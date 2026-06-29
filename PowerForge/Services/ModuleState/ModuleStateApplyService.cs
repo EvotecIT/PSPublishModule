@@ -169,6 +169,17 @@ internal sealed class ModuleStateApplyService
         if (plan.Actions.Any(static action => action.Kind == ModuleStatePlanActionKind.Save && string.IsNullOrWhiteSpace(action.TargetPath)))
             return "Plan includes save actions but no target path was supplied.";
 
+        if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
+            !deliveryOptions.AcceptLicense &&
+            plan.Actions.Any(static action => action.LicenseAcceptanceRequired && IsDeliveryAction(action.Kind)))
+        {
+            var modules = plan.Actions
+                .Where(static action => action.LicenseAcceptanceRequired && IsDeliveryAction(action.Kind))
+                .Select(static action => action.ModuleName)
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+            return "Planned managed delivery requires license acceptance for " + string.Join(", ", modules) + ".";
+        }
+
         if (commands.Any(static command => !HasCommandDeliveryTarget(command)))
             return deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule
                 ? "Plan has delivery actions but no ProfileName, Repository, or action target repository was supplied for managed module delivery."
@@ -243,6 +254,14 @@ internal sealed class ModuleStateApplyService
         if (effectiveForce && IsDeliveryAction(action.Kind))
         {
             arguments.Add("-Force");
+        }
+
+        if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
+            deliveryOptions.AcceptLicense &&
+            action.LicenseAcceptanceRequired &&
+            IsDeliveryAction(action.Kind))
+        {
+            arguments.Add("-AcceptLicense");
         }
 
         return new ModuleStateDeliveryCommand(

@@ -43,7 +43,8 @@ public sealed class ManagedModuleUpdateService
         using var requestScope = _repositoryClient.BeginRequestScope();
 
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
-        var targetVersion = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
+        var targetVersionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken).ConfigureAwait(false);
+        var targetVersion = targetVersionInfo.Version;
         var installedVersions = GetInstalledVersions(moduleRoot, request.Name);
         var currentVersion = installedVersions.LastOrDefault();
         var currentModulePath = currentVersion is null ? null : Path.Combine(moduleRoot, request.Name.Trim(), currentVersion);
@@ -140,7 +141,8 @@ public sealed class ManagedModuleUpdateService
         ManagedModuleTrustEvaluator.ThrowIfRepositoryRejected(request.Repository, request.TrustPolicy);
 
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
-        var targetVersion = await ResolveSelectedVersionAsync(request, cancellationToken).ConfigureAwait(false);
+        var targetVersionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken, resolveExactMetadata: true).ConfigureAwait(false);
+        var targetVersion = targetVersionInfo.Version;
         var installedVersions = GetInstalledVersions(moduleRoot, request.Name);
         var currentVersion = installedVersions.LastOrDefault();
         var currentModulePath = currentVersion is null ? null : Path.Combine(moduleRoot, request.Name.Trim(), currentVersion);
@@ -175,7 +177,10 @@ public sealed class ManagedModuleUpdateService
             SourcePolicySatisfied = sourceEvaluation.IsSatisfied,
             SourcePolicyReason = sourceEvaluation.Reason,
             InstalledReceipt = sourceEvaluation.Receipt,
-            FamilyActions = familyActions
+            FamilyActions = familyActions,
+            License = targetVersionInfo.License,
+            LicenseAcceptanceRequired = targetVersionInfo.RequireLicenseAcceptance,
+            LicenseAccepted = request.AcceptLicense
         };
     }
 
@@ -261,11 +266,12 @@ public sealed class ManagedModuleUpdateService
             if (currentVersion is null)
                 continue;
 
-            var repositoryVersionAvailable = await RepositoryContainsVersionAsync(
+            var repositoryVersion = await TryResolveRepositoryVersionAsync(
                 request,
                 familyName,
                 targetVersion,
                 cancellationToken).ConfigureAwait(false);
+            var repositoryVersionAvailable = repositoryVersion is not null;
             var action = ResolveFamilyPlanAction(currentVersion, targetVersion, request.Force, repositoryVersionAvailable);
             var selectedPathVersion = action is ManagedModuleFamilyUpdatePlanAction.Update or ManagedModuleFamilyUpdatePlanAction.Reinstall
                 ? targetVersion
@@ -282,14 +288,17 @@ public sealed class ManagedModuleUpdateService
                 ModulePath = Path.Combine(moduleRoot, familyName, selectedPathVersion),
                 RepositoryVersionAvailable = repositoryVersionAvailable,
                 WouldWriteFiles = action is ManagedModuleFamilyUpdatePlanAction.Update or ManagedModuleFamilyUpdatePlanAction.Reinstall,
-                ConflictReason = ResolveFamilyConflictReason(familyName, currentVersion, targetVersion, action)
+                ConflictReason = ResolveFamilyConflictReason(familyName, currentVersion, targetVersion, action),
+                License = repositoryVersion?.License,
+                LicenseAcceptanceRequired = repositoryVersion?.RequireLicenseAcceptance == true,
+                LicenseAccepted = request.AcceptLicense
             });
         }
 
         return actions;
     }
 
-    private async Task<bool> RepositoryContainsVersionAsync(
+    private async Task<ManagedModuleVersionInfo?> TryResolveRepositoryVersionAsync(
         ManagedModuleUpdateRequest request,
         string moduleName,
         string targetVersion,
@@ -301,7 +310,7 @@ public sealed class ManagedModuleUpdateService
             request.IncludePrerelease || ContainsPrereleaseLabel(targetVersion),
             request.Credential,
             cancellationToken).ConfigureAwait(false);
-        return versions.Any(version => version.Version.Equals(targetVersion, StringComparison.OrdinalIgnoreCase));
+        return versions.FirstOrDefault(version => version.Version.Equals(targetVersion, StringComparison.OrdinalIgnoreCase));
     }
 
     private static void ThrowIfLoadedModuleBlocksUpdate(
@@ -342,10 +351,27 @@ public sealed class ManagedModuleUpdateService
         throw new InvalidOperationException($"Managed module family update cannot be applied safely: {details}.");
     }
 
-    private async Task<string> ResolveSelectedVersionAsync(ManagedModuleUpdateRequest request, CancellationToken cancellationToken)
+    private async Task<ManagedModuleVersionInfo> ResolveSelectedVersionInfoAsync(
+        ManagedModuleUpdateRequest request,
+        CancellationToken cancellationToken,
+        bool resolveExactMetadata = false)
     {
         if (!string.IsNullOrWhiteSpace(request.Version))
-            return request.Version!.Trim();
+        {
+            var exactVersion = request.Version!.Trim();
+            if (resolveExactMetadata)
+            {
+                var exactMatch = await TryResolveRepositoryVersionAsync(
+                    request,
+                    request.Name,
+                    exactVersion,
+                    cancellationToken).ConfigureAwait(false);
+                if (exactMatch is not null)
+                    return exactMatch;
+            }
+
+            return CreateRequestedVersionInfo(request, exactVersion);
+        }
 
         var range = ResolveVersionRange(request.VersionPolicy, request.MinimumVersion, request.MaximumVersion);
         var versions = await _repositoryClient.GetVersionsAsync(
@@ -361,8 +387,18 @@ public sealed class ManagedModuleUpdateService
         if (latest is null)
             throw new InvalidOperationException($"No versions of '{request.Name}' satisfying range '{range}' were found in repository '{request.Repository.Name}'.");
 
-        return latest.Version;
+        return latest;
     }
+
+    private static ManagedModuleVersionInfo CreateRequestedVersionInfo(ManagedModuleUpdateRequest request, string version)
+        => new()
+        {
+            Name = request.Name.Trim(),
+            Version = version,
+            RepositoryName = request.Repository.Name,
+            RepositorySource = request.Repository.Source,
+            IsPrerelease = ManagedModuleVersionComparer.IsPrerelease(version)
+        };
 
     private static IReadOnlyList<string> GetInstalledVersions(string moduleRoot, string moduleName)
     {

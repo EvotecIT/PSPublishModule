@@ -45,6 +45,37 @@ public sealed class UpdateManagedModuleCommandTests
     }
 
     [Fact]
+    public void UpdateManagedModule_WithoutNamePlanReportsLicenseRequiredPackage()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: CreateModuleFiles("Company.Tools", "1.1.0"),
+            requireLicenseAcceptance: true);
+        var installedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(installedPath);
+        File.WriteAllText(Path.Combine(installedPath, "Company.Tools.psd1"), "@{ ModuleVersion = '1.0.0' }");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Update-ManagedModule")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", moduleRoot.Path)
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedModuleUpdatePlan>(Assert.Single(results).BaseObject);
+        Assert.Equal("Company.Tools", plan.Name);
+        Assert.True(plan.LicenseAcceptanceRequired);
+        Assert.False(plan.LicenseAccepted);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0")));
+    }
+
+    [Fact]
     public void UpdateManagedModule_blocks_loaded_module_update_by_default()
     {
         using var feed = new TemporaryDirectory();

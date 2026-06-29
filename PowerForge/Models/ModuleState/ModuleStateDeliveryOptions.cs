@@ -10,6 +10,7 @@ internal sealed class ModuleStateDeliveryOptions
         bool installPrerequisites = false,
         bool prerelease = false,
         bool force = false,
+        bool acceptLicense = false,
         bool allowErrorFindings = false,
         ModuleStateDeliveryTransport transport = ModuleStateDeliveryTransport.PrivateModule)
     {
@@ -18,6 +19,7 @@ internal sealed class ModuleStateDeliveryOptions
         InstallPrerequisites = installPrerequisites;
         Prerelease = prerelease;
         Force = force;
+        AcceptLicense = acceptLicense;
         AllowErrorFindings = allowErrorFindings;
         Transport = transport;
     }
@@ -31,6 +33,8 @@ internal sealed class ModuleStateDeliveryOptions
     internal bool Prerelease { get; }
 
     internal bool Force { get; }
+
+    internal bool AcceptLicense { get; }
 
     internal bool AllowErrorFindings { get; }
 

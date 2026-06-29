@@ -147,6 +147,63 @@ public sealed class ManagedModuleLicenseAcceptanceTests
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
     }
 
+    [Fact]
+    public async Task PlanInstallAsync_reports_license_required_package_before_mutation()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"),
+            requireLicenseAcceptance: true);
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var plan = await service.PlanInstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(ManagedModuleInstallPlanAction.Install, plan.Action);
+        Assert.True(plan.LicenseAcceptanceRequired);
+        Assert.False(plan.LicenseAccepted);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools")));
+    }
+
+    [Fact]
+    public async Task PlanUpdateAsync_reports_license_required_package_before_mutation()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: CreateModuleFiles("1.1.0"),
+            requireLicenseAcceptance: true);
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
+        var service = new ManagedModuleUpdateService(new NullLogger());
+
+        var plan = await service.PlanUpdateAsync(new ManagedModuleUpdateRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(ManagedModuleUpdatePlanAction.Update, plan.Action);
+        Assert.Equal("1.1.0", plan.TargetVersion);
+        Assert.True(plan.LicenseAcceptanceRequired);
+        Assert.False(plan.LicenseAccepted);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0")));
+    }
+
     [Theory]
     [InlineData("Install-ManagedModule")]
     [InlineData("Save-ManagedModule")]

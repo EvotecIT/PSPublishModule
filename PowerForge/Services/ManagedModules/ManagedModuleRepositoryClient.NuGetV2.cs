@@ -22,24 +22,16 @@ public sealed partial class ManagedModuleRepositoryClient
                 cancellationToken)
             .ConfigureAwait(false);
 
+        XNamespace atom = "http://www.w3.org/2005/Atom";
         XNamespace data = "http://schemas.microsoft.com/ado/2007/08/dataservices";
         return documents
-            .SelectMany(document => document.Descendants(data + "Version"))
-            .Select(static version => version.Value)
-            .Where(version => !string.IsNullOrWhiteSpace(version))
-            .Select(version => version.Trim())
-            .Where(version => includePrerelease || !ManagedModuleVersionComparer.IsPrerelease(version))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(version => version, ManagedModuleVersionComparer.Instance)
-            .Select(version => new ManagedModuleVersionInfo
-            {
-                Name = packageId,
-                Version = version,
-                RepositoryName = repository.Name,
-                RepositorySource = repository.Source,
-                PackageSource = BuildNuGetV2PackageUri(repository.Source, packageId, version).ToString(),
-                IsPrerelease = ManagedModuleVersionComparer.IsPrerelease(version)
-            })
+            .SelectMany(document => document.Descendants(atom + "entry"))
+            .Select(entry => ReadNuGetV2SearchResult(repository, entry, data, packageId))
+            .Where(version => version is not null && (includePrerelease || !version!.IsPrerelease))
+            .Select(static version => version!)
+            .GroupBy(version => version.Version, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .OrderBy(version => version.Version, ManagedModuleVersionComparer.Instance)
             .ToArray();
     }
 
@@ -214,15 +206,18 @@ public sealed partial class ManagedModuleRepositoryClient
     private static ManagedModuleVersionInfo? ReadNuGetV2SearchResult(
         ManagedModuleRepository repository,
         XElement entry,
-        XNamespace data)
+        XNamespace data,
+        string? fallbackId = null)
     {
-        var id = entry.Descendants(data + "Id").FirstOrDefault()?.Value;
+        var id = entry.Descendants(data + "Id").FirstOrDefault()?.Value ?? fallbackId;
         var version = entry.Descendants(data + "Version").FirstOrDefault()?.Value;
         if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(version))
             return null;
 
         var trimmedId = id!.Trim();
         var trimmedVersion = version!.Trim();
+        var license = ReadNuGetV2String(entry, data, "LicenseExpression") ??
+                      ReadNuGetV2String(entry, data, "LicenseUrl");
         return new ManagedModuleVersionInfo
         {
             Name = trimmedId,
@@ -230,8 +225,19 @@ public sealed partial class ManagedModuleRepositoryClient
             RepositoryName = repository.Name,
             RepositorySource = repository.Source,
             PackageSource = BuildNuGetV2PackageUri(repository.Source, trimmedId, trimmedVersion).ToString(),
-            IsPrerelease = ManagedModuleVersionComparer.IsPrerelease(trimmedVersion)
+            IsPrerelease = ManagedModuleVersionComparer.IsPrerelease(trimmedVersion),
+            License = license,
+            RequireLicenseAcceptance = ReadNuGetV2Boolean(entry, data, "RequireLicenseAcceptance")
         };
+    }
+
+    private static string? ReadNuGetV2String(XElement entry, XNamespace data, string name)
+        => entry.Descendants(data + name).FirstOrDefault()?.Value.Trim();
+
+    private static bool ReadNuGetV2Boolean(XElement entry, XNamespace data, string name)
+    {
+        var value = ReadNuGetV2String(entry, data, name);
+        return bool.TryParse(value, out var parsed) && parsed;
     }
 
     private static Uri BuildNuGetV2PackageUri(string source, string packageId, string version)
