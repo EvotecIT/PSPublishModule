@@ -72,6 +72,7 @@ $validHosts = @('Current', 'PowerShell7', 'WindowsPowerShell')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.OptimizationTargets.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Artifacts.ps1')
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.Scenarios.ps1')
+. (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.SuiteNotes.ps1')
 
 function Resolve-TokenList {
     param(
@@ -633,6 +634,7 @@ $hostsPath = Join-Path $suiteRoot 'suite-hosts.csv'
 $gatePath = Join-Path $suiteRoot 'suite-gate.csv'
 $hostGatePath = Join-Path $suiteRoot 'suite-host-gate.csv'
 $metadataPath = Join-Path $suiteRoot 'metadata.json'
+$notesPath = Join-Path $suiteRoot 'suite-notes.md'
 $gateViolations = @(Get-ManagedPerformanceGateViolationForSuite -Rows @($summaryRows) -MaxRank $ManagedMaxRank -MaxVsFastest $ManagedMaxVsFastest -MinAuthenticodeCheckedFiles $ManagedMinAuthenticodeCheckedFiles -MinAuthenticodeCatalogFiles $ManagedMinAuthenticodeCatalogFiles -UseScenarioGates:$UseScenarioGates.IsPresent)
 $hostComparisonRows = @(New-ManagedHostComparison -Rows @($summaryRows))
 $hostGateViolations = @(Get-ManagedHostComparisonGateViolation -Rows @($hostComparisonRows) -MaxComparisonVsBaseline $ManagedMaxWindowsPowerShellVsPowerShell7)
@@ -655,6 +657,7 @@ if ($ManagedMaxRank -gt 0 -or
 if ($ManagedMaxWindowsPowerShellVsPowerShell7 -gt 0) {
     Write-ManagedBenchmarkCsv -InputObject @($hostGateViolations) -Path $hostGatePath
 }
+Write-ManagedBenchmarkSuiteNotes -Scenarios @($scenarios) -SummaryRows @($summaryRows) -HostRows @($hostRows) -GateViolations @($gateViolations) -HostGateViolations @($hostGateViolations) -Path $notesPath
 
 $metadata = [ordered]@{
     Suites = $Suite
@@ -713,6 +716,7 @@ $metadata = [ordered]@{
     HostComparisonPath = $hostComparisonPath
     HostGatePath = $hostGatePath
     OptimizationTargetsPath = $optimizationTargetsPath
+    NotesPath = $notesPath
     RemoveOutputRoots = $RemoveOutputRoots.IsPresent
     OutputDirectory = $suiteRoot
 }
