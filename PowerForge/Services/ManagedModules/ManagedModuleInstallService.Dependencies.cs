@@ -68,15 +68,19 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleInstallResult[] results,
         CancellationToken cancellationToken)
     {
+        var gateWaitStopwatch = System.Diagnostics.Stopwatch.StartNew();
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        gateWaitStopwatch.Stop();
         try
         {
-            results[index] = await InstallDependencyCoreAsync(
+            var result = await InstallDependencyCoreAsync(
                 request,
                 dependency,
                 cacheDirectory,
                 context,
                 cancellationToken).ConfigureAwait(false);
+            result.DependencyQueueWaitElapsed += gateWaitStopwatch.Elapsed;
+            results[index] = result;
         }
         finally
         {

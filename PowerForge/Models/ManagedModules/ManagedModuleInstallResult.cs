@@ -141,6 +141,11 @@ public sealed class ManagedModuleInstallResult
     public TimeSpan DependencyElapsed { get; set; }
 
     /// <summary>
+    /// Elapsed time spent waiting to enter the dependency install scheduler before this branch started.
+    /// </summary>
+    public TimeSpan DependencyQueueWaitElapsed { get; set; }
+
+    /// <summary>
     /// Elapsed time spent moving the staged module into the final module root.
     /// </summary>
     public TimeSpan PromotionElapsed { get; set; }

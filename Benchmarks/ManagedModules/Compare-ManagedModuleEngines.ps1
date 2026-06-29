@@ -480,6 +480,8 @@ function Invoke-TimedOperation {
         ManagedRootElapsedMilliseconds = $managedRootElapsedMilliseconds
         ManagedHarnessOverheadMilliseconds = $managedHarnessOverheadMilliseconds
         ManagedRootDependencyMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'RootDependencyMilliseconds')
+        ManagedRootDependencyUnattributedMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'RootDependencyUnattributedMilliseconds')
+        ManagedTotalDependencyQueueWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDependencyQueueWaitMilliseconds')
         ManagedTotalDownloadMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDownloadMilliseconds')
         ManagedTotalExtractionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalExtractionMilliseconds')
         ManagedTotalExtractionCacheLockWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalExtractionCacheLockWaitMilliseconds')
@@ -504,6 +506,8 @@ function Invoke-TimedOperation {
         ManagedSlowestDependencyPackageName = Get-DetailText -InputObject $detailSummary -Name 'SlowestDependencyPackageName'
         ManagedSlowestDependencyPackageParent = Get-DetailText -InputObject $detailSummary -Name 'SlowestDependencyPackageParent'
         ManagedSlowestDependencyPackageMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestDependencyPackageMilliseconds')
+        ManagedSlowestDependencyQueueWaitName = Get-DetailText -InputObject $detailSummary -Name 'SlowestDependencyQueueWaitName'
+        ManagedSlowestDependencyQueueWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestDependencyQueueWaitMilliseconds')
         ManagedSlowestMaterializedPackageName = Get-DetailText -InputObject $detailSummary -Name 'SlowestMaterializedPackageName'
         ManagedSlowestMaterializedPackageMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageMilliseconds')
         ManagedSlowestMaterializedPackageExtractionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageExtractionMilliseconds')
