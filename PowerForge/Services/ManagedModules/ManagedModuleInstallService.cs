@@ -54,7 +54,7 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleTrustEvaluator.ThrowIfRepositoryRejected(request.Repository, request.TrustPolicy);
 
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
-        if (TrySelectInstalledNoOpVersion(request, moduleRoot, out var installedVersion))
+        if (TrySelectInstalledNoOpVersion(request, moduleRoot, context: null, out var installedVersion))
         {
             var installedModulePath = Path.Combine(moduleRoot, request.Name.Trim(), installedVersion);
             return CreateInstallPlan(
@@ -198,7 +198,7 @@ public sealed partial class ManagedModuleInstallService
             using (AcquireInstallLock(moduleRoot, request.Name, cancellationToken, out var initialLockWaitElapsed))
             {
                 installLockWaitElapsed += initialLockWaitElapsed;
-                if (TrySelectInstalledNoOpVersion(request, moduleRoot, out var installedVersion))
+                if (TrySelectInstalledNoOpVersion(request, moduleRoot, context, out var installedVersion))
                 {
                     var installedModulePath = Path.Combine(moduleRoot, request.Name.Trim(), installedVersion);
                     _logger.Verbose($"Managed module install skipped existing satisfying version: {installedModulePath}");
@@ -212,6 +212,7 @@ public sealed partial class ManagedModuleInstallService
                         repositoryRequestCount: 0,
                         installLockWaitElapsed);
 
+                    context.RecordInstalledVersion(moduleRoot, request.Name, installedVersion);
                     return CompletePreResolvedInstall(result);
                 }
             }
@@ -324,13 +325,14 @@ public sealed partial class ManagedModuleInstallService
     private static bool TrySelectInstalledNoOpVersion(
         ManagedModuleInstallRequest request,
         string moduleRoot,
+        ManagedModuleInstallContext? context,
         out string version)
     {
         version = string.Empty;
         if (request.Force)
             return false;
 
-        var installedVersion = GetInstalledVersions(moduleRoot, request.Name)
+        var installedVersion = GetInstalledVersions(moduleRoot, request.Name, context)
             .Where(candidate => AllowsInstalledNoOpVersion(candidate, request))
             .LastOrDefault();
         if (installedVersion is null)
@@ -381,6 +383,7 @@ public sealed partial class ManagedModuleInstallService
                 if (Directory.Exists(modulePath) && !request.Force)
                 {
                     _logger.Verbose($"Managed module install skipped existing version: {modulePath}");
+                    context.RecordInstalledVersion(moduleRoot, request.Name, version);
                     return CreateAlreadyInstalledResult(
                         request,
                         version,
@@ -447,6 +450,7 @@ public sealed partial class ManagedModuleInstallService
                 if (Directory.Exists(modulePath) && !request.Force)
                 {
                     _logger.Verbose($"Managed module install skipped concurrently installed version: {modulePath}");
+                    context.RecordInstalledVersion(moduleRoot, request.Name, version);
                     return CreateAlreadyInstalledResult(
                         request,
                         version,
@@ -503,6 +507,7 @@ public sealed partial class ManagedModuleInstallService
                 PackageRepositoryRedirectCount = packageRepositoryRedirectCount,
                 DependencyResults = dependencyResults
             };
+            context.RecordInstalledVersion(moduleRoot, request.Name, version);
             _receiptStore.WriteReceipt(request.Repository, result);
             return result;
         }

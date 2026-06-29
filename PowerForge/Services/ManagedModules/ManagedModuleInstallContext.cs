@@ -8,13 +8,15 @@ internal sealed class ManagedModuleInstallContext
     private readonly HashSet<string> _ownedInstallKeys;
     private readonly ConcurrentDictionary<string, ManagedModuleInstallPending> _inFlightInstalls;
     private readonly ConcurrentDictionary<string, ManagedModuleInstallResult> _completedInstalls;
+    private readonly ConcurrentDictionary<string, string[]> _installedVersions;
 
     public ManagedModuleInstallContext()
         : this(
             new HashSet<string>(StringComparer.OrdinalIgnoreCase),
             new HashSet<string>(StringComparer.OrdinalIgnoreCase),
             new ConcurrentDictionary<string, ManagedModuleInstallPending>(StringComparer.OrdinalIgnoreCase),
-            new ConcurrentDictionary<string, ManagedModuleInstallResult>(StringComparer.OrdinalIgnoreCase))
+            new ConcurrentDictionary<string, ManagedModuleInstallResult>(StringComparer.OrdinalIgnoreCase),
+            new ConcurrentDictionary<string, string[]>(StringComparer.OrdinalIgnoreCase))
     {
     }
 
@@ -22,12 +24,14 @@ internal sealed class ManagedModuleInstallContext
         HashSet<string> active,
         HashSet<string> ownedInstallKeys,
         ConcurrentDictionary<string, ManagedModuleInstallPending> inFlightInstalls,
-        ConcurrentDictionary<string, ManagedModuleInstallResult> completedInstalls)
+        ConcurrentDictionary<string, ManagedModuleInstallResult> completedInstalls,
+        ConcurrentDictionary<string, string[]> installedVersions)
     {
         _active = active;
         _ownedInstallKeys = ownedInstallKeys;
         _inFlightInstalls = inFlightInstalls;
         _completedInstalls = completedInstalls;
+        _installedVersions = installedVersions;
     }
 
     public ManagedModuleInstallContext CreateBranch()
@@ -35,7 +39,8 @@ internal sealed class ManagedModuleInstallContext
             new HashSet<string>(_active, StringComparer.OrdinalIgnoreCase),
             new HashSet<string>(_ownedInstallKeys, StringComparer.OrdinalIgnoreCase),
             _inFlightInstalls,
-            _completedInstalls);
+            _completedInstalls,
+            _installedVersions);
 
     public IDisposable Enter(string moduleName)
     {
@@ -104,6 +109,61 @@ internal sealed class ManagedModuleInstallContext
             throw new ArgumentNullException(nameof(result));
 
         _completedInstalls[key] = result;
+    }
+
+    public IReadOnlyList<string> GetInstalledVersions(string moduleRoot, string moduleName)
+    {
+        var key = CreateInstalledVersionKey(moduleRoot, moduleName);
+        if (_installedVersions.TryGetValue(key, out var cached))
+            return cached;
+
+        var versions = EnumerateInstalledVersions(moduleRoot, moduleName);
+        if (versions.Length > 0)
+            _installedVersions.TryAdd(key, versions);
+
+        return versions;
+    }
+
+    public void RecordInstalledVersion(string moduleRoot, string moduleName, string version)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+            return;
+
+        var key = CreateInstalledVersionKey(moduleRoot, moduleName);
+        var normalizedVersion = version.Trim();
+        _installedVersions.AddOrUpdate(
+            key,
+            _ => new[] { normalizedVersion },
+            (_, existing) =>
+            {
+                if (existing.Any(item => item.Equals(normalizedVersion, StringComparison.OrdinalIgnoreCase)))
+                    return existing;
+
+                return existing
+                    .Concat(new[] { normalizedVersion })
+                    .OrderBy(static item => item, ManagedModuleVersionComparer.Instance)
+                    .ToArray();
+            });
+    }
+
+    private static string CreateInstalledVersionKey(string moduleRoot, string moduleName)
+        => string.Join("|", NormalizePath(moduleRoot), moduleName.Trim());
+
+    private static string NormalizePath(string path)
+        => Path.GetFullPath(path.Trim().Trim('"')).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+    internal static string[] EnumerateInstalledVersions(string moduleRoot, string moduleName)
+    {
+        var moduleFolder = Path.Combine(moduleRoot, moduleName.Trim());
+        if (!Directory.Exists(moduleFolder))
+            return Array.Empty<string>();
+
+        return Directory.EnumerateDirectories(moduleFolder)
+            .Select(Path.GetFileName)
+            .Where(static version => !string.IsNullOrWhiteSpace(version))
+            .Select(static version => version!)
+            .OrderBy(static version => version, ManagedModuleVersionComparer.Instance)
+            .ToArray();
     }
 
     private bool WouldCreateWaitCycle(ManagedModuleInstallPending pending)

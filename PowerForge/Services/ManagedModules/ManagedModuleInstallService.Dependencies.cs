@@ -94,7 +94,7 @@ public sealed partial class ManagedModuleInstallService
         var range = ManagedModuleVersionRange.Parse(dependency.VersionRange);
         var dependencyTrustPolicy = ResolveDependencyTrustPolicy(request.TrustPolicy);
         if (dependencyTrustPolicy is null &&
-            TryCreateSatisfiedDependencyResult(request, dependency.Id, range, out var satisfiedResult))
+            TryCreateSatisfiedDependencyResult(request, dependency.Id, range, context, out var satisfiedResult))
         {
             return satisfiedResult;
         }
@@ -134,11 +134,12 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleInstallRequest request,
         string dependencyName,
         ManagedModuleVersionRange range,
+        ManagedModuleInstallContext context,
         out ManagedModuleInstallResult result)
     {
         result = null!;
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
-        var installedVersion = GetInstalledVersions(moduleRoot, dependencyName)
+        var installedVersion = GetInstalledVersions(moduleRoot, dependencyName, context)
             .Where(version => AllowsInstalledDependencyVersion(version, request, range))
             .LastOrDefault();
         if (installedVersion is null)
@@ -167,6 +168,7 @@ public sealed partial class ManagedModuleInstallService
             TimeSpan.Zero,
             repositoryRequestCount: 0,
             installLockWaitElapsed: TimeSpan.Zero);
+        context.RecordInstalledVersion(moduleRoot, dependencyName, installedVersion);
         return true;
     }
 
@@ -183,19 +185,11 @@ public sealed partial class ManagedModuleInstallService
         return range.IsSatisfiedBy(version);
     }
 
-    private static IReadOnlyList<string> GetInstalledVersions(string moduleRoot, string moduleName)
-    {
-        var moduleFolder = Path.Combine(moduleRoot, moduleName.Trim());
-        if (!Directory.Exists(moduleFolder))
-            return Array.Empty<string>();
-
-        return Directory.EnumerateDirectories(moduleFolder)
-            .Select(Path.GetFileName)
-            .Where(static version => !string.IsNullOrWhiteSpace(version))
-            .Select(static version => version!)
-            .OrderBy(static version => version, ManagedModuleVersionComparer.Instance)
-            .ToArray();
-    }
+    private static IReadOnlyList<string> GetInstalledVersions(
+        string moduleRoot,
+        string moduleName,
+        ManagedModuleInstallContext? context = null)
+        => context?.GetInstalledVersions(moduleRoot, moduleName) ?? ManagedModuleInstallContext.EnumerateInstalledVersions(moduleRoot, moduleName);
 
     private async Task<string> ResolveDependencyVersionAsync(
         ManagedModuleInstallRequest request,
