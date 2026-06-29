@@ -84,6 +84,15 @@ public sealed class FindManagedModuleCommand : PSCmdlet
     [Alias("CredentialPath", "TokenPath")]
     public string? CredentialSecretFilePath { get; set; }
 
+    /// <summary>Optional HTTP proxy used for repository requests.</summary>
+    [Parameter]
+    [ValidateNotNull]
+    public Uri? Proxy { get; set; }
+
+    /// <summary>Optional proxy credential used with Proxy.</summary>
+    [Parameter]
+    public PSCredential? ProxyCredential { get; set; }
+
     /// <summary>Finds matching module versions.</summary>
     protected override void ProcessRecord()
     {
@@ -95,7 +104,7 @@ public sealed class FindManagedModuleCommand : PSCmdlet
             MyInvocation.BoundParameters.ContainsKey(nameof(Repository)));
         var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
-        var client = new ManagedModuleRepositoryClient(logger);
+        var client = ManagedModuleCommandSupport.CreateRepositoryClient(this, logger, Proxy, ProxyCredential);
 
         foreach (var moduleName in Name)
         {

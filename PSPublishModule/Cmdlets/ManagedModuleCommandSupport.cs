@@ -127,6 +127,24 @@ internal static class ManagedModuleCommandSupport
             };
     }
 
+    internal static ManagedModuleRepositoryClient CreateRepositoryClient(
+        PSCmdlet cmdlet,
+        ILogger logger,
+        Uri? proxy,
+        PSCredential? proxyCredential)
+    {
+        if (proxyCredential is not null && proxy is null)
+            throw new InvalidOperationException("ProxyCredential requires Proxy.");
+
+        return new ManagedModuleRepositoryClient(
+            logger,
+            options: new ManagedModuleRepositoryClientOptions
+            {
+                ProxyAddress = proxy,
+                ProxyCredential = ResolveCredential(cmdlet, proxyCredential, null, null, null)
+            });
+    }
+
     internal static ManagedModuleTrustPolicy? CreateTrustPolicy(
         ManagedModuleTrustPolicy? trustPolicy,
         bool requireTrustedRepository,
