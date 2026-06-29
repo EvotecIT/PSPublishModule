@@ -770,6 +770,23 @@ public class WebAgentReadinessTests
     }
 
     [Fact]
+    public void BuildMarkdownNegotiationMessage_DoesNotTreatAcceptEncodingAsAccept()
+    {
+        var message = WebAgentReadiness.BuildMarkdownNegotiationMessage(
+            negotiated: false,
+            requestSucceeded: true,
+            contentType: "text/html",
+            vary: "Accept-Encoding",
+            cacheStatus: "HIT",
+            cacheControl: "public, max-age=14400",
+            directMarkdownAvailable: true,
+            directMarkdownUrl: "https://example.test/index.md");
+
+        Assert.Contains("does not declare Vary: Accept", message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("may not be keying cached HTML by Accept", message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Prepare_ReplacesExistingApacheManagedBlock()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-apache-idempotent-" + Guid.NewGuid().ToString("N"));
@@ -1253,7 +1270,66 @@ public class WebAgentReadinessTests
     }
 
     [Fact]
-    public void Verify_FailsMalformedLlmsTxtWhenPresent()
+    public void Verify_WarnsForMinimalLlmsTxtWithoutRecommendedLinks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-minimal-llms-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"),
+                """
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.test/</loc></url>
+                </urlset>
+                """);
+            File.WriteAllText(Path.Combine(root, "llms.txt"),
+                """
+                # Example
+
+                Example documentation and API reference.
+                """);
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html lang="en">
+                <head><title>Example</title><meta name="robots" content="index,follow"><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Example","sameAs":["https://example.test"],"dateModified":"2026-04-17"}</script></head>
+                <body><header><nav><a href="/">Home</a></nav></header><main><h1>Example</h1><p>Hello agents.</p></main><footer>Footer</footer></body>
+                </html>
+                """);
+
+            var result = WebAgentReadiness.Verify(new WebAgentReadinessVerifyOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                AgentReadiness = new AgentReadinessSpec
+                {
+                    Enabled = true,
+                    Robots = false,
+                    LinkHeaders = false,
+                    SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                    ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                    ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                    AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                    AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                    MarkdownNegotiation = false
+                }
+            });
+
+            Assert.Contains(result.Checks, check =>
+                check.Id == "llms-txt" &&
+                check.Status == "warn" &&
+                check.Message.Contains("Recommended outline", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Checks, check => string.Equals(check.Status, "fail", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Verify_FailsLlmsTxtWithoutH1WhenPresent()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-bad-llms-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -1268,8 +1344,9 @@ public class WebAgentReadinessTests
                 """);
             File.WriteAllText(Path.Combine(root, "llms.txt"),
                 """
-                # Example
-                - /api/index.json
+                Example
+
+                - [API index](/api/index.json): Machine-readable API data.
                 """);
             File.WriteAllText(Path.Combine(root, "index.html"),
                 """
@@ -1301,7 +1378,7 @@ public class WebAgentReadinessTests
             Assert.Contains(result.Checks, check =>
                 check.Id == "llms-txt" &&
                 check.Status == "fail" &&
-                check.Message.Contains("Markdown list link", StringComparison.OrdinalIgnoreCase));
+                check.Message.Contains("H1 heading", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

@@ -207,9 +207,9 @@ public static class WebAgentReadiness
         var llmsPath = Path.Combine(siteRoot, "llms.txt");
         var llmsExists = File.Exists(llmsPath);
         var llmsMessage = string.Empty;
-        var llmsValid = llmsExists && ValidateLlmsTxt(llmsPath, out llmsMessage);
+        var llmsStatus = llmsExists ? GetLlmsTxtStatus(llmsPath, out llmsMessage) : "info";
         AddCheck(checks, "llms-txt", "agent-accessibility", "llms.txt",
-            llmsExists ? (llmsValid ? "pass" : "fail") : "info",
+            llmsExists ? llmsStatus : "info",
             llmsExists ? llmsMessage : "llms.txt is not present.",
             llmsPath);
 
@@ -353,9 +353,9 @@ public static class WebAgentReadiness
 
         var llms = await TryGetTextAsync(http, CombineUrl(baseUrl, "/llms.txt"), null, cancellationToken).ConfigureAwait(false);
         var llmsMessage = string.Empty;
-        var llmsValid = llms.Success && ValidateLlmsTxtText(llms.Text, out llmsMessage);
+        var llmsStatus = llms.Success ? GetLlmsTxtTextStatus(llms.Text, out llmsMessage) : "info";
         AddCheck(checks, "llms-txt", "agent-accessibility", "llms.txt",
-            llms.Success ? (llmsValid ? "pass" : "fail") : "info",
+            llms.Success ? llmsStatus : "info",
             llms.Success ? llmsMessage : "llms.txt was not found.",
             CombineUrl(baseUrl, "/llms.txt"));
 
@@ -1552,31 +1552,31 @@ public static class WebAgentReadiness
         }
     }
 
-    private static bool ValidateLlmsTxt(string path, out string message)
+    private static string GetLlmsTxtStatus(string path, out string message)
     {
         if (!File.Exists(path))
         {
             message = "llms.txt is missing.";
-            return false;
+            return "info";
         }
 
         try
         {
-            return ValidateLlmsTxtText(File.ReadAllText(path), out message);
+            return GetLlmsTxtTextStatus(File.ReadAllText(path), out message);
         }
         catch (Exception ex)
         {
             message = $"llms.txt could not be read: {ex.Message}";
-            return false;
+            return "fail";
         }
     }
 
-    private static bool ValidateLlmsTxtText(string text, out string message)
+    private static string GetLlmsTxtTextStatus(string text, out string message)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
             message = "llms.txt is empty.";
-            return false;
+            return "fail";
         }
 
         var hasH1 = MarkdownH1Regex.IsMatch(text);
@@ -1586,7 +1586,17 @@ public static class WebAgentReadiness
         if (hasH1 && hasH2 && hasMarkdownListLink)
         {
             message = "llms.txt follows the recommended Markdown outline with linked resources.";
-            return true;
+            return "pass";
+        }
+
+        if (hasH1)
+        {
+            var recommendations = new List<string>();
+            if (!hasH2) recommendations.Add("at least one H2 section");
+            if (!hasMarkdownListLink) recommendations.Add("at least one Markdown list link");
+
+            message = "llms.txt has an H1 heading. Recommended outline is missing " + string.Join(", ", recommendations) + ".";
+            return "warn";
         }
 
         var missing = new List<string>();
@@ -1595,7 +1605,7 @@ public static class WebAgentReadiness
         if (!hasMarkdownListLink) missing.Add("at least one Markdown list link");
 
         message = "llms.txt is missing " + string.Join(", ", missing) + ".";
-        return false;
+        return "fail";
     }
 
     private static bool ValidateApiCatalog(string path, out string message)
@@ -2319,7 +2329,7 @@ public static class WebAgentReadiness
         if (!requestSucceeded)
             return $"Accept: text/markdown request failed and returned {returned}.";
 
-        var hasVaryAccept = vary.Contains("Accept", StringComparison.OrdinalIgnoreCase);
+        var hasVaryAccept = HasHeaderToken(vary, "Accept");
         var hasEdgeCache = !string.IsNullOrWhiteSpace(cacheStatus);
         if (directMarkdownAvailable)
         {
@@ -2335,6 +2345,10 @@ public static class WebAgentReadiness
         var cacheControlDetail = string.IsNullOrWhiteSpace(cacheControl) ? string.Empty : $" Cache-Control was {cacheControl}.";
         return $"Accept: text/markdown did not return Content-Type text/markdown; returned {returned}.{cacheControlDetail}";
     }
+
+    private static bool HasHeaderToken(string value, string expectedToken)
+        => value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(token => string.Equals(token, expectedToken, StringComparison.OrdinalIgnoreCase));
 
     private static string NormalizeBaseUrl(string? value)
     {
