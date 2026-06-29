@@ -260,6 +260,40 @@ public sealed class ManagedModuleUpdateServiceTests
     }
 
     [Fact]
+    public async Task UpdateAsync_honors_comparator_version_policy()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.5.0.nupkg"),
+            "Company.Tools",
+            "1.5.0",
+            files: CreateModuleFiles("1.5.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.2.1.0.nupkg"),
+            "Company.Tools",
+            "2.1.0",
+            files: CreateModuleFiles("2.1.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.3.0.0.nupkg"),
+            "Company.Tools",
+            "3.0.0",
+            files: CreateModuleFiles("3.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
+        var service = new ManagedModuleUpdateService(new NullLogger());
+
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.VersionPolicy = ">=2.0.0 <3.0.0";
+        var result = await service.UpdateAsync(request);
+
+        Assert.Equal(ManagedModuleUpdateStatus.Updated, result.Status);
+        Assert.Equal("2.1.0", result.TargetVersion);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "2.1.0", "Company.Tools.psd1")));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.5.0")));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "3.0.0")));
+    }
+
+    [Fact]
     public async Task UpdateAsync_infers_prerelease_from_version_policy()
     {
         using var feed = new TemporaryDirectory();

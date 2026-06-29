@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using PowerForge;
 using PSPublishModule;
 using Xunit;
@@ -100,6 +101,36 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
         Assert.False(comparer.Equals(currentUser, allUsers));
     }
 
+    [Fact]
+    public void ManagedCreateUpdateRequest_PreservesLoadedModuleEvidence()
+    {
+        var loaded = new[]
+        {
+            new ManagedModuleLoadedModule
+            {
+                Name = "Company.Tools",
+                Version = "1.0.0",
+                ModuleBase = @"C:\Modules\Company.Tools\1.0.0"
+            }
+        };
+        var action = new ModuleStatePlanAction(
+            ModuleStatePlanActionKind.Update,
+            "Company.Tools",
+            "1.0.0",
+            ">=2.0.0",
+            "stale version",
+            isRepair: true);
+        var options = new ModuleStateManagedDeliveryOptions
+        {
+            LoadedModules = loaded
+        };
+
+        var request = InvokeManagedCreateUpdateRequest(action, options);
+
+        Assert.Same(loaded, request.LoadedModules);
+        Assert.NotNull(request.SourcePolicy);
+    }
+
     private static PrivateModuleWorkflowRequest InvokeCreateRequest(IReadOnlyList<ModuleStatePlanAction> actions)
     {
         var method = typeof(ModuleStatePrivateDeliveryService).GetMethod(
@@ -129,5 +160,27 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
         Assert.NotNull(method);
 
         return Assert.IsType<string?>(method!.Invoke(null, new object?[] { action, options }));
+    }
+
+    private static ManagedModuleUpdateRequest InvokeManagedCreateUpdateRequest(
+        ModuleStatePlanAction action,
+        ModuleStateManagedDeliveryOptions options)
+    {
+        var method = typeof(ModuleStateManagedDeliveryService).GetMethod(
+            "CreateUpdateRequest",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var service = (ModuleStateManagedDeliveryService)RuntimeHelpers.GetUninitializedObject(typeof(ModuleStateManagedDeliveryService));
+        var result = method!.Invoke(
+            service,
+            new object?[]
+            {
+                new ManagedModuleRepository("Local", "C:\\Feed"),
+                action,
+                options
+            });
+
+        return Assert.IsType<ManagedModuleUpdateRequest>(result);
     }
 }

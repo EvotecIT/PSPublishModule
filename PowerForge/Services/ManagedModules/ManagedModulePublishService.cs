@@ -144,8 +144,34 @@ public sealed class ManagedModulePublishService
     private static string ResolveOutputDirectory(ManagedModulePublishRequest request)
     {
         if (!string.IsNullOrWhiteSpace(request.OutputDirectory))
-            return Path.GetFullPath(request.OutputDirectory!.Trim().Trim('"'));
+        {
+            var outputDirectory = Path.GetFullPath(request.OutputDirectory!.Trim().Trim('"'));
+            if (IsSameLocalDirectory(outputDirectory, request.Repository.Source))
+                return Path.Combine(Path.GetTempPath(), "PowerForge.ManagedModules.Publish", Guid.NewGuid().ToString("N"));
+
+            return outputDirectory;
+        }
+
         return Path.Combine(Path.GetTempPath(), "PowerForge.ManagedModules.Publish", Guid.NewGuid().ToString("N"));
+    }
+
+    private static bool IsSameLocalDirectory(string outputDirectory, string repositorySource)
+    {
+        if (string.IsNullOrWhiteSpace(repositorySource))
+            return false;
+
+        try
+        {
+            var repositoryDirectory = Path.GetFullPath(repositorySource.Trim().Trim('"'));
+            return string.Equals(
+                outputDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                repositoryDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
     }
 
     private static void Validate(ManagedModulePublishRequest request)

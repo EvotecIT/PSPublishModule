@@ -53,6 +53,9 @@ internal sealed class ManagedModuleVersionRange
 
         var trimmed = value!.Trim();
         var allowsPrerelease = ManagedModuleVersionComparer.IsPrerelease(trimmed);
+        if (TryParseComparatorRange(trimmed, allowsPrerelease, out var comparatorRange))
+            return comparatorRange;
+
         if (!HasRangeDelimiters(trimmed))
             return new ManagedModuleVersionRange(trimmed, includeMinimum: true, null, false, null, allowsPrerelease);
 
@@ -109,6 +112,69 @@ internal sealed class ManagedModuleVersionRange
            value.StartsWith("(", StringComparison.Ordinal) ||
            value.EndsWith("]", StringComparison.Ordinal) ||
            value.EndsWith(")", StringComparison.Ordinal);
+
+    private static bool TryParseComparatorRange(
+        string value,
+        bool allowsPrerelease,
+        out ManagedModuleVersionRange range)
+    {
+        var minimumVersion = default(string);
+        var maximumVersion = default(string);
+        var includeMinimum = false;
+        var includeMaximum = false;
+        var parsedAny = false;
+
+        foreach (var rawToken in value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var token = rawToken.Trim();
+            if (token.StartsWith(">=", StringComparison.Ordinal))
+            {
+                minimumVersion = Normalize(token.Substring(2));
+                includeMinimum = true;
+                parsedAny = true;
+                continue;
+            }
+
+            if (token.StartsWith(">", StringComparison.Ordinal))
+            {
+                minimumVersion = Normalize(token.Substring(1));
+                includeMinimum = false;
+                parsedAny = true;
+                continue;
+            }
+
+            if (token.StartsWith("<=", StringComparison.Ordinal))
+            {
+                maximumVersion = Normalize(token.Substring(2));
+                includeMaximum = true;
+                parsedAny = true;
+                continue;
+            }
+
+            if (token.StartsWith("<", StringComparison.Ordinal))
+            {
+                maximumVersion = Normalize(token.Substring(1));
+                includeMaximum = false;
+                parsedAny = true;
+                continue;
+            }
+
+            if (parsedAny)
+            {
+                range = Any;
+                return false;
+            }
+        }
+
+        if (!parsedAny)
+        {
+            range = Any;
+            return false;
+        }
+
+        range = new ManagedModuleVersionRange(minimumVersion, includeMinimum, maximumVersion, includeMaximum, null, allowsPrerelease);
+        return true;
+    }
 
     private static string? Normalize(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();

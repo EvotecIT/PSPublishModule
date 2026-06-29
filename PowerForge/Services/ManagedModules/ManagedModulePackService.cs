@@ -111,10 +111,6 @@ public sealed class ManagedModulePackService
         if (!string.IsNullOrWhiteSpace(requestedName))
             return requestedName!.Trim();
 
-        if (ModuleManifestTextParser.TryGetQuotedStringValue(manifestText, "RootModule", out var rootModule) &&
-            !string.IsNullOrWhiteSpace(rootModule))
-            return Path.GetFileNameWithoutExtension(rootModule);
-
         var manifestName = Path.GetFileNameWithoutExtension(manifestPath);
         return string.IsNullOrWhiteSpace(manifestName) ? Path.GetFileName(modulePath) : manifestName;
     }

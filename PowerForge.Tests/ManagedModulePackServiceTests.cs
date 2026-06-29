@@ -96,6 +96,35 @@ public sealed class ManagedModulePackServiceTests
     }
 
     [Fact]
+    public void Pack_uses_manifest_name_when_root_module_points_to_binary()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var output = new TemporaryDirectory();
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "bin"));
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "bin", "Company.Tools.Engine.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "Company.Tools.psd1"), """
+@{
+    RootModule = 'bin/Company.Tools.Engine.dll'
+    ModuleVersion = '1.0.0'
+    Author = 'Evotec'
+    Description = 'Company tools module.'
+}
+""");
+        var service = new ManagedModulePackService();
+
+        var result = service.Pack(new ManagedModulePackRequest
+        {
+            ModulePath = moduleRoot.Path,
+            OutputDirectory = output.Path
+        });
+
+        Assert.Equal("Company.Tools", result.Name);
+        Assert.EndsWith("Company.Tools.1.0.0.nupkg", result.PackagePath, StringComparison.OrdinalIgnoreCase);
+        var metadata = new ManagedModulePackageReader().ReadMetadata(result.PackagePath);
+        Assert.Equal("Company.Tools", metadata.Id);
+    }
+
+    [Fact]
     public void Pack_omits_external_module_dependencies_from_nuspec_dependencies()
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -228,6 +257,27 @@ public sealed class ManagedModulePackServiceTests
         Assert.False(result.Duplicate);
         Assert.True(result.Elapsed > TimeSpan.Zero);
         Assert.NotEqual("existing", File.ReadAllText(destinationPath));
+    }
+
+    [Fact]
+    public async Task Publish_stages_outside_local_feed_when_output_directory_is_repository()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var feed = new TemporaryDirectory();
+        CreateModule(moduleRoot.Path, "Company.Tools", "1.0.0", prerelease: null);
+        var service = new ManagedModulePublishService(new NullLogger());
+
+        var result = await service.PublishAsync(new ManagedModulePublishRequest
+        {
+            ModulePath = moduleRoot.Path,
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            OutputDirectory = feed.Path
+        });
+
+        Assert.True(result.Published);
+        Assert.False(result.Duplicate);
+        Assert.True(File.Exists(Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg")));
+        Assert.NotEqual(feed.Path, Path.GetDirectoryName(result.PackagePath));
     }
 
     [Fact]

@@ -195,6 +195,7 @@ internal sealed class ModuleStateManagedDeliveryService
             Force = options.Force || action.Force,
             AllowClobber = options.AllowClobber,
             AcceptLicense = options.AcceptLicense,
+            LoadedModules = options.LoadedModules,
             SourcePolicy = action.IsRepair ? new ManagedModuleSourcePolicy() : null
         };
     }
@@ -355,6 +356,8 @@ internal sealed class ModuleStateManagedDeliveryOptions
     internal string? ModuleRoot { get; set; }
 
     internal RepositoryCredential? Credential { get; set; }
+
+    internal IReadOnlyList<ManagedModuleLoadedModule> LoadedModules { get; set; } = Array.Empty<ManagedModuleLoadedModule>();
 }
 
 internal readonly struct ModuleStateManagedVersionPolicy

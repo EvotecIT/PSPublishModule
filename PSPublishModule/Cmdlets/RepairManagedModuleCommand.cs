@@ -192,7 +192,7 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
             EnrichManagedLicenseMetadata(plan);
 
             var test = ModuleStateTestResult.FromPlan(plan);
-            var applyResult = PrepareApply(plan);
+            var applyResult = PrepareApply(plan, inventory);
             var workflow = new ModuleStateWorkflowResult
             {
                 Inventory = inventory,
@@ -324,7 +324,7 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
             : "=" + selected.Version.Trim();
     }
 
-    private ModuleStateApplyResult PrepareApply(ModuleStatePlanResult plan)
+    private ModuleStateApplyResult PrepareApply(ModuleStatePlanResult plan, ModuleStateInventoryResult inventory)
     {
         var deliveryOptions = new ModuleStateDeliveryOptions(
             ProfileName,
@@ -341,7 +341,7 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
         var executionResults = Array.Empty<ModuleStateDeliveryExecutionResult>();
 
         if (!Plan.IsPresent && result.Receipt.CanApply && ShouldProcess("managed module estate", "Repair managed modules"))
-            executionResults = ExecuteDelivery(result);
+            executionResults = ExecuteDelivery(result, inventory);
 
         return ModuleStateApplyResultMapper.ToCmdletResult(
             result,
@@ -352,13 +352,13 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
             postApplyInventory: null);
     }
 
-    private ModuleStateDeliveryExecutionResult[] ExecuteDelivery(PowerForge.ModuleStateApplyResult result)
+    private ModuleStateDeliveryExecutionResult[] ExecuteDelivery(PowerForge.ModuleStateApplyResult result, ModuleStateInventoryResult inventory)
     {
         if (Transport == ModuleStateDeliveryTransport.ManagedModule)
         {
             return new ModuleStateManagedDeliveryService(this).Execute(
                 result,
-                CreateManagedDeliveryOptions());
+                CreateManagedDeliveryOptions(inventory));
         }
 
         return new ModuleStatePrivateDeliveryService(this).Execute(
@@ -392,7 +392,7 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
         }
     }
 
-    private ModuleStateManagedDeliveryOptions CreateManagedDeliveryOptions()
+    private ModuleStateManagedDeliveryOptions CreateManagedDeliveryOptions(ModuleStateInventoryResult? inventory = null)
         => new()
         {
             ProfileName = ProfileName,
@@ -407,8 +407,20 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
                 Credential,
                 CredentialUserName,
                 CredentialSecret,
-                CredentialSecretFilePath)
+                CredentialSecretFilePath),
+            LoadedModules = ResolveLoadedModules(inventory)
         };
+
+    private static ManagedModuleLoadedModule[] ResolveLoadedModules(ModuleStateInventoryResult? inventory)
+        => (inventory?.InstalledModules ?? Array.Empty<ModuleStateInstalledModuleResult>())
+            .Where(static module => module.IsLoaded)
+            .Select(static module => new ManagedModuleLoadedModule
+            {
+                Name = module.Name,
+                Version = module.Version,
+                ModuleBase = module.Path
+            })
+            .ToArray();
 
     private void ValidateVersionPolicy()
     {
