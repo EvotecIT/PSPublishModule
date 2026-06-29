@@ -3,7 +3,7 @@ using PowerForge;
 namespace PSPublishModule;
 
 /// <summary>
-/// Result returned by Initialize-ModuleRepository for enterprise private-gallery onboarding.
+/// Result returned by Initialize-ManagedModuleRepository for managed repository onboarding.
 /// </summary>
 public sealed class ModuleRepositoryOnboardingResult
 {
@@ -43,10 +43,10 @@ public sealed class ModuleRepositoryOnboardingResult
     /// <summary>Repository connection result when connection was attempted.</summary>
     public ModuleRepositoryRegistrationResult? Connection { get; set; }
 
-    /// <summary>Recommended wrapper command for installing modules after onboarding.</summary>
+    /// <summary>Recommended managed command for installing modules after onboarding.</summary>
     public string RecommendedInstallCommand { get; set; } = string.Empty;
 
-    /// <summary>Recommended wrapper command for updating modules after onboarding.</summary>
+    /// <summary>Recommended managed command for updating modules after onboarding.</summary>
     public string RecommendedUpdateCommand { get; set; } = string.Empty;
 
     /// <summary>Operational messages collected during onboarding.</summary>

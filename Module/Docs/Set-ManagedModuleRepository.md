@@ -4,37 +4,45 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# Publish-ManagedModule
+# Set-ManagedModuleRepository
 ## SYNOPSIS
-Publishes a PowerShell module package through the managed C# module engine.
+Creates or updates a saved managed module repository profile.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Publish-ManagedModule [-Path] <string> [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-OutputDirectory <string>] [-ManifestPath <string>] [-Name <string>] [-Version <string>] [-Authors <string>] [-Description <string>] [-ProjectUrl <string>] [-Tags <string[]>] [-Credential <pscredential>] [-ApiKey <string>] [-ApiKeyFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [-Force] [-SkipDependenciesCheck] [-SkipModuleManifestValidate] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
+Set-ManagedModuleRepository [-Name] <string> [-Provider <PrivateGalleryProvider>] [-AzureDevOpsOrganization <string>] [-AzureDevOpsProject <string>] [-AzureArtifactsFeed <string>] [-Repository <string>] [-RepositoryName <string>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-JFrogBaseUri <string>] [-JFrogRepository <string>] [-GitHubOwner <string>] [-Tool <RepositoryRegistrationTool>] [-BootstrapMode <PrivateGalleryBootstrapMode>] [-Trusted <bool>] [-Priority <int>] [-Scope <ModuleRepositoryProfileScope>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-This managed publish surface creates a NuGet package from a module folder and publishes it to a local folder feed
-or NuGet-compatible package publish endpoint.
+Profiles store non-secret repository shape, trust, bootstrap, and publish-source settings used by the managed
+module lifecycle commands. Secrets stay in credentials, environment variables, secret files, or provider sessions.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-Publish-ManagedModule -Path C:\Source\Company.Tools -Repository C:\Packages
+Set-ManagedModuleRepository -Name Company -AzureDevOpsOrganization contoso -AzureDevOpsProject Platform -AzureArtifactsFeed Modules
 ```
 
+Saves a user-local profile that later commands can reference with -ProfileName Company.
+
+### EXAMPLE 2
+```powershell
+Set-ManagedModuleRepository -Name Finance -AzureDevOpsOrganization contoso -AzureDevOpsProject Platform -AzureArtifactsFeed InternalModules -RepositoryName CompanyModules -Priority 20
+```
+
+Stores the Azure Artifacts feed identity while registering it locally as CompanyModules.
 
 ## PARAMETERS
 
-### -ApiKey
-API key used by NuGet-compatible package publish endpoints.
+### -AzureArtifactsFeed
+Azure Artifacts feed name.
 
 ```yaml
 Type: String
 Parameter Sets: __AllParameterSets
-Aliases: NuGetApiKey
+Aliases: Feed
 Possible values:
 
 Required: False
@@ -44,13 +52,13 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ApiKeyFilePath
-Optional path to a file containing the API key.
+### -AzureDevOpsOrganization
+Azure DevOps organization name.
 
 ```yaml
 Type: String
 Parameter Sets: __AllParameterSets
-Aliases: ApiKeyPath, NuGetApiKeyPath
+Aliases: Organization
 Possible values:
 
 Required: False
@@ -60,8 +68,56 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Authors
-Optional authors override.
+### -AzureDevOpsProject
+Optional Azure DevOps project name for project-scoped feeds.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: Project
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -BootstrapMode
+Bootstrap/authentication mode saved in the profile. Defaults to ExistingSession for Azure Artifacts Credential Provider login.
+
+```yaml
+Type: PrivateGalleryBootstrapMode
+Parameter Sets: __AllParameterSets
+Aliases: Mode
+Possible values: Auto, ExistingSession, CredentialPrompt, JFrogCli
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -GitHubOwner
+GitHub user or organization namespace for GitHub Packages. Defaults from Repository when omitted.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: Owner, Namespace
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -JFrogBaseUri
+JFrog Artifactory base URI, for example https://company.jfrog.io/artifactory.
 
 ```yaml
 Type: String
@@ -76,56 +132,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Credential
-Optional repository credential.
-
-```yaml
-Type: PSCredential
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Description
-Optional description override.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Force
-Overwrite an existing package.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -ManifestPath
-Optional explicit module manifest path.
+### -JFrogRepository
+JFrog NuGet repository key. Defaults from Repository when omitted.
 
 ```yaml
 Type: String
@@ -141,44 +149,12 @@ Accept wildcard characters: True
 ```
 
 ### -Name
-Optional package id override.
+Repository profile name used by managed find, save, install, update, repair, and publish commands.
 
 ```yaml
 Type: String
 Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -OutputDirectory
-Output directory used when Repository is omitted.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: DestinationPath, OutputPath
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Path
-Module folder to package.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: ModulePath
+Aliases: ProfileName
 Possible values:
 
 Required: True
@@ -188,11 +164,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ProfileName
-Saved module repository profile to use instead of Repository or OutputDirectory.
+### -Priority
+Optional PSResourceGet repository priority.
 
 ```yaml
-Type: String
+Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -204,46 +180,14 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ProjectUrl
-Optional project URL override.
+### -Provider
+Private gallery provider.
 
 ```yaml
-Type: String
+Type: PrivateGalleryProvider
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Proxy
-Optional HTTP proxy used for repository requests.
-
-```yaml
-Type: Uri
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -ProxyCredential
-Optional proxy credential used with Proxy.
-
-```yaml
-Type: PSCredential
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
+Possible values: AzureArtifacts, Azure, JFrog, NuGet, GitHubPackages, GitHub
 
 Required: False
 Position: named
@@ -253,23 +197,23 @@ Accept wildcard characters: True
 ```
 
 ### -Repository
-Repository URL, NuGet v3 service index, publish endpoint, or local folder feed.
+Provider repository/feed id. For Azure this is the feed when AzureArtifactsFeed is omitted; for JFrog this is the Artifactory NuGet repository key.
 
 ```yaml
 Type: String
 Parameter Sets: __AllParameterSets
-Aliases: RepositoryPath, RepositoryUri, Source
+Aliases: None
 Possible values:
 
 Required: False
-Position: 1
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
 ### -RepositoryName
-Friendly repository name used in output.
+Optional local repository name override. Defaults to the provider repository/feed id.
 
 ```yaml
 Type: String
@@ -284,75 +228,91 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ShowSummary
-Write a compact Spectre.Console summary for the publish result.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -SkipDependenciesCheck
-Skip checking RequiredModules against the target repository.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -SkipModuleManifestValidate
-Skip managed manifest metadata validation before packaging.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Tags
-Optional package tags override.
-
-```yaml
-Type: String[]
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Version
-Optional package version override.
+### -RepositoryPublishUri
+PowerShellGet publish URI for generic/JFrog feeds.
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositorySourceUri
+PowerShellGet source URI for generic/JFrog feeds.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositoryUri
+PSResourceGet v3 repository URI for generic/JFrog feeds.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Scope
+Profile store scope to write. Use Machine from an elevated/admin deployment to share non-secret feed settings with all users.
+
+```yaml
+Type: ModuleRepositoryProfileScope
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: User, Machine, All
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Tool
+Registration strategy saved in the profile. Defaults to PSResourceGet for Entra-first Azure Artifacts use.
+
+```yaml
+Type: RepositoryRegistrationTool
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: Auto, PSResourceGet, PowerShellGet, Both
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Trusted
+When true, marks the repository as trusted during registration.
+
+```yaml
+Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -373,7 +333,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.ManagedModulePublishResult`
+- `PSPublishModule.ModuleRepositoryProfileResult` — User-facing private module repository profile saved by PSPublishModule.
 
 ## RELATED LINKS
 

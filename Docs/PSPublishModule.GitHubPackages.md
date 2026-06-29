@@ -24,7 +24,7 @@ GitHub Packages is the preferred private feed for neutral internal packages:
 Create a non-secret profile for the organization-scoped NuGet feed:
 
 ```powershell
-Set-ModuleRepositoryProfile -Name LicensingGitHub -Provider GitHubPackages -GitHubOwner EvotecIT -RepositoryName github-evotec
+Set-ManagedModuleRepository -Name LicensingGitHub -Provider GitHubPackages -GitHubOwner EvotecIT -RepositoryName github-evotec
 ```
 
 The profile resolves to:

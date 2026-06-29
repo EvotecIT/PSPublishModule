@@ -1,4 +1,4 @@
-﻿---
+---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule

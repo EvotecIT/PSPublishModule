@@ -11,7 +11,7 @@ Installs PowerShell modules through the managed C# module engine.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Install-ManagedModule [-Name] <string[]> [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-PackageCacheDirectory <string>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Force] [-AllowClobber] [-AcceptLicense] [-AuthenticodeCheck] [-SkipDependencyCheck] [-Plan] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
+Install-ManagedModule [-Name] <string[]> [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-PackageCacheDirectory <string>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [-Force] [-AllowClobber] [-AcceptLicense] [-AuthenticodeCheck] [-SkipDependencyCheck] [-Plan] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -311,6 +311,38 @@ Saved repository profile name.
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Proxy
+Optional HTTP proxy used for repository requests.
+
+```yaml
+Type: Uri
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProxyCredential
+Optional proxy credential used with Proxy.
+
+```yaml
+Type: PSCredential
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
