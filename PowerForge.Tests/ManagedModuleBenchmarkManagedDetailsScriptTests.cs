@@ -20,6 +20,7 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
                 VersionResolutionElapsed = [TimeSpan]::Zero
                 DownloadElapsed = [TimeSpan]::FromMilliseconds(5)
                 ExtractionElapsed = [TimeSpan]::FromMilliseconds(10)
+                ExtractionCacheLockWaitElapsed = [TimeSpan]::FromMilliseconds(1)
                 DependencyElapsed = [TimeSpan]::FromMilliseconds(800)
                 PromotionElapsed = [TimeSpan]::FromMilliseconds(2)
                 RepositoryRequestCount = 0
@@ -40,6 +41,7 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
                         VersionResolutionElapsed = [TimeSpan]::Zero
                         DownloadElapsed = [TimeSpan]::Zero
                         ExtractionElapsed = [TimeSpan]::Zero
+                        ExtractionCacheLockWaitElapsed = [TimeSpan]::Zero
                         DependencyElapsed = [TimeSpan]::Zero
                         PromotionElapsed = [TimeSpan]::Zero
                         RepositoryRequestCount = 0
@@ -61,6 +63,7 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
                         VersionResolutionElapsed = [TimeSpan]::Zero
                         DownloadElapsed = [TimeSpan]::Zero
                         ExtractionElapsed = [TimeSpan]::Zero
+                        ExtractionCacheLockWaitElapsed = [TimeSpan]::Zero
                         DependencyElapsed = [TimeSpan]::Zero
                         PromotionElapsed = [TimeSpan]::Zero
                         RepositoryRequestCount = 0
@@ -81,6 +84,7 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
                         VersionResolutionElapsed = [TimeSpan]::Zero
                         DownloadElapsed = [TimeSpan]::FromMilliseconds(20)
                         ExtractionElapsed = [TimeSpan]::FromMilliseconds(320)
+                        ExtractionCacheLockWaitElapsed = [TimeSpan]::FromMilliseconds(15)
                         DependencyElapsed = [TimeSpan]::FromMilliseconds(65)
                         PromotionElapsed = [TimeSpan]::FromMilliseconds(70)
                         RepositoryRequestCount = 0
@@ -130,9 +134,12 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
         Assert.Equal(0.0, NumericProperty(noOpPackage, "InstallLockWaitMilliseconds"));
         Assert.Equal(0.0, NumericProperty(bigPackage, "CoalescedWaitMilliseconds"));
         Assert.Equal(40.0, NumericProperty(bigPackage, "InstallLockWaitMilliseconds"));
+        Assert.Equal(15.0, NumericProperty(bigPackage, "ExtractionCacheLockWaitMilliseconds"));
         Assert.Equal("Company.Big", Property(summary, "SlowestMaterializedPackageName"));
         Assert.Equal(450.0, NumericProperty(summary, "SlowestMaterializedPackageMilliseconds"));
         Assert.Equal(320.0, NumericProperty(summary, "SlowestMaterializedPackageExtractionMilliseconds"));
+        Assert.Equal(16.0, NumericProperty(summary, "TotalExtractionCacheLockWaitMilliseconds"));
+        Assert.Equal(15.0, NumericProperty(summary, "SlowestMaterializedPackageExtractionCacheLockWaitMilliseconds"));
         Assert.Equal(70.0, NumericProperty(summary, "SlowestMaterializedPackagePromotionMilliseconds"));
     }
 

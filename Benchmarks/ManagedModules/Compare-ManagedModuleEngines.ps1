@@ -482,6 +482,7 @@ function Invoke-TimedOperation {
         ManagedRootDependencyMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'RootDependencyMilliseconds')
         ManagedTotalDownloadMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDownloadMilliseconds')
         ManagedTotalExtractionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalExtractionMilliseconds')
+        ManagedTotalExtractionCacheLockWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalExtractionCacheLockWaitMilliseconds')
         ManagedTotalDependencyMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDependencyMilliseconds')
         ManagedTotalPromotionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalPromotionMilliseconds')
         ManagedRepositoryRequestCount = [long] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalRepositoryRequestCount')
@@ -504,6 +505,7 @@ function Invoke-TimedOperation {
         ManagedSlowestMaterializedPackageName = Get-DetailText -InputObject $detailSummary -Name 'SlowestMaterializedPackageName'
         ManagedSlowestMaterializedPackageMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageMilliseconds')
         ManagedSlowestMaterializedPackageExtractionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageExtractionMilliseconds')
+        ManagedSlowestMaterializedPackageExtractionCacheLockWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageExtractionCacheLockWaitMilliseconds')
         ManagedSlowestMaterializedPackagePromotionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackagePromotionMilliseconds')
         ManagedAuthenticodeCheckedFileCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalAuthenticodeCheckedFiles')
         ManagedAuthenticodeCatalogFileCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalAuthenticodeCatalogFiles')

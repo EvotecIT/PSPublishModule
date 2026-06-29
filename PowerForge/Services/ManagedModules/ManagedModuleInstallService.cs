@@ -487,6 +487,7 @@ public sealed partial class ManagedModuleInstallService
                 ExtractedBytes = extraction.BytesWritten,
                 ExtractionElapsed = extraction.Elapsed,
                 ExtractionFromCache = extraction.FromCache,
+                ExtractionCacheLockWaitElapsed = extraction.CacheLockWaitElapsed,
                 DependencyElapsed = dependencyStopwatch.Elapsed,
                 PromotionElapsed = promotionStopwatch.Elapsed,
                 RepositoryRequestCount = requestScope.Count,

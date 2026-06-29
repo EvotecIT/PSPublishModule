@@ -131,6 +131,11 @@ public sealed class ManagedModuleInstallResult
     public bool ExtractionFromCache { get; set; }
 
     /// <summary>
+    /// Elapsed time spent waiting for exclusive access to the expanded package cache before materialization.
+    /// </summary>
+    public TimeSpan ExtractionCacheLockWaitElapsed { get; set; }
+
+    /// <summary>
     /// Elapsed time spent installing dependencies before this module was promoted.
     /// </summary>
     public TimeSpan DependencyElapsed { get; set; }
