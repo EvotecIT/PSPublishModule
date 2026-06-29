@@ -414,8 +414,6 @@ function Invoke-ScenarioHostRun {
         ((Get-ScenarioOperations -Scenario $Scenario) -join ','),
         '-Engine',
         ((Get-ScenarioEngines -Scenario $Scenario) -join ','),
-        '-ModuleFastSource',
-        (Get-ScenarioModuleFastSource -Scenario $Scenario),
         '-RepeatCount',
         ([string]$scenarioRepeatCount),
         '-SetupRetryCount',
@@ -428,6 +426,10 @@ function Invoke-ScenarioHostRun {
         $scenarioCacheMode,
         '-SkipBuild'
     )
+    $scenarioModuleFastSource = Get-ScenarioModuleFastSource -Scenario $Scenario
+    if (-not [string]::IsNullOrWhiteSpace($scenarioModuleFastSource)) {
+        $arguments += @('-ModuleFastSource', $scenarioModuleFastSource)
+    }
     $scenarioRepository = Get-ScenarioRepository -Scenario $Scenario
     if (-not [string]::IsNullOrWhiteSpace($scenarioRepository)) {
         $arguments += @('-Repository', $scenarioRepository)

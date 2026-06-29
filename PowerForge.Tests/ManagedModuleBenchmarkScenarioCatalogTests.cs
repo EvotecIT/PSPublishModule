@@ -159,6 +159,18 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
         Assert.Contains("[string] $ModuleFastSource = ''", content, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void BenchmarkSuite_OmitsEmptyProviderDefaultModuleFastSourceArgument()
+    {
+        var script = Path.Combine(RepoRootLocator.Find(), "Benchmarks", "ManagedModules", "Invoke-ManagedModuleBenchmarkSuite.ps1");
+        var content = File.ReadAllText(script);
+
+        Assert.Contains("$scenarioModuleFastSource = Get-ScenarioModuleFastSource -Scenario $Scenario", content, StringComparison.Ordinal);
+        Assert.Contains("if (-not [string]::IsNullOrWhiteSpace($scenarioModuleFastSource))", content, StringComparison.Ordinal);
+        Assert.Contains("$arguments += @('-ModuleFastSource', $scenarioModuleFastSource)", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("'ModuleFastSource',`r`n        (Get-ScenarioModuleFastSource -Scenario $Scenario)", content, StringComparison.Ordinal);
+    }
+
     private static JsonDocument InvokeScenarioList(string script)
     {
         using var process = new Process();
