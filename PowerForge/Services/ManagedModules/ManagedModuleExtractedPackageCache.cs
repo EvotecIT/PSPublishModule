@@ -161,16 +161,7 @@ internal sealed class ManagedModuleExtractedPackageCache
             var targetFile = Path.Combine(destinationRoot, file.Substring(sourceRoot.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
             CreateDirectoryOnce(Path.GetDirectoryName(targetFile)!, createdDirectories);
             var sourceInfo = new FileInfo(file);
-#if NETFRAMEWORK
-            // Windows PowerShell 5.1/net472 benefits from the platform copy path in warm-cache save diagnostics.
             File.Copy(file, targetFile, overwrite: false);
-#else
-            using (var source = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, CopyBufferSize, FileOptions.SequentialScan))
-            using (var destination = new FileStream(targetFile, FileMode.CreateNew, FileAccess.Write, FileShare.None, CopyBufferSize, FileOptions.SequentialScan))
-            {
-                source.CopyTo(destination, CopyBufferSize);
-            }
-#endif
             fileCount++;
             bytesWritten += sourceInfo.Length;
         }
