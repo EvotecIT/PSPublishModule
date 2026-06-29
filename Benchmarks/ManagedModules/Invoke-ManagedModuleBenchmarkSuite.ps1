@@ -53,7 +53,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $compareScript = Join-Path $PSScriptRoot 'Compare-ManagedModuleEngines.ps1'
 $suiteRoot = Join-Path $OutputDirectory ('S{0}-{1}' -f (Get-Date -Format 'yyyyMMddHHmmss'), $PID)
-$validSuites = @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'HeavyLifecycleGate', 'PublishGate', 'SpeedGate', 'SaveGate', 'All')
+$validSuites = @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'HeavyLifecycleGate', 'HeavySaveGate', 'PublishGate', 'SpeedGate', 'SaveGate', 'All')
 $validHosts = @('Current', 'PowerShell7', 'WindowsPowerShell')
 
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.PerformanceGate.ps1')
@@ -142,6 +142,8 @@ function Get-ScenarioCatalog {
         New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'Az.Accounts.SaveExact.NoOpForce' -ModuleName 'Az.Accounts' -Version '5.5.0' -AcceptLicense $true -Operations @('SaveNoOp', 'SaveForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet') -ScenarioManagedMaxRank 1
         New-BenchmarkScenario -SuiteName 'HeavyLifecycleGate' -Name 'Graph.Full.InstallExact.NoOpForce' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('InstallNoOp', 'InstallForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet') -Repository 'https://pwsh.gallery/index.json' -RepositoryName 'PWSHGallery' -ScenarioModuleFastSource 'https://pwsh.gallery/index.json' -ScenarioManagedMaxRank 1
         New-BenchmarkScenario -SuiteName 'HeavyLifecycleGate' -Name 'Az.Full.InstallExact.NoOpForce' -ModuleName 'Az' -Version '16.0.0' -AcceptLicense $true -Operations @('InstallNoOp', 'InstallForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet') -Repository 'https://pwsh.gallery/index.json' -RepositoryName 'PWSHGallery' -ScenarioModuleFastSource 'https://pwsh.gallery/index.json' -ScenarioManagedMaxRank 1
+        New-BenchmarkScenario -SuiteName 'HeavySaveGate' -Name 'Graph.Full.Save' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Save') -Engines @('Managed', 'PSResourceGet', 'PowerShellGet') -ScenarioManagedMaxRank 1
+        New-BenchmarkScenario -SuiteName 'HeavySaveGate' -Name 'Az.Full.Save' -ModuleName 'Az' -Version '16.0.0' -AcceptLicense $true -Operations @('Save') -Engines @('Managed', 'PSResourceGet', 'PowerShellGet') -ScenarioManagedMaxRank 1
         New-BenchmarkScenario -SuiteName 'PublishGate' -Name 'Synthetic.Publish.LocalFeed' -ModuleName 'Company.ManagedPublishBenchmark' -Version '1.0.0' -Operations @('Publish') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
         New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Graph.Full.SameSource' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast') -Repository 'https://pwsh.gallery/index.json' -RepositoryName 'PWSHGallery' -ScenarioModuleFastSource 'https://pwsh.gallery/index.json' -ScenarioManagedMaxRank 1
         New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Graph.Full.ProviderMatrix' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
@@ -153,7 +155,7 @@ function Get-ScenarioCatalog {
 
 function Resolve-ScenarioList {
     $selectedSuites = if ($Suite -contains 'All') {
-        @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'HeavyLifecycleGate', 'PublishGate', 'SpeedGate', 'SaveGate')
+        @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'HeavyLifecycleGate', 'HeavySaveGate', 'PublishGate', 'SpeedGate', 'SaveGate')
     } else {
         $Suite
     }
