@@ -286,6 +286,64 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
     }
 
     [Fact]
+    public void OptimizationTarget_LabelsWarmCachePackageDeliverySeparatelyFromDownload()
+    {
+        using var ps = CreateBenchmarkPowerShell("""
+            $rows = @(
+                [pscustomobject]@{
+                    Suite = 'HeavySaveCacheGate'
+                    Scenario = 'Graph.Full.Save.ManagedWarmCache'
+                    ModuleName = 'Microsoft.Graph'
+                    Host = 'WindowsPowerShell'
+                    Operation = 'Save'
+                    ManagedMs = '2100'
+                    ManagedRank = '1'
+                    ManagedVsFastest = '1x'
+                    ManagedOutputBytes = '104857600'
+                    ManagedOutputFileCount = '400'
+                    ManagedRootElapsedMs = '2000'
+                    ManagedHarnessOverheadMs = '100'
+                    ManagedRootDependencyMs = '1500'
+                    ManagedDependencyMs = '200'
+                    ManagedDownloadMs = '900'
+                    ManagedExtractionMs = '100'
+                    ManagedPromotionMs = '25'
+                    ManagedRepositoryRequests = '40'
+                    ManagedPackageRepositoryRequests = '40'
+                    ManagedPackageRepositoryRedirects = '0'
+                    ManagedDownloadBytes = '186506621'
+                    ManagedPackageCount = '40'
+                    ManagedUniquePackageCount = '40'
+                    ManagedCacheHits = '40'
+                    ManagedLastMs = '1900'
+                    ManagedLastRootDependencyMs = '1500'
+                    ManagedLastDependencyMs = '200'
+                    ManagedLastDownloadMs = '875'
+                    ManagedLastExtractionMs = '100'
+                    ManagedLastPromotionMs = '25'
+                    ManagedLastPromotionMoveMs = '10'
+                    ManagedLastPackageRepositoryRequests = '0'
+                    ManagedLastDownloadBytes = '0'
+                    ManagedLastCacheHits = '40'
+                }
+            )
+
+            New-ManagedOptimizationTarget -Rows $rows
+            """);
+
+        var results = ps.Invoke();
+
+        AssertNoErrors(ps);
+        var row = Assert.Single(results);
+        Assert.Equal("PackageCache", Property(row, "LastWarmOptimizationLane"));
+        Assert.Equal(875.0, NumericProperty(row, "LastWarmOptimizationLaneMs"));
+        Assert.Contains("package-cache", Property(row, "LastWarmOptimizationQuestion"), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0.0, NumericProperty(row, "LastPackageRepositoryRequests"));
+        Assert.Equal(0.0, NumericProperty(row, "LastDownloadMB"));
+        Assert.Equal(40.0, NumericProperty(row, "LastCacheHits"));
+    }
+
+    [Fact]
     public void OptimizationTarget_MarksOverlappedPhaseTiming()
     {
         using var ps = CreateBenchmarkPowerShell("""
