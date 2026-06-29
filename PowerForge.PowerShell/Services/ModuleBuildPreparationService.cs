@@ -66,7 +66,9 @@ internal sealed class ModuleBuildPreparationService
                 Name = moduleName!,
                 SourcePath = projectRoot,
                 StagingPath = ResolveWorkspacePath(workspaceRoot, request.StagingPath),
-                CsprojPath = ResolveWorkspacePath(workspaceRoot, request.CsprojPath),
+                CsprojPath = UsesModuleFolderLayout(workspaceRoot, projectRoot)
+                    ? ResolveProjectPreferredPath(workspaceRoot, projectRoot, request.CsprojPath)
+                    : ResolveWorkspacePath(workspaceRoot, request.CsprojPath),
                 Version = "1.0.0",
                 Configuration = request.DotNetConfiguration,
                 Frameworks = frameworks,
@@ -222,9 +224,13 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
+            var optionsRoot = projectRoot;
             if (!string.IsNullOrWhiteSpace(cfg.ConfigPath))
+            {
                 cfg.ConfigPath = ResolveConfigPath(projectRoot, cfg.ConfigPath);
-            ResolvePackageBuildOptionPaths(cfg.Options, projectRoot);
+                optionsRoot = Path.GetDirectoryName(cfg.ConfigPath) ?? projectRoot;
+            }
+            ResolvePackageBuildOptionPaths(cfg.Options, optionsRoot);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationBuildLibrariesSegment>() ?? Enumerable.Empty<ConfigurationBuildLibrariesSegment>())
@@ -523,6 +529,27 @@ internal sealed class ModuleBuildPreparationService
         return ResolveWorkspacePath(workspaceRoot, path);
     }
 
+    private static string? ResolveProjectPreferredPath(string workspaceRoot, string projectRoot, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return path;
+        if (Path.IsPathRooted(path) || SamePath(workspaceRoot, projectRoot))
+            return ResolveWorkspacePath(projectRoot, path);
+
+        var moduleDirectoryName = Path.GetFileName(projectRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) ?? string.Empty;
+        if (StartsWithPathSegment(path!, moduleDirectoryName))
+            return ResolveWorkspacePath(workspaceRoot, path);
+
+        var projectCandidate = PathValueResolver.Resolve(projectRoot, path!);
+        if (File.Exists(projectCandidate) || Directory.Exists(projectCandidate))
+            return projectCandidate;
+
+        var workspaceCandidate = PathValueResolver.Resolve(workspaceRoot, path!);
+        return File.Exists(workspaceCandidate) || Directory.Exists(workspaceCandidate)
+            ? workspaceCandidate
+            : projectCandidate;
+    }
+
     private static string[] ResolveWorkspaceQualifiedStagingRelativePaths(string workspaceRoot, string projectRoot, string[]? paths)
     {
         if (paths is null || paths.Length == 0)
@@ -794,9 +821,14 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
+            var optionsRoot = projectRoot;
             if (!string.IsNullOrWhiteSpace(cfg.ConfigPath))
-                cfg.ConfigPath = MakeRelativeForConfig(projectRoot, ResolveConfigPath(projectRoot, cfg.ConfigPath));
-            MakePackageBuildOptionPathsRelative(cfg.Options, projectRoot, workspaceRoot);
+            {
+                var configPath = ResolveConfigPath(projectRoot, cfg.ConfigPath);
+                optionsRoot = Path.GetDirectoryName(configPath) ?? projectRoot;
+                cfg.ConfigPath = MakeRelativeForConfig(projectRoot, configPath);
+            }
+            MakePackageBuildOptionPathsRelative(cfg.Options, optionsRoot, workspaceRoot);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationBuildLibrariesSegment>() ?? Enumerable.Empty<ConfigurationBuildLibrariesSegment>())

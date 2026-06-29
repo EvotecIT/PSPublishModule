@@ -48,12 +48,15 @@ public sealed class ModuleBuildPathPolicyTests
         var workspaceRoot = Path.Combine(Path.GetTempPath(), "pf-path-policy-workspace-" + Guid.NewGuid().ToString("N"));
         var projectRoot = Path.Combine(workspaceRoot, "Module");
         var projectPath = Path.Combine(projectRoot, "Artefacts", "Packed", "<TagModuleVersionWithPreRelease>");
+        var workspacePath = Path.Combine(workspaceRoot, "Artefacts", "Packed", "<ModuleVersion>");
         var externalPath = Path.Combine(Path.GetTempPath(), "pf-path-policy-external-" + Guid.NewGuid().ToString("N"), "Packed", "<ModuleVersion>");
 
         var projectRelative = ModuleBuildPathPolicy.MakeRelativeForProjectRoot(projectRoot, projectPath, preserveExternalRooted: true, workspaceRoot);
+        var workspaceRelative = ModuleBuildPathPolicy.MakeRelativeForProjectRoot(projectRoot, workspacePath, preserveExternalRooted: true, workspaceRoot);
         var externalPreserved = ModuleBuildPathPolicy.MakeRelativeForProjectRoot(projectRoot, externalPath, preserveExternalRooted: true, workspaceRoot);
 
         Assert.Equal("Artefacts/Packed/<TagModuleVersionWithPreRelease>", projectRelative);
+        Assert.Equal("../Artefacts/Packed/<ModuleVersion>", workspaceRelative);
         Assert.Equal(NormalizeForJson(externalPath), externalPreserved);
     }
 

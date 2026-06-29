@@ -104,7 +104,7 @@ internal static class ModuleBuildPathPolicy
             return null;
 
         if (ContainsToken(path!))
-            return MakeTokenizedPathRelativeForProjectRoot(projectRoot, path!);
+            return MakeTokenizedPathRelativeForProjectRoot(projectRoot, path!, workspaceRoot);
 
         var resolved = ResolveConfigPath(projectRoot, path);
         if (preserveExternalRooted &&
@@ -189,7 +189,7 @@ internal static class ModuleBuildPathPolicy
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
 
-    private static string MakeTokenizedPathRelativeForProjectRoot(string projectRoot, string path)
+    private static string MakeTokenizedPathRelativeForProjectRoot(string projectRoot, string path, string workspaceRoot)
     {
         var cleaned = PathValueResolver.Clean(path);
         if (!Path.IsPathRooted(cleaned))
@@ -205,8 +205,11 @@ internal static class ModuleBuildPathPolicy
             return NormalizeForJson(cleaned);
 
         var prefixFullPath = Path.GetFullPath(prefix);
-        if (!IsSameOrChildPath(projectRoot, prefixFullPath))
+        if (!IsSameOrChildPath(projectRoot, prefixFullPath) &&
+            !IsSameOrChildPath(workspaceRoot, prefixFullPath))
+        {
             return NormalizeForJson(cleaned);
+        }
 
         var relativePrefix = MakeRelativeForConfig(projectRoot, prefixFullPath);
         var tokenStartsNewSegment = tokenIndex == 0 || separators.Contains(cleaned[tokenIndex - 1]);

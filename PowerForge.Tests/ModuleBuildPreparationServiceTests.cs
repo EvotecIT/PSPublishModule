@@ -64,6 +64,9 @@ public sealed class ModuleBuildPreparationServiceTests
             Directory.CreateDirectory(Path.Combine(root.FullName, "Build"));
             Directory.CreateDirectory(Path.Combine(root.FullName, "Build", "Templates"));
             Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Examples"));
+            var topLevelProject = Path.Combine(root.FullName, "Sources", "TopLevel", "TopLevel.csproj");
+            Directory.CreateDirectory(Path.GetDirectoryName(topLevelProject)!);
+            File.WriteAllText(topLevelProject, "<Project />");
             File.WriteAllText(Path.Combine(root.FullName, "Build", "header.ps1"), "Write-Output 'repo header'");
             File.WriteAllText(Path.Combine(scriptRoot.FullName, "header.ps1"), "Write-Output 'module header'");
             File.WriteAllText(Path.Combine(scriptRoot.FullName, "workspace-header.ps1"), "Write-Output 'workspace-qualified module header'");
@@ -367,6 +370,41 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Runspace.DefaultRunspace = previousRunspace;
                 try { outsideRoot.Delete(recursive: true); } catch { }
             }
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Prepare_from_module_build_script_prefers_module_local_csproj_when_it_exists()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-module-csproj-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            var scriptRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Build"));
+            var moduleProject = Path.Combine(moduleRoot.FullName, "Sources", "Foo", "Foo.csproj");
+            Directory.CreateDirectory(Path.GetDirectoryName(moduleProject)!);
+            File.WriteAllText(moduleProject, "<Project />");
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "SampleModule.psd1"), "@{ ModuleVersion = '1.0.0' }");
+
+            var prepared = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
+            {
+                ParameterSetName = "Modern",
+                ModuleName = "SampleModule",
+                CurrentPath = root.FullName,
+                ScriptRoot = scriptRoot.FullName,
+                ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
+                CsprojPath = "Sources/Foo/Foo.csproj",
+                DotNetFramework = Array.Empty<string>(),
+                ExcludeDirectories = Array.Empty<string>(),
+                ExcludeFiles = Array.Empty<string>()
+            });
+
+            Assert.Equal(moduleProject, prepared.PipelineSpec.Build.CsprojPath);
         }
         finally
         {
@@ -1159,8 +1197,8 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Contains("\"StagingPath\": \"Artifacts/Packages/Staging\"", json, StringComparison.Ordinal);
             Assert.Contains($"\"OutputPath\": \"{externalPackageOutputPath.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"PlanOutputPath\": \"Artifacts/Packages/plan.json\"", json, StringComparison.Ordinal);
-            Assert.Contains("\"OutputPath\": \"Artifacts/ProjectBuild/options\"", json, StringComparison.Ordinal);
-            Assert.Contains("\"PlanOutputPath\": \"Build/project-options-plan.json\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"OutputPath\": \"../Artifacts/ProjectBuild/options\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"PlanOutputPath\": \"project-options-plan.json\"", json, StringComparison.Ordinal);
             Assert.Contains("\"OutputPath\": \"Artifacts/PackageBuild/options\"", json, StringComparison.Ordinal);
             Assert.Contains($"\"PlanOutputPath\": \"{externalPackageOutputPath.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains($"\"PublishApiKeyFilePath\": \"{packagePublishKey.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
