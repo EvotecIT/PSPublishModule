@@ -378,6 +378,20 @@ function Write-ManagedInstallDetail {
     } else {
         [pscustomobject]@{ Name = ''; Milliseconds = 0.0 }
     }
+    $slowestMaterializedPackageFileCount = if ($slowestMaterializedPackage.Count) { [int] $slowestMaterializedPackage[0].FileCount } else { 0 }
+    $slowestMaterializedPackageExtractedBytes = if ($slowestMaterializedPackage.Count) { [long] $slowestMaterializedPackage[0].ExtractedBytes } else { 0L }
+    $slowestMaterializedPackageExtractedMb = [math]::Round([double] $slowestMaterializedPackageExtractedBytes / 1MB, 2)
+    $slowestMaterializedPackageMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].ElapsedMilliseconds } else { 0.0 }
+    $slowestMaterializedPackageMbPerSecond = if ($slowestMaterializedPackageMilliseconds -gt 0 -and $slowestMaterializedPackageExtractedBytes -gt 0) {
+        [math]::Round(([double] $slowestMaterializedPackageExtractedBytes / 1MB) / ($slowestMaterializedPackageMilliseconds / 1000.0), 2)
+    } else {
+        0.0
+    }
+    $slowestMaterializedPackageFilesPerSecond = if ($slowestMaterializedPackageMilliseconds -gt 0 -and $slowestMaterializedPackageFileCount -gt 0) {
+        [math]::Round([double] $slowestMaterializedPackageFileCount / ($slowestMaterializedPackageMilliseconds / 1000.0), 2)
+    } else {
+        0.0
+    }
     $rootDependencyMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.DependencyElapsed
     $criticalDependencyBranchMilliseconds = if ($criticalDependencyBranch.Count) {
         [math]::Round([double] $criticalDependencyBranch[0].DependencyBranchElapsedMilliseconds, 2)
@@ -445,7 +459,12 @@ function Write-ManagedInstallDetail {
         SlowestVersionSelectionWaitName = if ($slowestVersionSelectionWait.Count) { [string] $slowestVersionSelectionWait[0].Name } else { '' }
         SlowestVersionSelectionWaitMilliseconds = if ($slowestVersionSelectionWait.Count) { [double] $slowestVersionSelectionWait[0].VersionSelectionWaitMilliseconds } else { 0.0 }
         SlowestMaterializedPackageName = if ($slowestMaterializedPackage.Count) { [string] $slowestMaterializedPackage[0].Name } else { '' }
-        SlowestMaterializedPackageMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].ElapsedMilliseconds } else { 0.0 }
+        SlowestMaterializedPackageMilliseconds = $slowestMaterializedPackageMilliseconds
+        SlowestMaterializedPackageFileCount = $slowestMaterializedPackageFileCount
+        SlowestMaterializedPackageExtractedBytes = $slowestMaterializedPackageExtractedBytes
+        SlowestMaterializedPackageExtractedMB = $slowestMaterializedPackageExtractedMb
+        SlowestMaterializedPackageMBPerSecond = $slowestMaterializedPackageMbPerSecond
+        SlowestMaterializedPackageFilesPerSecond = $slowestMaterializedPackageFilesPerSecond
         SlowestMaterializedPackageExtractionMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].ExtractionMilliseconds } else { 0.0 }
         SlowestMaterializedPackageExtractionCacheLockWaitMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].ExtractionCacheLockWaitMilliseconds } else { 0.0 }
         SlowestMaterializedPackagePromotionMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].PromotionMilliseconds } else { 0.0 }

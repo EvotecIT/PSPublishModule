@@ -115,7 +115,7 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
                         PackageRepositoryRequestCount = 0
                         PackageRepositoryRedirectCount = 0
                         FileCount = 10
-                        ExtractedBytes = 1000
+                        ExtractedBytes = 10485760
                         ExtractionFromCache = $true
                         DependencyResults = @()
                     }
@@ -172,6 +172,11 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
         Assert.Equal(15.0, NumericProperty(bigPackage, "ExtractionCacheLockWaitMilliseconds"));
         Assert.Equal("Company.Big", Property(summary, "SlowestMaterializedPackageName"));
         Assert.Equal(450.0, NumericProperty(summary, "SlowestMaterializedPackageMilliseconds"));
+        Assert.Equal(10.0, NumericProperty(summary, "SlowestMaterializedPackageFileCount"));
+        Assert.Equal(10485760.0, NumericProperty(summary, "SlowestMaterializedPackageExtractedBytes"));
+        Assert.Equal(10.0, NumericProperty(summary, "SlowestMaterializedPackageExtractedMB"));
+        Assert.Equal(22.22, NumericProperty(summary, "SlowestMaterializedPackageMBPerSecond"));
+        Assert.Equal(22.22, NumericProperty(summary, "SlowestMaterializedPackageFilesPerSecond"));
         Assert.Equal(320.0, NumericProperty(summary, "SlowestMaterializedPackageExtractionMilliseconds"));
         Assert.Equal(16.0, NumericProperty(summary, "TotalExtractionCacheLockWaitMilliseconds"));
         Assert.Equal(15.0, NumericProperty(summary, "SlowestMaterializedPackageExtractionCacheLockWaitMilliseconds"));

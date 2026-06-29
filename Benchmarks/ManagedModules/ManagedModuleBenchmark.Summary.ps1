@@ -146,6 +146,10 @@ function New-Summary {
             MedianManagedSlowestDependencyQueueWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestDependencyQueueWaitMilliseconds' } else { 0 }
             MedianManagedSlowestVersionSelectionWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestVersionSelectionWaitMilliseconds' } else { 0 }
             MedianManagedSlowestMaterializedPackageMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageMilliseconds' } else { 0 }
+            MedianManagedSlowestMaterializedPackageFileCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageFileCount' } else { 0 }
+            MedianManagedSlowestMaterializedPackageExtractedBytes = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageExtractedBytes' } else { 0 }
+            MedianManagedSlowestMaterializedPackageMBPerSecond = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageMBPerSecond' } else { 0 }
+            MedianManagedSlowestMaterializedPackageFilesPerSecond = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageFilesPerSecond' } else { 0 }
             MedianManagedSlowestMaterializedPackageExtractionCacheLockWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageExtractionCacheLockWaitMilliseconds' } else { 0 }
             MedianManagedSlowestMaterializedPackagePromotionMoveMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackagePromotionMoveMilliseconds' } else { 0 }
             MedianManagedSlowestMaterializedPackagePromotionFinalMoveMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackagePromotionFinalMoveMilliseconds' } else { 0 }
@@ -224,6 +228,10 @@ function New-Summary {
             LastManagedSlowestVersionSelectionWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestVersionSelectionWaitMilliseconds } else { 0 }
             LastManagedSlowestMaterializedPackageName = Get-TextProperty -Row $lastPassed -Name 'ManagedSlowestMaterializedPackageName'
             LastManagedSlowestMaterializedPackageMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageMilliseconds } else { 0 }
+            LastManagedSlowestMaterializedPackageFileCount = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageFileCount } else { 0 }
+            LastManagedSlowestMaterializedPackageExtractedBytes = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageExtractedBytes } else { 0 }
+            LastManagedSlowestMaterializedPackageMBPerSecond = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageMBPerSecond } else { 0 }
+            LastManagedSlowestMaterializedPackageFilesPerSecond = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageFilesPerSecond } else { 0 }
             LastManagedSlowestMaterializedPackageExtractionMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageExtractionMilliseconds } else { 0 }
             LastManagedSlowestMaterializedPackageExtractionCacheLockWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackageExtractionCacheLockWaitMilliseconds } else { 0 }
             LastManagedSlowestMaterializedPackagePromotionMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionMilliseconds } else { 0 }
@@ -307,6 +315,10 @@ function New-Comparison {
             ManagedSlowestDependencyQueueWaitMs = if ($managed.Count) { [double] $managed[0].MedianManagedSlowestDependencyQueueWaitMs } else { 0 }
             ManagedSlowestVersionSelectionWaitMs = if ($managed.Count) { [double] $managed[0].MedianManagedSlowestVersionSelectionWaitMs } else { 0 }
             ManagedSlowestMaterializedPackageMs = if ($managed.Count) { [double] $managed[0].MedianManagedSlowestMaterializedPackageMs } else { 0 }
+            ManagedSlowestMaterializedPackageFileCount = if ($managed.Count) { [double] $managed[0].MedianManagedSlowestMaterializedPackageFileCount } else { 0 }
+            ManagedSlowestMaterializedPackageExtractedBytes = if ($managed.Count) { [double] $managed[0].MedianManagedSlowestMaterializedPackageExtractedBytes } else { 0 }
+            ManagedSlowestMaterializedPackageMBPerSecond = if ($managed.Count) { [double] $managed[0].MedianManagedSlowestMaterializedPackageMBPerSecond } else { 0 }
+            ManagedSlowestMaterializedPackageFilesPerSecond = if ($managed.Count) { [double] $managed[0].MedianManagedSlowestMaterializedPackageFilesPerSecond } else { 0 }
             ManagedSlowestMaterializedPackageExtractionCacheLockWaitMs = if ($managed.Count) { [double] $managed[0].MedianManagedSlowestMaterializedPackageExtractionCacheLockWaitMs } else { 0 }
             ManagedCriticalDependencyBranchMs = if ($managed.Count) { [double] $managed[0].MedianManagedCriticalDependencyBranchMs } else { 0 }
             ManagedCriticalRootBranchMs = if ($managed.Count) { [double] $managed[0].MedianManagedCriticalRootBranchMs } else { 0 }
@@ -382,6 +394,10 @@ function New-Comparison {
             ManagedLastSlowestVersionSelectionWaitMs = if ($managed.Count) { [double] $managed[0].LastManagedSlowestVersionSelectionWaitMs } else { 0 }
             ManagedLastSlowestMaterializedPackageName = if ($managed.Count) { [string] $managed[0].LastManagedSlowestMaterializedPackageName } else { '' }
             ManagedLastSlowestMaterializedPackageMs = if ($managed.Count) { [double] $managed[0].LastManagedSlowestMaterializedPackageMs } else { 0 }
+            ManagedLastSlowestMaterializedPackageFileCount = if ($managed.Count) { [double] $managed[0].LastManagedSlowestMaterializedPackageFileCount } else { 0 }
+            ManagedLastSlowestMaterializedPackageExtractedBytes = if ($managed.Count) { [double] $managed[0].LastManagedSlowestMaterializedPackageExtractedBytes } else { 0 }
+            ManagedLastSlowestMaterializedPackageMBPerSecond = if ($managed.Count) { [double] $managed[0].LastManagedSlowestMaterializedPackageMBPerSecond } else { 0 }
+            ManagedLastSlowestMaterializedPackageFilesPerSecond = if ($managed.Count) { [double] $managed[0].LastManagedSlowestMaterializedPackageFilesPerSecond } else { 0 }
             ManagedLastSlowestMaterializedPackageExtractionMs = if ($managed.Count) { [double] $managed[0].LastManagedSlowestMaterializedPackageExtractionMs } else { 0 }
             ManagedLastSlowestMaterializedPackageExtractionCacheLockWaitMs = if ($managed.Count) { [double] $managed[0].LastManagedSlowestMaterializedPackageExtractionCacheLockWaitMs } else { 0 }
             ManagedLastSlowestMaterializedPackagePromotionMs = if ($managed.Count) { [double] $managed[0].LastManagedSlowestMaterializedPackagePromotionMs } else { 0 }

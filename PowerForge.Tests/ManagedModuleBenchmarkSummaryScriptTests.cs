@@ -52,6 +52,10 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
                     ManagedSlowestDependencyPackageMilliseconds = 700
                     ManagedSlowestMaterializedPackageName = 'Company.Big'
                     ManagedSlowestMaterializedPackageMilliseconds = 600
+                    ManagedSlowestMaterializedPackageFileCount = 100
+                    ManagedSlowestMaterializedPackageExtractedBytes = 104857600
+                    ManagedSlowestMaterializedPackageMBPerSecond = 166.67
+                    ManagedSlowestMaterializedPackageFilesPerSecond = 166.67
                     ManagedSlowestMaterializedPackageExtractionMilliseconds = 500
                     ManagedSlowestMaterializedPackagePromotionMilliseconds = 80
                     ManagedCriticalDependencyBranchName = 'Company.BranchCold'
@@ -115,6 +119,10 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
                     ManagedSlowestDependencyPackageMilliseconds = 500
                     ManagedSlowestMaterializedPackageName = 'Company.Files'
                     ManagedSlowestMaterializedPackageMilliseconds = 450
+                    ManagedSlowestMaterializedPackageFileCount = 80
+                    ManagedSlowestMaterializedPackageExtractedBytes = 52428800
+                    ManagedSlowestMaterializedPackageMBPerSecond = 111.11
+                    ManagedSlowestMaterializedPackageFilesPerSecond = 177.78
                     ManagedSlowestMaterializedPackageExtractionMilliseconds = 320
                     ManagedSlowestMaterializedPackagePromotionMilliseconds = 70
                     ManagedCriticalDependencyBranchName = 'Company.BranchWarm'
@@ -187,6 +195,14 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
         Assert.Equal(500.0, NumericProperty(row, "ManagedLastSlowestDependencyPackageMs"));
         Assert.Equal("Company.Files", Property(row, "ManagedLastSlowestMaterializedPackageName"));
         Assert.Equal(450.0, NumericProperty(row, "ManagedLastSlowestMaterializedPackageMs"));
+        Assert.Equal(90.0, NumericProperty(row, "ManagedSlowestMaterializedPackageFileCount"));
+        Assert.Equal(78643200.0, NumericProperty(row, "ManagedSlowestMaterializedPackageExtractedBytes"));
+        Assert.Equal(138.89, NumericProperty(row, "ManagedSlowestMaterializedPackageMBPerSecond"));
+        Assert.Equal(172.22, NumericProperty(row, "ManagedSlowestMaterializedPackageFilesPerSecond"));
+        Assert.Equal(80.0, NumericProperty(row, "ManagedLastSlowestMaterializedPackageFileCount"));
+        Assert.Equal(52428800.0, NumericProperty(row, "ManagedLastSlowestMaterializedPackageExtractedBytes"));
+        Assert.Equal(111.11, NumericProperty(row, "ManagedLastSlowestMaterializedPackageMBPerSecond"));
+        Assert.Equal(177.78, NumericProperty(row, "ManagedLastSlowestMaterializedPackageFilesPerSecond"));
         Assert.Equal(320.0, NumericProperty(row, "ManagedLastSlowestMaterializedPackageExtractionMs"));
         Assert.Equal(70.0, NumericProperty(row, "ManagedLastSlowestMaterializedPackagePromotionMs"));
         Assert.Equal(650.0, NumericProperty(row, "ManagedCriticalDependencyBranchMs"));

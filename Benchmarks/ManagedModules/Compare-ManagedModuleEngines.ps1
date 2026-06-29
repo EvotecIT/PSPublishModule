@@ -526,6 +526,11 @@ function Invoke-TimedOperation {
         ManagedSlowestVersionSelectionWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestVersionSelectionWaitMilliseconds')
         ManagedSlowestMaterializedPackageName = Get-DetailText -InputObject $detailSummary -Name 'SlowestMaterializedPackageName'
         ManagedSlowestMaterializedPackageMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageMilliseconds')
+        ManagedSlowestMaterializedPackageFileCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageFileCount')
+        ManagedSlowestMaterializedPackageExtractedBytes = [long] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageExtractedBytes')
+        ManagedSlowestMaterializedPackageExtractedMB = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageExtractedMB')
+        ManagedSlowestMaterializedPackageMBPerSecond = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageMBPerSecond')
+        ManagedSlowestMaterializedPackageFilesPerSecond = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageFilesPerSecond')
         ManagedSlowestMaterializedPackageExtractionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageExtractionMilliseconds')
         ManagedSlowestMaterializedPackageExtractionCacheLockWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackageExtractionCacheLockWaitMilliseconds')
         ManagedSlowestMaterializedPackagePromotionMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'SlowestMaterializedPackagePromotionMilliseconds')
