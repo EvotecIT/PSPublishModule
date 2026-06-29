@@ -113,6 +113,67 @@ public sealed class ManagedModuleBenchmarkHostComparisonScriptTests
         }
     }
 
+    [Fact]
+    public void HostComparisonGate_FailsWhenComparisonRatioExceedsThreshold()
+    {
+        using var ps = CreateBenchmarkPowerShell("""
+            $rows = @(
+                [pscustomobject]@{
+                    Suite = 'SaveGate'
+                    Scenario = 'Graph.Authentication.Save'
+                    ModuleName = 'Microsoft.Graph.Authentication'
+                    Operation = 'Save'
+                    Host = 'PowerShell7'
+                    ManagedMs = '1000'
+                },
+                [pscustomobject]@{
+                    Suite = 'SaveGate'
+                    Scenario = 'Graph.Authentication.Save'
+                    ModuleName = 'Microsoft.Graph.Authentication'
+                    Operation = 'Save'
+                    Host = 'WindowsPowerShell'
+                    ManagedMs = '1600'
+                }
+            )
+
+            $comparison = New-ManagedHostComparison -Rows $rows
+            Get-ManagedHostComparisonGateViolation -Rows $comparison -MaxComparisonVsBaseline 1.5
+            """);
+
+        var results = ps.Invoke();
+
+        AssertNoErrors(ps);
+        var row = Assert.Single(results);
+        Assert.Equal("1.6x", Property(row, "ComparisonVsBaseline"));
+        Assert.Contains("exceeds", Property(row, "Reason"), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void HostComparisonGate_FailsWhenRequestedComparisonHostIsMissing()
+    {
+        using var ps = CreateBenchmarkPowerShell("""
+            $comparison = New-ManagedHostComparison -Rows @(
+                [pscustomobject]@{
+                    Suite = 'SecurityGate'
+                    Scenario = 'ThreadJob.Authenticode.InstallSave'
+                    ModuleName = 'ThreadJob'
+                    Operation = 'Install'
+                    Host = 'PowerShell7'
+                    ManagedMs = '1000'
+                }
+            )
+
+            Get-ManagedHostComparisonGateViolation -Rows $comparison -MaxComparisonVsBaseline 2.0
+            """);
+
+        var results = ps.Invoke();
+
+        AssertNoErrors(ps);
+        var row = Assert.Single(results);
+        Assert.Equal("MissingComparison", Property(row, "Status"));
+        Assert.Contains("MissingComparison", Property(row, "Reason"), StringComparison.OrdinalIgnoreCase);
+    }
+
     private static PowerShell CreateBenchmarkPowerShell(string script)
     {
         var hostComparisonScript = Path.Combine(RepoRootLocator.Find(), "Benchmarks", "ManagedModules", "ManagedModuleBenchmark.HostComparison.ps1");

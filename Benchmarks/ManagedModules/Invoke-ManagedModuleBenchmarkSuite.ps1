@@ -42,6 +42,8 @@ param(
 
     [int] $ManagedMinAuthenticodeCheckedFiles = 0,
 
+    [double] $ManagedMaxWindowsPowerShellVsPowerShell7 = 0,
+
     [switch] $UseScenarioGates,
 
     [switch] $AuthenticodeCheck,
@@ -602,9 +604,11 @@ $optimizationTargetsPath = Join-Path $suiteRoot 'suite-optimization-targets.csv'
 $optimizationTargetsJsonPath = Join-Path $suiteRoot 'suite-optimization-targets.json'
 $hostsPath = Join-Path $suiteRoot 'suite-hosts.csv'
 $gatePath = Join-Path $suiteRoot 'suite-gate.csv'
+$hostGatePath = Join-Path $suiteRoot 'suite-host-gate.csv'
 $metadataPath = Join-Path $suiteRoot 'metadata.json'
 $gateViolations = @(Get-ManagedPerformanceGateViolationForSuite -Rows @($summaryRows) -MaxRank $ManagedMaxRank -MaxVsFastest $ManagedMaxVsFastest -MinAuthenticodeCheckedFiles $ManagedMinAuthenticodeCheckedFiles -UseScenarioGates:$UseScenarioGates.IsPresent)
 $hostComparisonRows = @(New-ManagedHostComparison -Rows @($summaryRows))
+$hostGateViolations = @(Get-ManagedHostComparisonGateViolation -Rows @($hostComparisonRows) -MaxComparisonVsBaseline $ManagedMaxWindowsPowerShellVsPowerShell7)
 $optimizationTargetRows = @(New-ManagedOptimizationTarget -Rows @($summaryRows))
 
 Write-ManagedBenchmarkCsv -InputObject @($summaryRows) -Path $summaryPath
@@ -616,6 +620,9 @@ Write-ManagedBenchmarkJson -InputObject @($optimizationTargetRows) -Path $optimi
 Write-ManagedBenchmarkCsv -InputObject @($hostRows) -Path $hostsPath
 if ($ManagedMaxRank -gt 0 -or $ManagedMaxVsFastest -gt 0 -or $UseScenarioGates.IsPresent) {
     Write-ManagedBenchmarkCsv -InputObject @($gateViolations) -Path $gatePath
+}
+if ($ManagedMaxWindowsPowerShellVsPowerShell7 -gt 0) {
+    Write-ManagedBenchmarkCsv -InputObject @($hostGateViolations) -Path $hostGatePath
 }
 
 $metadata = [ordered]@{
@@ -665,9 +672,12 @@ $metadata = [ordered]@{
     ManagedMaxRank = $ManagedMaxRank
     ManagedMaxVsFastest = $ManagedMaxVsFastest
     ManagedMinAuthenticodeCheckedFiles = $ManagedMinAuthenticodeCheckedFiles
+    ManagedMaxWindowsPowerShellVsPowerShell7 = $ManagedMaxWindowsPowerShellVsPowerShell7
     UseScenarioGates = $UseScenarioGates.IsPresent
     ManagedPerformanceGatePassed = $gateViolations.Count -eq 0
+    ManagedHostGatePassed = $hostGateViolations.Count -eq 0
     HostComparisonPath = $hostComparisonPath
+    HostGatePath = $hostGatePath
     OptimizationTargetsPath = $optimizationTargetsPath
     RemoveOutputRoots = $RemoveOutputRoots.IsPresent
     OutputDirectory = $suiteRoot
@@ -678,4 +688,8 @@ $summaryRows
 Write-Host "Benchmark suite output: $suiteRoot"
 if ($gateViolations.Count -gt 0) {
     throw "Managed performance gate failed for $($gateViolations.Count) suite row(s). See '$gatePath'."
+}
+if ($hostGateViolations.Count -gt 0) {
+    $hostGateViolations | Format-Table Suite, Scenario, Operation, BaselineHost, BaselineMs, ComparisonHost, ComparisonMs, ComparisonVsBaseline, Reason -AutoSize | Out-String | Write-Host
+    throw "Managed host comparison gate failed for $($hostGateViolations.Count) suite row(s). See '$hostGatePath'."
 }

@@ -75,3 +75,67 @@ function New-ManagedHostComparison {
         }
     }
 }
+
+function ConvertFrom-ManagedHostComparisonRatio {
+    param([object] $Value)
+
+    if ($null -eq $Value) {
+        return 0.0
+    }
+
+    $text = ([string] $Value).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return 0.0
+    }
+
+    if ($text.EndsWith('x', [StringComparison]::OrdinalIgnoreCase)) {
+        $text = $text.Substring(0, $text.Length - 1)
+    }
+
+    ConvertTo-ManagedBenchmarkDouble -Value $text
+}
+
+function Get-ManagedHostComparisonGateViolation {
+    param(
+        [object[]] $Rows,
+        [double] $MaxComparisonVsBaseline = 0
+    )
+
+    if ($MaxComparisonVsBaseline -le 0) {
+        return @()
+    }
+
+    foreach ($row in @($Rows)) {
+        $status = if ($row.PSObject.Properties['Status']) { [string] $row.Status } else { '' }
+        $ratio = ConvertFrom-ManagedHostComparisonRatio -Value $row.ComparisonVsBaseline
+        $missingHost = -not [string]::Equals($status, 'Compared', [StringComparison]::OrdinalIgnoreCase)
+        $ratioFailed = -not $missingHost -and $ratio -gt $MaxComparisonVsBaseline
+
+        if (-not ($missingHost -or $ratioFailed)) {
+            continue
+        }
+
+        [pscustomobject]@{
+            Suite = if ($row.PSObject.Properties['Suite']) { [string] $row.Suite } else { '' }
+            Scenario = if ($row.PSObject.Properties['Scenario']) { [string] $row.Scenario } else { '' }
+            BenchmarkRole = if ($row.PSObject.Properties['BenchmarkRole']) { [string] $row.BenchmarkRole } else { '' }
+            ComparisonScope = if ($row.PSObject.Properties['ComparisonScope']) { [string] $row.ComparisonScope } else { '' }
+            BenchmarkInterpretation = if ($row.PSObject.Properties['BenchmarkInterpretation']) { [string] $row.BenchmarkInterpretation } else { '' }
+            ModuleName = if ($row.PSObject.Properties['ModuleName']) { [string] $row.ModuleName } else { '' }
+            Operation = if ($row.PSObject.Properties['Operation']) { [string] $row.Operation } else { '' }
+            Engine = if ($row.PSObject.Properties['Engine']) { [string] $row.Engine } else { '' }
+            Status = $status
+            BaselineHost = if ($row.PSObject.Properties['BaselineHost']) { [string] $row.BaselineHost } else { '' }
+            BaselineMs = if ($row.PSObject.Properties['BaselineMs']) { [double] $row.BaselineMs } else { 0.0 }
+            ComparisonHost = if ($row.PSObject.Properties['ComparisonHost']) { [string] $row.ComparisonHost } else { '' }
+            ComparisonMs = if ($row.PSObject.Properties['ComparisonMs']) { [double] $row.ComparisonMs } else { 0.0 }
+            ComparisonVsBaseline = if ($row.PSObject.Properties['ComparisonVsBaseline']) { [string] $row.ComparisonVsBaseline } else { '' }
+            MaxComparisonVsBaseline = $MaxComparisonVsBaseline
+            Reason = if ($missingHost) {
+                "host comparison status is $status"
+            } else {
+                ("comparison ratio {0}x exceeds allowed ratio {1}x" -f $ratio.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture), $MaxComparisonVsBaseline.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture))
+            }
+        }
+    }
+}
