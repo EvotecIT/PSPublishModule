@@ -108,7 +108,10 @@ internal sealed class ModuleStatePlanner
 
         var findings = _familyAnalyzer
             .Analyze(request.Inventory, request.FamilyPolicies)
-            .Concat(_conflictAnalyzer.Analyze(request.Inventory, request.DesiredModules))
+            .Concat(_conflictAnalyzer.Analyze(
+                request.Inventory,
+                request.DesiredModules,
+                includeCrossScopeCommandConflicts: request.Repair))
             .Concat(_receiptAnalyzer.Analyze(request.Inventory, request.MaintenanceReceipts))
             .Concat(cleanupPlan.Findings)
             .ToArray();

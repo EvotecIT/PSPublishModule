@@ -6,13 +6,17 @@ namespace PowerForge;
 
 internal sealed class ModuleStateConflictAnalyzer
 {
-    internal ModuleStateConflictFinding[] Analyze(ModuleStateInventory inventory, IEnumerable<ModuleStateDesiredModule> desiredModules)
+    internal ModuleStateConflictFinding[] Analyze(
+        ModuleStateInventory inventory,
+        IEnumerable<ModuleStateDesiredModule> desiredModules,
+        bool includeCrossScopeCommandConflicts = false)
     {
         if (inventory is null)
             throw new ArgumentNullException(nameof(inventory));
 
         var findings = new List<ModuleStateConflictFinding>();
-        foreach (var desiredModule in desiredModules ?? Array.Empty<ModuleStateDesiredModule>())
+        var desired = (desiredModules ?? Array.Empty<ModuleStateDesiredModule>()).ToArray();
+        foreach (var desiredModule in desired)
         {
             var installedModules = inventory.InstalledModules
                 .Where(module => string.Equals(module.Name, desiredModule.Name, StringComparison.OrdinalIgnoreCase))
@@ -32,7 +36,77 @@ internal sealed class ModuleStateConflictAnalyzer
             AddLoadedModuleFinding(findings, desiredModule, installedModules, policy);
         }
 
+        if (includeCrossScopeCommandConflicts)
+            AddCrossScopeCommandConflictFindings(findings, inventory, desired);
+
         return findings.ToArray();
+    }
+
+    private static void AddCrossScopeCommandConflictFindings(
+        List<ModuleStateConflictFinding> findings,
+        ModuleStateInventory inventory,
+        ModuleStateDesiredModule[] desiredModules)
+    {
+        var desiredNames = new HashSet<string>(
+            desiredModules
+                .Select(static module => module.Name)
+                .Where(static name => !string.IsNullOrWhiteSpace(name)),
+            StringComparer.OrdinalIgnoreCase);
+        if (desiredNames.Count == 0)
+            return;
+
+        var candidates = inventory.InstalledModules
+            .Where(module => desiredNames.Contains(module.Name))
+            .Where(static module => module.ExportedCommands.Length > 0)
+            .ToArray();
+        if (candidates.Length == 0)
+            return;
+
+        var allExportingModules = inventory.InstalledModules
+            .Where(static module => module.ExportedCommands.Length > 0)
+            .ToArray();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var selected in candidates)
+        {
+            foreach (var other in allExportingModules)
+            {
+                if (ReferenceEquals(selected, other) ||
+                    string.Equals(selected.Name, other.Name, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(NormalizeScope(selected.Scope), NormalizeScope(other.Scope), StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var command = selected.ExportedCommands
+                    .Intersect(other.ExportedCommands, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault();
+                if (string.IsNullOrWhiteSpace(command))
+                    continue;
+
+                var orderedModules = new[] { selected, other }
+                    .OrderBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                var key = string.Join(
+                    "|",
+                    command,
+                    orderedModules[0].Name,
+                    NormalizeScope(orderedModules[0].Scope),
+                    orderedModules[1].Name,
+                    NormalizeScope(orderedModules[1].Scope));
+                if (!seen.Add(key))
+                    continue;
+
+                findings.Add(new ModuleStateConflictFinding(
+                    ModuleStateConflictSeverity.Warning,
+                    "ModuleState.CrossScopeCommandConflict",
+                    $"Command '{command}' is exported by module '{selected.Name}' in scope '{NormalizeScope(selected.Scope)}' and module '{other.Name}' in scope '{NormalizeScope(other.Scope)}'. Repair planning reports cross-scope command conflicts; normal managed install clobber checks remain limited to the selected target root.",
+                    string.Empty,
+                    orderedModules.Select(static module => module.Name).ToArray(),
+                    SortVersions(new[] { selected.Version, other.Version }),
+                    NormalizeScope(other.Scope)));
+            }
+        }
     }
 
     private static void AddScopeAmbiguityFinding(

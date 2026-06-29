@@ -227,6 +227,33 @@ public sealed class ModuleStateInventoryServiceTests
     }
 
     [Fact]
+    public void Collect_ReadsManifestExportedCommands()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            WriteManifest(
+                Path.Combine(root.FullName, "Company.Tools", "1.2.3"),
+                "Company.Tools",
+                "1.2.3",
+                exportedFunctions: new[] { "Get-CompanyTool" },
+                exportedAliases: new[] { "gct" });
+
+            var inventory = new ModuleStateInventoryService().Collect(new ModuleStateInventoryRequest(new[]
+            {
+                new ModuleStateModulePath(root.FullName, "Core", "CurrentUser")
+            }));
+
+            var module = Assert.Single(inventory.InstalledModules);
+            Assert.Equal(new[] { "gct", "Get-CompanyTool" }, module.ExportedCommands);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Collect_PreservesPrereleaseVersionFolderWhenManifestHasStableVersion()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -300,12 +327,25 @@ public sealed class ModuleStateInventoryServiceTests
         }
     }
 
-    private static void WriteManifest(string directoryPath, string moduleName, string version, string? repository = null, string? prerelease = null)
+    private static void WriteManifest(
+        string directoryPath,
+        string moduleName,
+        string version,
+        string? repository = null,
+        string? prerelease = null,
+        string[]? exportedFunctions = null,
+        string[]? exportedAliases = null)
     {
         Directory.CreateDirectory(directoryPath);
         var repositoryLine = string.IsNullOrWhiteSpace(repository)
             ? string.Empty
             : $"    Repository = '{repository}'{Environment.NewLine}";
+        var functionsLine = exportedFunctions is null
+            ? string.Empty
+            : $"    FunctionsToExport = @({FormatArray(exportedFunctions)}){Environment.NewLine}";
+        var aliasesLine = exportedAliases is null
+            ? string.Empty
+            : $"    AliasesToExport = @({FormatArray(exportedAliases)}){Environment.NewLine}";
         var prereleaseBlock = string.IsNullOrWhiteSpace(prerelease)
             ? string.Empty
             : $$"""
@@ -319,7 +359,10 @@ public sealed class ModuleStateInventoryServiceTests
 @{
     RootModule = '{{moduleName}}.psm1'
     ModuleVersion = '{{version}}'
-{{repositoryLine}}{{prereleaseBlock}}}
+{{repositoryLine}}{{functionsLine}}{{aliasesLine}}{{prereleaseBlock}}}
 """);
     }
+
+    private static string FormatArray(string[] values)
+        => string.Join(", ", values.Select(static value => "'" + value.Replace("'", "''") + "'"));
 }

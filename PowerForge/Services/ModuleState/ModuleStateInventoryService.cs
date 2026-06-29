@@ -70,7 +70,8 @@ internal sealed class ModuleStateInventoryService
             module.Path,
             module.SourceRepository,
             module.IsLoaded,
-            isEffective);
+            isEffective,
+            module.ExportedCommands);
 
     private static IEnumerable<ModuleStateInstalledModule> DiscoverModule(DirectoryInfo moduleDirectory, ModuleStateModulePath modulePath)
     {
@@ -123,7 +124,8 @@ internal sealed class ModuleStateInventoryService
             modulePath.PowerShellEdition,
             modulePath.Scope,
             manifest.DirectoryName ?? manifest.FullName,
-            TryReadSourceRepository(manifestText, manifest.Directory));
+            TryReadSourceRepository(manifestText, manifest.Directory),
+            exportedCommands: ReadCommandExports(manifest.FullName));
     }
 
     private static ModuleStateInstalledModule CreateScriptModule(
@@ -215,6 +217,22 @@ internal sealed class ModuleStateInventoryService
         catch
         {
             return null;
+        }
+    }
+
+    private static string[] ReadCommandExports(string manifestPath)
+    {
+        try
+        {
+            var exports = ModuleManifestExportReader.ReadExports(manifestPath);
+            return exports.Functions
+                .Concat(exports.Cmdlets)
+                .Concat(exports.Aliases)
+                .ToArray();
+        }
+        catch
+        {
+            return Array.Empty<string>();
         }
     }
 
