@@ -35,6 +35,7 @@ function Get-ManagedPhaseQuestion {
         'RootDependency' { 'Can dependency scheduling, installed-version reuse, or repository lookup fan-out shrink the root operation?' }
         'Dependency' { 'Can shared dependency pre-warming, fan-out ordering, or dependency graph planning shrink nested dependency waits?' }
         'Download' { 'Can package download throughput, source selection, caching, or request coalescing improve this lane?' }
+        'PackageCache' { 'Can warm package-cache read, copy, hash, or cache-lock work be reduced without weakening cache correctness?' }
         'Extraction' { 'Can archive extraction, path creation, or file writes be reduced safely?' }
         'Materialization' { 'Can warm-cache materialization reduce extraction-cache copy, path creation, or promotion moves?' }
         'Promotion' { 'Can final move, overwrite, or receipt writes be reduced without weakening rollback?' }
@@ -81,7 +82,10 @@ function Get-ManagedWarmOptimizationLane {
         [double] $DownloadMilliseconds,
         [double] $ExtractionMilliseconds,
         [double] $PromotionMoveMilliseconds,
-        [double] $InstallLockWaitMilliseconds
+        [double] $InstallLockWaitMilliseconds,
+        [double] $DownloadBytes,
+        [double] $PackageRepositoryRequests,
+        [double] $PackageCacheHits
     )
 
     $materializationMilliseconds = $ExtractionMilliseconds + $PromotionMoveMilliseconds
@@ -92,11 +96,16 @@ function Get-ManagedWarmOptimizationLane {
     } else {
         ''
     }
+    $packageDeliveryName = if ($DownloadMilliseconds -gt 0 -and $DownloadBytes -le 0 -and $PackageRepositoryRequests -le 0 -and $PackageCacheHits -gt 0) {
+        'PackageCache'
+    } else {
+        'Download'
+    }
 
     $phases = @(
         [pscustomobject]@{ Name = 'Dependency'; Milliseconds = $DependencyMilliseconds }
         [pscustomobject]@{ Name = 'Materialization'; Milliseconds = $materializationMilliseconds }
-        [pscustomobject]@{ Name = 'Download'; Milliseconds = $DownloadMilliseconds }
+        [pscustomobject]@{ Name = $packageDeliveryName; Milliseconds = $DownloadMilliseconds }
         [pscustomobject]@{ Name = 'InstallLock'; Milliseconds = $InstallLockWaitMilliseconds }
     )
     $lane = @($phases | Sort-Object Milliseconds -Descending | Select-Object -First 1)
@@ -153,6 +162,9 @@ function New-ManagedOptimizationTarget {
         $lastExtractionMs = if ($row.PSObject.Properties['ManagedLastExtractionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastExtractionMs } else { 0.0 }
         $lastPromotionMoveMs = if ($row.PSObject.Properties['ManagedLastPromotionMoveMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastPromotionMoveMs } else { 0.0 }
         $lastInstallLockWaitMs = if ($row.PSObject.Properties['ManagedLastInstallLockWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastInstallLockWaitMs } else { 0.0 }
+        $lastPackageRepositoryRequests = if ($row.PSObject.Properties['ManagedLastPackageRepositoryRequests']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastPackageRepositoryRequests } else { 0.0 }
+        $lastCacheHits = if ($row.PSObject.Properties['ManagedLastCacheHits']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastCacheHits } else { 0.0 }
+        $lastDownloadBytes = if ($row.PSObject.Properties['ManagedLastDownloadBytes']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDownloadBytes } else { 0.0 }
         $lastCriticalDependencyBranchMs = if ($row.PSObject.Properties['ManagedLastCriticalDependencyBranchMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastCriticalDependencyBranchMs } else { 0.0 }
         $lastCriticalRootBranchMs = if ($row.PSObject.Properties['ManagedLastCriticalRootBranchMs']) {
             ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastCriticalRootBranchMs
@@ -184,7 +196,10 @@ function New-ManagedOptimizationTarget {
             -DownloadMilliseconds $lastDownloadMs `
             -ExtractionMilliseconds $lastExtractionMs `
             -PromotionMoveMilliseconds $lastPromotionMoveMs `
-            -InstallLockWaitMilliseconds $lastInstallLockWaitMs
+            -InstallLockWaitMilliseconds $lastInstallLockWaitMs `
+            -DownloadBytes $lastDownloadBytes `
+            -PackageRepositoryRequests $lastPackageRepositoryRequests `
+            -PackageCacheHits $lastCacheHits
         $rootElapsedMs = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRootElapsedMs
         $repositoryRequests = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRepositoryRequests
         $packageRequests = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedPackageRepositoryRequests
@@ -192,7 +207,6 @@ function New-ManagedOptimizationTarget {
         $downloadBytes = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDownloadBytes
         $downloadMb = [math]::Round($downloadBytes / 1MB, 2)
         $firstDownloadBytes = if ($row.PSObject.Properties['ManagedFirstDownloadBytes']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstDownloadBytes } else { 0.0 }
-        $lastDownloadBytes = if ($row.PSObject.Properties['ManagedLastDownloadBytes']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDownloadBytes } else { 0.0 }
         $outputBytes = if ($row.PSObject.Properties['ManagedOutputBytes']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedOutputBytes } else { 0.0 }
         $outputFiles = if ($row.PSObject.Properties['ManagedOutputFileCount']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedOutputFileCount } else { 0.0 }
         $outputMb = [math]::Round($outputBytes / 1MB, 2)
