@@ -35,6 +35,34 @@ function Get-ManagedDetailSum {
     $measure[0].Sum
 }
 
+function Get-ManagedDetailDominantPhase {
+    param(
+        [object] $Row,
+        [string[]] $PhaseNames
+    )
+
+    $phases = @(
+        foreach ($name in $PhaseNames) {
+            [pscustomobject]@{
+                Name = $name
+                Milliseconds = [double] (Get-NumericPropertyValue -InputObject $Row -Name ($name + 'Milliseconds'))
+            }
+        }
+    )
+    $dominant = @($phases | Sort-Object Milliseconds -Descending | Select-Object -First 1)
+    if ($dominant.Count -eq 0 -or [double] $dominant[0].Milliseconds -le 0) {
+        return [pscustomobject]@{
+            Name = ''
+            Milliseconds = 0.0
+        }
+    }
+
+    [pscustomobject]@{
+        Name = [string] $dominant[0].Name
+        Milliseconds = [math]::Round([double] $dominant[0].Milliseconds, 2)
+    }
+}
+
 function Add-ManagedInstallDetail {
     param(
         [Parameter(Mandatory)]
@@ -197,6 +225,33 @@ function Write-ManagedInstallDetail {
             Sort-Object @{ Expression = { [double] $_.ElapsedMilliseconds }; Descending = $true } |
             Select-Object -First 1
     )
+    $criticalDependencyBranch = @(
+        $packages |
+            Where-Object { [int] $_.Depth -gt 0 } |
+            Sort-Object @{ Expression = { [double] $_.ElapsedMilliseconds }; Descending = $true } |
+            Select-Object -First 1
+    )
+    $criticalDependencyBranchPhase = if ($criticalDependencyBranch.Count) {
+        Get-ManagedDetailDominantPhase -Row $criticalDependencyBranch[0] -PhaseNames @('Download', 'Extraction', 'Dependency', 'Promotion', 'CoalescedWait', 'InstallLock')
+    } else {
+        [pscustomobject]@{ Name = ''; Milliseconds = 0.0 }
+    }
+    $criticalMaterializationBranch = @(
+        $packages |
+            Where-Object { $_.Status -eq 'Installed' } |
+            Sort-Object @{ Expression = { [double] $_.ExtractionMilliseconds + [double] $_.PromotionMoveMilliseconds }; Descending = $true } |
+            Select-Object -First 1
+    )
+    $criticalMaterializationBranchMs = if ($criticalMaterializationBranch.Count) {
+        [math]::Round([double] $criticalMaterializationBranch[0].ExtractionMilliseconds + [double] $criticalMaterializationBranch[0].PromotionMoveMilliseconds, 2)
+    } else {
+        0.0
+    }
+    $criticalMaterializationBranchPhase = if ($criticalMaterializationBranch.Count) {
+        Get-ManagedDetailDominantPhase -Row $criticalMaterializationBranch[0] -PhaseNames @('Extraction', 'PromotionMove')
+    } else {
+        [pscustomobject]@{ Name = ''; Milliseconds = 0.0 }
+    }
     $summary = [pscustomobject]@{
         PackageCount = $packages.Count
         DependencyCount = [math]::Max(0, $packages.Count - 1)
@@ -240,6 +295,15 @@ function Write-ManagedInstallDetail {
         SlowestMaterializedPackagePromotionMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].PromotionMilliseconds } else { 0.0 }
         SlowestMaterializedPackagePromotionLockWaitMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].PromotionLockWaitMilliseconds } else { 0.0 }
         SlowestMaterializedPackagePromotionMoveMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].PromotionMoveMilliseconds } else { 0.0 }
+        CriticalDependencyBranchName = if ($criticalDependencyBranch.Count) { [string] $criticalDependencyBranch[0].Name } else { '' }
+        CriticalDependencyBranchParent = if ($criticalDependencyBranch.Count) { [string] $criticalDependencyBranch[0].Parent } else { '' }
+        CriticalDependencyBranchMilliseconds = if ($criticalDependencyBranch.Count) { [double] $criticalDependencyBranch[0].ElapsedMilliseconds } else { 0.0 }
+        CriticalDependencyBranchDominantPhase = [string] $criticalDependencyBranchPhase.Name
+        CriticalDependencyBranchDominantPhaseMilliseconds = [double] $criticalDependencyBranchPhase.Milliseconds
+        CriticalMaterializationBranchName = if ($criticalMaterializationBranch.Count) { [string] $criticalMaterializationBranch[0].Name } else { '' }
+        CriticalMaterializationBranchMilliseconds = $criticalMaterializationBranchMs
+        CriticalMaterializationDominantPhase = [string] $criticalMaterializationBranchPhase.Name
+        CriticalMaterializationDominantPhaseMilliseconds = [double] $criticalMaterializationBranchPhase.Milliseconds
     }
 
     $parent = Split-Path -Path $Path -Parent

@@ -20,7 +20,13 @@ function Get-MedianProperty {
         [string] $Name
     )
 
-    Get-Median -Values @($Rows | ForEach-Object { [double] $_.$Name })
+    Get-Median -Values @($Rows | ForEach-Object {
+        if ($_.PSObject.Properties[$Name]) {
+            [double] $_.$Name
+        } else {
+            0.0
+        }
+    })
 }
 
 function Get-IterationValue {
@@ -49,6 +55,19 @@ function Get-TextProperty {
     }
 
     [string] $Row.PSObject.Properties[$Name].Value
+}
+
+function Get-DoubleProperty {
+    param(
+        [object] $Row,
+        [string] $Name
+    )
+
+    if ($null -eq $Row -or -not $Row.PSObject.Properties[$Name]) {
+        return 0.0
+    }
+
+    [double] $Row.PSObject.Properties[$Name].Value
 }
 
 function Get-OrderedSucceededRows {
@@ -114,6 +133,8 @@ function New-Summary {
             MedianManagedSlowestMaterializedPackageMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageMilliseconds' } else { 0 }
             MedianManagedSlowestMaterializedPackageExtractionCacheLockWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageExtractionCacheLockWaitMilliseconds' } else { 0 }
             MedianManagedSlowestMaterializedPackagePromotionMoveMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackagePromotionMoveMilliseconds' } else { 0 }
+            MedianManagedCriticalDependencyBranchMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedCriticalDependencyBranchMilliseconds' } else { 0 }
+            MedianManagedCriticalMaterializationBranchMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedCriticalMaterializationBranchMilliseconds' } else { 0 }
             MedianManagedAuthenticodeCheckedFiles = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedAuthenticodeCheckedFileCount' } else { 0 }
             MedianManagedAuthenticodeCatalogFiles = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedAuthenticodeCatalogFileCount' } else { 0 }
             FirstManagedRepositoryRequests = if ($firstPassed) { [double]$firstPassed.ManagedRepositoryRequestCount } else { 0 }
@@ -160,6 +181,15 @@ function New-Summary {
             LastManagedSlowestMaterializedPackagePromotionMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionMilliseconds } else { 0 }
             LastManagedSlowestMaterializedPackagePromotionLockWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionLockWaitMilliseconds } else { 0 }
             LastManagedSlowestMaterializedPackagePromotionMoveMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionMoveMilliseconds } else { 0 }
+            LastManagedCriticalDependencyBranchName = Get-TextProperty -Row $lastPassed -Name 'ManagedCriticalDependencyBranchName'
+            LastManagedCriticalDependencyBranchParent = Get-TextProperty -Row $lastPassed -Name 'ManagedCriticalDependencyBranchParent'
+            LastManagedCriticalDependencyBranchMs = Get-DoubleProperty -Row $lastPassed -Name 'ManagedCriticalDependencyBranchMilliseconds'
+            LastManagedCriticalDependencyBranchDominantPhase = Get-TextProperty -Row $lastPassed -Name 'ManagedCriticalDependencyBranchDominantPhase'
+            LastManagedCriticalDependencyBranchDominantPhaseMs = Get-DoubleProperty -Row $lastPassed -Name 'ManagedCriticalDependencyBranchDominantPhaseMilliseconds'
+            LastManagedCriticalMaterializationBranchName = Get-TextProperty -Row $lastPassed -Name 'ManagedCriticalMaterializationBranchName'
+            LastManagedCriticalMaterializationBranchMs = Get-DoubleProperty -Row $lastPassed -Name 'ManagedCriticalMaterializationBranchMilliseconds'
+            LastManagedCriticalMaterializationDominantPhase = Get-TextProperty -Row $lastPassed -Name 'ManagedCriticalMaterializationDominantPhase'
+            LastManagedCriticalMaterializationDominantPhaseMs = Get-DoubleProperty -Row $lastPassed -Name 'ManagedCriticalMaterializationDominantPhaseMilliseconds'
             MedianManagedMaintenanceActions = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedMaintenanceActionCount' } else { 0 }
             MedianManagedMaintenanceFindings = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedMaintenanceFindingCount' } else { 0 }
         }
@@ -218,6 +248,8 @@ function New-Comparison {
             ManagedSlowestDependencyPackageMs = if ($managed.Count) { [double] $managed[0].MedianManagedSlowestDependencyPackageMs } else { 0 }
             ManagedSlowestMaterializedPackageMs = if ($managed.Count) { [double] $managed[0].MedianManagedSlowestMaterializedPackageMs } else { 0 }
             ManagedSlowestMaterializedPackageExtractionCacheLockWaitMs = if ($managed.Count) { [double] $managed[0].MedianManagedSlowestMaterializedPackageExtractionCacheLockWaitMs } else { 0 }
+            ManagedCriticalDependencyBranchMs = if ($managed.Count) { [double] $managed[0].MedianManagedCriticalDependencyBranchMs } else { 0 }
+            ManagedCriticalMaterializationBranchMs = if ($managed.Count) { [double] $managed[0].MedianManagedCriticalMaterializationBranchMs } else { 0 }
             ManagedAuthenticodeCheckedFiles = if ($managed.Count) { [double] $managed[0].MedianManagedAuthenticodeCheckedFiles } else { 0 }
             ManagedAuthenticodeCatalogFiles = if ($managed.Count) { [double] $managed[0].MedianManagedAuthenticodeCatalogFiles } else { 0 }
             ManagedFirstRepositoryRequests = if ($managed.Count) { [double] $managed[0].FirstManagedRepositoryRequests } else { 0 }
@@ -264,6 +296,15 @@ function New-Comparison {
             ManagedLastSlowestMaterializedPackagePromotionMs = if ($managed.Count) { [double] $managed[0].LastManagedSlowestMaterializedPackagePromotionMs } else { 0 }
             ManagedLastSlowestMaterializedPackagePromotionLockWaitMs = if ($managed.Count) { [double] $managed[0].LastManagedSlowestMaterializedPackagePromotionLockWaitMs } else { 0 }
             ManagedLastSlowestMaterializedPackagePromotionMoveMs = if ($managed.Count) { [double] $managed[0].LastManagedSlowestMaterializedPackagePromotionMoveMs } else { 0 }
+            ManagedLastCriticalDependencyBranchName = if ($managed.Count) { [string] $managed[0].LastManagedCriticalDependencyBranchName } else { '' }
+            ManagedLastCriticalDependencyBranchParent = if ($managed.Count) { [string] $managed[0].LastManagedCriticalDependencyBranchParent } else { '' }
+            ManagedLastCriticalDependencyBranchMs = if ($managed.Count) { [double] $managed[0].LastManagedCriticalDependencyBranchMs } else { 0 }
+            ManagedLastCriticalDependencyBranchDominantPhase = if ($managed.Count) { [string] $managed[0].LastManagedCriticalDependencyBranchDominantPhase } else { '' }
+            ManagedLastCriticalDependencyBranchDominantPhaseMs = if ($managed.Count) { [double] $managed[0].LastManagedCriticalDependencyBranchDominantPhaseMs } else { 0 }
+            ManagedLastCriticalMaterializationBranchName = if ($managed.Count) { [string] $managed[0].LastManagedCriticalMaterializationBranchName } else { '' }
+            ManagedLastCriticalMaterializationBranchMs = if ($managed.Count) { [double] $managed[0].LastManagedCriticalMaterializationBranchMs } else { 0 }
+            ManagedLastCriticalMaterializationDominantPhase = if ($managed.Count) { [string] $managed[0].LastManagedCriticalMaterializationDominantPhase } else { '' }
+            ManagedLastCriticalMaterializationDominantPhaseMs = if ($managed.Count) { [double] $managed[0].LastManagedCriticalMaterializationDominantPhaseMs } else { 0 }
             ManagedMaintenanceActions = if ($managed.Count) { [double] $managed[0].MedianManagedMaintenanceActions } else { 0 }
             ManagedMaintenanceFindings = if ($managed.Count) { [double] $managed[0].MedianManagedMaintenanceFindings } else { 0 }
             ManagedRootDependencyMs = if ($managed.Count) { [double] $managed[0].MedianManagedRootDependencyMs } else { 0 }
