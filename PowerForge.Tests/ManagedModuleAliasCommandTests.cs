@@ -91,6 +91,25 @@ public sealed class ManagedModuleAliasCommandTests
     }
 
     [Theory]
+    [InlineData("Find-ManagedModule")]
+    [InlineData("Install-ManagedModule")]
+    [InlineData("Publish-ManagedModule")]
+    [InlineData("Save-ManagedModule")]
+    [InlineData("Update-ManagedModule")]
+    public void Managed_module_repository_commands_expose_proxy_parameters(string commandName)
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Get-Command")
+            .AddArgument(commandName);
+
+        var command = Assert.IsType<CmdletInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.True(command.Parameters.ContainsKey("Proxy"));
+        Assert.True(command.Parameters.ContainsKey("ProxyCredential"));
+    }
+
+    [Theory]
     [InlineData("Find-ManagedModule", "Name", "ModuleName")]
     [InlineData("Find-ManagedModule", "Repository", "Source")]
     [InlineData("Find-ManagedModule", "Repository", "RepositoryUri")]
@@ -158,6 +177,22 @@ public sealed class ManagedModuleAliasCommandTests
         Assert.False(command.Parameters.ContainsKey("SkipPublisherCheck"), $"{commandName} should not expose SkipPublisherCheck until managed publisher-check semantics exist.");
         Assert.DoesNotContain("TrustRepository", aliases);
         Assert.DoesNotContain("SkipPublisherCheck", aliases);
+    }
+
+    [Fact]
+    public void Managed_module_proxy_credential_requires_proxy()
+    {
+        using var feed = new TemporaryDirectory();
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddScript($$"""
+            $secure = ConvertTo-SecureString 'secret' -AsPlainText -Force
+            $proxyCredential = [pscredential]::new('proxy-user', $secure)
+            Find-ManagedModule -Name Company.Tools -Repository '{{EscapePowerShellString(feed.Path)}}' -ProxyCredential $proxyCredential
+            """);
+
+        ps.Invoke();
+
+        Assert.Contains(ps.Streams.Error, error => error.Exception.Message.Contains("ProxyCredential requires Proxy", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -330,6 +365,9 @@ public sealed class ManagedModuleAliasCommandTests
 }
 """);
     }
+
+    private static string EscapePowerShellString(string value)
+        => value.Replace("'", "''", StringComparison.Ordinal);
 
     private static void AssertNoPowerShellErrors(PowerShell ps)
     {

@@ -126,6 +126,15 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
     [Alias("CredentialPath", "TokenPath")]
     public string? CredentialSecretFilePath { get; set; }
 
+    /// <summary>Optional HTTP proxy used for repository requests.</summary>
+    [Parameter]
+    [ValidateNotNull]
+    public Uri? Proxy { get; set; }
+
+    /// <summary>Optional proxy credential used with Proxy.</summary>
+    [Parameter]
+    public PSCredential? ProxyCredential { get; set; }
+
     /// <summary>Overwrite an existing saved version.</summary>
     [Parameter]
     public SwitchParameter Force { get; set; }
@@ -173,7 +182,8 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
         var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
         var trustPolicy = ManagedModuleCommandSupport.CreateTrustPolicy(TrustPolicy, RequireTrustedRepository.IsPresent, AllowedAuthor);
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
-        var service = new ManagedModuleInstallService(logger);
+        var repositoryClient = ManagedModuleCommandSupport.CreateRepositoryClient(this, logger, Proxy, ProxyCredential);
+        var service = new ManagedModuleInstallService(logger, repositoryClient);
 
         foreach (var moduleName in Name)
         {

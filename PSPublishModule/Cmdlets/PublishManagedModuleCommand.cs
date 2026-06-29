@@ -94,6 +94,15 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
     [Alias("ApiKeyPath", "NuGetApiKeyPath")]
     public string? ApiKeyFilePath { get; set; }
 
+    /// <summary>Optional HTTP proxy used for repository requests.</summary>
+    [Parameter]
+    [ValidateNotNull]
+    public Uri? Proxy { get; set; }
+
+    /// <summary>Optional proxy credential used with Proxy.</summary>
+    [Parameter]
+    public PSCredential? ProxyCredential { get; set; }
+
     /// <summary>Overwrite an existing package.</summary>
     [Parameter]
     public SwitchParameter Force { get; set; }
@@ -119,11 +128,12 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
         var outputDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, OutputDirectory);
         var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, null, ApiKey, ApiKeyFilePath);
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
+        var repositoryClient = ManagedModuleCommandSupport.CreateRepositoryClient(this, logger, Proxy, ProxyCredential);
 
         if (!ShouldProcess(modulePath, $"Publish managed module package to '{repository.Source}'"))
             return;
 
-        var result = new ManagedModulePublishService(logger).PublishAsync(
+        var result = new ManagedModulePublishService(logger, repositoryClient).PublishAsync(
                 new ManagedModulePublishRequest
                 {
                     ModulePath = modulePath,

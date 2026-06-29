@@ -133,6 +133,15 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
     [Alias("CredentialPath", "TokenPath")]
     public string? CredentialSecretFilePath { get; set; }
 
+    /// <summary>Optional HTTP proxy used for repository requests.</summary>
+    [Parameter]
+    [ValidateNotNull]
+    public Uri? Proxy { get; set; }
+
+    /// <summary>Optional proxy credential used with Proxy.</summary>
+    [Parameter]
+    public PSCredential? ProxyCredential { get; set; }
+
     /// <summary>Reinstall the target version when it is already installed.</summary>
     [Parameter]
     public SwitchParameter Force { get; set; }
@@ -210,7 +219,8 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
         var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
         var trustPolicy = ManagedModuleCommandSupport.CreateTrustPolicy(TrustPolicy, RequireTrustedRepository.IsPresent, AllowedAuthor);
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
-        var service = new ManagedModuleUpdateService(logger);
+        var repositoryClient = ManagedModuleCommandSupport.CreateRepositoryClient(this, logger, Proxy, ProxyCredential);
+        var service = new ManagedModuleUpdateService(logger, repositoryClient);
         var targetScope = string.IsNullOrWhiteSpace(moduleRoot) ? Scope : ManagedModuleInstallScope.Custom;
         var targetModuleRoot = ManagedModuleInstallRootResolver.Resolve(targetScope, ShellEdition, moduleRoot);
         var moduleNames = ResolveModuleNames(targetModuleRoot).ToArray();

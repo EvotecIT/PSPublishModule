@@ -129,6 +129,7 @@ Repair-ManagedModule -Inventory $inventory -Latest -Repository PSGallery -ShowSu
 | Module identity | Supported | `-Name`, wildcard names where search semantics apply |
 | Repository source | Supported | `-Repository`, `-RepositoryName`, `-ProfileName` |
 | Credentials | Supported | `-Credential`, credential user/secret/file inputs where exposed |
+| Proxy | Supported | `-Proxy`, `-ProxyCredential` on managed repository cmdlets |
 | Version selection | Supported | `-RequiredVersion`, `-Version`, `-MinimumVersion`, `-MaximumVersion`, `-VersionPolicy` |
 | Prerelease | Supported | `-Prerelease`, `-AllowPrerelease` alias where useful |
 | Scope | Supported | CurrentUser, AllUsers, Custom module root |
@@ -168,7 +169,7 @@ This checklist is the guardrail for replacing common PowerShellGet and PSResourc
 - [x] `Publish-ManagedModule` supports module package publishing with API key or credential paths through the managed publisher.
 - [x] PSResourceGet-style semantic version ranges are supported through `-VersionPolicy`.
 - [x] PSResourceGet-style `-TrustRepository` behavior maps to trusted repository profiles and `-RequireTrustedRepository` policy instead of hidden prompts.
-- [ ] Decide whether public proxy parameters should be added to managed cmdlets or kept as repository/profile policy only. The managed repository client has proxy behavior, but `-Proxy` and `-ProxyCredential` are not currently public compatibility parameters.
+- [x] Public `-Proxy` and `-ProxyCredential` parameters are exposed on managed find/install/save/update/publish repository cmdlets and flow into the managed repository client.
 - [x] Define exact public semantics for `-Force` on install/save/update, including exact-version reinstall, no-op plans, rollback-protected replacement, downgrade blocking, and no implied cleanup.
 - [x] Define exact public semantics for `-Force` in repair and maintenance flows, including receipt repair and cleanup interactions.
 - [x] Define exact public semantics for `-AllowClobber` versus PSResourceGet `-NoClobber`, including exported command conflicts in the selected target root.
