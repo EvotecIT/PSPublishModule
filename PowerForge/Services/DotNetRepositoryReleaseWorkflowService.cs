@@ -2,21 +2,24 @@ namespace PowerForge;
 
 internal sealed class DotNetRepositoryReleaseWorkflowService
 {
-    private readonly Func<DotNetRepositoryReleaseSpec, Action<DotNetReleaseBuildAssemblySigningRequest>?, DotNetRepositoryReleaseResult> _executeRelease;
+    private readonly Func<DotNetRepositoryReleaseSpec, Action<DotNetReleaseBuildAssemblySigningRequest>?, Action<DotNetReleaseBuildAssemblySigningPreflightRequest>?, DotNetRepositoryReleaseResult> _executeRelease;
     private readonly Action<DotNetReleaseBuildAssemblySigningRequest>? _signAssemblies;
+    private readonly Action<DotNetReleaseBuildAssemblySigningPreflightRequest>? _validateAssemblySigning;
 
     public DotNetRepositoryReleaseWorkflowService(
         ILogger logger,
         Func<DotNetRepositoryReleaseSpec, DotNetRepositoryReleaseResult>? executeRelease = null,
-        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies = null)
+        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies = null,
+        Action<DotNetReleaseBuildAssemblySigningPreflightRequest>? validateAssemblySigning = null)
     {
         if (logger is null)
             throw new ArgumentNullException(nameof(logger));
 
         _executeRelease = executeRelease is null
-            ? (spec, signing) => new DotNetRepositoryReleaseService(logger).Execute(spec, signing)
-            : (spec, _) => executeRelease(spec);
+            ? (spec, signing, preflight) => new DotNetRepositoryReleaseService(logger).Execute(spec, signing, preflight)
+            : (spec, _, _) => executeRelease(spec);
         _signAssemblies = signAssemblies;
+        _validateAssemblySigning = validateAssemblySigning;
     }
 
     public DotNetRepositoryReleaseResult Execute(DotNetRepositoryReleasePreparedContext context, bool executeBuild)
@@ -27,11 +30,11 @@ internal sealed class DotNetRepositoryReleaseWorkflowService
             throw new ArgumentException("Prepared spec is required.", nameof(context));
 
         context.Spec.WhatIf = true;
-        var plan = _executeRelease(context.Spec, _signAssemblies);
+        var plan = _executeRelease(context.Spec, _signAssemblies, _validateAssemblySigning);
         if (!executeBuild)
             return plan;
 
         context.Spec.WhatIf = false;
-        return _executeRelease(context.Spec, _signAssemblies);
+        return _executeRelease(context.Spec, _signAssemblies, _validateAssemblySigning);
     }
 }

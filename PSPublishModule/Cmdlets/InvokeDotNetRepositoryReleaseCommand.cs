@@ -207,7 +207,8 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
         var executeBuild = ShouldProcess(preparation.RootPath, "Release .NET repository packages");
         var result = new DotNetRepositoryReleaseWorkflowService(
             logger,
-            signAssemblies: DotNetAssemblySigningCallbackFactory.Create(logger))
+            signAssemblies: DotNetAssemblySigningCallbackFactory.Create(logger),
+            validateAssemblySigning: DotNetAssemblySigningCallbackFactory.CreatePreflight(logger))
             .Execute(preparation, executeBuild);
         if (interactive)
         {

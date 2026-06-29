@@ -35,7 +35,10 @@ internal static class ModulePipelineRunnerDefaults
             scriptFunctionExportDetector ?? new PowerShellScriptFunctionExportDetector(),
             packageBuildExecutor ?? ((request, configuration, configPath) =>
             {
-                var service = new ProjectBuildHostService(logger, DotNetAssemblySigningCallbackFactory.Create(logger));
+                var service = new ProjectBuildHostService(
+                    logger,
+                    DotNetAssemblySigningCallbackFactory.Create(logger),
+                    DotNetAssemblySigningCallbackFactory.CreatePreflight(logger));
                 return configuration is null
                     ? service.Execute(request)
                     : service.Execute(request, configuration, configPath ?? request.ConfigPath);

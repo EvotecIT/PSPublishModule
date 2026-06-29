@@ -4,27 +4,30 @@ internal sealed class ProjectBuildWorkflowService
 {
     private readonly ILogger _logger;
     private readonly ProjectBuildSupportService _support;
-    private readonly Func<DotNetRepositoryReleaseSpec, Action<DotNetReleaseBuildAssemblySigningRequest>?, DotNetRepositoryReleaseResult> _executeRelease;
+    private readonly Func<DotNetRepositoryReleaseSpec, Action<DotNetReleaseBuildAssemblySigningRequest>?, Action<DotNetReleaseBuildAssemblySigningPreflightRequest>?, DotNetRepositoryReleaseResult> _executeRelease;
     private readonly Func<ProjectBuildGitHubPublishRequest, ProjectBuildGitHubPublishSummary> _publishGitHub;
     private readonly Func<ProjectBuildConfiguration, DotNetRepositoryReleaseResult, string, string?> _validateGitHubPreflight;
     private readonly Action<DotNetReleaseBuildAssemblySigningRequest>? _signAssemblies;
+    private readonly Action<DotNetReleaseBuildAssemblySigningPreflightRequest>? _validateAssemblySigning;
 
     public ProjectBuildWorkflowService(
         ILogger logger,
         Func<DotNetRepositoryReleaseSpec, DotNetRepositoryReleaseResult>? executeRelease = null,
         Func<ProjectBuildGitHubPublishRequest, ProjectBuildGitHubPublishSummary>? publishGitHub = null,
         Func<ProjectBuildConfiguration, DotNetRepositoryReleaseResult, string, string?>? validateGitHubPreflight = null,
-        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies = null)
+        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies = null,
+        Action<DotNetReleaseBuildAssemblySigningPreflightRequest>? validateAssemblySigning = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _support = new ProjectBuildSupportService(_logger);
         _executeRelease = executeRelease is null
-            ? (spec, signing) => new DotNetRepositoryReleaseService(_logger).Execute(spec, signing)
-            : (spec, _) => executeRelease(spec);
+            ? (spec, signing, preflight) => new DotNetRepositoryReleaseService(_logger).Execute(spec, signing, preflight)
+            : (spec, _, _) => executeRelease(spec);
         _publishGitHub = publishGitHub ?? (request => new ProjectBuildGitHubPublisher(_logger).Publish(request));
         _validateGitHubPreflight = validateGitHubPreflight ?? ((config, plan, token) =>
             new ProjectBuildGitHubPreflightService(_logger).Validate(config, plan, token));
         _signAssemblies = signAssemblies;
+        _validateAssemblySigning = validateAssemblySigning;
     }
 
     public ProjectBuildWorkflowResult Execute(
@@ -42,7 +45,7 @@ internal sealed class ProjectBuildWorkflowService
 
         var spec = preparation.Spec ?? throw new ArgumentException("Prepared spec is required.", nameof(preparation));
         spec.WhatIf = true;
-        var plan = _executeRelease(spec, _signAssemblies);
+        var plan = _executeRelease(spec, _signAssemblies, _validateAssemblySigning);
         var preflightErrors = new List<string>();
         if (!plan.Success)
             preflightErrors.Add(plan.ErrorMessage ?? "Plan/preflight validation failed.");
@@ -90,7 +93,7 @@ internal sealed class ProjectBuildWorkflowService
         _support.TryWritePlan(plan, preparation.PlanOutputPath);
 
         spec.WhatIf = false;
-        var release = _executeRelease(spec, _signAssemblies);
+        var release = _executeRelease(spec, _signAssemblies, _validateAssemblySigning);
         var result = new ProjectBuildResult { Release = release };
 
         if (release is null || !release.Success)

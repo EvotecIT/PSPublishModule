@@ -15,9 +15,16 @@ public sealed partial class DotNetRepositoryReleaseService
     /// <summary>
     /// Executes the repository release workflow.
     /// </summary>
+    public DotNetRepositoryReleaseResult Execute(DotNetRepositoryReleaseSpec spec)
+        => Execute(spec, signAssemblies: null, validateAssemblySigning: null);
+
+    /// <summary>
+    /// Executes the repository release workflow with optional assembly signing callbacks.
+    /// </summary>
     public DotNetRepositoryReleaseResult Execute(
         DotNetRepositoryReleaseSpec spec,
-        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies = null)
+        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies,
+        Action<DotNetReleaseBuildAssemblySigningPreflightRequest>? validateAssemblySigning)
     {
         var result = new DotNetRepositoryReleaseResult();
 
@@ -183,6 +190,32 @@ public sealed partial class DotNetRepositoryReleaseService
                 result.Success = false;
                 result.ErrorMessage = "Assembly signing was requested, but no assembly signing handler was provided.";
                 return result;
+            }
+
+            if (signAssemblyOutputs && validateAssemblySigning is null)
+            {
+                result.Success = false;
+                result.ErrorMessage = "Assembly signing was requested, but no assembly signing preflight handler was provided.";
+                return result;
+            }
+
+            if (signAssemblyOutputs)
+            {
+                try
+                {
+                    validateAssemblySigning!(new DotNetReleaseBuildAssemblySigningPreflightRequest
+                    {
+                        LocalStore = spec.CertificateStore,
+                        CertificateThumbprint = spec.CertificateThumbprint!.Trim(),
+                        TimeStampServer = spec.TimeStampServer!
+                    });
+                }
+                catch (Exception ex)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = $"Assembly signing preflight failed. {ex.Message}";
+                    return result;
+                }
             }
 
             if (signNuGetPackages)

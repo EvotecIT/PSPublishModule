@@ -10,6 +10,7 @@ public sealed class ProjectBuildHostService
     private readonly Func<ProjectBuildGitHubPublishRequest, ProjectBuildGitHubPublishSummary>? _publishGitHub;
     private readonly Func<ProjectBuildConfiguration, DotNetRepositoryReleaseResult, string, string?>? _validateGitHubPreflight;
     private readonly Action<DotNetReleaseBuildAssemblySigningRequest>? _signAssemblies;
+    private readonly Action<DotNetReleaseBuildAssemblySigningPreflightRequest>? _validateAssemblySigning;
 
     /// <summary>
     /// Creates a new host service using a null logger.
@@ -33,12 +34,15 @@ public sealed class ProjectBuildHostService
     /// </summary>
     /// <param name="logger">Logger used by the underlying workflow.</param>
     /// <param name="signAssemblies">Optional handler used to sign build outputs before packages are created.</param>
+    /// <param name="validateAssemblySigning">Optional handler used to validate assembly signing before mutable release steps run.</param>
     public ProjectBuildHostService(
         ILogger logger,
-        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies)
+        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies,
+        Action<DotNetReleaseBuildAssemblySigningPreflightRequest>? validateAssemblySigning = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _signAssemblies = signAssemblies;
+        _validateAssemblySigning = validateAssemblySigning;
     }
 
     internal ProjectBuildHostService(
@@ -46,13 +50,15 @@ public sealed class ProjectBuildHostService
         Func<DotNetRepositoryReleaseSpec, DotNetRepositoryReleaseResult>? executeRelease,
         Func<ProjectBuildGitHubPublishRequest, ProjectBuildGitHubPublishSummary>? publishGitHub,
         Func<ProjectBuildConfiguration, DotNetRepositoryReleaseResult, string, string?>? validateGitHubPreflight,
-        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies = null)
+        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies = null,
+        Action<DotNetReleaseBuildAssemblySigningPreflightRequest>? validateAssemblySigning = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _executeRelease = executeRelease;
         _publishGitHub = publishGitHub;
         _validateGitHubPreflight = validateGitHubPreflight;
         _signAssemblies = signAssemblies;
+        _validateAssemblySigning = validateAssemblySigning;
     }
 
     /// <summary>
@@ -126,7 +132,8 @@ public sealed class ProjectBuildHostService
             _executeRelease,
             _publishGitHub,
             _validateGitHubPreflight,
-            _signAssemblies)
+            _signAssemblies,
+            _validateAssemblySigning)
             .Execute(config, configDirectory, preparation, request.ExecuteBuild);
 
         return new ProjectBuildHostExecutionResult {

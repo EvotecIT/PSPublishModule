@@ -88,14 +88,18 @@ public sealed partial class DotNetRepositoryReleaseService
 
             try
             {
-                signAssemblies!(new DotNetReleaseBuildAssemblySigningRequest
+                var outputDirectories = ResolveBuildOutputDirectories(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger);
+                foreach (var outputDirectory in outputDirectories)
                 {
-                    ReleasePath = Path.Combine(csprojDir, "bin", configuration),
-                    LocalStore = spec.CertificateStore,
-                    CertificateThumbprint = spec.CertificateThumbprint!.Trim(),
-                    TimeStampServer = string.IsNullOrWhiteSpace(spec.TimeStampServer) ? "http://timestamp.digicert.com" : spec.TimeStampServer!.Trim(),
-                    IncludePatterns = new[] { "*.dll", "*.exe" }
-                });
+                    signAssemblies!(new DotNetReleaseBuildAssemblySigningRequest
+                    {
+                        ReleasePath = outputDirectory,
+                        LocalStore = spec.CertificateStore,
+                        CertificateThumbprint = spec.CertificateThumbprint!.Trim(),
+                        TimeStampServer = string.IsNullOrWhiteSpace(spec.TimeStampServer) ? "http://timestamp.digicert.com" : spec.TimeStampServer!.Trim(),
+                        IncludePatterns = new[] { "*.dll", "*.exe" }
+                    });
+                }
             }
             catch (Exception ex)
             {
@@ -355,6 +359,86 @@ public sealed partial class DotNetRepositoryReleaseService
         return exitCode;
     }
 
+    private static string[] ResolveBuildOutputDirectories(
+        string csproj,
+        string workingDirectory,
+        string configuration,
+        string projectName,
+        ILogger logger)
+    {
+        var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var targetFramework in ReadTargetFrameworks(csproj))
+        {
+            var exitCode = RunDotnetMsBuildGetProperty(
+                csproj,
+                workingDirectory,
+                configuration,
+                targetFramework,
+                "TargetDir",
+                projectName,
+                logger,
+                out var value,
+                out var stdErr,
+                out var stdOut,
+                out var duration);
+
+            if (exitCode == 0 && !string.IsNullOrWhiteSpace(value))
+            {
+                var resolved = Path.GetFullPath(value!.Trim().Trim('"'));
+                if (Directory.Exists(resolved))
+                    directories.Add(resolved);
+            }
+            else
+            {
+                logger.Verbose($"{projectName}: unable to resolve MSBuild TargetDir for signing in {FormatDuration(duration)}. {SummarizeProcessFailureOutput(stdErr, stdOut)}");
+            }
+        }
+
+        if (directories.Count == 0)
+        {
+            var fallback = Path.Combine(workingDirectory, "bin", configuration);
+            if (Directory.Exists(fallback))
+                directories.Add(fallback);
+        }
+
+        if (directories.Count == 0)
+            throw new DirectoryNotFoundException($"No build output directory found for {projectName}.");
+
+        return directories.ToArray();
+    }
+
+    private static string?[] ReadTargetFrameworks(string csproj)
+    {
+        try
+        {
+            var document = XDocument.Load(csproj);
+            var targetFrameworks = document.Descendants()
+                .FirstOrDefault(element => string.Equals(element.Name.LocalName, "TargetFrameworks", StringComparison.OrdinalIgnoreCase))
+                ?.Value;
+            if (!string.IsNullOrWhiteSpace(targetFrameworks))
+            {
+                return targetFrameworks!
+                    .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(static value => value.Trim())
+                    .Where(static value => !string.IsNullOrWhiteSpace(value))
+                    .Cast<string?>()
+                    .ToArray();
+            }
+
+            var targetFramework = document.Descendants()
+                .FirstOrDefault(element => string.Equals(element.Name.LocalName, "TargetFramework", StringComparison.OrdinalIgnoreCase))
+                ?.Value;
+            if (!string.IsNullOrWhiteSpace(targetFramework))
+                return new string?[] { targetFramework!.Trim() };
+        }
+        catch
+        {
+            // Fall back to a configuration-level output directory when project XML cannot be read.
+        }
+
+        return new string?[] { null };
+    }
+
     private static int RunDotnetMsBuildPack(
         string traversalProject,
         string workingDirectory,
@@ -407,6 +491,97 @@ public sealed partial class DotNetRepositoryReleaseService
             out duration);
         LogProcessOutput(logger, "MSBuild batch", "dotnet msbuild pack", stdOut, stdErr);
         return exitCode;
+    }
+
+    private static int RunDotnetMsBuildGetProperty(
+        string csproj,
+        string workingDirectory,
+        string configuration,
+        string? targetFramework,
+        string propertyName,
+        string projectName,
+        ILogger logger,
+        out string? value,
+        out string stdErr,
+        out string stdOut,
+        out TimeSpan duration)
+    {
+        value = null;
+        stdErr = string.Empty;
+        stdOut = string.Empty;
+        duration = TimeSpan.Zero;
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = workingDirectory
+        };
+        ProcessStartInfoEncoding.TryApplyUtf8(psi);
+
+        var args = new List<string>
+        {
+            "msbuild",
+            csproj,
+            "-nologo",
+            $"-getProperty:{propertyName}",
+            $"-p:Configuration={configuration}"
+        };
+        if (!string.IsNullOrWhiteSpace(targetFramework))
+            args.Add($"-p:TargetFramework={targetFramework!.Trim()}");
+
+#if NET472
+        psi.Arguments = BuildWindowsArgumentString(args);
+#else
+        foreach (var arg in args)
+            psi.ArgumentList.Add(arg);
+#endif
+
+        var exitCode = RunProcessWithHeartbeat(
+            psi,
+            logger,
+            elapsed => $"{projectName}: dotnet msbuild {propertyName} still running ({FormatDuration(elapsed)} elapsed).",
+            out stdErr,
+            out stdOut,
+            out duration);
+        LogProcessOutput(logger, projectName, $"dotnet msbuild {propertyName}", stdOut, stdErr);
+        value = ExtractMsBuildPropertyValue(stdOut, propertyName);
+        return exitCode;
+    }
+
+    private static string? ExtractMsBuildPropertyValue(string stdOut, string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(stdOut))
+            return null;
+
+        var lines = stdOut.Replace("\r\n", "\n").Split('\n')
+            .Select(static line => line.Trim())
+            .Where(static line => !string.IsNullOrWhiteSpace(line))
+            .ToArray();
+        if (lines.Length == 0)
+            return null;
+
+        var xmlStart = Array.FindIndex(lines, static line => line.StartsWith("<", StringComparison.Ordinal));
+        if (xmlStart >= 0)
+        {
+            try
+            {
+                var xml = string.Join(Environment.NewLine, lines.Skip(xmlStart));
+                var document = XDocument.Parse(xml);
+                return document.Descendants()
+                    .FirstOrDefault(element => string.Equals(element.Name.LocalName, propertyName, StringComparison.OrdinalIgnoreCase))
+                    ?.Value;
+            }
+            catch
+            {
+                // Fall back to the last non-empty line for older MSBuild output shapes.
+            }
+        }
+
+        return lines[lines.Length - 1];
     }
 
     internal static PackagePushResult ClassifyNuGetPushOutcome(int exitCode, bool skipDuplicate, string stdErr, string stdOut)
