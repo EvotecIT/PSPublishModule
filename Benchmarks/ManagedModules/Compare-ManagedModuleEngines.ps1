@@ -1,23 +1,14 @@
 param(
     [ValidateSet('Smoke', 'Standard')]
     [string] $Suite = 'Smoke',
-
     [string] $ModuleName = 'ThreadJob',
-
     [string] $Version = '',
-
     [string] $UpdateBaselineVersion = '',
-
     [string] $Repository = 'PSGallery',
-
     [string] $RepositoryName = 'PSGallery',
-
     [string] $ModuleFastSource = 'https://pwsh.gallery/index.json',
-
     [string[]] $Engine = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet'),
-
     [string[]] $Operation,
-
     [string[]] $RepairScenario = @('StaleVersion'),
 
     [ValidateSet('Default', 'Cold', 'Warm')]

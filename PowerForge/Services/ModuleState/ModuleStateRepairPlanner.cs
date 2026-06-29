@@ -35,7 +35,7 @@ internal sealed class ModuleStateRepairPlanner
 
         foreach (var repairAction in CreateFamilyRepairActions(inventory, familyPolicies, actionsByModule.Values))
         {
-            actionsByModule.Remove(CreateBaseActionKey(repairAction));
+            RemoveActionKeysForModuleScope(actionsByModule, repairAction);
             actionsByModule[CreateActionKey(repairAction)] = repairAction;
         }
 
@@ -55,6 +55,23 @@ internal sealed class ModuleStateRepairPlanner
 
     private static string CreateBaseActionKey(ModuleStatePlanAction action)
         => string.Join("|", action.ModuleName, action.TargetScope ?? string.Empty, string.Empty, string.Empty);
+
+    private static void RemoveActionKeysForModuleScope(
+        IDictionary<string, ModuleStatePlanAction> actionsByModule,
+        ModuleStatePlanAction repairAction)
+    {
+        var keys = actionsByModule
+            .Where(pair =>
+                string.Equals(pair.Value.ModuleName, repairAction.ModuleName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(pair.Value.TargetScope ?? string.Empty, repairAction.TargetScope ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+            .Select(static pair => pair.Key)
+            .ToArray();
+
+        foreach (var key in keys)
+        {
+            actionsByModule.Remove(key);
+        }
+    }
 
     private static IEnumerable<ModuleStatePlanAction> CreateFamilyRepairActions(
         ModuleStateInventory inventory,
@@ -86,6 +103,8 @@ internal sealed class ModuleStateRepairPlanner
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+            var wholeFamilyHasPlannedActions = installedFamilyModuleNames.All(name =>
+                existing.Any(action => string.Equals(action.ModuleName, name, StringComparison.OrdinalIgnoreCase)));
 
             foreach (var moduleName in installedFamilyModuleNames)
             {
@@ -97,6 +116,12 @@ internal sealed class ModuleStateRepairPlanner
                 if (installedModules.Length == 0 ||
                     selectedModule is null ||
                     VersionsEqual(selectedModule.Version, targetModule.Version))
+                {
+                    continue;
+                }
+
+                if (!wholeFamilyHasPlannedActions &&
+                    HasExplicitDesiredAction(existing, moduleName, selectedModule.Scope))
                 {
                     continue;
                 }
@@ -120,6 +145,15 @@ internal sealed class ModuleStateRepairPlanner
         string moduleName,
         string? targetScope)
         => existingActions.FirstOrDefault(action =>
+            string.Equals(action.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(action.TargetScope ?? string.Empty, targetScope ?? string.Empty, StringComparison.OrdinalIgnoreCase));
+
+    private static bool HasExplicitDesiredAction(
+        IEnumerable<ModuleStatePlanAction> existingActions,
+        string moduleName,
+        string? targetScope)
+        => existingActions.Any(action =>
+            !action.IsRepair &&
             string.Equals(action.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(action.TargetScope ?? string.Empty, targetScope ?? string.Empty, StringComparison.OrdinalIgnoreCase));
 
