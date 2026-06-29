@@ -787,6 +787,38 @@ public class WebAgentReadinessTests
     }
 
     [Fact]
+    public void BuildMarkdownNegotiationMessage_ReportsFetchedArtifactMimeMismatch()
+    {
+        var message = WebAgentReadiness.BuildMarkdownNegotiationMessage(
+            negotiated: false,
+            requestSucceeded: true,
+            contentType: "text/html",
+            vary: "Accept",
+            cacheStatus: string.Empty,
+            cacheControl: "public, max-age=14400",
+            directMarkdownAvailable: false,
+            directMarkdownUrl: "https://example.test/agent.md",
+            directMarkdownFetched: true,
+            directMarkdownContentType: "text/plain");
+
+        Assert.Contains("was fetched", message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Content-Type text/plain", message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("https://example.test/agent.md", message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveMarkdownAlternateUrl_ParsesRelationTokensAndMediaTypeParameters()
+    {
+        var linkHeader =
+            "</feed.xml>; rel=\"alternate\"; type=\"application/rss+xml\", " +
+            "</agent.md>; rel=\"canonical alternate\"; type=\"text/markdown; charset=utf-8\"";
+
+        var url = WebAgentReadiness.ResolveMarkdownAlternateUrl("https://example.test", linkHeader);
+
+        Assert.Equal("https://example.test/agent.md", url);
+    }
+
+    [Fact]
     public void Prepare_ReplacesExistingApacheManagedBlock()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-apache-idempotent-" + Guid.NewGuid().ToString("N"));
