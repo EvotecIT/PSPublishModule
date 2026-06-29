@@ -142,6 +142,8 @@ function New-ManagedOptimizationTarget {
         $lastDependencyMs = if ($row.PSObject.Properties['ManagedLastDependencyMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDependencyMs } else { 0.0 }
         $lastDependencyQueueWaitMs = if ($row.PSObject.Properties['ManagedLastDependencyQueueWaitMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDependencyQueueWaitMs } else { 0.0 }
         $lastRootDependencyUnattributedMs = if ($row.PSObject.Properties['ManagedLastRootDependencyUnattributedMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastRootDependencyUnattributedMs } else { 0.0 }
+        $lastRootDependencyCriticalPathGapMs = if ($row.PSObject.Properties['ManagedLastRootDependencyCriticalPathGapMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastRootDependencyCriticalPathGapMs } else { $lastRootDependencyUnattributedMs }
+        $lastDependencyBranchParallelismRatio = if ($row.PSObject.Properties['ManagedLastDependencyBranchParallelismRatio']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDependencyBranchParallelismRatio } else { 0.0 }
         $lastDownloadMs = if ($row.PSObject.Properties['ManagedLastDownloadMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDownloadMs } else { 0.0 }
         $lastExtractionMs = if ($row.PSObject.Properties['ManagedLastExtractionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastExtractionMs } else { 0.0 }
         $lastPromotionMoveMs = if ($row.PSObject.Properties['ManagedLastPromotionMoveMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastPromotionMoveMs } else { 0.0 }
@@ -301,6 +303,8 @@ function New-ManagedOptimizationTarget {
             LastCriticalOptimizationQuestion = [string] $lastCriticalLane.Question
             LastRootDependencyMs = if ($row.PSObject.Properties['ManagedLastRootDependencyMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastRootDependencyMs } else { 0.0 }
             LastRootDependencyUnattributedMs = $lastRootDependencyUnattributedMs
+            LastRootDependencyCriticalPathGapMs = $lastRootDependencyCriticalPathGapMs
+            LastDependencyBranchParallelismRatio = $lastDependencyBranchParallelismRatio
             LastDependencyQueueWaitMs = $lastDependencyQueueWaitMs
             LastDependencyMs = $lastDependencyMs
             LastDownloadMs = $lastDownloadMs

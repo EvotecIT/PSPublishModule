@@ -27,6 +27,8 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
                     ManagedRootElapsedMilliseconds = 4200
                     ManagedHarnessOverheadMilliseconds = 233
                     ManagedRootDependencyMilliseconds = 3540
+                    ManagedRootDependencyCriticalPathGapMilliseconds = 2760
+                    ManagedDependencyBranchParallelismRatio = 1.5
                     ManagedTotalDownloadMilliseconds = 25000
                     ManagedTotalExtractionMilliseconds = 1200
                     ManagedTotalDependencyMilliseconds = 1600
@@ -88,6 +90,8 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
                     ManagedRootElapsedMilliseconds = 1773
                     ManagedHarnessOverheadMilliseconds = 171
                     ManagedRootDependencyMilliseconds = 1773
+                    ManagedRootDependencyCriticalPathGapMilliseconds = 1253
+                    ManagedDependencyBranchParallelismRatio = 2.0
                     ManagedTotalDownloadMilliseconds = 0
                     ManagedTotalExtractionMilliseconds = 1100
                     ManagedTotalDependencyMilliseconds = 900
@@ -151,6 +155,10 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
         Assert.Equal(0.0, NumericProperty(row, "ManagedLastPackageRepositoryRequests"));
         Assert.Equal(3540.0, NumericProperty(row, "ManagedFirstRootDependencyMs"));
         Assert.Equal(1773.0, NumericProperty(row, "ManagedLastRootDependencyMs"));
+        Assert.Equal(2760.0, NumericProperty(row, "ManagedFirstRootDependencyCriticalPathGapMs"));
+        Assert.Equal(1253.0, NumericProperty(row, "ManagedLastRootDependencyCriticalPathGapMs"));
+        Assert.Equal(1.5, NumericProperty(row, "ManagedFirstDependencyBranchParallelismRatio"));
+        Assert.Equal(2.0, NumericProperty(row, "ManagedLastDependencyBranchParallelismRatio"));
         Assert.Equal(25000.0, NumericProperty(row, "ManagedFirstDownloadMs"));
         Assert.Equal(0.0, NumericProperty(row, "ManagedLastDownloadMs"));
         Assert.Equal(1200.0, NumericProperty(row, "ManagedFirstExtractionMs"));
@@ -184,6 +192,8 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
         Assert.Equal(650.0, NumericProperty(row, "ManagedCriticalDependencyBranchMs"));
         Assert.Equal(2986.5, NumericProperty(row, "ManagedCriticalRootBranchMs"));
         Assert.Equal(475.0, NumericProperty(row, "ManagedCriticalMaterializationBranchMs"));
+        Assert.Equal(2006.5, NumericProperty(row, "ManagedRootDependencyCriticalPathGapMs"));
+        Assert.Equal(1.75, NumericProperty(row, "ManagedDependencyBranchParallelismRatio"));
         Assert.Equal("Company.BranchWarm", Property(row, "ManagedLastCriticalDependencyBranchName"));
         Assert.Equal("Company.Shared", Property(row, "ManagedLastCriticalDependencyBranchParent"));
         Assert.Equal(520.0, NumericProperty(row, "ManagedLastCriticalDependencyBranchMs"));

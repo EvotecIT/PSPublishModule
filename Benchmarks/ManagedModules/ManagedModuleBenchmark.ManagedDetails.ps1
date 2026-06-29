@@ -384,6 +384,13 @@ function Write-ManagedInstallDetail {
     } else {
         0.0
     }
+    $totalDependencyBranchElapsedMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $dependencyBranches -Name 'DependencyBranchElapsedMilliseconds'), 2)
+    $rootDependencyCriticalPathGapMilliseconds = [math]::Round([math]::Max(0, $rootDependencyMilliseconds - $criticalDependencyBranchMilliseconds), 2)
+    $dependencyBranchParallelismRatio = if ([double] $rootDependencyMilliseconds -gt 0) {
+        [math]::Round([double] $totalDependencyBranchElapsedMilliseconds / [double] $rootDependencyMilliseconds, 2)
+    } else {
+        0.0
+    }
     $summary = [pscustomobject]@{
         PackageCount = $packages.Count
         DependencyCount = [math]::Max(0, $packages.Count - 1)
@@ -393,10 +400,12 @@ function Write-ManagedInstallDetail {
         AlreadyInstalledPackageCount = @($packages | Where-Object Status -eq 'AlreadyInstalled').Count
         RootElapsedMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.Elapsed
         RootDependencyMilliseconds = $rootDependencyMilliseconds
-        RootDependencyUnattributedMilliseconds = [math]::Round([math]::Max(0, $rootDependencyMilliseconds - $criticalDependencyBranchMilliseconds), 2)
+        RootDependencyUnattributedMilliseconds = $rootDependencyCriticalPathGapMilliseconds
+        RootDependencyCriticalPathGapMilliseconds = $rootDependencyCriticalPathGapMilliseconds
+        DependencyBranchParallelismRatio = $dependencyBranchParallelismRatio
         TotalVersionSelectionWaitMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $versionSelectionWaits -Name 'VersionSelectionWaitMilliseconds'), 2)
         TotalDependencyQueueWaitMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $dependencyQueueWaits -Name 'DependencyQueueWaitMilliseconds'), 2)
-        TotalDependencyBranchElapsedMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $dependencyBranches -Name 'DependencyBranchElapsedMilliseconds'), 2)
+        TotalDependencyBranchElapsedMilliseconds = $totalDependencyBranchElapsedMilliseconds
         TotalDependencyBranchOverheadMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $dependencyBranchOverheads -Name 'DependencyBranchOverheadMilliseconds'), 2)
         TotalDownloadMilliseconds = [math]::Round((($packages | Measure-Object DownloadMilliseconds -Sum).Sum), 2)
         TotalExtractionMilliseconds = [math]::Round((($packages | Measure-Object ExtractionMilliseconds -Sum).Sum), 2)
