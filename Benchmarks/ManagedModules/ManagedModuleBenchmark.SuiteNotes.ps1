@@ -110,7 +110,7 @@ function Write-ManagedBenchmarkSuiteNotes {
         $lines.Add('')
         $lines.Add('Use these rows to decide where the next managed-engine optimization should start. `Diagnostic` rows identify managed cost centers; `Scoreboard` rows keep provider-race context.')
         $lines.Add('')
-        Add-ManagedBenchmarkMarkdownTable -Lines $lines -Rows $OptimizationRows -Columns @('BenchmarkRole', 'Suite', 'Scenario', 'Host', 'Operation', 'ManagedMs', 'Bottleneck', 'LastMs', 'LastBottleneck', 'LastBottleneckMs', 'LastDependencyMs', 'LastSlowestDependencyPackage', 'LastSlowestDependencyPackageParent', 'LastSlowestDependencyPackageMs', 'LastCoalescedWaitMs', 'LastInstallLockWaitMs', 'ExtractionCacheLockWaitMs', 'LastExtractionCacheLockWaitMs', 'LastSlowestMaterializedPackage', 'LastSlowestMaterializedPackageMs', 'LastSlowestMaterializedPackageExtractionCacheLockWaitMs', 'LastNextQuestion')
+        Add-ManagedBenchmarkMarkdownTable -Lines $lines -Rows $OptimizationRows -Columns @('BenchmarkRole', 'Suite', 'Scenario', 'Host', 'Operation', 'ManagedMs', 'Bottleneck', 'LastMs', 'LastBottleneck', 'LastBottleneckMs', 'LastDependencyMs', 'LastSlowestDependencyPackage', 'LastSlowestDependencyPackageParent', 'LastSlowestDependencyPackageMs', 'LastCoalescedWaitMs', 'LastInstallLockWaitMs', 'ExtractionCacheLockWaitMs', 'LastExtractionCacheLockWaitMs', 'LastPromotionMoveMs', 'LastSlowestMaterializedPackage', 'LastSlowestMaterializedPackageMs', 'LastSlowestMaterializedPackageExtractionCacheLockWaitMs', 'LastSlowestMaterializedPackagePromotionMoveMs', 'LastNextQuestion')
         $lines.Add('')
     }
 

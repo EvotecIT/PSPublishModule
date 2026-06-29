@@ -438,9 +438,12 @@ public sealed partial class ManagedModuleInstallService
                 ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), stageModulePath);
 
             var promotionStopwatch = System.Diagnostics.Stopwatch.StartNew();
-            using (AcquireInstallLock(moduleRoot, request.Name, cancellationToken, out var promotionLockWaitElapsed))
+            var promotionLockWaitElapsed = TimeSpan.Zero;
+            var promotionMoveElapsed = TimeSpan.Zero;
+            using (AcquireInstallLock(moduleRoot, request.Name, cancellationToken, out var resolvedPromotionLockWaitElapsed))
             {
-                installLockWaitElapsed += promotionLockWaitElapsed;
+                promotionLockWaitElapsed = resolvedPromotionLockWaitElapsed;
+                installLockWaitElapsed += resolvedPromotionLockWaitElapsed;
                 if (Directory.Exists(modulePath) && !request.Force)
                 {
                     _logger.Verbose($"Managed module install skipped concurrently installed version: {modulePath}");
@@ -455,7 +458,10 @@ public sealed partial class ManagedModuleInstallService
                         installLockWaitElapsed);
                 }
 
+                var promotionMoveStopwatch = System.Diagnostics.Stopwatch.StartNew();
                 PromoteStagedModule(stageModulePath, modulePath);
+                promotionMoveStopwatch.Stop();
+                promotionMoveElapsed = promotionMoveStopwatch.Elapsed;
             }
 
             CleanupEmptyStage(stageRoot);
@@ -490,6 +496,8 @@ public sealed partial class ManagedModuleInstallService
                 ExtractionCacheLockWaitElapsed = extraction.CacheLockWaitElapsed,
                 DependencyElapsed = dependencyStopwatch.Elapsed,
                 PromotionElapsed = promotionStopwatch.Elapsed,
+                PromotionLockWaitElapsed = promotionLockWaitElapsed,
+                PromotionMoveElapsed = promotionMoveElapsed,
                 RepositoryRequestCount = requestScope.Count,
                 PackageRepositoryRequestCount = packageRepositoryRequestCount,
                 PackageRepositoryRedirectCount = packageRepositoryRedirectCount,

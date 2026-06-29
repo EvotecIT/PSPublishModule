@@ -587,6 +587,10 @@ function Add-SummaryRows {
                 ManagedLastDependencyMs = $row.ManagedLastDependencyMs
                 ManagedFirstPromotionMs = $row.ManagedFirstPromotionMs
                 ManagedLastPromotionMs = $row.ManagedLastPromotionMs
+                ManagedFirstPromotionLockWaitMs = $row.ManagedFirstPromotionLockWaitMs
+                ManagedLastPromotionLockWaitMs = $row.ManagedLastPromotionLockWaitMs
+                ManagedFirstPromotionMoveMs = $row.ManagedFirstPromotionMoveMs
+                ManagedLastPromotionMoveMs = $row.ManagedLastPromotionMoveMs
                 ManagedFirstDownloadBytes = $row.ManagedFirstDownloadBytes
                 ManagedLastDownloadBytes = $row.ManagedLastDownloadBytes
                 ManagedFirstCacheHits = $row.ManagedFirstCacheHits
@@ -609,6 +613,8 @@ function Add-SummaryRows {
                 ManagedLastSlowestMaterializedPackageExtractionMs = $row.ManagedLastSlowestMaterializedPackageExtractionMs
                 ManagedLastSlowestMaterializedPackageExtractionCacheLockWaitMs = $row.ManagedLastSlowestMaterializedPackageExtractionCacheLockWaitMs
                 ManagedLastSlowestMaterializedPackagePromotionMs = $row.ManagedLastSlowestMaterializedPackagePromotionMs
+                ManagedLastSlowestMaterializedPackagePromotionLockWaitMs = $row.ManagedLastSlowestMaterializedPackagePromotionLockWaitMs
+                ManagedLastSlowestMaterializedPackagePromotionMoveMs = $row.ManagedLastSlowestMaterializedPackagePromotionMoveMs
                 ManagedMaintenanceActions = $row.ManagedMaintenanceActions
                 ManagedMaintenanceFindings = $row.ManagedMaintenanceFindings
                 ManagedRootDependencyMs = $row.ManagedRootDependencyMs
@@ -617,6 +623,8 @@ function Add-SummaryRows {
                 ManagedExtractionCacheLockWaitMs = $row.ManagedExtractionCacheLockWaitMs
                 ManagedDependencyMs = $row.ManagedDependencyMs
                 ManagedPromotionMs = $row.ManagedPromotionMs
+                ManagedPromotionLockWaitMs = $row.ManagedPromotionLockWaitMs
+                ManagedPromotionMoveMs = $row.ManagedPromotionMoveMs
                 RunPath = $RunPath
             })
         }

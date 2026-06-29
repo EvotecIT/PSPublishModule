@@ -59,6 +59,16 @@ function Add-ManagedInstallDetail {
     }
     $dependencyMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.DependencyElapsed
     $promotionMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.PromotionElapsed
+    $promotionLockWaitMilliseconds = if ($null -ne $Result.PSObject.Properties['PromotionLockWaitElapsed']) {
+        ConvertTo-Milliseconds -TimeSpan $Result.PromotionLockWaitElapsed
+    } else {
+        0
+    }
+    $promotionMoveMilliseconds = if ($null -ne $Result.PSObject.Properties['PromotionMoveElapsed']) {
+        ConvertTo-Milliseconds -TimeSpan $Result.PromotionMoveElapsed
+    } else {
+        0
+    }
     $installLockWaitMilliseconds = if ($null -ne $Result.PSObject.Properties['InstallLockWaitElapsed']) {
         ConvertTo-Milliseconds -TimeSpan $Result.InstallLockWaitElapsed
     } else {
@@ -98,6 +108,8 @@ function Add-ManagedInstallDetail {
         ExtractionCacheLockWaitMilliseconds = $extractionCacheLockWaitMilliseconds
         DependencyMilliseconds = $dependencyMilliseconds
         PromotionMilliseconds = $promotionMilliseconds
+        PromotionLockWaitMilliseconds = $promotionLockWaitMilliseconds
+        PromotionMoveMilliseconds = $promotionMoveMilliseconds
         InstallLockWaitMilliseconds = $installLockWaitMilliseconds
         CoalescedWaitMilliseconds = $coalescedWaitMilliseconds
         RepositoryRequestCount = [long] $Result.RepositoryRequestCount
@@ -199,6 +211,8 @@ function Write-ManagedInstallDetail {
         TotalExtractionCacheLockWaitMilliseconds = [math]::Round((($packages | Measure-Object ExtractionCacheLockWaitMilliseconds -Sum).Sum), 2)
         TotalDependencyMilliseconds = [math]::Round((Get-ManagedDetailSum -Rows $dependencyWork -Name 'DependencyMilliseconds'), 2)
         TotalPromotionMilliseconds = [math]::Round((($packages | Measure-Object PromotionMilliseconds -Sum).Sum), 2)
+        TotalPromotionLockWaitMilliseconds = [math]::Round((($packages | Measure-Object PromotionLockWaitMilliseconds -Sum).Sum), 2)
+        TotalPromotionMoveMilliseconds = [math]::Round((($packages | Measure-Object PromotionMoveMilliseconds -Sum).Sum), 2)
         TotalRepositoryRequestCount = [long] $Result.RepositoryRequestCount
         TotalPackageRepositoryRequestCount = [long] (($packages | Measure-Object PackageRepositoryRequestCount -Sum).Sum)
         TotalPackageRepositoryRedirectCount = [long] (($packages | Measure-Object PackageRepositoryRedirectCount -Sum).Sum)
@@ -224,6 +238,8 @@ function Write-ManagedInstallDetail {
         SlowestMaterializedPackageExtractionMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].ExtractionMilliseconds } else { 0.0 }
         SlowestMaterializedPackageExtractionCacheLockWaitMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].ExtractionCacheLockWaitMilliseconds } else { 0.0 }
         SlowestMaterializedPackagePromotionMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].PromotionMilliseconds } else { 0.0 }
+        SlowestMaterializedPackagePromotionLockWaitMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].PromotionLockWaitMilliseconds } else { 0.0 }
+        SlowestMaterializedPackagePromotionMoveMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].PromotionMoveMilliseconds } else { 0.0 }
     }
 
     $parent = Split-Path -Path $Path -Parent

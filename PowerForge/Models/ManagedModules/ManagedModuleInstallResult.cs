@@ -146,6 +146,16 @@ public sealed class ManagedModuleInstallResult
     public TimeSpan PromotionElapsed { get; set; }
 
     /// <summary>
+    /// Elapsed time spent waiting for the per-module install lock during final promotion.
+    /// </summary>
+    public TimeSpan PromotionLockWaitElapsed { get; set; }
+
+    /// <summary>
+    /// Elapsed time spent moving the staged module directory after the promotion lock was acquired.
+    /// </summary>
+    public TimeSpan PromotionMoveElapsed { get; set; }
+
+    /// <summary>
     /// Repository HTTP request attempts observed during this install operation, including dependencies.
     /// </summary>
     public long RepositoryRequestCount { get; set; }
