@@ -344,6 +344,38 @@ In the result table, Managed is the `1.00x` baseline for each completed row.
 Other values show how many times slower that engine was for the same scenario,
 with measured time in parentheses.
 
+Why the managed engine is fast:
+
+- It avoids the PowerShellGet/PackageManagement provider stack during normal
+  install and save operations. The public cmdlets are PowerShell, but the
+  repository, dependency, download, extraction, and promotion work runs in the
+  shared C# engine.
+- It resolves and installs dependencies concurrently. Large dependency graphs
+  such as `Microsoft.Graph` and `Az` are not handled as one long serial
+  provider walk.
+- It coalesces duplicate work inside one operation. If several dependencies ask
+  for the same package/version, one install wins and the other branches reuse
+  the completed result.
+- It streams packages directly, records SHA256, and uses a per-run package cache
+  plus an extracted-package cache so repeated materialization does not pay the
+  same download/extract cost again.
+- It stages into short hidden folders and promotes atomically into the final
+  versioned module path. That keeps PS 5.1 viable for deep packages such as
+  `Az.MachineLearningServices` while still keeping the installed layout normal.
+- It uses the same engine on PS 7 and Windows PowerShell 5.1, so the 5.1 path is
+  not forced through older provider behavior just because the host is older.
+
+ModuleFast is fast for a different reason. It is a focused installer that uses
+`pwsh.gallery`, a community NuGet v2-to-v3 bridge for PowerShell Gallery using
+Cloudflare Workers. That mirror is maintained outside the official PowerShell
+Gallery path; the public ModuleFast and PWSHGallery repositories are under
+[Justin Grote's GitHub account](https://github.com/JustinGrote). This makes
+[ModuleFast](https://github.com/JustinGrote/ModuleFast) a useful speed
+comparison, but not an identical source comparison. When the mirror has the full
+dependency graph, ModuleFast can be very fast. When the mirror is missing a
+dependency that the official Gallery resolves, the ModuleFast row should be
+treated as a source/index miss rather than a managed engine failure.
+
 <!-- managed-module-benchmark-table:start -->
 Run `Measure-ManagedModuleBenchmark.ps1`, then refresh this block with
 `Update-ManagedModuleBenchmarkReadme.ps1` before publishing benchmark claims.
