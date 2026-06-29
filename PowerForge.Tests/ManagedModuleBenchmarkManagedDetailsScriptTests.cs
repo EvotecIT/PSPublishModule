@@ -35,6 +35,27 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
                         Status = 'AlreadyInstalled'
                         ModulePath = '{{EscapePowerShellString(Path.Combine(temp.Path, "Company.Wait", "1.0.0"))}}'
                         Elapsed = [TimeSpan]::FromMilliseconds(125)
+                        CoalescedWaitElapsed = [TimeSpan]::FromMilliseconds(90)
+                        VersionResolutionElapsed = [TimeSpan]::Zero
+                        DownloadElapsed = [TimeSpan]::Zero
+                        ExtractionElapsed = [TimeSpan]::Zero
+                        DependencyElapsed = [TimeSpan]::Zero
+                        PromotionElapsed = [TimeSpan]::Zero
+                        RepositoryRequestCount = 0
+                        PackageRepositoryRequestCount = 0
+                        PackageRepositoryRedirectCount = 0
+                        FileCount = 0
+                        ExtractedBytes = 0
+                        ExtractionFromCache = $false
+                        DependencyResults = @()
+                    },
+                    [pscustomobject]@{
+                        Name = 'Company.NoOp'
+                        Version = '1.0.0'
+                        Status = 'AlreadyInstalled'
+                        ModulePath = '{{EscapePowerShellString(Path.Combine(temp.Path, "Company.NoOp", "1.0.0"))}}'
+                        Elapsed = [TimeSpan]::FromMilliseconds(75)
+                        CoalescedWaitElapsed = [TimeSpan]::Zero
                         VersionResolutionElapsed = [TimeSpan]::Zero
                         DownloadElapsed = [TimeSpan]::Zero
                         ExtractionElapsed = [TimeSpan]::Zero
@@ -75,6 +96,7 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
             [pscustomobject]@{
                 Summary = $detail.Summary
                 WaitPackage = @($detail.Packages | Where-Object Name -eq 'Company.Wait')[0]
+                NoOpPackage = @($detail.Packages | Where-Object Name -eq 'Company.NoOp')[0]
                 BigPackage = @($detail.Packages | Where-Object Name -eq 'Company.Big')[0]
             }
             """);
@@ -85,12 +107,14 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
         var output = Assert.Single(results);
         var summary = (PSObject)output.Properties["Summary"].Value;
         var waitPackage = (PSObject)output.Properties["WaitPackage"].Value;
+        var noOpPackage = (PSObject)output.Properties["NoOpPackage"].Value;
         var bigPackage = (PSObject)output.Properties["BigPackage"].Value;
         Assert.Equal(1.0, NumericProperty(summary, "CoalescedWaitCount"));
-        Assert.Equal(125.0, NumericProperty(summary, "TotalCoalescedWaitMilliseconds"));
+        Assert.Equal(90.0, NumericProperty(summary, "TotalCoalescedWaitMilliseconds"));
         Assert.Equal("Company.Wait", Property(summary, "SlowestCoalescedWaitName"));
-        Assert.Equal(125.0, NumericProperty(summary, "SlowestCoalescedWaitMilliseconds"));
-        Assert.Equal(125.0, NumericProperty(waitPackage, "CoalescedWaitMilliseconds"));
+        Assert.Equal(90.0, NumericProperty(summary, "SlowestCoalescedWaitMilliseconds"));
+        Assert.Equal(90.0, NumericProperty(waitPackage, "CoalescedWaitMilliseconds"));
+        Assert.Equal(0.0, NumericProperty(noOpPackage, "CoalescedWaitMilliseconds"));
         Assert.Equal(0.0, NumericProperty(bigPackage, "CoalescedWaitMilliseconds"));
         Assert.Equal("Company.Big", Property(summary, "SlowestMaterializedPackageName"));
         Assert.Equal(450.0, NumericProperty(summary, "SlowestMaterializedPackageMilliseconds"));

@@ -86,6 +86,11 @@ public sealed class ManagedModuleInstallResult
     public TimeSpan VersionResolutionElapsed { get; set; }
 
     /// <summary>
+    /// Elapsed time spent waiting for another in-flight install of the same resolved module target.
+    /// </summary>
+    public TimeSpan CoalescedWaitElapsed { get; set; }
+
+    /// <summary>
     /// Package download or copy result when the install performed package delivery.
     /// </summary>
     public ManagedModuleDownloadResult? Download { get; set; }

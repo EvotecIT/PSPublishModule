@@ -87,6 +87,7 @@ public sealed partial class ManagedModuleInstallServiceTests
 
         Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, result.Status);
         Assert.True(result.Elapsed > TimeSpan.Zero);
+        Assert.Equal(TimeSpan.Zero, result.CoalescedWaitElapsed);
         Assert.Equal("keep", File.ReadAllText(Path.Combine(existingPath, "marker.txt")));
         Assert.Null(result.Download);
         Assert.Null(result.Receipt);
@@ -576,8 +577,10 @@ public sealed partial class ManagedModuleInstallServiceTests
             .Where(dependency => dependency.Name == "Company.Shared")
             .ToArray();
         Assert.Equal(2, sharedResults.Length);
-        Assert.Single(sharedResults, dependency => dependency.Status == ManagedModuleInstallStatus.Installed);
-        Assert.Single(sharedResults, dependency => dependency.Status == ManagedModuleInstallStatus.AlreadyInstalled);
+        var installedShared = Assert.Single(sharedResults, dependency => dependency.Status == ManagedModuleInstallStatus.Installed);
+        var alreadyInstalledShared = Assert.Single(sharedResults, dependency => dependency.Status == ManagedModuleInstallStatus.AlreadyInstalled);
+        Assert.Equal(TimeSpan.Zero, installedShared.CoalescedWaitElapsed);
+        Assert.True(alreadyInstalledShared.CoalescedWaitElapsed >= TimeSpan.Zero);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Shared", "1.0.0", "Company.Shared.psd1")));
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.A", "1.0.0", "Company.A.psd1")));
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.B", "1.0.0", "Company.B.psd1")));

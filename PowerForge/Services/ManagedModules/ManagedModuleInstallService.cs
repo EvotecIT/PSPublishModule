@@ -155,18 +155,23 @@ public sealed partial class ManagedModuleInstallService
             {
                 if (!runIndependently)
                 {
+                    var coalescedWaitStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                    ManagedModuleInstallResult completed;
                     using (context.EnterInstallWait(coalescingKey))
                     {
-                        var completed = await existingInstall.ConfigureAwait(false);
-                        return CreateAlreadyInstalledResult(
-                            request,
-                            completed.Version,
-                            moduleRoot,
-                            modulePath,
-                            stopwatch.Elapsed,
-                            versionResolutionStopwatch.Elapsed,
-                            requestScope.Count);
+                        completed = await existingInstall.ConfigureAwait(false);
                     }
+
+                    coalescedWaitStopwatch.Stop();
+                    return CreateAlreadyInstalledResult(
+                        request,
+                        completed.Version,
+                        moduleRoot,
+                        modulePath,
+                        stopwatch.Elapsed,
+                        versionResolutionStopwatch.Elapsed,
+                        requestScope.Count,
+                        coalescedWaitStopwatch.Elapsed);
                 }
             }
             else
@@ -469,7 +474,8 @@ public sealed partial class ManagedModuleInstallService
         string modulePath,
         TimeSpan elapsed,
         TimeSpan versionResolutionElapsed,
-        long repositoryRequestCount)
+        long repositoryRequestCount,
+        TimeSpan coalescedWaitElapsed = default)
         => new()
         {
             Name = request.Name.Trim(),
@@ -488,6 +494,7 @@ public sealed partial class ManagedModuleInstallService
             ModulePath = modulePath,
             Elapsed = elapsed,
             VersionResolutionElapsed = versionResolutionElapsed,
+            CoalescedWaitElapsed = coalescedWaitElapsed,
             RepositoryRequestCount = repositoryRequestCount
         };
 
