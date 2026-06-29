@@ -17,7 +17,7 @@ param(
     [Parameter(Mandatory)]
     [string] $RepositoryName,
 
-    [string] $ModuleFastSource = 'https://pwsh.gallery/index.json',
+    [string] $ModuleFastSource = '',
 
     [Parameter(Mandatory)]
     [string] $Destination,
