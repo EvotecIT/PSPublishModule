@@ -111,6 +111,8 @@ function New-Summary {
             MedianManagedHarnessOverheadMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedHarnessOverheadMilliseconds' } else { 0 }
             MedianManagedRootDependencyMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedRootDependencyMilliseconds' } else { 0 }
             MedianManagedRootDependencyUnattributedMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedRootDependencyUnattributedMilliseconds' } else { 0 }
+            MedianManagedRootDependencyCriticalPathGapMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedRootDependencyCriticalPathGapMilliseconds' } else { 0 }
+            MedianManagedDependencyBranchParallelismRatio = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedDependencyBranchParallelismRatio' } else { 0 }
             MedianManagedVersionSelectionWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalVersionSelectionWaitMilliseconds' } else { 0 }
             MedianManagedDependencyQueueWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDependencyQueueWaitMilliseconds' } else { 0 }
             MedianManagedDependencyBranchElapsedMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalDependencyBranchElapsedMilliseconds' } else { 0 }
@@ -161,6 +163,10 @@ function New-Summary {
             LastManagedRootDependencyMs = if ($lastPassed) { [double]$lastPassed.ManagedRootDependencyMilliseconds } else { 0 }
             FirstManagedRootDependencyUnattributedMs = if ($firstPassed) { [double]$firstPassed.ManagedRootDependencyUnattributedMilliseconds } else { 0 }
             LastManagedRootDependencyUnattributedMs = if ($lastPassed) { [double]$lastPassed.ManagedRootDependencyUnattributedMilliseconds } else { 0 }
+            FirstManagedRootDependencyCriticalPathGapMs = if ($firstPassed) { [double]$firstPassed.ManagedRootDependencyCriticalPathGapMilliseconds } else { 0 }
+            LastManagedRootDependencyCriticalPathGapMs = if ($lastPassed) { [double]$lastPassed.ManagedRootDependencyCriticalPathGapMilliseconds } else { 0 }
+            FirstManagedDependencyBranchParallelismRatio = if ($firstPassed) { [double]$firstPassed.ManagedDependencyBranchParallelismRatio } else { 0 }
+            LastManagedDependencyBranchParallelismRatio = if ($lastPassed) { [double]$lastPassed.ManagedDependencyBranchParallelismRatio } else { 0 }
             FirstManagedVersionSelectionWaitMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalVersionSelectionWaitMilliseconds } else { 0 }
             LastManagedVersionSelectionWaitMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalVersionSelectionWaitMilliseconds } else { 0 }
             FirstManagedDependencyQueueWaitMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalDependencyQueueWaitMilliseconds } else { 0 }
@@ -315,6 +321,10 @@ function New-Comparison {
             ManagedLastRootDependencyMs = if ($managed.Count) { [double] $managed[0].LastManagedRootDependencyMs } else { 0 }
             ManagedFirstRootDependencyUnattributedMs = if ($managed.Count) { [double] $managed[0].FirstManagedRootDependencyUnattributedMs } else { 0 }
             ManagedLastRootDependencyUnattributedMs = if ($managed.Count) { [double] $managed[0].LastManagedRootDependencyUnattributedMs } else { 0 }
+            ManagedFirstRootDependencyCriticalPathGapMs = if ($managed.Count) { [double] $managed[0].FirstManagedRootDependencyCriticalPathGapMs } else { 0 }
+            ManagedLastRootDependencyCriticalPathGapMs = if ($managed.Count) { [double] $managed[0].LastManagedRootDependencyCriticalPathGapMs } else { 0 }
+            ManagedFirstDependencyBranchParallelismRatio = if ($managed.Count) { [double] $managed[0].FirstManagedDependencyBranchParallelismRatio } else { 0 }
+            ManagedLastDependencyBranchParallelismRatio = if ($managed.Count) { [double] $managed[0].LastManagedDependencyBranchParallelismRatio } else { 0 }
             ManagedFirstVersionSelectionWaitMs = if ($managed.Count) { [double] $managed[0].FirstManagedVersionSelectionWaitMs } else { 0 }
             ManagedLastVersionSelectionWaitMs = if ($managed.Count) { [double] $managed[0].LastManagedVersionSelectionWaitMs } else { 0 }
             ManagedFirstDependencyQueueWaitMs = if ($managed.Count) { [double] $managed[0].FirstManagedDependencyQueueWaitMs } else { 0 }
@@ -400,6 +410,8 @@ function New-Comparison {
             ManagedMaintenanceFindings = if ($managed.Count) { [double] $managed[0].MedianManagedMaintenanceFindings } else { 0 }
             ManagedRootDependencyMs = if ($managed.Count) { [double] $managed[0].MedianManagedRootDependencyMs } else { 0 }
             ManagedRootDependencyUnattributedMs = if ($managed.Count) { [double] $managed[0].MedianManagedRootDependencyUnattributedMs } else { 0 }
+            ManagedRootDependencyCriticalPathGapMs = if ($managed.Count) { [double] $managed[0].MedianManagedRootDependencyCriticalPathGapMs } else { 0 }
+            ManagedDependencyBranchParallelismRatio = if ($managed.Count) { [double] $managed[0].MedianManagedDependencyBranchParallelismRatio } else { 0 }
             ManagedVersionSelectionWaitMs = if ($managed.Count) { [double] $managed[0].MedianManagedVersionSelectionWaitMs } else { 0 }
             ManagedDependencyQueueWaitMs = if ($managed.Count) { [double] $managed[0].MedianManagedDependencyQueueWaitMs } else { 0 }
             ManagedDependencyBranchElapsedMs = if ($managed.Count) { [double] $managed[0].MedianManagedDependencyBranchElapsedMs } else { 0 }

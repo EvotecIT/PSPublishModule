@@ -199,6 +199,8 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedCacheHits = '102'
                     ManagedLastMs = '3800'
                     ManagedLastRootDependencyMs = '3300'
+                    ManagedLastRootDependencyCriticalPathGapMs = '2400'
+                    ManagedLastDependencyBranchParallelismRatio = '7.1'
                     ManagedLastDependencyMs = '4200'
                     ManagedLastDownloadMs = '0'
                     ManagedLastExtractionMs = '600'
@@ -245,6 +247,8 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
         Assert.Contains("root branch", Property(row, "LastCriticalOptimizationQuestion"), StringComparison.OrdinalIgnoreCase);
         Assert.Equal("Az", Property(row, "LastCriticalRootBranch"));
         Assert.Equal(3300.0, NumericProperty(row, "LastCriticalRootBranchMs"));
+        Assert.Equal(2400.0, NumericProperty(row, "LastRootDependencyCriticalPathGapMs"));
+        Assert.Equal(7.1, NumericProperty(row, "LastDependencyBranchParallelismRatio"));
         Assert.Equal("Az.Advisor", Property(row, "LastCriticalDependencyBranch"));
         Assert.Equal(900.0, NumericProperty(row, "LastCriticalDependencyBranchMs"));
         Assert.Equal("Az.Files", Property(row, "LastCriticalMaterializationBranch"));

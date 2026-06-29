@@ -484,6 +484,8 @@ function Invoke-TimedOperation {
         ManagedHarnessOverheadMilliseconds = $managedHarnessOverheadMilliseconds
         ManagedRootDependencyMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'RootDependencyMilliseconds')
         ManagedRootDependencyUnattributedMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'RootDependencyUnattributedMilliseconds')
+        ManagedRootDependencyCriticalPathGapMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'RootDependencyCriticalPathGapMilliseconds')
+        ManagedDependencyBranchParallelismRatio = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'DependencyBranchParallelismRatio')
         ManagedTotalVersionSelectionWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalVersionSelectionWaitMilliseconds')
         ManagedTotalDependencyQueueWaitMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDependencyQueueWaitMilliseconds')
         ManagedTotalDependencyBranchElapsedMilliseconds = [double] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDependencyBranchElapsedMilliseconds')

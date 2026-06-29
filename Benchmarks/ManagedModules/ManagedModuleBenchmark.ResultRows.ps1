@@ -40,6 +40,8 @@ function New-SkippedRow {
         ManagedHarnessOverheadMilliseconds = 0
         ManagedRootDependencyMilliseconds = 0
         ManagedRootDependencyUnattributedMilliseconds = 0
+        ManagedRootDependencyCriticalPathGapMilliseconds = 0
+        ManagedDependencyBranchParallelismRatio = 0
         ManagedTotalVersionSelectionWaitMilliseconds = 0
         ManagedTotalDependencyQueueWaitMilliseconds = 0
         ManagedTotalDependencyBranchElapsedMilliseconds = 0

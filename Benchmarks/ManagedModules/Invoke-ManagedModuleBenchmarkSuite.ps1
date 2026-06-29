@@ -611,6 +611,10 @@ function Add-SummaryRows {
                 ManagedLastRootDependencyMs = $row.ManagedLastRootDependencyMs
                 ManagedFirstRootDependencyUnattributedMs = $row.ManagedFirstRootDependencyUnattributedMs
                 ManagedLastRootDependencyUnattributedMs = $row.ManagedLastRootDependencyUnattributedMs
+                ManagedFirstRootDependencyCriticalPathGapMs = $row.ManagedFirstRootDependencyCriticalPathGapMs
+                ManagedLastRootDependencyCriticalPathGapMs = $row.ManagedLastRootDependencyCriticalPathGapMs
+                ManagedFirstDependencyBranchParallelismRatio = $row.ManagedFirstDependencyBranchParallelismRatio
+                ManagedLastDependencyBranchParallelismRatio = $row.ManagedLastDependencyBranchParallelismRatio
                 ManagedFirstVersionSelectionWaitMs = $row.ManagedFirstVersionSelectionWaitMs
                 ManagedLastVersionSelectionWaitMs = $row.ManagedLastVersionSelectionWaitMs
                 ManagedFirstDependencyQueueWaitMs = $row.ManagedFirstDependencyQueueWaitMs
@@ -696,6 +700,8 @@ function Add-SummaryRows {
                 ManagedMaintenanceFindings = $row.ManagedMaintenanceFindings
                 ManagedRootDependencyMs = $row.ManagedRootDependencyMs
                 ManagedRootDependencyUnattributedMs = $row.ManagedRootDependencyUnattributedMs
+                ManagedRootDependencyCriticalPathGapMs = $row.ManagedRootDependencyCriticalPathGapMs
+                ManagedDependencyBranchParallelismRatio = $row.ManagedDependencyBranchParallelismRatio
                 ManagedVersionSelectionWaitMs = $row.ManagedVersionSelectionWaitMs
                 ManagedDependencyQueueWaitMs = $row.ManagedDependencyQueueWaitMs
                 ManagedDependencyBranchElapsedMs = $row.ManagedDependencyBranchElapsedMs
