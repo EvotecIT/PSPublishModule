@@ -15,10 +15,6 @@ public sealed partial class ManagedModuleRepositoryClient
         if (!ShouldUsePowerShellGalleryV2ReadApi(repository))
             return await DownloadNuGetPackageAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false);
 
-#if NET472
-        var netFrameworkFallback = CreatePowerShellGalleryV2Fallback(repository);
-        return await DownloadNuGetV2PackageAsync(netFrameworkFallback, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false);
-#else
         var packageUri = BuildPowerShellGalleryCdnPackageUri(packageId, version);
         var result = await TryDownloadHttpPackageAsync(
                 repository,
@@ -34,7 +30,6 @@ public sealed partial class ManagedModuleRepositoryClient
 
         var fallback = CreatePowerShellGalleryV2Fallback(repository);
         return await DownloadNuGetV2PackageAsync(fallback, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false);
-#endif
     }
 
     private async Task<ManagedModuleDownloadResult?> TryDownloadHttpPackageAsync(
