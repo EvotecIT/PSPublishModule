@@ -65,4 +65,9 @@ public sealed class ModuleStateInstalledModuleResult
     /// Gets or sets whether this module copy is the first import candidate by module path precedence.
     /// </summary>
     public bool IsEffectiveImportCandidate { get; set; }
+
+    /// <summary>
+    /// Gets or sets command names explicitly exported by the module manifest when known.
+    /// </summary>
+    public string[] ExportedCommands { get; set; } = [];
 }

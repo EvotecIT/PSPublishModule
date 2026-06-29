@@ -27,7 +27,8 @@ internal static class ModuleStateInventoryResultMapper
                 Path = module.Path,
                 SourceRepository = module.SourceRepository,
                 IsLoaded = module.IsLoaded,
-                IsEffectiveImportCandidate = module.IsEffectiveImportCandidate
+                IsEffectiveImportCandidate = module.IsEffectiveImportCandidate,
+                ExportedCommands = module.ExportedCommands
             }).ToArray()
         };
     }
@@ -46,6 +47,7 @@ internal static class ModuleStateInventoryResultMapper
                 module.Path,
                 module.SourceRepository,
                 module.IsLoaded,
-                module.IsEffectiveImportCandidate)));
+                module.IsEffectiveImportCandidate,
+                module.ExportedCommands)));
     }
 }

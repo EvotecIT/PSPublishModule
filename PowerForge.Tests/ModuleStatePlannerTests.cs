@@ -470,4 +470,34 @@ public sealed class ModuleStatePlannerTests
         Assert.True(plan.HasErrors);
         Assert.Contains(plan.Findings, static finding => finding.Code == "ModuleState.CleanupLoadedVersion");
     }
+
+    [Fact]
+    public void CreatePlan_WithRepair_ReportsCrossScopeCommandConflicts()
+    {
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule(
+                "Company.Tools",
+                "1.3.0",
+                scope: "AllUsers",
+                exportedCommands: new[] { "Get-CompanyThing" }),
+            new ModuleStateInstalledModule(
+                "Company.Legacy",
+                "1.0.0",
+                scope: "CurrentUser",
+                exportedCommands: new[] { "Get-CompanyThing" })
+        });
+        var desiredModules = new[] { new ModuleStateDesiredModule("Company.Tools", ">=1.0.0") };
+
+        var normalPlan = new ModuleStatePlanner().CreatePlan(new ModuleStatePlanRequest(inventory, desiredModules));
+        var repairPlan = new ModuleStatePlanner().CreatePlan(new ModuleStatePlanRequest(
+            inventory,
+            desiredModules,
+            repair: true));
+
+        Assert.DoesNotContain(normalPlan.Findings, static finding => finding.Code == "ModuleState.CrossScopeCommandConflict");
+        var finding = Assert.Single(repairPlan.Findings, static finding => finding.Code == "ModuleState.CrossScopeCommandConflict");
+        Assert.Equal(ModuleStateConflictSeverity.Warning, finding.Severity);
+        Assert.False(repairPlan.HasErrors);
+    }
 }

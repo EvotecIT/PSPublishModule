@@ -56,7 +56,8 @@ internal sealed class ModuleStateJsonService
                 module.Path,
                 module.SourceRepository,
                 module.IsLoaded,
-                module.IsEffectiveImportCandidate));
+                module.IsEffectiveImportCandidate,
+                module.ExportedCommands));
         }
 
         return new ModuleStateInventory(modules);
@@ -135,6 +136,8 @@ internal sealed class ModuleStateJsonService
         public bool IsLoaded { get; set; }
 
         public bool IsEffectiveImportCandidate { get; set; }
+
+        public string[]? ExportedCommands { get; set; }
     }
 
     private sealed class DesiredStateDto
