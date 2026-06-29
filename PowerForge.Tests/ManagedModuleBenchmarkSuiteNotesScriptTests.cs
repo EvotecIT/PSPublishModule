@@ -97,6 +97,9 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                     LastWarmOptimizationLaneMs = '1400'
                     LastCriticalOptimizationLane = 'DependencyBranch'
                     LastCriticalOptimizationLaneMs = '500'
+                    LastCriticalRootBranch = 'Microsoft.Graph'
+                    LastCriticalRootBranchMs = '3966.4'
+                    LastCriticalRootBranchDominantPhase = 'Dependency'
                     LastCriticalDependencyBranch = 'Microsoft.Graph.Authentication'
                     LastCriticalDependencyBranchMs = '500'
                     LastCriticalDependencyBranchDominantPhase = 'Dependency'
@@ -135,6 +138,9 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                     LastWarmOptimizationLaneMs = '1250'
                     LastCriticalOptimizationLane = 'MaterializationBranch'
                     LastCriticalOptimizationLaneMs = '478'
+                    LastCriticalRootBranch = 'Microsoft.Graph'
+                    LastCriticalRootBranchMs = '300'
+                    LastCriticalRootBranchDominantPhase = 'Dependency'
                     LastCriticalDependencyBranch = 'Microsoft.Graph.Authentication'
                     LastCriticalDependencyBranchMs = '125'
                     LastCriticalDependencyBranchDominantPhase = 'Dependency'
@@ -182,6 +188,7 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
         Assert.Contains("LastWarmOptimizationLane", markdown, StringComparison.Ordinal);
         Assert.Contains("LastCriticalOptimizationLane", markdown, StringComparison.Ordinal);
         Assert.Contains("MaterializationBranch", markdown, StringComparison.Ordinal);
+        Assert.Contains("LastCriticalRootBranch", markdown, StringComparison.Ordinal);
         Assert.Contains("LastCriticalDependencyBranch", markdown, StringComparison.Ordinal);
         Assert.Contains("LastCriticalMaterializationBranch", markdown, StringComparison.Ordinal);
         Assert.Contains("LastMaterializationMs", markdown, StringComparison.Ordinal);

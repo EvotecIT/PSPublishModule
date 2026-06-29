@@ -573,6 +573,7 @@ function Add-SummaryRows {
                 ManagedSlowestDependencyPackageMs = $row.ManagedSlowestDependencyPackageMs
                 ManagedSlowestMaterializedPackageMs = $row.ManagedSlowestMaterializedPackageMs
                 ManagedCriticalDependencyBranchMs = $row.ManagedCriticalDependencyBranchMs
+                ManagedCriticalRootBranchMs = $row.ManagedCriticalRootBranchMs
                 ManagedCriticalMaterializationBranchMs = $row.ManagedCriticalMaterializationBranchMs
                 ManagedAuthenticodeCheckedFiles = $row.ManagedAuthenticodeCheckedFiles
                 ManagedAuthenticodeCatalogFiles = $row.ManagedAuthenticodeCatalogFiles
@@ -625,6 +626,10 @@ function Add-SummaryRows {
                 ManagedLastCriticalDependencyBranchMs = $row.ManagedLastCriticalDependencyBranchMs
                 ManagedLastCriticalDependencyBranchDominantPhase = $row.ManagedLastCriticalDependencyBranchDominantPhase
                 ManagedLastCriticalDependencyBranchDominantPhaseMs = $row.ManagedLastCriticalDependencyBranchDominantPhaseMs
+                ManagedLastCriticalRootBranchName = $row.ManagedLastCriticalRootBranchName
+                ManagedLastCriticalRootBranchMs = $row.ManagedLastCriticalRootBranchMs
+                ManagedLastCriticalRootBranchDominantPhase = $row.ManagedLastCriticalRootBranchDominantPhase
+                ManagedLastCriticalRootBranchDominantPhaseMs = $row.ManagedLastCriticalRootBranchDominantPhaseMs
                 ManagedLastCriticalMaterializationBranchName = $row.ManagedLastCriticalMaterializationBranchName
                 ManagedLastCriticalMaterializationBranchMs = $row.ManagedLastCriticalMaterializationBranchMs
                 ManagedLastCriticalMaterializationDominantPhase = $row.ManagedLastCriticalMaterializationDominantPhase
