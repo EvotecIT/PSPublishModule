@@ -62,6 +62,7 @@ function Write-ManagedBenchmarkSuiteNotes {
         [object[]] $Scenarios,
         [object[]] $SummaryRows,
         [object[]] $OptimizationRows,
+        [object[]] $HostComparisonRows,
         [object[]] $HostRows,
         [object[]] $GateViolations,
         [object[]] $HostGateViolations,
@@ -94,6 +95,15 @@ function Write-ManagedBenchmarkSuiteNotes {
     $lines.Add('')
     Add-ManagedBenchmarkMarkdownTable -Lines $lines -Rows $SummaryRows -Columns @('BenchmarkRole', 'Suite', 'Scenario', 'Host', 'Operation', 'FastestEngine', 'FastestMs', 'ManagedMs', 'ManagedRank', 'ManagedVsFastest')
     $lines.Add('')
+
+    if ($HostComparisonRows -and $HostComparisonRows.Count -gt 0) {
+        $lines.Add('## Host Comparisons')
+        $lines.Add('')
+        $lines.Add('These rows compare the same managed scenario across PowerShell hosts. Median columns feed the host gate; first and last columns show cold-start and warm-cache behavior separately.')
+        $lines.Add('')
+        Add-ManagedBenchmarkMarkdownTable -Lines $lines -Rows $HostComparisonRows -Columns @('BenchmarkRole', 'Suite', 'Scenario', 'Operation', 'BaselineHost', 'BaselineMs', 'ComparisonHost', 'ComparisonMs', 'ComparisonVsBaseline', 'BaselineFirstMs', 'ComparisonFirstMs', 'FirstComparisonVsBaseline', 'BaselineLastMs', 'ComparisonLastMs', 'LastComparisonVsBaseline', 'BenchmarkInterpretation')
+        $lines.Add('')
+    }
 
     if ($OptimizationRows -and $OptimizationRows.Count -gt 0) {
         $lines.Add('## Optimization Targets')

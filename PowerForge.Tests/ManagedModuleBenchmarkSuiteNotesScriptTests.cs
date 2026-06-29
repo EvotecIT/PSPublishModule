@@ -58,6 +58,26 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                 }
             )
             $hostRows = @([pscustomobject]@{ Host = 'PowerShell7'; Status = 'Available'; Executable = 'pwsh'; Reason = '' })
+            $hostComparisonRows = @(
+                [pscustomobject]@{
+                    BenchmarkRole = 'Diagnostic'
+                    Suite = 'HeavySaveCacheGate'
+                    Scenario = 'Graph.Full.Save.ManagedWarmCache'
+                    Operation = 'Save'
+                    BaselineHost = 'PowerShell7'
+                    BaselineMs = '2318.31'
+                    ComparisonHost = 'WindowsPowerShell'
+                    ComparisonMs = '3936.44'
+                    ComparisonVsBaseline = '1.7x'
+                    BaselineFirstMs = '3258.53'
+                    ComparisonFirstMs = '5569.20'
+                    FirstComparisonVsBaseline = '1.71x'
+                    BaselineLastMs = '1378.09'
+                    ComparisonLastMs = '2303.68'
+                    LastComparisonVsBaseline = '1.67x'
+                    BenchmarkInterpretation = 'Diagnostic only: managed warm-cache save isolates package cache, extraction, and output materialization cost; do not rank it against providers or install rows.'
+                }
+            )
             $optimizationRows = @(
                 [pscustomobject]@{
                     BenchmarkRole = 'Scoreboard'
@@ -99,7 +119,7 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                 }
             )
 
-            Write-ManagedBenchmarkSuiteNotes -Scenarios $scenarios -SummaryRows $summaryRows -OptimizationRows $optimizationRows -HostRows $hostRows -GateViolations @() -HostGateViolations @() -Path '{{EscapePowerShellString(notesPath)}}' -GeneratedAt ([datetime]'2026-06-29T00:00:00Z')
+            Write-ManagedBenchmarkSuiteNotes -Scenarios $scenarios -SummaryRows $summaryRows -OptimizationRows $optimizationRows -HostComparisonRows $hostComparisonRows -HostRows $hostRows -GateViolations @() -HostGateViolations @() -Path '{{EscapePowerShellString(notesPath)}}' -GeneratedAt ([datetime]'2026-06-29T00:00:00Z')
             """);
 
         ps.Invoke();
@@ -115,6 +135,10 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
         Assert.Contains("Graph.Full.Save.ManagedWarmCache", markdown, StringComparison.Ordinal);
         Assert.Contains("do not rank it against providers or install rows", markdown, StringComparison.Ordinal);
         Assert.Contains("| Diagnostic | HeavySaveCacheGate | Graph.Full.Save.ManagedWarmCache |", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Host Comparisons", markdown, StringComparison.Ordinal);
+        Assert.Contains("Median columns feed the host gate", markdown, StringComparison.Ordinal);
+        Assert.Contains("BaselineLastMs", markdown, StringComparison.Ordinal);
+        Assert.Contains("1.67x", markdown, StringComparison.Ordinal);
         Assert.Contains("## Optimization Targets", markdown, StringComparison.Ordinal);
         Assert.Contains("Use these rows to decide where the next managed-engine optimization should start.", markdown, StringComparison.Ordinal);
         Assert.Contains("LastCoalescedWaitMs", markdown, StringComparison.Ordinal);

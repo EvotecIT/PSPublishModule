@@ -17,6 +17,8 @@ public sealed class ManagedModuleBenchmarkHostComparisonScriptTests
                     Operation = 'Save'
                     Host = 'PowerShell7'
                     ManagedMs = '1000.25'
+                    ManagedFirstMs = '1300'
+                    ManagedLastMs = '800'
                     RunPath = 'ps7-run'
                 },
                 [pscustomobject]@{
@@ -26,6 +28,8 @@ public sealed class ManagedModuleBenchmarkHostComparisonScriptTests
                     Operation = 'Save'
                     Host = 'WindowsPowerShell'
                     ManagedMs = '1500.50'
+                    ManagedFirstMs = '2100'
+                    ManagedLastMs = '1200'
                     RunPath = 'ps51-run'
                 }
             )
@@ -40,6 +44,14 @@ public sealed class ManagedModuleBenchmarkHostComparisonScriptTests
         Assert.Equal("Compared", Property(row, "Status"));
         Assert.Equal("PowerShell7", Property(row, "FasterHost"));
         Assert.Equal("1.5x", Property(row, "ComparisonVsBaseline"));
+        Assert.Equal(1300.0, NumericProperty(row, "BaselineFirstMs"));
+        Assert.Equal(2100.0, NumericProperty(row, "ComparisonFirstMs"));
+        Assert.Equal("1.62x", Property(row, "FirstComparisonVsBaseline"));
+        Assert.Equal("PowerShell7", Property(row, "FasterFirstHost"));
+        Assert.Equal(800.0, NumericProperty(row, "BaselineLastMs"));
+        Assert.Equal(1200.0, NumericProperty(row, "ComparisonLastMs"));
+        Assert.Equal("1.5x", Property(row, "LastComparisonVsBaseline"));
+        Assert.Equal("PowerShell7", Property(row, "FasterLastHost"));
         Assert.Equal("ps7-run", Property(row, "BaselineRunPath"));
         Assert.Equal("ps51-run", Property(row, "ComparisonRunPath"));
     }
@@ -184,6 +196,9 @@ public sealed class ManagedModuleBenchmarkHostComparisonScriptTests
 
     private static string Property(PSObject value, string name)
         => (string)value.Properties[name].Value;
+
+    private static double NumericProperty(PSObject value, string name)
+        => Convert.ToDouble(value.Properties[name].Value, CultureInfo.InvariantCulture);
 
     private static void AssertNoErrors(PowerShell ps)
     {
