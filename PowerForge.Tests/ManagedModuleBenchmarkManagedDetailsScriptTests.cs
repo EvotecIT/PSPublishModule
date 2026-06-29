@@ -71,17 +71,27 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
             }
 
             Write-ManagedInstallDetail -Result $root -Path '{{EscapePowerShellString(detailPath)}}'
-            (Get-Content -LiteralPath '{{EscapePowerShellString(detailPath)}}' -Raw | ConvertFrom-Json).Summary
+            $detail = Get-Content -LiteralPath '{{EscapePowerShellString(detailPath)}}' -Raw | ConvertFrom-Json
+            [pscustomobject]@{
+                Summary = $detail.Summary
+                WaitPackage = @($detail.Packages | Where-Object Name -eq 'Company.Wait')[0]
+                BigPackage = @($detail.Packages | Where-Object Name -eq 'Company.Big')[0]
+            }
             """);
 
         var results = ps.Invoke();
 
         AssertNoErrors(ps);
-        var summary = Assert.Single(results);
+        var output = Assert.Single(results);
+        var summary = (PSObject)output.Properties["Summary"].Value;
+        var waitPackage = (PSObject)output.Properties["WaitPackage"].Value;
+        var bigPackage = (PSObject)output.Properties["BigPackage"].Value;
         Assert.Equal(1.0, NumericProperty(summary, "CoalescedWaitCount"));
         Assert.Equal(125.0, NumericProperty(summary, "TotalCoalescedWaitMilliseconds"));
         Assert.Equal("Company.Wait", Property(summary, "SlowestCoalescedWaitName"));
         Assert.Equal(125.0, NumericProperty(summary, "SlowestCoalescedWaitMilliseconds"));
+        Assert.Equal(125.0, NumericProperty(waitPackage, "CoalescedWaitMilliseconds"));
+        Assert.Equal(0.0, NumericProperty(bigPackage, "CoalescedWaitMilliseconds"));
         Assert.Equal("Company.Big", Property(summary, "SlowestMaterializedPackageName"));
         Assert.Equal(450.0, NumericProperty(summary, "SlowestMaterializedPackageMilliseconds"));
         Assert.Equal(320.0, NumericProperty(summary, "SlowestMaterializedPackageExtractionMilliseconds"));
