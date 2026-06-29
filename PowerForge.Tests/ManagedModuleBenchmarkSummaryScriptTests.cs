@@ -89,6 +89,14 @@ public sealed class ManagedModuleBenchmarkSummaryScriptTests
         Assert.Equal(0.0, NumericProperty(row, "ManagedLastRepositoryRequests"));
         Assert.Equal(40.0, NumericProperty(row, "ManagedFirstPackageRepositoryRequests"));
         Assert.Equal(0.0, NumericProperty(row, "ManagedLastPackageRepositoryRequests"));
+        Assert.Equal(3540.0, NumericProperty(row, "ManagedFirstRootDependencyMs"));
+        Assert.Equal(1773.0, NumericProperty(row, "ManagedLastRootDependencyMs"));
+        Assert.Equal(25000.0, NumericProperty(row, "ManagedFirstDownloadMs"));
+        Assert.Equal(0.0, NumericProperty(row, "ManagedLastDownloadMs"));
+        Assert.Equal(1200.0, NumericProperty(row, "ManagedFirstExtractionMs"));
+        Assert.Equal(1100.0, NumericProperty(row, "ManagedLastExtractionMs"));
+        Assert.Equal(60.0, NumericProperty(row, "ManagedFirstPromotionMs"));
+        Assert.Equal(58.0, NumericProperty(row, "ManagedLastPromotionMs"));
         Assert.Equal(186506621.0, NumericProperty(row, "ManagedFirstDownloadBytes"));
         Assert.Equal(0.0, NumericProperty(row, "ManagedLastDownloadBytes"));
         Assert.Equal(0.0, NumericProperty(row, "ManagedFirstCacheHits"));

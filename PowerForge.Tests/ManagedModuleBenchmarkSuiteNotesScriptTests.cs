@@ -70,6 +70,10 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                     BottleneckMs = '3966.4'
                     BottleneckShare = '82.4%'
                     NextQuestion = 'Can dependency scheduling, installed-version reuse, or repository lookup fan-out shrink the root operation?'
+                    LastMs = '4815.85'
+                    LastBottleneck = 'RootDependency'
+                    LastBottleneckMs = '3966.4'
+                    LastNextQuestion = 'Can dependency scheduling, installed-version reuse, or repository lookup fan-out shrink the root operation?'
                 },
                 [pscustomobject]@{
                     BenchmarkRole = 'Diagnostic'
@@ -82,6 +86,10 @@ public sealed class ManagedModuleBenchmarkSuiteNotesScriptTests
                     BottleneckMs = '1100'
                     BottleneckShare = '56.6%'
                     NextQuestion = 'Can archive extraction, path creation, or file writes be reduced safely?'
+                    LastMs = '1944.07'
+                    LastBottleneck = 'Extraction'
+                    LastBottleneckMs = '1100'
+                    LastNextQuestion = 'Can archive extraction, path creation, or file writes be reduced safely?'
                 }
             )
 

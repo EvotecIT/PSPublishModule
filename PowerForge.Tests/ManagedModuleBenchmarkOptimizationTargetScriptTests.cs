@@ -44,6 +44,10 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedLastCacheHits = '3'
                     ManagedFirstExtractionCacheHits = '0'
                     ManagedLastExtractionCacheHits = '3'
+                    ManagedLastRootDependencyMs = '120'
+                    ManagedLastDownloadMs = '0'
+                    ManagedLastExtractionMs = '300'
+                    ManagedLastPromotionMs = '40'
                 }
             )
 
@@ -74,7 +78,15 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
         Assert.Equal(3.0, NumericProperty(row, "LastCacheHits"));
         Assert.Equal(0.0, NumericProperty(row, "FirstExtractionCacheHits"));
         Assert.Equal(3.0, NumericProperty(row, "LastExtractionCacheHits"));
+        Assert.Equal(120.0, NumericProperty(row, "LastRootDependencyMs"));
+        Assert.Equal(0.0, NumericProperty(row, "LastDownloadMs"));
+        Assert.Equal(300.0, NumericProperty(row, "LastExtractionMs"));
+        Assert.Equal(40.0, NumericProperty(row, "LastPromotionMs"));
+        Assert.Equal("Extraction", Property(row, "LastBottleneck"));
+        Assert.Equal(300.0, NumericProperty(row, "LastBottleneckMs"));
+        Assert.Equal("60%", Property(row, "LastBottleneckShare"));
         Assert.Contains("download", Property(row, "NextQuestion"), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("archive extraction", Property(row, "LastNextQuestion"), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -157,6 +169,7 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
         AssertNoErrors(ps);
         var row = Assert.Single(results);
         Assert.Equal("Uninstrumented", Property(row, "Bottleneck"));
+        Assert.Equal("Uninstrumented", Property(row, "LastBottleneck"));
         Assert.Equal(string.Empty, Property(row, "BottleneckShare"));
         Assert.Contains("instrumentation", Property(row, "NextQuestion"), StringComparison.OrdinalIgnoreCase);
     }

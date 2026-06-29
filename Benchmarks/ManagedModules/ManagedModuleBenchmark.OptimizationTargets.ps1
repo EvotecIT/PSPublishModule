@@ -28,27 +28,76 @@ function Get-ManagedBottleneckShare {
     }
 }
 
+function Get-ManagedPhaseQuestion {
+    param([string] $Name)
+
+    switch ($Name) {
+        'RootDependency' { 'Can dependency scheduling, installed-version reuse, or repository lookup fan-out shrink the root operation?' }
+        'Download' { 'Can package download throughput, source selection, caching, or request coalescing improve this lane?' }
+        'Extraction' { 'Can archive extraction, path creation, or file writes be reduced safely?' }
+        'Promotion' { 'Can final move, overwrite, or receipt writes be reduced without weakening rollback?' }
+        'HarnessOverhead' { 'Is the benchmark dominated by child-host startup, module import, or measurement wrapper work?' }
+        default { 'Add managed detail instrumentation before optimizing this row.' }
+    }
+}
+
+function Get-ManagedBenchmarkBottleneck {
+    param(
+        [double] $ManagedMilliseconds,
+        [object[]] $Phases
+    )
+
+    $bottleneck = @($Phases | Sort-Object Milliseconds -Descending | Select-Object -First 1)
+    $bottleneckMs = if ($bottleneck.Count) { [double] $bottleneck[0].Milliseconds } else { 0.0 }
+    if ($bottleneckMs -le 0) {
+        return [pscustomobject]@{
+            Name = 'Uninstrumented'
+            Milliseconds = 0.0
+            Share = ''
+            ShareRaw = 0.0
+            Note = ''
+            Question = Get-ManagedPhaseQuestion -Name ''
+        }
+    }
+
+    $share = Get-ManagedBottleneckShare -ManagedMilliseconds $ManagedMilliseconds -BottleneckMilliseconds $bottleneckMs
+    [pscustomobject]@{
+        Name = [string] $bottleneck[0].Name
+        Milliseconds = $bottleneckMs
+        Share = [string] $share.Text
+        ShareRaw = [double] $share.Raw
+        Note = [string] $share.Note
+        Question = Get-ManagedPhaseQuestion -Name ([string] $bottleneck[0].Name)
+    }
+}
+
 function New-ManagedOptimizationTarget {
     param([object[]] $Rows)
 
     foreach ($row in @($Rows | Where-Object { $_.ManagedMs -and (ConvertTo-ManagedBenchmarkDouble -Value $_.ManagedMs) -gt 0 })) {
         $managedMs = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedMs
         $phases = @(
-            [pscustomobject]@{ Name = 'RootDependency'; Milliseconds = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRootDependencyMs; Question = 'Can dependency scheduling, installed-version reuse, or repository lookup fan-out shrink the root operation?' }
-            [pscustomobject]@{ Name = 'Download'; Milliseconds = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDownloadMs; Question = 'Can package download throughput, source selection, caching, or request coalescing improve this lane?' }
-            [pscustomobject]@{ Name = 'Extraction'; Milliseconds = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedExtractionMs; Question = 'Can archive extraction, path creation, or file writes be reduced safely?' }
-            [pscustomobject]@{ Name = 'Promotion'; Milliseconds = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedPromotionMs; Question = 'Can final move, overwrite, or receipt writes be reduced without weakening rollback?' }
-            [pscustomobject]@{ Name = 'HarnessOverhead'; Milliseconds = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedHarnessOverheadMs; Question = 'Is the benchmark dominated by child-host startup, module import, or measurement wrapper work?' }
+            [pscustomobject]@{ Name = 'RootDependency'; Milliseconds = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRootDependencyMs }
+            [pscustomobject]@{ Name = 'Download'; Milliseconds = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDownloadMs }
+            [pscustomobject]@{ Name = 'Extraction'; Milliseconds = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedExtractionMs }
+            [pscustomobject]@{ Name = 'Promotion'; Milliseconds = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedPromotionMs }
+            [pscustomobject]@{ Name = 'HarnessOverhead'; Milliseconds = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedHarnessOverheadMs }
         )
-        $bottleneck = @($phases | Sort-Object Milliseconds -Descending | Select-Object -First 1)
-        $bottleneckMs = if ($bottleneck.Count) { [double] $bottleneck[0].Milliseconds } else { 0.0 }
+        $bottleneck = Get-ManagedBenchmarkBottleneck -ManagedMilliseconds $managedMs -Phases $phases
+        $lastMs = if ($row.PSObject.Properties['ManagedLastMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastMs } else { 0.0 }
+        $lastPhases = @(
+            [pscustomobject]@{ Name = 'RootDependency'; Milliseconds = if ($row.PSObject.Properties['ManagedLastRootDependencyMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastRootDependencyMs } else { 0.0 } }
+            [pscustomobject]@{ Name = 'Download'; Milliseconds = if ($row.PSObject.Properties['ManagedLastDownloadMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDownloadMs } else { 0.0 } }
+            [pscustomobject]@{ Name = 'Extraction'; Milliseconds = if ($row.PSObject.Properties['ManagedLastExtractionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastExtractionMs } else { 0.0 } }
+            [pscustomobject]@{ Name = 'Promotion'; Milliseconds = if ($row.PSObject.Properties['ManagedLastPromotionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastPromotionMs } else { 0.0 } }
+        )
+        $lastBottleneck = Get-ManagedBenchmarkBottleneck -ManagedMilliseconds $lastMs -Phases $lastPhases
         $rootElapsedMs = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRootElapsedMs
         $repositoryRequests = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRepositoryRequests
         $packageRequests = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedPackageRepositoryRequests
         $packageRedirects = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedPackageRepositoryRedirects
         $downloadBytes = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDownloadBytes
         $downloadMb = [math]::Round($downloadBytes / 1MB, 2)
-        $bottleneckShare = Get-ManagedBottleneckShare -ManagedMilliseconds $managedMs -BottleneckMilliseconds $bottleneckMs
         $firstDownloadBytes = if ($row.PSObject.Properties['ManagedFirstDownloadBytes']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstDownloadBytes } else { 0.0 }
         $lastDownloadBytes = if ($row.PSObject.Properties['ManagedLastDownloadBytes']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDownloadBytes } else { 0.0 }
 
@@ -90,12 +139,22 @@ function New-ManagedOptimizationTarget {
             LastCacheHits = if ($row.PSObject.Properties['ManagedLastCacheHits']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastCacheHits } else { 0.0 }
             FirstExtractionCacheHits = if ($row.PSObject.Properties['ManagedFirstExtractionCacheHits']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstExtractionCacheHits } else { 0.0 }
             LastExtractionCacheHits = if ($row.PSObject.Properties['ManagedLastExtractionCacheHits']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastExtractionCacheHits } else { 0.0 }
-            Bottleneck = if ($bottleneckMs -gt 0) { [string] $bottleneck[0].Name } else { 'Uninstrumented' }
-            BottleneckMs = [math]::Round($bottleneckMs, 2)
-            BottleneckShare = [string] $bottleneckShare.Text
-            BottleneckShareRaw = [math]::Round([double] $bottleneckShare.Raw, 1)
-            TimingNote = [string] $bottleneckShare.Note
-            NextQuestion = if ($bottleneckMs -gt 0) { [string] $bottleneck[0].Question } else { 'Add managed detail instrumentation before optimizing this row.' }
+            LastRootDependencyMs = if ($row.PSObject.Properties['ManagedLastRootDependencyMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastRootDependencyMs } else { 0.0 }
+            LastDownloadMs = if ($row.PSObject.Properties['ManagedLastDownloadMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDownloadMs } else { 0.0 }
+            LastExtractionMs = if ($row.PSObject.Properties['ManagedLastExtractionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastExtractionMs } else { 0.0 }
+            LastPromotionMs = if ($row.PSObject.Properties['ManagedLastPromotionMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastPromotionMs } else { 0.0 }
+            Bottleneck = [string] $bottleneck.Name
+            BottleneckMs = [math]::Round([double] $bottleneck.Milliseconds, 2)
+            BottleneckShare = [string] $bottleneck.Share
+            BottleneckShareRaw = [math]::Round([double] $bottleneck.ShareRaw, 1)
+            TimingNote = [string] $bottleneck.Note
+            NextQuestion = [string] $bottleneck.Question
+            LastBottleneck = [string] $lastBottleneck.Name
+            LastBottleneckMs = [math]::Round([double] $lastBottleneck.Milliseconds, 2)
+            LastBottleneckShare = [string] $lastBottleneck.Share
+            LastBottleneckShareRaw = [math]::Round([double] $lastBottleneck.ShareRaw, 1)
+            LastTimingNote = [string] $lastBottleneck.Note
+            LastNextQuestion = [string] $lastBottleneck.Question
         }
     }
 }
