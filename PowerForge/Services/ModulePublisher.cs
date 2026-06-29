@@ -563,6 +563,13 @@ public sealed partial class ModulePublisher
         if (string.IsNullOrWhiteSpace(moduleName) || exception is null)
             return false;
 
+        if (exception is ManagedModuleRepositoryException managedException &&
+            managedException.Operation.Equals("VersionQuery", StringComparison.OrdinalIgnoreCase) &&
+            managedException.StatusCode == 404)
+        {
+            return true;
+        }
+
         var message = exception.ToString();
         return message.IndexOf(moduleName, StringComparison.OrdinalIgnoreCase) >= 0 &&
                (message.IndexOf("could not be found in repository", StringComparison.OrdinalIgnoreCase) >= 0 ||

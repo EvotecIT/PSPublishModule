@@ -370,6 +370,7 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
                 InstallPrerequisites = false,
                 Prerelease = Prerelease.IsPresent,
                 Force = Force.IsPresent,
+                DeliveryTransport = Transport,
                 CredentialUserName = CredentialUserName,
                 CredentialSecret = CredentialSecret,
                 CredentialSecretFilePath = CredentialSecretFilePath,

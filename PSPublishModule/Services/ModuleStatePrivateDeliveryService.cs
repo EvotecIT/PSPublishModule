@@ -98,6 +98,7 @@ internal sealed class ModuleStatePrivateDeliveryService
             InstallPrerequisites = options.InstallPrerequisites,
             Prerelease = options.Prerelease,
             Force = force,
+            DeliveryTransport = options.DeliveryTransport,
             CredentialUserName = options.CredentialUserName,
             CredentialSecret = options.CredentialSecret,
             CredentialSecretFilePath = options.CredentialSecretFilePath,
@@ -337,6 +338,8 @@ internal sealed class ModuleStatePrivateDeliveryOptions
     internal bool Prerelease { get; set; }
 
     internal bool Force { get; set; }
+
+    internal ModuleStateDeliveryTransport DeliveryTransport { get; set; } = ModuleStateDeliveryTransport.PrivateModule;
 
     internal string? CredentialUserName { get; set; }
 

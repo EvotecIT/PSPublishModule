@@ -209,7 +209,7 @@ public sealed partial class ManagedModuleRepositoryClient
             throw new ArgumentException("Destination directory is required.", nameof(destinationDirectory));
 
         Directory.CreateDirectory(destinationDirectory);
-        var destinationPath = BuildDestinationPath(destinationDirectory, packageId, version);
+        var destinationPath = BuildDestinationPath(destinationDirectory, repository, packageId, version);
         var packageLock = _packageDownloadLocks.GetOrAdd(destinationPath, static _ => new SemaphoreSlim(1, 1));
         await packageLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -298,7 +298,7 @@ public sealed partial class ManagedModuleRepositoryClient
         string version,
         string destinationDirectory)
     {
-        var destinationPath = BuildDestinationPath(destinationDirectory, packageId, version);
+        var destinationPath = BuildDestinationPath(destinationDirectory, repository, packageId, version);
         if (!File.Exists(destinationPath))
             return null;
 
@@ -489,7 +489,7 @@ public sealed partial class ManagedModuleRepositoryClient
     {
         var packageBase = await ResolvePackageBaseAddressAsync(repository, credential, cancellationToken).ConfigureAwait(false);
         var packageUri = BuildPackageUri(packageBase, packageId, version);
-        var destinationPath = BuildDestinationPath(destinationDirectory, packageId, version);
+        var destinationPath = BuildDestinationPath(destinationDirectory, repository, packageId, version);
         using var response = await SendWithPolicyAsync(
             () => CreateRequest(HttpMethod.Get, packageUri, credential, "application/octet-stream"),
             cancellationToken).ConfigureAwait(false);
@@ -527,7 +527,7 @@ public sealed partial class ManagedModuleRepositoryClient
         if (match?.PackageSource is null)
             throw CreateLocalRepositoryException(repository, "Download", $"Package '{packageId}' version '{version}' was not found in local repository '{repository.Name}'.");
 
-        var destinationPath = BuildDestinationPath(destinationDirectory, packageId, version);
+        var destinationPath = BuildDestinationPath(destinationDirectory, repository, packageId, version);
         PackageCopyResult packageCopy;
         using (var source = CreatePackageFileStream(match.PackageSource, FileMode.Open, FileAccess.Read, FileShare.Read))
         {
@@ -595,13 +595,22 @@ public sealed partial class ManagedModuleRepositoryClient
     }
 
     private static FileStream CreatePackageFileStream(string path, FileMode mode, FileAccess access, FileShare share)
-        => new(
+    {
+        if (access != FileAccess.Read)
+        {
+            var parent = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(parent))
+                Directory.CreateDirectory(parent);
+        }
+
+        return new FileStream(
             path,
             mode,
             access,
             share,
             PackageCopyBufferSize,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
+    }
 
     private async Task<string> ResolveSearchQueryServiceAsync(
         ManagedModuleRepository repository,
@@ -817,8 +826,23 @@ public sealed partial class ManagedModuleRepositoryClient
             $"{Uri.EscapeDataString(lowerId)}/{Uri.EscapeDataString(lowerVersion)}/{Uri.EscapeDataString(lowerId)}.{Uri.EscapeDataString(lowerVersion)}.nupkg");
     }
 
-    private static string BuildDestinationPath(string destinationDirectory, string packageId, string version)
-        => Path.Combine(Path.GetFullPath(destinationDirectory), $"{packageId.Trim().ToLowerInvariant()}.{version.Trim().ToLowerInvariant()}.nupkg");
+    private static string BuildDestinationPath(
+        string destinationDirectory,
+        ManagedModuleRepository repository,
+        string packageId,
+        string version)
+        => Path.Combine(
+            Path.GetFullPath(destinationDirectory),
+            GetRepositoryCacheKey(repository),
+            $"{packageId.Trim().ToLowerInvariant()}.{version.Trim().ToLowerInvariant()}.nupkg");
+
+    private static string GetRepositoryCacheKey(ManagedModuleRepository repository)
+    {
+        using var sha256 = SHA256.Create();
+        var source = Encoding.UTF8.GetBytes(repository.Source.Trim().ToLowerInvariant());
+        var hash = sha256.ComputeHash(source);
+        return string.Concat(hash.Take(8).Select(static value => value.ToString("x2")));
+    }
 
     private static string ComputeSha256(string path)
     {

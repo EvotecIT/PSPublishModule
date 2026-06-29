@@ -41,7 +41,7 @@ public sealed partial class ManagedModuleRepositoryClient
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
-        var destinationPath = BuildDestinationPath(destinationDirectory, packageId, version);
+        var destinationPath = BuildDestinationPath(destinationDirectory, repository, packageId, version);
         using var response = await SendWithPolicyAsync(
             () => CreateRequest(HttpMethod.Get, packageUri, credential, "application/octet-stream"),
             cancellationToken).ConfigureAwait(false);

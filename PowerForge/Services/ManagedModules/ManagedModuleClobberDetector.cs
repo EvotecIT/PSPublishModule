@@ -18,9 +18,9 @@ internal static class ManagedModuleClobberDetector
             if (existingName.Equals(moduleName, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            foreach (var versionDirectory in Directory.EnumerateDirectories(moduleDirectory))
+            foreach (var existingModulePath in EnumerateCandidateModulePaths(moduleDirectory))
             {
-                var existingManifest = FindModuleManifest(versionDirectory, existingName);
+                var existingManifest = FindModuleManifest(existingModulePath, existingName);
                 if (existingManifest is null)
                     continue;
 
@@ -35,6 +35,14 @@ internal static class ManagedModuleClobberDetector
                 }
             }
         }
+    }
+
+    private static IEnumerable<string> EnumerateCandidateModulePaths(string moduleDirectory)
+    {
+        yield return moduleDirectory;
+
+        foreach (var versionDirectory in Directory.EnumerateDirectories(moduleDirectory))
+            yield return versionDirectory;
     }
 
     private static string? FindModuleManifest(string modulePath, string moduleName)

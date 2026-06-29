@@ -145,6 +145,47 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task DownloadPackageAsync_PartitionsPackageCacheByRepositorySource()
+    {
+        using var firstFeed = new TemporaryDirectory();
+        using var secondFeed = new TemporaryDirectory();
+        using var cache = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(firstFeed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = "@{ ModuleVersion = '1.0.0'; Description = 'First feed' }"
+            });
+        TestPackageFactory.Create(
+            Path.Combine(secondFeed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = "@{ ModuleVersion = '1.0.0'; Description = 'Second feed' }"
+            });
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger());
+
+        var first = await repositoryClient.DownloadPackageAsync(
+            new ManagedModuleRepository("First", firstFeed.Path),
+            "Company.Tools",
+            "1.0.0",
+            cache.Path);
+        var second = await repositoryClient.DownloadPackageAsync(
+            new ManagedModuleRepository("Second", secondFeed.Path),
+            "Company.Tools",
+            "1.0.0",
+            cache.Path);
+
+        Assert.NotEqual(first.PackagePath, second.PackagePath);
+        Assert.NotEqual(first.PackageSha256, second.PackageSha256);
+        Assert.False(first.FromCache);
+        Assert.False(second.FromCache);
+    }
+
+    [Fact]
     public async Task GetLatestVersionAsync_uses_powershellgallery_v2_read_api_for_canonical_default()
     {
         var requests = new List<RecordedRequest>();
@@ -420,10 +461,12 @@ public sealed class ManagedModuleRepositoryClientTests
     {
         var requests = new List<RecordedRequest>();
         using var temp = new TemporaryDirectory();
-        TestPackageFactory.Create(Path.Combine(temp.Path, "Company.Tools.1.1.0.nupkg"), "Company.Tools", "1.1.0");
         using var client = new HttpClient(new ManagedModuleHandler(requests));
         var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
         var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+        var cachedPackagePath = BuildCachedPackagePath(temp.Path, repository, "Company.Tools", "1.1.0");
+        Directory.CreateDirectory(Path.GetDirectoryName(cachedPackagePath)!);
+        TestPackageFactory.Create(cachedPackagePath, "Company.Tools", "1.1.0");
 
         var result = await repositoryClient.DownloadPackageAsync(repository, "Company.Tools", "1.1.0", temp.Path);
 
@@ -676,6 +719,24 @@ public sealed class ManagedModuleRepositoryClientTests
         using var stream = File.OpenRead(path);
         using var sha256 = SHA256.Create();
         return string.Concat(sha256.ComputeHash(stream).Select(static value => value.ToString("x2")));
+    }
+
+    private static string BuildCachedPackagePath(
+        string destinationDirectory,
+        ManagedModuleRepository repository,
+        string packageId,
+        string version)
+        => Path.Combine(
+            Path.GetFullPath(destinationDirectory),
+            GetRepositoryCacheKey(repository),
+            $"{packageId.Trim().ToLowerInvariant()}.{version.Trim().ToLowerInvariant()}.nupkg");
+
+    private static string GetRepositoryCacheKey(ManagedModuleRepository repository)
+    {
+        using var sha256 = SHA256.Create();
+        var source = Encoding.UTF8.GetBytes(repository.Source.Trim().ToLowerInvariant());
+        var hash = sha256.ComputeHash(source);
+        return string.Concat(hash.Take(8).Select(static value => value.ToString("x2")));
     }
 
     private sealed class ManagedModuleHandler : HttpMessageHandler

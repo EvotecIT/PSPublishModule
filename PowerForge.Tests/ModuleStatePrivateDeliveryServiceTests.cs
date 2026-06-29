@@ -59,6 +59,22 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
     }
 
     [Fact]
+    public void CreateRequest_PreservesRequestedAutoTransport()
+    {
+        var request = InvokeCreateRequest(
+            new[]
+            {
+                new ModuleStatePlanAction(ModuleStatePlanActionKind.Install, "Company.Tools", null, "1.2.0", "missing")
+            },
+            new ModuleStatePrivateDeliveryOptions
+            {
+                DeliveryTransport = ModuleStateDeliveryTransport.Auto
+            });
+
+        Assert.Equal(ModuleStateDeliveryTransport.Auto, request.DeliveryTransport);
+    }
+
+    [Fact]
     public void ResolveActionRepository_PreservesActionTargetOverGlobalRepository()
     {
         var action = new ModuleStatePlanAction(
@@ -131,7 +147,29 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
         Assert.NotNull(request.SourcePolicy);
     }
 
-    private static PrivateModuleWorkflowRequest InvokeCreateRequest(IReadOnlyList<ModuleStatePlanAction> actions)
+    [Fact]
+    public void ManagedResolveRepository_PreservesActionTargetOverGlobalRepository()
+    {
+        var action = new ModuleStatePlanAction(
+            ModuleStatePlanActionKind.Install,
+            "Company.Tools",
+            installedVersion: null,
+            ">=1.2.0",
+            "missing",
+            targetRepository: "https://first.example.test/v3/index.json");
+        var options = new ModuleStateManagedDeliveryOptions
+        {
+            Repository = "https://fallback.example.test/v3/index.json"
+        };
+
+        var repository = InvokeManagedResolveRepository(action, options);
+
+        Assert.Equal("https://first.example.test/v3/index.json", repository.Source);
+    }
+
+    private static PrivateModuleWorkflowRequest InvokeCreateRequest(
+        IReadOnlyList<ModuleStatePlanAction> actions,
+        ModuleStatePrivateDeliveryOptions? options = null)
     {
         var method = typeof(ModuleStatePrivateDeliveryService).GetMethod(
             "CreateRequest",
@@ -146,7 +184,7 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
                 "Company",
                 actions.Any(static action => action.Force),
                 actions,
-                new ModuleStatePrivateDeliveryOptions()
+                options ?? new ModuleStatePrivateDeliveryOptions()
             });
 
         return Assert.IsType<PrivateModuleWorkflowRequest>(result);
@@ -182,5 +220,20 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
             });
 
         return Assert.IsType<ManagedModuleUpdateRequest>(result);
+    }
+
+    private static ManagedModuleRepository InvokeManagedResolveRepository(
+        ModuleStatePlanAction action,
+        ModuleStateManagedDeliveryOptions options)
+    {
+        var method = typeof(ModuleStateManagedDeliveryService).GetMethod(
+            "ResolveRepository",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var service = (ModuleStateManagedDeliveryService)RuntimeHelpers.GetUninitializedObject(typeof(ModuleStateManagedDeliveryService));
+        var result = method!.Invoke(service, new object?[] { action, options });
+
+        return Assert.IsType<ManagedModuleRepository>(result);
     }
 }

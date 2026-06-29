@@ -152,6 +152,20 @@ public sealed class ModulePublisherRepositoryVersionTests
     }
 
     [Fact]
+    public void IsRepositoryPackageNotFound_TreatsManagedVersionQueryNotFoundAsFirstPublish()
+    {
+        var exception = new ManagedModuleRepositoryException(
+            "VersionQuery",
+            "CompanyGallery",
+            "https://gallery.example.test/index.json",
+            "Unable to query versions for package 'EntraIDConfig'.",
+            "Check repository availability.",
+            statusCode: 404);
+
+        Assert.True(ModulePublisher.IsRepositoryPackageNotFound("EntraIDConfig", exception));
+    }
+
+    [Fact]
     public void Publish_RegistersConfiguredRepositoryBeforeVersionCheck()
     {
         var stagingRoot = Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N"));

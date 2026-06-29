@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Reflection;
 using System.Text.Json;
 using PowerForge;
 
@@ -796,6 +797,39 @@ public sealed partial class ManagedModuleInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_rejects_export_conflicts_from_flat_module_layout()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var existingPath = Path.Combine(moduleRoot.Path, "Company.Existing");
+        Directory.CreateDirectory(existingPath);
+        File.WriteAllText(
+            Path.Combine(existingPath, "Company.Existing.psd1"),
+            CreateManifest("1.0.0", "Get-CompanyTool"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = CreateManifest("1.0.0", "Get-CompanyTool")
+            });
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        }));
+
+        Assert.Contains("export conflict", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0")));
+    }
+
+    [Fact]
     public async Task InstallAsync_allows_export_conflicts_with_allow_clobber()
     {
         using var feed = new TemporaryDirectory();
@@ -827,6 +861,23 @@ public sealed partial class ManagedModuleInstallServiceTests
 
         Assert.Equal(ManagedModuleInstallStatus.Installed, result.Status);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
+    public void CreateStageRoot_UsesTargetModuleRoot()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var method = typeof(ManagedModuleInstallService).GetMethod(
+            "CreateStageRoot",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var stageRoot = Assert.IsType<string>(method!.Invoke(null, new object?[] { moduleRoot.Path, "Company.Tools" }));
+
+        Assert.StartsWith(
+            Path.Combine(Path.GetFullPath(moduleRoot.Path), "Company.Tools"),
+            stageRoot,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

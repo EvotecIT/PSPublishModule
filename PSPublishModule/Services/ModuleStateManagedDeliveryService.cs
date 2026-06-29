@@ -28,7 +28,6 @@ internal sealed class ModuleStateManagedDeliveryService
         if (actions.Length == 0)
             return Array.Empty<ModuleStateDeliveryExecutionResult>();
 
-        var repository = ResolveRepository(actions, options);
         var logger = new CmdletLogger(_cmdlet, _cmdlet.MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var installService = new ManagedModuleInstallService(logger);
         var updateService = new ManagedModuleUpdateService(logger);
@@ -36,6 +35,7 @@ internal sealed class ModuleStateManagedDeliveryService
 
         foreach (var action in actions)
         {
+            var repository = ResolveRepository(action, options);
             results.Add(action.Kind switch
             {
                 ModuleStatePlanActionKind.Update => ExecuteUpdate(updateService, repository, action, options),
@@ -226,61 +226,30 @@ internal sealed class ModuleStateManagedDeliveryService
     }
 
     private ManagedModuleRepository ResolveRepository(
-        IReadOnlyList<ModuleStatePlanAction> actions,
+        ModuleStatePlanAction action,
         ModuleStateManagedDeliveryOptions options)
     {
-        var source = ResolveRepositorySource(actions, options);
-        var name = ResolveRepositoryName(actions, options, source);
-        return new ManagedModuleRepository(name, source);
-    }
-
-    private string ResolveRepositorySource(
-        IReadOnlyList<ModuleStatePlanAction> actions,
-        ModuleStateManagedDeliveryOptions options)
-    {
-        if (!string.IsNullOrWhiteSpace(options.Repository))
-            return options.Repository!;
+        if (!string.IsNullOrWhiteSpace(action.TargetRepository))
+            return ManagedModuleCommandSupport.CreateRepository(
+                _cmdlet,
+                ManagedModuleCommandSupport.DefaultRepositoryName,
+                action.TargetRepository!);
 
         if (!string.IsNullOrWhiteSpace(options.ProfileName))
-        {
-            var profileRepository = ManagedModuleCommandSupport.CreateRepository(
+            return ManagedModuleCommandSupport.CreateRepository(
                 _cmdlet,
                 ManagedModuleCommandSupport.DefaultRepositoryName,
                 ManagedModuleCommandSupport.DefaultRepositorySource,
                 options.ProfileName,
                 repositoryWasBound: false);
-            return profileRepository.Source;
-        }
 
-        var actionRepository = actions
-            .Select(static action => action.TargetRepository)
-            .FirstOrDefault(static repository => !string.IsNullOrWhiteSpace(repository));
-        if (!string.IsNullOrWhiteSpace(actionRepository))
-            return actionRepository!;
+        if (!string.IsNullOrWhiteSpace(options.Repository))
+            return ManagedModuleCommandSupport.CreateRepository(
+                _cmdlet,
+                ManagedModuleCommandSupport.DefaultRepositoryName,
+                options.Repository!);
 
         throw new InvalidOperationException("Managed module delivery requires Repository, ProfileName, or action target repository.");
-    }
-
-    private string ResolveRepositoryName(
-        IReadOnlyList<ModuleStatePlanAction> actions,
-        ModuleStateManagedDeliveryOptions options,
-        string source)
-    {
-        if (!string.IsNullOrWhiteSpace(options.ProfileName))
-        {
-            var profileRepository = ManagedModuleCommandSupport.CreateRepository(
-                _cmdlet,
-                ManagedModuleCommandSupport.DefaultRepositoryName,
-                ManagedModuleCommandSupport.DefaultRepositorySource,
-                options.ProfileName,
-                repositoryWasBound: false);
-            return profileRepository.Name;
-        }
-
-        var actionRepository = actions
-            .Select(static action => action.TargetRepository)
-            .FirstOrDefault(static repository => !string.IsNullOrWhiteSpace(repository));
-        return actionRepository ?? source;
     }
 
     private static string? ResolveModuleRoot(ModuleStatePlanAction action, ModuleStateManagedDeliveryOptions options)

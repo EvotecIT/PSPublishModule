@@ -766,13 +766,9 @@ public sealed partial class ManagedModuleInstallService
 
     private static string CreateStageRoot(string moduleRoot, string moduleName)
     {
-#if NET472
-        return Path.Combine(Path.GetTempPath(), "PFMM.S", NewShortId());
-#else
         var root = Path.GetFullPath(moduleRoot.Trim().Trim('"'))
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return Path.Combine(root, moduleName.Trim(), ".pfmm-stage-" + NewShortId());
-#endif
     }
 
     private static string CreateStageModulePath(string stageRoot, string moduleName, string version)
