@@ -19,6 +19,49 @@ internal sealed class ManagedModuleExtractedPackageCache
         _logger = logger ?? new NullLogger();
     }
 
+    public ManagedModuleExtractedPackageLease? TryAcquirePayload(
+        string packageSha256,
+        string packageCacheDirectory,
+        CancellationToken cancellationToken)
+    {
+        var normalizedSha256 = ManagedModulePackageIntegrity.NormalizeSha256(packageSha256);
+        if (normalizedSha256 is null)
+            return null;
+
+        var cacheRoot = GetCacheRoot(packageCacheDirectory, normalizedSha256);
+        var payloadPath = Path.Combine(cacheRoot, PayloadDirectoryName);
+        var metadataPath = Path.Combine(cacheRoot, MetadataFileName);
+        var lockStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var cacheLock = ManagedModuleExtractedPackageCacheLock.Acquire(packageCacheDirectory, normalizedSha256, cancellationToken);
+        lockStopwatch.Stop();
+
+        try
+        {
+            var metadata = ReadValidMetadata(metadataPath, normalizedSha256);
+            if (metadata is not null && Directory.Exists(payloadPath))
+            {
+                return new ManagedModuleExtractedPackageLease(
+                    payloadPath,
+                    cacheRoot,
+                    metadata.Value.FileCount,
+                    metadata.Value.BytesWritten,
+                    lockStopwatch.Elapsed,
+                    cacheLock);
+            }
+
+            if (Directory.Exists(cacheRoot))
+                DeleteDirectoryQuietly(cacheRoot);
+        }
+        catch
+        {
+            cacheLock.Dispose();
+            throw;
+        }
+
+        cacheLock.Dispose();
+        return null;
+    }
+
     public ManagedModuleArchiveExtractionResult MaterializePackage(
         string packagePath,
         string packageSha256,
@@ -71,6 +114,43 @@ internal sealed class ManagedModuleExtractedPackageCache
         TryPopulateCache(destinationPath, cacheRoot, normalizedSha256, extraction, cancellationToken);
         stopwatch.Stop();
         return new ManagedModuleArchiveExtractionResult(extraction.FileCount, extraction.BytesWritten, stopwatch.Elapsed, fromCache: false, cacheLockWaitElapsed);
+    }
+
+    public ManagedModuleArchiveExtractionResult MaterializePackage(
+        ManagedModuleExtractedPackageLease payloadLease,
+        string destinationPath,
+        CancellationToken cancellationToken)
+    {
+        if (payloadLease is null)
+            throw new ArgumentNullException(nameof(payloadLease));
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var copied = CopyDirectory(payloadLease.PayloadPath, destinationPath, cancellationToken);
+            if (copied.FileCount == payloadLease.FileCount && copied.BytesWritten == payloadLease.BytesWritten)
+            {
+                stopwatch.Stop();
+                return new ManagedModuleArchiveExtractionResult(
+                    copied.FileCount,
+                    copied.BytesWritten,
+                    stopwatch.Elapsed,
+                    fromCache: true,
+                    payloadLease.CacheLockWaitElapsed);
+            }
+
+            _logger.Verbose($"Discarded extracted package cache because materialized file counts did not match metadata.");
+            DeleteDirectoryQuietly(destinationPath);
+            payloadLease.Invalidate();
+            throw new IOException("Extracted package cache materialization did not match cached metadata.");
+        }
+        catch (Exception ex) when (IsRecoverableCacheMaterializationException(ex))
+        {
+            _logger.Verbose($"Discarded extracted package cache because direct materialization failed: {ex.Message}");
+            DeleteDirectoryQuietly(destinationPath);
+            payloadLease.Invalidate();
+            throw;
+        }
     }
 
     private static string GetCacheRoot(string packageCacheDirectory, string packageSha256)
@@ -234,7 +314,7 @@ internal sealed class ManagedModuleExtractedPackageCache
                aggregate.InnerExceptions.All(IsRecoverableCacheMaterializationException);
     }
 
-    private static void DeleteDirectoryQuietly(string path)
+    internal static void DeleteDirectoryQuietly(string path)
     {
         try
         {
@@ -273,5 +353,45 @@ internal sealed class ManagedModuleExtractedPackageCache
         public int FileCount { get; }
 
         public long BytesWritten { get; }
+    }
+}
+
+internal sealed class ManagedModuleExtractedPackageLease : IDisposable
+{
+    private readonly IDisposable _cacheLock;
+    private readonly string _cacheRoot;
+    private int _disposed;
+
+    public ManagedModuleExtractedPackageLease(
+        string payloadPath,
+        string cacheRoot,
+        int fileCount,
+        long bytesWritten,
+        TimeSpan cacheLockWaitElapsed,
+        IDisposable cacheLock)
+    {
+        PayloadPath = payloadPath;
+        _cacheRoot = cacheRoot;
+        FileCount = fileCount;
+        BytesWritten = bytesWritten;
+        CacheLockWaitElapsed = cacheLockWaitElapsed;
+        _cacheLock = cacheLock;
+    }
+
+    public string PayloadPath { get; }
+
+    public int FileCount { get; }
+
+    public long BytesWritten { get; }
+
+    public TimeSpan CacheLockWaitElapsed { get; }
+
+    public void Invalidate()
+        => ManagedModuleExtractedPackageCache.DeleteDirectoryQuietly(_cacheRoot);
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+            _cacheLock.Dispose();
     }
 }

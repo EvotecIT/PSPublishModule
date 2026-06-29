@@ -124,6 +124,8 @@ function New-Summary {
             MedianManagedPromotionBackupMoveMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionBackupMoveMilliseconds' } else { 0 }
             MedianManagedPromotionBackupCleanupMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionBackupCleanupMilliseconds' } else { 0 }
             MedianManagedPromotionOverwriteCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedPromotionOverwriteCount' } else { 0 }
+            MedianManagedDirectMaterializationCount = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedDirectMaterializationCount' } else { 0 }
+            MedianManagedPromotionDirectMaterializationMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedTotalPromotionDirectMaterializationMilliseconds' } else { 0 }
             MedianManagedRepositoryRequests = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedRepositoryRequestCount' } else { 0 }
             MedianManagedPackageRepositoryRequests = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedPackageRepositoryRequestCount' } else { 0 }
             MedianManagedPackageRepositoryRedirects = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedPackageRepositoryRedirectCount' } else { 0 }
@@ -142,6 +144,7 @@ function New-Summary {
             MedianManagedSlowestMaterializedPackageExtractionCacheLockWaitMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackageExtractionCacheLockWaitMilliseconds' } else { 0 }
             MedianManagedSlowestMaterializedPackagePromotionMoveMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackagePromotionMoveMilliseconds' } else { 0 }
             MedianManagedSlowestMaterializedPackagePromotionFinalMoveMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackagePromotionFinalMoveMilliseconds' } else { 0 }
+            MedianManagedSlowestMaterializedPackagePromotionDirectMaterializationMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedSlowestMaterializedPackagePromotionDirectMaterializationMilliseconds' } else { 0 }
             MedianManagedCriticalDependencyBranchMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedCriticalDependencyBranchMilliseconds' } else { 0 }
             MedianManagedCriticalRootBranchMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedCriticalRootBranchMilliseconds' } else { 0 }
             MedianManagedCriticalMaterializationBranchMs = if ($passed.Count) { Get-MedianProperty -Rows $passed -Name 'ManagedCriticalMaterializationBranchMilliseconds' } else { 0 }
@@ -181,6 +184,10 @@ function New-Summary {
             LastManagedPromotionBackupCleanupMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalPromotionBackupCleanupMilliseconds } else { 0 }
             FirstManagedPromotionOverwriteCount = if ($firstPassed) { [double]$firstPassed.ManagedPromotionOverwriteCount } else { 0 }
             LastManagedPromotionOverwriteCount = if ($lastPassed) { [double]$lastPassed.ManagedPromotionOverwriteCount } else { 0 }
+            FirstManagedDirectMaterializationCount = if ($firstPassed) { [double]$firstPassed.ManagedDirectMaterializationCount } else { 0 }
+            LastManagedDirectMaterializationCount = if ($lastPassed) { [double]$lastPassed.ManagedDirectMaterializationCount } else { 0 }
+            FirstManagedPromotionDirectMaterializationMs = if ($firstPassed) { [double]$firstPassed.ManagedTotalPromotionDirectMaterializationMilliseconds } else { 0 }
+            LastManagedPromotionDirectMaterializationMs = if ($lastPassed) { [double]$lastPassed.ManagedTotalPromotionDirectMaterializationMilliseconds } else { 0 }
             FirstManagedDownloadBytes = if ($firstPassed) { [double]$firstPassed.ManagedDownloadBytes } else { 0 }
             LastManagedDownloadBytes = if ($lastPassed) { [double]$lastPassed.ManagedDownloadBytes } else { 0 }
             FirstManagedCacheHits = if ($firstPassed) { [double]$firstPassed.ManagedCacheHitCount } else { 0 }
@@ -211,6 +218,8 @@ function New-Summary {
             LastManagedSlowestMaterializedPackagePromotionBackupMoveMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionBackupMoveMilliseconds } else { 0 }
             LastManagedSlowestMaterializedPackagePromotionBackupCleanupMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionBackupCleanupMilliseconds } else { 0 }
             LastManagedSlowestMaterializedPackagePromotionHadExistingTarget = if ($lastPassed) { [bool]$lastPassed.ManagedSlowestMaterializedPackagePromotionHadExistingTarget } else { $false }
+            LastManagedSlowestMaterializedPackagePromotionMaterializedDirectly = if ($lastPassed) { [bool]$lastPassed.ManagedSlowestMaterializedPackagePromotionMaterializedDirectly } else { $false }
+            LastManagedSlowestMaterializedPackagePromotionDirectMaterializationMs = if ($lastPassed) { [double]$lastPassed.ManagedSlowestMaterializedPackagePromotionDirectMaterializationMilliseconds } else { 0 }
             LastManagedCriticalDependencyBranchName = Get-TextProperty -Row $lastPassed -Name 'ManagedCriticalDependencyBranchName'
             LastManagedCriticalDependencyBranchParent = Get-TextProperty -Row $lastPassed -Name 'ManagedCriticalDependencyBranchParent'
             LastManagedCriticalDependencyBranchMs = Get-DoubleProperty -Row $lastPassed -Name 'ManagedCriticalDependencyBranchMilliseconds'
@@ -330,6 +339,10 @@ function New-Comparison {
             ManagedLastPromotionBackupCleanupMs = if ($managed.Count) { [double] $managed[0].LastManagedPromotionBackupCleanupMs } else { 0 }
             ManagedFirstPromotionOverwriteCount = if ($managed.Count) { [double] $managed[0].FirstManagedPromotionOverwriteCount } else { 0 }
             ManagedLastPromotionOverwriteCount = if ($managed.Count) { [double] $managed[0].LastManagedPromotionOverwriteCount } else { 0 }
+            ManagedFirstDirectMaterializationCount = if ($managed.Count) { [double] $managed[0].FirstManagedDirectMaterializationCount } else { 0 }
+            ManagedLastDirectMaterializationCount = if ($managed.Count) { [double] $managed[0].LastManagedDirectMaterializationCount } else { 0 }
+            ManagedFirstPromotionDirectMaterializationMs = if ($managed.Count) { [double] $managed[0].FirstManagedPromotionDirectMaterializationMs } else { 0 }
+            ManagedLastPromotionDirectMaterializationMs = if ($managed.Count) { [double] $managed[0].LastManagedPromotionDirectMaterializationMs } else { 0 }
             ManagedLastSlowestCoalescedWaitName = if ($managed.Count) { [string] $managed[0].LastManagedSlowestCoalescedWaitName } else { '' }
             ManagedLastSlowestCoalescedWaitMs = if ($managed.Count) { [double] $managed[0].LastManagedSlowestCoalescedWaitMs } else { 0 }
             ManagedFirstInstallLockWaitMs = if ($managed.Count) { [double] $managed[0].FirstManagedInstallLockWaitMs } else { 0 }
@@ -352,6 +365,8 @@ function New-Comparison {
             ManagedLastSlowestMaterializedPackagePromotionBackupMoveMs = if ($managed.Count) { [double] $managed[0].LastManagedSlowestMaterializedPackagePromotionBackupMoveMs } else { 0 }
             ManagedLastSlowestMaterializedPackagePromotionBackupCleanupMs = if ($managed.Count) { [double] $managed[0].LastManagedSlowestMaterializedPackagePromotionBackupCleanupMs } else { 0 }
             ManagedLastSlowestMaterializedPackagePromotionHadExistingTarget = if ($managed.Count) { [bool] $managed[0].LastManagedSlowestMaterializedPackagePromotionHadExistingTarget } else { $false }
+            ManagedLastSlowestMaterializedPackagePromotionMaterializedDirectly = if ($managed.Count) { [bool] $managed[0].LastManagedSlowestMaterializedPackagePromotionMaterializedDirectly } else { $false }
+            ManagedLastSlowestMaterializedPackagePromotionDirectMaterializationMs = if ($managed.Count) { [double] $managed[0].LastManagedSlowestMaterializedPackagePromotionDirectMaterializationMs } else { 0 }
             ManagedLastCriticalDependencyBranchName = if ($managed.Count) { [string] $managed[0].LastManagedCriticalDependencyBranchName } else { '' }
             ManagedLastCriticalDependencyBranchParent = if ($managed.Count) { [string] $managed[0].LastManagedCriticalDependencyBranchParent } else { '' }
             ManagedLastCriticalDependencyBranchMs = if ($managed.Count) { [double] $managed[0].LastManagedCriticalDependencyBranchMs } else { 0 }

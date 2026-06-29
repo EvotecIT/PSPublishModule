@@ -127,6 +127,16 @@ function Add-ManagedInstallDetail {
     } else {
         $false
     }
+    $promotionMaterializedDirectly = if ($null -ne $Result.PSObject.Properties['PromotionMaterializedDirectly']) {
+        [bool] $Result.PromotionMaterializedDirectly
+    } else {
+        $false
+    }
+    $promotionDirectMaterializationMilliseconds = if ($null -ne $Result.PSObject.Properties['PromotionDirectMaterializationElapsed']) {
+        ConvertTo-Milliseconds -TimeSpan $Result.PromotionDirectMaterializationElapsed
+    } else {
+        0
+    }
     $installLockWaitMilliseconds = if ($null -ne $Result.PSObject.Properties['InstallLockWaitElapsed']) {
         ConvertTo-Milliseconds -TimeSpan $Result.InstallLockWaitElapsed
     } else {
@@ -174,6 +184,8 @@ function Add-ManagedInstallDetail {
         PromotionFinalMoveMilliseconds = $promotionFinalMoveMilliseconds
         PromotionBackupCleanupMilliseconds = $promotionBackupCleanupMilliseconds
         PromotionHadExistingTarget = $promotionHadExistingTarget
+        PromotionMaterializedDirectly = $promotionMaterializedDirectly
+        PromotionDirectMaterializationMilliseconds = $promotionDirectMaterializationMilliseconds
         InstallLockWaitMilliseconds = $installLockWaitMilliseconds
         CoalescedWaitMilliseconds = $coalescedWaitMilliseconds
         RepositoryRequestCount = [long] $Result.RepositoryRequestCount
@@ -238,6 +250,12 @@ function Write-ManagedInstallDetail {
         $packages |
             Where-Object {
                 [bool] $_.PromotionHadExistingTarget
+            }
+    )
+    $directMaterializations = @(
+        $packages |
+            Where-Object {
+                [bool] $_.PromotionMaterializedDirectly
             }
     )
     $slowestCoalescedWait = @(
@@ -346,6 +364,8 @@ function Write-ManagedInstallDetail {
         TotalPromotionFinalMoveMilliseconds = [math]::Round((($packages | Measure-Object PromotionFinalMoveMilliseconds -Sum).Sum), 2)
         TotalPromotionBackupCleanupMilliseconds = [math]::Round((($packages | Measure-Object PromotionBackupCleanupMilliseconds -Sum).Sum), 2)
         PromotionOverwriteCount = $promotionOverwrites.Count
+        DirectMaterializationCount = $directMaterializations.Count
+        TotalPromotionDirectMaterializationMilliseconds = [math]::Round((($packages | Measure-Object PromotionDirectMaterializationMilliseconds -Sum).Sum), 2)
         TotalRepositoryRequestCount = [long] $Result.RepositoryRequestCount
         TotalPackageRepositoryRequestCount = [long] (($packages | Measure-Object PackageRepositoryRequestCount -Sum).Sum)
         TotalPackageRepositoryRedirectCount = [long] (($packages | Measure-Object PackageRepositoryRedirectCount -Sum).Sum)
@@ -379,6 +399,8 @@ function Write-ManagedInstallDetail {
         SlowestMaterializedPackagePromotionFinalMoveMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].PromotionFinalMoveMilliseconds } else { 0.0 }
         SlowestMaterializedPackagePromotionBackupCleanupMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].PromotionBackupCleanupMilliseconds } else { 0.0 }
         SlowestMaterializedPackagePromotionHadExistingTarget = if ($slowestMaterializedPackage.Count) { [bool] $slowestMaterializedPackage[0].PromotionHadExistingTarget } else { $false }
+        SlowestMaterializedPackagePromotionMaterializedDirectly = if ($slowestMaterializedPackage.Count) { [bool] $slowestMaterializedPackage[0].PromotionMaterializedDirectly } else { $false }
+        SlowestMaterializedPackagePromotionDirectMaterializationMilliseconds = if ($slowestMaterializedPackage.Count) { [double] $slowestMaterializedPackage[0].PromotionDirectMaterializationMilliseconds } else { 0.0 }
         CriticalDependencyBranchName = if ($criticalDependencyBranch.Count) { [string] $criticalDependencyBranch[0].Name } else { '' }
         CriticalDependencyBranchParent = if ($criticalDependencyBranch.Count) { [string] $criticalDependencyBranch[0].Parent } else { '' }
         CriticalDependencyBranchMilliseconds = $criticalDependencyBranchMilliseconds

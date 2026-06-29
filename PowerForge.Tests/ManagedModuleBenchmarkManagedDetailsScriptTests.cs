@@ -29,6 +29,8 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
                 PromotionFinalMoveElapsed = [TimeSpan]::FromMilliseconds(1.5)
                 PromotionBackupCleanupElapsed = [TimeSpan]::Zero
                 PromotionHadExistingTarget = $false
+                PromotionMaterializedDirectly = $true
+                PromotionDirectMaterializationElapsed = [TimeSpan]::FromMilliseconds(7)
                 RepositoryRequestCount = 0
                 PackageRepositoryRequestCount = 0
                 PackageRepositoryRedirectCount = 0
@@ -193,6 +195,8 @@ public sealed class ManagedModuleBenchmarkManagedDetailsScriptTests
         Assert.Equal(51.5, NumericProperty(summary, "TotalPromotionFinalMoveMilliseconds"));
         Assert.Equal(5.0, NumericProperty(summary, "TotalPromotionBackupCleanupMilliseconds"));
         Assert.Equal(1.0, NumericProperty(summary, "PromotionOverwriteCount"));
+        Assert.Equal(1.0, NumericProperty(summary, "DirectMaterializationCount"));
+        Assert.Equal(7.0, NumericProperty(summary, "TotalPromotionDirectMaterializationMilliseconds"));
         Assert.Equal(3.0, NumericProperty(bigPackage, "PromotionBackupMoveMilliseconds"));
         Assert.Equal(50.0, NumericProperty(bigPackage, "PromotionFinalMoveMilliseconds"));
         Assert.Equal(5.0, NumericProperty(bigPackage, "PromotionBackupCleanupMilliseconds"));
