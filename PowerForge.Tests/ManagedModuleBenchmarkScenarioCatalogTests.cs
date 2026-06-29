@@ -114,6 +114,17 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "PSResourceGet", "PowerShellGet" }) &&
             Int32Property(row, "ManagedMaxRank") == 1);
         Assert.Contains(rows, row =>
+            Property(row, "Suite") == "SecurityGate" &&
+            Property(row, "Name") == "ThreadJob.Authenticode.InstallSave" &&
+            Property(row, "BenchmarkRole") == "Scoreboard" &&
+            Property(row, "ComparisonScope") == "AuthenticodeCapableProviders" &&
+            Property(row, "BenchmarkInterpretation").Contains("signature validation", StringComparison.OrdinalIgnoreCase) &&
+            Property(row, "Version") == "2.1.0" &&
+            BooleanProperty(row, "AuthenticodeCheck") &&
+            StringArrayProperty(row, "Operations").SequenceEqual(new[] { "Install", "Save" }) &&
+            StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "PSResourceGet" }) &&
+            Int32Property(row, "ManagedMaxRank") == 1);
+        Assert.Contains(rows, row =>
             Property(row, "Suite") == "RepairGate" &&
             Property(row, "Name") == "ThreadJob.Repair.LoadedModuleSafety" &&
             Property(row, "BenchmarkRole") == "Diagnostic" &&
@@ -149,7 +160,7 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
         process.StartInfo.ArgumentList.Add("Bypass");
         process.StartInfo.ArgumentList.Add("-Command");
         process.StartInfo.ArgumentList.Add(
-            "& '" + script.Replace("'", "''", StringComparison.Ordinal) + "' -Suite SpeedGate,SaveGate,LifecycleGate,HeavyLifecycleGate,HeavySaveGate,HeavySaveCacheGate,RepairGate -ListScenarios | ConvertTo-Json -Depth 5 -Compress");
+            "& '" + script.Replace("'", "''", StringComparison.Ordinal) + "' -Suite SpeedGate,SaveGate,LifecycleGate,HeavyLifecycleGate,HeavySaveGate,HeavySaveCacheGate,SecurityGate,RepairGate -ListScenarios | ConvertTo-Json -Depth 5 -Compress");
         process.StartInfo.RedirectStandardOutput = true;
         process.StartInfo.RedirectStandardError = true;
         process.StartInfo.UseShellExecute = false;
