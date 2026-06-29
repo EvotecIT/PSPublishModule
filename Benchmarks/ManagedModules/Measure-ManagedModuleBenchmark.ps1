@@ -1,8 +1,8 @@
 #requires -Version 5.1
 [CmdletBinding()]
 param(
-    [ValidateSet('ThreadJob', 'GraphAuthentication', 'Graph', 'AzAccounts', 'Az')]
-    [string[]] $ScenarioName = @('ThreadJob', 'GraphAuthentication', 'Graph', 'AzAccounts', 'Az'),
+    [ValidateSet('SingleModule', 'GraphAuthentication', 'Graph', 'AzAccounts', 'Az')]
+    [string[]] $ScenarioName = @('SingleModule', 'GraphAuthentication', 'Graph', 'AzAccounts', 'Az'),
 
     [ValidateSet('Find', 'Install', 'Save')]
     [string[]] $Operation = @('Find', 'Install', 'Save'),
@@ -38,7 +38,7 @@ $ErrorActionPreference = 'Stop'
 
 function Get-BenchmarkScenarios {
     @(
-        [pscustomobject]@{ Name = 'ThreadJob'; Label = 'ThreadJob'; ModuleName = 'ThreadJob'; Version = '2.1.0'; AcceptLicense = $false }
+        [pscustomobject]@{ Name = 'SingleModule'; Label = 'PSScriptAnalyzer'; ModuleName = 'PSScriptAnalyzer'; Version = '1.25.0'; AcceptLicense = $false }
         [pscustomobject]@{ Name = 'GraphAuthentication'; Label = 'Graph.Authentication'; ModuleName = 'Microsoft.Graph.Authentication'; Version = '2.38.0'; AcceptLicense = $true }
         [pscustomobject]@{ Name = 'Graph'; Label = 'Graph'; ModuleName = 'Microsoft.Graph'; Version = '2.38.0'; AcceptLicense = $true }
         [pscustomobject]@{ Name = 'AzAccounts'; Label = 'Az.Accounts'; ModuleName = 'Az.Accounts'; Version = '5.5.0'; AcceptLicense = $true }
@@ -96,6 +96,9 @@ function New-MeasurementResult {
         [string] $Reason
     )
 
+    $roundedMilliseconds = [Math]::Round($Milliseconds, 2)
+    $roundedSeconds = [Math]::Round($Milliseconds / 1000, 3)
+
     [pscustomobject]@{
         TimestampUtc = [DateTime]::UtcNow.ToString('o')
         Host = Get-CurrentHostLabel
@@ -107,8 +110,8 @@ function New-MeasurementResult {
         Engine = $EngineName
         Iteration = $Iteration
         Status = $Status
-        Milliseconds = [Math]::Round($Milliseconds, 2)
-        Seconds = [Math]::Round($Milliseconds / 1000, 3)
+        Milliseconds = $roundedMilliseconds.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture)
+        Seconds = $roundedSeconds.ToString('0.###', [Globalization.CultureInfo]::InvariantCulture)
         Reason = $Reason
     }
 }
@@ -124,30 +127,37 @@ function Invoke-MeasuredBlock {
     $watch.Elapsed.TotalMilliseconds
 }
 
-function Get-ProfileModuleRoot {
-    $documents = [Environment]::GetFolderPath('MyDocuments')
-    if ([string]::IsNullOrWhiteSpace($documents)) {
-        return ''
-    }
+function Remove-IsolatedModule {
+    param(
+        [string] $ModuleRoot,
+        [string] $ModuleName
+    )
 
-    if ($PSVersionTable.PSEdition -eq 'Desktop') {
-        return Join-Path $documents 'WindowsPowerShell\Modules'
-    }
-
-    Join-Path $documents 'PowerShell\Modules'
-}
-
-function Remove-ProfileModule {
-    param([string] $ModuleName)
-
-    $root = Get-ProfileModuleRoot
-    if ([string]::IsNullOrWhiteSpace($root)) {
-        return
-    }
-
-    $path = Join-Path $root $ModuleName
+    $path = Join-Path $ModuleRoot $ModuleName
     if (Test-Path -LiteralPath $path) {
         Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Invoke-WithIsolatedModulePath {
+    param(
+        [string] $ModuleRoot,
+        [scriptblock] $ScriptBlock
+    )
+
+    New-Item -ItemType Directory -Path $ModuleRoot -Force | Out-Null
+    $originalModulePath = $env:PSModulePath
+    $separator = [System.IO.Path]::PathSeparator
+    if ([string]::IsNullOrWhiteSpace($originalModulePath)) {
+        $env:PSModulePath = $ModuleRoot
+    } else {
+        $env:PSModulePath = $ModuleRoot + $separator + $originalModulePath
+    }
+
+    try {
+        & $ScriptBlock
+    } finally {
+        $env:PSModulePath = $originalModulePath
     }
 }
 
@@ -231,7 +241,7 @@ function Invoke-BenchmarkCommand {
                     if (-not $AllowUserProfileInstall.IsPresent) {
                         throw 'Skipped: pass -AllowUserProfileInstall to measure native install providers.'
                     }
-                    Remove-ProfileModule -ModuleName $name
+                    Remove-IsolatedModule -ModuleRoot $InstallRoot -ModuleName $name
                     $parameters = @{
                         Name = $name
                         Repository = $Repository
@@ -241,8 +251,10 @@ function Invoke-BenchmarkCommand {
                     }
                     if (-not [string]::IsNullOrWhiteSpace($version)) { $parameters.Version = $version }
                     if ($acceptLicense) { $parameters.AcceptLicense = $true }
-                    Install-PSResource @parameters | Out-Null
-                    Remove-ProfileModule -ModuleName $name
+                    Invoke-WithIsolatedModulePath -ModuleRoot $InstallRoot -ScriptBlock {
+                        Install-PSResource @parameters | Out-Null
+                    }
+                    Remove-IsolatedModule -ModuleRoot $InstallRoot -ModuleName $name
                 }
                 'Save' {
                     $parameters = @{
@@ -267,7 +279,7 @@ function Invoke-BenchmarkCommand {
                     if (-not $AllowUserProfileInstall.IsPresent) {
                         throw 'Skipped: pass -AllowUserProfileInstall to measure native install providers.'
                     }
-                    Remove-ProfileModule -ModuleName $name
+                    Remove-IsolatedModule -ModuleRoot $InstallRoot -ModuleName $name
                     $parameters = @{
                         Name = $name
                         Repository = $Repository
@@ -277,8 +289,10 @@ function Invoke-BenchmarkCommand {
                     }
                     if (-not [string]::IsNullOrWhiteSpace($version)) { $parameters.RequiredVersion = $version }
                     if ($acceptLicense) { $parameters.AcceptLicense = $true }
-                    Install-Module @parameters | Out-Null
-                    Remove-ProfileModule -ModuleName $name
+                    Invoke-WithIsolatedModulePath -ModuleRoot $InstallRoot -ScriptBlock {
+                        Install-Module @parameters | Out-Null
+                    }
+                    Remove-IsolatedModule -ModuleRoot $InstallRoot -ModuleName $name
                 }
                 'Save' {
                     $parameters = @{

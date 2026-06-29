@@ -20,7 +20,7 @@ public sealed class ManagedModuleSimpleBenchmarkScriptTests
 
         AssertNoErrors(ps);
         var names = results.Select(static result => result.Properties["Name"].Value?.ToString()).ToArray();
-        Assert.Equal(new[] { "ThreadJob", "GraphAuthentication", "Graph", "AzAccounts", "Az" }, names);
+        Assert.Equal(new[] { "SingleModule", "GraphAuthentication", "Graph", "AzAccounts", "Az" }, names);
         Assert.DoesNotContain(names, static name => string.Equals(name, "Repair", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -52,7 +52,7 @@ public sealed class ManagedModuleSimpleBenchmarkScriptTests
         AssertNoErrors(ps);
         var readme = File.ReadAllText(readmePath);
         Assert.Contains("| Scenario | Host | Operation | Managed | ModuleFast | PSResourceGet | PowerShellGet | Result |", readme, StringComparison.Ordinal);
-        Assert.Contains("| ThreadJob | PowerShell 7 | Find | 1.00x (0.10s) | NotEquivalent | 1.50x (0.15s) | 4.00x (0.40s) | Managed fastest |", readme, StringComparison.Ordinal);
+        Assert.Contains("| PSScriptAnalyzer | PowerShell 7 | Find | 1.00x (0.10s) | NotEquivalent | 1.50x (0.15s) | 4.00x (0.40s) | Managed fastest |", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("old", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("Repair", readme, StringComparison.OrdinalIgnoreCase);
     }
@@ -76,10 +76,10 @@ public sealed class ManagedModuleSimpleBenchmarkScriptTests
     private static string BuildResultCsv()
         => string.Join(Environment.NewLine,
             "TimestampUtc,Host,Scenario,ScenarioLabel,ModuleName,Version,Operation,Engine,Iteration,Status,Milliseconds,Seconds,Reason",
-            "2026-06-29T00:00:00Z,PowerShell 7,ThreadJob,ThreadJob,ThreadJob,2.1.0,Find,Managed,1,Succeeded,100,0.1,",
-            "2026-06-29T00:00:00Z,PowerShell 7,ThreadJob,ThreadJob,ThreadJob,2.1.0,Find,ModuleFast,1,NotEquivalent,0,0,No equivalent",
-            "2026-06-29T00:00:00Z,PowerShell 7,ThreadJob,ThreadJob,ThreadJob,2.1.0,Find,PSResourceGet,1,Succeeded,150,0.15,",
-            "2026-06-29T00:00:00Z,PowerShell 7,ThreadJob,ThreadJob,ThreadJob,2.1.0,Find,PowerShellGet,1,Succeeded,400,0.4,");
+            "2026-06-29T00:00:00Z,PowerShell 7,SingleModule,PSScriptAnalyzer,PSScriptAnalyzer,1.25.0,Find,Managed,1,Succeeded,100,0.1,",
+            "2026-06-29T00:00:00Z,PowerShell 7,SingleModule,PSScriptAnalyzer,PSScriptAnalyzer,1.25.0,Find,ModuleFast,1,NotEquivalent,0,0,No equivalent",
+            "2026-06-29T00:00:00Z,PowerShell 7,SingleModule,PSScriptAnalyzer,PSScriptAnalyzer,1.25.0,Find,PSResourceGet,1,Succeeded,150,0.15,",
+            "2026-06-29T00:00:00Z,PowerShell 7,SingleModule,PSScriptAnalyzer,PSScriptAnalyzer,1.25.0,Find,PowerShellGet,1,Succeeded,400,0.4,");
 
     private static void AssertNoErrors(PowerShell ps)
     {

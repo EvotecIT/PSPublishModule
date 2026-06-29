@@ -334,7 +334,7 @@ Repair-ManagedModule -Latest -Repository PSGallery -ShowSummary
 Benchmarking stays outside the shipped module surface. The public benchmark is
 a small command-measurement script in
 [Benchmarks/ManagedModules](Benchmarks/ManagedModules), not a benchmark
-framework. It measures `Find`, `Install`, and `Save` for ThreadJob,
+framework. It measures `Find`, `Install`, and `Save` for PSScriptAnalyzer,
 Microsoft.Graph.Authentication, Microsoft.Graph, Az.Accounts, and Az against
 Managed, ModuleFast, PSResourceGet, and PowerShellGet where those providers have
 an equivalent command. Repair is not part of the table because the other

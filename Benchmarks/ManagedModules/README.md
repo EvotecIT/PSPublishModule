@@ -5,7 +5,7 @@ produce one CSV file that can update the root README table.
 
 Scenarios:
 
-- `ThreadJob`
+- `PSScriptAnalyzer`
 - `Microsoft.Graph.Authentication`
 - `Microsoft.Graph`
 - `Az.Accounts`

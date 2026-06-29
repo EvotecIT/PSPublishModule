@@ -10,6 +10,25 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function ConvertTo-BenchmarkDouble {
+    param([object] $Value)
+
+    if ($null -eq $Value) {
+        return 0
+    }
+
+    $text = ([string]$Value).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return 0
+    }
+
+    if ($text.Contains(',') -and -not $text.Contains('.')) {
+        $text = $text.Replace(',', '.')
+    }
+
+    [double]::Parse($text, [Globalization.CultureInfo]::InvariantCulture)
+}
+
 function Format-BenchmarkCell {
     param(
         [object] $Row,
@@ -24,7 +43,7 @@ function Format-BenchmarkCell {
         return $Row.Status
     }
 
-    $seconds = [double]$Row.Seconds
+    $seconds = ConvertTo-BenchmarkDouble -Value $Row.Seconds
     if ($ManagedSeconds -le 0) {
         return ('{0}s' -f $seconds.ToString('N2', [Globalization.CultureInfo]::InvariantCulture))
     }
@@ -49,7 +68,7 @@ function Get-ManagedResultText {
         return 'Managed only successful'
     }
 
-    $fastest = $successful | Sort-Object { [double]$_.Seconds } | Select-Object -First 1
+    $fastest = $successful | Sort-Object { ConvertTo-BenchmarkDouble -Value $_.Seconds } | Select-Object -First 1
     if ($fastest.Engine -eq 'Managed') {
         return 'Managed fastest'
     }
@@ -75,7 +94,7 @@ function ConvertTo-BenchmarkMarkdown {
     foreach ($group in $groups) {
         $items = @($group.Group)
         $managed = $items | Where-Object { $_.Engine -eq 'Managed' } | Sort-Object Iteration | Select-Object -First 1
-        $managedSeconds = if ($managed -and $managed.Status -eq 'Succeeded') { [double]$managed.Seconds } else { 0 }
+        $managedSeconds = if ($managed -and $managed.Status -eq 'Succeeded') { ConvertTo-BenchmarkDouble -Value $managed.Seconds } else { 0 }
         $first = $items | Select-Object -First 1
         $cells = foreach ($engine in $engines) {
             $row = $items | Where-Object { $_.Engine -eq $engine } | Sort-Object Iteration | Select-Object -First 1
