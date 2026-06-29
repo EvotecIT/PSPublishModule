@@ -49,6 +49,8 @@ function New-ManagedOptimizationTarget {
         $downloadBytes = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedDownloadBytes
         $downloadMb = [math]::Round($downloadBytes / 1MB, 2)
         $bottleneckShare = Get-ManagedBottleneckShare -ManagedMilliseconds $managedMs -BottleneckMilliseconds $bottleneckMs
+        $firstDownloadBytes = if ($row.PSObject.Properties['ManagedFirstDownloadBytes']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstDownloadBytes } else { 0.0 }
+        $lastDownloadBytes = if ($row.PSObject.Properties['ManagedLastDownloadBytes']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDownloadBytes } else { 0.0 }
 
         [pscustomobject]@{
             Suite = if ($row.PSObject.Properties['Suite']) { [string] $row.Suite } else { '' }
@@ -69,9 +71,19 @@ function New-ManagedOptimizationTarget {
             PackageRepositoryRequests = [math]::Round($packageRequests, 2)
             PackageRepositoryRedirects = [math]::Round($packageRedirects, 2)
             DownloadMB = $downloadMb
+            FirstDownloadMB = [math]::Round($firstDownloadBytes / 1MB, 2)
+            LastDownloadMB = [math]::Round($lastDownloadBytes / 1MB, 2)
             PackageCount = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedPackageCount
             UniquePackageCount = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedUniquePackageCount
             CacheHits = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedCacheHits
+            FirstMs = if ($row.PSObject.Properties['ManagedFirstMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstMs } else { 0.0 }
+            LastMs = if ($row.PSObject.Properties['ManagedLastMs']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastMs } else { 0.0 }
+            FirstRepositoryRequests = if ($row.PSObject.Properties['ManagedFirstRepositoryRequests']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstRepositoryRequests } else { 0.0 }
+            LastRepositoryRequests = if ($row.PSObject.Properties['ManagedLastRepositoryRequests']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastRepositoryRequests } else { 0.0 }
+            FirstPackageRepositoryRequests = if ($row.PSObject.Properties['ManagedFirstPackageRepositoryRequests']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstPackageRepositoryRequests } else { 0.0 }
+            LastPackageRepositoryRequests = if ($row.PSObject.Properties['ManagedLastPackageRepositoryRequests']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastPackageRepositoryRequests } else { 0.0 }
+            FirstCacheHits = if ($row.PSObject.Properties['ManagedFirstCacheHits']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstCacheHits } else { 0.0 }
+            LastCacheHits = if ($row.PSObject.Properties['ManagedLastCacheHits']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastCacheHits } else { 0.0 }
             Bottleneck = if ($bottleneckMs -gt 0) { [string] $bottleneck[0].Name } else { 'Uninstrumented' }
             BottleneckMs = [math]::Round($bottleneckMs, 2)
             BottleneckShare = [string] $bottleneckShare.Text

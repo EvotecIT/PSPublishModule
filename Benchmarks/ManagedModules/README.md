@@ -98,6 +98,13 @@ pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModule
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite HeavySaveGate -ScenarioName Az.Full.Save -HostName PowerShell7 -RepeatCount 1 -RotateEngineOrder -UseScenarioGates -RemoveOutputRoots -SkipBuild
 ```
 
+Run the managed-only heavy save cache lane when separating package download/source cost from repeated save materialization. These scenarios default to `CacheMode=Warm` and `RepeatCount=2`; command-line `-CacheMode` or `-RepeatCount` still override those defaults for experiments:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite HeavySaveCacheGate -ScenarioName Graph.Full.Save.ManagedWarmCache -HostName PowerShell7 -RemoveOutputRoots -SkipBuild
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite HeavySaveCacheGate -ScenarioName Az.Full.Save.ManagedWarmCache -HostName PowerShell7 -RemoveOutputRoots -SkipBuild
+```
+
 Run the publish evidence lane against local folder feeds. The fixture module and feed are synthetic and benchmark-owned, repository registration happens outside the timed publish operation, and ModuleFast is kept as an explicit skipped row because it has no publish command:
 
 ```powershell
@@ -332,6 +339,7 @@ Measured on 2026-06-28 with ModuleFast 0.6.1 installed in the current user's Pow
 - After the short save-root fix, Windows PowerShell 5.1 full `Microsoft.Graph` 2.38.0 save became a clean three-engine race: managed measured 12862.88 ms, PSResourceGet 60098.00 ms, and PowerShellGet 82563.59 ms, with all three providers succeeding. Managed saved about 1.05 GB across 482 files, recorded 78 package rows, 40 unique package outputs, 80 whole-operation/package-delivery requests, and 186.5 MB downloaded.
 - Windows PowerShell 5.1 full `Az` 16.0.0 save with the same short root measured managed first at 31863.64 ms and PowerShellGet at 130163.03 ms; PSResourceGet still failed after 84213.81 ms in its own temp extraction path for `Az.MachineLearningServices`. Managed saved about 623.0 MB across 2789 files, recorded 204 package rows, 103 unique package outputs, 210 whole-operation repository requests, 206 package-delivery requests, and 137.5 MB downloaded. The optimization artifact still points at download/source/cache behavior rather than extraction or promotion.
 - Warm managed package caches now live under a run-scoped short temp root instead of inside each output root, so repeated save/install/update rows can prove reusable cache behavior even with `-RemoveOutputRoots`. A PowerShell 7 repeated warm managed `ThreadJob` 2.1.0 save proof showed iteration 1 downloading 82971 bytes with zero cache hits, then iteration 2 using two cache hits, zero downloaded bytes, and no package-delivery requests; the cache and output roots were removed after the CSV/JSON evidence was written.
+- `HeavySaveCacheGate` adds managed-only full-family warm-cache save scenarios with scenario-owned `CacheMode=Warm` and `RepeatCount=2`. A PowerShell 7 full `Microsoft.Graph` 2.38.0 run measured iteration 1 at 3645.44 ms with 40 package requests, 186506621 downloaded bytes, and zero cache hits; iteration 2 measured 1944.07 ms with zero repository/package requests, zero downloaded bytes, and 40 cache hits. The suite summary and optimization target artifacts now include first/last managed timing, request, download, and cache-hit fields so this cache contrast is visible without opening raw child rows.
 
 Install and save numbers should be read through their own comparison sets. ModuleFast is the install speed competitor and is intentionally present in the full Graph same-source install gate. Save rows compare managed against save-capable providers such as PSResourceGet and PowerShellGet; ModuleFast skip rows in save evidence are capability markers, not managed losses. Warm install lifecycle rows can also reuse an already-populated module root, while save rows have to materialize a saved module tree, so a fast install no-op/force result should not be read as evidence about save throughput.
 

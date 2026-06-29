@@ -31,6 +31,16 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedPackageCount = '3'
                     ManagedUniquePackageCount = '3'
                     ManagedCacheHits = '1'
+                    ManagedFirstMs = '1500'
+                    ManagedLastMs = '500'
+                    ManagedFirstRepositoryRequests = '10'
+                    ManagedLastRepositoryRequests = '0'
+                    ManagedFirstPackageRepositoryRequests = '8'
+                    ManagedLastPackageRepositoryRequests = '0'
+                    ManagedFirstDownloadBytes = '2097152'
+                    ManagedLastDownloadBytes = '0'
+                    ManagedFirstCacheHits = '0'
+                    ManagedLastCacheHits = '3'
                 }
             )
 
@@ -46,8 +56,18 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
         Assert.Equal(60.0, NumericProperty(row, "BottleneckShareRaw"));
         Assert.Equal(string.Empty, Property(row, "TimingNote"));
         Assert.Equal(2.0, NumericProperty(row, "DownloadMB"));
+        Assert.Equal(2.0, NumericProperty(row, "FirstDownloadMB"));
+        Assert.Equal(0.0, NumericProperty(row, "LastDownloadMB"));
+        Assert.Equal(1500.0, NumericProperty(row, "FirstMs"));
+        Assert.Equal(500.0, NumericProperty(row, "LastMs"));
         Assert.Equal(10.0, NumericProperty(row, "RepositoryRequests"));
+        Assert.Equal(10.0, NumericProperty(row, "FirstRepositoryRequests"));
+        Assert.Equal(0.0, NumericProperty(row, "LastRepositoryRequests"));
+        Assert.Equal(8.0, NumericProperty(row, "FirstPackageRepositoryRequests"));
+        Assert.Equal(0.0, NumericProperty(row, "LastPackageRepositoryRequests"));
         Assert.Equal(4.0, NumericProperty(row, "PackageRepositoryRedirects"));
+        Assert.Equal(0.0, NumericProperty(row, "FirstCacheHits"));
+        Assert.Equal(3.0, NumericProperty(row, "LastCacheHits"));
         Assert.Contains("download", Property(row, "NextQuestion"), StringComparison.OrdinalIgnoreCase);
     }
 

@@ -328,6 +328,7 @@ Compatibility mappings, public-surface decisions, provider support levels, and b
 - [x] Document a same-source ModuleFast comparison gate so engine speed is not confused with package-source/backend variance.
 - [x] Promote the same-source full Graph ModuleFast comparison into a named `SpeedGate` suite scenario with scenario-scoped engines, repository source, and suite metadata.
 - [x] Promote full-family Graph/Az save comparisons into a named `HeavySaveGate` suite so broad save throughput is proven separately from install lifecycle behavior.
+- [x] Promote managed-only full-family Graph/Az warm-cache save experiments into a named `HeavySaveCacheGate` suite so download/source/cache behavior is measured separately from save-capable provider races.
 - [x] Move save benchmark payload roots to short disposable temp paths while keeping CSV/JSON artifacts under the benchmark run directory, so Windows PowerShell 5.1/native-provider comparisons are not distorted by deep repository-backed paths.
 - [x] Move warm managed package-cache roots to short run-scoped temp paths so repeated rows can prove cache reuse even when expanded output roots are deleted after measurement.
 - [x] Measure Graph/Az/Teams/Exchange-heavy scenario presets on PowerShell 5.1 and PowerShell 7+.
@@ -409,6 +410,7 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] 2026-06-29: Save benchmark payload roots now use short disposable temp paths while CSV/JSON artifacts remain in the benchmark run directory. This fixed the Windows PowerShell 5.1 native-provider path failures for full `Microsoft.Graph` 2.38.0 save: managed measured 12863 ms, PSResourceGet 60098 ms, and PowerShellGet 82564 ms, with all three providers succeeding. Managed saved about 1.05 GB across 482 files, recorded 78 package rows, 40 unique package outputs, 80 whole-operation/package-delivery requests, and 186.5 MB downloaded.
 - [x] 2026-06-29: Windows PowerShell 5.1 full `Az` 16.0.0 save after the short-root fix measured managed first at 31864 ms and PowerShellGet at 130163 ms; PSResourceGet still failed after 84214 ms in its own temp extraction path for `Az.MachineLearningServices`. Managed saved about 623 MB across 2789 files, recorded 204 package rows, 103 unique package outputs, 210 whole-operation repository requests, 206 package-delivery requests, and 137.5 MB downloaded. Detail evidence still points the next heavy save optimization question at download/source/cache behavior rather than extraction or promotion.
 - [x] 2026-06-29: Warm managed package caches now use a run-scoped short temp root shared across repeated save/install/update rows and are removed after artifact capture when `-RemoveOutputRoots` is used. A PowerShell 7 repeated warm managed `ThreadJob` 2.1.0 save proof showed iteration 1 downloading 82971 bytes with zero cache hits, then iteration 2 using two cache hits, zero downloaded bytes, and no package-delivery requests.
+- [x] 2026-06-29: `HeavySaveCacheGate` now has managed-only full Graph/Az warm-cache save scenarios with scenario-owned `CacheMode=Warm` and `RepeatCount=2`. Suite summary and optimization-target artifacts now expose first/last managed timing, request, download, and cache-hit fields. The first PowerShell 7 full `Microsoft.Graph` 2.38.0 warm-cache run measured iteration 1 at 3645 ms with 40 package requests, 186.5 MB downloaded, and zero cache hits; iteration 2 measured 1944 ms with zero repository/package requests, zero downloaded bytes, and 40 cache hits.
 
 ### Next Optimization Targets
 
@@ -442,7 +444,9 @@ The benchmark harness is intentionally outside the shipped module. The module ow
 - [x] Promote exact-version Graph.Authentication and Az.Accounts save no-op/force gates into the benchmark suite so heavy core-package save semantics are measured beyond the small `ThreadJob` lane.
 - [x] Run full-family save gates on PowerShell 7 and Windows PowerShell 5.1 for Graph/Az after separating save payload roots from artifact roots.
 - [x] Prove warm managed package cache reuse survives repeated save rows and output-root cleanup.
-- [ ] Add package-source/cache experiments for heavy save rows now that full Graph/Az evidence points at download/source/cache behavior.
+- [x] Add named package-source/cache experiments for heavy save rows now that full Graph/Az evidence points at download/source/cache behavior.
+- [x] Run the named full Graph heavy save cache experiment and record how warm package reuse changes package requests, downloaded bytes, and cache hits.
+- [ ] Run the named full Az heavy save cache experiment and record whether the larger module tree shows the same cache/materialization split.
 
 ### Compatibility Semantics Gates
 

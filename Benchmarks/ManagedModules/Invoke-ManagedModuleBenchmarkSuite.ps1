@@ -50,10 +50,12 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$cacheModeWasBound = $PSBoundParameters.ContainsKey('CacheMode')
+$repeatCountWasBound = $PSBoundParameters.ContainsKey('RepeatCount')
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $compareScript = Join-Path $PSScriptRoot 'Compare-ManagedModuleEngines.ps1'
 $suiteRoot = Join-Path $OutputDirectory ('S{0}-{1}' -f (Get-Date -Format 'yyyyMMddHHmmss'), $PID)
-$validSuites = @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'HeavyLifecycleGate', 'HeavySaveGate', 'PublishGate', 'SpeedGate', 'SaveGate', 'All')
+$validSuites = @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'HeavyLifecycleGate', 'HeavySaveGate', 'HeavySaveCacheGate', 'PublishGate', 'SpeedGate', 'SaveGate', 'All')
 $validHosts = @('Current', 'PowerShell7', 'WindowsPowerShell')
 
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.PerformanceGate.ps1')
@@ -104,7 +106,10 @@ function New-BenchmarkScenario {
         [string] $RepositoryName = '',
         [string] $ScenarioModuleFastSource = '',
         [int] $ScenarioManagedMaxRank = 0,
-        [double] $ScenarioManagedMaxVsFastest = 0
+        [double] $ScenarioManagedMaxVsFastest = 0,
+        [ValidateSet('', 'Default', 'Cold', 'Warm')]
+        [string] $ScenarioCacheMode = '',
+        [int] $ScenarioRepeatCount = 0
     )
 
     [pscustomobject]@{
@@ -121,6 +126,8 @@ function New-BenchmarkScenario {
         ModuleFastSource = $ScenarioModuleFastSource
         ManagedMaxRank = $ScenarioManagedMaxRank
         ManagedMaxVsFastest = $ScenarioManagedMaxVsFastest
+        CacheMode = $ScenarioCacheMode
+        RepeatCount = $ScenarioRepeatCount
     }
 }
 
@@ -144,6 +151,8 @@ function Get-ScenarioCatalog {
         New-BenchmarkScenario -SuiteName 'HeavyLifecycleGate' -Name 'Az.Full.InstallExact.NoOpForce' -ModuleName 'Az' -Version '16.0.0' -AcceptLicense $true -Operations @('InstallNoOp', 'InstallForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet') -Repository 'https://pwsh.gallery/index.json' -RepositoryName 'PWSHGallery' -ScenarioModuleFastSource 'https://pwsh.gallery/index.json' -ScenarioManagedMaxRank 1
         New-BenchmarkScenario -SuiteName 'HeavySaveGate' -Name 'Graph.Full.Save' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Save') -Engines @('Managed', 'PSResourceGet', 'PowerShellGet') -ScenarioManagedMaxRank 1
         New-BenchmarkScenario -SuiteName 'HeavySaveGate' -Name 'Az.Full.Save' -ModuleName 'Az' -Version '16.0.0' -AcceptLicense $true -Operations @('Save') -Engines @('Managed', 'PSResourceGet', 'PowerShellGet') -ScenarioManagedMaxRank 1
+        New-BenchmarkScenario -SuiteName 'HeavySaveCacheGate' -Name 'Graph.Full.Save.ManagedWarmCache' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Save') -Engines @('Managed') -ScenarioCacheMode 'Warm' -ScenarioRepeatCount 2
+        New-BenchmarkScenario -SuiteName 'HeavySaveCacheGate' -Name 'Az.Full.Save.ManagedWarmCache' -ModuleName 'Az' -Version '16.0.0' -AcceptLicense $true -Operations @('Save') -Engines @('Managed') -ScenarioCacheMode 'Warm' -ScenarioRepeatCount 2
         New-BenchmarkScenario -SuiteName 'PublishGate' -Name 'Synthetic.Publish.LocalFeed' -ModuleName 'Company.ManagedPublishBenchmark' -Version '1.0.0' -Operations @('Publish') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
         New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Graph.Full.SameSource' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast') -Repository 'https://pwsh.gallery/index.json' -RepositoryName 'PWSHGallery' -ScenarioModuleFastSource 'https://pwsh.gallery/index.json' -ScenarioManagedMaxRank 1
         New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Graph.Full.ProviderMatrix' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
@@ -155,7 +164,7 @@ function Get-ScenarioCatalog {
 
 function Resolve-ScenarioList {
     $selectedSuites = if ($Suite -contains 'All') {
-        @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'HeavyLifecycleGate', 'HeavySaveGate', 'PublishGate', 'SpeedGate', 'SaveGate')
+        @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'HeavyLifecycleGate', 'HeavySaveGate', 'HeavySaveCacheGate', 'PublishGate', 'SpeedGate', 'SaveGate')
     } else {
         $Suite
     }
@@ -316,6 +325,32 @@ function Get-EffectiveManagedMaxVsFastest {
     0.0
 }
 
+function Get-EffectiveCacheMode {
+    param([object] $Scenario)
+
+    if ($cacheModeWasBound) {
+        return $CacheMode
+    }
+    if ($Scenario.PSObject.Properties['CacheMode'] -and -not [string]::IsNullOrWhiteSpace([string]$Scenario.CacheMode)) {
+        return [string]$Scenario.CacheMode
+    }
+
+    $CacheMode
+}
+
+function Get-EffectiveRepeatCount {
+    param([object] $Scenario)
+
+    if ($repeatCountWasBound) {
+        return $RepeatCount
+    }
+    if ($Scenario.PSObject.Properties['RepeatCount'] -and [int]$Scenario.RepeatCount -gt 0) {
+        return [int]$Scenario.RepeatCount
+    }
+
+    $RepeatCount
+}
+
 function Get-HostOutputLabel {
     param([string] $HostLabel)
 
@@ -347,6 +382,8 @@ function Invoke-ScenarioHostRun {
 
     $scenarioRoot = Join-Path $suiteRoot ('{0}\{1}' -f (Get-HostOutputLabel -HostLabel $HostLabel), (Get-ScenarioOutputLabel -Scenario $Scenario))
     New-Item -Path $scenarioRoot -ItemType Directory -Force | Out-Null
+    $scenarioCacheMode = Get-EffectiveCacheMode -Scenario $Scenario
+    $scenarioRepeatCount = Get-EffectiveRepeatCount -Scenario $Scenario
 
     $arguments = @(
         '-NoLogo',
@@ -364,7 +401,7 @@ function Invoke-ScenarioHostRun {
         '-ModuleFastSource',
         (Get-ScenarioModuleFastSource -Scenario $Scenario),
         '-RepeatCount',
-        ([string]$RepeatCount),
+        ([string]$scenarioRepeatCount),
         '-SetupRetryCount',
         ([string]$SetupRetryCount),
         '-OutputDirectory',
@@ -372,7 +409,7 @@ function Invoke-ScenarioHostRun {
         '-Configuration',
         $Configuration,
         '-CacheMode',
-        $CacheMode,
+        $scenarioCacheMode,
         '-SkipBuild'
     )
     $scenarioRepository = Get-ScenarioRepository -Scenario $Scenario
@@ -467,6 +504,8 @@ function Add-SummaryRows {
                 Repository = Get-ScenarioRepository -Scenario $Scenario
                 RepositoryName = Get-ScenarioRepositoryName -Scenario $Scenario
                 ModuleFastSource = Get-ScenarioModuleFastSource -Scenario $Scenario
+                CacheMode = Get-EffectiveCacheMode -Scenario $Scenario
+                RepeatCount = Get-EffectiveRepeatCount -Scenario $Scenario
                 GateManagedMaxRank = Get-EffectiveManagedMaxRank -Scenario $Scenario
                 GateManagedMaxVsFastest = Get-EffectiveManagedMaxVsFastest -Scenario $Scenario
                 UpdateBaselineVersion = $resolvedBaseline
@@ -478,6 +517,10 @@ function Add-SummaryRows {
                 ManagedMs = $row.ManagedMs
                 ManagedRank = $row.ManagedRank
                 ManagedVsFastest = $row.ManagedVsFastest
+                ManagedFirstIteration = $row.ManagedFirstIteration
+                ManagedLastIteration = $row.ManagedLastIteration
+                ManagedFirstMs = $row.ManagedFirstMs
+                ManagedLastMs = $row.ManagedLastMs
                 ManagedPackageCount = $row.ManagedPackageCount
                 ManagedDependencyCount = $row.ManagedDependencyCount
                 ManagedUniquePackageCount = $row.ManagedUniquePackageCount
@@ -491,6 +534,14 @@ function Add-SummaryRows {
                 ManagedPackageRepositoryRedirects = $row.ManagedPackageRepositoryRedirects
                 ManagedDownloadBytes = $row.ManagedDownloadBytes
                 ManagedCacheHits = $row.ManagedCacheHits
+                ManagedFirstRepositoryRequests = $row.ManagedFirstRepositoryRequests
+                ManagedLastRepositoryRequests = $row.ManagedLastRepositoryRequests
+                ManagedFirstPackageRepositoryRequests = $row.ManagedFirstPackageRepositoryRequests
+                ManagedLastPackageRepositoryRequests = $row.ManagedLastPackageRepositoryRequests
+                ManagedFirstDownloadBytes = $row.ManagedFirstDownloadBytes
+                ManagedLastDownloadBytes = $row.ManagedLastDownloadBytes
+                ManagedFirstCacheHits = $row.ManagedFirstCacheHits
+                ManagedLastCacheHits = $row.ManagedLastCacheHits
                 ManagedMaintenanceActions = $row.ManagedMaintenanceActions
                 ManagedMaintenanceFindings = $row.ManagedMaintenanceFindings
                 ManagedRootDependencyMs = $row.ManagedRootDependencyMs
@@ -507,7 +558,7 @@ $Suite = Resolve-TokenList -Value $Suite -Allowed $validSuites -Label 'suite'
 $HostName = Resolve-TokenList -Value $HostName -Allowed $validHosts -Label 'host'
 $scenarios = Resolve-ScenarioList
 if ($ListScenarios.IsPresent) {
-    $scenarios | Select-Object Suite, Name, ModuleName, Version, UpdateBaselineVersion, AcceptLicense, Operations, Engines, Repository, RepositoryName, ModuleFastSource, ManagedMaxRank, ManagedMaxVsFastest
+    $scenarios | Select-Object Suite, Name, ModuleName, Version, UpdateBaselineVersion, AcceptLicense, Operations, Engines, Repository, RepositoryName, ModuleFastSource, CacheMode, RepeatCount, ManagedMaxRank, ManagedMaxVsFastest
     return
 }
 
@@ -582,6 +633,8 @@ $metadata = [ordered]@{
                 Repository = Get-ScenarioRepository -Scenario $_
                 RepositoryName = Get-ScenarioRepositoryName -Scenario $_
                 ModuleFastSource = Get-ScenarioModuleFastSource -Scenario $_
+                CacheMode = Get-EffectiveCacheMode -Scenario $_
+                RepeatCount = Get-EffectiveRepeatCount -Scenario $_
                 ManagedMaxRank = Get-ScenarioManagedMaxRank -Scenario $_
                 ManagedMaxVsFastest = Get-ScenarioManagedMaxVsFastest -Scenario $_
                 EffectiveManagedMaxRank = Get-EffectiveManagedMaxRank -Scenario $_
