@@ -155,6 +155,59 @@ public sealed class RepairManagedModuleCommandTests
         Assert.Empty(result.Apply.ExecutionResults);
     }
 
+    [Fact]
+    public void RepairManagedModule_ForceDoesNotApplyCleanupRemoval()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var oldPath = CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var currentPath = CreateInstalledModule(moduleRoot.Path, "Company.Tools", "2.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("Name", new[] { "Company.Tools" })
+            .AddParameter("Cleanup", "OldVersions")
+            .AddParameter("Force");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.False(result.Apply.CanApply);
+        Assert.Contains("cleanup actions", result.Apply.BlockedReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(result.Apply.Commands);
+        Assert.False(result.Apply.ExecutionRequested);
+        Assert.Empty(result.Apply.ExecutionResults);
+        Assert.True(Directory.Exists(oldPath));
+        Assert.True(Directory.Exists(currentPath));
+    }
+
+    [Fact]
+    public void RepairManagedModule_ForceDoesNotApproveExplicitDowngradePolicy()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "2.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("Name", new[] { "Company.Tools" })
+            .AddParameter("Version", "1.0.0")
+            .AddParameter("Repository", "LocalFeed")
+            .AddParameter("Force")
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var finding = Assert.Single(result.Plan.Findings, static finding =>
+            string.Equals(finding.Code, "ModuleState.DowngradeRequiresCleanup", StringComparison.Ordinal));
+        Assert.Equal(ModuleStateConflictSeverity.Error.ToString(), finding.Severity);
+        Assert.False(result.Apply.CanApply);
+        Assert.Contains("error findings", result.Apply.BlockedReason, StringComparison.OrdinalIgnoreCase);
+        Assert.False(result.Apply.ExecutionRequested);
+        Assert.Empty(result.Apply.ExecutionResults);
+    }
+
     private static string CreateInstalledModule(string moduleRoot, string name, string version)
     {
         var modulePath = Path.Combine(moduleRoot, name, version);
