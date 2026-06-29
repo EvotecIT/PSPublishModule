@@ -35,4 +35,39 @@ public sealed class ManagedModuleInstallContextTests
 
         Assert.Equal(new[] { "1.0.0" }, versions);
     }
+
+    [Fact]
+    public async Task DependencyVersionSelectionCache_IsSharedAcrossBranchesAndRetriesFailures()
+    {
+        var context = new ManagedModuleInstallContext();
+        var branch = context.CreateBranch();
+        var attempts = 0;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => context.GetOrAddDependencyVersionSelection(
+            "repository|Company.Core|[1.0.0,2.0.0)",
+            () =>
+            {
+                attempts++;
+                throw new InvalidOperationException("Temporary version lookup failure.");
+            }));
+
+        var selected = await context.GetOrAddDependencyVersionSelection(
+            "repository|Company.Core|[1.0.0,2.0.0)",
+            () =>
+            {
+                attempts++;
+                return Task.FromResult("1.2.0");
+            });
+        var branchSelected = await branch.GetOrAddDependencyVersionSelection(
+            "repository|Company.Core|[1.0.0,2.0.0)",
+            () =>
+            {
+                attempts++;
+                return Task.FromResult("1.3.0");
+            });
+
+        Assert.Equal("1.2.0", selected);
+        Assert.Equal("1.2.0", branchSelected);
+        Assert.Equal(2, attempts);
+    }
 }

@@ -135,6 +135,7 @@ public sealed partial class ManagedModuleInstallService
             request,
             dependency.Id,
             range,
+            context,
             cancellationToken).ConfigureAwait(false);
         dependencyVersionStopwatch.Stop();
 
@@ -230,12 +231,46 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleInstallRequest request,
         string dependencyName,
         ManagedModuleVersionRange range,
+        ManagedModuleInstallContext context,
         CancellationToken cancellationToken)
     {
         if (range.ExactVersion is not null)
             return range.ExactVersion;
 
         var includePrerelease = request.IncludePrerelease || range.AllowsPrerelease;
+        var cacheKey = TryCreateDependencyVersionSelectionKey(
+            request,
+            dependencyName,
+            range,
+            includePrerelease,
+            cancellationToken);
+        if (cacheKey is not null)
+        {
+            return await context.GetOrAddDependencyVersionSelection(
+                cacheKey,
+                () => ResolveDependencyVersionUncachedAsync(
+                    request,
+                    dependencyName,
+                    range,
+                    includePrerelease,
+                    cancellationToken)).ConfigureAwait(false);
+        }
+
+        return await ResolveDependencyVersionUncachedAsync(
+            request,
+            dependencyName,
+            range,
+            includePrerelease,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<string> ResolveDependencyVersionUncachedAsync(
+        ManagedModuleInstallRequest request,
+        string dependencyName,
+        ManagedModuleVersionRange range,
+        bool includePrerelease,
+        CancellationToken cancellationToken)
+    {
         if (range.IsUnbounded)
         {
             var latestVersion = await _repositoryClient.GetLatestVersionAsync(
@@ -264,6 +299,35 @@ public sealed partial class ManagedModuleInstallService
             throw new InvalidOperationException($"No dependency version of '{dependencyName}' satisfies range '{range}' in repository '{request.Repository.Name}'.");
 
         return selected.Version;
+    }
+
+    private static string? TryCreateDependencyVersionSelectionKey(
+        ManagedModuleInstallRequest request,
+        string dependencyName,
+        ManagedModuleVersionRange range,
+        bool includePrerelease,
+        CancellationToken cancellationToken)
+    {
+        if (request.Credential is not null || cancellationToken.CanBeCanceled)
+            return null;
+
+        return string.Join(
+            "|",
+            "dependency-version",
+            request.Repository.Kind.ToString(),
+            NormalizeDependencyVersionCacheValue(request.Repository.Source),
+            NormalizeDependencyVersionCacheValue(dependencyName),
+            range.ToString(),
+            includePrerelease ? "pre" : "stable");
+    }
+
+    private static string NormalizeDependencyVersionCacheValue(string value)
+    {
+        var trimmed = value.Trim().Trim('"');
+        if (Path.IsPathRooted(trimmed))
+            return Path.GetFullPath(trimmed).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        return trimmed.TrimEnd('/', '\\');
     }
 
     private static IEnumerable<ManagedModuleDependencyInfo> SelectDependencies(ManagedModulePackageMetadata? metadata)
