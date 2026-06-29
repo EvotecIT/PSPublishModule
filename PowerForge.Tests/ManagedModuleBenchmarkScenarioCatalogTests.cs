@@ -20,15 +20,18 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast" }));
         Assert.Contains(rows, row =>
             Property(row, "Name") == "Graph.Full.ProviderMatrix" &&
+            Property(row, "ModuleFastSource") == "ProviderDefault" &&
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }));
         Assert.Contains(rows, row =>
             Property(row, "Name") == "Az.Accounts.ProviderMatrix" &&
             Property(row, "Version") == "5.5.0" &&
+            Property(row, "ModuleFastSource") == "ProviderDefault" &&
             BooleanProperty(row, "AcceptLicense") &&
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }));
         Assert.Contains(rows, row =>
             Property(row, "Name") == "Az.Full.ProviderMatrix" &&
             Property(row, "Version") == "16.0.0" &&
+            Property(row, "ModuleFastSource") == "ProviderDefault" &&
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }));
         Assert.Contains(rows, row =>
             Property(row, "Suite") == "HeavySaveCacheGate" &&

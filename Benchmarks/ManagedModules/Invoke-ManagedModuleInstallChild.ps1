@@ -157,11 +157,13 @@ switch ($EngineName) {
         $parameters = @{
             Specification = $specification
             Destination = $Destination
-            Source = $ModuleFastSource
             DestinationOnly = $true
             NoPSModulePathUpdate = $true
             NoProfileUpdate = $true
             PassThru = $true
+        }
+        if (-not [string]::IsNullOrWhiteSpace($ModuleFastSource)) {
+            $parameters.Source = $ModuleFastSource
         }
         if ($Force.IsPresent) {
             $parameters.Update = $true
