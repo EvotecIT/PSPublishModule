@@ -331,32 +331,35 @@ Repair-ManagedModule -Latest -Repository PSGallery -Plan -ShowSummary
 Repair-ManagedModule -Latest -Repository PSGallery -ShowSummary
 ```
 
-Benchmarking stays outside the shipped module surface. The suite runs from
-[Benchmarks/ManagedModules](Benchmarks/ManagedModules) and compares the managed
-engine against equivalent provider commands on PowerShell 7 and Windows
-PowerShell 5.1. The public gate is intentionally small: ThreadJob as the
-single-module baseline, Microsoft.Graph.Authentication and Az.Accounts as
-single-family dependency cases, and full Microsoft.Graph/Az as multi-module
-families. Repair planning is validated separately because ModuleFast,
-PSResourceGet, and PowerShellGet do not expose an equivalent estate-repair
-planner.
+Benchmarking stays outside the shipped module surface. The public benchmark is
+a small command-measurement script in
+[Benchmarks/ManagedModules](Benchmarks/ManagedModules), not a benchmark
+framework. It measures `Find`, `Install`, and `Save` for ThreadJob,
+Microsoft.Graph.Authentication, Microsoft.Graph, Az.Accounts, and Az against
+Managed, ModuleFast, PSResourceGet, and PowerShellGet where those providers have
+an equivalent command. Repair is not part of the table because the other
+providers do not expose an equivalent module-estate repair command.
 
-In the result table, Managed is the `1.00x` baseline for each row. Other values
-show how many times slower that engine was for the same scenario, with measured
-time in parentheses.
+In the result table, Managed is the `1.00x` baseline for each completed row.
+Other values show how many times slower that engine was for the same scenario,
+with measured time in parentheses.
 
 <!-- managed-module-benchmark-table:start -->
-Run `PublicComparisonGate` and refresh this block before publishing benchmark
-claims. The gate writes a small find/install/save/update table for ThreadJob,
-Microsoft.Graph.Authentication, Microsoft.Graph, Az.Accounts, and Az.
+Run `Measure-ManagedModuleBenchmark.ps1`, then refresh this block with
+`Update-ManagedModuleBenchmarkReadme.ps1` before publishing benchmark claims.
 <!-- managed-module-benchmark-table:end -->
 
-Generate the table from retained `suite-scoreboard.csv` artifacts with
-`Benchmarks/ManagedModules/Export-ManagedModuleBenchmarkReadmeTable.ps1`.
-Use `-PublicComparison -LatestPerScenario -SplitByOperation -ReadmePath
-.\README.MD` when refreshing this README. Keep public rows tied to
-`PublicComparisonGate`; use the other gates for contributor diagnostics,
-security proof, publish proof, repair planning, and optimization work.
+Refresh the table with:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Measure-ManagedModuleBenchmark.ps1 -RepeatCount 1
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Measure-ManagedModuleBenchmark.ps1 -RepeatCount 1 -Append
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Update-ManagedModuleBenchmarkReadme.ps1 -ResultPath .\Ignore\Benchmarks\ManagedModules\managed-module-benchmark.csv
+```
+
+Native `Install-Module` and `Install-PSResource` install into the user module
+location. Include those install rows only in a disposable benchmark profile or
+VM by passing `-AllowUserProfileInstall`.
 
 See [Docs/PSPublishModule.ManagedModules.Compatibility.md](Docs/PSPublishModule.ManagedModules.Compatibility.md)
 for the switching matrix, [Docs/PSPublishModule.ManagedModules.Roadmap.md](Docs/PSPublishModule.ManagedModules.Roadmap.md)
