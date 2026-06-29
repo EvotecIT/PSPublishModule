@@ -50,6 +50,10 @@ Native `Install-Module` and `Install-PSResource` install into the user module
 location. To include those install rows, run in a disposable profile or VM and
 pass `-AllowUserProfileInstall`.
 
+Windows PowerShell 5.1 uses short root-level run and temp folders by default
+because deep packages such as `Az.MachineLearningServices` can still hit legacy
+path limits when extracted under a long repository worktree path.
+
 Update the root README marker block:
 
 ```powershell

@@ -382,8 +382,38 @@ dependency that the official Gallery resolves, the ModuleFast row should be
 treated as a source/index miss rather than a managed engine failure.
 
 <!-- managed-module-benchmark-table:start -->
-Run `Measure-ManagedModuleBenchmark.ps1`, then refresh this block with
-`Update-ManagedModuleBenchmarkReadme.ps1` before publishing benchmark claims.
+| Scenario | Host | Operation | Managed | ModuleFast | PSResourceGet | PowerShellGet | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Az.Accounts | PowerShell 7 | Find | 1.00x (0.34s) | NotEquivalent | 0.91x (0.31s) | 1.71x (0.58s) | Managed slower than PSResourceGet |
+| Az.Accounts | PowerShell 7 | Install | 1.00x (0.58s) | 2.00x (1.15s) | 2.80x (1.61s) | 10.08x (5.80s) | Managed fastest |
+| Az.Accounts | PowerShell 7 | Save | 1.00x (0.63s) | NotEquivalent | 2.62x (1.66s) | 7.11x (4.51s) | Managed fastest |
+| Az.Accounts | Windows PowerShell 5.1 | Find | 1.00x (0.37s) | NotEquivalent | 1.23x (0.45s) | 2.31x (0.85s) | Managed fastest |
+| Az.Accounts | Windows PowerShell 5.1 | Install | 1.00x (0.77s) | NotAvailable | 2.61x (2.00s) | 7.64x (5.84s) | Managed fastest |
+| Az.Accounts | Windows PowerShell 5.1 | Save | 1.00x (0.73s) | NotEquivalent | 3.23x (2.35s) | 4.73x (3.44s) | Managed fastest |
+| Az | PowerShell 7 | Find | 1.00x (0.27s) | NotEquivalent | 1.35x (0.37s) | 2.81x (0.76s) | Managed fastest |
+| Az | PowerShell 7 | Install | 1.00x (12.31s) | Failed | 11.21x (137.93s) | 12.46x (153.34s) | Managed fastest |
+| Az | PowerShell 7 | Save | 1.00x (8.89s) | NotEquivalent | 16.54x (146.98s) | 12.70x (112.89s) | Managed fastest |
+| Az | Windows PowerShell 5.1 | Find | 1.00x (0.44s) | NotEquivalent | 1.89x (0.82s) | 9.79x (4.27s) | Managed fastest |
+| Az | Windows PowerShell 5.1 | Install | 1.00x (14.78s) | NotAvailable | 10.29x (152.18s) | 8.89x (131.37s) | Managed fastest |
+| Az | Windows PowerShell 5.1 | Save | 1.00x (8.47s) | NotEquivalent | 17.41x (147.58s) | 16.92x (143.37s) | Managed fastest |
+| Graph.Authentication | PowerShell 7 | Find | 1.00x (0.25s) | NotEquivalent | 1.28x (0.32s) | 2.35x (0.58s) | Managed fastest |
+| Graph.Authentication | PowerShell 7 | Install | 1.00x (0.46s) | 1.53x (0.70s) | 3.00x (1.37s) | 9.92x (4.54s) | Managed fastest |
+| Graph.Authentication | PowerShell 7 | Save | 1.00x (0.43s) | NotEquivalent | 3.79x (1.62s) | 7.89x (3.37s) | Managed fastest |
+| Graph.Authentication | Windows PowerShell 5.1 | Find | 1.00x (0.25s) | NotEquivalent | 1.28x (0.32s) | 3.15x (0.78s) | Managed fastest |
+| Graph.Authentication | Windows PowerShell 5.1 | Install | 1.00x (0.73s) | NotAvailable | 2.14x (1.57s) | 6.14x (4.50s) | Managed fastest |
+| Graph.Authentication | Windows PowerShell 5.1 | Save | 1.00x (0.68s) | NotEquivalent | 2.17x (1.47s) | 3.64x (2.47s) | Managed fastest |
+| Graph | PowerShell 7 | Find | 1.00x (0.36s) | NotEquivalent | 1.01x (0.37s) | 2.29x (0.83s) | Managed fastest |
+| Graph | PowerShell 7 | Install | 1.00x (9.17s) | 0.57x (5.22s) | 18.96x (173.93s) | 9.60x (88.03s) | Managed slower than ModuleFast |
+| Graph | PowerShell 7 | Save | 1.00x (6.93s) | NotEquivalent | 8.92x (61.79s) | 9.88x (68.47s) | Managed fastest |
+| Graph | Windows PowerShell 5.1 | Find | 1.00x (0.23s) | NotEquivalent | 1.30x (0.29s) | 5.08x (1.14s) | Managed fastest |
+| Graph | Windows PowerShell 5.1 | Install | 1.00x (6.10s) | NotAvailable | 9.01x (54.98s) | 12.91x (78.79s) | Managed fastest |
+| Graph | Windows PowerShell 5.1 | Save | 1.00x (5.16s) | NotEquivalent | 11.42x (58.96s) | 15.39x (79.45s) | Managed fastest |
+| PSScriptAnalyzer | PowerShell 7 | Find | 1.00x (0.48s) | NotEquivalent | 1.09x (0.53s) | 7.32x (3.53s) | Managed fastest |
+| PSScriptAnalyzer | PowerShell 7 | Install | 1.00x (1.52s) | 1.59x (2.43s) | 1.83x (2.78s) | 5.39x (8.21s) | Managed fastest |
+| PSScriptAnalyzer | PowerShell 7 | Save | 1.00x (0.90s) | NotEquivalent | 2.53x (2.29s) | 4.20x (3.79s) | Managed fastest |
+| PSScriptAnalyzer | Windows PowerShell 5.1 | Find | 1.00x (0.35s) | NotEquivalent | 2.91x (1.01s) | 7.29x (2.52s) | Managed fastest |
+| PSScriptAnalyzer | Windows PowerShell 5.1 | Install | 1.00x (1.37s) | NotAvailable | 1.68x (2.30s) | 4.28x (5.87s) | Managed fastest |
+| PSScriptAnalyzer | Windows PowerShell 5.1 | Save | 1.00x (0.98s) | NotEquivalent | 2.60x (2.55s) | 3.69x (3.62s) | Managed fastest |
 <!-- managed-module-benchmark-table:end -->
 
 Refresh the table with:

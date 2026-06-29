@@ -18,9 +18,9 @@ param(
 
     [string] $ModuleFastSource = 'https://pwsh.gallery/index.json',
 
-    [string] $OutputPath = (Join-Path $PSScriptRoot '..\..\Ignore\Benchmarks\ManagedModules\managed-module-benchmark.csv'),
+    [string] $OutputPath = '',
 
-    [string] $OutputRoot = (Join-Path $PSScriptRoot '..\..\Ignore\Benchmarks\ManagedModules\Runs'),
+    [string] $OutputRoot = '',
 
     [string] $ManagedModuleBinary = '',
 
@@ -35,6 +35,31 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+$script:BenchmarkScriptRoot = if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+    $PSScriptRoot
+} elseif ($MyInvocation.MyCommand.Path) {
+    Split-Path -Parent $MyInvocation.MyCommand.Path
+} else {
+    Get-Location
+}
+
+if ([string]::IsNullOrWhiteSpace($OutputPath)) {
+    $OutputPath = Join-Path $script:BenchmarkScriptRoot '..\..\Ignore\Benchmarks\ManagedModules\managed-module-benchmark.csv'
+}
+
+if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
+    if ($PSVersionTable.PSEdition -eq 'Desktop') {
+        $driveRoot = [System.IO.Path]::GetPathRoot([System.IO.Path]::GetTempPath())
+        if ([string]::IsNullOrWhiteSpace($driveRoot)) {
+            $OutputRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'PFMMB'
+        } else {
+            $OutputRoot = Join-Path $driveRoot 'PFMMB'
+        }
+    } else {
+        $OutputRoot = Join-Path $script:BenchmarkScriptRoot '..\..\Ignore\Benchmarks\ManagedModules\Runs'
+    }
+}
 
 function Get-BenchmarkScenarios {
     @(
@@ -64,7 +89,7 @@ function Resolve-ManagedModuleBinary {
     }
 
     $target = if ($PSVersionTable.PSEdition -eq 'Desktop') { 'net472' } else { 'net10.0' }
-    $candidate = Join-Path $PSScriptRoot "..\..\PSPublishModule\bin\Release\$target\PSPublishModule.dll"
+    $candidate = Join-Path $script:BenchmarkScriptRoot "..\..\PSPublishModule\bin\Release\$target\PSPublishModule.dll"
     if (Test-Path -LiteralPath $candidate) {
         return (Resolve-Path -LiteralPath $candidate).Path
     }
@@ -328,6 +353,17 @@ if ($selectedScenarios.Count -eq 0) {
 
 New-Item -ItemType Directory -Path (Split-Path -Parent $OutputPath) -Force | Out-Null
 New-Item -ItemType Directory -Path $OutputRoot -Force | Out-Null
+if ($PSVersionTable.PSEdition -eq 'Desktop') {
+    $driveRoot = [System.IO.Path]::GetPathRoot([System.IO.Path]::GetTempPath())
+    $shortTempRoot = if ([string]::IsNullOrWhiteSpace($driveRoot)) {
+        Join-Path ([System.IO.Path]::GetTempPath()) 'PFMMT'
+    } else {
+        Join-Path $driveRoot 'PFMMT'
+    }
+    New-Item -ItemType Directory -Path $shortTempRoot -Force | Out-Null
+    $env:TEMP = $shortTempRoot
+    $env:TMP = $shortTempRoot
+}
 
 $results = [System.Collections.Generic.List[object]]::new()
 foreach ($scenario in $selectedScenarios) {
