@@ -52,6 +52,7 @@ $ErrorActionPreference = 'Stop'
 
 $cacheModeWasBound = $PSBoundParameters.ContainsKey('CacheMode')
 $repeatCountWasBound = $PSBoundParameters.ContainsKey('RepeatCount')
+$providerDefaultModuleFastSource = 'ProviderDefault'
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $compareScript = Join-Path $PSScriptRoot 'Compare-ManagedModuleEngines.ps1'
 $suiteRoot = Join-Path $OutputDirectory ('S{0}-{1}' -f (Get-Date -Format 'yyyyMMddHHmmss'), $PID)
@@ -155,9 +156,9 @@ function Get-ScenarioCatalog {
         New-BenchmarkScenario -SuiteName 'HeavySaveCacheGate' -Name 'Az.Full.Save.ManagedWarmCache' -ModuleName 'Az' -Version '16.0.0' -AcceptLicense $true -Operations @('Save') -Engines @('Managed') -ScenarioCacheMode 'Warm' -ScenarioRepeatCount 2
         New-BenchmarkScenario -SuiteName 'PublishGate' -Name 'Synthetic.Publish.LocalFeed' -ModuleName 'Company.ManagedPublishBenchmark' -Version '1.0.0' -Operations @('Publish') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
         New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Graph.Full.SameSource' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast') -Repository 'https://pwsh.gallery/index.json' -RepositoryName 'PWSHGallery' -ScenarioModuleFastSource 'https://pwsh.gallery/index.json' -ScenarioManagedMaxRank 1
-        New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Graph.Full.ProviderMatrix' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
-        New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Az.Accounts.ProviderMatrix' -ModuleName 'Az.Accounts' -Version '5.5.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
-        New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Az.Full.ProviderMatrix' -ModuleName 'Az' -Version '16.0.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
+        New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Graph.Full.ProviderMatrix' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet') -ScenarioModuleFastSource $providerDefaultModuleFastSource
+        New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Az.Accounts.ProviderMatrix' -ModuleName 'Az.Accounts' -Version '5.5.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet') -ScenarioModuleFastSource $providerDefaultModuleFastSource
+        New-BenchmarkScenario -SuiteName 'SpeedGate' -Name 'Az.Full.ProviderMatrix' -ModuleName 'Az' -Version '16.0.0' -AcceptLicense $true -Operations @('Install') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet') -ScenarioModuleFastSource $providerDefaultModuleFastSource
         New-BenchmarkScenario -SuiteName 'SaveGate' -Name 'Graph.Authentication.Save' -ModuleName 'Microsoft.Graph.Authentication' -AcceptLicense $true -Operations @('Save') -Engines @('Managed', 'PSResourceGet') -ScenarioManagedMaxRank 1
     )
 }
@@ -270,6 +271,20 @@ function Get-ScenarioRepositoryName {
 }
 
 function Get-ScenarioModuleFastSource {
+    param([object] $Scenario)
+
+    if ($Scenario.PSObject.Properties['ModuleFastSource'] -and -not [string]::IsNullOrWhiteSpace($Scenario.ModuleFastSource)) {
+        if ([string]::Equals([string]$Scenario.ModuleFastSource, $providerDefaultModuleFastSource, [StringComparison]::OrdinalIgnoreCase)) {
+            return ''
+        }
+
+        return [string]$Scenario.ModuleFastSource
+    }
+
+    $ModuleFastSource
+}
+
+function Get-ScenarioModuleFastSourceLabel {
     param([object] $Scenario)
 
     if ($Scenario.PSObject.Properties['ModuleFastSource'] -and -not [string]::IsNullOrWhiteSpace($Scenario.ModuleFastSource)) {
@@ -503,7 +518,7 @@ function Add-SummaryRows {
                 Engines = (Get-ScenarioEngines -Scenario $Scenario) -join ','
                 Repository = Get-ScenarioRepository -Scenario $Scenario
                 RepositoryName = Get-ScenarioRepositoryName -Scenario $Scenario
-                ModuleFastSource = Get-ScenarioModuleFastSource -Scenario $Scenario
+                ModuleFastSource = Get-ScenarioModuleFastSourceLabel -Scenario $Scenario
                 CacheMode = Get-EffectiveCacheMode -Scenario $Scenario
                 RepeatCount = Get-EffectiveRepeatCount -Scenario $Scenario
                 GateManagedMaxRank = Get-EffectiveManagedMaxRank -Scenario $Scenario
@@ -635,7 +650,7 @@ $metadata = [ordered]@{
                 Engines = @(Get-ScenarioEngines -Scenario $_)
                 Repository = Get-ScenarioRepository -Scenario $_
                 RepositoryName = Get-ScenarioRepositoryName -Scenario $_
-                ModuleFastSource = Get-ScenarioModuleFastSource -Scenario $_
+                ModuleFastSource = Get-ScenarioModuleFastSourceLabel -Scenario $_
                 CacheMode = Get-EffectiveCacheMode -Scenario $_
                 RepeatCount = Get-EffectiveRepeatCount -Scenario $_
                 ManagedMaxRank = Get-ScenarioManagedMaxRank -Scenario $_

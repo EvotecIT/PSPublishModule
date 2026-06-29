@@ -171,13 +171,17 @@ function Invoke-IsolatedInstallHost {
         $repositorySource
         '-RepositoryName'
         $RepositoryName
-        '-ModuleFastSource'
-        $ModuleFastSource
         '-Destination'
         $Destination
         '-ModuleBinary'
         (Resolve-ModuleBinary)
     )
+    if (-not [string]::IsNullOrWhiteSpace($ModuleFastSource)) {
+        $arguments += @(
+            '-ModuleFastSource'
+            $ModuleFastSource
+        )
+    }
     if (-not [string]::IsNullOrWhiteSpace($PackageCacheDirectory)) {
         $arguments += @(
             '-PackageCacheDirectory'
