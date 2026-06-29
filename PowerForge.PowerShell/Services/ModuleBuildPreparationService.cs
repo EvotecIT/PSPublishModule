@@ -370,7 +370,7 @@ internal sealed class ModuleBuildPreparationService
         {
             var basePath = request.ResolvePath!(request.InputPath!);
             var fullProjectPath = Path.Combine(basePath, moduleName);
-            return (fullProjectPath, basePath, fullProjectPath);
+            return (fullProjectPath, basePath, basePath);
         }
 
         var rootToUse = !string.IsNullOrWhiteSpace(request.ScriptRoot)
@@ -628,19 +628,10 @@ internal sealed class ModuleBuildPreparationService
                 continue;
 
             if (!string.IsNullOrWhiteSpace(requiredFirstSegment) && !StartsWithPathSegment(mapping.Source, requiredFirstSegment!))
-            {
-                if (string.IsNullOrWhiteSpace(projectRoot) || IsModuleRelativeCopySource(mapping.Source))
-                    continue;
-            }
+                continue;
 
             mapping.Source = PathValueResolver.Resolve(rootPath, mapping.Source);
         }
-    }
-
-    private static bool IsModuleRelativeCopySource(string path)
-    {
-        var firstSegment = GetFirstPathSegment(path);
-        return string.Equals(firstSegment, "Examples", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool StartsWithPathSegment(string path, string segment)
@@ -790,9 +781,9 @@ internal sealed class ModuleBuildPreparationService
             cfg.ReleaseZipOutputPath = MakeRelativeForProjectRoot(projectRoot, cfg.ReleaseZipOutputPath);
             cfg.StagingPath = MakeRelativeForProjectRoot(projectRoot, cfg.StagingPath);
             cfg.PlanOutputPath = MakeRelativeForProjectRoot(projectRoot, cfg.PlanOutputPath);
-            cfg.PublishApiKeyFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.PublishApiKeyFilePath);
-            cfg.NugetCredentialSecretFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.NugetCredentialSecretFilePath);
-            cfg.GitHubAccessTokenFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.GitHubAccessTokenFilePath);
+            cfg.PublishApiKeyFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.PublishApiKeyFilePath, preserveExternalRooted: true);
+            cfg.NugetCredentialSecretFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.NugetCredentialSecretFilePath, preserveExternalRooted: true);
+            cfg.GitHubAccessTokenFilePath = MakeRelativeForProjectRoot(projectRoot, cfg.GitHubAccessTokenFilePath, preserveExternalRooted: true);
             MakePackageBuildOptionPathsRelative(cfg.Options, projectRoot);
         }
 
@@ -828,7 +819,7 @@ internal sealed class ModuleBuildPreparationService
         {
             var signing = segment.Options?.Signing;
             if (signing is null) continue;
-            signing.CertificatePFXPath = MakeRelativeForProjectRoot(projectRoot, signing.CertificatePFXPath);
+            signing.CertificatePFXPath = MakeRelativeForProjectRoot(projectRoot, signing.CertificatePFXPath, preserveExternalRooted: true);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationReleaseSegment>() ?? Enumerable.Empty<ConfigurationReleaseSegment>())
@@ -849,8 +840,8 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
-            cfg.FilePath = MakeRelativeForProjectRoot(projectRoot, cfg.FilePath);
-            cfg.WorkingDirectory = MakeRelativeForProjectRoot(projectRoot, cfg.WorkingDirectory);
+            cfg.FilePath = MakeRelativeForProjectRoot(projectRoot, cfg.FilePath, preserveExternalRooted: true);
+            cfg.WorkingDirectory = MakeRelativeForProjectRoot(projectRoot, cfg.WorkingDirectory, preserveExternalRooted: true);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationArtefactSegment>() ?? Enumerable.Empty<ConfigurationArtefactSegment>())
@@ -930,9 +921,14 @@ internal sealed class ModuleBuildPreparationService
             if (string.IsNullOrWhiteSpace(path))
                 continue;
 
-            options[optionName] = MakeRelativeForProjectRoot(projectRoot, path);
+            options[optionName] = MakeRelativeForProjectRoot(projectRoot, path, preserveExternalRooted: IsPackageCredentialPathName(optionName));
         }
     }
+
+    private static bool IsPackageCredentialPathName(string optionName)
+        => string.Equals(optionName, nameof(PackageBuildConfiguration.PublishApiKeyFilePath), StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(optionName, nameof(PackageBuildConfiguration.NugetCredentialSecretFilePath), StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(optionName, nameof(PackageBuildConfiguration.GitHubAccessTokenFilePath), StringComparison.OrdinalIgnoreCase);
 
     private static string[] MakePathsRelativeForProjectRoot(string projectRoot, string[]? paths, bool preserveExternalRooted = false)
     {
