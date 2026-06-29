@@ -106,6 +106,19 @@ function New-ManagedOptimizationTarget {
         $downloadMb = [math]::Round($downloadBytes / 1MB, 2)
         $firstDownloadBytes = if ($row.PSObject.Properties['ManagedFirstDownloadBytes']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedFirstDownloadBytes } else { 0.0 }
         $lastDownloadBytes = if ($row.PSObject.Properties['ManagedLastDownloadBytes']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedLastDownloadBytes } else { 0.0 }
+        $outputBytes = if ($row.PSObject.Properties['ManagedOutputBytes']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedOutputBytes } else { 0.0 }
+        $outputFiles = if ($row.PSObject.Properties['ManagedOutputFileCount']) { ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedOutputFileCount } else { 0.0 }
+        $outputMb = [math]::Round($outputBytes / 1MB, 2)
+        $outputMbPerSecond = if ($managedMs -gt 0 -and $outputBytes -gt 0) {
+            [math]::Round(($outputBytes / 1MB) / ($managedMs / 1000.0), 2)
+        } else {
+            0.0
+        }
+        $outputFilesPerSecond = if ($managedMs -gt 0 -and $outputFiles -gt 0) {
+            [math]::Round($outputFiles / ($managedMs / 1000.0), 2)
+        } else {
+            0.0
+        }
 
         [pscustomobject]@{
             Suite = if ($row.PSObject.Properties['Suite']) { [string] $row.Suite } else { '' }
@@ -119,6 +132,11 @@ function New-ManagedOptimizationTarget {
             ManagedMs = [math]::Round($managedMs, 2)
             ManagedRank = ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRank
             ManagedVsFastest = if ($row.PSObject.Properties['ManagedVsFastest']) { [string] $row.ManagedVsFastest } else { '' }
+            OutputFileCount = $outputFiles
+            OutputBytes = $outputBytes
+            OutputMB = $outputMb
+            OutputMBPerSecond = $outputMbPerSecond
+            OutputFilesPerSecond = $outputFilesPerSecond
             RootElapsedMs = [math]::Round($rootElapsedMs, 2)
             HarnessOverheadMs = [math]::Round((ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedHarnessOverheadMs), 2)
             RootDependencyMs = [math]::Round((ConvertTo-ManagedBenchmarkDouble -Value $row.ManagedRootDependencyMs), 2)

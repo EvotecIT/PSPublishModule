@@ -548,6 +548,8 @@ function Add-SummaryRows {
                 ManagedLastIteration = $row.ManagedLastIteration
                 ManagedFirstMs = $row.ManagedFirstMs
                 ManagedLastMs = $row.ManagedLastMs
+                ManagedOutputFileCount = $row.ManagedOutputFileCount
+                ManagedOutputBytes = $row.ManagedOutputBytes
                 ManagedPackageCount = $row.ManagedPackageCount
                 ManagedDependencyCount = $row.ManagedDependencyCount
                 ManagedUniquePackageCount = $row.ManagedUniquePackageCount
