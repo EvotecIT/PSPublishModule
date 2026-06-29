@@ -64,7 +64,8 @@ public sealed class ModuleBuildPreparationServiceTests
             Directory.CreateDirectory(Path.Combine(root.FullName, "Build"));
             Directory.CreateDirectory(Path.Combine(root.FullName, "Build", "Templates"));
             Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Examples"));
-            File.WriteAllText(Path.Combine(root.FullName, "Build", "header.ps1"), "Write-Output 'header'");
+            File.WriteAllText(Path.Combine(root.FullName, "Build", "header.ps1"), "Write-Output 'repo header'");
+            File.WriteAllText(Path.Combine(scriptRoot.FullName, "header.ps1"), "Write-Output 'module header'");
             File.WriteAllText(Path.Combine(root.FullName, "Build", "NOTICE.txt"), "notice");
             File.WriteAllText(Path.Combine(moduleRoot.FullName, "Examples", "NOTICE.txt"), "module notice");
             File.WriteAllText(Path.Combine(moduleRoot.FullName, "DbaClientX.psd1"), "@{ ModuleVersion = '1.0.0' }");
@@ -339,7 +340,8 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
 
                 var fileBackedArtefact = Assert.IsType<ConfigurationArtefactSegment>(prepared.PipelineSpec.Segments[13]);
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "FileBacked", "<TagModuleVersionWithPreRelease>"), fileBackedArtefact.Configuration.Path);
-                Assert.Contains("Write-Output", fileBackedArtefact.Configuration.PreScriptMerge, StringComparison.Ordinal);
+                Assert.Contains("module header", fileBackedArtefact.Configuration.PreScriptMerge, StringComparison.Ordinal);
+                Assert.DoesNotContain("repo header", fileBackedArtefact.Configuration.PreScriptMerge, StringComparison.Ordinal);
 
                 var appleApp = Assert.IsType<ConfigurationAppleAppSegment>(prepared.PipelineSpec.Segments[14]);
                 Assert.Equal(".\\Tactra.xcodeproj", appleApp.Configuration.ProjectPath);
@@ -655,6 +657,72 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Contains($"\"ApiKeyFilePath\": \"{externalPublishKey.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"FilePath\": \"../Build/Test-ReleaseReady.ps1\"", json, StringComparison.Ordinal);
             Assert.Contains("\"WorkingDirectory\": \"../Build\"", json, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void WritePipelineSpecJson_preserves_external_documentation_and_portable_about_paths()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-json-docs-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var jsonPath = Path.Combine(root.FullName, ".powerforge", "powerforge.json");
+            var externalDocs = Path.Combine(Path.GetTempPath(), "PowerForge", "ExternalDocs-" + Guid.NewGuid().ToString("N"));
+            var externalReadme = Path.Combine(Path.GetTempPath(), "PowerForge", "ExternalReadme-" + Guid.NewGuid().ToString("N"), "README.md");
+            var projectAboutTopics = Path.Combine(root.FullName, "Help", "About");
+            var externalAboutTopics = Path.Combine(Path.GetTempPath(), "PowerForge", "ExternalAbout-" + Guid.NewGuid().ToString("N"));
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "SampleModule",
+                    SourcePath = root.FullName
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationDocumentationSegment
+                    {
+                        Configuration = new DocumentationConfiguration
+                        {
+                            Path = externalDocs,
+                            PathReadme = externalReadme
+                        }
+                    },
+                    new ConfigurationBuildDocumentationSegment
+                    {
+                        Configuration = new BuildDocumentationConfiguration
+                        {
+                            Enable = true,
+                            AboutTopicsSourcePath = new[] { projectAboutTopics, externalAboutTopics }
+                        }
+                    }
+                }
+            };
+
+            var service = new ModuleBuildPreparationService();
+            service.WritePipelineSpecJson(spec, jsonPath);
+
+            var json = File.ReadAllText(jsonPath);
+            Assert.Contains($"\"Path\": \"{externalDocs.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains($"\"PathReadme\": \"{externalReadme.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"Help/About\"", json, StringComparison.Ordinal);
+            Assert.Contains(externalAboutTopics.Replace('\\', '/'), json, StringComparison.OrdinalIgnoreCase);
+
+            var jsonSpec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, CreateJsonOptions());
+            Assert.NotNull(jsonSpec);
+
+            service.ResolvePipelineSpecPaths(jsonSpec!, jsonPath);
+            var documentation = Assert.IsType<ConfigurationDocumentationSegment>(jsonSpec!.Segments[0]);
+            var buildDocumentation = Assert.IsType<ConfigurationBuildDocumentationSegment>(jsonSpec.Segments[1]);
+            Assert.Equal(externalDocs, documentation.Configuration.Path);
+            Assert.Equal(externalReadme, documentation.Configuration.PathReadme);
+            Assert.Equal(projectAboutTopics, buildDocumentation.Configuration.AboutTopicsSourcePath[0]);
+            Assert.Equal(externalAboutTopics, buildDocumentation.Configuration.AboutTopicsSourcePath[1]);
         }
         finally
         {
@@ -1069,7 +1137,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Equal(signingPfxPath, options.Options.Signing!.CertificatePFXPath);
             Assert.Equal(documentationPath, documentation.Configuration.Path);
             Assert.Equal(documentationReadmePath, documentation.Configuration.PathReadme);
-            Assert.Equal(new[] { aboutTopicsPath }, buildDocumentation.Configuration.AboutTopicsSourcePath);
+            Assert.Equal(Path.Combine(root.FullName, "Help", "About"), Path.GetFullPath(buildDocumentation.Configuration.AboutTopicsSourcePath[0]));
             Assert.Equal(testsPath, validation.Settings.Tests.TestPath);
             Assert.Equal(publishKey, publish.Configuration.ApiKeyFilePath);
             Assert.Equal(actionFile, action.Configuration.FilePath);

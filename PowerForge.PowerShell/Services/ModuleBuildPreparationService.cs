@@ -47,7 +47,7 @@ internal sealed class ModuleBuildPreparationService
         var segments = useLegacy
             ? (string.Equals(request.ParameterSetName, "Configuration", StringComparison.Ordinal)
                 ? LegacySegmentAdapter.CollectFromLegacyConfiguration(request.Configuration)
-                : CollectSettingsFromWorkspace(request.Settings, workspaceRoot))
+                : CollectSettingsFromWorkspace(request.Settings, UsesModuleFolderLayout(workspaceRoot, projectRoot) ? projectRoot : workspaceRoot))
             : Array.Empty<IConfigurationSegment>();
         ResolveWorkspaceRelativeSegmentPaths(segments, workspaceRoot, projectRoot);
 
@@ -262,6 +262,7 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
+            cfg.AboutTopicsSourcePath = ResolveConfigPaths(projectRoot, cfg.AboutTopicsSourcePath);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationTestSegment>() ?? Enumerable.Empty<ConfigurationTestSegment>())
@@ -831,14 +832,15 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
-            cfg.Path = MakeRelativeForProjectRoot(projectRoot, cfg.Path) ?? string.Empty;
-            cfg.PathReadme = MakeRelativeForProjectRoot(projectRoot, cfg.PathReadme) ?? string.Empty;
+            cfg.Path = MakeRelativeForProjectRoot(projectRoot, cfg.Path, preserveExternalRooted: true, workspaceRoot) ?? string.Empty;
+            cfg.PathReadme = MakeRelativeForProjectRoot(projectRoot, cfg.PathReadme, preserveExternalRooted: true, workspaceRoot) ?? string.Empty;
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationBuildDocumentationSegment>() ?? Enumerable.Empty<ConfigurationBuildDocumentationSegment>())
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
+            cfg.AboutTopicsSourcePath = MakePathsRelativeForProjectRoot(projectRoot, cfg.AboutTopicsSourcePath, preserveExternalRooted: true, workspaceRoot);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationTestSegment>() ?? Enumerable.Empty<ConfigurationTestSegment>())
