@@ -102,7 +102,7 @@ function Write-ManagedBenchmarkSuiteNotes {
         $lines.Add('')
         $lines.Add('These rows show each participating engine median at suite level. Use this table for provider comparisons; use `Optimization Targets` for managed-only bottleneck work.')
         $lines.Add('')
-        Add-ManagedBenchmarkMarkdownTable -Lines $lines -Rows $EngineRows -Columns @('BenchmarkRole', 'Suite', 'Scenario', 'Host', 'Operation', 'Engine', 'MedianMs', 'Runs', 'Succeeded', 'Failed', 'Skipped', 'FirstMs', 'LastMs')
+        Add-ManagedBenchmarkMarkdownTable -Lines $lines -Rows $EngineRows -Columns @('BenchmarkRole', 'Suite', 'Scenario', 'Host', 'Operation', 'Engine', 'MedianMs', 'MedianOutputMB', 'MedianOutputMBPerSecond', 'MedianOutputFilesPerSecond', 'Runs', 'Succeeded', 'Failed', 'Skipped', 'FirstMs', 'LastMs')
         $lines.Add('')
     }
 
