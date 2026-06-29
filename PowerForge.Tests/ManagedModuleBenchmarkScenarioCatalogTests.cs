@@ -31,6 +31,24 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
             Property(row, "Version") == "16.0.0" &&
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }));
         Assert.Contains(rows, row =>
+            Property(row, "Suite") == "HeavySaveCacheGate" &&
+            Property(row, "Name") == "Graph.Full.Save.ManagedWarmCache" &&
+            Property(row, "ModuleName") == "Microsoft.Graph" &&
+            Property(row, "Version") == "2.38.0" &&
+            Property(row, "CacheMode") == "Warm" &&
+            Int32Property(row, "RepeatCount") == 2 &&
+            StringArrayProperty(row, "Operations").SequenceEqual(new[] { "Save" }) &&
+            StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed" }));
+        Assert.Contains(rows, row =>
+            Property(row, "Suite") == "HeavySaveCacheGate" &&
+            Property(row, "Name") == "Az.Full.Save.ManagedWarmCache" &&
+            Property(row, "ModuleName") == "Az" &&
+            Property(row, "Version") == "16.0.0" &&
+            Property(row, "CacheMode") == "Warm" &&
+            Int32Property(row, "RepeatCount") == 2 &&
+            StringArrayProperty(row, "Operations").SequenceEqual(new[] { "Save" }) &&
+            StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed" }));
+        Assert.Contains(rows, row =>
             Property(row, "Name") == "Graph.Authentication.Save" &&
             StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "PSResourceGet" }) &&
             Int32Property(row, "ManagedMaxRank") == 1 &&
@@ -79,7 +97,7 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
         process.StartInfo.ArgumentList.Add("Bypass");
         process.StartInfo.ArgumentList.Add("-Command");
         process.StartInfo.ArgumentList.Add(
-            "& '" + script.Replace("'", "''", StringComparison.Ordinal) + "' -Suite SpeedGate,SaveGate,LifecycleGate,HeavyLifecycleGate -ListScenarios | ConvertTo-Json -Depth 5 -Compress");
+            "& '" + script.Replace("'", "''", StringComparison.Ordinal) + "' -Suite SpeedGate,SaveGate,LifecycleGate,HeavyLifecycleGate,HeavySaveCacheGate -ListScenarios | ConvertTo-Json -Depth 5 -Compress");
         process.StartInfo.RedirectStandardOutput = true;
         process.StartInfo.RedirectStandardError = true;
         process.StartInfo.UseShellExecute = false;
