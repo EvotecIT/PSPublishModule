@@ -116,6 +116,11 @@ public sealed class ManagedModuleInstallResult
     public TimeSpan ExtractionElapsed { get; set; }
 
     /// <summary>
+    /// True when module files were materialized from the expanded package cache instead of directly from the package archive.
+    /// </summary>
+    public bool ExtractionFromCache { get; set; }
+
+    /// <summary>
     /// Elapsed time spent installing dependencies before this module was promoted.
     /// </summary>
     public TimeSpan DependencyElapsed { get; set; }

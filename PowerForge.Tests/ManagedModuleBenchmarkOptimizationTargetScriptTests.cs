@@ -31,6 +31,7 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedPackageCount = '3'
                     ManagedUniquePackageCount = '3'
                     ManagedCacheHits = '1'
+                    ManagedExtractionCacheHits = '1'
                     ManagedFirstMs = '1500'
                     ManagedLastMs = '500'
                     ManagedFirstRepositoryRequests = '10'
@@ -41,6 +42,8 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
                     ManagedLastDownloadBytes = '0'
                     ManagedFirstCacheHits = '0'
                     ManagedLastCacheHits = '3'
+                    ManagedFirstExtractionCacheHits = '0'
+                    ManagedLastExtractionCacheHits = '3'
                 }
             )
 
@@ -66,8 +69,11 @@ public sealed class ManagedModuleBenchmarkOptimizationTargetScriptTests
         Assert.Equal(8.0, NumericProperty(row, "FirstPackageRepositoryRequests"));
         Assert.Equal(0.0, NumericProperty(row, "LastPackageRepositoryRequests"));
         Assert.Equal(4.0, NumericProperty(row, "PackageRepositoryRedirects"));
+        Assert.Equal(1.0, NumericProperty(row, "ExtractionCacheHits"));
         Assert.Equal(0.0, NumericProperty(row, "FirstCacheHits"));
         Assert.Equal(3.0, NumericProperty(row, "LastCacheHits"));
+        Assert.Equal(0.0, NumericProperty(row, "FirstExtractionCacheHits"));
+        Assert.Equal(3.0, NumericProperty(row, "LastExtractionCacheHits"));
         Assert.Contains("download", Property(row, "NextQuestion"), StringComparison.OrdinalIgnoreCase);
     }
 

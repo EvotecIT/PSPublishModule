@@ -53,7 +53,7 @@ internal sealed class ManagedModuleArchiveExtractor
         }
 
         stopwatch.Stop();
-        return new ManagedModuleArchiveExtractionResult(fileCount, bytesWritten, stopwatch.Elapsed);
+        return new ManagedModuleArchiveExtractionResult(fileCount, bytesWritten, stopwatch.Elapsed, fromCache: false);
     }
 
     private static string Normalize(string path)
@@ -95,11 +95,12 @@ internal sealed class ManagedModuleArchiveExtractor
 
 internal sealed class ManagedModuleArchiveExtractionResult
 {
-    public ManagedModuleArchiveExtractionResult(int fileCount, long bytesWritten, TimeSpan elapsed)
+    public ManagedModuleArchiveExtractionResult(int fileCount, long bytesWritten, TimeSpan elapsed, bool fromCache)
     {
         FileCount = fileCount;
         BytesWritten = bytesWritten;
         Elapsed = elapsed;
+        FromCache = fromCache;
     }
 
     public int FileCount { get; }
@@ -107,4 +108,6 @@ internal sealed class ManagedModuleArchiveExtractionResult
     public long BytesWritten { get; }
 
     public TimeSpan Elapsed { get; }
+
+    public bool FromCache { get; }
 }

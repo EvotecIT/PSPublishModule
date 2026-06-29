@@ -98,7 +98,7 @@ pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModule
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite HeavySaveGate -ScenarioName Az.Full.Save -HostName PowerShell7 -RepeatCount 1 -RotateEngineOrder -UseScenarioGates -RemoveOutputRoots -SkipBuild
 ```
 
-Run the managed-only heavy save cache lane when separating package download/source cost from repeated save materialization. These scenarios default to `CacheMode=Warm` and `RepeatCount=2`; command-line `-CacheMode` or `-RepeatCount` still override those defaults for experiments:
+Run the managed-only heavy save cache lane when separating package download/source cost from repeated save materialization. These scenarios default to `CacheMode=Warm` and `RepeatCount=2`; command-line `-CacheMode` or `-RepeatCount` still override those defaults for experiments. Read `ManagedCacheHits` as package-cache reuse and `ManagedExtractionCacheHits` as expanded-payload reuse:
 
 ```powershell
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkSuite.ps1 -Suite HeavySaveCacheGate -ScenarioName Graph.Full.Save.ManagedWarmCache -HostName PowerShell7 -RemoveOutputRoots -SkipBuild

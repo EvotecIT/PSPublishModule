@@ -475,6 +475,7 @@ function Invoke-TimedOperation {
         ManagedPackageRepositoryRedirectCount = [long] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalPackageRepositoryRedirectCount')
         ManagedDownloadBytes = [long] (Get-DetailNumber -InputObject $detailSummary -Name 'TotalDownloadBytes')
         ManagedCacheHitCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'CacheHitCount')
+        ManagedExtractionCacheHitCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'ExtractionCacheHitCount')
         ManagedMaintenanceActionCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'MaintenanceActionCount')
         ManagedMaintenanceFindingCount = [int] (Get-DetailNumber -InputObject $detailSummary -Name 'MaintenanceFindingCount')
         ImportStatus = if ($importValidation) { [string] $importValidation.Status } else { '' }

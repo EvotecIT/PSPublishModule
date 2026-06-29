@@ -56,6 +56,7 @@ function Add-ManagedInstallDetail {
         DownloadBytes = if ($download) { [long] $download.BytesWritten } else { 0L }
         DownloadRedirectCount = if ($download) { [long] (Get-NumericPropertyValue -InputObject $download -Name 'RedirectCount') } else { 0L }
         DownloadFromCache = if ($download) { [bool] $download.FromCache } else { $false }
+        ExtractionFromCache = [bool] (Get-NumericPropertyValue -InputObject $Result -Name 'ExtractionFromCache')
         AuthenticodeCheckedFiles = if ($authenticode) { [int] $authenticode.CheckedFiles } else { 0 }
         AuthenticodeFiles = if ($authenticode) { @($authenticode.Files) } else { @() }
     })
@@ -109,6 +110,7 @@ function Write-ManagedInstallDetail {
         TotalDownloadRedirectCount = [long] (($packages | Measure-Object DownloadRedirectCount -Sum).Sum)
         TotalDownloadBytes = [long] (($packages | Measure-Object DownloadBytes -Sum).Sum)
         CacheHitCount = @($packages | Where-Object DownloadFromCache).Count
+        ExtractionCacheHitCount = @($packages | Where-Object ExtractionFromCache).Count
     }
 
     $parent = Split-Path -Path $Path -Parent
