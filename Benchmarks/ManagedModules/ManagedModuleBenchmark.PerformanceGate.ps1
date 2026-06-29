@@ -40,6 +40,9 @@ function Get-ManagedPerformanceGateViolation {
                 Suite = if ($row.PSObject.Properties['Suite']) { [string] $row.Suite } else { '' }
                 Scenario = if ($row.PSObject.Properties['Scenario']) { [string] $row.Scenario } else { '' }
                 Host = if ($row.PSObject.Properties['Host']) { [string] $row.Host } else { '' }
+                BenchmarkRole = if ($row.PSObject.Properties['BenchmarkRole']) { [string] $row.BenchmarkRole } else { '' }
+                ComparisonScope = if ($row.PSObject.Properties['ComparisonScope']) { [string] $row.ComparisonScope } else { '' }
+                BenchmarkInterpretation = if ($row.PSObject.Properties['BenchmarkInterpretation']) { [string] $row.BenchmarkInterpretation } else { '' }
                 Operation = [string] $row.Operation
                 FastestEngine = [string] $row.FastestEngine
                 FastestMs = [double] $row.FastestMs
@@ -70,6 +73,9 @@ function Get-ManagedPerformanceGateViolation {
             Suite = if ($row.PSObject.Properties['Suite']) { [string] $row.Suite } else { '' }
             Scenario = if ($row.PSObject.Properties['Scenario']) { [string] $row.Scenario } else { '' }
             Host = if ($row.PSObject.Properties['Host']) { [string] $row.Host } else { '' }
+            BenchmarkRole = if ($row.PSObject.Properties['BenchmarkRole']) { [string] $row.BenchmarkRole } else { '' }
+            ComparisonScope = if ($row.PSObject.Properties['ComparisonScope']) { [string] $row.ComparisonScope } else { '' }
+            BenchmarkInterpretation = if ($row.PSObject.Properties['BenchmarkInterpretation']) { [string] $row.BenchmarkInterpretation } else { '' }
             Operation = [string] $row.Operation
             FastestEngine = [string] $row.FastestEngine
             FastestMs = [double] $row.FastestMs

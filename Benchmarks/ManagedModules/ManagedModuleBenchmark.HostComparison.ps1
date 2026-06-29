@@ -54,6 +54,7 @@ function New-ManagedHostComparison {
             Scenario = [string] $group.Group[0].Scenario
             BenchmarkRole = if ($group.Group[0].PSObject.Properties['BenchmarkRole']) { [string] $group.Group[0].BenchmarkRole } else { '' }
             ComparisonScope = if ($group.Group[0].PSObject.Properties['ComparisonScope']) { [string] $group.Group[0].ComparisonScope } else { '' }
+            BenchmarkInterpretation = if ($group.Group[0].PSObject.Properties['BenchmarkInterpretation']) { [string] $group.Group[0].BenchmarkInterpretation } else { '' }
             ModuleName = if ($group.Group[0].PSObject.Properties['ModuleName']) { [string] $group.Group[0].ModuleName } else { '' }
             Operation = [string] $group.Group[0].Operation
             Engine = $EngineName

@@ -142,6 +142,25 @@ function Get-BenchmarkComparisonScope {
     'ProviderComparison'
 }
 
+function Get-BenchmarkInterpretation {
+    param(
+        [string] $ComparisonScope
+    )
+
+    switch ($ComparisonScope) {
+        'InstallSameSource' { 'Strict install scoreboard: managed and ModuleFast use the same source URL.'; break }
+        'InstallProviderMatrix' { 'Install scoreboard: provider-default source behavior is compared across available engines.'; break }
+        'InstallWithModuleFast' { 'Install lifecycle scoreboard: ModuleFast participates only where it has an equivalent install operation.'; break }
+        'InstallCapableProviders' { 'Install scoreboard: compare engines that can perform this install operation.'; break }
+        'SaveCapableProviders' { 'Save scoreboard: compare save-capable providers only; ModuleFast has no equivalent save command.'; break }
+        'ManagedOnlySaveCache' { 'Diagnostic only: managed warm-cache save isolates package cache, extraction, and output materialization cost; do not rank it against providers or install rows.'; break }
+        'ManagedOnlyRepairPlan' { 'Diagnostic only: managed repair planning evidence; competitor rows are explicit skips when no equivalent planner exists.'; break }
+        'PublishCapableProviders' { 'Publish scoreboard: compare engines that can publish to the prepared feed.'; break }
+        'MixedLifecycle' { 'Mixed lifecycle scoreboard: compare the selected install and save operations separately before drawing a combined conclusion.'; break }
+        default { 'Provider comparison: read with the operation and engine set before treating it as a speed scoreboard.' }
+    }
+}
+
 function New-BenchmarkScenario {
     param(
         [string] $SuiteName,
@@ -169,12 +188,14 @@ function New-BenchmarkScenario {
         'Scoreboard'
     }
     $comparisonScope = Get-BenchmarkComparisonScope -SuiteName $SuiteName -Name $Name -Operations $Operations -Engines $Engines
+    $benchmarkInterpretation = Get-BenchmarkInterpretation -ComparisonScope $comparisonScope
 
     [pscustomobject]@{
         Suite = $SuiteName
         Name = $Name
         BenchmarkRole = $benchmarkRole
         ComparisonScope = $comparisonScope
+        BenchmarkInterpretation = $benchmarkInterpretation
         ModuleName = $ModuleName
         Version = $Version
         UpdateBaselineVersion = $UpdateBaselineVersion
@@ -596,6 +617,7 @@ function Add-SummaryRows {
                 Scenario = $Scenario.Name
                 BenchmarkRole = $Scenario.BenchmarkRole
                 ComparisonScope = $Scenario.ComparisonScope
+                BenchmarkInterpretation = $Scenario.BenchmarkInterpretation
                 ModuleName = $Scenario.ModuleName
                 Engines = (Get-ScenarioEngines -Scenario $Scenario) -join ','
                 RepairScenarios = (Get-ScenarioRepairScenarios -Scenario $Scenario) -join ','
@@ -659,7 +681,7 @@ $Suite = Resolve-TokenList -Value $Suite -Allowed $validSuites -Label 'suite'
 $HostName = Resolve-TokenList -Value $HostName -Allowed $validHosts -Label 'host'
 $scenarios = Resolve-ScenarioList
 if ($ListScenarios.IsPresent) {
-    $scenarios | Select-Object Suite, Name, BenchmarkRole, ComparisonScope, ModuleName, Version, UpdateBaselineVersion, AcceptLicense, Operations, RepairScenarios, Engines, Repository, RepositoryName, ModuleFastSource, CacheMode, RepeatCount, ManagedMaxRank, ManagedMaxVsFastest
+    $scenarios | Select-Object Suite, Name, BenchmarkRole, ComparisonScope, BenchmarkInterpretation, ModuleName, Version, UpdateBaselineVersion, AcceptLicense, Operations, RepairScenarios, Engines, Repository, RepositoryName, ModuleFastSource, CacheMode, RepeatCount, ManagedMaxRank, ManagedMaxVsFastest
     return
 }
 
@@ -727,6 +749,7 @@ $metadata = [ordered]@{
                 Name = $_.Name
                 BenchmarkRole = $_.BenchmarkRole
                 ComparisonScope = $_.ComparisonScope
+                BenchmarkInterpretation = $_.BenchmarkInterpretation
                 ModuleName = $_.ModuleName
                 Version = $_.Version
                 UpdateBaselineVersion = $_.UpdateBaselineVersion
