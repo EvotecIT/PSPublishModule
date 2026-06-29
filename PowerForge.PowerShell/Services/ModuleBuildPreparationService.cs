@@ -312,7 +312,7 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
-            cfg.Path = ResolveConfigPathNullable(projectRoot, cfg.Path);
+            cfg.Path = ResolveTokenAwareConfigPathNullable(projectRoot, cfg.Path);
             cfg.RequiredModules.Path = ResolveArtefactLayoutPath(projectRoot, cfg.Path, cfg.RequiredModules.Path);
             cfg.RequiredModules.ModulesPath = ResolveArtefactLayoutPath(projectRoot, cfg.Path, cfg.RequiredModules.ModulesPath);
             ResolveCopyMappingSources(cfg.DirectoryOutput, projectRoot);
@@ -693,6 +693,8 @@ internal sealed class ModuleBuildPreparationService
         {
             if (mapping is null || string.IsNullOrWhiteSpace(mapping.Source) || Path.IsPathRooted(mapping.Source))
                 continue;
+            if (ContainsPathToken(mapping.Source))
+                continue;
 
             if (!string.IsNullOrWhiteSpace(requiredFirstSegment) && !StartsWithPathSegment(mapping.Source, requiredFirstSegment!))
                 continue;
@@ -786,6 +788,14 @@ internal sealed class ModuleBuildPreparationService
     {
         if (string.IsNullOrWhiteSpace(path)) return null;
         return ResolveConfigPath(baseDir, path);
+    }
+
+    private static string? ResolveTokenAwareConfigPathNullable(string baseDir, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        return ContainsPathToken(path!)
+            ? NormalizePathSeparators(path!)
+            : ResolveConfigPath(baseDir, path);
     }
 
     private static void PrepareSpecForJsonExport(ModulePipelineSpec spec, string jsonFullPath)

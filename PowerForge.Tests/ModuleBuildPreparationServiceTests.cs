@@ -1260,6 +1260,14 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                             {
                                 Path = "Artefacts/Packed/<TagModuleVersionWithPreRelease>/RequiredModules",
                                 ModulesPath = "Artefacts/Packed/<TagModuleVersionWithPreRelease>/Modules"
+                            },
+                            FilesOutput = new[]
+                            {
+                                new ArtefactCopyMapping
+                                {
+                                    Source = "Payload/<ModuleVersion>/NOTICE.txt",
+                                    Destination = "NOTICE.txt"
+                                }
                             }
                         }
                     }
@@ -1279,9 +1287,10 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Equal(Path.Combine(root.FullName, "Artefacts", "Packed", "Modules"), workspaceQualifiedLayout.Configuration.RequiredModules.ModulesPath);
 
             var tokenizedLayout = Assert.IsType<ConfigurationArtefactSegment>(spec.Segments[2]);
-            Assert.Equal(Path.Combine(root.FullName, "Artefacts", "Packed", "<TagModuleVersionWithPreRelease>"), tokenizedLayout.Configuration.Path);
+            Assert.Equal("Artefacts/Packed/<TagModuleVersionWithPreRelease>", tokenizedLayout.Configuration.Path);
             Assert.Equal("Artefacts/Packed/<TagModuleVersionWithPreRelease>/RequiredModules", tokenizedLayout.Configuration.RequiredModules.Path);
             Assert.Equal("Artefacts/Packed/<TagModuleVersionWithPreRelease>/Modules", tokenizedLayout.Configuration.RequiredModules.ModulesPath);
+            Assert.Equal("Payload/<ModuleVersion>/NOTICE.txt", tokenizedLayout.Configuration.FilesOutput![0].Source);
         }
         finally
         {
