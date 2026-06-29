@@ -376,7 +376,7 @@ public static class WebAgentReadiness
         }
 
         AddCheck(checks, "markdown-negotiation", "content", "Markdown for Agents",
-            markdownNegotiated ? "pass" : "fail",
+            GetMarkdownNegotiationStatus(markdownNegotiated, markdownAlternateAvailableAsMarkdown),
             BuildMarkdownNegotiationMessage(
                 markdownNegotiated,
                 markdown.Success,
@@ -2456,6 +2456,14 @@ public static class WebAgentReadiness
 
         var cacheControlDetail = string.IsNullOrWhiteSpace(cacheControl) ? string.Empty : $" Cache-Control was {cacheControl}.";
         return $"Accept: text/markdown did not return Content-Type text/markdown; returned {returned}.{cacheControlDetail}";
+    }
+
+    internal static string GetMarkdownNegotiationStatus(bool negotiated, bool directMarkdownAvailable)
+    {
+        if (negotiated)
+            return "pass";
+
+        return directMarkdownAvailable ? "warn" : "fail";
     }
 
     private static string FormatContentTypeForMessage(string contentType)

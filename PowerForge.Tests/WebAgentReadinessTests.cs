@@ -770,6 +770,14 @@ public class WebAgentReadinessTests
     }
 
     [Fact]
+    public void GetMarkdownNegotiationStatus_WarnsWhenDirectArtifactWorks()
+    {
+        Assert.Equal("pass", WebAgentReadiness.GetMarkdownNegotiationStatus(negotiated: true, directMarkdownAvailable: false));
+        Assert.Equal("warn", WebAgentReadiness.GetMarkdownNegotiationStatus(negotiated: false, directMarkdownAvailable: true));
+        Assert.Equal("fail", WebAgentReadiness.GetMarkdownNegotiationStatus(negotiated: false, directMarkdownAvailable: false));
+    }
+
+    [Fact]
     public void BuildMarkdownNegotiationMessage_DoesNotTreatAcceptEncodingAsAccept()
     {
         var message = WebAgentReadiness.BuildMarkdownNegotiationMessage(
