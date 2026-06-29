@@ -362,7 +362,16 @@ parentheses.
 | `Graph.Authentication.SaveExact.NoOpForce` | PowerShell 7 | SaveNoOp | 1.00x (0.03s) | Not equivalent | 56.50x (1.57s) | 105.53x (2.94s) | SaveCapableProviders |
 | `Graph.Authentication.SaveExact.NoOpForce` | Windows PowerShell 5.1 | SaveForce | 1.00x (0.11s) | Not equivalent | Not equivalent | Skipped | SaveCapableProviders |
 | `Graph.Authentication.SaveExact.NoOpForce` | Windows PowerShell 5.1 | SaveNoOp | 1.00x (0.03s) | Not equivalent | 54.58x (1.79s) | Skipped | SaveCapableProviders |
+| `Graph.Authentication.Save` | PowerShell 7 | Save | 1.00x (1.15s) | Not equivalent | 1.30x (1.50s) | 3.40x (3.92s) | SaveCapableProviders |
+| `Graph.Authentication.Save` | Windows PowerShell 5.1 | Save | 1.00x (1.16s) | Not equivalent | 1.50x (1.74s) | Skipped | SaveCapableProviders |
+| `ThreadJob.Authenticode.InstallSave` | PowerShell 7 | Install | 1.00x (1.99s) | Not in this gate | 1.58x (3.15s) | Not in this gate | AuthenticodeCapableProviders |
+| `ThreadJob.Authenticode.InstallSave` | PowerShell 7 | Save | 1.00x (0.90s) | Not in this gate | 2.67x (2.42s) | Not in this gate | AuthenticodeCapableProviders |
+| `ThreadJob.Authenticode.InstallSave` | Windows PowerShell 5.1 | Install | 1.00x (1.55s) | Not in this gate | Failed | Not in this gate | AuthenticodeCapableProviders |
+| `ThreadJob.Authenticode.InstallSave` | Windows PowerShell 5.1 | Save | 1.00x (1.06s) | Not in this gate | Failed | Not in this gate | AuthenticodeCapableProviders |
+| `Az.Accounts.ProviderMatrix` | PowerShell 7 | Install | 1.00x (1.56s) | 1.34x (2.09s) | 3.98x (6.22s) | 7.90x (12.34s) | InstallProviderMatrix |
+| `Az.Full.ProviderMatrix` | PowerShell 7 | Install | 1.00x (5.58s) | Failed | 75.22x (419.59s) | 32.83x (183.10s) | InstallProviderMatrix |
 | `Graph.Full.SameSource` | PowerShell 7 | Install | 1.00x (5.65s) | 1.34x (7.59s) | Not in this gate | Not in this gate | InstallSameSource |
+| `Graph.Full.SameSource` | Windows PowerShell 5.1 | Install | 1.00x (7.08s) | Skipped | Not in this gate | Not in this gate | InstallSameSource |
 <!-- managed-module-benchmark-table:end -->
 
 Generate the table from retained `suite-scoreboard.csv` artifacts with
