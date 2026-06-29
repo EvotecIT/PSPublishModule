@@ -14,6 +14,43 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
 
         var rows = results.RootElement.EnumerateArray().ToArray();
         Assert.Contains(rows, row =>
+            Property(row, "Suite") == "PublicComparisonGate" &&
+            Property(row, "Name") == "ThreadJob.SingleModule.PublicComparison" &&
+            Property(row, "BenchmarkRole") == "Scoreboard" &&
+            Property(row, "ComparisonScope") == "PublicComparison" &&
+            Property(row, "ModuleName") == "ThreadJob" &&
+            Property(row, "Version") == "2.1.0" &&
+            Property(row, "UpdateBaselineVersion") == "2.0.3" &&
+            StringArrayProperty(row, "Operations").SequenceEqual(new[] { "Find", "InstallNoOp", "InstallForce", "SaveNoOp", "SaveForce", "UpdateNoOp", "UpdateForce" }) &&
+            StringArrayProperty(row, "Engines").SequenceEqual(new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }) &&
+            Int32Property(row, "ManagedMaxRank") == 1);
+        Assert.Contains(rows, row =>
+            Property(row, "Suite") == "PublicComparisonGate" &&
+            Property(row, "Name") == "Graph.Authentication.SingleModule.PublicComparison" &&
+            Property(row, "ModuleName") == "Microsoft.Graph.Authentication" &&
+            BooleanProperty(row, "AcceptLicense") &&
+            StringArrayProperty(row, "Operations").SequenceEqual(new[] { "Find", "InstallNoOp", "InstallForce", "SaveNoOp", "SaveForce", "UpdateNoOp", "UpdateForce" }));
+        Assert.Contains(rows, row =>
+            Property(row, "Suite") == "PublicComparisonGate" &&
+            Property(row, "Name") == "Graph.Full.MultiModule.PublicComparison" &&
+            Property(row, "ModuleName") == "Microsoft.Graph" &&
+            Property(row, "Repository") == "https://pwsh.gallery/index.json" &&
+            Property(row, "RepositoryName") == "PWSHGallery" &&
+            Property(row, "ModuleFastSource") == "https://pwsh.gallery/index.json" &&
+            StringArrayProperty(row, "Operations").SequenceEqual(new[] { "Find", "Install", "Save" }));
+        Assert.Contains(rows, row =>
+            Property(row, "Suite") == "PublicComparisonGate" &&
+            Property(row, "Name") == "Az.Accounts.SingleModule.PublicComparison" &&
+            Property(row, "ModuleName") == "Az.Accounts" &&
+            Property(row, "Version") == "5.5.0" &&
+            StringArrayProperty(row, "Operations").SequenceEqual(new[] { "Find", "InstallNoOp", "InstallForce", "SaveNoOp", "SaveForce", "UpdateNoOp", "UpdateForce" }));
+        Assert.Contains(rows, row =>
+            Property(row, "Suite") == "PublicComparisonGate" &&
+            Property(row, "Name") == "Az.Full.MultiModule.PublicComparison" &&
+            Property(row, "ModuleName") == "Az" &&
+            Property(row, "Version") == "16.0.0" &&
+            StringArrayProperty(row, "Operations").SequenceEqual(new[] { "Find", "Install", "Save" }));
+        Assert.Contains(rows, row =>
             Property(row, "Name") == "Graph.Full.SameSource" &&
             Property(row, "BenchmarkRole") == "Scoreboard" &&
             Property(row, "ComparisonScope") == "InstallSameSource" &&
@@ -159,6 +196,11 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
         var rows = results.RootElement.EnumerateArray().ToArray();
         var gatedScenarioNames = new[]
         {
+            "ThreadJob.SingleModule.PublicComparison",
+            "Graph.Authentication.SingleModule.PublicComparison",
+            "Graph.Full.MultiModule.PublicComparison",
+            "Az.Accounts.SingleModule.PublicComparison",
+            "Az.Full.MultiModule.PublicComparison",
             "ThreadJob.InstallSave.NoOpForce",
             "Graph.Authentication.InstallExact.NoOpForce",
             "Graph.Authentication.SaveExact.NoOpForce",
@@ -205,7 +247,7 @@ public sealed class ManagedModuleBenchmarkScenarioCatalogTests
         process.StartInfo.ArgumentList.Add("Bypass");
         process.StartInfo.ArgumentList.Add("-Command");
         process.StartInfo.ArgumentList.Add(
-            "& '" + script.Replace("'", "''", StringComparison.Ordinal) + "' -Suite SpeedGate,SaveGate,LifecycleGate,HeavyLifecycleGate,HeavySaveGate,HeavySaveCacheGate,SecurityGate,RepairGate -ListScenarios | ConvertTo-Json -Depth 5 -Compress");
+            "& '" + script.Replace("'", "''", StringComparison.Ordinal) + "' -Suite PublicComparisonGate,SpeedGate,SaveGate,LifecycleGate,HeavyLifecycleGate,HeavySaveGate,HeavySaveCacheGate,SecurityGate,RepairGate -ListScenarios | ConvertTo-Json -Depth 5 -Compress");
         process.StartInfo.RedirectStandardOutput = true;
         process.StartInfo.RedirectStandardError = true;
         process.StartInfo.UseShellExecute = false;

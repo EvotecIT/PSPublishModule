@@ -19,6 +19,8 @@ param(
 
     [string] $MarkerName = 'managed-module-benchmark-table',
 
+    [switch] $PublicComparison,
+
     [switch] $SplitByOperation
 )
 
@@ -123,6 +125,74 @@ function Format-ReadmeBenchmarkCell {
     'Not in this gate'
 }
 
+function Format-ReadmeBenchmarkScenario {
+    param([string] $Scenario)
+
+    switch ($Scenario) {
+        'ThreadJob.SingleModule.PublicComparison' { 'ThreadJob single module'; break }
+        'Graph.Authentication.SingleModule.PublicComparison' { 'Graph.Authentication single module'; break }
+        'Graph.Full.MultiModule.PublicComparison' { 'Graph full family'; break }
+        'Az.Accounts.SingleModule.PublicComparison' { 'Az.Accounts single module'; break }
+        'Az.Full.MultiModule.PublicComparison' { 'Az full family'; break }
+        default { "``$Scenario``" }
+    }
+}
+
+function Format-ReadmeBenchmarkOperation {
+    param([string] $Operation)
+
+    switch ($Operation) {
+        'Find' { 'Find'; break }
+        'Install' { 'Install'; break }
+        'InstallNoOp' { 'Install no-op'; break }
+        'InstallForce' { 'Install force'; break }
+        'Save' { 'Save'; break }
+        'SaveNoOp' { 'Save no-op'; break }
+        'SaveForce' { 'Save force'; break }
+        'Update' { 'Update'; break }
+        'UpdateNoOp' { 'Update no-op'; break }
+        'UpdateForce' { 'Update force'; break }
+        'Publish' { 'Publish'; break }
+        default { $Operation }
+    }
+}
+
+function Get-ReadmeBenchmarkResult {
+    param([object] $Row)
+
+    $engines = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
+    $successes = foreach ($engine in $engines) {
+        $status = Get-ReadmeBenchmarkProperty -InputObject $Row -Name "${engine}Status"
+        $milliseconds = ConvertTo-ReadmeBenchmarkDouble -Value (Get-ReadmeBenchmarkProperty -InputObject $Row -Name "${engine}Ms")
+        if ($status -eq 'Succeeded' -and $milliseconds -gt 0) {
+            [pscustomobject]@{
+                Engine = $engine
+                Milliseconds = $milliseconds
+            }
+        }
+    }
+
+    if (@($successes).Count -eq 0) {
+        return 'No successful engine'
+    }
+
+    $managedStatus = Get-ReadmeBenchmarkProperty -InputObject $Row -Name 'ManagedStatus'
+    if ($managedStatus -ne 'Succeeded') {
+        return 'Managed did not complete'
+    }
+
+    if (@($successes).Count -eq 1) {
+        return 'Managed only successful'
+    }
+
+    $fastest = @($successes | Sort-Object Milliseconds | Select-Object -First 1)
+    if ($fastest[0].Engine -eq 'Managed') {
+        return 'Managed fastest'
+    }
+
+    '{0} fastest' -f $fastest[0].Engine
+}
+
 function Get-ReadmeBenchmarkOperationGroup {
     param([object] $Row)
 
@@ -147,6 +217,7 @@ function Get-ReadmeBenchmarkOperationGroupOrder {
     param([string] $Name)
 
     switch ($Name) {
+        'Find' { 5; break }
         'Install' { 10; break }
         'Save' { 20; break }
         'Update' { 30; break }
@@ -154,6 +225,67 @@ function Get-ReadmeBenchmarkOperationGroupOrder {
         'Repair' { 50; break }
         default { 90 }
     }
+}
+
+function Get-PublicComparisonScenarioOrder {
+    param([string] $Scenario)
+
+    switch ($Scenario) {
+        'ThreadJob.SingleModule.PublicComparison' { 10; break }
+        'Graph.Authentication.SingleModule.PublicComparison' { 20; break }
+        'Az.Accounts.SingleModule.PublicComparison' { 30; break }
+        'Graph.Full.MultiModule.PublicComparison' { 40; break }
+        'Az.Full.MultiModule.PublicComparison' { 50; break }
+        default { 900 }
+    }
+}
+
+function Get-PublicComparisonOperationOrder {
+    param([string] $Operation)
+
+    switch ($Operation) {
+        'Find' { 10; break }
+        'Install' { 20; break }
+        'InstallNoOp' { 21; break }
+        'InstallForce' { 22; break }
+        'Save' { 30; break }
+        'SaveNoOp' { 31; break }
+        'SaveForce' { 32; break }
+        'Update' { 40; break }
+        'UpdateNoOp' { 41; break }
+        'UpdateForce' { 42; break }
+        default { 900 }
+    }
+}
+
+function Test-PublicComparisonRow {
+    param([object] $Row)
+
+    $scenario = Get-ReadmeBenchmarkProperty -InputObject $Row -Name 'Scenario'
+    $operationName = Get-ReadmeBenchmarkProperty -InputObject $Row -Name 'Operation'
+
+    $publicScenarios = @(
+        'ThreadJob.SingleModule.PublicComparison',
+        'Graph.Authentication.SingleModule.PublicComparison',
+        'Graph.Full.MultiModule.PublicComparison',
+        'Az.Accounts.SingleModule.PublicComparison',
+        'Az.Full.MultiModule.PublicComparison'
+    )
+
+    $publicOperations = @(
+        'Find',
+        'Install',
+        'InstallNoOp',
+        'InstallForce',
+        'Save',
+        'SaveNoOp',
+        'SaveForce',
+        'Update',
+        'UpdateNoOp',
+        'UpdateForce'
+    )
+
+    ($publicScenarios -contains $scenario) -and ($publicOperations -contains $operationName)
 }
 
 function Resolve-ReadmeBenchmarkScoreboardPaths {
@@ -228,24 +360,24 @@ function ConvertTo-ReadmeBenchmarkTableBlock {
     param([object[]] $Rows)
 
     $output = [Collections.Generic.List[string]]::new()
-    $output.Add('| Scenario | Host | Operation | Managed | ModuleFast | PSResourceGet | PowerShellGet | Scope |')
+    $output.Add('| Scenario | Host | Operation | Managed | ModuleFast | PSResourceGet | PowerShellGet | Result |')
     $output.Add('| --- | --- | --- | ---: | ---: | ---: | ---: | --- |')
 
-    foreach ($row in @($Rows | Sort-Object Suite, Scenario, Host, Operation)) {
+    foreach ($row in @($Rows | Sort-Object @{ Expression = { Get-PublicComparisonScenarioOrder -Scenario (Get-ReadmeBenchmarkProperty -InputObject $_ -Name 'Scenario') } }, @{ Expression = { Get-ReadmeBenchmarkOperationGroupOrder -Name (Get-ReadmeBenchmarkOperationGroup -Row $_) } }, @{ Expression = { Get-PublicComparisonOperationOrder -Operation (Get-ReadmeBenchmarkProperty -InputObject $_ -Name 'Operation') } }, Host, Suite, Scenario, Operation)) {
         $managedMs = ConvertTo-ReadmeBenchmarkDouble -Value (Get-ReadmeBenchmarkProperty -InputObject $row -Name 'ManagedMs')
-        $scenario = Get-ReadmeBenchmarkProperty -InputObject $row -Name 'Scenario'
+        $scenario = Format-ReadmeBenchmarkScenario -Scenario (Get-ReadmeBenchmarkProperty -InputObject $row -Name 'Scenario')
         $hostName = Format-ReadmeBenchmarkHost -HostName (Get-ReadmeBenchmarkProperty -InputObject $row -Name 'Host')
-        $operationName = Get-ReadmeBenchmarkProperty -InputObject $row -Name 'Operation'
-        $scope = Get-ReadmeBenchmarkProperty -InputObject $row -Name 'ComparisonScope'
+        $operationName = Format-ReadmeBenchmarkOperation -Operation (Get-ReadmeBenchmarkProperty -InputObject $row -Name 'Operation')
+        $result = Get-ReadmeBenchmarkResult -Row $row
         $cells = @(
-            "| ``$scenario``",
+            "| $scenario",
             $hostName,
             $operationName,
             (Format-ReadmeBenchmarkCell -Row $row -Engine 'Managed' -ManagedMilliseconds $managedMs),
             (Format-ReadmeBenchmarkCell -Row $row -Engine 'ModuleFast' -ManagedMilliseconds $managedMs),
             (Format-ReadmeBenchmarkCell -Row $row -Engine 'PSResourceGet' -ManagedMilliseconds $managedMs),
             (Format-ReadmeBenchmarkCell -Row $row -Engine 'PowerShellGet' -ManagedMilliseconds $managedMs),
-            "$scope |"
+            "$result |"
         )
         $output.Add(($cells -join ' | '))
     }
@@ -264,7 +396,15 @@ function ConvertTo-ReadmeBenchmarkTable {
     }
 
     $output = [Collections.Generic.List[string]]::new()
-    $groups = @($Rows | Group-Object -Property { Get-ReadmeBenchmarkOperationGroup -Row $_ } | Sort-Object @{ Expression = { Get-ReadmeBenchmarkOperationGroupOrder -Name $_.Name } }, Name)
+    $groupRows = @($Rows | ForEach-Object {
+        $name = Get-ReadmeBenchmarkOperationGroup -Row $_
+        [pscustomobject]@{
+            Name = $name
+            Order = Get-ReadmeBenchmarkOperationGroupOrder -Name $name
+            Row = $_
+        }
+    })
+    $groups = @($groupRows | Group-Object -Property Name | Sort-Object @{ Expression = { @($_.Group | Select-Object -First 1)[0].Order } }, Name)
     foreach ($group in $groups) {
         if ($output.Count -gt 0) {
             $output.Add('')
@@ -272,7 +412,7 @@ function ConvertTo-ReadmeBenchmarkTable {
 
         $output.Add("#### $($group.Name)")
         $output.Add('')
-        $output.Add((ConvertTo-ReadmeBenchmarkTableBlock -Rows $group.Group))
+        $output.Add((ConvertTo-ReadmeBenchmarkTableBlock -Rows @($group.Group | ForEach-Object { $_.Row })))
     }
 
     $output -join "`n"
@@ -299,6 +439,10 @@ $rows = foreach ($path in $paths) {
         }
 
         if (-not (Test-ReadmeBenchmarkFilter -Row $row -Values $Operation -PropertyName 'Operation')) {
+            continue
+        }
+
+        if ($PublicComparison.IsPresent -and -not (Test-PublicComparisonRow -Row $row)) {
             continue
         }
 

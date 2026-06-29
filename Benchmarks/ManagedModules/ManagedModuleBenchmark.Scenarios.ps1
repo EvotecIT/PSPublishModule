@@ -22,6 +22,10 @@ function Get-BenchmarkComparisonScope {
         return 'AuthenticodeCapableProviders'
     }
 
+    if ($SuiteName -eq 'PublicComparisonGate') {
+        return 'PublicComparison'
+    }
+
     if ($Name -like '*.ProviderMatrix') {
         return 'InstallProviderMatrix'
     }
@@ -66,6 +70,7 @@ function Get-BenchmarkInterpretation {
         'ManagedOnlyRepairPlan' { 'Diagnostic only: managed repair planning evidence; competitor rows are explicit skips when no equivalent planner exists.'; break }
         'PublishCapableProviders' { 'Publish scoreboard: compare engines that can publish to the prepared feed.'; break }
         'AuthenticodeCapableProviders' { 'Authenticode compatibility scoreboard: compare install/save providers that expose signature validation for signable module files.'; break }
+        'PublicComparison' { 'Public comparison scoreboard: curated find, install, save, and update rows for single-module and multi-module Graph/Az coverage.'; break }
         'MixedLifecycle' { 'Mixed lifecycle scoreboard: compare the selected install and save operations separately before drawing a combined conclusion.'; break }
         default { 'Provider comparison: read with the operation and engine set before treating it as a speed scoreboard.' }
     }
@@ -142,6 +147,11 @@ function Get-ScenarioCatalog {
         New-BenchmarkScenario -SuiteName 'Az' -Name 'Az.Full' -ModuleName 'Az' -AcceptLicense $true
         New-BenchmarkScenario -SuiteName 'Enterprise' -Name 'Teams' -ModuleName 'MicrosoftTeams'
         New-BenchmarkScenario -SuiteName 'Enterprise' -Name 'ExchangeOnlineManagement' -ModuleName 'ExchangeOnlineManagement'
+        New-BenchmarkScenario -SuiteName 'PublicComparisonGate' -Name 'ThreadJob.SingleModule.PublicComparison' -ModuleName 'ThreadJob' -Version '2.1.0' -UpdateBaselineVersion '2.0.3' -Operations @('Find', 'InstallNoOp', 'InstallForce', 'SaveNoOp', 'SaveForce', 'UpdateNoOp', 'UpdateForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet') -ScenarioManagedMaxRank 1 -ScenarioManagedMaxWindowsPowerShellVsPowerShell7 2.0
+        New-BenchmarkScenario -SuiteName 'PublicComparisonGate' -Name 'Graph.Authentication.SingleModule.PublicComparison' -ModuleName 'Microsoft.Graph.Authentication' -Version '2.38.0' -AcceptLicense $true -Operations @('Find', 'InstallNoOp', 'InstallForce', 'SaveNoOp', 'SaveForce', 'UpdateNoOp', 'UpdateForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet') -ScenarioManagedMaxRank 1 -ScenarioManagedMaxWindowsPowerShellVsPowerShell7 2.0
+        New-BenchmarkScenario -SuiteName 'PublicComparisonGate' -Name 'Graph.Full.MultiModule.PublicComparison' -ModuleName 'Microsoft.Graph' -Version '2.38.0' -AcceptLicense $true -Operations @('Find', 'Install', 'Save') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet') -Repository 'https://pwsh.gallery/index.json' -RepositoryName 'PWSHGallery' -ScenarioModuleFastSource 'https://pwsh.gallery/index.json' -ScenarioManagedMaxRank 1 -ScenarioManagedMaxWindowsPowerShellVsPowerShell7 2.0
+        New-BenchmarkScenario -SuiteName 'PublicComparisonGate' -Name 'Az.Accounts.SingleModule.PublicComparison' -ModuleName 'Az.Accounts' -Version '5.5.0' -AcceptLicense $true -Operations @('Find', 'InstallNoOp', 'InstallForce', 'SaveNoOp', 'SaveForce', 'UpdateNoOp', 'UpdateForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet') -ScenarioManagedMaxRank 1 -ScenarioManagedMaxWindowsPowerShellVsPowerShell7 2.0
+        New-BenchmarkScenario -SuiteName 'PublicComparisonGate' -Name 'Az.Full.MultiModule.PublicComparison' -ModuleName 'Az' -Version '16.0.0' -AcceptLicense $true -Operations @('Find', 'Install', 'Save') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet') -ScenarioManagedMaxRank 1 -ScenarioManagedMaxWindowsPowerShellVsPowerShell7 2.0
         New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'ThreadJob.InstallSave.NoOpForce' -ModuleName 'ThreadJob' -Version '2.1.0' -Operations @('InstallNoOp', 'InstallForce', 'SaveNoOp', 'SaveForce') -ScenarioManagedMaxVsFastest 1.25 -ScenarioManagedMaxWindowsPowerShellVsPowerShell7 2.0
         New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'Graph.Authentication.InstallExact.NoOpForce' -ModuleName 'Microsoft.Graph.Authentication' -Version '2.38.0' -AcceptLicense $true -Operations @('InstallNoOp', 'InstallForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet') -ScenarioManagedMaxRank 1 -ScenarioManagedMaxWindowsPowerShellVsPowerShell7 2.0
         New-BenchmarkScenario -SuiteName 'LifecycleGate' -Name 'Graph.Authentication.SaveExact.NoOpForce' -ModuleName 'Microsoft.Graph.Authentication' -Version '2.38.0' -AcceptLicense $true -Operations @('SaveNoOp', 'SaveForce') -Engines @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet') -ScenarioManagedMaxRank 1 -ScenarioManagedMaxWindowsPowerShellVsPowerShell7 2.0

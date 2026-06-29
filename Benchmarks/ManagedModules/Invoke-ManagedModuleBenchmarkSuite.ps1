@@ -68,7 +68,7 @@ $providerDefaultModuleFastSource = 'ProviderDefault'
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $compareScript = Join-Path $PSScriptRoot 'Compare-ManagedModuleEngines.ps1'
 $suiteRoot = Join-Path $OutputDirectory ('S{0}-{1}' -f (Get-Date -Format 'yyyyMMddHHmmss'), $PID)
-$validSuites = @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'HeavyLifecycleGate', 'HeavySaveGate', 'HeavySaveCacheGate', 'PublishGate', 'SpeedGate', 'SaveGate', 'SecurityGate', 'RepairGate', 'All')
+$validSuites = @('Smoke', 'Graph', 'Az', 'Enterprise', 'PublicComparisonGate', 'LifecycleGate', 'HeavyLifecycleGate', 'HeavySaveGate', 'HeavySaveCacheGate', 'PublishGate', 'SpeedGate', 'SaveGate', 'SecurityGate', 'RepairGate', 'All')
 $validHosts = @('Current', 'PowerShell7', 'WindowsPowerShell')
 
 . (Join-Path $PSScriptRoot 'ManagedModuleBenchmark.PerformanceGate.ps1')
@@ -112,7 +112,7 @@ function Resolve-TokenList {
 
 function Resolve-ScenarioList {
     $selectedSuites = if ($Suite -contains 'All') {
-        @('Smoke', 'Graph', 'Az', 'Enterprise', 'LifecycleGate', 'HeavyLifecycleGate', 'HeavySaveGate', 'HeavySaveCacheGate', 'PublishGate', 'SpeedGate', 'SaveGate', 'SecurityGate', 'RepairGate')
+        @('Smoke', 'Graph', 'Az', 'Enterprise', 'PublicComparisonGate', 'LifecycleGate', 'HeavyLifecycleGate', 'HeavySaveGate', 'HeavySaveCacheGate', 'PublishGate', 'SpeedGate', 'SaveGate', 'SecurityGate', 'RepairGate')
     } else {
         $Suite
     }
