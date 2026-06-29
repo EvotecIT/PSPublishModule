@@ -54,7 +54,15 @@ function Add-ManagedInstallDetail {
     $extractionMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.ExtractionElapsed
     $dependencyMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.DependencyElapsed
     $promotionMilliseconds = ConvertTo-Milliseconds -TimeSpan $Result.PromotionElapsed
-    $coalescedWaitMilliseconds = if (
+    $hasExplicitCoalescedWait = $null -ne $Result.PSObject.Properties['CoalescedWaitElapsed']
+    $explicitCoalescedWaitMilliseconds = if ($hasExplicitCoalescedWait) {
+        ConvertTo-Milliseconds -TimeSpan $Result.CoalescedWaitElapsed
+    } else {
+        0
+    }
+    $coalescedWaitMilliseconds = if ($hasExplicitCoalescedWait) {
+        $explicitCoalescedWaitMilliseconds
+    } elseif (
         [string] $Result.Status -eq 'AlreadyInstalled' -and
         [double] $elapsedMilliseconds -gt 0 -and
         [double] $downloadMilliseconds -eq 0 -and
