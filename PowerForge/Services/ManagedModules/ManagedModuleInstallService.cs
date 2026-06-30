@@ -784,12 +784,7 @@ public sealed partial class ManagedModuleInstallService
     }
 
     private static string ResolveModuleDirectoryVersion(string version)
-    {
-        var prereleaseIndex = version.IndexOf('-');
-        return prereleaseIndex >= 0
-            ? version.Substring(0, prereleaseIndex)
-            : version;
-    }
+        => ManagedModulePackageIdentity.RequireSafeVersion(version, nameof(version));
 
     private static bool IsInstalledModulePathSatisfied(string modulePath, string moduleName, string version)
     {

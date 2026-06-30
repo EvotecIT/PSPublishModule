@@ -61,8 +61,11 @@ public sealed partial class ManagedModuleRepositoryClient
 
         if (!repository.Source.EndsWith("index.json", StringComparison.OrdinalIgnoreCase))
         {
-            _packagePublishAddressCache[repository.Source] = repository.Source;
-            return repository.Source;
+            var publishAddress = repository.Kind == ManagedModuleRepositoryKind.NuGetV2
+                ? ResolveNuGetV2PackagePublishAddress(repository.Source)
+                : repository.Source;
+            _packagePublishAddressCache[repository.Source] = publishAddress;
+            return publishAddress;
         }
 
         using var response = await SendWithPolicyAsync(
@@ -194,5 +197,13 @@ public sealed partial class ManagedModuleRepositoryClient
             return false;
 
         return type!.IndexOf("PackagePublish", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static string ResolveNuGetV2PackagePublishAddress(string source)
+    {
+        var trimmed = source.Trim().TrimEnd('/');
+        return trimmed.EndsWith("/package", StringComparison.OrdinalIgnoreCase)
+            ? trimmed
+            : trimmed + "/package";
     }
 }

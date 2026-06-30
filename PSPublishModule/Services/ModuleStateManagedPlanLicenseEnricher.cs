@@ -114,6 +114,22 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
         ModuleStatePlanActionResult action,
         ModuleStateManagedDeliveryOptions options)
     {
+        if (!string.IsNullOrWhiteSpace(options.ProfileName))
+        {
+            var profile = ModuleRepositoryProfileCommandSupport.TryResolve(options.ProfileName);
+            if (profile is not null &&
+                (string.IsNullOrWhiteSpace(action.TargetRepository) ||
+                 string.Equals(action.TargetRepository, profile.RepositoryName, StringComparison.OrdinalIgnoreCase)))
+            {
+                return ManagedModuleCommandSupport.CreateRepository(
+                    _cmdlet,
+                    ManagedModuleCommandSupport.DefaultRepositoryName,
+                    ManagedModuleCommandSupport.DefaultRepositorySource,
+                    options.ProfileName,
+                    repositoryWasBound: false);
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(action.TargetRepository))
             return ManagedModuleCommandSupport.CreateRepository(
                 _cmdlet,

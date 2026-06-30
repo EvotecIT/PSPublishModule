@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Net;
 using PowerForge;
 
 namespace PowerForge.Tests;
@@ -57,6 +58,31 @@ public sealed class ManagedModuleUpdateServiceTests
         Assert.False(string.IsNullOrWhiteSpace(result.ReceiptPath));
         Assert.Equal(result.ReceiptPath, result.InstallResult?.ReceiptPath);
         AssertReceipt(result.ReceiptPath, "Update", "Company.Tools", "1.1.0", "1.0.0");
+    }
+
+    [Fact]
+    public async Task PlanUpdateAsync_ignores_unlisted_repository_versions()
+    {
+        var requests = new List<string>();
+        using var moduleRoot = new TemporaryDirectory();
+        var installedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(installedPath);
+        File.WriteAllText(Path.Combine(installedPath, "Company.Tools.psd1"), "@{ ModuleVersion = '1.0.0' }");
+        using var client = new HttpClient(new UnlistedUpdateHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var service = new ManagedModuleUpdateService(new NullLogger(), repositoryClient);
+
+        var plan = await service.PlanUpdateAsync(new ManagedModuleUpdateRequest
+        {
+            Repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json"),
+            Name = "Company.Tools",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal("1.5.0", plan.TargetVersion);
+        Assert.DoesNotContain("2.0.0", plan.TargetVersion);
+        Assert.Contains(requests, request => request == "https://example.test/search/?q=Company.Tools&prerelease=false&take=20&semVerLevel=2.0.0");
     }
 
     [Fact]
@@ -764,4 +790,44 @@ public sealed class ManagedModuleUpdateServiceTests
 
     private static string ComputeSha256(string path)
         => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
+
+    private sealed class UnlistedUpdateHandler : HttpMessageHandler
+    {
+        private readonly List<string> _requests;
+
+        internal UnlistedUpdateHandler(List<string> requests)
+            => _requests = requests;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
+            _requests.Add(uri);
+
+            if (uri == "https://example.test/v3/index.json")
+                return Json("{\"resources\":[" +
+                            "{\"@id\":\"https://example.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}," +
+                            "{\"@id\":\"https://example.test/search/\",\"@type\":\"SearchQueryService/3.5.0\"}" +
+                            "]}");
+
+            if (uri == "https://example.test/packages/company.tools/index.json")
+                return Json("{\"versions\":[\"1.0.0\",\"1.5.0\",\"2.0.0\"]}");
+
+            if (uri == "https://example.test/search/?q=Company.Tools&prerelease=false&take=20&semVerLevel=2.0.0")
+                return Json("{\"data\":[{\"id\":\"Company.Tools\",\"version\":\"1.5.0\",\"listed\":true}]}");
+
+            if (uri == "https://example.test/packages/company.tools/1.5.0/company.tools.1.5.0.nupkg")
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(TestPackageFactory.CreateBytes("Company.Tools", "1.5.0"))
+                });
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+
+        private static Task<HttpResponseMessage> Json(string content)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(content, System.Text.Encoding.UTF8, "application/json")
+            });
+    }
 }

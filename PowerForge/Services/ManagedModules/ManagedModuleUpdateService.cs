@@ -468,6 +468,7 @@ public sealed class ManagedModuleUpdateService
             cancellationToken).ConfigureAwait(false);
 
         var latest = versions
+            .Where(static version => version.Listed)
             .Where(version => range.IsSatisfiedBy(version.Version))
             .LastOrDefault();
         if (latest is null)

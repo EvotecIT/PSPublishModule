@@ -307,8 +307,46 @@ public sealed partial class ManagedModuleInstallServiceTests
         });
 
         Assert.Equal("1.1.0-preview.10", result.Version);
-        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
-        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0-preview.10")));
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0-preview.10", "Company.Tools.psd1")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_preserves_prerelease_labels_as_side_by_side_directories()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0-preview.1.nupkg"),
+            "Company.Tools",
+            "1.1.0-preview.1",
+            files: CreateModuleFiles("1.1.0-preview.1"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0-preview.2.nupkg"),
+            "Company.Tools",
+            "1.1.0-preview.2",
+            files: CreateModuleFiles("1.1.0-preview.2"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.1.0-preview.1",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.1.0-preview.2",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal("1.1.0-preview.2", result.Version);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0-preview.1", "Company.Tools.psd1")));
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0-preview.2", "Company.Tools.psd1")));
     }
 
     [Fact]
@@ -838,8 +876,7 @@ public sealed partial class ManagedModuleInstallServiceTests
         var dependency = Assert.Single(result.DependencyResults);
         Assert.Equal("Company.Core", dependency.Name);
         Assert.Equal("2.0.0-preview.10", dependency.Version);
-        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "2.0.0", "Company.Core.psd1")));
-        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "2.0.0-preview.10")));
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "2.0.0-preview.10", "Company.Core.psd1")));
     }
 
     [Fact]

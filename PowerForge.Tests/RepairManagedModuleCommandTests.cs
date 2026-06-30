@@ -198,6 +198,48 @@ public sealed class RepairManagedModuleCommandTests
     }
 
     [Fact]
+    public void RepairManagedModule_ProfileNameUsesProfileSourceForLicensePreflight()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: CreateModuleFiles("Company.Tools", "1.1.0"),
+            requireLicenseAcceptance: true);
+        new ModuleRepositoryProfileStore().SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "Company",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "CompanyModules",
+            RepositoryUri = feed.Path
+        });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("Name", new[] { "Company.Tools" })
+            .AddParameter("Latest")
+            .AddParameter("ProfileName", "Company")
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions, static action =>
+            string.Equals(action.ModuleName, "Company.Tools", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(action.Kind, "Update", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("CompanyModules", action.TargetRepository);
+        Assert.True(action.LicenseAcceptanceRequired);
+        Assert.False(action.LicenseAccepted);
+        Assert.False(result.Apply.CanApply);
+    }
+
+    [Fact]
     public void RepairManagedModule_ProfileNameResolvesMachineScopeProfileForPlanning()
     {
         using var feed = new TemporaryDirectory();
