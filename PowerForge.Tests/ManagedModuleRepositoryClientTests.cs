@@ -162,6 +162,24 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task GetLatestVersionAsync_uses_package_id_fallback_for_nuget_v2_latest_entries_without_id()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/api/v2");
+
+        var version = await repositoryClient.GetLatestVersionAsync(repository, "NoId.Tools", includePrerelease: false);
+
+        Assert.NotNull(version);
+        Assert.Equal("NoId.Tools", version!.Name);
+        Assert.Equal("1.1.0", version.Version);
+        Assert.Contains(
+            requests,
+            request => request.Url == "https://example.test/api/v2/FindPackagesById()?id='NoId.Tools'&$filter=IsLatestVersion&$top=1");
+    }
+
+    [Fact]
     public async Task GetLatestVersionAsync_uses_absolute_latest_filter_for_prerelease()
     {
         var requests = new List<RecordedRequest>();
@@ -1055,6 +1073,13 @@ public sealed class ManagedModuleRepositoryClientTests
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
                     "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\">" +
                     "<entry><content><m:properties><d:Id>Company.Tools</d:Id><d:Version>1.1.0</d:Version></m:properties></content></entry>" +
+                    "</feed>");
+
+            if (uri.AbsoluteUri == "https://example.test/api/v2/FindPackagesById()?id='NoId.Tools'&$filter=IsLatestVersion&$top=1")
+                return Xml(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                    "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\">" +
+                    "<entry><content><m:properties><d:Version>1.1.0</d:Version></m:properties></content></entry>" +
                     "</feed>");
 
             if (uri.AbsoluteUri == "https://example.test/api/v2/FindPackagesById()?id='Company.Tools'&$filter=IsAbsoluteLatestVersion&$top=1")

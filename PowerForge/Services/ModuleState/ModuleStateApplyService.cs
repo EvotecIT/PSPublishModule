@@ -229,7 +229,13 @@ internal sealed class ModuleStateApplyService
             arguments.Add(deliveryOptions.ModuleRoot!);
         }
 
-        if (!string.IsNullOrWhiteSpace(action.TargetRepository))
+        if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
+            !string.IsNullOrWhiteSpace(deliveryOptions.ProfileName))
+        {
+            arguments.Add("-ProfileName");
+            arguments.Add(deliveryOptions.ProfileName!);
+        }
+        else if (!string.IsNullOrWhiteSpace(action.TargetRepository))
         {
             arguments.Add("-Repository");
             arguments.Add(action.TargetRepository!);

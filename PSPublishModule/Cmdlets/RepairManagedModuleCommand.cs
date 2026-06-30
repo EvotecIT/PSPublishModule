@@ -373,10 +373,13 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
                 Prerelease = Prerelease.IsPresent,
                 Force = Force.IsPresent,
                 DeliveryTransport = Transport,
-                CredentialUserName = CredentialUserName,
-                CredentialSecret = CredentialSecret,
+                CredentialUserName = Credential?.UserName ?? CredentialUserName,
+                CredentialSecret = Credential?.GetNetworkCredential().Password ?? CredentialSecret,
                 CredentialSecretFilePath = CredentialSecretFilePath,
-                PromptForCredential = false
+                PromptForCredential = false,
+                ManagedModuleRoot = ResolveManagedDeliveryModuleRoot(),
+                ManagedAllowClobber = AllowClobber.IsPresent,
+                ManagedAcceptLicense = AcceptLicense.IsPresent
             });
     }
 

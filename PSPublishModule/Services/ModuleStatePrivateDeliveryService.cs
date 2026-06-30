@@ -104,6 +104,7 @@ internal sealed class ModuleStatePrivateDeliveryService
             CredentialSecretFilePath = options.CredentialSecretFilePath,
             PromptForCredential = options.PromptForCredential
         };
+        ApplyManagedDeliveryOptions(request, actions, options);
 
         if (!string.IsNullOrWhiteSpace(options.ProfileName))
         {
@@ -131,6 +132,28 @@ internal sealed class ModuleStatePrivateDeliveryService
         }
 
         return request;
+    }
+
+    private static void ApplyManagedDeliveryOptions(
+        PrivateModuleWorkflowRequest request,
+        IReadOnlyList<ModuleStatePlanAction> actions,
+        ModuleStatePrivateDeliveryOptions options)
+    {
+        request.ManagedAllowClobber = options.ManagedAllowClobber;
+        request.ManagedAcceptLicense = options.ManagedAcceptLicense;
+        request.ManagedModuleRoot = options.ManagedModuleRoot;
+        request.ManagedScope = ResolveManagedScope(actions);
+    }
+
+    private static ManagedModuleInstallScope ResolveManagedScope(IReadOnlyList<ModuleStatePlanAction> actions)
+    {
+        var scope = actions
+            .Select(static action => action.TargetScope)
+            .FirstOrDefault(static scope => !string.IsNullOrWhiteSpace(scope));
+
+        return string.Equals(scope, "AllUsers", StringComparison.OrdinalIgnoreCase)
+            ? ManagedModuleInstallScope.AllUsers
+            : ManagedModuleInstallScope.CurrentUser;
     }
 
     private static bool ShouldApplyProfile(string? repository, ModuleRepositoryProfile profile)
@@ -359,4 +382,10 @@ internal sealed class ModuleStatePrivateDeliveryOptions
     internal string? CredentialSecretFilePath { get; set; }
 
     internal bool PromptForCredential { get; set; }
+
+    internal string? ManagedModuleRoot { get; set; }
+
+    internal bool ManagedAllowClobber { get; set; }
+
+    internal bool ManagedAcceptLicense { get; set; }
 }

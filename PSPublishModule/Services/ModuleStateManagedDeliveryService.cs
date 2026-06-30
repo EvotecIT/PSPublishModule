@@ -229,11 +229,33 @@ internal sealed class ModuleStateManagedDeliveryService
         ModuleStatePlanAction action,
         ModuleStateManagedDeliveryOptions options)
     {
+        if (!string.IsNullOrWhiteSpace(options.ProfileName))
+        {
+            var profile = ModuleRepositoryProfileCommandSupport.TryResolve(options.ProfileName);
+            if (profile is not null &&
+                (string.IsNullOrWhiteSpace(action.TargetRepository) ||
+                 string.Equals(action.TargetRepository, profile.RepositoryName, StringComparison.OrdinalIgnoreCase)))
+            {
+                return ManagedModuleCommandSupport.CreateRepository(
+                    _cmdlet,
+                    ManagedModuleCommandSupport.DefaultRepositoryName,
+                    ManagedModuleCommandSupport.DefaultRepositorySource,
+                    options.ProfileName,
+                    repositoryWasBound: false);
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(action.TargetRepository))
             return ManagedModuleCommandSupport.CreateRepository(
                 _cmdlet,
                 ManagedModuleCommandSupport.DefaultRepositoryName,
                 action.TargetRepository!);
+
+        if (!string.IsNullOrWhiteSpace(options.Repository))
+            return ManagedModuleCommandSupport.CreateRepository(
+                _cmdlet,
+                ManagedModuleCommandSupport.DefaultRepositoryName,
+                options.Repository!);
 
         if (!string.IsNullOrWhiteSpace(options.ProfileName))
             return ManagedModuleCommandSupport.CreateRepository(
@@ -242,12 +264,6 @@ internal sealed class ModuleStateManagedDeliveryService
                 ManagedModuleCommandSupport.DefaultRepositorySource,
                 options.ProfileName,
                 repositoryWasBound: false);
-
-        if (!string.IsNullOrWhiteSpace(options.Repository))
-            return ManagedModuleCommandSupport.CreateRepository(
-                _cmdlet,
-                ManagedModuleCommandSupport.DefaultRepositoryName,
-                options.Repository!);
 
         throw new InvalidOperationException("Managed module delivery requires Repository, ProfileName, or action target repository.");
     }

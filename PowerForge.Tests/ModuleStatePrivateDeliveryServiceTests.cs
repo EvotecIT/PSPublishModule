@@ -87,6 +87,35 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
     }
 
     [Fact]
+    public void CreateRequest_ForwardsManagedOptionsForAutoDelivery()
+    {
+        var request = InvokeCreateRequest(
+            new[]
+            {
+                new ModuleStatePlanAction(
+                    ModuleStatePlanActionKind.Update,
+                    "Company.Tools",
+                    "1.0.0",
+                    ">=2.0.0",
+                    "stale version",
+                    targetScope: "AllUsers")
+            },
+            new ModuleStatePrivateDeliveryOptions
+            {
+                DeliveryTransport = ModuleStateDeliveryTransport.Auto,
+                ManagedModuleRoot = @"C:\ManagedRoot",
+                ManagedAllowClobber = true,
+                ManagedAcceptLicense = true
+            });
+
+        Assert.Equal(ModuleStateDeliveryTransport.Auto, request.DeliveryTransport);
+        Assert.Equal(@"C:\ManagedRoot", request.ManagedModuleRoot);
+        Assert.True(request.ManagedAllowClobber);
+        Assert.True(request.ManagedAcceptLicense);
+        Assert.Equal(ManagedModuleInstallScope.AllUsers, request.ManagedScope);
+    }
+
+    [Fact]
     public void ResolveActionRepository_PreservesActionTargetOverGlobalRepository()
     {
         var action = new ModuleStatePlanAction(

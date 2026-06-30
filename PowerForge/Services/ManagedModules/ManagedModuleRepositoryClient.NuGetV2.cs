@@ -96,7 +96,7 @@ public sealed partial class ManagedModuleRepositoryClient
         XNamespace data = "http://schemas.microsoft.com/ado/2007/08/dataservices";
         return document
             .Descendants(atom + "entry")
-            .Select(entry => ReadNuGetV2SearchResult(repository, entry, data))
+            .Select(entry => ReadNuGetV2SearchResult(repository, entry, data, packageId))
             .Where(version => version is not null && version.Name.Equals(packageId, StringComparison.OrdinalIgnoreCase))
             .Select(static version => version!)
             .OrderBy(version => version.Version, ManagedModuleVersionComparer.Instance)
