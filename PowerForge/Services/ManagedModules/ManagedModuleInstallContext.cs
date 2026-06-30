@@ -199,11 +199,9 @@ internal sealed class ManagedModuleInstallContext
         try
         {
             var versions = Directory.GetDirectories(moduleFolder)
-                .Select(Path.GetFileName)
+                .Select(path => ReadInstalledVersionDirectory(moduleName, path))
                 .Where(static version => !string.IsNullOrWhiteSpace(version))
                 .Select(static version => version!)
-                .Where(static version => !IsManagedStageDirectory(version))
-                .Where(static version => IsInstalledVersionDirectory(version))
                 .OrderBy(static version => version, ManagedModuleVersionComparer.Instance)
                 .ToArray();
             if (versions.Length > 0)
@@ -236,6 +234,38 @@ internal sealed class ManagedModuleInstallContext
 
     internal static bool IsManagedStageDirectory(string directoryName)
         => directoryName.StartsWith(".pfmm-stage-", StringComparison.OrdinalIgnoreCase);
+
+    private static string? ReadInstalledVersionDirectory(string moduleName, string directoryPath)
+    {
+        var directoryName = Path.GetFileName(directoryPath);
+        if (string.IsNullOrWhiteSpace(directoryName) ||
+            IsManagedStageDirectory(directoryName!) ||
+            !IsInstalledVersionDirectory(directoryName))
+        {
+            return null;
+        }
+
+        var manifestPath = Path.Combine(directoryPath, moduleName.Trim() + ".psd1");
+        if (!File.Exists(manifestPath))
+            manifestPath = Directory.EnumerateFiles(directoryPath, "*.psd1", SearchOption.TopDirectoryOnly).FirstOrDefault() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(manifestPath))
+            return directoryName!.Trim();
+
+        try
+        {
+            var manifest = new ModuleManifestMetadataReader().Read(manifestPath);
+            if (string.IsNullOrWhiteSpace(manifest.ModuleVersion))
+                return directoryName!.Trim();
+
+            return string.IsNullOrWhiteSpace(manifest.PreRelease)
+                ? manifest.ModuleVersion.Trim()
+                : manifest.ModuleVersion.Trim() + "-" + manifest.PreRelease!.Trim().TrimStart('-');
+        }
+        catch
+        {
+            return directoryName!.Trim();
+        }
+    }
 
     private static bool IsInstalledVersionDirectory(string? directoryName)
     {

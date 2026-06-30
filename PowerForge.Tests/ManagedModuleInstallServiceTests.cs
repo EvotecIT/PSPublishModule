@@ -209,6 +209,37 @@ public sealed partial class ManagedModuleInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_treats_equals_version_policy_as_exact_version()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.2.0.0.nupkg"),
+            "Company.Tools",
+            "2.0.0",
+            files: CreateModuleFiles("2.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            VersionPolicy = "=1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal("1.0.0", result.Version);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "2.0.0")));
+    }
+
+    [Fact]
     public async Task InstallAsync_supports_comma_separated_comparator_version_policy()
     {
         using var feed = new TemporaryDirectory();
@@ -276,7 +307,8 @@ public sealed partial class ManagedModuleInstallServiceTests
         });
 
         Assert.Equal("1.1.0-preview.10", result.Version);
-        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0-preview.10", "Company.Tools.psd1")));
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0-preview.10")));
     }
 
     [Fact]
@@ -806,7 +838,8 @@ public sealed partial class ManagedModuleInstallServiceTests
         var dependency = Assert.Single(result.DependencyResults);
         Assert.Equal("Company.Core", dependency.Name);
         Assert.Equal("2.0.0-preview.10", dependency.Version);
-        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "2.0.0-preview.10", "Company.Core.psd1")));
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "2.0.0", "Company.Core.psd1")));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "2.0.0-preview.10")));
     }
 
     [Fact]
@@ -1196,15 +1229,26 @@ public sealed partial class ManagedModuleInstallServiceTests
     private static IReadOnlyDictionary<string, string> CreateModuleFiles(string version)
         => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Company.Tools.psd1"] = "@{ ModuleVersion = '" + version + "' }",
+            ["Company.Tools.psd1"] = CreateModuleManifest(version),
             ["Public/Get-CompanyTool.ps1"] = "function Get-CompanyTool { 'ok' }"
         };
 
     private static IReadOnlyDictionary<string, string> CreateDependencyFiles(string version)
         => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Company.Core.psd1"] = "@{ ModuleVersion = '" + version + "' }"
+            ["Company.Core.psd1"] = CreateModuleManifest(version)
         };
+
+    private static string CreateModuleManifest(string version)
+    {
+        var prereleaseIndex = version.IndexOf('-');
+        if (prereleaseIndex < 0)
+            return "@{ ModuleVersion = '" + version + "' }";
+
+        var core = version.Substring(0, prereleaseIndex);
+        var prerelease = version.Substring(prereleaseIndex + 1);
+        return "@{ ModuleVersion = '" + core + "'; PrivateData = @{ PSData = @{ Prerelease = '" + prerelease + "' } } }";
+    }
 
     private static IReadOnlyDictionary<string, string> CreateBaseFiles(string version)
         => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)

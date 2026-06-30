@@ -198,6 +198,38 @@ public sealed class RepairManagedModuleCommandTests
     }
 
     [Fact]
+    public void RepairManagedModule_ProfileNameResolvesMachineScopeProfileForPlanning()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        using var profileRoot = new TemporaryDirectory();
+        using var machineProfileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStores(profileRoot.Path, machineProfileRoot.Path);
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        new ModuleRepositoryProfileStore(ModuleRepositoryProfileScope.Machine).SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "CompanyMachine",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "MachineModules",
+            RepositoryUri = feed.Path
+        });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("Name", new[] { "Company.Tools" })
+            .AddParameter("Latest")
+            .AddParameter("ProfileName", "CompanyMachine")
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions);
+        Assert.Equal("MachineModules", action.TargetRepository);
+    }
+
+    [Fact]
     public void RepairManagedModule_ProfileNameAppliesUpdateToInventoriedCustomRoot()
     {
         using var feed = new TemporaryDirectory();
@@ -397,6 +429,15 @@ public sealed class RepairManagedModuleCommandTests
         return new TestEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH", path);
     }
 
+    private static IDisposable UseProfileStores(string userRoot, string machineRoot)
+    {
+        Directory.CreateDirectory(userRoot);
+        Directory.CreateDirectory(machineRoot);
+        return new CompositeDisposable(
+            new TestEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH", Path.Combine(userRoot, "profiles.json")),
+            new TestEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH", Path.Combine(machineRoot, "profiles.json")));
+    }
+
     private static void AssertNoPowerShellErrors(PowerShell ps)
     {
         if (ps.HadErrors)
@@ -418,6 +459,20 @@ public sealed class RepairManagedModuleCommandTests
         public void Dispose()
         {
             Environment.SetEnvironmentVariable(_name, _previousValue);
+        }
+    }
+
+    private sealed class CompositeDisposable : IDisposable
+    {
+        private readonly IDisposable[] _items;
+
+        internal CompositeDisposable(params IDisposable[] items)
+            => _items = items;
+
+        public void Dispose()
+        {
+            foreach (var item in _items.Reverse())
+                item.Dispose();
         }
     }
 }

@@ -321,7 +321,8 @@ public sealed partial class ManagedModuleRepositoryClient
 
         try
         {
-            return (await GetNuGetVersionsAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false)).LastOrDefault();
+            return (await GetNuGetVersionsAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false))
+                .LastOrDefault(static version => version.Listed);
         }
         catch (ManagedModuleRepositoryException ex) when (IsRepositoryPackageNotFound(ex))
         {
@@ -417,20 +418,27 @@ public sealed partial class ManagedModuleRepositoryClient
         if (!document.RootElement.TryGetProperty("versions", out var versions) || versions.ValueKind != JsonValueKind.Array)
             throw CreateRepositoryContractException(repository, "VersionQuery", $"Repository response did not include a versions array for package '{packageId}'.");
 
+        var latestListedVersion = await TryResolveLatestListedVersionAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false);
         return versions.EnumerateArray()
             .Select(static version => version.GetString())
             .Where(version => !string.IsNullOrWhiteSpace(version))
             .Select(version => version!.Trim())
             .Where(version => includePrerelease || !ManagedModuleVersionComparer.IsPrerelease(version))
             .OrderBy(version => version, ManagedModuleVersionComparer.Instance)
+            .Select(version => new
+            {
+                Version = version,
+                Listed = IsVersionListedBySearch(latestListedVersion, version)
+            })
             .Select(version => new ManagedModuleVersionInfo
             {
                 Name = packageId,
-                Version = version,
+                Version = version.Version,
                 RepositoryName = repository.Name,
                 RepositorySource = repository.Source,
-                PackageSource = BuildPackageUri(packageBase, packageId, version).ToString(),
-                IsPrerelease = ManagedModuleVersionComparer.IsPrerelease(version)
+                PackageSource = BuildPackageUri(packageBase, packageId, version.Version).ToString(),
+                IsPrerelease = ManagedModuleVersionComparer.IsPrerelease(version.Version),
+                Listed = version.Listed
             })
             .ToArray();
     }
@@ -512,7 +520,7 @@ public sealed partial class ManagedModuleRepositoryClient
         var searchText = ManagedModuleSearchMatcher.ToSearchText(query);
         var uri = new Uri(
             new Uri(EnsureTrailingSlash(searchService)),
-            $"?q={Uri.EscapeDataString(searchText)}&prerelease={includePrerelease.ToString().ToLowerInvariant()}&take={Math.Max(1, take)}");
+            $"?q={Uri.EscapeDataString(searchText)}&prerelease={includePrerelease.ToString().ToLowerInvariant()}&take={Math.Max(1, take)}&semVerLevel=2.0.0");
         using var response = await SendWithPolicyAsync(
             () => CreateRequest(HttpMethod.Get, uri, credential, "application/json"),
             cancellationToken).ConfigureAwait(false);
@@ -536,6 +544,33 @@ public sealed partial class ManagedModuleRepositoryClient
             .Take(Math.Max(1, take))
             .ToArray();
     }
+
+    private async Task<string?> TryResolveLatestListedVersionAsync(
+        ManagedModuleRepository repository,
+        string packageId,
+        bool includePrerelease,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var results = await SearchNuGetPackagesAsync(repository, packageId, includePrerelease, credential, take: 20, cancellationToken).ConfigureAwait(false);
+            return results
+                .Where(version => version.Listed && version.Name.Equals(packageId, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(version => version.Version, ManagedModuleVersionComparer.Instance)
+                .LastOrDefault()
+                ?.Version;
+        }
+        catch (Exception ex) when (ex is ManagedModuleRepositoryException or InvalidOperationException or JsonException)
+        {
+            _logger.Verbose($"Managed module listed-version metadata lookup skipped for '{packageId}': {ex.Message}");
+            return null;
+        }
+    }
+
+    private static bool IsVersionListedBySearch(string? latestListedVersion, string version)
+        => string.IsNullOrWhiteSpace(latestListedVersion) ||
+           ManagedModuleVersionComparer.Instance.Compare(version, latestListedVersion!) <= 0;
 
     private async Task<ManagedModuleDownloadResult> DownloadNuGetPackageAsync(
         ManagedModuleRepository repository,

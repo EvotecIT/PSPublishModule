@@ -53,6 +53,14 @@ internal sealed class ManagedModuleVersionRange
 
         var trimmed = value!.Trim();
         var allowsPrerelease = ManagedModuleVersionComparer.IsPrerelease(trimmed);
+        if (trimmed.StartsWith("=", StringComparison.Ordinal))
+        {
+            var exact = Normalize(trimmed.Substring(1));
+            return string.IsNullOrWhiteSpace(exact)
+                ? Any
+                : new ManagedModuleVersionRange(null, false, null, false, exact, ManagedModuleVersionComparer.IsPrerelease(exact!));
+        }
+
         if (TryParseComparatorRange(trimmed, allowsPrerelease, out var comparatorRange))
             return comparatorRange;
 

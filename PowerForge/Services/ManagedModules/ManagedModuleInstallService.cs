@@ -225,7 +225,7 @@ public sealed partial class ManagedModuleInstallService
             var versionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken).ConfigureAwait(false);
             var version = versionInfo.Version;
             versionResolutionStopwatch.Stop();
-            var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), version);
+            var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), ResolveModuleDirectoryVersion(version));
 
             var coalescingKey = preResolvedCoalescingKey ?? TryCreateInstallCoalescingKey(request, version, moduleRoot);
             if (preResolvedPendingInstall is not null && coalescingKey is not null)
@@ -392,7 +392,7 @@ public sealed partial class ManagedModuleInstallService
             using (AcquireInstallLock(moduleRoot, request.Name, cancellationToken, out var resolvedLockWaitElapsed))
             {
                 installLockWaitElapsed += resolvedLockWaitElapsed;
-                if (Directory.Exists(modulePath) && !request.Force && !RequiresVerifiedPackage(request))
+                if (IsInstalledModulePathSatisfied(modulePath, request.Name, version) && !request.Force && !RequiresVerifiedPackage(request))
                 {
                     _logger.Verbose($"Managed module install skipped existing version: {modulePath}");
                     context.RecordInstalledVersion(moduleRoot, request.Name, version);
@@ -519,7 +519,7 @@ public sealed partial class ManagedModuleInstallService
                 {
                     promotionLockWaitElapsed += resolvedPromotionLockWaitElapsed;
                     installLockWaitElapsed += resolvedPromotionLockWaitElapsed;
-                    if (Directory.Exists(modulePath) && !request.Force && !RequiresVerifiedPackage(request))
+                    if (IsInstalledModulePathSatisfied(modulePath, request.Name, version) && !request.Force && !RequiresVerifiedPackage(request))
                     {
                         _logger.Verbose($"Managed module install skipped concurrently installed version: {modulePath}");
                         context.RecordInstalledVersion(moduleRoot, request.Name, version);
@@ -695,6 +695,7 @@ public sealed partial class ManagedModuleInstallService
             cancellationToken).ConfigureAwait(false);
 
         var latest = versions
+            .Where(static version => version.Listed)
             .Where(version => range.IsSatisfiedBy(version.Version))
             .LastOrDefault();
         if (latest is null)
@@ -780,6 +781,42 @@ public sealed partial class ManagedModuleInstallService
             ? version.Substring(0, prereleaseIndex)
             : version;
         return core.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries).Length < 3;
+    }
+
+    private static string ResolveModuleDirectoryVersion(string version)
+    {
+        var prereleaseIndex = version.IndexOf('-');
+        return prereleaseIndex >= 0
+            ? version.Substring(0, prereleaseIndex)
+            : version;
+    }
+
+    private static bool IsInstalledModulePathSatisfied(string modulePath, string moduleName, string version)
+    {
+        if (!Directory.Exists(modulePath))
+            return false;
+
+        var manifestPath = Path.Combine(modulePath, moduleName.Trim() + ".psd1");
+        if (!File.Exists(manifestPath))
+            manifestPath = Directory.EnumerateFiles(modulePath, "*.psd1", SearchOption.TopDirectoryOnly).FirstOrDefault() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(manifestPath))
+            return true;
+
+        try
+        {
+            var manifest = new ModuleManifestMetadataReader().Read(manifestPath);
+            if (string.IsNullOrWhiteSpace(manifest.ModuleVersion))
+                return true;
+
+            var manifestVersion = string.IsNullOrWhiteSpace(manifest.PreRelease)
+                ? manifest.ModuleVersion.Trim()
+                : manifest.ModuleVersion.Trim() + "-" + manifest.PreRelease!.Trim().TrimStart('-');
+            return ManagedModuleVersionComparer.Instance.Compare(manifestVersion, version) == 0;
+        }
+        catch
+        {
+            return true;
+        }
     }
 
     private static ManagedModuleVersionInfo CreateRequestedVersionInfo(ManagedModuleInstallRequest request, string version)

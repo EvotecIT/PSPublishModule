@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.Http.Headers;
+using System.Reflection;
 using PowerForge;
 
 namespace PowerForge.Tests;
@@ -77,5 +79,40 @@ public sealed class ManagedModuleRepositoryClientHttpHandlerTests
 #if !NET472
         Assert.True(handler.AutomaticDecompression.HasFlag(DecompressionMethods.Brotli));
 #endif
+    }
+
+    [Fact]
+    public void RedirectRequest_keeps_credentials_only_for_same_origin_redirects()
+    {
+        var method = typeof(ManagedModuleRepositoryClient).GetMethod(
+            "CreateRedirectRequest",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        using var source = new HttpRequestMessage(HttpMethod.Get, "https://feed.example.test:8443/packages");
+        source.Headers.Authorization = new AuthenticationHeaderValue("Basic", "secret");
+        source.Headers.Add("X-NuGet-ApiKey", "api-secret");
+
+        using var sameOrigin = Assert.IsType<HttpRequestMessage>(method!.Invoke(null, new object[]
+        {
+            source,
+            new Uri("https://feed.example.test:8443/redirected")
+        }));
+        using var downgraded = Assert.IsType<HttpRequestMessage>(method.Invoke(null, new object[]
+        {
+            source,
+            new Uri("http://feed.example.test:8443/redirected")
+        }));
+        using var differentPort = Assert.IsType<HttpRequestMessage>(method.Invoke(null, new object[]
+        {
+            source,
+            new Uri("https://feed.example.test/redirected")
+        }));
+
+        Assert.NotNull(sameOrigin.Headers.Authorization);
+        Assert.True(sameOrigin.Headers.Contains("X-NuGet-ApiKey"));
+        Assert.Null(downgraded.Headers.Authorization);
+        Assert.False(downgraded.Headers.Contains("X-NuGet-ApiKey"));
+        Assert.Null(differentPort.Headers.Authorization);
+        Assert.False(differentPort.Headers.Contains("X-NuGet-ApiKey"));
     }
 }

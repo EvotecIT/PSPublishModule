@@ -118,13 +118,13 @@ public sealed partial class ManagedModuleRepositoryClient
             request.Headers.UserAgent.Add(header);
         if (source.Headers.Authorization is not null &&
             source.RequestUri is not null &&
-            string.Equals(source.RequestUri.Host, redirectUri.Host, StringComparison.OrdinalIgnoreCase))
+            IsSameOrigin(source.RequestUri, redirectUri))
         {
             request.Headers.Authorization = source.Headers.Authorization;
         }
 
         if (source.RequestUri is not null &&
-            string.Equals(source.RequestUri.Host, redirectUri.Host, StringComparison.OrdinalIgnoreCase) &&
+            IsSameOrigin(source.RequestUri, redirectUri) &&
             source.Headers.TryGetValues("X-NuGet-ApiKey", out var apiKeyValues))
         {
             request.Headers.TryAddWithoutValidation("X-NuGet-ApiKey", apiKeyValues);
@@ -132,6 +132,11 @@ public sealed partial class ManagedModuleRepositoryClient
 
         return request;
     }
+
+    private static bool IsSameOrigin(Uri sourceUri, Uri redirectUri)
+        => string.Equals(sourceUri.Scheme, redirectUri.Scheme, StringComparison.OrdinalIgnoreCase) &&
+           string.Equals(sourceUri.Host, redirectUri.Host, StringComparison.OrdinalIgnoreCase) &&
+           sourceUri.Port == redirectUri.Port;
 
     private async Task DelayBeforeRetryAsync(int attempt, CancellationToken cancellationToken)
     {

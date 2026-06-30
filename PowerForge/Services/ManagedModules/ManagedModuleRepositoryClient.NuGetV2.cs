@@ -279,7 +279,7 @@ public sealed partial class ManagedModuleRepositoryClient
     private static Uri BuildNuGetV2FindPackagesByIdUri(string source, string packageId)
     {
         var escapedId = Uri.EscapeDataString(packageId.Trim().Replace("'", "''"));
-        return new Uri(new Uri(EnsureTrailingSlash(source)), $"FindPackagesById()?id='{escapedId}'");
+        return new Uri(new Uri(EnsureTrailingSlash(source)), $"FindPackagesById()?id='{escapedId}'&semVerLevel=2.0.0");
     }
 
     private static Uri BuildNuGetV2SearchUri(string source, string pattern, bool includePrerelease, int take)
@@ -295,7 +295,7 @@ public sealed partial class ManagedModuleRepositoryClient
 
         return new Uri(
             new Uri(EnsureTrailingSlash(source)),
-            $"Packages()?$filter={filter}&$top={Math.Max(1, take)}");
+            $"Packages()?$filter={filter}&$top={Math.Max(1, take)}&semVerLevel=2.0.0");
     }
 
     private static Uri BuildNuGetV2LatestPackageUri(string source, string packageId, bool includePrerelease)
@@ -304,7 +304,7 @@ public sealed partial class ManagedModuleRepositoryClient
         var latestPredicate = includePrerelease ? "IsAbsoluteLatestVersion" : "IsLatestVersion";
         return new Uri(
             new Uri(EnsureTrailingSlash(source)),
-            $"FindPackagesById()?id='{escapedId}'&$filter={latestPredicate}&$top=1");
+            $"FindPackagesById()?id='{escapedId}'&$filter={latestPredicate}&$top=1&semVerLevel=2.0.0");
     }
 
     private static bool ShouldUsePrefixFilter(string pattern)
