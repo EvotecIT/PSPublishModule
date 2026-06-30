@@ -56,7 +56,7 @@ public sealed class ManagedModulePublishService
         var publish = await _repositoryClient.PublishPackageAsync(
             publishRepository,
             package.PackagePath,
-            request.Credential,
+            request.PublishCredential ?? request.Credential,
             request.Force,
             cancellationToken).ConfigureAwait(false);
 

@@ -57,8 +57,9 @@ public sealed class ManagedModuleUpdateService
             sourceEvaluation);
         ThrowIfSourcePolicyBlocked(action, sourceEvaluation);
         var targetWouldWrite = ActionWritesFiles(action);
-        var familyActions = await PlanFamilyActionsAsync(moduleRoot, request, targetVersion, resolvePackageMetadata: false, cancellationToken).ConfigureAwait(false);
+        var familyActions = await PlanFamilyActionsAsync(moduleRoot, request, targetVersion, resolvePackageMetadata: true, cancellationToken).ConfigureAwait(false);
         ThrowIfFamilyPlanBlocked(familyActions);
+        ThrowIfFamilyLicenseAcceptanceRequired(familyActions, request.AcceptLicense);
 
         if (!targetWouldWrite && !familyActions.Any(static action => action.WouldWriteFiles))
         {
@@ -282,10 +283,21 @@ public sealed class ManagedModuleUpdateService
                 request,
                 familyName,
                 targetVersion,
-                resolvePackageMetadata,
+                resolvePackageMetadata: false,
                 cancellationToken).ConfigureAwait(false);
             var repositoryVersionAvailable = repositoryVersion is not null;
             var action = ResolveFamilyPlanAction(currentVersion, targetVersion, request.Force, repositoryVersionAvailable);
+            if (resolvePackageMetadata &&
+                repositoryVersion is not null &&
+                FamilyActionWritesFiles(action))
+            {
+                repositoryVersion = await EnrichVersionInfoWithPackageMetadataAsync(
+                    request.Repository,
+                    repositoryVersion,
+                    request.Credential,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             var selectedPathVersion = action is ManagedModuleFamilyUpdatePlanAction.Update or ManagedModuleFamilyUpdatePlanAction.Reinstall
                 ? targetVersion
                 : currentVersion;
@@ -402,6 +414,24 @@ public sealed class ManagedModuleUpdateService
 
         var details = string.Join("; ", blocked.Select(static action => action.ConflictReason ?? $"{action.Name}: {action.Action}"));
         throw new InvalidOperationException($"Managed module family update cannot be applied safely: {details}.");
+    }
+
+    private static void ThrowIfFamilyLicenseAcceptanceRequired(
+        IReadOnlyList<ManagedModuleFamilyUpdatePlanItem> familyActions,
+        bool acceptLicense)
+    {
+        if (acceptLicense)
+            return;
+
+        var blocked = familyActions
+            .Where(static action => action.WouldWriteFiles && action.LicenseAcceptanceRequired)
+            .ToArray();
+        if (blocked.Length == 0)
+            return;
+
+        var details = string.Join(", ", blocked.Select(static action => $"{action.Name} {action.TargetVersion}"));
+        throw new InvalidOperationException(
+            $"Managed module family update requires license acceptance before files are changed: {details}. Use AcceptLicense to continue.");
     }
 
     private async Task<ManagedModuleVersionInfo> ResolveSelectedVersionInfoAsync(
@@ -534,6 +564,10 @@ public sealed class ManagedModuleUpdateService
             or ManagedModuleUpdatePlanAction.Update
             or ManagedModuleUpdatePlanAction.Reinstall
             or ManagedModuleUpdatePlanAction.RepairSource;
+
+    private static bool FamilyActionWritesFiles(ManagedModuleFamilyUpdatePlanAction action)
+        => action is ManagedModuleFamilyUpdatePlanAction.Update
+            or ManagedModuleFamilyUpdatePlanAction.Reinstall;
 
     private static ManagedModuleUpdateStatus ResolveUpdateStatus(
         ManagedModuleUpdatePlanAction action,

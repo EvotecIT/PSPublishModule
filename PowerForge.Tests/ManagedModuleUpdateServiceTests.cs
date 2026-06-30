@@ -585,6 +585,39 @@ public sealed class ManagedModuleUpdateServiceTests
     }
 
     [Fact]
+    public async Task UpdateAsync_blocks_family_license_acceptance_before_writing_requested_module()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Cloud.Users.2.0.0.nupkg"),
+            "Company.Cloud.Users",
+            "2.0.0",
+            files: CreateModuleFiles("Company.Cloud.Users", "2.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Cloud.Groups.2.0.0.nupkg"),
+            "Company.Cloud.Groups",
+            "2.0.0",
+            files: CreateModuleFiles("Company.Cloud.Groups", "2.0.0"),
+            requireLicenseAcceptance: true);
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Cloud.Users", "1.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Cloud.Groups", "1.5.0"));
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path, "Company.Cloud.Users");
+        request.FamilyPolicy = new ManagedModuleFamilyPolicy
+        {
+            ModuleNamePrefix = "Company.Cloud."
+        };
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateAsync(request));
+
+        Assert.Contains("requires license acceptance", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Company.Cloud.Groups", exception.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Cloud.Users", "2.0.0")));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Cloud.Groups", "2.0.0")));
+    }
+
+    [Fact]
     public async Task UpdateAsync_blocks_loaded_family_member_when_family_update_would_write()
     {
         using var feed = new TemporaryDirectory();

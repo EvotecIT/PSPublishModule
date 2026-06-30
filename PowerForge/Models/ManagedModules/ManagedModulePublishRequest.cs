@@ -41,9 +41,14 @@ public sealed class ManagedModulePublishRequest
     public string? OutputDirectory { get; set; }
 
     /// <summary>
-    /// Repository credential or API key.
+    /// Repository credential used for repository reads and dependency checks.
     /// </summary>
     public RepositoryCredential? Credential { get; set; }
+
+    /// <summary>
+    /// Optional credential or API key used only for package upload.
+    /// </summary>
+    public RepositoryCredential? PublishCredential { get; set; }
 
     /// <summary>
     /// Optional package authors override.

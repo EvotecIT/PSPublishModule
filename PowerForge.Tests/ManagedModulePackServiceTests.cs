@@ -583,6 +583,46 @@ public sealed class ManagedModulePackServiceTests
     }
 
     [Fact]
+    public async Task Publish_uses_read_credential_for_dependencies_and_publish_credential_for_upload()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var requests = new List<ManagedModuleRepositoryClientTests.RecordedRequest>();
+        using var httpClient = new HttpClient(new ManagedModuleRepositoryClientTests.ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), httpClient);
+        var service = new ManagedModulePublishService(new NullLogger(), repositoryClient);
+        CreateModule(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            prerelease: null,
+            requiredModules: "    RequiredModules = @(@{ ModuleName = 'Company.Core'; RequiredVersion = '2.0.0' })");
+
+        var result = await service.PublishAsync(new ManagedModulePublishRequest
+        {
+            ModulePath = moduleRoot.Path,
+            Repository = new ManagedModuleRepository("Company", "https://example.test/v3/index.json"),
+            PublishRepository = new ManagedModuleRepository("Company", "https://example.test/v3/index.json"),
+            Credential = new RepositoryCredential
+            {
+                UserName = "reader",
+                Secret = "read-secret"
+            },
+            PublishCredential = new RepositoryCredential
+            {
+                Secret = "publish-key"
+            }
+        });
+
+        Assert.True(result.Published);
+        var dependencyRead = Assert.Single(requests, request => request.Url == "https://example.test/packages/company.core/index.json");
+        Assert.Equal("Basic", dependencyRead.Authorization?.Scheme);
+        Assert.Null(dependencyRead.ApiKey);
+        var publish = Assert.Single(requests, request => request.Url == "https://example.test/publish/" && request.Method == HttpMethod.Put);
+        Assert.Null(publish.Authorization);
+        Assert.Equal("publish-key", publish.ApiKey);
+    }
+
+    [Fact]
     public async Task Publish_can_skip_required_module_repository_check()
     {
         using var moduleRoot = new TemporaryDirectory();

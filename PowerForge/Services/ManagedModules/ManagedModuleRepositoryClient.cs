@@ -403,6 +403,8 @@ public sealed partial class ManagedModuleRepositoryClient
         using var response = await SendWithPolicyAsync(
             () => CreateRequest(HttpMethod.Get, indexUri, credential, "application/json"),
             cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return Array.Empty<ManagedModuleVersionInfo>();
         if (!response.IsSuccessStatusCode)
             throw CreateRepositoryHttpException(repository, "VersionQuery", response.StatusCode, $"Unable to query versions for package '{packageId}'.");
 

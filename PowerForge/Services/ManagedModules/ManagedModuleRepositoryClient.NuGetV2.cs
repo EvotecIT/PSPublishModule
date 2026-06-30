@@ -12,15 +12,23 @@ public sealed partial class ManagedModuleRepositoryClient
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
-        var documents = await ReadNuGetV2XmlPagesAsync(
-                repository,
-                BuildNuGetV2FindPackagesByIdUri(repository.Source, packageId),
-                credential,
-                "VersionQuery",
-                $"Unable to query versions for package '{packageId}'.",
-                $"Managed module NuGet v2 version query for package '{packageId}' returned malformed XML.",
-                cancellationToken)
-            .ConfigureAwait(false);
+        IReadOnlyList<XDocument> documents;
+        try
+        {
+            documents = await ReadNuGetV2XmlPagesAsync(
+                    repository,
+                    BuildNuGetV2FindPackagesByIdUri(repository.Source, packageId),
+                    credential,
+                    "VersionQuery",
+                    $"Unable to query versions for package '{packageId}'.",
+                    $"Managed module NuGet v2 version query for package '{packageId}' returned malformed XML.",
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (ManagedModuleRepositoryException ex) when (IsRepositoryPackageNotFound(ex))
+        {
+            return Array.Empty<ManagedModuleVersionInfo>();
+        }
 
         XNamespace atom = "http://www.w3.org/2005/Atom";
         XNamespace data = "http://schemas.microsoft.com/ado/2007/08/dataservices";

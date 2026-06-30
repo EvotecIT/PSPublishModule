@@ -53,6 +53,20 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task GetVersionsAsync_returns_empty_when_nuget_v3_package_is_absent()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        var versions = await repositoryClient.GetVersionsAsync(repository, "Missing.Tools", includePrerelease: false);
+
+        Assert.Empty(versions);
+        Assert.Contains(requests, request => request.Url == "https://example.test/packages/missing.tools/index.json");
+    }
+
+    [Fact]
     public async Task GetVersionsAsync_uses_powershellgallery_v2_read_api_for_canonical_default()
     {
         var requests = new List<RecordedRequest>();
@@ -1013,6 +1027,9 @@ public sealed class ManagedModuleRepositoryClientTests
 
             if (uri.AbsoluteUri == "https://example.test/packages/company.tools/index.json")
                 return Json("{\"versions\":[\"1.0.0\",\"1.1.0-beta1\",\"1.1.0\"]}");
+
+            if (uri.AbsoluteUri == "https://example.test/packages/company.core/index.json")
+                return Json("{\"versions\":[\"2.0.0\"]}");
 
             if (uri.AbsoluteUri == "https://psgallery.test/packages/pester/index.json")
                 return Json("{\"versions\":[\"5.6.1\",\"5.7.0-preview1\",\"5.7.0\"]}");
