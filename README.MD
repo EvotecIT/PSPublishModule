@@ -393,6 +393,15 @@ The comparison is therefore split into capability and timing:
 | PSResourceGet | Registered PSGallery provider | Find and Save in the safe run; Install only when explicitly allowed | Native Microsoft resource provider. Safe benchmark runs skip install rows because the command writes to the user module path. |
 | PowerShellGet | PackageManagement / PowerShellGet provider path | Find and Save in the safe run; Install only when explicitly allowed | Mature legacy provider behavior. Safe benchmark runs skip install rows for the same user-profile install reason. |
 
+`-AllowUserProfileInstall` is a benchmark harness safety switch, not a Managed
+module feature. Managed install rows use `-ModuleRoot` and ModuleFast rows use
+`-Destination`, so both can materialize the requested module graph in an
+isolated benchmark folder. `Install-PSResource` and `Install-Module` target a
+profile scope instead of an arbitrary install root, so the safe matrix skips
+those native install rows rather than mutating the runner's real CurrentUser
+module location. To compare native install timings, rerun the matrix in a
+disposable profile, VM, or runner and pass `-AllowUserProfileInstall`.
+
 The full table below was refreshed on June 30, 2026 from one complete safe
 matrix run on PowerShell 7 and Windows PowerShell 5.1. Native `Install-Module`
 and `Install-PSResource` rows are marked `Skipped` in this snapshot because the

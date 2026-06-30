@@ -39,6 +39,16 @@ What the benchmark is trying to prove:
 - When `-RepeatCount` is greater than one, the README updater summarizes each
   tool/scenario row with the median successful timing before writing the table.
 
+`-AllowUserProfileInstall` belongs only to this benchmark harness. Managed
+installs use `Install-ManagedModule -ModuleRoot <isolated folder>` and
+ModuleFast uses `Install-ModuleFast -Destination <isolated folder>`, so those
+rows perform real installs without changing the user's module profile.
+PSResourceGet and PowerShellGet install commands target a profile scope, not an
+arbitrary module root, so the safe run marks those install rows as `Skipped`
+instead of pretending an isolated install was measured. Pass
+`-AllowUserProfileInstall` only from a disposable profile, VM, or runner where a
+CurrentUser install is acceptable.
+
 Run PowerShell 7:
 
 ```powershell
