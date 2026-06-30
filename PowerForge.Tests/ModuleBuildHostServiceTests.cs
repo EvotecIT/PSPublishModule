@@ -26,6 +26,7 @@ public sealed class ModuleBuildHostServiceTests
         Assert.Equal(@"C:\repo", captured.WorkingDirectory);
         Assert.Contains("JsonOnly = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("JsonPath = $targetJson", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("Remove-Item -LiteralPath Alias:Build-Module -Force -ErrorAction SilentlyContinue", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains(@". 'C:\repo\Build\Build-Module.ps1'", captured.CommandText!, StringComparison.Ordinal);
         Assert.True(result.Succeeded);
     }

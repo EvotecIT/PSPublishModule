@@ -62,7 +62,7 @@ internal sealed class ExternalAssetPreparationService
 
         foreach (var file in files)
         {
-            var result = PrepareFile(projectRoot, outputRoot, manifestDirectory, configuration.SkipDownload, file, effectiveTimeout);
+            var result = PrepareFile(projectRoot, outputRoot, manifestDirectory, manifestPath, configuration.SkipDownload, file, effectiveTimeout);
             fileResults.Add(result);
             manifestFiles.Add(new ExternalAssetManifestFile
             {
@@ -100,6 +100,7 @@ internal sealed class ExternalAssetPreparationService
         string projectRoot,
         string outputRoot,
         string manifestDirectory,
+        string generatedManifestPath,
         bool skipDownload,
         ExternalAssetFileConfiguration? file,
         TimeSpan timeout)
@@ -112,6 +113,8 @@ internal sealed class ExternalAssetPreparationService
         var source = RequireValue(file.Uri, $"External asset file '{fileName}' requires Uri.");
         var outputRelativePath = NormalizeOutputRelativePath(file.Path, fileName);
         var targetPath = ResolveOutputPath(outputRoot, outputRelativePath);
+        if (SamePath(targetPath, generatedManifestPath))
+            throw new InvalidOperationException($"External asset file '{outputRelativePath}' cannot use the generated manifest path '{generatedManifestPath}'.");
 
         Directory.CreateDirectory(Path.GetDirectoryName(targetPath) ?? outputRoot);
         if (skipDownload)

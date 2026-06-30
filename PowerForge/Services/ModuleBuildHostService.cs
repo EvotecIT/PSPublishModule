@@ -80,6 +80,7 @@ public sealed class ModuleBuildHostService
             $"Set-Location -LiteralPath {QuoteLiteral(moduleRoot)}",
             BuildModuleImportClause(modulePath),
             $"$targetJson = {QuoteLiteral(outputPath)}",
+            "Remove-Item -LiteralPath Alias:Build-Module -Force -ErrorAction SilentlyContinue",
             "function Invoke-ModuleBuild {",
             "  [CmdletBinding(PositionalBinding = $false)]",
             "  param(",

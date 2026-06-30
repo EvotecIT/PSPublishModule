@@ -101,6 +101,45 @@ public sealed class ExternalAssetPreparationServiceTests
     }
 
     [Fact]
+    public void Prepare_RejectsFileThatOverwritesGeneratedManifest()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var sourceRoot = Path.Combine(root, "Source");
+            Directory.CreateDirectory(sourceRoot);
+            var sourceFile = Path.Combine(sourceRoot, "manifest.json");
+            File.WriteAllText(sourceFile, "payload");
+
+            var service = new ExternalAssetPreparationService(new NullLogger());
+            var segment = new ConfigurationExternalAssetSegment
+            {
+                Configuration = new ExternalAssetConfiguration
+                {
+                    Name = "VendorTool",
+                    OutputPath = "Artefacts/VendorTool",
+                    Files = new[]
+                    {
+                        new ExternalAssetFileConfiguration
+                        {
+                            Runtime = "win-x64",
+                            FileName = "manifest.json",
+                            Uri = sourceFile
+                        }
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => service.Prepare(root, segment));
+            Assert.Contains("manifest path", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Run_StagesExternalAssetsWithoutStagingUnrelatedArtefacts()
     {
         var workspace = CreateTempDirectory();
@@ -284,6 +323,7 @@ public sealed class ExternalAssetPreparationServiceTests
         var definitions = schema.RootElement.GetProperty("$defs");
 
         Assert.True(definitions.TryGetProperty("ExternalAssetConfiguration", out var configuration));
+        Assert.True(configuration.GetProperty("properties").TryGetProperty("Enabled", out _));
         Assert.True(configuration.GetProperty("properties").TryGetProperty("Files", out _));
         Assert.True(definitions.TryGetProperty("ExternalAssetFileConfiguration", out var fileConfiguration));
         Assert.True(fileConfiguration.GetProperty("properties").TryGetProperty("Sha256", out _));

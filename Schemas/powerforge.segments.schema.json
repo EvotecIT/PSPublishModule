@@ -224,6 +224,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "Enabled": { "type": "boolean" },
         "Name": { "type": "string", "minLength": 1 },
         "Version": { "type": ["string", "null"] },
         "OutputPath": { "type": "string", "minLength": 1 },
