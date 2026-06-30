@@ -103,6 +103,29 @@ public sealed partial class ManagedModuleRepositoryClient
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
+        if (ShouldUsePowerShellGalleryCdn(repository))
+        {
+            return await DownloadPowerShellGalleryPackageWithCdnFallbackAsync(
+                    repository,
+                    packageId,
+                    version,
+                    destinationDirectory,
+                    credential,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return await DownloadNuGetV2PackageDirectAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<ManagedModuleDownloadResult> DownloadNuGetV2PackageDirectAsync(
+        ManagedModuleRepository repository,
+        string packageId,
+        string version,
+        string destinationDirectory,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+    {
         var packageUri = BuildNuGetV2PackageUri(repository.Source, packageId, version);
         var destinationPath = BuildDestinationPath(destinationDirectory, repository, packageId, version);
         using var response = await SendWithPolicyAsync(
@@ -273,7 +296,7 @@ public sealed partial class ManagedModuleRepositoryClient
         var latestPredicate = includePrerelease ? "IsAbsoluteLatestVersion" : "IsLatestVersion";
         return new Uri(
             new Uri(EnsureTrailingSlash(source)),
-            $"Packages()?$filter=Id%20eq%20'{escapedId}'%20and%20{latestPredicate}&$top=1");
+            $"FindPackagesById()?id='{escapedId}'&$filter={latestPredicate}&$top=1");
     }
 
     private static bool ShouldUsePrefixFilter(string pattern)

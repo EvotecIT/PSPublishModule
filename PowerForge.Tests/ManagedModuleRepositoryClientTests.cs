@@ -143,8 +143,8 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.Equal(repository.Source, version.RepositorySource);
         Assert.Contains(
             requests,
-            request => request.Url == "https://example.test/api/v2/Packages()?$filter=Id%20eq%20'Company.Tools'%20and%20IsLatestVersion&$top=1");
-        Assert.DoesNotContain(requests, request => request.Url.Contains("FindPackagesById", StringComparison.OrdinalIgnoreCase));
+            request => request.Url == "https://example.test/api/v2/FindPackagesById()?id='Company.Tools'&$filter=IsLatestVersion&$top=1");
+        Assert.DoesNotContain(requests, request => request.Url.Contains("Packages()?$filter=Id", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -162,7 +162,7 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.True(version.IsPrerelease);
         Assert.Contains(
             requests,
-            request => request.Url == "https://example.test/api/v2/Packages()?$filter=Id%20eq%20'Company.Tools'%20and%20IsAbsoluteLatestVersion&$top=1");
+            request => request.Url == "https://example.test/api/v2/FindPackagesById()?id='Company.Tools'&$filter=IsAbsoluteLatestVersion&$top=1");
     }
 
     [Fact]
@@ -225,7 +225,30 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.DoesNotContain(requests, request => request.Url == "https://www.powershellgallery.com/api/v3/index.json");
         Assert.Contains(
             requests,
-            request => request.Url == "https://www.powershellgallery.com/api/v2/Packages()?$filter=Id%20eq%20'Pester'%20and%20IsLatestVersion&$top=1");
+            request => request.Url == "https://www.powershellgallery.com/api/v2/FindPackagesById()?id='Pester'&$filter=IsLatestVersion&$top=1");
+    }
+
+    [Fact]
+    public async Task DownloadPackageAsync_uses_powershellgallery_cdn_for_v2_endpoint()
+    {
+        var requests = new List<RecordedRequest>();
+        using var temp = new TemporaryDirectory();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository(
+            "PSGallery",
+            "https://www.powershellgallery.com/api/v2");
+
+        var result = await repositoryClient.DownloadPackageAsync(repository, "Pester", "5.7.0", temp.Path);
+
+        Assert.True(File.Exists(result.PackagePath));
+        Assert.Equal("Pester", result.Metadata!.Id);
+        Assert.Equal("5.7.0", result.Metadata.Version);
+        Assert.Equal("PSGallery", result.RepositoryName);
+        Assert.Equal("https://cdn.powershellgallery.com/packages/pester.5.7.0.nupkg", result.Source);
+        Assert.Equal(0, result.RedirectCount);
+        Assert.Contains(requests, request => request.Url == "https://cdn.powershellgallery.com/packages/pester.5.7.0.nupkg");
+        Assert.DoesNotContain(requests, request => request.Url == "https://www.powershellgallery.com/api/v2/package/Pester/5.7.0");
     }
 
     [Fact]
@@ -1010,14 +1033,14 @@ public sealed class ManagedModuleRepositoryClientTests
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.0.0</d:Version></m:properties></content></entry>" +
                     "</feed>");
 
-            if (uri.AbsoluteUri == "https://example.test/api/v2/Packages()?$filter=Id%20eq%20'Company.Tools'%20and%20IsLatestVersion&$top=1")
+            if (uri.AbsoluteUri == "https://example.test/api/v2/FindPackagesById()?id='Company.Tools'&$filter=IsLatestVersion&$top=1")
                 return Xml(
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
                     "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\">" +
                     "<entry><content><m:properties><d:Id>Company.Tools</d:Id><d:Version>1.1.0</d:Version></m:properties></content></entry>" +
                     "</feed>");
 
-            if (uri.AbsoluteUri == "https://example.test/api/v2/Packages()?$filter=Id%20eq%20'Company.Tools'%20and%20IsAbsoluteLatestVersion&$top=1")
+            if (uri.AbsoluteUri == "https://example.test/api/v2/FindPackagesById()?id='Company.Tools'&$filter=IsAbsoluteLatestVersion&$top=1")
                 return Xml(
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
                     "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\">" +
@@ -1033,7 +1056,7 @@ public sealed class ManagedModuleRepositoryClientTests
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>5.7.0</d:Version></m:properties></content></entry>" +
                     "</feed>");
 
-            if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v2/Packages()?$filter=Id%20eq%20'Pester'%20and%20IsLatestVersion&$top=1")
+            if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v2/FindPackagesById()?id='Pester'&$filter=IsLatestVersion&$top=1")
                 return Xml(
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
                     "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\">" +

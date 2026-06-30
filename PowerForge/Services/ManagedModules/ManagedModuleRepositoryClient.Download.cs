@@ -108,7 +108,22 @@ public sealed partial class ManagedModuleRepositoryClient
         string version,
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
-        => await DownloadHttpPackageToMemoryAsync(
+    {
+        if (ShouldUsePowerShellGalleryCdn(repository))
+        {
+            var cdn = await TryDownloadHttpPackageToMemoryAsync(
+                    repository,
+                    BuildPowerShellGalleryCdnPackageUri(packageId, version),
+                    packageId,
+                    version,
+                    credential,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (cdn is not null)
+                return cdn;
+        }
+
+        return await DownloadHttpPackageToMemoryAsync(
                 repository,
                 BuildNuGetV2PackageUri(repository.Source, packageId, version),
                 packageId,
@@ -116,6 +131,7 @@ public sealed partial class ManagedModuleRepositoryClient
                 credential,
                 cancellationToken)
             .ConfigureAwait(false);
+    }
 
     private async Task<ManagedModuleBufferedPackage?> TryDownloadHttpPackageToMemoryAsync(
         ManagedModuleRepository repository,

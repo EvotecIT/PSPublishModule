@@ -15,6 +15,24 @@ public sealed partial class ManagedModuleRepositoryClient
         if (!ShouldUsePowerShellGalleryV2ReadApi(repository))
             return await DownloadNuGetPackageAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false);
 
+        return await DownloadPowerShellGalleryPackageWithCdnFallbackAsync(
+                repository,
+                packageId,
+                version,
+                destinationDirectory,
+                credential,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<ManagedModuleDownloadResult> DownloadPowerShellGalleryPackageWithCdnFallbackAsync(
+        ManagedModuleRepository repository,
+        string packageId,
+        string version,
+        string destinationDirectory,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+    {
         var packageUri = BuildPowerShellGalleryCdnPackageUri(packageId, version);
         var result = await TryDownloadHttpPackageAsync(
                 repository,
@@ -29,7 +47,7 @@ public sealed partial class ManagedModuleRepositoryClient
             return result;
 
         var fallback = CreatePowerShellGalleryV2Fallback(repository);
-        return await DownloadNuGetV2PackageAsync(fallback, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false);
+        return await DownloadNuGetV2PackageDirectAsync(fallback, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<ManagedModuleDownloadResult?> TryDownloadHttpPackageAsync(
@@ -74,5 +92,14 @@ public sealed partial class ManagedModuleRepositoryClient
         return new Uri(
             "https://cdn.powershellgallery.com/packages/" +
             $"{Uri.EscapeDataString(lowerId)}.{Uri.EscapeDataString(lowerVersion)}.nupkg");
+    }
+
+    private static bool ShouldUsePowerShellGalleryCdn(ManagedModuleRepository repository)
+        => IsPowerShellGalleryV3Index(repository.Source) || IsPowerShellGalleryV2Endpoint(repository.Source);
+
+    private static bool IsPowerShellGalleryV2Endpoint(string source)
+    {
+        var normalized = source.Trim().TrimEnd('/');
+        return normalized.Equals("https://www.powershellgallery.com/api/v2", StringComparison.OrdinalIgnoreCase);
     }
 }

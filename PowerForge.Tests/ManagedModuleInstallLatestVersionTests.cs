@@ -103,7 +103,7 @@ public sealed class ManagedModuleInstallLatestVersionTests
 
         Assert.Equal("1.1.0", plan.Version);
         Assert.Contains(requests, request => request.Url == LatestPackageHandler.LatestStableUrl);
-        Assert.DoesNotContain(requests, request => request.Url.Contains("FindPackagesById", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(requests, request => request.Url.Contains("Packages()?$filter=Id", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -128,12 +128,12 @@ public sealed class ManagedModuleInstallLatestVersionTests
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
         Assert.Contains(requests, request => request.Url == LatestPackageHandler.LatestStableUrl);
         Assert.Contains(requests, request => request.Url == LatestPackageHandler.PackageUrl);
-        Assert.DoesNotContain(requests, request => request.Url.Contains("FindPackagesById", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(requests, request => request.Url.Contains("Packages()?$filter=Id", StringComparison.OrdinalIgnoreCase));
     }
 
     private sealed class LatestPackageHandler : HttpMessageHandler
     {
-        public const string LatestStableUrl = "https://example.test/api/v2/Packages()?$filter=Id%20eq%20'Company.Tools'%20and%20IsLatestVersion&$top=1";
+        public const string LatestStableUrl = "https://example.test/api/v2/FindPackagesById()?id='Company.Tools'&$filter=IsLatestVersion&$top=1";
         public const string PackageUrl = "https://example.test/api/v2/package/Company.Tools/1.1.0";
 
         private readonly List<RecordedRequest> _requests;
