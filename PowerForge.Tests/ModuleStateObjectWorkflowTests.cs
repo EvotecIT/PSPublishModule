@@ -59,7 +59,9 @@ public sealed class ModuleStateObjectWorkflowTests
         };
 
         var corePlan = ModuleStatePlanResultMapper.ToCorePlan(planResult);
-        var result = new ModuleStateApplyService().Prepare(corePlan, new ModuleStateDeliveryOptions());
+        var result = new ModuleStateApplyService().Prepare(
+            corePlan,
+            new ModuleStateDeliveryOptions(transport: ModuleStateDeliveryTransport.ManagedModule));
 
         Assert.True(result.Receipt.CanApply);
         var command = Assert.Single(result.Receipt.Commands);

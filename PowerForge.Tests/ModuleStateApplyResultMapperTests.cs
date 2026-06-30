@@ -10,7 +10,11 @@ public sealed class ModuleStateApplyResultMapperTests
         var plan = new ModuleStatePlan(
             new[] { new ModuleStatePlanAction(ModuleStatePlanActionKind.Install, "Company.Tools", null, ">=1.0.0", "missing") },
             Array.Empty<ModuleStateConflictFinding>());
-        var applyResult = new ModuleStateApplyService().Prepare(plan, new ModuleStateDeliveryOptions(repository: "Company"));
+        var applyResult = new ModuleStateApplyService().Prepare(
+            plan,
+            new ModuleStateDeliveryOptions(
+                repository: "Company",
+                transport: ModuleStateDeliveryTransport.ManagedModule));
         var execution = new[]
         {
             new ModuleStateDeliveryExecutionResult
