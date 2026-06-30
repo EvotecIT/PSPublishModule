@@ -133,6 +133,40 @@ public sealed partial class ManagedModuleInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_does_not_skip_author_policy_for_existing_version()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"),
+            authors: "OtherPublisher");
+        var existingPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(existingPath);
+        File.WriteAllText(Path.Combine(existingPath, "marker.txt"), "keep");
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var exception = await Assert.ThrowsAsync<ManagedModuleTrustException>(() => service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            TrustPolicy = new ManagedModuleTrustPolicy
+            {
+                AllowedAuthors = new[] { "Evotec" }
+            }
+        }));
+
+        Assert.Equal("PackageAuthorNotAllowed", exception.Reason);
+        Assert.Equal("Company.Tools", exception.ModuleName);
+        Assert.Equal("keep", File.ReadAllText(Path.Combine(existingPath, "marker.txt")));
+    }
+
+    [Fact]
     public async Task InstallAsync_selects_highest_version_within_bounds()
     {
         using var feed = new TemporaryDirectory();

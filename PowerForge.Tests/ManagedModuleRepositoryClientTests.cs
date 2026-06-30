@@ -162,6 +162,22 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task GetLatestVersionAsync_missing_nuget_v2_package_returns_null()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/api/v2");
+
+        var version = await repositoryClient.GetLatestVersionAsync(repository, "Missing.Tools", includePrerelease: false);
+
+        Assert.Null(version);
+        Assert.Contains(
+            requests,
+            request => request.Url == "https://example.test/api/v2/FindPackagesById()?id='Missing.Tools'&$filter=IsLatestVersion&$top=1&semVerLevel=2.0.0");
+    }
+
+    [Fact]
     public async Task GetLatestVersionAsync_uses_package_id_fallback_for_nuget_v2_latest_entries_without_id()
     {
         var requests = new List<RecordedRequest>();

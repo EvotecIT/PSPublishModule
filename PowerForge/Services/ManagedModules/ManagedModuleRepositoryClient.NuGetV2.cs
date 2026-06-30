@@ -82,15 +82,23 @@ public sealed partial class ManagedModuleRepositoryClient
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
-        var document = await ReadNuGetV2XmlAsync(
-                repository,
-                BuildNuGetV2LatestPackageUri(repository.Source, packageId, includePrerelease),
-                credential,
-                "LatestVersionQuery",
-                $"Unable to query latest version for package '{packageId}'.",
-                $"Managed module NuGet v2 latest-version query for package '{packageId}' returned malformed XML.",
-                cancellationToken)
-            .ConfigureAwait(false);
+        XDocument document;
+        try
+        {
+            document = await ReadNuGetV2XmlAsync(
+                    repository,
+                    BuildNuGetV2LatestPackageUri(repository.Source, packageId, includePrerelease),
+                    credential,
+                    "LatestVersionQuery",
+                    $"Unable to query latest version for package '{packageId}'.",
+                    $"Managed module NuGet v2 latest-version query for package '{packageId}' returned malformed XML.",
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (ManagedModuleRepositoryException ex) when (IsRepositoryPackageNotFound(ex))
+        {
+            return null;
+        }
 
         XNamespace atom = "http://www.w3.org/2005/Atom";
         XNamespace data = "http://schemas.microsoft.com/ado/2007/08/dataservices";

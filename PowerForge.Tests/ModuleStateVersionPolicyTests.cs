@@ -22,6 +22,25 @@ public sealed class ModuleStateVersionPolicyTests
     }
 
     [Fact]
+    public void Parse_NuGetBracketRangeAcceptsVersionWithinExclusiveBounds()
+    {
+        var policy = ModuleStateVersionPolicy.Parse("[1.0.0,2.0.0)");
+
+        Assert.True(policy.IsSatisfiedBy("1.0.0"));
+        Assert.True(policy.IsSatisfiedBy("1.9.9"));
+        Assert.False(policy.IsSatisfiedBy("2.0.0"));
+    }
+
+    [Fact]
+    public void Parse_NuGetBracketExactVersionRequiresSameNormalizedVersion()
+    {
+        var policy = ModuleStateVersionPolicy.Parse("[1.2]");
+
+        Assert.True(policy.IsSatisfiedBy("1.2.0"));
+        Assert.False(policy.IsSatisfiedBy("1.2.1"));
+    }
+
+    [Fact]
     public void Parse_ExclusiveMinimumRejectsBoundary()
     {
         var policy = ModuleStateVersionPolicy.Parse(">2.36.0");

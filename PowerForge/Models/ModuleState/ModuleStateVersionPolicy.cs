@@ -50,6 +50,9 @@ internal sealed class ModuleStateVersionPolicy
         var minimumInclusive = true;
         var maximumInclusive = true;
 
+        if (HasRangeDelimiters(trimmedExpression))
+            return FromManagedRange(ManagedModuleVersionRange.Parse(trimmedExpression), allowPrerelease);
+
         foreach (var token in trimmedExpression.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries))
         {
             if (token.StartsWith(">=", StringComparison.Ordinal))
@@ -92,6 +95,36 @@ internal sealed class ModuleStateVersionPolicy
 
         return new ModuleStateVersionPolicy(exact, minimum, minimumInclusive, maximum, maximumInclusive, effectiveAllowPrerelease);
     }
+
+    private static ModuleStateVersionPolicy FromManagedRange(ManagedModuleVersionRange range, bool allowPrerelease)
+    {
+        if (range.IsUnbounded)
+            return Any(allowPrerelease);
+
+        if (range.ExactVersion is not null)
+        {
+            var exact = ModuleStateVersion.Parse(range.ExactVersion);
+            return new ModuleStateVersionPolicy(exact, null, true, null, true, allowPrerelease || exact.IsPrerelease);
+        }
+
+        var minimum = string.IsNullOrWhiteSpace(range.MinimumVersion)
+            ? (ModuleStateVersion?)null
+            : ModuleStateVersion.Parse(range.MinimumVersion!);
+        var maximum = string.IsNullOrWhiteSpace(range.MaximumVersion)
+            ? (ModuleStateVersion?)null
+            : ModuleStateVersion.Parse(range.MaximumVersion!);
+        var effectiveAllowPrerelease = allowPrerelease ||
+                                       range.AllowsPrerelease ||
+                                       minimum is { IsPrerelease: true } ||
+                                       maximum is { IsPrerelease: true };
+        return new ModuleStateVersionPolicy(null, minimum, range.IncludeMinimum, maximum, range.IncludeMaximum, effectiveAllowPrerelease);
+    }
+
+    private static bool HasRangeDelimiters(string value)
+        => value.StartsWith("[", StringComparison.Ordinal) ||
+           value.StartsWith("(", StringComparison.Ordinal) ||
+           value.EndsWith("]", StringComparison.Ordinal) ||
+           value.EndsWith(")", StringComparison.Ordinal);
 
     internal bool IsSatisfiedBy(string version)
     {

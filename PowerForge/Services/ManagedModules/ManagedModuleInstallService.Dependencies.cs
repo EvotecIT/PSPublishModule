@@ -418,6 +418,7 @@ public sealed partial class ManagedModuleInstallService
             cancellationToken).ConfigureAwait(false);
 
         var selected = versions
+            .Where(static version => version.Listed)
             .Where(version => range.IsSatisfiedBy(version.Version))
             .LastOrDefault();
         if (selected is null)

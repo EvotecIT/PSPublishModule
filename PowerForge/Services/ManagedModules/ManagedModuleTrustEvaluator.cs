@@ -9,6 +9,9 @@ public static class ManagedModuleTrustEvaluator
         => policy is not null &&
            (policy.RequireTrustedRepository || NormalizeAuthors(policy.AllowedAuthors).Count > 0);
 
+    internal static bool HasAllowedAuthorPolicy(ManagedModuleTrustPolicy? policy)
+        => NormalizeAuthors(policy?.AllowedAuthors).Count > 0;
+
     /// <summary>
     /// Normalizes caller-supplied package author policy values for stable comparison and output.
     /// </summary>

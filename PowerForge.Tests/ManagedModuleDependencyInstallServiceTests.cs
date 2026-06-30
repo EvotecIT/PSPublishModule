@@ -120,6 +120,31 @@ public sealed class ManagedModuleDependencyInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_ignores_unlisted_dependency_versions_before_selecting_range_target()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var handler = new UnlistedDependencyFeedHandler();
+        using var httpClient = new HttpClient(handler);
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), httpClient);
+        var service = new ManagedModuleInstallService(new NullLogger(), repositoryClient);
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json"),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.Equal("Company.Core", dependency.Name);
+        Assert.Equal("1.8.0", dependency.Version);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "1.8.0", "Company.Core.psd1")));
+        Assert.DoesNotContain(handler.Requests, request => request.Contains("company.core/1.9.0", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task InstallAsync_keeps_parallel_dependency_request_counts_scoped()
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -137,9 +162,9 @@ public sealed class ManagedModuleDependencyInstallServiceTests
             ModuleRoot = moduleRoot.Path
         });
 
-        Assert.Equal(6, result.RepositoryRequestCount);
+        Assert.Equal(8, result.RepositoryRequestCount);
         Assert.Equal(2, result.PackageRepositoryRequestCount);
-        Assert.Equal(6, repositoryClient.RequestCount);
+        Assert.Equal(8, repositoryClient.RequestCount);
         var dependencies = result.DependencyResults.OrderBy(dependency => dependency.Name, StringComparer.OrdinalIgnoreCase).ToArray();
         Assert.Equal(new[] { "Company.CoreA", "Company.CoreB" }, dependencies.Select(dependency => dependency.Name));
         Assert.All(dependencies, dependency => Assert.Equal(1, dependency.RepositoryRequestCount));
@@ -240,6 +265,74 @@ public sealed class ManagedModuleDependencyInstallServiceTests
                 System.Threading.Interlocked.Increment(ref _dependencyVersionQueryCount);
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError));
             }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+
+        private static HttpResponseMessage Json(string json)
+            => new(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
+            };
+
+        private static HttpResponseMessage Package(string id, string version, IReadOnlyList<TestDependency>? dependencies)
+            => new(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(CreatePackageBytes(id, version, dependencies))
+            };
+
+        private static byte[] CreatePackageBytes(string id, string version, IReadOnlyList<TestDependency>? dependencies)
+        {
+            using var directory = new TemporaryDirectory();
+            var packagePath = Path.Combine(directory.Path, id + "." + version + ".nupkg");
+            TestPackageFactory.Create(
+                packagePath,
+                id,
+                version,
+                dependencies,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [id + ".psd1"] = "@{ ModuleVersion = '" + version + "' }"
+                });
+            return File.ReadAllBytes(packagePath);
+        }
+    }
+
+    private sealed class UnlistedDependencyFeedHandler : HttpMessageHandler
+    {
+        public List<string> Requests { get; } = new();
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
+            Requests.Add(uri);
+            if (uri == "https://example.test/v3/index.json")
+            {
+                return Task.FromResult(Json("{\"resources\":[" +
+                                            "{\"@id\":\"https://example.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}," +
+                                            "{\"@id\":\"https://example.test/search/\",\"@type\":\"SearchQueryService/3.5.0\"}" +
+                                            "]}"));
+            }
+
+            if (uri == "https://example.test/packages/company.tools/1.0.0/company.tools.1.0.0.nupkg")
+            {
+                return Task.FromResult(Package("Company.Tools", "1.0.0", new[]
+                {
+                    new TestDependency("Company.Core", "[1.0.0,2.0.0)", null)
+                }));
+            }
+
+            if (uri == "https://example.test/packages/company.core/index.json")
+                return Task.FromResult(Json("{\"versions\":[\"1.8.0\",\"1.9.0\"]}"));
+
+            if (uri == "https://example.test/search/?q=Company.Core&prerelease=false&take=20&semVerLevel=2.0.0")
+                return Task.FromResult(Json("{\"data\":[{\"id\":\"Company.Core\",\"version\":\"1.8.0\",\"listed\":true}]}"));
+
+            if (uri == "https://example.test/packages/company.core/1.8.0/company.core.1.8.0.nupkg")
+                return Task.FromResult(Package("Company.Core", "1.8.0", dependencies: null));
+
+            if (uri == "https://example.test/packages/company.core/1.9.0/company.core.1.9.0.nupkg")
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError));
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         }

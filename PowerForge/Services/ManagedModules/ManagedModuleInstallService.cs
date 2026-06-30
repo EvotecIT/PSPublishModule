@@ -85,9 +85,9 @@ public sealed partial class ManagedModuleInstallService
         bool exists,
         ManagedModuleVersionInfo? versionInfo = null)
     {
-        var requiresVerifiedPackage = !string.IsNullOrWhiteSpace(request.ExpectedPackageSha256);
+        var requiresPackageDownloadBeforeNoOp = RequiresPackageDownloadBeforeNoOp(request);
         var action = exists
-            ? request.Force || requiresVerifiedPackage ? ManagedModuleInstallPlanAction.Reinstall : ManagedModuleInstallPlanAction.SkipExisting
+            ? request.Force || requiresPackageDownloadBeforeNoOp ? ManagedModuleInstallPlanAction.Reinstall : ManagedModuleInstallPlanAction.SkipExisting
             : ManagedModuleInstallPlanAction.Install;
 
         return new ManagedModuleInstallPlan
@@ -333,7 +333,7 @@ public sealed partial class ManagedModuleInstallService
         version = string.Empty;
         if (request.Force)
             return false;
-        if (!string.IsNullOrWhiteSpace(request.ExpectedPackageSha256))
+        if (RequiresPackageDownloadBeforeNoOp(request))
             return false;
 
         var installedVersion = GetInstalledVersions(moduleRoot, request.Name, context)
@@ -362,6 +362,9 @@ public sealed partial class ManagedModuleInstallService
 
     private static bool RequiresVerifiedPackage(ManagedModuleInstallRequest request)
         => !string.IsNullOrWhiteSpace(request.ExpectedPackageSha256);
+
+    private static bool RequiresPackageDownloadBeforeNoOp(ManagedModuleInstallRequest request)
+        => RequiresVerifiedPackage(request) || ManagedModuleTrustEvaluator.HasAllowedAuthorPolicy(request.TrustPolicy);
 
     private async Task<ManagedModuleInstallResult> InstallResolvedAsync(
         ManagedModuleInstallRequest request,
@@ -392,7 +395,9 @@ public sealed partial class ManagedModuleInstallService
             using (AcquireInstallLock(moduleRoot, request.Name, cancellationToken, out var resolvedLockWaitElapsed))
             {
                 installLockWaitElapsed += resolvedLockWaitElapsed;
-                if (IsInstalledModulePathSatisfied(modulePath, request.Name, version) && !request.Force && !RequiresVerifiedPackage(request))
+                if (IsInstalledModulePathSatisfied(modulePath, request.Name, version) &&
+                    !request.Force &&
+                    !RequiresPackageDownloadBeforeNoOp(request))
                 {
                     _logger.Verbose($"Managed module install skipped existing version: {modulePath}");
                     context.RecordInstalledVersion(moduleRoot, request.Name, version);
