@@ -21,18 +21,146 @@ public sealed class ModuleStateApplyServiceTests
 
         Assert.True(result.Receipt.CanApply);
         Assert.Null(result.Receipt.BlockedReason);
+        Assert.Equal(ModuleStateDeliveryTransport.PrivateModule, result.Receipt.Transport);
         Assert.Equal(2, result.Receipt.Commands.Length);
 
         var update = result.Receipt.Commands[0];
-        Assert.Equal("Update-PrivateModule", update.CommandName);
-        Assert.Equal(new[] { "-Name", "Company.Tools", "-VersionPolicy", ">=1.2.0", "-ProfileName", "Company", "-InstallPrerequisites", "-Prerelease" }, update.Arguments);
-        Assert.Contains("Update-PrivateModule", update.CommandText, StringComparison.Ordinal);
+        Assert.Equal("Repair-ManagedModule", update.CommandName);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-VersionPolicy", ">=1.2.0", "-ProfileName", "Company", "-Prerelease", "-Transport", "PrivateModule", "-Force" }, update.Arguments);
+        Assert.True(update.Force);
+        Assert.Contains("Repair-ManagedModule", update.CommandText, StringComparison.Ordinal);
+        Assert.Contains("-Transport 'PrivateModule'", update.CommandText, StringComparison.Ordinal);
 
         var install = result.Receipt.Commands[1];
-        Assert.Equal("Install-PrivateModule", install.CommandName);
-        Assert.Equal(new[] { "-Name", "Company.Other", "-VersionPolicy", ">=1.0.0", "-ProfileName", "Company", "-InstallPrerequisites", "-Prerelease", "-Force" }, install.Arguments);
+        Assert.Equal("Repair-ManagedModule", install.CommandName);
+        Assert.Equal(new[] { "-Name", "Company.Other", "-VersionPolicy", ">=1.0.0", "-ProfileName", "Company", "-Prerelease", "-Transport", "PrivateModule", "-Force" }, install.Arguments);
         Assert.Equal(">=1.0.0", install.VersionPolicy);
         Assert.True(install.IsRepair);
+        Assert.True(install.Force);
+    }
+
+    [Fact]
+    public void Prepare_CreatesManagedModuleDeliveryCommands()
+    {
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(
+                    ModuleStatePlanActionKind.Update,
+                    "Company.Tools",
+                    "1.0.0",
+                    "=1.2.0",
+                    "stale",
+                    targetScope: "CurrentUser",
+                    expectedPackageSha256: new string('a', 64)),
+                new ModuleStatePlanAction(ModuleStatePlanActionKind.Install, "Company.Other", null, ">=1.0.0 <2.0.0", "missing", isRepair: true, targetRepository: "CompanyModules")
+            },
+            Array.Empty<ModuleStateConflictFinding>());
+
+        var result = new ModuleStateApplyService().Prepare(
+            plan,
+            new ModuleStateDeliveryOptions(
+                repository: "FallbackModules",
+                installPrerequisites: true,
+                prerelease: true,
+                force: true,
+                allowClobber: true,
+                moduleRoot: @"C:\RepairRoot",
+                transport: ModuleStateDeliveryTransport.ManagedModule));
+
+        Assert.True(result.Receipt.CanApply);
+        Assert.Null(result.Receipt.BlockedReason);
+        Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, result.Receipt.Transport);
+        Assert.Equal(2, result.Receipt.Commands.Length);
+
+        var update = result.Receipt.Commands[0];
+        Assert.Equal("Update-ManagedModule", update.CommandName);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-RequiredVersion", "1.2.0", "-Scope", "CurrentUser", "-ModuleRoot", @"C:\RepairRoot", "-Repository", "FallbackModules", "-Prerelease", "-ExpectedPackageSha256", new string('a', 64), "-Force", "-AllowClobber" }, update.Arguments);
+        Assert.True(update.Force);
+        Assert.Contains("Update-ManagedModule", update.CommandText, StringComparison.Ordinal);
+
+        var install = result.Receipt.Commands[1];
+        Assert.Equal("Install-ManagedModule", install.CommandName);
+        Assert.Equal(new[] { "-Name", "Company.Other", "-VersionPolicy", ">=1.0.0 <2.0.0", "-ModuleRoot", @"C:\RepairRoot", "-Repository", "CompanyModules", "-Prerelease", "-Force", "-AllowClobber" }, install.Arguments);
+        Assert.Equal(">=1.0.0 <2.0.0", install.VersionPolicy);
+        Assert.True(install.IsRepair);
+        Assert.True(install.Force);
+    }
+
+    [Fact]
+    public void Prepare_CreatesManagedSaveDeliveryCommand()
+    {
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(
+                    ModuleStatePlanActionKind.Save,
+                    "Company.Tools",
+                    null,
+                    "=1.2.0",
+                    "missing",
+                    targetPath: @"C:\OfflineModules",
+                    targetRepository: "CompanyModules")
+            },
+            Array.Empty<ModuleStateConflictFinding>());
+
+        var result = new ModuleStateApplyService().Prepare(
+            plan,
+            new ModuleStateDeliveryOptions(
+                installPrerequisites: true,
+                prerelease: true,
+                force: true,
+                transport: ModuleStateDeliveryTransport.ManagedModule));
+
+        Assert.True(result.Receipt.CanApply);
+        var command = Assert.Single(result.Receipt.Commands);
+        Assert.Equal("Save-ManagedModule", command.CommandName);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-RequiredVersion", "1.2.0", "-Path", @"C:\OfflineModules", "-Repository", "CompanyModules", "-Prerelease", "-Force" }, command.Arguments);
+    }
+
+    [Fact]
+    public void Prepare_BlocksSaveDeliveryForPrivateTransport()
+    {
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(
+                    ModuleStatePlanActionKind.Save,
+                    "Company.Tools",
+                    null,
+                    ">=1.2.0",
+                    "missing",
+                    targetPath: @"C:\OfflineModules",
+                    targetRepository: "CompanyModules")
+            },
+            Array.Empty<ModuleStateConflictFinding>());
+
+        var result = new ModuleStateApplyService().Prepare(plan, new ModuleStateDeliveryOptions());
+
+        Assert.False(result.Receipt.CanApply);
+        Assert.Contains("managed module transport", result.Receipt.BlockedReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Prepare_BlocksPackageHashRequirementForPrivateTransport()
+    {
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(
+                    ModuleStatePlanActionKind.Install,
+                    "Company.Tools",
+                    null,
+                    "=1.2.0",
+                    "missing",
+                    expectedPackageSha256: new string('a', 64))
+            },
+            Array.Empty<ModuleStateConflictFinding>());
+
+        var result = new ModuleStateApplyService().Prepare(plan, new ModuleStateDeliveryOptions(repository: "CompanyModules"));
+
+        Assert.False(result.Receipt.CanApply);
+        Assert.Contains("integrity enforcement", result.Receipt.BlockedReason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -71,6 +199,23 @@ public sealed class ModuleStateApplyServiceTests
     }
 
     [Fact]
+    public void Prepare_BlocksManagedDeliveryWhenDeliveryTargetIsMissing()
+    {
+        var plan = new ModuleStatePlan(
+            new[] { new ModuleStatePlanAction(ModuleStatePlanActionKind.Update, "Company.Other", "1.0.0", ">=1.2.0", "stale") },
+            Array.Empty<ModuleStateConflictFinding>());
+
+        var result = new ModuleStateApplyService().Prepare(
+            plan,
+            new ModuleStateDeliveryOptions(transport: ModuleStateDeliveryTransport.ManagedModule));
+
+        Assert.False(result.Receipt.CanApply);
+        Assert.Contains("managed module delivery", result.Receipt.BlockedReason, StringComparison.OrdinalIgnoreCase);
+        var command = Assert.Single(result.Receipt.Commands);
+        Assert.Equal("Update-ManagedModule", command.CommandName);
+    }
+
+    [Fact]
     public void Prepare_AddsRequiredVersionForExactRepairPolicy()
     {
         var plan = new ModuleStatePlan(
@@ -80,8 +225,8 @@ public sealed class ModuleStateApplyServiceTests
         var result = new ModuleStateApplyService().Prepare(plan, new ModuleStateDeliveryOptions(repository: "Company", allowErrorFindings: true));
 
         var command = Assert.Single(result.Receipt.Commands);
-        Assert.Equal("Update-PrivateModule", command.CommandName);
-        Assert.Equal(new[] { "-Name", "Company.Tools", "-RequiredVersion", "1.2.0", "-Repository", "Company" }, command.Arguments);
+        Assert.Equal("Repair-ManagedModule", command.CommandName);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-RequiredVersion", "1.2.0", "-Repository", "Company", "-Transport", "PrivateModule" }, command.Arguments);
         Assert.Equal("=1.2.0", command.VersionPolicy);
         Assert.True(command.IsRepair);
     }
@@ -96,8 +241,8 @@ public sealed class ModuleStateApplyServiceTests
         var result = new ModuleStateApplyService().Prepare(plan, new ModuleStateDeliveryOptions(repository: "Company"));
 
         var command = Assert.Single(result.Receipt.Commands);
-        Assert.Equal("Install-PrivateModule", command.CommandName);
-        Assert.Equal(new[] { "-Name", "Company.Tools", "-VersionPolicy", ">=1.2.0", "-Scope", "AllUsers", "-Repository", "Company" }, command.Arguments);
+        Assert.Equal("Repair-ManagedModule", command.CommandName);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-VersionPolicy", ">=1.2.0", "-Scope", "AllUsers", "-Repository", "Company", "-Transport", "PrivateModule" }, command.Arguments);
         Assert.Contains("-VersionPolicy '>=1.2.0'", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("-Scope 'AllUsers'", command.CommandText, StringComparison.Ordinal);
     }
@@ -112,8 +257,8 @@ public sealed class ModuleStateApplyServiceTests
         var result = new ModuleStateApplyService().Prepare(plan, new ModuleStateDeliveryOptions(repository: "Company"));
 
         var command = Assert.Single(result.Receipt.Commands);
-        Assert.Equal("Install-PrivateModule", command.CommandName);
-        Assert.Equal(new[] { "-Name", "Company.Tools", "-RequiredVersion", "1.2.0", "-Scope", "AllUsers", "-Repository", "Company" }, command.Arguments);
+        Assert.Equal("Repair-ManagedModule", command.CommandName);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-RequiredVersion", "1.2.0", "-Scope", "AllUsers", "-Repository", "Company", "-Transport", "PrivateModule" }, command.Arguments);
         Assert.True(command.IsRepair);
     }
 
@@ -128,7 +273,7 @@ public sealed class ModuleStateApplyServiceTests
 
         Assert.True(result.Receipt.CanApply);
         var command = Assert.Single(result.Receipt.Commands);
-        Assert.Equal(new[] { "-Name", "Company.Tools", "-RequiredVersion", "1.2.0", "-Repository", "CompanyModules" }, command.Arguments);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-RequiredVersion", "1.2.0", "-Repository", "CompanyModules", "-Transport", "PrivateModule" }, command.Arguments);
     }
 
     [Fact]
@@ -142,7 +287,35 @@ public sealed class ModuleStateApplyServiceTests
 
         Assert.True(result.Receipt.CanApply);
         var command = Assert.Single(result.Receipt.Commands);
-        Assert.Equal(new[] { "-Name", "Company.Tools", "-VersionPolicy", ">=1.2.0", "-Repository", "CompanyModules" }, command.Arguments);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-VersionPolicy", ">=1.2.0", "-Repository", "CompanyModules", "-Transport", "PrivateModule" }, command.Arguments);
+    }
+
+    [Fact]
+    public void Prepare_PreservesActionTargetRepositoryOverFallbackProfile()
+    {
+        var plan = new ModuleStatePlan(
+            new[] { new ModuleStatePlanAction(ModuleStatePlanActionKind.Update, "Company.Tools", "1.2.0", ">=1.2.0", "source policy", targetRepository: "CompanyModules") },
+            Array.Empty<ModuleStateConflictFinding>());
+
+        var result = new ModuleStateApplyService().Prepare(plan, new ModuleStateDeliveryOptions(profileName: "Company"));
+
+        Assert.True(result.Receipt.CanApply);
+        var command = Assert.Single(result.Receipt.Commands);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-VersionPolicy", ">=1.2.0", "-Repository", "CompanyModules", "-Transport", "PrivateModule" }, command.Arguments);
+    }
+
+    [Fact]
+    public void Prepare_UsesProfileNameWhenActionHasNoTargetRepository()
+    {
+        var plan = new ModuleStatePlan(
+            new[] { new ModuleStatePlanAction(ModuleStatePlanActionKind.Update, "Company.Tools", "1.2.0", ">=1.2.0", "source policy") },
+            Array.Empty<ModuleStateConflictFinding>());
+
+        var result = new ModuleStateApplyService().Prepare(plan, new ModuleStateDeliveryOptions(profileName: "Company"));
+
+        Assert.True(result.Receipt.CanApply);
+        var command = Assert.Single(result.Receipt.Commands);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-VersionPolicy", ">=1.2.0", "-ProfileName", "Company", "-Transport", "PrivateModule" }, command.Arguments);
     }
 
     [Fact]
@@ -178,6 +351,8 @@ public sealed class ModuleStateApplyServiceTests
         var receipt = service.CreateMaintenanceReceipt(result, source: "ModuleStatePlan", sourceRepository: "Company");
 
         Assert.Equal("ModuleStatePlan", receipt.Source);
+        Assert.Equal(ModuleStateDeliveryTransport.PrivateModule, receipt.DeliveryTransport);
+        Assert.Equal("PrivateModule", receipt.Engine);
         Assert.Equal(2, receipt.Modules.Length);
         Assert.Contains(receipt.Modules, static module => module.Name == "Company.Tools" && module.Version == "1.3.0");
         Assert.Contains(receipt.Modules, static module => module.Name == "Company.Exact" && module.Version == "1.2.0");
@@ -353,10 +528,43 @@ public sealed class ModuleStateApplyServiceTests
 
             var receipt = new ModuleStateJsonService().LoadMaintenanceReceipt(receiptPath);
             Assert.Equal("ModuleStatePlan", receipt.Source);
+            Assert.Equal(ModuleStateDeliveryTransport.PrivateModule, receipt.DeliveryTransport);
+            Assert.Equal("PrivateModule", receipt.Engine);
             var module = Assert.Single(receipt.Modules);
             Assert.Equal("Company.Tools", module.Name);
             Assert.Equal("1.3.0", module.Version);
             Assert.Null(module.SourceRepository);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void WriteMaintenanceReceipt_WritesManagedTransportEvidence()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var receiptPath = Path.Combine(root.FullName, "module-state.maintenance.json");
+            var plan = new ModuleStatePlan(
+                new[] { new ModuleStatePlanAction(ModuleStatePlanActionKind.Install, "Company.Tools", null, "=1.3.0", "missing", targetRepository: "Company") },
+                Array.Empty<ModuleStateConflictFinding>());
+            var service = new ModuleStateApplyService();
+            var result = service.Prepare(
+                plan,
+                new ModuleStateDeliveryOptions(repository: "Company", transport: ModuleStateDeliveryTransport.ManagedModule));
+
+            service.WriteMaintenanceReceipt(result, receiptPath, "ModuleStatePlan", "Company");
+
+            using var document = JsonDocument.Parse(File.ReadAllText(receiptPath));
+            Assert.Equal("ManagedModule", document.RootElement.GetProperty("deliveryTransport").GetString());
+            Assert.Equal("ManagedModule", document.RootElement.GetProperty("engine").GetString());
+
+            var receipt = new ModuleStateJsonService().LoadMaintenanceReceipt(receiptPath);
+            Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, receipt.DeliveryTransport);
+            Assert.Equal("ManagedModule", receipt.Engine);
         }
         finally
         {
@@ -416,7 +624,9 @@ public sealed class ModuleStateApplyServiceTests
 
             using var document = JsonDocument.Parse(File.ReadAllText(receiptPath));
             Assert.True(document.RootElement.GetProperty("CanApply").GetBoolean());
-            Assert.Equal("Install-PrivateModule", document.RootElement.GetProperty("Commands")[0].GetProperty("CommandName").GetString());
+            Assert.Equal("PrivateModule", document.RootElement.GetProperty("Transport").GetString());
+            Assert.Equal("Repair-ManagedModule", document.RootElement.GetProperty("Commands")[0].GetProperty("CommandName").GetString());
+            Assert.Contains("PrivateModule", document.RootElement.GetProperty("Commands")[0].GetProperty("Arguments").EnumerateArray().Select(static item => item.GetString()));
         }
         finally
         {

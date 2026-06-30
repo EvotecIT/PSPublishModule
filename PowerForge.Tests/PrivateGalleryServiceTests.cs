@@ -297,7 +297,7 @@ public sealed class PrivateGalleryServiceTests
         Assert.Equal("https://mcr.microsoft.com", result.PSResourceGetUri);
         Assert.False(result.RegistrationPerformed);
         Assert.True(result.InstallPSResourceReady == false);
-        Assert.Equal("Register-ModuleRepository -MicrosoftArtifactRegistry", result.RecommendedBootstrapCommand);
+        Assert.Equal("Initialize-ManagedModuleRepository -MicrosoftArtifactRegistry", result.RecommendedBootstrapCommand);
     }
 
     [Fact]

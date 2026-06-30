@@ -18,6 +18,9 @@ public sealed class ModuleStateApplyResultMapperTests
                 Operation = "Install",
                 OperationPerformed = true,
                 RepositoryName = "Company",
+                RequestedTransport = ModuleStateDeliveryTransport.Auto,
+                EffectiveTransport = ModuleStateDeliveryTransport.ManagedModule,
+                DeliveryTransportReason = "Auto selected managed transport because a repository source URI or local feed path was resolved.",
                 DependencyResults = new[]
                 {
                     new ModuleStateDependencyResult
@@ -50,8 +53,12 @@ public sealed class ModuleStateApplyResultMapperTests
         Assert.Equal("receipt.json", result.ReceiptPath);
         Assert.Equal("maintenance.json", result.MaintenanceReceiptOutputPath);
         Assert.Same(execution, result.ExecutionResults);
+        var executionResult = Assert.Single(result.ExecutionResults);
+        Assert.Equal(ModuleStateDeliveryTransport.Auto, executionResult.RequestedTransport);
+        Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, executionResult.EffectiveTransport);
+        Assert.Contains("Auto selected managed transport", executionResult.DeliveryTransportReason, StringComparison.OrdinalIgnoreCase);
         Assert.Same(postInventory, result.PostApplyInventory);
-        Assert.Equal("Install-PrivateModule", Assert.Single(result.Commands).CommandName);
+        Assert.Equal("Install-ManagedModule", Assert.Single(result.Commands).CommandName);
     }
 
     [Fact]

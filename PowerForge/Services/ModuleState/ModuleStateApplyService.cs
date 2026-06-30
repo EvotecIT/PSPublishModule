@@ -22,7 +22,7 @@ internal sealed class ModuleStateApplyService
 
         var actionCount = plan.Actions.Count(static action => action.Kind != ModuleStatePlanActionKind.NoAction);
         var deliveryActions = plan.Actions
-            .Where(static action => action.Kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update)
+            .Where(static action => IsDeliveryAction(action.Kind))
             .ToArray();
         var commands = deliveryActions.Select(action => CreateCommand(action, deliveryOptions)).ToArray();
         var blockedReason = ResolveBlockedReason(plan, deliveryOptions, commands);
@@ -32,6 +32,7 @@ internal sealed class ModuleStateApplyService
             blockedReason,
             actionCount,
             plan.Findings.Length,
+            deliveryOptions.Transport,
             commands);
 
         return new ModuleStateApplyResult(receipt, plan);
@@ -57,6 +58,7 @@ internal sealed class ModuleStateApplyService
             receipt.BlockedReason,
             receipt.ActionCount,
             receipt.FindingCount,
+            Transport = receipt.Transport.ToString(),
             Commands = receipt.Commands.Select(static command => new
             {
                 ActionKind = command.ActionKind.ToString(),
@@ -90,7 +92,7 @@ internal sealed class ModuleStateApplyService
                 static group => group.ToArray(),
                 StringComparer.OrdinalIgnoreCase);
         var modules = result.Plan.Actions
-            .Where(static action => action.Kind is ModuleStatePlanActionKind.NoAction or ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update)
+            .Where(static action => action.Kind is ModuleStatePlanActionKind.NoAction or ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update or ModuleStatePlanActionKind.Save)
             .Select(action => CreateMaintenanceReceiptModule(action, sourceRepository, observedByName))
             .Where(static module => module is not null)
             .Cast<ModuleStateMaintenanceReceiptModule>()
@@ -99,7 +101,7 @@ internal sealed class ModuleStateApplyService
             .OrderBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        return new ModuleStateMaintenanceReceipt(source, modules);
+        return new ModuleStateMaintenanceReceipt(source, modules, result.Receipt.Transport, ResolveMaintenanceReceiptEngine(result.Receipt.Transport));
     }
 
     internal void WriteMaintenanceReceipt(
@@ -127,6 +129,8 @@ internal sealed class ModuleStateApplyService
         var dto = new
         {
             source = receipt.Source,
+            deliveryTransport = receipt.DeliveryTransport?.ToString(),
+            engine = receipt.Engine,
             maintainedModules = receipt.Modules.Select(static module => new
             {
                 name = module.Name,
@@ -150,8 +154,36 @@ internal sealed class ModuleStateApplyService
         if (plan.Actions.Any(static action => action.Kind == ModuleStatePlanActionKind.Remove))
             return "Plan includes cleanup actions that private module delivery does not execute. Review the plan and run without Cleanup to execute install/update delivery only.";
 
+        if (plan.Actions.Any(static action => action.Kind == ModuleStatePlanActionKind.Save) &&
+            deliveryOptions.Transport != ModuleStateDeliveryTransport.ManagedModule)
+        {
+            return "Plan includes save actions. Save delivery requires managed module transport.";
+        }
+
+        if (deliveryOptions.Transport != ModuleStateDeliveryTransport.ManagedModule &&
+            plan.Actions.Any(static action => IsDeliveryAction(action.Kind) && !string.IsNullOrWhiteSpace(action.ExpectedPackageSha256)))
+        {
+            return "Plan includes package SHA256 requirements. Package integrity enforcement requires managed module transport.";
+        }
+
+        if (plan.Actions.Any(static action => action.Kind == ModuleStatePlanActionKind.Save && string.IsNullOrWhiteSpace(action.TargetPath)))
+            return "Plan includes save actions but no target path was supplied.";
+
+        if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
+            !deliveryOptions.AcceptLicense &&
+            plan.Actions.Any(static action => action.LicenseAcceptanceRequired && IsDeliveryAction(action.Kind)))
+        {
+            var modules = plan.Actions
+                .Where(static action => action.LicenseAcceptanceRequired && IsDeliveryAction(action.Kind))
+                .Select(static action => action.ModuleName)
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+            return "Planned managed delivery requires license acceptance for " + string.Join(", ", modules) + ".";
+        }
+
         if (commands.Any(static command => !HasCommandDeliveryTarget(command)))
-            return "Plan has install/update actions but no ProfileName, Repository, or action target repository was supplied for private module delivery.";
+            return deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule
+                ? "Plan has delivery actions but no ProfileName, Repository, or action target repository was supplied for managed module delivery."
+                : "Plan has delivery actions but no ProfileName, Repository, or action target repository was supplied for private module delivery.";
 
         return null;
     }
@@ -160,9 +192,7 @@ internal sealed class ModuleStateApplyService
         ModuleStatePlanAction action,
         ModuleStateDeliveryOptions deliveryOptions)
     {
-        var commandName = action.Kind == ModuleStatePlanActionKind.Update
-            ? "Update-PrivateModule"
-            : "Install-PrivateModule";
+        var commandName = ResolveCommandName(action.Kind, deliveryOptions.Transport);
         var arguments = new List<string>
         {
             "-Name",
@@ -181,10 +211,22 @@ internal sealed class ModuleStateApplyService
             arguments.Add(action.VersionPolicy);
         }
 
-        if (!string.IsNullOrWhiteSpace(action.TargetScope))
+        if (!string.IsNullOrWhiteSpace(action.TargetScope) && action.Kind != ModuleStatePlanActionKind.Save)
         {
             arguments.Add("-Scope");
             arguments.Add(action.TargetScope!);
+        }
+
+        if (!string.IsNullOrWhiteSpace(action.TargetPath) && action.Kind == ModuleStatePlanActionKind.Save)
+        {
+            arguments.Add("-Path");
+            arguments.Add(action.TargetPath!);
+        }
+        else if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
+                 !string.IsNullOrWhiteSpace(deliveryOptions.ModuleRoot))
+        {
+            arguments.Add(action.Kind == ModuleStatePlanActionKind.Save ? "-Path" : "-ModuleRoot");
+            arguments.Add(deliveryOptions.ModuleRoot!);
         }
 
         if (!string.IsNullOrWhiteSpace(action.TargetRepository))
@@ -203,22 +245,63 @@ internal sealed class ModuleStateApplyService
             arguments.Add(deliveryOptions.Repository!);
         }
 
-        if (deliveryOptions.InstallPrerequisites)
-            arguments.Add("-InstallPrerequisites");
         if (deliveryOptions.Prerelease)
             arguments.Add("-Prerelease");
-        if ((deliveryOptions.Force || action.Force) && action.Kind == ModuleStatePlanActionKind.Install)
+        if (deliveryOptions.Transport != ModuleStateDeliveryTransport.ManagedModule)
+        {
+            arguments.Add("-Transport");
+            arguments.Add(deliveryOptions.Transport.ToString());
+        }
+
+        if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
+            !string.IsNullOrWhiteSpace(action.ExpectedPackageSha256))
+        {
+            arguments.Add("-ExpectedPackageSha256");
+            arguments.Add(action.ExpectedPackageSha256!);
+        }
+
+        var effectiveForce = deliveryOptions.Force || action.Force;
+        if (effectiveForce && IsDeliveryAction(action.Kind))
+        {
             arguments.Add("-Force");
+        }
+
+        if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
+            deliveryOptions.AcceptLicense &&
+            action.LicenseAcceptanceRequired &&
+            IsDeliveryAction(action.Kind))
+        {
+            arguments.Add("-AcceptLicense");
+        }
+
+        if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
+            deliveryOptions.AllowClobber &&
+            IsDeliveryAction(action.Kind))
+        {
+            arguments.Add("-AllowClobber");
+        }
 
         return new ModuleStateDeliveryCommand(
             action.Kind,
             action.ModuleName,
             action.VersionPolicy,
             action.IsRepair,
-            action.Force,
+            effectiveForce,
             commandName,
             arguments.ToArray(),
             commandName + " " + string.Join(" ", FormatArguments(arguments)));
+    }
+
+    private static string ResolveCommandName(ModuleStatePlanActionKind actionKind, ModuleStateDeliveryTransport transport)
+    {
+        if (transport != ModuleStateDeliveryTransport.ManagedModule)
+            return "Repair-ManagedModule";
+
+        if (actionKind == ModuleStatePlanActionKind.Save)
+            return "Save-ManagedModule";
+        return actionKind == ModuleStatePlanActionKind.Update
+            ? "Update-ManagedModule"
+            : "Install-ManagedModule";
     }
 
     private static string? GetExactVersionPolicyValue(string? versionPolicy)
@@ -263,6 +346,14 @@ internal sealed class ModuleStateApplyService
     private static bool HasCommandDeliveryTarget(ModuleStateDeliveryCommand command)
         => command.Arguments.Contains("-ProfileName", StringComparer.OrdinalIgnoreCase) ||
            command.Arguments.Contains("-Repository", StringComparer.OrdinalIgnoreCase);
+
+    private static bool IsDeliveryAction(ModuleStatePlanActionKind kind)
+        => kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update or ModuleStatePlanActionKind.Save;
+
+    private static string ResolveMaintenanceReceiptEngine(ModuleStateDeliveryTransport transport)
+        => transport == ModuleStateDeliveryTransport.ManagedModule
+            ? "ManagedModule"
+            : "PrivateModule";
 
     private static ModuleStateInstalledModule? SelectObservedModule(
         ModuleStatePlanAction action,

@@ -247,8 +247,8 @@ public sealed class ModuleRepositoryRegistrationResult
     /// <summary>Recommended wrapper command for installing modules from this repository.</summary>
     public string RecommendedWrapperInstallCommand
         => string.IsNullOrWhiteSpace(RepositoryName)
-            ? "Install-PrivateModule -Name <ModuleName>"
-            : $"Install-PrivateModule -Name <ModuleName> -Repository '{RepositoryName}'";
+            ? "Install-ManagedModule -Name <ModuleName>"
+            : $"Install-ManagedModule -Name <ModuleName> -Repository '{RepositoryName}'";
 
     /// <summary>Recommended native command for installing modules from this repository.</summary>
     public string RecommendedNativeInstallCommand
@@ -271,12 +271,12 @@ public sealed class ModuleRepositoryRegistrationResult
         {
             if (IsMicrosoftArtifactRegistry)
             {
-                var marParts = new List<string> { "Register-ModuleRepository", "-MicrosoftArtifactRegistry" };
+                var marParts = new List<string> { "Initialize-ManagedModuleRepository", "-MicrosoftArtifactRegistry" };
                 if (InstallPrerequisitesRecommended)
                     marParts.Add("-InstallPrerequisites");
                 if (!string.IsNullOrWhiteSpace(RepositoryName) &&
                     !MicrosoftArtifactRegistryRepository.IsDefaultName(RepositoryName))
-                    marParts.Add($"-Name '{RepositoryName}'");
+                    marParts.Add($"-RepositoryName '{RepositoryName}'");
                 return string.Join(" ", marParts);
             }
 
@@ -284,7 +284,7 @@ public sealed class ModuleRepositoryRegistrationResult
             {
                 var privateGalleryParts = new List<string>
                 {
-                    "Register-ModuleRepository",
+                    "Initialize-ManagedModuleRepository",
                     $"-Provider {Provider}"
                 };
 
@@ -330,7 +330,7 @@ public sealed class ModuleRepositoryRegistrationResult
 
             var parts = new List<string>
             {
-                "Register-ModuleRepository",
+                "Initialize-ManagedModuleRepository",
                 $"-AzureDevOpsOrganization '{AzureDevOpsOrganization}'"
             };
 

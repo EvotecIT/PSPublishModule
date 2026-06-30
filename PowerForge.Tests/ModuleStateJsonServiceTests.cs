@@ -71,7 +71,14 @@ public sealed class ModuleStateJsonServiceTests
         var desiredState = new ModuleStateJsonService().ReadDesiredState("""
 {
   "modules": [
-    { "name": "Company.Tools", "versionPolicy": ">=1.2.0", "allowedSources": [ "CompanyModules" ], "scope": "AllUsers" }
+    {
+      "name": "Company.Tools",
+      "versionPolicy": ">=1.2.0",
+      "allowedSources": [ "CompanyModules" ],
+      "scope": "AllUsers",
+      "targetPath": "C:/OfflineModules",
+      "expectedPackageSha256": "sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    }
   ],
   "families": [
     {
@@ -91,6 +98,8 @@ public sealed class ModuleStateJsonServiceTests
         Assert.Equal(">=1.2.0", module.VersionPolicy);
         Assert.Equal(new[] { "CompanyModules" }, module.AllowedSources);
         Assert.Equal("AllUsers", module.Scope);
+        Assert.Equal("C:/OfflineModules", module.TargetPath);
+        Assert.Equal(new string('a', 64), module.ExpectedPackageSha256);
 
         var family = Assert.Single(desiredState.FamilyPolicies);
         Assert.Equal("Graph", family.Name);
@@ -134,10 +143,35 @@ public sealed class ModuleStateJsonServiceTests
 """);
 
         Assert.Equal("Company baseline", receipt.Source);
+        Assert.Null(receipt.DeliveryTransport);
+        Assert.Null(receipt.Engine);
         var module = Assert.Single(receipt.Modules);
         Assert.Equal("Company.Tools", module.Name);
         Assert.Equal("1.2.0", module.Version);
         Assert.Equal("CompanyModules", module.SourceRepository);
         Assert.Equal("AllUsers", module.Scope);
+    }
+
+    [Fact]
+    public void ReadMaintenanceReceipt_LoadsManagedTransportEvidenceFromJson()
+    {
+        var receipt = new ModuleStateJsonService().ReadMaintenanceReceipt("""
+{
+  "source": "Company baseline",
+  "deliveryTransport": "ManagedModule",
+  "engine": "ManagedModule",
+  "maintainedModules": [
+    {
+      "name": "Company.Tools",
+      "version": "1.2.0"
+    }
+  ]
+}
+""");
+
+        Assert.Equal("Company baseline", receipt.Source);
+        Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, receipt.DeliveryTransport);
+        Assert.Equal("ManagedModule", receipt.Engine);
+        Assert.Equal("Company.Tools", Assert.Single(receipt.Modules).Name);
     }
 }

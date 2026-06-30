@@ -56,7 +56,8 @@ internal sealed class ModuleStateJsonService
                 module.Path,
                 module.SourceRepository,
                 module.IsLoaded,
-                module.IsEffectiveImportCandidate));
+                module.IsEffectiveImportCandidate,
+                module.ExportedCommands));
         }
 
         return new ModuleStateInventory(modules);
@@ -74,7 +75,9 @@ internal sealed class ModuleStateJsonService
                 module.Name ?? string.Empty,
                 module.VersionPolicy ?? module.Version ?? module.RequiredVersion,
                 module.AllowedSources ?? module.Repositories ?? ToArray(module.Repository),
-                module.Scope));
+                module.Scope,
+                module.TargetPath ?? module.Path ?? module.ModuleRoot ?? module.DestinationPath,
+                module.ExpectedPackageSha256 ?? module.PackageSha256 ?? module.Sha256));
         }
 
         var families = new List<ModuleStateFamilyPolicy>();
@@ -104,7 +107,11 @@ internal sealed class ModuleStateJsonService
                 module.Scope));
         }
 
-        return new ModuleStateMaintenanceReceipt(dto.Source ?? dto.Profile ?? dto.Name, modules);
+        return new ModuleStateMaintenanceReceipt(
+            dto.Source ?? dto.Profile ?? dto.Name,
+            modules,
+            ParseDeliveryTransport(dto.DeliveryTransport ?? dto.Transport),
+            dto.Engine ?? dto.ManagedEngine);
     }
 
     private sealed class InventoryDto
@@ -129,6 +136,8 @@ internal sealed class ModuleStateJsonService
         public bool IsLoaded { get; set; }
 
         public bool IsEffectiveImportCandidate { get; set; }
+
+        public string[]? ExportedCommands { get; set; }
     }
 
     private sealed class DesiredStateDto
@@ -157,10 +166,34 @@ internal sealed class ModuleStateJsonService
         public string? Repository { get; set; }
 
         public string? Scope { get; set; }
+
+        public string? TargetPath { get; set; }
+
+        public string? Path { get; set; }
+
+        public string? ModuleRoot { get; set; }
+
+        public string? DestinationPath { get; set; }
+
+        public string? ExpectedPackageSha256 { get; set; }
+
+        public string? PackageSha256 { get; set; }
+
+        public string? Sha256 { get; set; }
     }
 
     private static string[]? ToArray(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : new[] { value!.Trim() };
+
+    private static ModuleStateDeliveryTransport? ParseDeliveryTransport(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return Enum.TryParse<ModuleStateDeliveryTransport>(value!.Trim(), ignoreCase: true, out var transport)
+            ? transport
+            : null;
+    }
 
     private sealed class FamilyPolicyDto
     {
@@ -178,6 +211,14 @@ internal sealed class ModuleStateJsonService
         public string? Source { get; set; }
 
         public string? Profile { get; set; }
+
+        public string? DeliveryTransport { get; set; }
+
+        public string? Transport { get; set; }
+
+        public string? Engine { get; set; }
+
+        public string? ManagedEngine { get; set; }
 
         public MaintenanceReceiptModuleDto[]? Modules { get; set; }
 

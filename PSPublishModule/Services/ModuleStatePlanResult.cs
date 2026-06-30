@@ -90,6 +90,26 @@ public sealed class ModuleStatePlanActionResult
     /// Gets or sets the repository targeted by this action when applicable.
     /// </summary>
     public string? TargetRepository { get; set; }
+
+    /// <summary>
+    /// Gets or sets the expected SHA256 hash for the root package when package integrity is required.
+    /// </summary>
+    public string? ExpectedPackageSha256 { get; set; }
+
+    /// <summary>
+    /// Gets or sets the selected package license when repository metadata exposes it.
+    /// </summary>
+    public string? License { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether this planned package requires explicit license acceptance.
+    /// </summary>
+    public bool LicenseAcceptanceRequired { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether license acceptance was supplied for this planned action.
+    /// </summary>
+    public bool LicenseAccepted { get; set; }
 }
 
 /// <summary>

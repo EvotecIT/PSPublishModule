@@ -103,6 +103,8 @@ internal sealed class ModuleStateRepairPlanner
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+            var wholeFamilyHasPlannedActions = installedFamilyModuleNames.All(name =>
+                existing.Any(action => string.Equals(action.ModuleName, name, StringComparison.OrdinalIgnoreCase)));
 
             foreach (var moduleName in installedFamilyModuleNames)
             {
@@ -118,8 +120,11 @@ internal sealed class ModuleStateRepairPlanner
                     continue;
                 }
 
-                if (HasExplicitDesiredAction(existing, moduleName, selectedModule.Scope))
+                if (!wholeFamilyHasPlannedActions &&
+                    HasExplicitDesiredAction(existing, moduleName, selectedModule.Scope))
+                {
                     continue;
+                }
 
                 var targetRepository = FindCoveredAction(existing, moduleName, selectedModule.Scope)?.TargetRepository;
                 yield return new ModuleStatePlanAction(

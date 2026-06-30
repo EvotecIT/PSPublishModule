@@ -52,7 +52,8 @@ The same contracts are available from PowerShell cmdlets, JSON files, and CLI co
 | PowerShell module build | Builds script and binary modules, merges public/private functions, updates manifests, signs outputs, creates packed/unpacked artifacts, validates imports, runs tests, and generates help. | `Invoke-ModuleBuild`, `Build-Module`, `New-ConfigurationBuild`, `New-ConfigurationManifest`, `New-ConfigurationArtefact`, `New-ConfigurationValidation` |
 | Module dependencies and isolation | Resolves required/external/approved modules, supports online dependency install, packages required modules, detects missing helpers, and imports selected modules through AssemblyLoadContext isolation profiles. | `New-ConfigurationModule`, `Get-MissingFunctions`, `Import-IsolatedModule`, `Test-IsolatedModuleProfile` |
 | Documentation and delivery | Generates Markdown command docs, MAML external help, about topics, and bundled module documentation. It can also copy or render installed module docs from local files, GitHub, or Azure DevOps. | `New-ConfigurationDocumentation`, `New-ModuleAboutTopic`, `Show-ModuleDocumentation`, `Install-ModuleDocumentation`, `Install-ModuleScript` |
-| Private galleries | Onboards users and publishers to private PowerShell module feeds, especially Azure Artifacts, without storing secrets in profiles. | `Initialize-ModuleRepository`, `Connect-ModuleRepository`, `Register-ModuleRepository`, `Install-PrivateModule`, `Update-PrivateModule`, `Publish-NugetPackage` |
+| Private galleries | Stores non-secret repository profiles, bootstraps feed access, and lets the managed module cmdlets use the same profile for find/save/install/update/publish. | `Set-ManagedModuleRepository`, `Get-ManagedModuleRepository`, `Initialize-ManagedModuleRepository`, `Remove-ManagedModuleRepository`, `Find-ManagedModule`, `Save-ManagedModule`, `Install-ManagedModule`, `Update-ManagedModule`, `Publish-ManagedModule` |
+| Managed module lifecycle | Finds, saves, installs, updates, publishes, and maintains PowerShell modules through the managed C# engine with typed results and receipts. Benchmark tooling lives under Benchmarks for contributor evidence. | `Find-ManagedModule`, `Save-ManagedModule`, `Install-ManagedModule`, `Update-ManagedModule`, `Repair-ManagedModule`, `Publish-ManagedModule` |
 | .NET publish and packaging | Builds publish matrices for apps, services, tools, bundles, plugins, MSI, MSIX, Microsoft Store packages, appinstaller files, signing, checksums, and manifests. | `New-DotNetPublishConfig`, `Invoke-DotNetPublish`, `Invoke-PowerForgeBundlePostProcess`, `Invoke-PowerForgePluginExport`, `Invoke-PowerForgePluginPack` |
 | Unified release | Coordinates module artifacts, NuGet packages, tool binaries, installers, GitHub releases, staging folders, checksums, Winget manifests/submission, and release manifests from one release config. | `New-PowerForgeReleaseConfig`, `Invoke-PowerForgeRelease`, `Invoke-ProjectRelease`, `Invoke-ProjectBuild`, `powerforge release` |
 | GitHub housekeeping | Prunes Actions artifacts and caches, performs runner cleanup, and provides reusable workflows/actions for cross-repo maintenance. | `powerforge github housekeeping`, `.github/workflows/powerforge-github-housekeeping.yml` |
@@ -256,34 +257,211 @@ The older hashtable-style configuration is still supported for compatibility, bu
 
 ## Quick Start: Private PowerShell Galleries
 
-Create a non-secret private gallery profile for Azure Artifacts:
+Create a non-secret profile for a private NuGet-compatible module feed:
 
 ```powershell
-Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
+Set-ManagedModuleRepository `
+    -Name Company `
+    -Provider NuGet `
+    -RepositoryName CompanyModules `
+    -RepositoryUri 'https://packages.company.test/nuget/v3/index.json' `
+    -RepositoryPublishUri 'https://packages.company.test/nuget/v3/index.json' `
+    -Trusted
 ```
 
 Export/import the same settings for other users or build machines:
 
 ```powershell
-Export-ModuleRepositoryProfile -Name Company -Path .\Company.profile.json -Force
-Import-ModuleRepositoryProfile -Path .\Company.profile.json -Overwrite
-Connect-ModuleRepository -ProfileName Company -InstallPrerequisites
+Get-ManagedModuleRepository -Name Company -ExportPath .\Company.profile.json -Force
+Initialize-ManagedModuleRepository -Path .\Company.profile.json -Overwrite
+Initialize-ManagedModuleRepository -ProfileName Company -InstallPrerequisites
 ```
 
-Install and update modules through the profile:
+Use the profile with the managed module lifecycle commands:
 
 ```powershell
-Install-PrivateModule -ProfileName Company -Name ModuleA
-Update-PrivateModule -ProfileName Company -Name ModuleA
+Find-ManagedModule -ProfileName Company -Name Company.Tools
+Save-ManagedModule -ProfileName Company -Name Company.Tools -Path C:\OfflineModules
+Install-ManagedModule -ProfileName Company -Name Company.Tools -Scope CurrentUser
+Update-ManagedModule -ProfileName Company -Name Company.Tools
 ```
 
-Publish packages to the saved feed:
+Publish PowerShell modules through the same profile:
 
 ```powershell
-Publish-NugetPackage -Path .\Artifacts -ProfileName Company -SkipDuplicate
+Publish-ManagedModule -Path C:\Source\Company.Tools -ProfileName Company -ApiKeyFilePath C:\Secrets\company-feed-key.txt
 ```
 
-See [Docs/PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md) and `Get-Help about_PrivateGalleries`.
+`Publish-NugetPackage` remains available for raw `.nupkg` publishing. For
+module lifecycle work, prefer `Publish-ManagedModule` so package creation,
+metadata validation, repository resolution, and publish behavior stay in the
+managed module flow.
+
+See [Docs/PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md),
+[Docs/PSPublishModule.ManagedModules.Compatibility.md](Docs/PSPublishModule.ManagedModules.Compatibility.md),
+and `Get-Help about_PrivateGalleries`.
+
+## Quick Start: Managed Module Lifecycle
+
+The managed module commands are the C# engine path for module discovery, save,
+install, update, publish, and estate maintenance. They are designed to cover
+common `Find-Module`, `Save-Module`, `Install-Module`, `Update-Module`, and
+`Publish-Module` workflows without depending on PowerShellGet, PSResourceGet,
+PackageManagement, external executables, or embedded PowerShell scripts in the
+managed delivery path.
+
+```powershell
+Find-ManagedModule -Name Company.Tools -Repository PSGallery
+Save-ManagedModule -Name Company.Tools -Path C:\OfflineModules -Repository PSGallery
+Install-ManagedModule -Name Company.Tools -Scope CurrentUser -Repository PSGallery
+Update-ManagedModule -Name Company.Tools -Repository PSGallery
+Publish-ManagedModule -Path C:\Source\Company.Tools -Repository C:\Packages
+```
+
+Managed module repository profiles can be used anywhere the lifecycle commands
+accept `-ProfileName`, so private/internal feeds do not need a parallel install
+or update command family.
+
+For machine-wide maintenance, use `Repair-ManagedModule` as the operator
+entrypoint. `-Plan` previews the work with typed objects and the same summary
+view; removing `-Plan` applies the managed install/update/save actions.
+
+```powershell
+Repair-ManagedModule -Latest -Repository PSGallery -Plan -ShowSummary
+Repair-ManagedModule -Latest -Repository PSGallery -ShowSummary
+```
+
+### Benchmarks
+
+The managed module benchmark answers a narrow question: how long does each
+tool take to run the public command a user would normally run? The script in
+[Benchmarks/ManagedModules](Benchmarks/ManagedModules) measures `Find`,
+`Install`, and `Save` for PSScriptAnalyzer, Microsoft.Graph.Authentication,
+Microsoft.Graph, Az.Accounts, and Az against Managed, ModuleFast,
+PSResourceGet, and PowerShellGet where an equivalent command exists. Repair is
+not included because the other tools do not expose an equivalent module-estate
+repair command.
+
+Managed is the `1.00x` baseline for each completed row. Other values show how
+many times slower that tool was for the same scenario, with measured time in
+parentheses. A row only deserves a speed comparison when the tool successfully
+materializes the requested module graph; source/index misses and unsupported
+operations should be read as compatibility notes, not slow timings.
+
+What makes Managed fast is the install model, not simply that it uses .NET.
+PowerShellGet, PackageManagement, and PSResourceGet also use compiled .NET
+components. The difference is that Managed uses a purpose-built module
+repository and archive pipeline instead of routing normal installs through a
+generic package-provider workflow.
+
+- Repository lookup, dependency planning, package download, extraction, caching,
+  and promotion run in one operation-local engine.
+- Large dependency graphs such as `Microsoft.Graph` and `Az` are resolved and
+  installed concurrently instead of as one long serial provider walk.
+- Default dependency and HTTP fanout scales with processor count up to the
+  benchmark cap, while `-DependencyConcurrency` remains available when a runner
+  needs a lower or higher explicit limit.
+- Duplicate dependency requests are coalesced inside the same operation. If two
+  branches ask for the same package/version, one install wins and the other
+  branch reuses the completed result.
+- Packages are streamed directly, SHA256 is recorded, and per-run package and
+  extracted-package caches avoid paying the same download/extract cost again.
+- Installs stage into short hidden folders and promote atomically into the final
+  versioned module path. That keeps PS 5.1 viable for deep packages such as
+  `Az.MachineLearningServices` while preserving the normal installed layout.
+- The same managed path runs on PS 7 and Windows PowerShell 5.1, so the 5.1
+  results are not forced through older provider behavior just because the host
+  is older.
+
+ModuleFast is fast for a different reason. It is a focused installer that uses
+`pwsh.gallery`, a community NuGet v2-to-v3 bridge for PowerShell Gallery using
+Cloudflare Workers. That mirror is maintained outside the official PowerShell
+Gallery path; the public ModuleFast and PWSHGallery repositories are under
+[Justin Grote's GitHub account](https://github.com/JustinGrote). This makes
+[ModuleFast](https://github.com/JustinGrote/ModuleFast) a useful speed
+comparison, but not an identical source comparison. When the mirror has the full
+dependency graph, ModuleFast can be very fast. When the mirror is missing a
+dependency that the official Gallery resolves, the ModuleFast row should be
+treated as a source/index miss rather than a managed engine failure.
+
+The comparison is therefore split into capability and timing:
+
+| Tool | Source path used here | Equivalent rows | Integrity and safety posture |
+| --- | --- | --- | --- |
+| Managed / PSPublishModule | Official PowerShell Gallery package URLs and registered repository profiles | Find, Install, Save | Records SHA256 delivery evidence, supports expected SHA256 and Authenticode checks when requested, preserves license/trust decisions, checks clobber behavior, writes receipts, stages into short hidden folders, then promotes into the normal module layout. |
+| ModuleFast | `pwsh.gallery` mirror | Install on PS 7 only | Very small install path optimized for speed. Good comparison for elapsed install time, but not the same source path or command surface. Mirror misses are reported separately from slow timings. |
+| PSResourceGet | Registered PSGallery provider | Find, Install, Save | Native Microsoft resource provider. Install rows use the provider's real `CurrentUser` path because the command does not expose an arbitrary install root. The benchmark runner measures those rows under a temporary Windows user and deletes that account/profile afterward. |
+| PowerShellGet | PackageManagement / PowerShellGet provider path | Find, Install, Save | Mature legacy provider behavior. Install rows use the same temporary Windows user model as PSResourceGet. |
+
+Managed install rows use `-ModuleRoot` and ModuleFast rows use `-Destination`,
+so both can materialize the requested module graph in an isolated benchmark
+folder. `Install-PSResource` and `Install-Module` target a profile scope instead
+of an arbitrary install root, so native install rows intentionally use the real
+`CurrentUser` provider path. The benchmark runner measures those rows by
+creating a temporary local Windows account, staging only the native provider
+modules for that account, running the install with a loaded user profile,
+importing the small CSV result, and deleting the account/profile afterward. Use
+`-SkipTemporaryUserNativeInstall` only when a machine cannot create a temporary
+local benchmark account.
+
+The full table below was refreshed on June 30, 2026 from one complete matrix
+run on PowerShell 7 and Windows PowerShell 5.1. The PowerShell 7
+PSScriptAnalyzer find row also includes three extra Managed repeats after one
+transient first-result outlier; when repeated rows exist, the README updater
+writes the median timing for that scenario/tool row.
+
+<!-- managed-module-benchmark-table:start -->
+| Scenario | Host | Operation | Managed | ModuleFast | PSResourceGet | PowerShellGet | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Az.Accounts | PowerShell 7 | Find | 1.00x (0.19s) | NotEquivalent | 1.67x (0.32s) | 2.91x (0.55s) | Managed fastest |
+| Az.Accounts | PowerShell 7 | Install | 1.00x (0.43s) | 1.80x (0.77s) | 4.05x (1.73s) | 10.23x (4.37s) | Managed fastest |
+| Az.Accounts | PowerShell 7 | Save | 1.00x (0.59s) | NotEquivalent | 4.59x (2.70s) | 8.32x (4.90s) | Managed fastest |
+| Az.Accounts | Windows PowerShell 5.1 | Find | 1.00x (0.18s) | NotEquivalent | 1.64x (0.29s) | 5.19x (0.92s) | Managed fastest |
+| Az.Accounts | Windows PowerShell 5.1 | Install | 1.00x (0.63s) | NotAvailable | 2.47x (1.55s) | 5.85x (3.66s) | Managed fastest |
+| Az.Accounts | Windows PowerShell 5.1 | Save | 1.00x (0.75s) | NotEquivalent | 2.24x (1.68s) | 12.13x (9.07s) | Managed fastest |
+| Az | PowerShell 7 | Find | 1.00x (0.18s) | NotEquivalent | 1.89x (0.33s) | 3.11x (0.55s) | Managed fastest |
+| Az | PowerShell 7 | Install | 1.00x (16.06s) | Failed | 9.92x (159.21s) | 7.75x (124.51s) | Managed fastest |
+| Az | PowerShell 7 | Save | 1.00x (7.82s) | NotEquivalent | 20.66x (161.60s) | 18.83x (147.31s) | Managed fastest |
+| Az | Windows PowerShell 5.1 | Find | 1.00x (0.27s) | NotEquivalent | 1.55x (0.42s) | 4.14x (1.11s) | Managed fastest |
+| Az | Windows PowerShell 5.1 | Install | 1.00x (8.29s) | NotAvailable | 16.74x (138.79s) | 18.04x (149.54s) | Managed fastest |
+| Az | Windows PowerShell 5.1 | Save | 1.00x (19.26s) | NotEquivalent | 7.06x (136.04s) | 6.76x (130.28s) | Managed fastest |
+| Graph.Authentication | PowerShell 7 | Find | 1.00x (0.20s) | NotEquivalent | 6.06x (1.19s) | 2.83x (0.55s) | Managed fastest |
+| Graph.Authentication | PowerShell 7 | Install | 1.00x (0.51s) | 1.79x (0.91s) | 2.66x (1.34s) | 8.46x (4.28s) | Managed fastest |
+| Graph.Authentication | PowerShell 7 | Save | 1.00x (0.61s) | NotEquivalent | 12.77x (7.85s) | 24.43x (15.02s) | Managed fastest |
+| Graph.Authentication | Windows PowerShell 5.1 | Find | 1.00x (0.27s) | NotEquivalent | 1.72x (0.46s) | 2.90x (0.78s) | Managed fastest |
+| Graph.Authentication | Windows PowerShell 5.1 | Install | 1.00x (0.71s) | NotAvailable | 2.87x (2.05s) | 4.61x (3.30s) | Managed fastest |
+| Graph.Authentication | Windows PowerShell 5.1 | Save | 1.00x (0.68s) | NotEquivalent | 3.02x (2.06s) | 5.10x (3.48s) | Managed fastest |
+| Graph | PowerShell 7 | Find | 1.00x (0.24s) | NotEquivalent | 4.59x (1.10s) | 2.49x (0.59s) | Managed fastest |
+| Graph | PowerShell 7 | Install | 1.00x (6.60s) | 0.88x (5.81s) | 8.10x (53.46s) | 11.19x (73.84s) | Managed slower than ModuleFast |
+| Graph | PowerShell 7 | Save | 1.00x (3.55s) | NotEquivalent | 92.31x (327.79s) | 53.15x (188.73s) | Managed fastest |
+| Graph | Windows PowerShell 5.1 | Find | 1.00x (0.31s) | NotEquivalent | 2.56x (0.80s) | 3.69x (1.16s) | Managed fastest |
+| Graph | Windows PowerShell 5.1 | Install | 1.00x (11.54s) | NotAvailable | 4.93x (56.87s) | 6.88x (79.40s) | Managed fastest |
+| Graph | Windows PowerShell 5.1 | Save | 1.00x (4.65s) | NotEquivalent | 15.22x (70.76s) | 21.69x (100.80s) | Managed fastest |
+| PSScriptAnalyzer | PowerShell 7 | Find | 1.00x (0.65s) | NotEquivalent | 1.30x (0.84s) | 7.14x (4.62s) | Managed fastest |
+| PSScriptAnalyzer | PowerShell 7 | Install | 1.00x (0.82s) | 2.71x (2.23s) | 2.70x (2.23s) | 14.42x (11.90s) | Managed fastest |
+| PSScriptAnalyzer | PowerShell 7 | Save | 1.00x (1.24s) | NotEquivalent | 5.94x (7.35s) | 8.87x (10.97s) | Managed fastest |
+| PSScriptAnalyzer | Windows PowerShell 5.1 | Find | 1.00x (0.89s) | NotEquivalent | 1.56x (1.39s) | 3.50x (3.12s) | Managed fastest |
+| PSScriptAnalyzer | Windows PowerShell 5.1 | Install | 1.00x (1.58s) | NotAvailable | 2.71x (4.27s) | 4.51x (7.12s) | Managed fastest |
+| PSScriptAnalyzer | Windows PowerShell 5.1 | Save | 1.00x (1.25s) | NotEquivalent | 2.93x (3.67s) | 3.21x (4.02s) | Managed fastest |
+<!-- managed-module-benchmark-table:end -->
+
+Refresh the table with:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -BenchmarkHost PowerShell7 -RepeatCount 1
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -BenchmarkHost WindowsPowerShell -RepeatCount 1 -Append
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Update-ManagedModuleBenchmarkReadme.ps1 -ResultPath .\Ignore\Benchmarks\ManagedModules\managed-module-benchmark.csv
+```
+
+Native `Install-Module` and `Install-PSResource` install into the user module
+location. For native install rows, the benchmark runner uses a temporary local
+Windows account and removes it after timing; the real user module folder is not
+moved.
+
+See [Docs/PSPublishModule.ManagedModules.Compatibility.md](Docs/PSPublishModule.ManagedModules.Compatibility.md)
+for the switching matrix, [Docs/PSPublishModule.ManagedModules.Roadmap.md](Docs/PSPublishModule.ManagedModules.Roadmap.md)
+for the remaining parity and documentation gates, and [Benchmarks/ManagedModules/README.md](Benchmarks/ManagedModules/README.md)
+for the exact benchmark commands.
 
 ## Quick Start: .NET Publish and Packaging
 
@@ -405,7 +583,7 @@ PSPublishModule exports commands in these families:
 - `New-Configuration*`: create DSL objects for module, .NET publish, release, installer, signing, documentation, validation, and compatibility configuration.
 - `New-*Config`: scaffold JSON configuration files.
 - `Get-*` / `Test-*`: inspect module metadata, repository profiles, compatibility, project consistency, versions, isolated module profiles, and test failures.
-- `Install-*` / `Update-*` / `Register-*` / `Connect-*`: manage module docs/scripts and private gallery repositories.
+- `Find-*` / `Save-*` / `Install-*` / `Update-*` / `Repair-*`: manage module discovery, materialization, installation, update, repair, docs/scripts, and managed repository profiles.
 - `Publish-*` / `Send-*`: publish NuGet packages and GitHub release assets.
 - `powerforge`: JSON-first CLI for release, .NET publish, GitHub housekeeping, plugin export/pack, bundle post-process, and related automation.
 - `powerforge-web`: static-site and API-docs CLI.
@@ -468,6 +646,9 @@ Start here:
 - [Docs/PSPublishModule.ProjectBuild.md](Docs/PSPublishModule.ProjectBuild.md)
 - [Docs/PSPublishModule.ModuleDocumentation.md](Docs/PSPublishModule.ModuleDocumentation.md)
 - [Docs/PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md)
+- [Docs/PSPublishModule.ManagedModules.Compatibility.md](Docs/PSPublishModule.ManagedModules.Compatibility.md)
+- [Docs/PSPublishModule.ManagedModules.Roadmap.md](Docs/PSPublishModule.ManagedModules.Roadmap.md)
+- [Benchmarks/ManagedModules/README.md](Benchmarks/ManagedModules/README.md)
 - [Docs/PSPublishModule.ModuleIsolation.md](Docs/PSPublishModule.ModuleIsolation.md)
 - [Docs/PSPublishModule.DevelopmentBootstrapper.md](Docs/PSPublishModule.DevelopmentBootstrapper.md)
 - [Docs/PowerForge.Web.WebsiteStarter.md](Docs/PowerForge.Web.WebsiteStarter.md)

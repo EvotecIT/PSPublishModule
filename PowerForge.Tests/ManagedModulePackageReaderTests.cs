@@ -1,0 +1,286 @@
+using System.IO.Compression;
+using PowerForge;
+
+namespace PowerForge.Tests;
+
+public sealed class ManagedModulePackageReaderTests
+{
+    [Fact]
+    public void ReadMetadata_reads_nuspec_metadata_and_dependencies()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.2.0.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.2.0",
+            dependencies: new[]
+            {
+                new TestDependency("Company.Shared", "1.5.0", null),
+                new TestDependency("Company.Core", "[1.0.0,2.0.0)", "net472")
+            });
+
+        var metadata = new ManagedModulePackageReader().ReadMetadata(packagePath);
+
+        Assert.Equal("Company.Tools", metadata.Id);
+        Assert.Equal("1.2.0", metadata.Version);
+        Assert.Equal("expression:MIT", metadata.License);
+        Assert.Equal(new[] { "automation", "company", "powershell" }, metadata.Tags);
+        Assert.True(metadata.FileCount >= 1);
+        Assert.True(metadata.PackageBytes > 0);
+        Assert.True(metadata.UncompressedBytes > 0);
+        Assert.Equal(2, metadata.Dependencies.Count);
+        Assert.Equal(new[] { "Company.Shared", "Company.Core" }, metadata.Dependencies.Select(static dependency => dependency.Id).ToArray());
+        Assert.Contains(metadata.Dependencies, dependency =>
+            dependency.Id == "Company.Core" &&
+            dependency.VersionRange == "[1.0.0,2.0.0)" &&
+            dependency.TargetFramework == "net472");
+        Assert.Contains(metadata.Dependencies, dependency =>
+            dependency.Id == "Company.Shared" &&
+            dependency.VersionRange == "1.5.0" &&
+            dependency.TargetFramework is null);
+    }
+
+    [Fact]
+    public void ReadMetadata_marks_prerelease_versions()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.2.0.0-beta1.nupkg");
+        TestPackageFactory.Create(packagePath, "Company.Tools", "2.0.0-beta1");
+
+        var metadata = new ManagedModulePackageReader().ReadMetadata(packagePath);
+
+        Assert.True(metadata.IsPrerelease);
+    }
+
+    [Fact]
+    public void ReadMetadata_reads_module_manifest_metadata_and_required_modules()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.2.0-preview1.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.2.0-preview1",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = """
+                    @{
+                        ModuleVersion = '1.2.0'
+                        RequiredModules = @(
+                            @{ ModuleName = 'Company.Core'; RequiredVersion = '1.0.0' },
+                            @{ ModuleName = 'Company.Shared'; ModuleVersion = '2.0.0'; MaximumVersion = '2.9.9' }
+                        )
+                        PrivateData = @{
+                            PSData = @{
+                                Prerelease = 'preview1'
+                            }
+                        }
+                    }
+                    """
+            });
+
+        var metadata = new ManagedModulePackageReader().ReadMetadata(packagePath);
+
+        Assert.Equal("Company.Tools.psd1", metadata.ModuleManifestPath);
+        Assert.Equal("1.2.0", metadata.ModuleManifestVersion);
+        Assert.Equal("preview1", metadata.ModuleManifestPrerelease);
+        Assert.Equal(2, metadata.ManifestDependencies.Count);
+        Assert.Contains(metadata.Dependencies, dependency =>
+            dependency.Id == "Company.Core" &&
+            dependency.VersionRange == "[1.0.0]");
+        Assert.Contains(metadata.Dependencies, dependency =>
+            dependency.Id == "Company.Shared" &&
+            dependency.VersionRange == "[2.0.0,2.9.9]");
+    }
+
+    [Fact]
+    public void ReadMetadata_prefers_manifest_dependency_constraint_over_stale_nuspec_constraint()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[]
+            {
+                new TestDependency("Company.Core", "1.0.0", null)
+            },
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = """
+                    @{
+                        ModuleVersion = '1.0.0'
+                        RequiredModules = @{ ModuleName = 'Company.Core'; RequiredVersion = '2.0.0' }
+                    }
+                    """
+            });
+
+        var metadata = new ManagedModulePackageReader().ReadMetadata(packagePath);
+
+        var dependency = Assert.Single(metadata.Dependencies, dependency => dependency.Id == "Company.Core");
+        Assert.Equal("[2.0.0]", dependency.VersionRange);
+    }
+
+    [Fact]
+    public void ReadMetadata_preserves_nuspec_constraint_when_manifest_only_names_dependency()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[]
+            {
+                new TestDependency("Company.Core", "[2.0.0,3.0.0)", null)
+            },
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = """
+                    @{
+                        ModuleVersion = '1.0.0'
+                        RequiredModules = @('Company.Core')
+                    }
+                    """
+            });
+
+        var metadata = new ManagedModulePackageReader().ReadMetadata(packagePath);
+
+        var dependency = Assert.Single(metadata.Dependencies, dependency => dependency.Id == "Company.Core");
+        Assert.Equal("[2.0.0,3.0.0)", dependency.VersionRange);
+    }
+
+    [Fact]
+    public void ReadMetadata_excludes_manifest_external_modules_from_installable_dependencies()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[]
+            {
+                new TestDependency("External.Dependency", "[2.0.0]", null),
+                new TestDependency("Company.Core", "[3.0.0]", null)
+            },
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = """
+                    @{
+                        ModuleVersion = '1.0.0'
+                        RequiredModules = @(
+                            @{ ModuleName = 'External.Dependency'; RequiredVersion = '2.0.0' },
+                            @{ ModuleName = 'Company.Core'; RequiredVersion = '3.0.0' }
+                        )
+                        PrivateData = @{
+                            PSData = @{
+                                ExternalModuleDependencies = @('external.dependency')
+                            }
+                        }
+                    }
+                    """
+            });
+
+        var metadata = new ManagedModulePackageReader().ReadMetadata(packagePath);
+
+        Assert.Contains("External.Dependency", metadata.ManifestDependencies.Select(static dependency => dependency.Id), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("external.dependency", metadata.ManifestExternalModuleDependencies, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(metadata.Dependencies, dependency => string.Equals(dependency.Id, "Company.Core", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(metadata.Dependencies, dependency => string.Equals(dependency.Id, "External.Dependency", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ReadMetadata_ignores_non_module_psd1_files()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Templates/Other.Tools.psd1"] = """
+                    @{
+                        ModuleVersion = '9.9.9'
+                    }
+                    """
+            });
+
+        var metadata = new ManagedModulePackageReader().ReadMetadata(packagePath);
+
+        Assert.Null(metadata.ModuleManifestPath);
+        Assert.Null(metadata.ModuleManifestVersion);
+    }
+
+    [Fact]
+    public void ReadMetadata_rejects_manifest_version_that_disagrees_with_nuspec_version()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = """
+                    @{
+                        ModuleVersion = '2.0.0'
+                    }
+                    """
+            });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new ManagedModulePackageReader().ReadMetadata(packagePath));
+        Assert.Contains("does not match module manifest version", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("1.0.0", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("2.0.0", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReadMetadata_accepts_semantically_equivalent_manifest_version()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.2.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.2",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = """
+                    @{
+                        ModuleVersion = '1.2.0'
+                    }
+                    """
+            });
+
+        var metadata = new ManagedModulePackageReader().ReadMetadata(packagePath);
+
+        Assert.Equal("1.2", metadata.Version);
+        Assert.Equal("1.2.0", metadata.ModuleManifestVersion);
+    }
+
+    [Fact]
+    public void ReadMetadata_rejects_unsafe_archive_paths()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        using (var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create))
+        {
+            var nuspec = archive.CreateEntry("Company.Tools.nuspec");
+            using (var writer = new StreamWriter(nuspec.Open()))
+            {
+                writer.Write(TestPackageFactory.CreateNuspec("Company.Tools", "1.0.0"));
+            }
+
+            archive.CreateEntry("../escape.ps1");
+        }
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new ManagedModulePackageReader().ReadMetadata(packagePath));
+        Assert.Contains("unsafe path", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+}

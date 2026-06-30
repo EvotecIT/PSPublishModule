@@ -46,11 +46,43 @@ internal sealed class PrivateModuleWorkflowService
         var preferPowerShellGet = false;
         var usePrivateGallery = request.UseAzureArtifacts;
         var useMicrosoftArtifactRegistry = request.UseMicrosoftArtifactRegistry;
+        var managedRepositorySource = request.ManagedRepositorySource;
+        var effectiveTransport = request.DeliveryTransport;
+        var transportReason = "Transport was requested explicitly.";
 
         if (usePrivateGallery && useMicrosoftArtifactRegistry)
             throw new ArgumentException("Choose either a private gallery provider or Microsoft Artifact Registry, not both.", nameof(request));
 
-        if (usePrivateGallery)
+        if (usePrivateGallery && UsesManagedPrivateGalleryPath(request, managedRepositorySource))
+        {
+            _privateGalleryService.EnsureProviderSupported(request.Provider);
+            var transportDecision = ManagedModuleTransportPolicy.Resolve(CreateTransportPolicyInput(request, usePrivateGallery, useMicrosoftArtifactRegistry, managedRepositorySource));
+
+            var endpoint = PrivateGalleryRepositoryEndpoints.Create(
+                request.Provider,
+                request.AzureDevOpsOrganization,
+                request.AzureDevOpsProject,
+                request.AzureArtifactsFeed,
+                request.RepositoryName,
+                request.Repository,
+                request.RepositoryUri,
+                request.RepositorySourceUri,
+                request.RepositoryPublishUri,
+                request.JFrogBaseUri,
+                request.JFrogRepository);
+
+            repositoryName = endpoint.RepositoryName;
+            managedRepositorySource = endpoint.PSResourceGetUri;
+            effectiveTransport = transportDecision.EffectiveTransport;
+            transportReason = transportDecision.Reason;
+            credential = _privateGalleryService.ResolveOptionalCredential(
+                repositoryName,
+                request.CredentialUserName,
+                request.CredentialSecret,
+                request.CredentialSecretFilePath,
+                request.PromptForCredential);
+        }
+        else if (usePrivateGallery)
         {
             _privateGalleryService.EnsureProviderSupported(request.Provider);
 
@@ -66,6 +98,7 @@ internal sealed class PrivateModuleWorkflowService
                 request.RepositoryPublishUri,
                 request.JFrogBaseUri,
                 request.JFrogRepository);
+            managedRepositorySource = endpoint.PSResourceGetUri;
             var prerequisiteInstall = _privateGalleryService.EnsureBootstrapPrerequisites(
                 request.InstallPrerequisites,
                 request.BootstrapMode,
@@ -113,11 +146,15 @@ internal sealed class PrivateModuleWorkflowService
 
             if (!registration.RegistrationPerformed)
             {
+                var skippedTransport = ResolvePendingTransport(request.Provider, effectiveTransport, usePrivateGallery, useMicrosoftArtifactRegistry, managedRepositorySource, transportReason);
                 _host.WriteWarning(GetSkippedRegistrationMessage(request.Operation, registration.RepositoryName));
                 return new PrivateModuleWorkflowResult
                 {
                     OperationPerformed = false,
                     RepositoryName = registration.RepositoryName,
+                    RequestedTransport = request.DeliveryTransport,
+                    EffectiveTransport = skippedTransport.EffectiveTransport,
+                    DeliveryTransportReason = skippedTransport.Reason,
                     DependencyResults = Array.Empty<ModuleDependencyInstallResult>()
                 };
             }
@@ -136,8 +173,8 @@ internal sealed class PrivateModuleWorkflowService
                     ? $"Repository access probe failed via {probe.Tool}."
                     : $"Repository access probe failed via {probe.Tool}: {probe.Message}";
                 var refreshCommand = string.IsNullOrWhiteSpace(request.ProfileName)
-                    ? "Initialize-ModuleRepository for this private gallery"
-                    : $"Initialize-ModuleRepository -ProfileName '{request.ProfileName}' -InstallPrerequisites";
+                    ? "Initialize-ManagedModuleRepository for this managed module repository"
+                    : $"Initialize-ManagedModuleRepository -ProfileName '{request.ProfileName}' -InstallPrerequisites";
                 throw new InvalidOperationException($"{message} Re-run {refreshCommand} or retry the command with valid private gallery credentials.");
             }
 
@@ -171,14 +208,19 @@ internal sealed class PrivateModuleWorkflowService
             registration.InstalledPrerequisites = prerequisiteInstall.InstalledPrerequisites;
             registration.PrerequisiteInstallMessages = prerequisiteInstall.Messages;
             repositoryName = registration.RepositoryName;
+            managedRepositorySource = registration.PSResourceGetUri;
 
             if (!registration.RegistrationPerformed)
             {
+                var skippedTransport = ResolvePendingTransport(request.Provider, effectiveTransport, usePrivateGallery, useMicrosoftArtifactRegistry, managedRepositorySource, transportReason);
                 _host.WriteWarning(GetSkippedRegistrationMessage(request.Operation, registration.RepositoryName));
                 return new PrivateModuleWorkflowResult
                 {
                     OperationPerformed = false,
                     RepositoryName = registration.RepositoryName,
+                    RequestedTransport = request.DeliveryTransport,
+                    EffectiveTransport = skippedTransport.EffectiveTransport,
+                    DeliveryTransportReason = skippedTransport.Reason,
                     DependencyResults = Array.Empty<ModuleDependencyInstallResult>()
                 };
             }
@@ -199,6 +241,26 @@ internal sealed class PrivateModuleWorkflowService
                 throw new InvalidOperationException(message);
             }
         }
+        if (effectiveTransport == ModuleStateDeliveryTransport.Auto)
+        {
+            var resolution = ResolveAutoTransport(request.Provider, usePrivateGallery, useMicrosoftArtifactRegistry, managedRepositorySource, HasManagedOnlyOptionsRequested(request));
+            effectiveTransport = resolution.EffectiveTransport;
+            transportReason = resolution.Reason;
+        }
+
+        _host.WriteVerbose($"Module delivery transport: requested {request.DeliveryTransport}, using {effectiveTransport}. {transportReason}");
+
+        if (effectiveTransport == ModuleStateDeliveryTransport.PrivateModule)
+        {
+            if (!string.IsNullOrWhiteSpace(request.VersionPolicy))
+            {
+                throw new InvalidOperationException(
+                    "VersionPolicy requires the managed module repository path. Legacy delivery supports RequiredVersion, MinimumVersion, and MaximumVersion.");
+            }
+
+            ThrowIfManagedOnlyOptionsRequested(request);
+        }
+
         if (!shouldProcess(
                 $"{modules.Count} module(s) from repository '{repositoryName}'",
                 GetFinalAction(request.Operation, request.Force)))
@@ -207,6 +269,9 @@ internal sealed class PrivateModuleWorkflowService
             {
                 OperationPerformed = false,
                 RepositoryName = repositoryName,
+                RequestedTransport = request.DeliveryTransport,
+                EffectiveTransport = effectiveTransport,
+                DeliveryTransportReason = transportReason,
                 DependencyResults = Array.Empty<ModuleDependencyInstallResult>()
             };
         }
@@ -219,6 +284,20 @@ internal sealed class PrivateModuleWorkflowService
                 request.CredentialSecret,
                 request.CredentialSecretFilePath,
                 request.PromptForCredential);
+        }
+
+        if (effectiveTransport == ModuleStateDeliveryTransport.ManagedModule)
+        {
+            var managedResults = ExecuteManagedDependencies(request, modules, repositoryName, managedRepositorySource, credential);
+            return new PrivateModuleWorkflowResult
+            {
+                OperationPerformed = true,
+                RepositoryName = repositoryName,
+                RequestedTransport = request.DeliveryTransport,
+                EffectiveTransport = effectiveTransport,
+                DeliveryTransportReason = transportReason,
+                DependencyResults = managedResults
+            };
         }
 
         var results = _dependencyExecutor(new PrivateModuleDependencyExecutionRequest
@@ -236,8 +315,233 @@ internal sealed class PrivateModuleWorkflowService
         {
             OperationPerformed = true,
             RepositoryName = repositoryName,
+            RequestedTransport = request.DeliveryTransport,
+            EffectiveTransport = effectiveTransport,
+            DeliveryTransportReason = transportReason,
             DependencyResults = results
         };
+    }
+
+    private static ManagedModuleTransportDecision ResolveAutoTransport(
+        PrivateGalleryProvider provider,
+        bool usePrivateGallery,
+        bool useMicrosoftArtifactRegistry,
+        string? managedRepositorySource,
+        bool hasManagedOnlyOptions)
+        => ManagedModuleTransportPolicy.Resolve(new ManagedModuleTransportPolicyInput
+        {
+            RequestedTransport = ModuleStateDeliveryTransport.Auto,
+            UsesPrivateGalleryProvider = usePrivateGallery,
+            PrivateGalleryProvider = provider,
+            UsesMicrosoftArtifactRegistry = useMicrosoftArtifactRegistry,
+            HasRepositorySource = !string.IsNullOrWhiteSpace(managedRepositorySource),
+            HasManagedOnlyOptions = hasManagedOnlyOptions
+        });
+
+    private static ManagedModuleTransportDecision ResolvePendingTransport(
+        PrivateGalleryProvider provider,
+        ModuleStateDeliveryTransport effectiveTransport,
+        bool usePrivateGallery,
+        bool useMicrosoftArtifactRegistry,
+        string? managedRepositorySource,
+        string transportReason)
+        => effectiveTransport == ModuleStateDeliveryTransport.Auto
+            ? ResolveAutoTransport(provider, usePrivateGallery, useMicrosoftArtifactRegistry, managedRepositorySource, hasManagedOnlyOptions: false)
+            : new ManagedModuleTransportDecision
+            {
+                RequestedTransport = effectiveTransport,
+                EffectiveTransport = effectiveTransport,
+                Reason = transportReason
+            };
+
+    private IReadOnlyList<ModuleDependencyInstallResult> ExecuteManagedDependencies(
+        PrivateModuleWorkflowRequest request,
+        IReadOnlyList<ModuleDependency> modules,
+        string repositoryName,
+        string? repositorySource,
+        RepositoryCredential? credential)
+    {
+        if (string.IsNullOrWhiteSpace(repositorySource))
+        {
+            throw new InvalidOperationException(
+                "Managed private module delivery requires a repository source URI or local feed path. Use RepositoryUri/RepositorySourceUri, a saved profile with a source URI, or pass a local/URI Repository value.");
+        }
+
+        var repository = new ManagedModuleRepository(repositoryName, repositorySource!);
+        var installService = new ManagedModuleInstallService(_logger);
+        var updateService = new ManagedModuleUpdateService(_logger);
+        var results = new List<ModuleDependencyInstallResult>(modules.Count);
+        foreach (var module in modules)
+        {
+            results.Add(request.Operation == PrivateModuleWorkflowOperation.Install
+                ? ExecuteManagedInstall(request, module, repository, credential, installService)
+                : ExecuteManagedUpdate(request, module, repository, credential, updateService));
+        }
+
+        return results;
+    }
+
+    private static ModuleDependencyInstallResult ExecuteManagedInstall(
+        PrivateModuleWorkflowRequest workflow,
+        ModuleDependency module,
+        ManagedModuleRepository repository,
+        RepositoryCredential? credential,
+        ManagedModuleInstallService installService)
+    {
+        var result = installService.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = repository,
+            Name = module.Name,
+            Version = module.RequiredVersion,
+            MinimumVersion = module.MinimumVersion,
+            MaximumVersion = module.MaximumVersion,
+            VersionPolicy = workflow.VersionPolicy,
+            IncludePrerelease = workflow.Prerelease,
+            Scope = ResolveManagedScope(workflow),
+            ShellEdition = workflow.ManagedShellEdition,
+            ModuleRoot = workflow.ManagedModuleRoot,
+            PackageCacheDirectory = workflow.ManagedPackageCacheDirectory,
+            Credential = credential,
+            Force = workflow.Force,
+            AllowClobber = workflow.ManagedAllowClobber,
+            AcceptLicense = workflow.ManagedAcceptLicense,
+            SkipDependencyCheck = workflow.ManagedSkipDependencyCheck
+        }).GetAwaiter().GetResult();
+
+        return MapInstallResult(result);
+    }
+
+    private static ModuleDependencyInstallResult ExecuteManagedUpdate(
+        PrivateModuleWorkflowRequest workflow,
+        ModuleDependency module,
+        ManagedModuleRepository repository,
+        RepositoryCredential? credential,
+        ManagedModuleUpdateService updateService)
+    {
+        var result = updateService.UpdateAsync(new ManagedModuleUpdateRequest
+        {
+            Repository = repository,
+            Name = module.Name,
+            Version = module.RequiredVersion,
+            MinimumVersion = module.MinimumVersion,
+            MaximumVersion = module.MaximumVersion,
+            VersionPolicy = workflow.VersionPolicy,
+            IncludePrerelease = workflow.Prerelease,
+            Scope = ResolveManagedScope(workflow),
+            ShellEdition = workflow.ManagedShellEdition,
+            ModuleRoot = workflow.ManagedModuleRoot,
+            PackageCacheDirectory = workflow.ManagedPackageCacheDirectory,
+            Credential = credential,
+            Force = workflow.Force,
+            AllowClobber = workflow.ManagedAllowClobber,
+            AcceptLicense = workflow.ManagedAcceptLicense,
+            SkipDependencyCheck = workflow.ManagedSkipDependencyCheck,
+            SourcePolicy = workflow.ManagedRequireSourceMatch ? new ManagedModuleSourcePolicy() : null,
+            AllowLoadedModuleUpdate = workflow.ManagedAllowLoadedModuleUpdate
+        }).GetAwaiter().GetResult();
+
+        return MapUpdateResult(result);
+    }
+
+    private static ManagedModuleInstallScope ResolveManagedScope(PrivateModuleWorkflowRequest workflow)
+        => string.IsNullOrWhiteSpace(workflow.ManagedModuleRoot)
+            ? workflow.ManagedScope
+            : ManagedModuleInstallScope.Custom;
+
+    private static bool UsesManagedPrivateGalleryPath(PrivateModuleWorkflowRequest request, string? managedRepositorySource)
+        => ManagedModuleTransportPolicy.ShouldUseManagedPrivateGalleryPath(CreateTransportPolicyInput(
+            request,
+            usePrivateGallery: true,
+            useMicrosoftArtifactRegistry: false,
+            managedRepositorySource));
+
+    private static ManagedModuleTransportPolicyInput CreateTransportPolicyInput(
+        PrivateModuleWorkflowRequest request,
+        bool usePrivateGallery,
+        bool useMicrosoftArtifactRegistry,
+        string? managedRepositorySource)
+        => new()
+        {
+            RequestedTransport = request.DeliveryTransport,
+            UsesPrivateGalleryProvider = usePrivateGallery,
+            PrivateGalleryProvider = request.Provider,
+            UsesMicrosoftArtifactRegistry = useMicrosoftArtifactRegistry,
+            HasRepositorySource = !string.IsNullOrWhiteSpace(managedRepositorySource),
+            HasManagedOnlyOptions = HasManagedOnlyOptionsRequested(request)
+        };
+
+    private static ModuleDependencyInstallResult MapInstallResult(ManagedModuleInstallResult result)
+        => new(
+            result.Name,
+            result.Status == ManagedModuleInstallStatus.AlreadyInstalled ? result.Version : null,
+            result.Version,
+            ResolveRequestedVersion(result.RequestedVersion, result.MinimumVersion, result.MaximumVersion, result.VersionPolicy),
+            result.Status == ManagedModuleInstallStatus.AlreadyInstalled
+                ? ModuleDependencyInstallStatus.Satisfied
+                : ModuleDependencyInstallStatus.Installed,
+            "ManagedModule",
+            null);
+
+    private static ModuleDependencyInstallResult MapUpdateResult(ManagedModuleUpdateResult result)
+        => new(
+            result.Name,
+            result.PreviousVersion,
+            result.TargetVersion,
+            ResolveRequestedVersion(result.RequestedVersion, result.MinimumVersion, result.MaximumVersion, result.VersionPolicy),
+            result.Status switch
+            {
+                ManagedModuleUpdateStatus.UpToDate => ModuleDependencyInstallStatus.Satisfied,
+                ManagedModuleUpdateStatus.InstalledMissing => ModuleDependencyInstallStatus.Installed,
+                _ => ModuleDependencyInstallStatus.Updated
+            },
+            "ManagedModule",
+            result.SourcePolicyReason);
+
+    private static string? ResolveRequestedVersion(string? exact, string? minimum, string? maximum, string? policy)
+    {
+        if (!string.IsNullOrWhiteSpace(exact))
+            return exact;
+        if (!string.IsNullOrWhiteSpace(policy))
+            return policy;
+        if (!string.IsNullOrWhiteSpace(minimum) || !string.IsNullOrWhiteSpace(maximum))
+            return $"{minimum ?? string.Empty}..{maximum ?? string.Empty}";
+        return null;
+    }
+
+    private static void ThrowIfManagedOnlyOptionsRequested(PrivateModuleWorkflowRequest request)
+    {
+        var managedOnly = CollectManagedOnlyOptions(request);
+        if (managedOnly.Count == 0)
+            return;
+
+        throw new InvalidOperationException(
+            $"{string.Join(", ", managedOnly)} requires a managed module repository source URI/path.");
+    }
+
+    private static bool HasManagedOnlyOptionsRequested(PrivateModuleWorkflowRequest request)
+        => CollectManagedOnlyOptions(request).Count > 0;
+
+    private static List<string> CollectManagedOnlyOptions(PrivateModuleWorkflowRequest request)
+    {
+        var managedOnly = new List<string>();
+        if (!string.IsNullOrWhiteSpace(request.ManagedModuleRoot))
+            managedOnly.Add("ModuleRoot");
+        if (!string.IsNullOrWhiteSpace(request.ManagedPackageCacheDirectory))
+            managedOnly.Add("PackageCacheDirectory");
+        if (!string.IsNullOrWhiteSpace(request.ManagedRepositorySource))
+            managedOnly.Add("Repository source URI/path");
+        if (request.ManagedAllowClobber)
+            managedOnly.Add("AllowClobber");
+        if (request.ManagedAcceptLicense)
+            managedOnly.Add("AcceptLicense");
+        if (request.ManagedSkipDependencyCheck)
+            managedOnly.Add("SkipDependencyCheck");
+        if (request.ManagedRequireSourceMatch)
+            managedOnly.Add("RequireSourceMatch");
+        if (request.ManagedAllowLoadedModuleUpdate)
+            managedOnly.Add("AllowLoadedModuleUpdate");
+
+        return managedOnly;
     }
 
     private IReadOnlyList<ModuleDependencyInstallResult> ExecuteDependencies(PrivateModuleDependencyExecutionRequest request)
@@ -286,4 +590,5 @@ internal sealed class PrivateModuleWorkflowService
 
         return "Update private modules";
     }
+
 }

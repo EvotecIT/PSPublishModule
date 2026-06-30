@@ -1,0 +1,166 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Management.Automation;
+using PowerForge;
+
+namespace PSPublishModule;
+
+/// <summary>
+/// Finds module versions from a managed module repository.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This command queries NuGet v3 or local-folder repositories through the managed C# repository client.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Find the latest stable version of a module</summary>
+/// <code>Find-ManagedModule -Name Company.Tools</code>
+/// </example>
+/// <example>
+/// <summary>Find modules using a wildcard package id</summary>
+/// <code>Find-ManagedModule -Name Company.* -Repository C:\Packages</code>
+/// </example>
+/// <example>
+/// <summary>Find all versions from a local folder feed</summary>
+/// <code>Find-ManagedModule -Name Company.Tools -Repository C:\Packages -AllVersions -AllowPrerelease</code>
+/// </example>
+[Cmdlet(VerbsCommon.Find, "ManagedModule")]
+[OutputType(typeof(ManagedModuleVersionInfo))]
+public sealed class FindManagedModuleCommand : PSCmdlet
+{
+    /// <summary>Module names to find.</summary>
+    [Parameter(Mandatory = true, Position = 0, ValueFromPipelineByPropertyName = true)]
+    [Alias("ModuleName")]
+    [ValidateNotNullOrEmpty]
+    public string[] Name { get; set; } = Array.Empty<string>();
+
+    /// <summary>Repository URL, NuGet v3 service index, flat-container URL, or local folder feed.</summary>
+    [Parameter(Position = 1)]
+    [Alias("Source", "RepositoryUri")]
+    [ValidateNotNullOrEmpty]
+    public string Repository { get; set; } = ManagedModuleCommandSupport.DefaultRepositorySource;
+
+    /// <summary>Friendly repository name used in output.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string RepositoryName { get; set; } = ManagedModuleCommandSupport.DefaultRepositoryName;
+
+    /// <summary>Saved module repository profile to use instead of Repository.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? ProfileName { get; set; }
+
+    /// <summary>Return all matching versions instead of only the latest selected version.</summary>
+    [Parameter]
+    public SwitchParameter AllVersions { get; set; }
+
+    /// <summary>Maximum search results returned for wildcard name queries.</summary>
+    [Parameter]
+    [ValidateRange(1, 1000)]
+    public int First { get; set; } = 100;
+
+    /// <summary>Include prerelease versions.</summary>
+    [Parameter]
+    [Alias("AllowPrerelease")]
+    public SwitchParameter Prerelease { get; set; }
+
+    /// <summary>Optional repository credential.</summary>
+    [Parameter]
+    public PSCredential? Credential { get; set; }
+
+    /// <summary>Optional repository credential username.</summary>
+    [Parameter]
+    [Alias("UserName")]
+    public string? CredentialUserName { get; set; }
+
+    /// <summary>Optional repository credential secret.</summary>
+    [Parameter]
+    [Alias("Password", "Token")]
+    public string? CredentialSecret { get; set; }
+
+    /// <summary>Optional path to a file containing the repository credential secret.</summary>
+    [Parameter]
+    [Alias("CredentialPath", "TokenPath")]
+    public string? CredentialSecretFilePath { get; set; }
+
+    /// <summary>Optional HTTP proxy used for repository requests.</summary>
+    [Parameter]
+    [ValidateNotNull]
+    public Uri? Proxy { get; set; }
+
+    /// <summary>Optional proxy credential used with Proxy.</summary>
+    [Parameter]
+    public PSCredential? ProxyCredential { get; set; }
+
+    /// <summary>Finds matching module versions.</summary>
+    protected override void ProcessRecord()
+    {
+        var repository = ManagedModuleCommandSupport.CreateRepository(
+            this,
+            RepositoryName,
+            Repository,
+            ProfileName,
+            MyInvocation.BoundParameters.ContainsKey(nameof(Repository)));
+        var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
+        var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
+        var client = ManagedModuleCommandSupport.CreateRepositoryClient(this, logger, Proxy, ProxyCredential);
+
+        foreach (var moduleName in Name)
+        {
+            var output = ManagedModuleCommandSupport.HasWildcard(moduleName)
+                ? FindWildcardPackageVersions(client, repository, moduleName, credential)
+                : FindExactPackageVersions(client, repository, moduleName, credential);
+
+            foreach (var version in output)
+                WriteObject(version);
+        }
+    }
+
+    private IReadOnlyList<ManagedModuleVersionInfo> FindExactPackageVersions(
+        ManagedModuleRepositoryClient client,
+        ManagedModuleRepository repository,
+        string moduleName,
+        RepositoryCredential? credential)
+    {
+        if (AllVersions.IsPresent)
+        {
+            return client.GetVersionsAsync(repository, moduleName, Prerelease.IsPresent, credential)
+                .GetAwaiter()
+                .GetResult();
+        }
+
+        var latest = client.GetLatestVersionAsync(repository, moduleName, Prerelease.IsPresent, credential)
+            .GetAwaiter()
+            .GetResult();
+        return latest is null ? Array.Empty<ManagedModuleVersionInfo>() : new[] { latest };
+    }
+
+    private IReadOnlyList<ManagedModuleVersionInfo> FindWildcardPackageVersions(
+        ManagedModuleRepositoryClient client,
+        ManagedModuleRepository repository,
+        string moduleName,
+        RepositoryCredential? credential)
+    {
+        var matches = client.SearchPackagesAsync(repository, moduleName, Prerelease.IsPresent, credential, First)
+            .GetAwaiter()
+            .GetResult();
+        if (!AllVersions.IsPresent || matches.Count == 0)
+            return matches;
+
+        var versions = new List<ManagedModuleVersionInfo>();
+        foreach (var match in matches)
+        {
+            versions.AddRange(client.GetVersionsAsync(repository, match.Name, Prerelease.IsPresent, credential)
+                .GetAwaiter()
+                .GetResult());
+        }
+
+        return versions
+            .OrderBy(static version => version.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static version => version.Version, ManagedModuleVersionComparer.Instance)
+            .ToArray();
+    }
+
+}

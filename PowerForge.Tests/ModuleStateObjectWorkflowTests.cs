@@ -63,7 +63,7 @@ public sealed class ModuleStateObjectWorkflowTests
 
         Assert.True(result.Receipt.CanApply);
         var command = Assert.Single(result.Receipt.Commands);
-        Assert.Equal("Install-PrivateModule", command.CommandName);
+        Assert.Equal("Install-ManagedModule", command.CommandName);
         Assert.Contains("-Repository 'CompanyModules'", command.CommandText);
         Assert.Contains("-Scope 'CurrentUser'", command.CommandText);
     }

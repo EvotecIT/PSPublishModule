@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace PowerForge;
 
@@ -12,7 +14,8 @@ internal sealed class ModuleStateInstalledModule
         string? path = null,
         string? sourceRepository = null,
         bool isLoaded = false,
-        bool isEffectiveImportCandidate = false)
+        bool isEffectiveImportCandidate = false,
+        IEnumerable<string>? exportedCommands = null)
     {
         Name = string.IsNullOrWhiteSpace(name)
             ? throw new ArgumentException("Module name is required.", nameof(name))
@@ -26,6 +29,13 @@ internal sealed class ModuleStateInstalledModule
         SourceRepository = NormalizeOptional(sourceRepository);
         IsLoaded = isLoaded;
         IsEffectiveImportCandidate = isEffectiveImportCandidate;
+        ExportedCommands = (exportedCommands ?? Array.Empty<string>())
+            .Where(static command => !string.IsNullOrWhiteSpace(command))
+            .Select(static command => command.Trim())
+            .Where(static command => !string.Equals(command, "*", StringComparison.Ordinal))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static command => command, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     internal string Name { get; }
@@ -43,6 +53,8 @@ internal sealed class ModuleStateInstalledModule
     internal bool IsLoaded { get; }
 
     internal bool IsEffectiveImportCandidate { get; }
+
+    internal string[] ExportedCommands { get; }
 
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();

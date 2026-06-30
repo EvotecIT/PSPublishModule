@@ -6,16 +6,21 @@ namespace PowerForge;
 
 internal sealed class ModuleStateConflictAnalyzer
 {
-    internal ModuleStateConflictFinding[] Analyze(ModuleStateInventory inventory, IEnumerable<ModuleStateDesiredModule> desiredModules)
+    internal ModuleStateConflictFinding[] Analyze(
+        ModuleStateInventory inventory,
+        IEnumerable<ModuleStateDesiredModule> desiredModules,
+        bool includeCrossScopeCommandConflicts = false)
     {
         if (inventory is null)
             throw new ArgumentNullException(nameof(inventory));
 
         var findings = new List<ModuleStateConflictFinding>();
-        foreach (var desiredModule in desiredModules ?? Array.Empty<ModuleStateDesiredModule>())
+        var desired = (desiredModules ?? Array.Empty<ModuleStateDesiredModule>()).ToArray();
+        foreach (var desiredModule in desired)
         {
             var installedModules = inventory.InstalledModules
                 .Where(module => string.Equals(module.Name, desiredModule.Name, StringComparison.OrdinalIgnoreCase))
+                .Where(module => string.IsNullOrWhiteSpace(desiredModule.TargetPath) || IsUnderTargetPath(module.Path, desiredModule.TargetPath!))
                 .ToArray();
             var policy = ModuleStateVersionPolicy.Parse(desiredModule.VersionPolicy);
 
@@ -23,13 +28,85 @@ internal sealed class ModuleStateConflictAnalyzer
                 continue;
 
             AddScopeAmbiguityFinding(findings, desiredModule, installedModules);
+            AddSideBySideVersionFindings(findings, desiredModule, installedModules);
             AddDesiredScopeFinding(findings, desiredModule, installedModules);
+            AddScopeShadowingFinding(findings, desiredModule, installedModules, policy);
             AddSourcePreferenceFinding(findings, desiredModule, installedModules, policy);
             AddDowngradeBlockFinding(findings, desiredModule, installedModules, policy);
             AddLoadedModuleFinding(findings, desiredModule, installedModules, policy);
         }
 
+        if (includeCrossScopeCommandConflicts)
+            AddCrossScopeCommandConflictFindings(findings, inventory, desired);
+
         return findings.ToArray();
+    }
+
+    private static void AddCrossScopeCommandConflictFindings(
+        List<ModuleStateConflictFinding> findings,
+        ModuleStateInventory inventory,
+        ModuleStateDesiredModule[] desiredModules)
+    {
+        var desiredNames = new HashSet<string>(
+            desiredModules
+                .Select(static module => module.Name)
+                .Where(static name => !string.IsNullOrWhiteSpace(name)),
+            StringComparer.OrdinalIgnoreCase);
+        if (desiredNames.Count == 0)
+            return;
+
+        var candidates = inventory.InstalledModules
+            .Where(module => desiredNames.Contains(module.Name))
+            .Where(static module => module.ExportedCommands.Length > 0)
+            .ToArray();
+        if (candidates.Length == 0)
+            return;
+
+        var allExportingModules = inventory.InstalledModules
+            .Where(static module => module.ExportedCommands.Length > 0)
+            .ToArray();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var selected in candidates)
+        {
+            foreach (var other in allExportingModules)
+            {
+                if (ReferenceEquals(selected, other) ||
+                    string.Equals(selected.Name, other.Name, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(NormalizeScope(selected.Scope), NormalizeScope(other.Scope), StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var command = selected.ExportedCommands
+                    .Intersect(other.ExportedCommands, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault();
+                if (string.IsNullOrWhiteSpace(command))
+                    continue;
+
+                var orderedModules = new[] { selected, other }
+                    .OrderBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                var key = string.Join(
+                    "|",
+                    command,
+                    orderedModules[0].Name,
+                    NormalizeScope(orderedModules[0].Scope),
+                    orderedModules[1].Name,
+                    NormalizeScope(orderedModules[1].Scope));
+                if (!seen.Add(key))
+                    continue;
+
+                findings.Add(new ModuleStateConflictFinding(
+                    ModuleStateConflictSeverity.Warning,
+                    "ModuleState.CrossScopeCommandConflict",
+                    $"Command '{command}' is exported by module '{selected.Name}' in scope '{NormalizeScope(selected.Scope)}' and module '{other.Name}' in scope '{NormalizeScope(other.Scope)}'. Repair planning reports cross-scope command conflicts; normal managed install clobber checks remain limited to the selected target root.",
+                    string.Empty,
+                    orderedModules.Select(static module => module.Name).ToArray(),
+                    SortVersions(new[] { selected.Version, other.Version }),
+                    NormalizeScope(other.Scope)));
+            }
+        }
     }
 
     private static void AddScopeAmbiguityFinding(
@@ -64,6 +141,32 @@ internal sealed class ModuleStateConflictAnalyzer
             versions));
     }
 
+    private static void AddSideBySideVersionFindings(
+        List<ModuleStateConflictFinding> findings,
+        ModuleStateDesiredModule desiredModule,
+        ModuleStateInstalledModule[] installedModules)
+    {
+        foreach (var group in installedModules
+                     .GroupBy(static module => NormalizeScope(module.Scope), StringComparer.OrdinalIgnoreCase)
+                     .OrderBy(static group => group.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var versions = SortVersions(group
+                .Select(static module => module.Version)
+                .Distinct(StringComparer.OrdinalIgnoreCase));
+            if (versions.Length <= 1)
+                continue;
+
+            findings.Add(new ModuleStateConflictFinding(
+                ModuleStateConflictSeverity.Warning,
+                "ModuleState.SideBySideVersions",
+                $"Module '{desiredModule.Name}' has multiple installed versions in scope '{group.Key}': {string.Join(", ", versions)}. Review loaded modules and cleanup policy before assuming a single effective version.",
+                string.Empty,
+                new[] { desiredModule.Name },
+                versions,
+                group.Key));
+        }
+    }
+
     private static void AddDesiredScopeFinding(
         List<ModuleStateConflictFinding> findings,
         ModuleStateDesiredModule desiredModule,
@@ -87,6 +190,42 @@ internal sealed class ModuleStateConflictAnalyzer
             string.Empty,
             new[] { desiredModule.Name },
             installedModules.Select(static module => module.Version).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()));
+    }
+
+    private static void AddScopeShadowingFinding(
+        List<ModuleStateConflictFinding> findings,
+        ModuleStateDesiredModule desiredModule,
+        ModuleStateInstalledModule[] installedModules,
+        ModuleStateVersionPolicy policy)
+    {
+        if (string.IsNullOrWhiteSpace(desiredModule.Scope))
+            return;
+
+        var desiredScopeModule = SelectInstalledModule(installedModules, desiredModule.Scope);
+        if (desiredScopeModule is null)
+            return;
+
+        foreach (var effectiveModule in installedModules
+                     .Where(module => module.IsEffectiveImportCandidate)
+                     .Where(module => !string.Equals(module.Scope, desiredModule.Scope, StringComparison.OrdinalIgnoreCase)))
+        {
+            var effectiveSatisfiesPolicy = policy.IsSatisfiedBy(effectiveModule.Version);
+            if (string.Equals(effectiveModule.Version, desiredScopeModule.Version, StringComparison.OrdinalIgnoreCase) &&
+                effectiveSatisfiesPolicy)
+            {
+                continue;
+            }
+
+            var shadowScope = NormalizeScope(effectiveModule.Scope);
+            findings.Add(new ModuleStateConflictFinding(
+                effectiveSatisfiesPolicy ? ModuleStateConflictSeverity.Warning : ModuleStateConflictSeverity.Error,
+                "ModuleState.ScopeShadowing",
+                $"Module '{desiredModule.Name}' is desired in scope '{desiredModule.Scope}' at version {desiredScopeModule.Version}, but effective import precedence points to scope '{shadowScope}' version {effectiveModule.Version}. Remove, update, or isolate the shadowing copy before relying on the scoped module.",
+                string.Empty,
+                new[] { desiredModule.Name },
+                SortVersions(new[] { desiredScopeModule.Version, effectiveModule.Version }),
+                shadowScope));
+        }
     }
 
     private static void AddSourcePreferenceFinding(
@@ -219,4 +358,28 @@ internal sealed class ModuleStateConflictAnalyzer
             .ThenByDescending(static module => module.IsLoaded)
             .FirstOrDefault();
     }
+
+    private static bool IsUnderTargetPath(string? modulePath, string targetPath)
+    {
+        if (string.IsNullOrWhiteSpace(modulePath))
+            return false;
+
+        var normalizedModulePath = NormalizePath(modulePath!);
+        var normalizedTargetPath = NormalizePath(targetPath);
+        return string.Equals(normalizedModulePath, normalizedTargetPath, StringComparison.OrdinalIgnoreCase) ||
+               normalizedModulePath.StartsWith(normalizedTargetPath + "/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizePath(string path)
+        => path.Trim()
+            .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)
+            .Replace('\\', '/');
+
+    private static string NormalizeScope(string? scope)
+        => string.IsNullOrWhiteSpace(scope) ? "<unknown>" : scope!.Trim();
+
+    private static string[] SortVersions(IEnumerable<string> versions)
+        => versions
+            .OrderBy(static version => ModuleStateVersion.TryParse(version, out var parsed) ? parsed : default)
+            .ToArray();
 }

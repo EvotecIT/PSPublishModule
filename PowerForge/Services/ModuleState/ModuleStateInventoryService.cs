@@ -70,7 +70,8 @@ internal sealed class ModuleStateInventoryService
             module.Path,
             module.SourceRepository,
             module.IsLoaded,
-            isEffective);
+            isEffective,
+            module.ExportedCommands);
 
     private static IEnumerable<ModuleStateInstalledModule> DiscoverModule(DirectoryInfo moduleDirectory, ModuleStateModulePath modulePath)
     {
@@ -123,7 +124,8 @@ internal sealed class ModuleStateInventoryService
             modulePath.PowerShellEdition,
             modulePath.Scope,
             manifest.DirectoryName ?? manifest.FullName,
-            TryReadSourceRepository(manifestText, manifest.Directory));
+            TryReadSourceRepository(manifestText, manifest.Directory),
+            exportedCommands: ReadCommandExports(manifest.FullName));
     }
 
     private static ModuleStateInstalledModule CreateScriptModule(
@@ -218,6 +220,22 @@ internal sealed class ModuleStateInventoryService
         }
     }
 
+    private static string[] ReadCommandExports(string manifestPath)
+    {
+        try
+        {
+            var exports = ModuleManifestExportReader.ReadExports(manifestPath);
+            return exports.Functions
+                .Concat(exports.Cmdlets)
+                .Concat(exports.Aliases)
+                .ToArray();
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
+    }
+
     private static string? TryReadManifestVersion(string? manifestText)
     {
         if (string.IsNullOrWhiteSpace(manifestText))
@@ -257,8 +275,29 @@ internal sealed class ModuleStateInventoryService
 
     private static string? TryReadSourceRepository(string? manifestText, DirectoryInfo? moduleDirectory)
         => TryReadManifestSourceRepository(manifestText)
+           ?? TryReadManagedReceiptRepository(moduleDirectory)
            ?? TryReadPSGetModuleInfoRepository(moduleDirectory)
            ?? TryReadNuspecRepository(moduleDirectory);
+
+    private static string? TryReadManagedReceiptRepository(DirectoryInfo? moduleDirectory)
+    {
+        if (moduleDirectory is null)
+            return null;
+
+        var receiptPath = ManagedModuleReceiptStore.GetReceiptPath(moduleDirectory.FullName);
+        if (!File.Exists(receiptPath))
+            return null;
+
+        try
+        {
+            var receipt = System.Text.Json.JsonSerializer.Deserialize<ManagedModuleReceipt>(File.ReadAllText(receiptPath));
+            return FirstNonEmpty(receipt?.RepositoryName, receipt?.RepositorySource);
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     private static string? TryReadManifestSourceRepository(string? manifestText)
     {
@@ -268,6 +307,9 @@ internal sealed class ModuleStateInventoryService
         var match = SourceRepositoryPattern.Match(manifestText!);
         return match.Success ? match.Groups["repository"].Value.Trim() : null;
     }
+
+    private static string? FirstNonEmpty(params string?[] values)
+        => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))?.Trim();
 
     private static string? TryReadPSGetModuleInfoRepository(DirectoryInfo? moduleDirectory)
     {

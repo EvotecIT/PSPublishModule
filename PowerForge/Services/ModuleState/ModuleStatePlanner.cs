@@ -35,48 +35,56 @@ internal sealed class ModuleStatePlanner
         foreach (var desiredModule in request.DesiredModules)
         {
             var installedModules = SelectInstalledModules(request.Inventory, desiredModule.Name);
-            var installedModule = SelectInstalledModule(installedModules, desiredModule.Scope);
+            var installedModule = SelectInstalledModule(installedModules, desiredModule.Scope, desiredModule.TargetPath);
             var versionPolicy = ModuleStateVersionPolicy.Parse(desiredModule.VersionPolicy);
             var targetRepository = ResolveTargetRepository(desiredModule);
             if (installedModule is null)
             {
                 actions.Add(new ModuleStatePlanAction(
-                    ModuleStatePlanActionKind.Install,
+                    ResolveMissingActionKind(desiredModule),
                     desiredModule.Name,
                     installedVersion: null,
                     desiredModule.VersionPolicy,
-                    string.IsNullOrWhiteSpace(desiredModule.Scope)
+                    !string.IsNullOrWhiteSpace(desiredModule.TargetPath)
+                        ? "Module is not saved in desired target path."
+                        : string.IsNullOrWhiteSpace(desiredModule.Scope)
                         ? "Module is not installed."
                         : "Module is not installed in desired scope.",
                     targetScope: desiredModule.Scope,
-                    targetRepository: targetRepository));
+                    targetPath: desiredModule.TargetPath,
+                    targetRepository: targetRepository,
+                    expectedPackageSha256: desiredModule.ExpectedPackageSha256));
                 continue;
             }
 
             if (!versionPolicy.IsSatisfiedBy(installedModule.Version))
             {
                 actions.Add(new ModuleStatePlanAction(
-                    ModuleStatePlanActionKind.Update,
+                    ResolveVersionActionKind(desiredModule),
                     desiredModule.Name,
                     installedModule.Version,
                     desiredModule.VersionPolicy,
                     "Installed module version does not satisfy desired policy.",
                     targetScope: desiredModule.Scope,
-                    targetRepository: targetRepository));
+                    targetPath: desiredModule.TargetPath,
+                    targetRepository: targetRepository,
+                    expectedPackageSha256: desiredModule.ExpectedPackageSha256));
                 continue;
             }
 
             if (NeedsSourceDelivery(installedModule, desiredModule, targetRepository))
             {
                 actions.Add(new ModuleStatePlanAction(
-                    ModuleStatePlanActionKind.Install,
+                    ResolveSourceDeliveryActionKind(desiredModule),
                     desiredModule.Name,
                     installedModule.Version,
                     desiredModule.VersionPolicy,
                     "Installed module version satisfies desired policy but source repository does not match desired state.",
                     force: true,
                     targetScope: desiredModule.Scope,
-                    targetRepository: targetRepository));
+                    targetPath: desiredModule.TargetPath,
+                    targetRepository: targetRepository,
+                    expectedPackageSha256: desiredModule.ExpectedPackageSha256));
                 continue;
             }
 
@@ -87,7 +95,9 @@ internal sealed class ModuleStatePlanner
                 desiredModule.VersionPolicy,
                 "Installed module version satisfies desired policy.",
                 targetScope: desiredModule.Scope,
-                targetRepository: targetRepository));
+                targetPath: desiredModule.TargetPath,
+                targetRepository: targetRepository,
+                expectedPackageSha256: desiredModule.ExpectedPackageSha256));
         }
 
         var plannedActions = request.Repair
@@ -98,7 +108,10 @@ internal sealed class ModuleStatePlanner
 
         var findings = _familyAnalyzer
             .Analyze(request.Inventory, request.FamilyPolicies)
-            .Concat(_conflictAnalyzer.Analyze(request.Inventory, request.DesiredModules))
+            .Concat(_conflictAnalyzer.Analyze(
+                request.Inventory,
+                request.DesiredModules,
+                includeCrossScopeCommandConflicts: request.Repair))
             .Concat(_receiptAnalyzer.Analyze(request.Inventory, request.MaintenanceReceipts))
             .Concat(cleanupPlan.Findings)
             .ToArray();
@@ -110,11 +123,16 @@ internal sealed class ModuleStatePlanner
             .Where(module => string.Equals(module.Name, moduleName, StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
-    private static ModuleStateInstalledModule? SelectInstalledModule(IEnumerable<ModuleStateInstalledModule> installedModules, string? desiredScope)
+    private static ModuleStateInstalledModule? SelectInstalledModule(
+        IEnumerable<ModuleStateInstalledModule> installedModules,
+        string? desiredScope,
+        string? targetPath)
     {
         var candidates = installedModules
-            .Where(module => string.IsNullOrWhiteSpace(desiredScope)
-                || string.Equals(module.Scope, desiredScope, StringComparison.OrdinalIgnoreCase))
+            .Where(module =>
+                (string.IsNullOrWhiteSpace(desiredScope)
+                 || string.Equals(module.Scope, desiredScope, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(targetPath) || IsUnderTargetPath(module.Path, targetPath!)))
             .ToArray();
 
         return candidates
@@ -131,6 +149,21 @@ internal sealed class ModuleStatePlanner
             ? desiredModule.AllowedSources[0]
             : null;
 
+    private static ModuleStatePlanActionKind ResolveMissingActionKind(ModuleStateDesiredModule desiredModule)
+        => string.IsNullOrWhiteSpace(desiredModule.TargetPath)
+            ? ModuleStatePlanActionKind.Install
+            : ModuleStatePlanActionKind.Save;
+
+    private static ModuleStatePlanActionKind ResolveVersionActionKind(ModuleStateDesiredModule desiredModule)
+        => string.IsNullOrWhiteSpace(desiredModule.TargetPath)
+            ? ModuleStatePlanActionKind.Update
+            : ModuleStatePlanActionKind.Save;
+
+    private static ModuleStatePlanActionKind ResolveSourceDeliveryActionKind(ModuleStateDesiredModule desiredModule)
+        => string.IsNullOrWhiteSpace(desiredModule.TargetPath)
+            ? ModuleStatePlanActionKind.Install
+            : ModuleStatePlanActionKind.Save;
+
     private static bool NeedsSourceDelivery(
         ModuleStateInstalledModule installedModule,
         ModuleStateDesiredModule desiredModule,
@@ -138,6 +171,22 @@ internal sealed class ModuleStatePlanner
         => !string.IsNullOrWhiteSpace(targetRepository) &&
            !string.IsNullOrWhiteSpace(installedModule.SourceRepository) &&
            !desiredModule.AllowedSources.Contains(installedModule.SourceRepository, StringComparer.OrdinalIgnoreCase);
+
+    private static bool IsUnderTargetPath(string? modulePath, string targetPath)
+    {
+        if (string.IsNullOrWhiteSpace(modulePath))
+            return false;
+
+        var normalizedModulePath = NormalizePath(modulePath!);
+        var normalizedTargetPath = NormalizePath(targetPath);
+        return string.Equals(normalizedModulePath, normalizedTargetPath, StringComparison.OrdinalIgnoreCase) ||
+               normalizedModulePath.StartsWith(normalizedTargetPath + "/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizePath(string path)
+        => path.Trim()
+            .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)
+            .Replace('\\', '/');
 
     private static ModuleStateConflictFinding[] DowngradeActionCoveredFindings(
         ModuleStateConflictFinding[] findings,
@@ -180,15 +229,18 @@ internal sealed class ModuleStatePlanner
         string[] moduleNames,
         bool requireRepair)
         => actions.Any(action =>
-            action.Kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update &&
+            IsDeliveryAction(action.Kind) &&
             (!requireRepair || action.IsRepair) &&
             moduleNames.Contains(action.ModuleName, StringComparer.OrdinalIgnoreCase));
 
     private static bool IsSourcePreferenceCoveredByAction(ModuleStateConflictFinding finding, ModuleStatePlanAction[] actions)
         => actions.Any(action =>
-            action.Kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update &&
+            IsDeliveryAction(action.Kind) &&
             finding.ModuleNames.Contains(action.ModuleName, StringComparer.OrdinalIgnoreCase) &&
             string.Equals(action.TargetScope, finding.Scope, StringComparison.OrdinalIgnoreCase) &&
             !string.IsNullOrWhiteSpace(action.TargetRepository) &&
             !string.Equals(action.TargetRepository, finding.SourceRepository, StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsDeliveryAction(ModuleStatePlanActionKind kind)
+        => kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update or ModuleStatePlanActionKind.Save;
 }

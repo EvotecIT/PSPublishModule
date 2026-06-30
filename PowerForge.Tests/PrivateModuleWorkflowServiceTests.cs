@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -91,6 +92,164 @@ public sealed class PrivateModuleWorkflowServiceTests
             });
         Assert.Equal("2 module(s) from repository 'Company'", capturedTarget);
         Assert.Equal("Install or reinstall private modules", capturedAction);
+    }
+
+    [Fact]
+    public void Execute_AutoTransportWithRegisteredRepositoryName_UsesCompatibilityExecutor()
+    {
+        var host = new FakePrivateGalleryHost();
+        var galleryService = new PrivateGalleryService(host);
+        PrivateModuleDependencyExecutionRequest? capturedRequest = null;
+        var expected = new[]
+        {
+            new ModuleDependencyInstallResult("ModuleA", null, "1.0.0", null, ModuleDependencyInstallStatus.Installed, "PSResourceGet", null)
+        };
+        var service = new PrivateModuleWorkflowService(
+            host,
+            galleryService,
+            new NullLogger(),
+            request =>
+            {
+                capturedRequest = request;
+                return expected;
+            });
+
+        var result = service.Execute(
+            new PrivateModuleWorkflowRequest
+            {
+                Operation = PrivateModuleWorkflowOperation.Install,
+                ModuleNames = new[] { "ModuleA" },
+                UseAzureArtifacts = false,
+                RepositoryName = "Company",
+                DeliveryTransport = ModuleStateDeliveryTransport.Auto
+            },
+            (_, _) => true);
+
+        Assert.True(result.OperationPerformed);
+        Assert.Same(expected, result.DependencyResults);
+        Assert.NotNull(capturedRequest);
+        Assert.Equal("Company", capturedRequest!.RepositoryName);
+        Assert.Equal("PSResourceGet", result.DependencyResults[0].Installer);
+        Assert.Equal(ModuleStateDeliveryTransport.Auto, result.RequestedTransport);
+        Assert.Equal(ModuleStateDeliveryTransport.PrivateModule, result.EffectiveTransport);
+        Assert.Contains("registered repository name", result.DeliveryTransportReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(host.VerboseMessages, message => message.Contains("using PrivateModule", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Execute_AutoTransportWithRepositorySource_UsesManagedExecutor()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var host = new FakePrivateGalleryHost();
+        var galleryService = new PrivateGalleryService(host);
+        var compatibilityExecutorCalled = false;
+        var service = new PrivateModuleWorkflowService(
+            host,
+            galleryService,
+            new NullLogger(),
+            _ =>
+            {
+                compatibilityExecutorCalled = true;
+                return Array.Empty<ModuleDependencyInstallResult>();
+            });
+
+        var result = service.Execute(
+            new PrivateModuleWorkflowRequest
+            {
+                Operation = PrivateModuleWorkflowOperation.Install,
+                ModuleNames = new[] { "Company.Tools" },
+                RequiredVersions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Company.Tools"] = "1.0.0"
+                },
+                UseAzureArtifacts = false,
+                RepositoryName = "Local",
+                DeliveryTransport = ModuleStateDeliveryTransport.Auto,
+                ManagedRepositorySource = feed.Path,
+                ManagedModuleRoot = moduleRoot.Path
+            },
+            (_, _) => true);
+
+        Assert.True(result.OperationPerformed);
+        Assert.False(compatibilityExecutorCalled);
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.Equal("ManagedModule", dependency.Installer);
+        Assert.Equal("1.0.0", dependency.ResolvedVersion);
+        Assert.Equal(ModuleStateDeliveryTransport.Auto, result.RequestedTransport);
+        Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, result.EffectiveTransport);
+        Assert.Contains("repository source", result.DeliveryTransportReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(host.VerboseMessages, message => message.Contains("using ManagedModule", StringComparison.OrdinalIgnoreCase));
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
+    public void Execute_AutoTransportWithSupportedPrivateProvider_ReportsManagedSupportReason()
+    {
+        var host = new FakePrivateGalleryHost();
+        var galleryService = new PrivateGalleryService(host);
+        var service = new PrivateModuleWorkflowService(
+            host,
+            galleryService,
+            new NullLogger(),
+            _ => throw new InvalidOperationException("Compatibility executor should not run."));
+
+        var result = service.Execute(
+            new PrivateModuleWorkflowRequest
+            {
+                Operation = PrivateModuleWorkflowOperation.Install,
+                ModuleNames = new[] { "Company.Tools" },
+                UseAzureArtifacts = true,
+                Provider = PrivateGalleryProvider.NuGet,
+                RepositoryName = "Company",
+                RepositoryUri = "https://nuget.example.test/v3/index.json",
+                DeliveryTransport = ModuleStateDeliveryTransport.Auto
+            },
+            (_, _) => false);
+
+        Assert.False(result.OperationPerformed);
+        Assert.Equal(ModuleStateDeliveryTransport.Auto, result.RequestedTransport);
+        Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, result.EffectiveTransport);
+        Assert.Contains("Generic NuGet private feed", result.DeliveryTransportReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("supported", result.DeliveryTransportReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Execute_ExplicitManagedTransportWithPartialPrivateProvider_ReportsProviderLimitation()
+    {
+        var host = new FakePrivateGalleryHost();
+        var galleryService = new PrivateGalleryService(host);
+        var service = new PrivateModuleWorkflowService(
+            host,
+            galleryService,
+            new NullLogger(),
+            _ => throw new InvalidOperationException("Compatibility executor should not run."));
+
+        var result = service.Execute(
+            new PrivateModuleWorkflowRequest
+            {
+                Operation = PrivateModuleWorkflowOperation.Install,
+                ModuleNames = new[] { "Company.Tools" },
+                UseAzureArtifacts = true,
+                Provider = PrivateGalleryProvider.JFrog,
+                RepositoryName = "Company",
+                JFrogBaseUri = "https://company.jfrog.io/artifactory",
+                JFrogRepository = "powershell-virtual",
+                DeliveryTransport = ModuleStateDeliveryTransport.ManagedModule
+            },
+            (_, _) => false);
+
+        Assert.False(result.OperationPerformed);
+        Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, result.RequestedTransport);
+        Assert.Equal(ModuleStateDeliveryTransport.ManagedModule, result.EffectiveTransport);
+        Assert.Contains("JFrog", result.DeliveryTransportReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Partial", result.DeliveryTransportReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("OIDC", result.DeliveryTransportReason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -192,6 +351,8 @@ public sealed class PrivateModuleWorkflowServiceTests
 
     private sealed class FakePrivateGalleryHost : IPrivateGalleryHost
     {
+        internal List<string> VerboseMessages { get; } = new();
+
         public bool ShouldProcess(string target, string action) => true;
 
         public bool IsWhatIfRequested => false;
@@ -200,10 +361,17 @@ public sealed class PrivateModuleWorkflowServiceTests
 
         public void WriteVerbose(string message)
         {
+            VerboseMessages.Add(message);
         }
 
         public void WriteWarning(string message)
         {
         }
     }
+
+    private static IReadOnlyDictionary<string, string> CreateModuleFiles(string version)
+        => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools.psd1"] = "@{ ModuleVersion = '" + version + "' }"
+        };
 }

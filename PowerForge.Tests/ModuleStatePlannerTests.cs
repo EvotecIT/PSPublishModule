@@ -7,9 +7,10 @@ public sealed class ModuleStatePlannerTests
     [Fact]
     public void CreatePlan_PlansInstallForMissingDesiredModule()
     {
+        var expectedSha256 = new string('a', 64);
         var request = new ModuleStatePlanRequest(
             new ModuleStateInventory(Array.Empty<ModuleStateInstalledModule>()),
-            new[] { new ModuleStateDesiredModule("Company.Tools", ">=1.0.0") });
+            new[] { new ModuleStateDesiredModule("Company.Tools", ">=1.0.0", expectedPackageSha256: expectedSha256) });
 
         var action = Assert.Single(new ModuleStatePlanner().CreatePlan(request).Actions);
 
@@ -17,6 +18,7 @@ public sealed class ModuleStatePlannerTests
         Assert.Equal("Company.Tools", action.ModuleName);
         Assert.Null(action.InstalledVersion);
         Assert.Equal(">=1.0.0", action.VersionPolicy);
+        Assert.Equal(expectedSha256, action.ExpectedPackageSha256);
     }
 
     [Fact]
@@ -145,6 +147,40 @@ public sealed class ModuleStatePlannerTests
     }
 
     [Fact]
+    public void CreatePlan_PlansSaveForMissingDesiredTargetPath()
+    {
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(Array.Empty<ModuleStateInstalledModule>()),
+            new[] { new ModuleStateDesiredModule("Company.Tools", ">=1.2.0", targetPath: @"C:\OfflineModules") });
+
+        var action = Assert.Single(new ModuleStatePlanner().CreatePlan(request).Actions);
+
+        Assert.Equal(ModuleStatePlanActionKind.Save, action.Kind);
+        Assert.Equal("Company.Tools", action.ModuleName);
+        Assert.Equal(@">=1.2.0", action.VersionPolicy);
+        Assert.Equal(@"C:\OfflineModules", action.TargetPath);
+        Assert.Equal("Module is not saved in desired target path.", action.Reason);
+    }
+
+    [Fact]
+    public void CreatePlan_UsesTargetPathCopyForSaveDecision()
+    {
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[]
+            {
+                new ModuleStateInstalledModule("Company.Tools", "1.4.0", path: @"C:\UserModules\Company.Tools\1.4.0"),
+                new ModuleStateInstalledModule("Company.Tools", "1.1.0", path: @"C:\OfflineModules\Company.Tools\1.1.0")
+            }),
+            new[] { new ModuleStateDesiredModule("Company.Tools", ">=1.2.0", targetPath: @"C:\OfflineModules") });
+
+        var action = Assert.Single(new ModuleStatePlanner().CreatePlan(request).Actions);
+
+        Assert.Equal(ModuleStatePlanActionKind.Save, action.Kind);
+        Assert.Equal("1.1.0", action.InstalledVersion);
+        Assert.Equal(@"C:\OfflineModules", action.TargetPath);
+    }
+
+    [Fact]
     public void CreatePlan_UsesDesiredScopeVersionForDecision()
     {
         var request = new ModuleStatePlanRequest(
@@ -208,6 +244,26 @@ public sealed class ModuleStatePlannerTests
         Assert.Contains(plan.Findings, static finding =>
             finding.Code == "ModuleState.SourcePreferenceMismatch" &&
             finding.Severity == ModuleStateConflictSeverity.Error);
+    }
+
+    [Fact]
+    public void CreatePlan_BlocksWhenDesiredScopeIsShadowedByEffectiveImportCandidate()
+    {
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[]
+            {
+                new ModuleStateInstalledModule("Company.Tools", "1.3.0", scope: "AllUsers"),
+                new ModuleStateInstalledModule("Company.Tools", "1.0.0", scope: "CurrentUser", isEffectiveImportCandidate: true)
+            }),
+            new[] { new ModuleStateDesiredModule("Company.Tools", ">=1.2.0", scope: "AllUsers") });
+
+        var plan = new ModuleStatePlanner().CreatePlan(request);
+
+        Assert.Equal(ModuleStatePlanActionKind.NoAction, Assert.Single(plan.Actions).Kind);
+        Assert.True(plan.HasErrors);
+        var finding = Assert.Single(plan.Findings, static finding => finding.Code == "ModuleState.ScopeShadowing");
+        Assert.Equal(ModuleStateConflictSeverity.Error, finding.Severity);
+        Assert.Equal("CurrentUser", finding.Scope);
     }
 
     [Fact]
@@ -338,7 +394,30 @@ public sealed class ModuleStatePlannerTests
     }
 
     [Fact]
-    public void CreatePlan_WithCleanup_KeepsDesiredScopeVersion()
+    public void CreatePlan_WithCleanup_KeepsReceiptScopeOnly()
+    {
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[]
+            {
+                new ModuleStateInstalledModule("Company.Tools", "1.0.0", scope: "CurrentUser", path: @"C:\User\Company.Tools\1.0.0"),
+                new ModuleStateInstalledModule("Company.Tools", "2.0.0", scope: "AllUsers", path: @"C:\Program Files\Company.Tools\2.0.0")
+            }),
+            Array.Empty<ModuleStateDesiredModule>(),
+            maintenanceReceipts: new[]
+            {
+                new ModuleStateMaintenanceReceipt(
+                    "ModuleState",
+                    new[] { new ModuleStateMaintenanceReceiptModule("Company.Tools", "2.0.0", scope: "AllUsers") })
+            },
+            cleanupMode: ModuleStateCleanupMode.OldVersions);
+
+        var plan = new ModuleStatePlanner().CreatePlan(request);
+
+        Assert.DoesNotContain(plan.Actions, static action => action.Kind == ModuleStatePlanActionKind.Remove);
+    }
+
+    [Fact]
+    public void CreatePlan_WithCleanup_KeepsDesiredScopeOnly()
     {
         var request = new ModuleStatePlanRequest(
             new ModuleStateInventory(new[]
@@ -350,10 +429,8 @@ public sealed class ModuleStatePlannerTests
             cleanupMode: ModuleStateCleanupMode.OldVersions);
 
         var plan = new ModuleStatePlanner().CreatePlan(request);
-        var cleanupAction = Assert.Single(plan.Actions, static action => action.Kind == ModuleStatePlanActionKind.Remove);
 
-        Assert.Equal("2.0.0", cleanupAction.InstalledVersion);
-        Assert.Equal("CurrentUser", cleanupAction.TargetScope);
+        Assert.DoesNotContain(plan.Actions, static action => action.Kind == ModuleStatePlanActionKind.Remove);
     }
 
     [Fact]
@@ -377,6 +454,26 @@ public sealed class ModuleStatePlannerTests
     }
 
     [Fact]
+    public void CreatePlan_WithCleanupAndSaveTarget_DoesNotRemoveCopiesOutsideTargetPath()
+    {
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[]
+            {
+                new ModuleStateInstalledModule("Company.Tools", "1.0.0", path: @"C:\UserModules\Company.Tools\1.0.0"),
+                new ModuleStateInstalledModule("Company.Tools", "1.0.0", path: @"C:\OfflineModules\Company.Tools\1.0.0"),
+                new ModuleStateInstalledModule("Company.Tools", "1.1.0", path: @"C:\OfflineModules\Company.Tools\1.1.0")
+            }),
+            new[] { new ModuleStateDesiredModule("Company.Tools", ">=1.1.0", targetPath: @"C:\OfflineModules") },
+            cleanupMode: ModuleStateCleanupMode.OldVersions);
+
+        var plan = new ModuleStatePlanner().CreatePlan(request);
+        var cleanupAction = Assert.Single(plan.Actions, static action => action.Kind == ModuleStatePlanActionKind.Remove);
+
+        Assert.Equal("1.0.0", cleanupAction.InstalledVersion);
+        Assert.Equal(@"C:\OfflineModules\Company.Tools\1.0.0", cleanupAction.TargetPath);
+    }
+
+    [Fact]
     public void CreatePlan_WithCleanup_ReportsLoadedOldVersionInsteadOfRemoval()
     {
         var request = new ModuleStatePlanRequest(
@@ -393,5 +490,35 @@ public sealed class ModuleStatePlannerTests
         Assert.DoesNotContain(plan.Actions, static action => action.Kind == ModuleStatePlanActionKind.Remove);
         Assert.True(plan.HasErrors);
         Assert.Contains(plan.Findings, static finding => finding.Code == "ModuleState.CleanupLoadedVersion");
+    }
+
+    [Fact]
+    public void CreatePlan_WithRepair_ReportsCrossScopeCommandConflicts()
+    {
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule(
+                "Company.Tools",
+                "1.3.0",
+                scope: "AllUsers",
+                exportedCommands: new[] { "Get-CompanyThing" }),
+            new ModuleStateInstalledModule(
+                "Company.Legacy",
+                "1.0.0",
+                scope: "CurrentUser",
+                exportedCommands: new[] { "Get-CompanyThing" })
+        });
+        var desiredModules = new[] { new ModuleStateDesiredModule("Company.Tools", ">=1.0.0") };
+
+        var normalPlan = new ModuleStatePlanner().CreatePlan(new ModuleStatePlanRequest(inventory, desiredModules));
+        var repairPlan = new ModuleStatePlanner().CreatePlan(new ModuleStatePlanRequest(
+            inventory,
+            desiredModules,
+            repair: true));
+
+        Assert.DoesNotContain(normalPlan.Findings, static finding => finding.Code == "ModuleState.CrossScopeCommandConflict");
+        var finding = Assert.Single(repairPlan.Findings, static finding => finding.Code == "ModuleState.CrossScopeCommandConflict");
+        Assert.Equal(ModuleStateConflictSeverity.Warning, finding.Severity);
+        Assert.False(repairPlan.HasErrors);
     }
 }

@@ -198,7 +198,8 @@ internal static class ModuleStateInventoryCommandSupport
                     existing.Path,
                     existing.SourceRepository,
                     isLoaded: true,
-                    isEffectiveImportCandidate: true);
+                    isEffectiveImportCandidate: true,
+                    existing.ExportedCommands);
                 continue;
             }
 

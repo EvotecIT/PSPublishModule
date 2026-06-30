@@ -44,7 +44,7 @@ public sealed class PortalModulePagesTests
             var modulePage = Path.Combine(root, "content", "generated", "modules", "contoso-tools", "index.md");
             Assert.True(File.Exists(modulePage));
             var moduleMarkdown = File.ReadAllText(modulePage);
-            Assert.Contains("Install-PrivateModule -ProfileName 'EvotecPowerShellGallery' -Name 'Contoso.Tools' -InstallPrerequisites", moduleMarkdown);
+            Assert.Contains("Install-ManagedModule -ProfileName 'EvotecPowerShellGallery' -Name 'Contoso.Tools'", moduleMarkdown);
             Assert.Contains("| `Get-ContosoTool` | Function | Gets a tool. |", moduleMarkdown);
             Assert.Contains("[Operator Guide](../contoso-tools-operator-guide/)", moduleMarkdown);
             Assert.Contains("| Pester | 5.7.1 |", moduleMarkdown);

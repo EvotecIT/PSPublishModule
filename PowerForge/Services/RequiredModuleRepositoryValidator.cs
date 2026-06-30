@@ -163,7 +163,7 @@ internal sealed class RequiredModuleRepositoryValidator
             : null;
     }
 
-    private static HashSet<string> GetExternalModulesForPublish(
+    internal static HashSet<string> GetExternalModulesForPublish(
         ModuleBuildResult buildResult,
         ModulePipelinePlan plan)
     {

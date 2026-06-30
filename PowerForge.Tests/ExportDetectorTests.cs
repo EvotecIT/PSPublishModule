@@ -31,14 +31,15 @@ public sealed class ExportDetectorTests
         var path = typeof(InvokePowerForgePluginExportCommand).Assembly.Location;
         var cmdlets = BinaryExportDetector.DetectBinaryCmdlets(new[] { path });
 
-        Assert.Contains("Get-ModuleState", cmdlets);
-        Assert.Contains("Get-ModuleStatePlan", cmdlets);
-        Assert.Contains("Invoke-ModuleState", cmdlets);
-        Assert.Contains("Invoke-ModuleStatePlan", cmdlets);
+        Assert.Contains("Find-ManagedModule", cmdlets);
+        Assert.Contains("Get-ManagedModule", cmdlets);
+        Assert.Contains("Install-ManagedModule", cmdlets);
         Assert.Contains("Invoke-PowerForgeBundlePostProcess", cmdlets);
         Assert.Contains("Invoke-PowerForgePluginExport", cmdlets);
         Assert.Contains("Invoke-PowerForgePluginPack", cmdlets);
-        Assert.Contains("Test-ModuleState", cmdlets);
+        Assert.Contains("Repair-ManagedModule", cmdlets);
+        Assert.Contains("Save-ManagedModule", cmdlets);
+        Assert.Contains("Update-ManagedModule", cmdlets);
     }
 
     [Fact]
@@ -51,22 +52,24 @@ public sealed class ExportDetectorTests
         var exports = ModuleManifestExportReader.ReadExports(manifestPath);
         var bootstrapper = File.ReadAllText(bootstrapperPath);
 
-        Assert.Contains("Get-ModuleState", exports.Cmdlets);
-        Assert.Contains("Get-ModuleStatePlan", exports.Cmdlets);
-        Assert.Contains("Invoke-ModuleState", exports.Cmdlets);
-        Assert.Contains("Invoke-ModuleStatePlan", exports.Cmdlets);
+        Assert.Contains("Find-ManagedModule", exports.Cmdlets);
+        Assert.Contains("Get-ManagedModule", exports.Cmdlets);
+        Assert.Contains("Install-ManagedModule", exports.Cmdlets);
         Assert.Contains("Invoke-PowerForgeBundlePostProcess", exports.Cmdlets);
         Assert.Contains("Invoke-PowerForgePluginExport", exports.Cmdlets);
         Assert.Contains("Invoke-PowerForgePluginPack", exports.Cmdlets);
-        Assert.Contains("Test-ModuleState", exports.Cmdlets);
-        Assert.Contains("Get-ModuleState", bootstrapper, StringComparison.Ordinal);
-        Assert.Contains("Get-ModuleStatePlan", bootstrapper, StringComparison.Ordinal);
-        Assert.Contains("Invoke-ModuleState", bootstrapper, StringComparison.Ordinal);
-        Assert.Contains("Invoke-ModuleStatePlan", bootstrapper, StringComparison.Ordinal);
+        Assert.Contains("Repair-ManagedModule", exports.Cmdlets);
+        Assert.Contains("Save-ManagedModule", exports.Cmdlets);
+        Assert.Contains("Update-ManagedModule", exports.Cmdlets);
+        Assert.Contains("Find-ManagedModule", bootstrapper, StringComparison.Ordinal);
+        Assert.Contains("Get-ManagedModule", bootstrapper, StringComparison.Ordinal);
+        Assert.Contains("Install-ManagedModule", bootstrapper, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgeBundlePostProcess", bootstrapper, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgePluginExport", bootstrapper, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgePluginPack", bootstrapper, StringComparison.Ordinal);
-        Assert.Contains("Test-ModuleState", bootstrapper, StringComparison.Ordinal);
+        Assert.Contains("Repair-ManagedModule", bootstrapper, StringComparison.Ordinal);
+        Assert.Contains("Save-ManagedModule", bootstrapper, StringComparison.Ordinal);
+        Assert.Contains("Update-ManagedModule", bootstrapper, StringComparison.Ordinal);
     }
 
     [Fact]

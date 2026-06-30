@@ -59,15 +59,32 @@ internal sealed class ModuleStateCleanupPlanner
 
     private static IEnumerable<IGrouping<string, ModuleStateInstalledModule>> GetManagedModuleGroups(ModuleStatePlanRequest request)
     {
-        var managedNames = request.DesiredModules
-            .Select(static module => module.Name)
-            .Concat(request.MaintenanceReceipts.SelectMany(static receipt => receipt.Modules.Select(static module => module.Name)))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var selectedModules = new List<ModuleStateInstalledModule>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var desiredModule in request.DesiredModules)
+        {
+            AddCleanupCandidates(
+                request.Inventory.InstalledModules.Where(module =>
+                    string.Equals(module.Name, desiredModule.Name, StringComparison.OrdinalIgnoreCase) &&
+                    (string.IsNullOrWhiteSpace(desiredModule.Scope) ||
+                     string.Equals(module.Scope, desiredModule.Scope, StringComparison.OrdinalIgnoreCase)) &&
+                    (string.IsNullOrWhiteSpace(desiredModule.TargetPath) || IsUnderTargetPath(module.Path, desiredModule.TargetPath!))),
+                selectedModules,
+                seen);
+        }
 
-        return request.Inventory.InstalledModules
-            .Where(module => managedNames.Contains(module.Name, StringComparer.OrdinalIgnoreCase))
-            .GroupBy(static module => module.Name, StringComparer.OrdinalIgnoreCase);
+        foreach (var receiptModule in request.MaintenanceReceipts.SelectMany(static receipt => receipt.Modules))
+        {
+            AddCleanupCandidates(
+                request.Inventory.InstalledModules.Where(module =>
+                    string.Equals(module.Name, receiptModule.Name, StringComparison.OrdinalIgnoreCase) &&
+                    (string.IsNullOrWhiteSpace(receiptModule.Scope) ||
+                     string.Equals(module.Scope, receiptModule.Scope, StringComparison.OrdinalIgnoreCase))),
+                selectedModules,
+                seen);
+        }
+
+        return selectedModules.GroupBy(static module => module.Name, StringComparer.OrdinalIgnoreCase);
     }
 
     private static HashSet<string> ResolveKeepVersions(
@@ -98,8 +115,10 @@ internal sealed class ModuleStateCleanupPlanner
 
             var policy = ModuleStateVersionPolicy.Parse(desiredModule.VersionPolicy);
             var candidates = installedModules
-                .Where(module => string.IsNullOrWhiteSpace(desiredModule.Scope) ||
-                                 string.Equals(module.Scope, desiredModule.Scope, StringComparison.OrdinalIgnoreCase))
+                .Where(module =>
+                    (string.IsNullOrWhiteSpace(desiredModule.Scope) ||
+                     string.Equals(module.Scope, desiredModule.Scope, StringComparison.OrdinalIgnoreCase)) &&
+                    (string.IsNullOrWhiteSpace(desiredModule.TargetPath) || IsUnderTargetPath(module.Path, desiredModule.TargetPath!)))
                 .ToArray();
             if (candidates.Length == 0)
                 continue;
@@ -137,6 +156,35 @@ internal sealed class ModuleStateCleanupPlanner
             string.Empty,
             new[] { installedModule.Name },
             new[] { installedModule.Version });
+
+    private static void AddCleanupCandidates(
+        IEnumerable<ModuleStateInstalledModule> candidates,
+        List<ModuleStateInstalledModule> selectedModules,
+        HashSet<string> seen)
+    {
+        foreach (var module in candidates)
+        {
+            var key = string.Join("|", module.Name, module.Version, module.Path ?? string.Empty);
+            if (seen.Add(key))
+                selectedModules.Add(module);
+        }
+    }
+
+    private static bool IsUnderTargetPath(string? modulePath, string targetPath)
+    {
+        if (string.IsNullOrWhiteSpace(modulePath))
+            return false;
+
+        var normalizedModulePath = NormalizePath(modulePath!);
+        var normalizedTargetPath = NormalizePath(targetPath);
+        return string.Equals(normalizedModulePath, normalizedTargetPath, StringComparison.OrdinalIgnoreCase) ||
+               normalizedModulePath.StartsWith(normalizedTargetPath + "/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizePath(string path)
+        => path.Trim()
+            .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)
+            .Replace('\\', '/');
 }
 
 internal sealed class ModuleStateCleanupPlan

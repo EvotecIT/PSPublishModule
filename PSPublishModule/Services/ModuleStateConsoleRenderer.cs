@@ -124,15 +124,21 @@ internal static class ModuleStateConsoleRenderer
             var executions = new Table().Border(Border());
             executions.AddColumn(new TableColumn("Operation").NoWrap());
             executions.AddColumn(new TableColumn("Repository").NoWrap());
+            executions.AddColumn(new TableColumn("Transport").NoWrap());
             executions.AddColumn(new TableColumn("Performed").NoWrap());
+            executions.AddColumn(new TableColumn("Status").NoWrap());
             executions.AddColumn(new TableColumn("Dependencies").NoWrap());
+            executions.AddColumn(new TableColumn("Details"));
             foreach (var execution in result.ExecutionResults)
             {
                 executions.AddRow(
                     Esc(execution.Operation),
                     Esc(execution.RepositoryName),
+                    Esc(FormatExecutionTransport(execution)),
                     execution.OperationPerformed ? "[green]yes[/]" : "[dim]no[/]",
-                    execution.DependencyResults.Length.ToString());
+                    Esc(FormatExecutionStatuses(execution)),
+                    execution.DependencyResults.Length.ToString(),
+                    Esc(FormatExecutionDetails(execution)));
             }
 
             AnsiConsole.Write(executions);
@@ -150,6 +156,7 @@ internal static class ModuleStateConsoleRenderer
         table.AddColumn(new TableColumn("Installed").NoWrap());
         table.AddColumn(new TableColumn("Policy").NoWrap());
         table.AddColumn(new TableColumn("Target").NoWrap());
+        table.AddColumn(new TableColumn("License").NoWrap());
         table.AddColumn(new TableColumn("Reason"));
         foreach (var action in actions.Take(20))
         {
@@ -159,6 +166,7 @@ internal static class ModuleStateConsoleRenderer
                 Esc(action.InstalledVersion),
                 Esc(action.VersionPolicy),
                 Esc(FormatTarget(action)),
+                Esc(FormatLicense(action)),
                 Esc(action.Reason));
         }
 
@@ -200,6 +208,57 @@ internal static class ModuleStateConsoleRenderer
         }.Where(static part => !string.IsNullOrWhiteSpace(part));
 
         return string.Join(" / ", parts);
+    }
+
+    private static string FormatLicense(ModuleStatePlanActionResult action)
+    {
+        if (!action.LicenseAcceptanceRequired)
+            return string.Empty;
+
+        return action.LicenseAccepted ? "accepted" : "required";
+    }
+
+    internal static string FormatExecutionStatuses(ModuleStateDeliveryExecutionResult execution)
+    {
+        if (execution is null || execution.DependencyResults.Length == 0)
+            return execution?.OperationPerformed == true ? "Performed" : "Skipped";
+
+        return string.Join(
+            ", ",
+            execution.DependencyResults
+                .Select(static dependency => dependency.Status)
+                .Where(static status => !string.IsNullOrWhiteSpace(status))
+                .Distinct(StringComparer.OrdinalIgnoreCase));
+    }
+
+    internal static string FormatExecutionDetails(ModuleStateDeliveryExecutionResult execution)
+    {
+        if (execution is null)
+            return string.Empty;
+
+        var details = execution.DependencyResults
+            .Select(static dependency => dependency.Message)
+            .Where(static message => !string.IsNullOrWhiteSpace(message))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (details.Length > 0)
+            return string.Join("; ", details);
+        if (!string.IsNullOrWhiteSpace(execution.DeliveryTransportReason))
+            return execution.DeliveryTransportReason;
+
+        return execution.OperationPerformed
+            ? "Operation performed."
+            : "Operation skipped or no changes were required.";
+    }
+
+    internal static string FormatExecutionTransport(ModuleStateDeliveryExecutionResult execution)
+    {
+        if (execution is null)
+            return string.Empty;
+
+        return execution.RequestedTransport == execution.EffectiveTransport
+            ? execution.EffectiveTransport.ToString()
+            : $"{execution.RequestedTransport} -> {execution.EffectiveTransport}";
     }
 
     private static void WriteRule(string title, string color)
