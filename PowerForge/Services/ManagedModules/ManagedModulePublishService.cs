@@ -93,13 +93,17 @@ public sealed class ManagedModulePublishService
                 .Select(static dependency => dependency.Trim())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var missing = new List<string>();
+        var dependencyRepository = ResolveDependencyCheckRepository(request);
+        if (dependencyRepository is null)
+            return;
+
         foreach (var dependency in metadata.ManifestDependencies)
         {
             if (externalDependencies.Contains(dependency.Id))
                 continue;
 
             var range = ManagedModuleVersionRange.Parse(dependency.VersionRange);
-            if (!await RepositoryHasDependencyAsync(request, dependency, range, cancellationToken).ConfigureAwait(false))
+            if (!await RepositoryHasDependencyAsync(request, dependencyRepository, dependency, range, cancellationToken).ConfigureAwait(false))
                 missing.Add(FormatDependency(dependency, range));
         }
 
@@ -115,8 +119,39 @@ public sealed class ManagedModulePublishService
             ? dependency.Id
             : $"{dependency.Id} {range}";
 
+    private static ManagedModuleRepository? ResolveDependencyCheckRepository(ManagedModulePublishRequest request)
+    {
+        if (request.PublishRepository is not null)
+            return request.Repository;
+
+        var source = request.Repository.Source.Trim().TrimEnd('/');
+        if (source.EndsWith("/package", StringComparison.OrdinalIgnoreCase))
+        {
+            var readSource = source.Substring(0, source.Length - "/package".Length);
+            return string.IsNullOrWhiteSpace(readSource)
+                ? request.Repository
+                : new ManagedModuleRepository(
+                    request.Repository.Name,
+                    readSource,
+                    ManagedModuleRepositoryKind.NuGetV2,
+                    request.Repository.Trusted);
+        }
+
+        if (request.Repository.Kind == ManagedModuleRepositoryKind.NuGetV3 &&
+            Uri.TryCreate(source, UriKind.Absolute, out var uri) &&
+            (uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+             uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) &&
+            !source.EndsWith("index.json", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return request.Repository;
+    }
+
     private async Task<bool> RepositoryHasDependencyAsync(
         ManagedModulePublishRequest request,
+        ManagedModuleRepository dependencyRepository,
         ManagedModuleDependencyInfo dependency,
         ManagedModuleVersionRange range,
         CancellationToken cancellationToken)
@@ -124,7 +159,7 @@ public sealed class ManagedModulePublishService
         try
         {
             var versions = await _repositoryClient.GetVersionsAsync(
-                request.Repository,
+                dependencyRepository,
                 dependency.Id,
                 range.AllowsPrerelease,
                 request.Credential,

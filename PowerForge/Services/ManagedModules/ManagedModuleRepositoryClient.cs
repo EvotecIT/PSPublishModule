@@ -744,11 +744,10 @@ public sealed partial class ManagedModuleRepositoryClient
             return cached;
 
         if (!repository.Source.EndsWith("index.json", StringComparison.OrdinalIgnoreCase))
-        {
-            var flat = EnsureTrailingSlash(repository.Source);
-            _searchQueryServiceCache[repository.Source] = flat;
-            return flat;
-        }
+            throw CreateRepositoryContractException(
+                repository,
+                "SearchServiceDiscovery",
+                "Wildcard package search requires a NuGet v3 service index that exposes SearchQueryService; flat-container and package endpoints do not support search.");
 
         using var response = await SendWithPolicyAsync(
             () => CreateRequest(HttpMethod.Get, new Uri(repository.Source), credential, "application/json"),

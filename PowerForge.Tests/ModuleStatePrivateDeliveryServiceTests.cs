@@ -40,6 +40,23 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
     }
 
     [Fact]
+    public void CreateRequest_PreservesNuGetBracketRangePolicies()
+    {
+        var request = InvokeCreateRequest(new[]
+        {
+            new ModuleStatePlanAction(ModuleStatePlanActionKind.Install, "Company.Range", null, "[1.0.0,2.0.0)", "missing"),
+            new ModuleStatePlanAction(ModuleStatePlanActionKind.Install, "Company.Exact", null, "[3.0.0]", "missing")
+        });
+
+        Assert.Equal("1.0.0", request.MinimumVersions["Company.Range"]);
+        Assert.True(request.MinimumVersionInclusivity["Company.Range"]);
+        Assert.Equal("2.0.0", request.MaximumVersions["Company.Range"]);
+        Assert.False(request.MaximumVersionInclusivity["Company.Range"]);
+        Assert.False(request.RequiredVersions.ContainsKey("Company.Range"));
+        Assert.Equal("3.0.0", request.RequiredVersions["Company.Exact"]);
+    }
+
+    [Fact]
     public void CreateRequest_EnablesPrereleaseWhenActionPolicyContainsPrerelease()
     {
         var request = InvokeCreateRequest(new[]

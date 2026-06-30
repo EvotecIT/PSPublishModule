@@ -963,6 +963,21 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task SearchPackagesAsync_rejects_flat_container_source_for_wildcards()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Flat", "https://example.test/packages/");
+
+        var exception = await Assert.ThrowsAsync<ManagedModuleRepositoryException>(() => repositoryClient.SearchPackagesAsync(repository, "Company.*"));
+
+        Assert.Equal("SearchServiceDiscovery", exception.Operation);
+        Assert.Contains("SearchQueryService", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(requests);
+    }
+
+    [Fact]
     public async Task SearchPackagesAsync_uses_powershellgallery_v2_read_api_for_canonical_default()
     {
         var requests = new List<RecordedRequest>();
@@ -1117,6 +1132,13 @@ public sealed class ManagedModuleRepositoryClientTests
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
                     "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\">" +
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.0.0</d:Version></m:properties></content></entry>" +
+                    "</feed>");
+
+            if (uri.AbsoluteUri == "https://push.example.test/api/v2/FindPackagesById()?id='Company.Core'&semVerLevel=2.0.0")
+                return Xml(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                    "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\">" +
+                    "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>2.0.0</d:Version></m:properties></content></entry>" +
                     "</feed>");
 
             if (uri.AbsoluteUri == "https://example.test/api/v2/FindPackagesById()?id='Company.Tools'&$filter=IsLatestVersion&$top=1&semVerLevel=2.0.0")

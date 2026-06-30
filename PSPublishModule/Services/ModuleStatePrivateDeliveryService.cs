@@ -258,6 +258,19 @@ internal sealed class ModuleStatePrivateDeliveryService
         if (trimmed.Length == 0 || string.Equals(trimmed, "*", StringComparison.Ordinal))
             return ModuleStateVersionConstraint.Empty;
 
+        if (HasNuGetRangeDelimiters(trimmed))
+        {
+            var range = ManagedModuleVersionRange.Parse(trimmed);
+            return range.IsUnbounded
+                ? ModuleStateVersionConstraint.Empty
+                : new ModuleStateVersionConstraint(
+                    range.ExactVersion,
+                    range.MinimumVersion,
+                    range.IncludeMinimum,
+                    range.MaximumVersion,
+                    range.IncludeMaximum);
+        }
+
         string? requiredVersion = null;
         string? minimumVersion = null;
         var minimumVersionInclusive = true;
@@ -303,6 +316,12 @@ internal sealed class ModuleStatePrivateDeliveryService
 
         return new ModuleStateVersionConstraint(requiredVersion, minimumVersion, minimumVersionInclusive, maximumVersion, maximumVersionInclusive);
     }
+
+    private static bool HasNuGetRangeDelimiters(string value)
+        => value.StartsWith("[", StringComparison.Ordinal) ||
+           value.StartsWith("(", StringComparison.Ordinal) ||
+           value.EndsWith("]", StringComparison.Ordinal) ||
+           value.EndsWith(")", StringComparison.Ordinal);
 }
 
 internal readonly struct ModuleStateVersionConstraint

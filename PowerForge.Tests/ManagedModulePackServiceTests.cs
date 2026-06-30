@@ -646,6 +646,68 @@ public sealed class ManagedModulePackServiceTests
     }
 
     [Fact]
+    public async Task Publish_uses_v2_feed_root_for_dependency_checks_when_upload_source_is_package_endpoint()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var requests = new List<ManagedModuleRepositoryClientTests.RecordedRequest>();
+        using var httpClient = new HttpClient(new ManagedModuleRepositoryClientTests.ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), httpClient);
+        var service = new ManagedModulePublishService(new NullLogger(), repositoryClient);
+        CreateModule(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            prerelease: null,
+            requiredModules: "    RequiredModules = @(@{ ModuleName = 'Company.Core'; RequiredVersion = '2.0.0' })");
+
+        var result = await service.PublishAsync(new ManagedModulePublishRequest
+        {
+            ModulePath = moduleRoot.Path,
+            Repository = new ManagedModuleRepository("LegacyPush", "https://push.example.test/api/v2/package"),
+            Credential = new RepositoryCredential
+            {
+                Secret = "publish-key"
+            }
+        });
+
+        Assert.True(result.Published);
+        Assert.Contains(requests, request => request.Url == "https://push.example.test/api/v2/FindPackagesById()?id='Company.Core'&semVerLevel=2.0.0");
+        var publish = Assert.Single(requests, request => request.Url == "https://push.example.test/api/v2/package" && request.Method == HttpMethod.Put);
+        Assert.Equal("publish-key", publish.ApiKey);
+    }
+
+    [Fact]
+    public async Task Publish_skips_dependency_check_for_direct_package_publish_endpoint()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var requests = new List<ManagedModuleRepositoryClientTests.RecordedRequest>();
+        using var httpClient = new HttpClient(new ManagedModuleRepositoryClientTests.ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), httpClient);
+        var service = new ManagedModulePublishService(new NullLogger(), repositoryClient);
+        CreateModule(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            prerelease: null,
+            requiredModules: "    RequiredModules = @(@{ ModuleName = 'Company.Missing'; RequiredVersion = '9.0.0' })");
+
+        var result = await service.PublishAsync(new ManagedModulePublishRequest
+        {
+            ModulePath = moduleRoot.Path,
+            Repository = new ManagedModuleRepository("DirectPush", "https://example.test/publish/"),
+            Credential = new RepositoryCredential
+            {
+                Secret = "publish-key"
+            }
+        });
+
+        Assert.True(result.Published);
+        Assert.DoesNotContain(requests, request => request.Url.Contains("Company.Missing", StringComparison.OrdinalIgnoreCase));
+        var publish = Assert.Single(requests, request => request.Url == "https://example.test/publish/" && request.Method == HttpMethod.Put);
+        Assert.Equal("publish-key", publish.ApiKey);
+    }
+
+    [Fact]
     public async Task Publish_can_skip_required_module_repository_check()
     {
         using var moduleRoot = new TemporaryDirectory();
