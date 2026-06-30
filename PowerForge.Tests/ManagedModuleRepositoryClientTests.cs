@@ -8,6 +8,16 @@ namespace PowerForge.Tests;
 
 public sealed class ManagedModuleRepositoryClientTests
 {
+    [Theory]
+    [InlineData("packages/feed")]
+    [InlineData(@"packages\feed")]
+    public void ManagedModuleRepository_infers_relative_folder_feeds_as_local(string source)
+    {
+        var repository = new ManagedModuleRepository("Local", source);
+
+        Assert.Equal(ManagedModuleRepositoryKind.LocalFolder, repository.Kind);
+    }
+
     [Fact]
     public async Task GetVersionsAsync_uses_nuget_v3_package_base_address()
     {

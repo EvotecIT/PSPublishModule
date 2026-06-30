@@ -1151,6 +1151,48 @@ public sealed partial class ManagedModuleInstallServiceTests
         AssertNoManagedStageDirectories(moduleRoot);
     }
 
+    [Fact]
+    public async Task InstallAsync_clobber_preflight_runs_before_dependency_install()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var existingPath = Path.Combine(moduleRoot.Path, "Company.Existing", "1.0.0");
+        Directory.CreateDirectory(existingPath);
+        File.WriteAllText(
+            Path.Combine(existingPath, "Company.Existing.psd1"),
+            CreateManifest("1.0.0", "Get-CompanyTool"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            files: CreateDependencyFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[1.0.0]", null) },
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = CreateManifest("1.0.0", "Get-CompanyTool")
+            });
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        }));
+
+        Assert.Contains("export conflict", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Core")));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0")));
+        Assert.False(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", ".powerforge", "managed-module-receipt.json")));
+        Assert.Empty(Directory.EnumerateDirectories(moduleRoot.Path, ".pfmm-stage-*", SearchOption.AllDirectories));
+    }
+
     private static IReadOnlyDictionary<string, string> CreateModuleFiles(string version)
         => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {

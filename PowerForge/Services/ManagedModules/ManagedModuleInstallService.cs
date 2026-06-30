@@ -489,6 +489,9 @@ public sealed partial class ManagedModuleInstallService
                 : null;
             var finalParent = Path.GetDirectoryName(modulePath) ?? moduleRoot;
             Directory.CreateDirectory(finalParent);
+            if (!request.AllowClobber)
+                ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), validationModulePath);
+
             var dependencyStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var dependencyResults = request.SkipDependencyCheck
                 ? Array.Empty<ManagedModuleInstallResult>()

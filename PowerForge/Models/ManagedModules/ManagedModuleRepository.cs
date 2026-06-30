@@ -64,14 +64,25 @@ public sealed class ManagedModuleRepository
 
     private static ManagedModuleRepositoryKind InferKind(string source)
     {
-        if (Uri.TryCreate(source, UriKind.Absolute, out var uri) && uri.IsFile)
-            return ManagedModuleRepositoryKind.LocalFolder;
+        if (Uri.TryCreate(source, UriKind.Absolute, out var uri))
+        {
+            if (uri.IsFile)
+                return ManagedModuleRepositoryKind.LocalFolder;
+
+            if (uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+                uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            {
+                return source.IndexOf("/api/v2", StringComparison.OrdinalIgnoreCase) >= 0
+                    ? ManagedModuleRepositoryKind.NuGetV2
+                    : ManagedModuleRepositoryKind.NuGetV3;
+            }
+        }
 
         if (Path.IsPathRooted(source) || source.StartsWith(".", StringComparison.Ordinal))
             return ManagedModuleRepositoryKind.LocalFolder;
 
-        if (source.IndexOf("/api/v2", StringComparison.OrdinalIgnoreCase) >= 0)
-            return ManagedModuleRepositoryKind.NuGetV2;
+        if (source.IndexOfAny(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }) >= 0)
+            return ManagedModuleRepositoryKind.LocalFolder;
 
         return ManagedModuleRepositoryKind.NuGetV3;
     }
