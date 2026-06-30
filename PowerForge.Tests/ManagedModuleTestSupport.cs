@@ -66,14 +66,30 @@ internal static class TestPackageFactory
         }
     }
 
-    public static byte[] CreateBytes(string id, string version, bool requireLicenseAcceptance = false)
+    public static byte[] CreateBytes(
+        string id,
+        string version,
+        bool requireLicenseAcceptance = false,
+        IReadOnlyDictionary<string, string>? files = null)
     {
         using var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
             var nuspec = archive.CreateEntry(id + ".nuspec");
-            using var writer = new StreamWriter(nuspec.Open());
-            writer.Write(CreateNuspec(id, version, requireLicenseAcceptance: requireLicenseAcceptance));
+            using (var writer = new StreamWriter(nuspec.Open()))
+            {
+                writer.Write(CreateNuspec(id, version, requireLicenseAcceptance: requireLicenseAcceptance));
+            }
+
+            if (files is not null)
+            {
+                foreach (var file in files)
+                {
+                    var entry = archive.CreateEntry(file.Key);
+                    using var entryWriter = new StreamWriter(entry.Open());
+                    entryWriter.Write(file.Value);
+                }
+            }
         }
 
         return stream.ToArray();

@@ -383,6 +383,9 @@ public sealed partial class ManagedModuleInstallService
         var stageRoot = CreateStageRoot(moduleRoot, moduleName);
         var stageModulePath = CreateStageModulePath(stageRoot, moduleName, version);
         ManagedModuleExtractedPackageLease? directPayloadLease = null;
+#if !NET472
+        ManagedModuleBufferedPackage? bufferedPackage = null;
+#endif
 
         try
         {
@@ -411,6 +414,14 @@ public sealed partial class ManagedModuleInstallService
             long packageRepositoryRedirectCount;
             using (var packageRequestScope = _repositoryClient.BeginRequestScope())
             {
+#if !NET472
+                if (ShouldUseBufferedPackageExtraction(request, ownsCache))
+                {
+                    bufferedPackage = await DownloadBufferedPackageForInstallAsync(request, version, cancellationToken).ConfigureAwait(false);
+                    download = bufferedPackage.Download;
+                }
+                else
+#endif
                 download = await _repositoryClient.DownloadPackageAsync(
                     request.Repository,
                     request.Name,
@@ -441,6 +452,16 @@ public sealed partial class ManagedModuleInstallService
 
             if (directPayloadLease is null)
             {
+#if !NET472
+                if (bufferedPackage is not null)
+                {
+                    extraction = await ExtractBufferedPackageForInstallAsync(
+                        bufferedPackage,
+                        stageModulePath,
+                        cancellationToken).ConfigureAwait(false);
+                }
+                else
+#endif
                 extraction = ownsCache
                     ? _extractor.ExtractPackage(download.PackagePath, stageModulePath)
                     : _extractedPackageCache.MaterializePackage(
@@ -595,6 +616,9 @@ public sealed partial class ManagedModuleInstallService
         }
         finally
         {
+#if !NET472
+            bufferedPackage?.Dispose();
+#endif
             directPayloadLease?.Dispose();
             ManagedModuleExtractedPackageCache.DeleteDirectoryQuietly(stageRoot);
             if (ownsCache)

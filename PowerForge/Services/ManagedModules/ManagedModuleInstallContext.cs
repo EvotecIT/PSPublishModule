@@ -239,7 +239,7 @@ internal sealed class ManagedModuleInstallContext
         if (string.IsNullOrWhiteSpace(directoryName))
             return false;
 
-        var value = directoryName.Trim();
+        var value = directoryName!.Trim();
         var plusIndex = value.IndexOf('+');
         if (plusIndex >= 0)
             value = value.Substring(0, plusIndex);

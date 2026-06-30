@@ -275,7 +275,7 @@ public sealed class ManagedModulePackService
     private static bool ReadManifestLicenseAcceptance(string manifestPath)
         => ModuleManifestValueReader.ReadPsDataBoolean(manifestPath, "RequireLicenseAcceptance");
 
-    private static IReadOnlySet<string> ResolveManifestFileReferences(string manifestPath)
+    private static ISet<string> ResolveManifestFileReferences(string manifestPath)
     {
         var references = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         AddReference(references, ModuleManifestValueReader.ReadTopLevelString(manifestPath, "RootModule"));
@@ -296,7 +296,7 @@ public sealed class ManagedModulePackService
         if (string.IsNullOrWhiteSpace(value))
             return;
 
-        var normalized = value.Trim().Trim('"', '\'')
+        var normalized = value!.Trim().Trim('"', '\'')
             .Replace('\\', '/')
             .TrimStart('.', '/');
         if (!string.IsNullOrWhiteSpace(normalized))
@@ -307,7 +307,7 @@ public sealed class ManagedModulePackService
         string modulePath,
         string outputDirectory,
         string packagePath,
-        IReadOnlySet<string> manifestReferences)
+        ISet<string> manifestReferences)
         => Directory.EnumerateFiles(modulePath, "*", SearchOption.AllDirectories)
             .Where(file => !IsIgnoredPath(modulePath, file, outputDirectory, packagePath, manifestReferences))
             .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase);
@@ -317,7 +317,7 @@ public sealed class ManagedModulePackService
         string file,
         string outputDirectory,
         string packagePath,
-        IReadOnlySet<string> manifestReferences)
+        ISet<string> manifestReferences)
     {
         var fullPath = Path.GetFullPath(file);
         if (fullPath.Equals(Path.GetFullPath(packagePath), StringComparison.OrdinalIgnoreCase))
@@ -353,7 +353,7 @@ public sealed class ManagedModulePackService
         return fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsManifestReferenced(string relativePath, IReadOnlySet<string> manifestReferences)
+    private static bool IsManifestReferenced(string relativePath, ISet<string> manifestReferences)
     {
         foreach (var reference in manifestReferences)
         {

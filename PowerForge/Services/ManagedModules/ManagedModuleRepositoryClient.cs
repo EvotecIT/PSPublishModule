@@ -599,14 +599,31 @@ public sealed partial class ManagedModuleRepositoryClient
     private ManagedModulePackageMetadata ReadDownloadedPackageMetadata(string packageId, string version, string packagePath)
     {
         var metadata = _packageReader.ReadMetadata(packagePath);
+        ValidateDownloadedPackageMetadata(packageId, version, packagePath, metadata);
+        return metadata;
+    }
+
+#if !NET472
+    private ManagedModulePackageMetadata ReadDownloadedPackageMetadata(string packageId, string version, Stream packageStream, string packageIdentity)
+    {
+        var metadata = _packageReader.ReadMetadata(packageStream, packageIdentity);
+        ValidateDownloadedPackageMetadata(packageId, version, packageIdentity, metadata);
+        return metadata;
+    }
+#endif
+
+    private static void ValidateDownloadedPackageMetadata(
+        string packageId,
+        string version,
+        string packagePath,
+        ManagedModulePackageMetadata metadata)
+    {
         if (!metadata.Id.Equals(packageId, StringComparison.OrdinalIgnoreCase) ||
             ManagedModuleVersionComparer.Instance.Compare(metadata.Version, version) != 0)
         {
             throw new InvalidOperationException(
                 $"Downloaded package '{packagePath}' contains '{metadata.Id}' version '{metadata.Version}', not requested package '{packageId}' version '{version}'.");
         }
-
-        return metadata;
     }
 
     private async Task<string> ResolvePackageBaseAddressAsync(

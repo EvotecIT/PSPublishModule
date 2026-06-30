@@ -68,6 +68,36 @@ public sealed partial class ManagedModuleInstallServiceTests
         AssertNoManagedStageDirectories(moduleRoot);
     }
 
+#if !NET472
+    [Fact]
+    public async Task InstallAsync_streams_http_package_to_temporary_cache_on_modern_runtime()
+    {
+        var requests = new List<ManagedModuleRepositoryClientTests.RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleRepositoryClientTests.ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var service = new ManagedModuleInstallService(new NullLogger(), repositoryClient);
+        using var moduleRoot = new TemporaryDirectory();
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json"),
+            Name = "Company.Tools",
+            Version = "1.1.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            AcceptLicense = true
+        });
+
+        Assert.Equal(ManagedModuleInstallStatus.Installed, result.Status);
+        Assert.Equal(string.Empty, result.Download!.PackagePath);
+        Assert.True(result.Download.BytesWritten > 0);
+        Assert.True(result.ExtractionElapsed > TimeSpan.Zero);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
+        Assert.Contains(requests, request => request.Url == "https://example.test/packages/company.tools/1.1.0/company.tools.1.1.0.nupkg");
+    }
+
+#endif
+
     [Fact]
     public async Task InstallAsync_skips_existing_version_without_force()
     {

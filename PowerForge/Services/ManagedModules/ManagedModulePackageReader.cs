@@ -33,8 +33,35 @@ public sealed class ManagedModulePackageReader
             throw new InvalidOperationException($"Package '{fullPath}' exceeds the managed module metadata size limit.");
 
         using var archive = ZipFile.OpenRead(fullPath);
+        return ReadMetadata(archive, fullPath, info.Length);
+    }
+
+#if !NET472
+    internal ManagedModulePackageMetadata ReadMetadata(Stream packageStream, string packageIdentity)
+    {
+        if (packageStream is null)
+            throw new ArgumentNullException(nameof(packageStream));
+        if (!packageStream.CanSeek)
+            throw new ArgumentException("Package stream must be seekable.", nameof(packageStream));
+
+        var originalPosition = packageStream.Position;
+        try
+        {
+            packageStream.Position = 0;
+            using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read, leaveOpen: true);
+            return ReadMetadata(archive, packageIdentity, packageStream.Length);
+        }
+        finally
+        {
+            packageStream.Position = originalPosition;
+        }
+    }
+#endif
+
+    private ManagedModulePackageMetadata ReadMetadata(ZipArchive archive, string packagePath, long packageBytes)
+    {
         if (archive.Entries.Count > MaxEntries)
-            throw new InvalidOperationException($"Package '{fullPath}' exceeds the managed module metadata entry-count limit.");
+            throw new InvalidOperationException($"Package '{packagePath}' exceeds the managed module metadata entry-count limit.");
 
         foreach (var entry in archive.Entries)
         {
@@ -42,7 +69,7 @@ public sealed class ManagedModulePackageReader
             if (string.IsNullOrWhiteSpace(normalized))
                 continue;
             if (!IsSafePackagePath(normalized))
-                throw new InvalidOperationException($"Package '{fullPath}' contains unsafe path '{entry.FullName}'.");
+                throw new InvalidOperationException($"Package '{packagePath}' contains unsafe path '{entry.FullName}'.");
         }
 
         var nuspec = archive.Entries
@@ -52,7 +79,7 @@ public sealed class ManagedModulePackageReader
             .FirstOrDefault();
 
         if (nuspec is null)
-            throw new InvalidOperationException($"Package '{fullPath}' does not contain a nuspec file.");
+            throw new InvalidOperationException($"Package '{packagePath}' does not contain a nuspec file.");
 
         using var stream = nuspec.Open();
         using var reader = XmlReader.Create(stream, new XmlReaderSettings
@@ -63,14 +90,14 @@ public sealed class ManagedModulePackageReader
         });
         var document = XDocument.Load(reader, LoadOptions.None);
         var metadata = document.Descendants().FirstOrDefault(static element => element.Name.LocalName == "metadata")
-                       ?? throw new InvalidOperationException($"Package '{fullPath}' nuspec does not contain metadata.");
+                       ?? throw new InvalidOperationException($"Package '{packagePath}' nuspec does not contain metadata.");
 
         var packageId = ReadElement(metadata, "id") ?? string.Empty;
         var nuspecDependencies = ReadDependencies(metadata);
-        var manifest = ReadManifestMetadata(archive, packageId, fullPath);
+        var manifest = ReadManifestMetadata(archive, packageId, packagePath);
         var uncompressedBytes = CountUncompressedBytes(archive);
         if (uncompressedBytes > MaxUncompressedPackageBytes)
-            throw new InvalidOperationException($"Package '{fullPath}' exceeds the managed module uncompressed size limit.");
+            throw new InvalidOperationException($"Package '{packagePath}' exceeds the managed module uncompressed size limit.");
 
         var result = new ManagedModulePackageMetadata
         {
@@ -83,7 +110,7 @@ public sealed class ManagedModulePackageReader
             RequireLicenseAcceptance = ReadBoolean(metadata, "requireLicenseAcceptance"),
             Tags = ReadTags(ReadElement(metadata, "tags")),
             FileCount = CountFiles(archive),
-            PackageBytes = info.Length,
+            PackageBytes = packageBytes,
             UncompressedBytes = uncompressedBytes,
             Dependencies = SelectInstallableDependencies(nuspecDependencies, manifest.Dependencies, manifest.ExternalModuleDependencies),
             ModuleManifestPath = manifest.Path,
@@ -91,14 +118,14 @@ public sealed class ManagedModulePackageReader
             ModuleManifestPrerelease = manifest.Prerelease,
             ManifestDependencies = manifest.Dependencies,
             ManifestExternalModuleDependencies = manifest.ExternalModuleDependencies,
-            PackagePath = fullPath
+            PackagePath = packagePath
         };
 
         if (string.IsNullOrWhiteSpace(result.Id))
-            throw new InvalidOperationException($"Package '{fullPath}' nuspec does not contain an id.");
+            throw new InvalidOperationException($"Package '{packagePath}' nuspec does not contain an id.");
         if (string.IsNullOrWhiteSpace(result.Version))
-            throw new InvalidOperationException($"Package '{fullPath}' nuspec does not contain a version.");
-        ValidateManifestAgreement(result, fullPath);
+            throw new InvalidOperationException($"Package '{packagePath}' nuspec does not contain a version.");
+        ValidateManifestAgreement(result, packagePath);
 
         return result;
     }

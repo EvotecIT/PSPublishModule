@@ -56,6 +56,66 @@ internal sealed class ManagedModuleArchiveExtractor
         return new ManagedModuleArchiveExtractionResult(fileCount, bytesWritten, stopwatch.Elapsed, fromCache: false, cacheLockWaitElapsed: TimeSpan.Zero);
     }
 
+#if !NET472
+    public async Task<ManagedModuleArchiveExtractionResult> ExtractPackageAsync(
+        Stream packageStream,
+        string destinationPath,
+        CancellationToken cancellationToken)
+    {
+        if (packageStream is null)
+            throw new ArgumentNullException(nameof(packageStream));
+        if (string.IsNullOrWhiteSpace(destinationPath))
+            throw new ArgumentException("Destination path is required.", nameof(destinationPath));
+
+        Directory.CreateDirectory(destinationPath);
+        var destinationRoot = Path.GetFullPath(destinationPath);
+        var createdDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            destinationRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+        };
+        var fileCount = 0;
+        long bytesWritten = 0;
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read, leaveOpen: true);
+        foreach (var entry in archive.Entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var normalized = Normalize(entry.FullName);
+            if (string.IsNullOrWhiteSpace(normalized) || IsPackageMetadata(normalized))
+                continue;
+            if (!IsSafePath(normalized))
+                throw new InvalidOperationException($"Package contains unsafe path '{entry.FullName}'.");
+
+            var targetPath = Path.GetFullPath(Path.Combine(destinationRoot, normalized.Replace('/', Path.DirectorySeparatorChar)));
+            if (!IsInsideDirectory(destinationRoot, targetPath))
+                throw new InvalidOperationException($"Package entry '{entry.FullName}' escapes the destination directory.");
+
+            if (entry.FullName.EndsWith("/", StringComparison.Ordinal) || entry.FullName.EndsWith("\\", StringComparison.Ordinal))
+            {
+                EnsureDirectory(targetPath, createdDirectories);
+                continue;
+            }
+
+            EnsureDirectory(Path.GetDirectoryName(targetPath)!, createdDirectories);
+            using var source = entry.Open();
+            await using var destination = new FileStream(
+                targetPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                CopyBufferSize,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await source.CopyToAsync(destination, CopyBufferSize, cancellationToken).ConfigureAwait(false);
+            fileCount++;
+            bytesWritten += destination.Length;
+        }
+
+        stopwatch.Stop();
+        return new ManagedModuleArchiveExtractionResult(fileCount, bytesWritten, stopwatch.Elapsed, fromCache: false, cacheLockWaitElapsed: TimeSpan.Zero);
+    }
+#endif
+
     private static string Normalize(string path)
         => path.Replace('\\', '/').Trim('/');
 

@@ -401,6 +401,29 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.Contains(requests, request => request.Url == "https://example.test/packages/company.tools/1.1.0/company.tools.1.1.0.nupkg");
     }
 
+#if !NET472
+    [Fact]
+    public async Task DownloadPackageToMemoryAsync_buffers_package_from_nuget_v3_feed()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        using var result = await repositoryClient.DownloadPackageToMemoryAsync(repository, "Company.Tools", "1.1.0");
+
+        Assert.Equal("Company.Tools", result.Download.Metadata!.Id);
+        Assert.Equal("1.1.0", result.Download.Metadata.Version);
+        Assert.Equal(string.Empty, result.Download.PackagePath);
+        Assert.True(result.Download.BytesWritten > 0);
+        Assert.Equal(64, result.Download.PackageSha256.Length);
+        Assert.True(result.PackageStream.CanSeek);
+        Assert.Equal(0, result.PackageStream.Position);
+        Assert.Contains(requests, request => request.Url == "https://example.test/packages/company.tools/1.1.0/company.tools.1.1.0.nupkg");
+    }
+
+#endif
+
     [Fact]
     public async Task PlanInstallAsync_enriches_nuget_v3_version_with_package_license_metadata()
     {
@@ -836,7 +859,7 @@ public sealed class ManagedModuleRepositoryClientTests
         return string.Concat(hash.Take(8).Select(static value => value.ToString("x2")));
     }
 
-    private sealed class ManagedModuleHandler : HttpMessageHandler
+    internal sealed class ManagedModuleHandler : HttpMessageHandler
     {
         private readonly List<RecordedRequest> _requests;
         private readonly bool _conflictPublishes;
@@ -990,7 +1013,11 @@ public sealed class ManagedModuleRepositoryClientTests
 
             if (uri.AbsoluteUri == "https://example.test/packages/company.tools/1.1.0/company.tools.1.1.0.nupkg")
             {
-                var bytes = TestPackageFactory.CreateBytes("Company.Tools", "1.1.0", requireLicenseAcceptance: true);
+                var bytes = TestPackageFactory.CreateBytes(
+                    "Company.Tools",
+                    "1.1.0",
+                    requireLicenseAcceptance: true,
+                    files: CreateCompanyToolsFiles("1.1.0"));
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new ByteArrayContent(bytes)
@@ -1047,7 +1074,10 @@ public sealed class ManagedModuleRepositoryClientTests
 
             if (uri.AbsoluteUri == "https://cdn.example.test/packages/company.tools.1.1.0.nupkg")
             {
-                var bytes = TestPackageFactory.CreateBytes("Company.Tools", "1.1.0");
+                var bytes = TestPackageFactory.CreateBytes(
+                    "Company.Tools",
+                    "1.1.0",
+                    files: CreateCompanyToolsFiles("1.1.0"));
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new ByteArrayContent(bytes)
@@ -1095,6 +1125,13 @@ public sealed class ManagedModuleRepositoryClientTests
             {
                 Content = new StringContent(xml, Encoding.UTF8, "application/xml")
             });
+
+        private static IReadOnlyDictionary<string, string> CreateCompanyToolsFiles(string version)
+            => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = "@{ ModuleVersion = '" + version + "' }",
+                ["Public/Get-CompanyTool.ps1"] = "function Get-CompanyTool { 'ok' }"
+            };
     }
 
     private sealed class SlowHandler : HttpMessageHandler
@@ -1112,7 +1149,7 @@ public sealed class ManagedModuleRepositoryClientTests
             => throw new HttpRequestException("socket unavailable");
     }
 
-    private sealed class RecordedRequest
+    internal sealed class RecordedRequest
     {
         public RecordedRequest(string url, HttpMethod method, AuthenticationHeaderValue? authorization, string? apiKey, string userAgent)
         {
