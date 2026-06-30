@@ -247,6 +247,12 @@ internal sealed class ModuleStateApplyService
 
         if (deliveryOptions.Prerelease)
             arguments.Add("-Prerelease");
+        if (deliveryOptions.Transport != ModuleStateDeliveryTransport.ManagedModule)
+        {
+            arguments.Add("-Transport");
+            arguments.Add(deliveryOptions.Transport.ToString());
+        }
+
         if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
             !string.IsNullOrWhiteSpace(action.ExpectedPackageSha256))
         {
@@ -288,6 +294,9 @@ internal sealed class ModuleStateApplyService
 
     private static string ResolveCommandName(ModuleStatePlanActionKind actionKind, ModuleStateDeliveryTransport transport)
     {
+        if (transport != ModuleStateDeliveryTransport.ManagedModule)
+            return "Repair-ManagedModule";
+
         if (actionKind == ModuleStatePlanActionKind.Save)
             return "Save-ManagedModule";
         return actionKind == ModuleStatePlanActionKind.Update
