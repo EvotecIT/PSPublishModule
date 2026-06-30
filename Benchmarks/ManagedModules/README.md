@@ -33,6 +33,11 @@ What the benchmark is trying to prove:
   NuGet v3 mirror used by ModuleFast rather than the normal PSGallery provider
   path. If that mirror is missing a dependency, mark the row as a source/index
   miss instead of comparing elapsed time.
+- Safe runs skip native `Install-Module` and `Install-PSResource` rows unless
+  `-AllowUserProfileInstall` is passed, because those tools install into the
+  user module path. Use a disposable profile or VM when including those rows.
+- When `-RepeatCount` is greater than one, the README updater summarizes each
+  tool/scenario row with the median successful timing before writing the table.
 
 Run PowerShell 7:
 

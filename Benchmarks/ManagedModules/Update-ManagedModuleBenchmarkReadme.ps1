@@ -76,9 +76,71 @@ function Get-ManagedResultText {
     'Managed slower than {0}' -f $fastest.Engine
 }
 
+function Get-BenchmarkMedian {
+    param([double[]] $Values)
+
+    if ($Values.Count -eq 0) {
+        return 0
+    }
+
+    $sorted = @($Values | Sort-Object)
+    $middle = [int][Math]::Floor($sorted.Count / 2)
+    if (($sorted.Count % 2) -eq 1) {
+        return $sorted[$middle]
+    }
+
+    ($sorted[$middle - 1] + $sorted[$middle]) / 2
+}
+
+function ConvertTo-BenchmarkSummaryRows {
+    param([object[]] $Rows)
+
+    foreach ($group in ($Rows | Group-Object ScenarioLabel, Host, Operation, Engine)) {
+        $items = @($group.Group)
+        $first = $items | Select-Object -First 1
+        $successful = @($items | Where-Object { $_.Status -eq 'Succeeded' })
+        if ($successful.Count -gt 0) {
+            $seconds = @($successful | ForEach-Object { ConvertTo-BenchmarkDouble -Value $_.Seconds })
+            $median = Get-BenchmarkMedian -Values $seconds
+            $milliseconds = [Math]::Round($median * 1000, 2)
+            $status = 'Succeeded'
+            $reason = ''
+        } else {
+            $statusGroup = $items |
+                Group-Object Status |
+                Sort-Object Count -Descending |
+                Select-Object -First 1
+            $representative = $items |
+                Where-Object { $_.Status -eq $statusGroup.Name } |
+                Select-Object -First 1
+            $median = 0
+            $milliseconds = 0
+            $status = $statusGroup.Name
+            $reason = $representative.Reason
+        }
+
+        [pscustomobject]@{
+            TimestampUtc = $first.TimestampUtc
+            Host = $first.Host
+            Scenario = $first.Scenario
+            ScenarioLabel = $first.ScenarioLabel
+            ModuleName = $first.ModuleName
+            Version = $first.Version
+            Operation = $first.Operation
+            Engine = $first.Engine
+            Iteration = 'median'
+            Status = $status
+            Milliseconds = $milliseconds.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture)
+            Seconds = $median.ToString('0.###', [Globalization.CultureInfo]::InvariantCulture)
+            Reason = $reason
+        }
+    }
+}
+
 function ConvertTo-BenchmarkMarkdown {
     param([object[]] $Rows)
 
+    $Rows = @(ConvertTo-BenchmarkSummaryRows -Rows $Rows)
     $engines = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add('| Scenario | Host | Operation | Managed | ModuleFast | PSResourceGet | PowerShellGet | Result |') | Out-Null
@@ -93,11 +155,11 @@ function ConvertTo-BenchmarkMarkdown {
 
     foreach ($group in $groups) {
         $items = @($group.Group)
-        $managed = $items | Where-Object { $_.Engine -eq 'Managed' } | Sort-Object Iteration | Select-Object -First 1
+        $managed = $items | Where-Object { $_.Engine -eq 'Managed' } | Select-Object -First 1
         $managedSeconds = if ($managed -and $managed.Status -eq 'Succeeded') { ConvertTo-BenchmarkDouble -Value $managed.Seconds } else { 0 }
         $first = $items | Select-Object -First 1
         $cells = foreach ($engine in $engines) {
-            $row = $items | Where-Object { $_.Engine -eq $engine } | Sort-Object Iteration | Select-Object -First 1
+            $row = $items | Where-Object { $_.Engine -eq $engine } | Select-Object -First 1
             Format-BenchmarkCell -Row $row -ManagedSeconds $managedSeconds
         }
         $result = Get-ManagedResultText -Rows $items -ManagedRow $managed
@@ -112,7 +174,7 @@ function ConvertTo-BenchmarkMarkdown {
             $result)) | Out-Null
     }
 
-    $lines -join [Environment]::NewLine
+    $lines -join "`n"
 }
 
 $rows = @(Import-Csv -LiteralPath $ResultPath)
@@ -125,7 +187,7 @@ $readme = Get-Content -LiteralPath $ReadmePath -Raw
 $start = '<!-- managed-module-benchmark-table:start -->'
 $end = '<!-- managed-module-benchmark-table:end -->'
 $pattern = [regex]::Escape($start) + '(?s).*?' + [regex]::Escape($end)
-$replacement = $start + [Environment]::NewLine + $table + [Environment]::NewLine + $end
+$replacement = $start + "`n" + $table + "`n" + $end
 
 if ($readme -notmatch $pattern) {
     throw "README marker block was not found in '$ReadmePath'."
