@@ -51,9 +51,10 @@ public sealed class ManagedModulePublishService
         });
         var metadata = _packageReader.ReadMetadata(package.PackagePath);
         await VerifyDependenciesAsync(request, metadata, cancellationToken).ConfigureAwait(false);
+        var publishRepository = request.PublishRepository ?? request.Repository;
 
         var publish = await _repositoryClient.PublishPackageAsync(
-            request.Repository,
+            publishRepository,
             package.PackagePath,
             request.Credential,
             request.Force,
@@ -143,10 +144,11 @@ public sealed class ManagedModulePublishService
 
     private static string ResolveOutputDirectory(ManagedModulePublishRequest request)
     {
+        var publishRepository = request.PublishRepository ?? request.Repository;
         if (!string.IsNullOrWhiteSpace(request.OutputDirectory))
         {
             var outputDirectory = Path.GetFullPath(request.OutputDirectory!.Trim().Trim('"'));
-            if (IsSameLocalDirectory(outputDirectory, request.Repository.Source))
+            if (IsSameLocalDirectory(outputDirectory, publishRepository.Source))
                 return Path.Combine(Path.GetTempPath(), "PowerForge.ManagedModules.Publish", Guid.NewGuid().ToString("N"));
 
             return outputDirectory;

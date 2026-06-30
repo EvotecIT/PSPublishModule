@@ -31,6 +31,11 @@ public sealed class ManagedModulePublishRequest
     public ManagedModuleRepository Repository { get; set; } = null!;
 
     /// <summary>
+    /// Optional repository endpoint used only for package upload when it differs from the read repository.
+    /// </summary>
+    public ManagedModuleRepository? PublishRepository { get; set; }
+
+    /// <summary>
     /// Optional package staging directory used before remote upload.
     /// </summary>
     public string? OutputDirectory { get; set; }

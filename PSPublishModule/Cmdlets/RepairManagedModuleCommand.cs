@@ -404,7 +404,7 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
             Force = Force.IsPresent,
             AllowClobber = AllowClobber.IsPresent,
             AcceptLicense = AcceptLicense.IsPresent,
-            ModuleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot),
+            ModuleRoot = ResolveManagedDeliveryModuleRoot(),
             Credential = ManagedModuleCommandSupport.ResolveCredential(
                 this,
                 Credential,
@@ -413,6 +413,16 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
                 CredentialSecretFilePath),
             LoadedModules = ResolveLoadedModules(inventory)
         };
+
+    private string? ResolveManagedDeliveryModuleRoot()
+    {
+        if (!string.IsNullOrWhiteSpace(ModuleRoot))
+            return ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot);
+
+        return ModulePath is { Length: 1 }
+            ? ManagedModuleCommandSupport.ResolveProviderPath(this, ModulePath[0])
+            : null;
+    }
 
     private static ManagedModuleLoadedModule[] ResolveLoadedModules(ModuleStateInventoryResult? inventory)
         => (inventory?.InstalledModules ?? Array.Empty<ModuleStateInstalledModuleResult>())

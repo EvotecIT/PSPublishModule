@@ -433,6 +433,38 @@ public sealed class ManagedModulePackServiceTests
     }
 
     [Fact]
+    public void Pack_preserves_runtime_companions_for_manifest_referenced_binary_module()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var output = new TemporaryDirectory();
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "bin"));
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "bin", "Company.Tools.dll"), "binary");
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "bin", "Company.Tools.deps.json"), "{}");
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "bin", "Company.Native.dll"), "native");
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "Company.Tools.psd1"), """
+@{
+    RootModule = 'bin/Company.Tools.dll'
+    ModuleVersion = '1.0.0'
+    Author = 'Evotec'
+    Description = 'Company binary module.'
+    PrivateData = @{ PSData = @{ Tags = @('company') } }
+}
+""");
+        var service = new ManagedModulePackService();
+
+        var result = service.Pack(new ManagedModulePackRequest
+        {
+            ModulePath = moduleRoot.Path,
+            OutputDirectory = output.Path
+        });
+
+        using var archive = ZipFile.OpenRead(result.PackagePath);
+        Assert.Contains(archive.Entries, entry => entry.FullName.Equals("bin/Company.Tools.dll", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(archive.Entries, entry => entry.FullName.Equals("bin/Company.Tools.deps.json", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(archive.Entries, entry => entry.FullName.Equals("bin/Company.Native.dll", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task Publish_classifies_local_feed_duplicate_without_force()
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -521,6 +553,33 @@ public sealed class ManagedModulePackServiceTests
 
         Assert.True(result.Published);
         Assert.True(File.Exists(Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg")));
+    }
+
+    [Fact]
+    public async Task Publish_checks_dependencies_from_read_repository_and_uploads_to_publish_repository()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var readFeed = new TemporaryDirectory();
+        using var publishFeed = new TemporaryDirectory();
+        TestPackageFactory.Create(Path.Combine(readFeed.Path, "Company.Core.2.0.0.nupkg"), "Company.Core", "2.0.0");
+        CreateModule(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            prerelease: null,
+            requiredModules: "    RequiredModules = @(@{ ModuleName = 'Company.Core'; RequiredVersion = '2.0.0' })");
+        var service = new ManagedModulePublishService(new NullLogger());
+
+        var result = await service.PublishAsync(new ManagedModulePublishRequest
+        {
+            ModulePath = moduleRoot.Path,
+            Repository = new ManagedModuleRepository("Company", readFeed.Path),
+            PublishRepository = new ManagedModuleRepository("Company", publishFeed.Path)
+        });
+
+        Assert.True(result.Published);
+        Assert.False(File.Exists(Path.Combine(readFeed.Path, "Company.Tools.1.0.0.nupkg")));
+        Assert.True(File.Exists(Path.Combine(publishFeed.Path, "Company.Tools.1.0.0.nupkg")));
     }
 
     [Fact]

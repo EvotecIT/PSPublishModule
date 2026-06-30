@@ -108,8 +108,13 @@ internal static class ManagedModuleCommandSupport
             return repository;
 
         var trimmed = repository.Trim().Trim('"');
-        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) && !uri.IsFile)
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+        {
+            if (uri.IsFile)
+                return uri.LocalPath;
+
             return trimmed;
+        }
 
         var providerPath = ResolveProviderPath(cmdlet, trimmed);
         if (!string.IsNullOrWhiteSpace(providerPath) && Directory.Exists(providerPath))

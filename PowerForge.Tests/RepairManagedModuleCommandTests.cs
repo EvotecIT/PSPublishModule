@@ -3,6 +3,7 @@ using PSPublishModule;
 
 namespace PowerForge.Tests;
 
+[Collection("ModuleRepositoryProfileEnvironment")]
 public sealed class RepairManagedModuleCommandTests
 {
     [Fact]
@@ -194,6 +195,44 @@ public sealed class RepairManagedModuleCommandTests
         Assert.Contains("-ProfileName", command.Arguments);
         Assert.Contains("Company", command.Arguments);
         Assert.DoesNotContain("-Repository", command.Arguments);
+    }
+
+    [Fact]
+    public void RepairManagedModule_ProfileNameAppliesUpdateToInventoriedCustomRoot()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: CreateModuleFiles("Company.Tools", "1.1.0"));
+        new ModuleRepositoryProfileStore().SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "Company",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "CompanyModules",
+            RepositoryUri = feed.Path
+        });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("Name", new[] { "Company.Tools" })
+            .AddParameter("Latest")
+            .AddParameter("ProfileName", "Company");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.True(result.Apply.ExecutionRequested);
+        Assert.Contains(result.Apply.ExecutionResults, execution =>
+            string.Equals(execution.Operation, "Update", StringComparison.OrdinalIgnoreCase) &&
+            execution.OperationPerformed);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
     }
 
     [Fact]

@@ -20,7 +20,8 @@ public sealed partial class ModulePublisher
                 new ManagedModulePublishRequest
                 {
                     ModulePath = modulePath,
-                    Repository = CreateManagedPublishRepository(repositoryName, repoConfig),
+                    Repository = CreateManagedReadRepository(repositoryName, repoConfig),
+                    PublishRepository = CreateManagedPublishRepository(repositoryName, repoConfig),
                     OutputDirectory = temporaryPackagePath,
                     Credential = credential,
                     SkipDependenciesCheck = skipDependenciesCheck,
@@ -42,19 +43,37 @@ public sealed partial class ModulePublisher
     {
         var source = FirstNonEmpty(repoConfig?.PublishUri, repoConfig?.Uri, repoConfig?.SourceUri);
         if (string.IsNullOrWhiteSpace(source))
-        {
-            if (string.Equals(repositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase))
-                source = "https://www.powershellgallery.com/api/v3/index.json";
-            else
-                throw new InvalidOperationException(
-                    $"Managed module publishing requires a repository Uri, SourceUri, or PublishUri for repository '{repositoryName}'.");
-        }
+            source = ResolveDefaultManagedRepositorySource(repositoryName);
 
         return new ManagedModuleRepository(
             repositoryName,
             source!,
             ManagedModuleRepositoryKind.Auto,
             repoConfig?.Trusted ?? true);
+    }
+
+    private static ManagedModuleRepository CreateManagedReadRepository(
+        string repositoryName,
+        PublishRepositoryConfiguration? repoConfig)
+    {
+        var source = FirstNonEmpty(repoConfig?.Uri, repoConfig?.SourceUri, repoConfig?.PublishUri);
+        if (string.IsNullOrWhiteSpace(source))
+            source = ResolveDefaultManagedRepositorySource(repositoryName);
+
+        return new ManagedModuleRepository(
+            repositoryName,
+            source!,
+            ManagedModuleRepositoryKind.Auto,
+            repoConfig?.Trusted ?? true);
+    }
+
+    private static string ResolveDefaultManagedRepositorySource(string repositoryName)
+    {
+        if (string.Equals(repositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase))
+            return "https://www.powershellgallery.com/api/v3/index.json";
+
+        throw new InvalidOperationException(
+            $"Managed module publishing requires a repository Uri, SourceUri, or PublishUri for repository '{repositoryName}'.");
     }
 
     private static RepositoryCredential? ResolveManagedPublishCredential(

@@ -229,12 +229,6 @@ internal sealed class ModuleStateManagedDeliveryService
         ModuleStatePlanAction action,
         ModuleStateManagedDeliveryOptions options)
     {
-        if (!string.IsNullOrWhiteSpace(action.TargetRepository))
-            return ManagedModuleCommandSupport.CreateRepository(
-                _cmdlet,
-                ManagedModuleCommandSupport.DefaultRepositoryName,
-                action.TargetRepository!);
-
         if (!string.IsNullOrWhiteSpace(options.ProfileName))
             return ManagedModuleCommandSupport.CreateRepository(
                 _cmdlet,
@@ -242,6 +236,12 @@ internal sealed class ModuleStateManagedDeliveryService
                 ManagedModuleCommandSupport.DefaultRepositorySource,
                 options.ProfileName,
                 repositoryWasBound: false);
+
+        if (!string.IsNullOrWhiteSpace(action.TargetRepository))
+            return ManagedModuleCommandSupport.CreateRepository(
+                _cmdlet,
+                ManagedModuleCommandSupport.DefaultRepositoryName,
+                action.TargetRepository!);
 
         if (!string.IsNullOrWhiteSpace(options.Repository))
             return ManagedModuleCommandSupport.CreateRepository(

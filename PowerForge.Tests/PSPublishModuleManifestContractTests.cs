@@ -42,6 +42,24 @@ public sealed class PSPublishModuleManifestContractTests
         "Update-ManagedModule"
     };
 
+    private static readonly string[] DocumentationCmdlets =
+    {
+        "Get-ModuleDocumentation",
+        "Install-ModuleDocumentation",
+        "Install-ModuleScript",
+        "Set-ModuleDocumentation",
+        "Show-ModuleDocumentation"
+    };
+
+    private static readonly string[] DocumentationAliases =
+    {
+        "Install-Documentation",
+        "Install-ModuleScripts",
+        "Install-Scripts",
+        "Set-Documentation",
+        "Show-Documentation"
+    };
+
     [Fact]
     public void Manifest_does_not_require_feature_specific_tool_modules_at_import_time()
     {
@@ -114,6 +132,26 @@ public sealed class PSPublishModuleManifestContractTests
         {
             Assert.Contains($"'{cmdlet}'", manifestText, StringComparison.Ordinal);
             Assert.Contains($"'{cmdlet}'", bootstrapperText, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Module_exports_documentation_cmdlets_and_aliases()
+    {
+        var repoRoot = RepoRootLocator.Find();
+        var manifestText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psd1"));
+        var bootstrapperText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psm1"));
+
+        foreach (var cmdlet in DocumentationCmdlets)
+        {
+            Assert.Contains($"'{cmdlet}'", manifestText, StringComparison.Ordinal);
+            Assert.Contains($"'{cmdlet}'", bootstrapperText, StringComparison.Ordinal);
+        }
+
+        foreach (var alias in DocumentationAliases)
+        {
+            Assert.Contains($"'{alias}'", manifestText, StringComparison.Ordinal);
+            Assert.Contains($"'{alias}'", bootstrapperText, StringComparison.Ordinal);
         }
     }
 }

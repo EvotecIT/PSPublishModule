@@ -933,12 +933,6 @@ public sealed partial class ManagedModuleRepositoryClient
         string version)
     {
         yield return BuildDestinationPath(destinationDirectory, repository, packageId, version);
-
-        var safePackageId = ManagedModulePackageIdentity.RequireSafeId(packageId, nameof(packageId));
-        var safeVersion = ManagedModulePackageIdentity.RequireSafeVersion(version, nameof(version));
-        yield return Path.Combine(
-            Path.GetFullPath(destinationDirectory),
-            $"{safePackageId}.{safeVersion}.nupkg");
     }
 
     private static string GetRepositoryCacheKey(ManagedModuleRepository repository)

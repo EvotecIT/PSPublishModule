@@ -99,4 +99,40 @@ public sealed partial class ManagedModuleInstallServiceTests
         Assert.Equal(first.FileCount, second.FileCount);
         Assert.True(File.Exists(Path.Combine(secondModuleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
     }
+
+    [Fact]
+    public async Task InstallAsync_does_not_reuse_legacy_unscoped_package_cache_for_different_repository()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        using var packageCache = new TemporaryDirectory();
+        var staleFiles = CreateModuleFiles("1.0.0").ToDictionary(static item => item.Key, static item => item.Value, StringComparer.OrdinalIgnoreCase);
+        staleFiles["marker.txt"] = "stale";
+        var freshFiles = CreateModuleFiles("1.0.0").ToDictionary(static item => item.Key, static item => item.Value, StringComparer.OrdinalIgnoreCase);
+        freshFiles["marker.txt"] = "fresh";
+        TestPackageFactory.Create(
+            Path.Combine(packageCache.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: staleFiles);
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: freshFiles);
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            PackageCacheDirectory = packageCache.Path
+        });
+
+        Assert.False(result.Download?.FromCache);
+        Assert.Equal("fresh", File.ReadAllText(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "marker.txt")));
+    }
 }

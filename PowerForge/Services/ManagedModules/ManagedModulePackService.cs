@@ -347,7 +347,8 @@ public sealed class ManagedModulePackService
         }
 
         if (parts.Any(static part => part.Equals("bin", StringComparison.OrdinalIgnoreCase)) &&
-            !IsManifestReferenced(relativePath, manifestReferences))
+            !IsManifestReferenced(relativePath, manifestReferences) &&
+            !IsUnderManifestReferencedDirectory(relativePath, manifestReferences))
         {
             return true;
         }
@@ -376,6 +377,23 @@ public sealed class ManagedModulePackService
             {
                 return true;
             }
+        }
+
+        return false;
+    }
+
+    private static bool IsUnderManifestReferencedDirectory(string relativePath, ISet<string> manifestReferences)
+    {
+        foreach (var reference in manifestReferences)
+        {
+            var normalized = reference.TrimEnd('/');
+            var lastSlash = normalized.LastIndexOf('/');
+            if (lastSlash <= 0)
+                continue;
+
+            var directory = normalized.Substring(0, lastSlash + 1);
+            if (relativePath.StartsWith(directory, StringComparison.OrdinalIgnoreCase))
+                return true;
         }
 
         return false;

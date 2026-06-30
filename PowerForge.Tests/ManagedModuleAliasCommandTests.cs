@@ -226,6 +226,25 @@ public sealed class ManagedModuleAliasCommandTests
     }
 
     [Fact]
+    public void FindManagedModule_accepts_local_feed_file_uri()
+    {
+        using var feed = new TemporaryDirectory();
+        TestPackageFactory.Create(Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"), "Company.Tools", "1.0.0");
+        var feedUri = new Uri(feed.Path).AbsoluteUri;
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Find-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feedUri);
+
+        var result = Assert.IsType<ManagedModuleVersionInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal("Company.Tools", result.Name);
+        Assert.Equal("1.0.0", result.Version);
+    }
+
+    [Fact]
     public void FindManagedModule_wildcard_all_versions_expands_each_match()
     {
         using var feed = new TemporaryDirectory();

@@ -207,6 +207,25 @@ public sealed class ModulePublisherRequiredModulesTests
     }
 
     [Fact]
+    public void CreateManagedReadRepository_PrefersSourceIndexOverPublishEndpoint()
+    {
+        var method = typeof(ModulePublisher).GetMethod(
+            "CreateManagedReadRepository",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        var config = new PublishRepositoryConfiguration
+        {
+            SourceUri = "https://packages.example.test/nuget/v3/index.json",
+            PublishUri = "https://packages.example.test/nuget/v2/package"
+        };
+
+        var repository = Assert.IsType<ManagedModuleRepository>(method!.Invoke(null, new object?[] { "Company", config }));
+
+        Assert.Equal("Company", repository.Name);
+        Assert.Equal("https://packages.example.test/nuget/v3/index.json", repository.Source);
+    }
+
+    [Fact]
     public void FindSavedModulePath_ReturnsVersionFolderContainingManifest()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

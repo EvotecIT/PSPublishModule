@@ -251,7 +251,7 @@ public sealed partial class ModulePublisher
                 if (tool == PublishTool.ManagedModule)
                 {
                     EnsureManagedVersionIsGreaterThanRepository(
-                        CreateManagedPublishRepository(repositoryName, repoConfig),
+                        CreateManagedReadRepository(repositoryName, repoConfig),
                         plan.ModuleName,
                         plan.ResolvedVersion,
                         plan.PreRelease,
@@ -271,7 +271,7 @@ public sealed partial class ModulePublisher
             {
                 _managedRequiredModuleRepositoryValidator.Validate(
                     publish,
-                    CreateManagedPublishRepository(repositoryName, repoConfig),
+                    CreateManagedReadRepository(repositoryName, repoConfig),
                     credential,
                     plan,
                     buildResult);
