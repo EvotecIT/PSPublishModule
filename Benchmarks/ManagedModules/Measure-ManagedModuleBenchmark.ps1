@@ -28,7 +28,7 @@ param(
 
     [switch] $Append,
 
-    [switch] $AllowUserProfileInstall,
+    [switch] $SkipNativeCurrentUserInstall,
 
     [switch] $ListScenarios
 )
@@ -93,7 +93,7 @@ function Resolve-ManagedModuleBinary {
         return (Resolve-Path -LiteralPath $ManagedModuleBinary).Path
     }
 
-    $target = if ($PSVersionTable.PSEdition -eq 'Desktop') { 'net472' } else { 'net10.0' }
+    $target = if ($PSVersionTable.PSEdition -eq 'Desktop') { 'net472' } else { 'net8.0' }
     $candidate = Join-Path $script:BenchmarkScriptRoot "..\..\PSPublishModule\bin\Release\$target\PSPublishModule.dll"
     if (Test-Path -LiteralPath $candidate) {
         return (Resolve-Path -LiteralPath $candidate).Path
@@ -143,6 +143,20 @@ function New-MeasurementResult {
         Milliseconds = $roundedMilliseconds.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture)
         Seconds = $roundedSeconds.ToString('0.###', [Globalization.CultureInfo]::InvariantCulture)
         Reason = $Reason
+    }
+}
+
+function Write-MeasurementResult {
+    param(
+        [object] $Result
+    )
+
+    $results.Add($Result) | Out-Null
+    if ($script:BenchmarkOutputHasRows) {
+        $Result | Export-Csv -LiteralPath $OutputPath -NoTypeInformation -Append
+    } else {
+        $Result | Export-Csv -LiteralPath $OutputPath -NoTypeInformation
+        $script:BenchmarkOutputHasRows = $true
     }
 }
 
@@ -222,6 +236,7 @@ function Invoke-BenchmarkCommand {
                         Repository = $RepositoryUri
                         ModuleRoot = $InstallRoot
                         Force = $true
+                        AllowClobber = $true
                     }
                     if (-not [string]::IsNullOrWhiteSpace($version)) { $parameters.Version = $version }
                     if ($acceptLicense) { $parameters.AcceptLicense = $true }
@@ -233,6 +248,7 @@ function Invoke-BenchmarkCommand {
                         Repository = $RepositoryUri
                         Path = $SaveRoot
                         Force = $true
+                        AllowClobber = $true
                     }
                     if (-not [string]::IsNullOrWhiteSpace($version)) { $parameters.Version = $version }
                     if ($acceptLicense) { $parameters.AcceptLicense = $true }
@@ -268,10 +284,9 @@ function Invoke-BenchmarkCommand {
                     Find-PSResource -Name $name -Repository $Repository | Out-Null
                 }
                 'Install' {
-                    if (-not $AllowUserProfileInstall.IsPresent) {
-                        throw 'Skipped: pass -AllowUserProfileInstall to measure native install providers.'
+                    if ($SkipNativeCurrentUserInstall.IsPresent) {
+                        throw 'Skipped: native CurrentUser install was disabled by -SkipNativeCurrentUserInstall.'
                     }
-                    Remove-IsolatedModule -ModuleRoot $InstallRoot -ModuleName $name
                     $parameters = @{
                         Name = $name
                         Repository = $Repository
@@ -281,10 +296,7 @@ function Invoke-BenchmarkCommand {
                     }
                     if (-not [string]::IsNullOrWhiteSpace($version)) { $parameters.Version = $version }
                     if ($acceptLicense) { $parameters.AcceptLicense = $true }
-                    Invoke-WithIsolatedModulePath -ModuleRoot $InstallRoot -ScriptBlock {
-                        Install-PSResource @parameters | Out-Null
-                    }
-                    Remove-IsolatedModule -ModuleRoot $InstallRoot -ModuleName $name
+                    Install-PSResource @parameters | Out-Null
                 }
                 'Save' {
                     $parameters = @{
@@ -306,10 +318,9 @@ function Invoke-BenchmarkCommand {
                     Find-Module -Name $name -Repository $Repository | Out-Null
                 }
                 'Install' {
-                    if (-not $AllowUserProfileInstall.IsPresent) {
-                        throw 'Skipped: pass -AllowUserProfileInstall to measure native install providers.'
+                    if ($SkipNativeCurrentUserInstall.IsPresent) {
+                        throw 'Skipped: native CurrentUser install was disabled by -SkipNativeCurrentUserInstall.'
                     }
-                    Remove-IsolatedModule -ModuleRoot $InstallRoot -ModuleName $name
                     $parameters = @{
                         Name = $name
                         Repository = $Repository
@@ -319,10 +330,7 @@ function Invoke-BenchmarkCommand {
                     }
                     if (-not [string]::IsNullOrWhiteSpace($version)) { $parameters.RequiredVersion = $version }
                     if ($acceptLicense) { $parameters.AcceptLicense = $true }
-                    Invoke-WithIsolatedModulePath -ModuleRoot $InstallRoot -ScriptBlock {
-                        Install-Module @parameters | Out-Null
-                    }
-                    Remove-IsolatedModule -ModuleRoot $InstallRoot -ModuleName $name
+                    Install-Module @parameters | Out-Null
                 }
                 'Save' {
                     $parameters = @{
@@ -358,6 +366,7 @@ if ($selectedScenarios.Count -eq 0) {
 
 New-Item -ItemType Directory -Path (Split-Path -Parent $OutputPath) -Force | Out-Null
 New-Item -ItemType Directory -Path $OutputRoot -Force | Out-Null
+$script:BenchmarkOutputHasRows = $Append.IsPresent -and (Test-Path -LiteralPath $OutputPath)
 if ($PSVersionTable.PSEdition -eq 'Desktop') {
     $driveRoot = [System.IO.Path]::GetPathRoot([System.IO.Path]::GetTempPath())
     $shortTempRoot = if ([string]::IsNullOrWhiteSpace($driveRoot)) {
@@ -384,7 +393,7 @@ foreach ($scenario in $selectedScenarios) {
                     $elapsed = Invoke-MeasuredBlock {
                         Invoke-BenchmarkCommand -Scenario $scenario -OperationName $operationName -EngineName $engineName -InstallRoot $installRoot -SaveRoot $saveRoot
                     }
-                    $results.Add((New-MeasurementResult -Scenario $scenario -OperationName $operationName -EngineName $engineName -Iteration $iteration -Status 'Succeeded' -Milliseconds $elapsed -Reason '')) | Out-Null
+                    Write-MeasurementResult -Result (New-MeasurementResult -Scenario $scenario -OperationName $operationName -EngineName $engineName -Iteration $iteration -Status 'Succeeded' -Milliseconds $elapsed -Reason '')
                 } catch {
                     $message = $_.Exception.Message
                     $status = if ($message.StartsWith('NotEquivalent:', [StringComparison]::OrdinalIgnoreCase)) {
@@ -396,17 +405,11 @@ foreach ($scenario in $selectedScenarios) {
                     } else {
                         'Failed'
                     }
-                    $results.Add((New-MeasurementResult -Scenario $scenario -OperationName $operationName -EngineName $engineName -Iteration $iteration -Status $status -Milliseconds 0 -Reason $message)) | Out-Null
+                    Write-MeasurementResult -Result (New-MeasurementResult -Scenario $scenario -OperationName $operationName -EngineName $engineName -Iteration $iteration -Status $status -Milliseconds 0 -Reason $message)
                 }
             }
         }
     }
-}
-
-if ($Append.IsPresent -and (Test-Path -LiteralPath $OutputPath)) {
-    $results | Export-Csv -LiteralPath $OutputPath -NoTypeInformation -Append
-} else {
-    $results | Export-Csv -LiteralPath $OutputPath -NoTypeInformation
 }
 
 $results

@@ -33,37 +33,38 @@ What the benchmark is trying to prove:
   NuGet v3 mirror used by ModuleFast rather than the normal PSGallery provider
   path. If that mirror is missing a dependency, mark the row as a source/index
   miss instead of comparing elapsed time.
-- Safe runs skip native `Install-Module` and `Install-PSResource` rows unless
-  `-AllowUserProfileInstall` is passed, because those tools install into the
-  user module path. Use a disposable profile or VM when including those rows.
+- Native `Install-Module` and `Install-PSResource` rows are real
+  `CurrentUser` installs against a temporary Windows user. The runner stages
+  only the native provider modules for that account, runs the measured install
+  with a loaded user profile, imports the small CSV result, and deletes the
+  account/profile afterward.
 - When `-RepeatCount` is greater than one, the README updater summarizes each
   tool/scenario row with the median successful timing before writing the table.
 
-`-AllowUserProfileInstall` belongs only to this benchmark harness. Managed
-installs use `Install-ManagedModule -ModuleRoot <isolated folder>` and
-ModuleFast uses `Install-ModuleFast -Destination <isolated folder>`, so those
-rows perform real installs without changing the user's module profile.
-PSResourceGet and PowerShellGet install commands target a profile scope, not an
-arbitrary module root, so the safe run marks those install rows as `Skipped`
-instead of pretending an isolated install was measured. Pass
-`-AllowUserProfileInstall` only from a disposable profile, VM, or runner where a
-CurrentUser install is acceptable.
+Managed installs use `Install-ManagedModule -ModuleRoot <isolated folder>` and
+ModuleFast uses `Install-ModuleFast -Destination <isolated folder>`. Native
+providers do not expose an equivalent arbitrary install root for install
+commands, so their install rows intentionally use the real `CurrentUser`
+provider path inside a temporary Windows user. Use
+`-SkipTemporaryUserNativeInstall` only when a machine cannot create a temporary
+local benchmark account.
 
 Run PowerShell 7:
 
 ```powershell
-pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Measure-ManagedModuleBenchmark.ps1 -RepeatCount 1
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -BenchmarkHost PowerShell7 -RepeatCount 1
 ```
 
 Append Windows PowerShell 5.1 results:
 
 ```powershell
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Measure-ManagedModuleBenchmark.ps1 -RepeatCount 1 -Append
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -BenchmarkHost WindowsPowerShell -RepeatCount 1 -Append
 ```
 
 Native `Install-Module` and `Install-PSResource` install into the user module
-location. To include those install rows, run in a disposable profile or VM and
-pass `-AllowUserProfileInstall`.
+location. The runner measures those rows from a temporary local Windows account
+and deletes that account/profile afterward; it does not move the real user
+module folder.
 
 Windows PowerShell 5.1 uses short root-level run and temp folders by default
 because deep packages such as `Az.MachineLearningServices` can still hit legacy

@@ -66,11 +66,28 @@ public sealed class ManagedModuleSimpleBenchmarkScriptTests
         Assert.Equal(
             new[]
             {
+                "Invoke-ManagedModuleBenchmarkMatrix.ps1",
                 "Measure-ManagedModuleBenchmark.ps1",
                 "README.md",
                 "Update-ManagedModuleBenchmarkReadme.ps1"
             },
             files);
+    }
+
+    [Fact]
+    public void MeasureScript_DoesNotFakeNativeCurrentUserInstallIsolation()
+    {
+        var script = File.ReadAllText(Path.Combine(
+            RepoRootLocator.Find(),
+            "Benchmarks",
+            "ManagedModules",
+            "Measure-ManagedModuleBenchmark.ps1"));
+
+        Assert.Contains("SkipNativeCurrentUserInstall", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("AllowUserProfileInstall", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("pass -AllowUserProfileInstall to measure native install providers", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Enter-NativeTemporaryCurrentUserProfile", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("PFBenchmarkBackup", script, StringComparison.Ordinal);
     }
 
     private static string BuildResultCsv()
