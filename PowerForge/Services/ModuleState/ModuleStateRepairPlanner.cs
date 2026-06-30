@@ -155,7 +155,8 @@ internal sealed class ModuleStateRepairPlanner
         => existingActions.Any(action =>
             !action.IsRepair &&
             string.Equals(action.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(action.TargetScope ?? string.Empty, targetScope ?? string.Empty, StringComparison.OrdinalIgnoreCase));
+            (string.IsNullOrWhiteSpace(action.TargetScope) ||
+             string.Equals(action.TargetScope, targetScope, StringComparison.OrdinalIgnoreCase)));
 
     private static ModuleStatePlanAction? CreateRepairAction(
         ModuleStateInventory inventory,
