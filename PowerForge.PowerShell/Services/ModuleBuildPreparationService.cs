@@ -796,7 +796,7 @@ internal sealed class ModuleBuildPreparationService
         if (spec.Install?.Roots is not null)
             spec.Install.Roots = MakePathsRelativeForProjectRoot(projectRoot, spec.Install.Roots, preserveExternalRooted: true, workspaceRoot);
         if (spec.Diagnostics is not null && !string.IsNullOrWhiteSpace(spec.Diagnostics.BaselinePath))
-            spec.Diagnostics.BaselinePath = MakeRelativeForConfig(baseDir, spec.Diagnostics.BaselinePath!);
+            spec.Diagnostics.BaselinePath = MakeDiagnosticsBaselinePathForJson(baseDir, projectRoot, workspaceRoot, spec.Diagnostics.BaselinePath!);
         if (spec.Diagnostics is not null)
             spec.Diagnostics.BinaryConflictSearchRoots = MakePathsRelativeForProjectRoot(projectRoot, spec.Diagnostics.BinaryConflictSearchRoots, preserveExternalRooted: true, workspaceRoot);
 
@@ -913,9 +913,10 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
+            var artefactPath = cfg.Path;
             cfg.Path = MakeRelativeForProjectRoot(projectRoot, cfg.Path, preserveExternalRooted: true, workspaceRoot);
-            cfg.RequiredModules.Path = MakeArtefactLayoutPathForJson(projectRoot, workspaceRoot, cfg.Path, cfg.RequiredModules.Path);
-            cfg.RequiredModules.ModulesPath = MakeArtefactLayoutPathForJson(projectRoot, workspaceRoot, cfg.Path, cfg.RequiredModules.ModulesPath);
+            cfg.RequiredModules.Path = MakeArtefactLayoutPathForJson(projectRoot, workspaceRoot, artefactPath, cfg.RequiredModules.Path);
+            cfg.RequiredModules.ModulesPath = MakeArtefactLayoutPathForJson(projectRoot, workspaceRoot, artefactPath, cfg.RequiredModules.ModulesPath);
             MakeCopyMappingSourcesRelative(cfg.DirectoryOutput, projectRoot, workspaceRoot);
             MakeCopyMappingSourcesRelative(cfg.FilesOutput, projectRoot, workspaceRoot);
         }
@@ -939,12 +940,29 @@ internal sealed class ModuleBuildPreparationService
         => File.Exists(Path.Combine(directory, ".git")) ||
            Directory.Exists(Path.Combine(directory, ".git"));
 
+    private static string MakeDiagnosticsBaselinePathForJson(string baseDir, string projectRoot, string workspaceRoot, string baselinePath)
+    {
+        var cleaned = PathValueResolver.Clean(baselinePath);
+        var resolved = ResolveConfigPath(projectRoot, baselinePath);
+        if (Path.IsPathRooted(cleaned) &&
+            !IsSameOrChildPath(projectRoot, resolved) &&
+            !IsSameOrChildPath(workspaceRoot, resolved))
+        {
+            return NormalizePathSeparators(resolved);
+        }
+
+        return MakeRelativeForConfig(baseDir, resolved);
+    }
+
     private static string? MakeArtefactLayoutPathForJson(string projectRoot, string workspaceRoot, string? artefactPath, string? layoutPath)
     {
         if (string.IsNullOrWhiteSpace(layoutPath))
             return null;
         if (Path.IsPathRooted(layoutPath))
-            return MakeRelativeForProjectRoot(projectRoot, layoutPath, preserveExternalRooted: true, workspaceRoot);
+        {
+            var outputRelativePath = MakeTokenizedArtefactLayoutPathOutputRelative(projectRoot, artefactPath, layoutPath!);
+            return outputRelativePath ?? MakeRelativeForProjectRoot(projectRoot, layoutPath, preserveExternalRooted: true, workspaceRoot);
+        }
         if (string.IsNullOrWhiteSpace(artefactPath))
             return NormalizePathSeparators(layoutPath!);
         if (ContainsPathToken(layoutPath!) || ContainsPathToken(artefactPath!))
@@ -955,6 +973,54 @@ internal sealed class ModuleBuildPreparationService
         return IsSameOrChildPath(artefactRoot, candidate)
             ? MakeRelativeForProjectRoot(projectRoot, candidate, preserveExternalRooted: true, workspaceRoot)
             : NormalizePathSeparators(layoutPath!);
+    }
+
+    private static string? MakeTokenizedArtefactLayoutPathOutputRelative(string projectRoot, string? artefactPath, string layoutPath)
+    {
+        if (string.IsNullOrWhiteSpace(artefactPath) ||
+            ContainsPathToken(artefactPath!) ||
+            !ContainsPathToken(layoutPath))
+        {
+            return null;
+        }
+
+        var cleanedLayoutPath = PathValueResolver.Clean(layoutPath);
+        var tokenIndex = IndexOfPathToken(cleanedLayoutPath);
+        if (tokenIndex < 0)
+            return null;
+
+        var separators = new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
+        var prefix = cleanedLayoutPath.Substring(0, tokenIndex).TrimEnd(separators);
+        if (string.IsNullOrWhiteSpace(prefix))
+            return null;
+
+        var artefactRoot = ResolveConfigPath(projectRoot, artefactPath);
+        var prefixRoot = Path.GetFullPath(prefix);
+        if (!IsSameOrChildPath(artefactRoot, prefixRoot))
+            return null;
+
+        var relativePrefix = MakeRelativeForConfig(artefactRoot, prefixRoot);
+        var tokenStartsNewSegment = tokenIndex == 0 || separators.Contains(cleanedLayoutPath[tokenIndex - 1]);
+        var suffix = tokenStartsNewSegment
+            ? cleanedLayoutPath.Substring(tokenIndex).TrimStart(separators)
+            : cleanedLayoutPath.Substring(tokenIndex);
+
+        return string.Equals(relativePrefix, ".", StringComparison.Ordinal)
+            ? NormalizePathSeparators(suffix)
+            : NormalizePathSeparators(tokenStartsNewSegment
+                ? Path.Combine(relativePrefix, suffix)
+                : relativePrefix + suffix);
+    }
+
+    private static int IndexOfPathToken(string path)
+    {
+        var angleToken = path.IndexOf('<');
+        var braceToken = path.IndexOf('{');
+        if (angleToken < 0)
+            return braceToken;
+        if (braceToken < 0)
+            return angleToken;
+        return Math.Min(angleToken, braceToken);
     }
 
     private static string? MakeDocumentationPathForJson(string projectRoot, string workspaceRoot, string? path)

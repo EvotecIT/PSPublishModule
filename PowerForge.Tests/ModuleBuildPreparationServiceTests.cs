@@ -1194,6 +1194,51 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
     }
 
     [Fact]
+    public void WritePipelineSpecJson_resolves_relative_diagnostics_baseline_from_project_root()
+    {
+        var parent = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-json-diagnostics-" + Guid.NewGuid().ToString("N")));
+        var previousCurrentDirectory = Directory.GetCurrentDirectory();
+
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(parent.FullName, "SampleModule"));
+            var jsonPath = Path.Combine(moduleRoot.FullName, ".powerforge", "powerforge.json");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "SampleModule",
+                    SourcePath = moduleRoot.FullName
+                },
+                Diagnostics = new ModulePipelineDiagnosticsOptions
+                {
+                    BaselinePath = "Build/diagnostics.json"
+                }
+            };
+
+            Directory.SetCurrentDirectory(parent.FullName);
+
+            var service = new ModuleBuildPreparationService();
+            service.WritePipelineSpecJson(spec, jsonPath);
+
+            var json = File.ReadAllText(jsonPath);
+            Assert.Contains("\"BaselinePath\": \"../Build/diagnostics.json\"", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"BaselinePath\": \"../../Build/diagnostics.json\"", json, StringComparison.Ordinal);
+
+            var jsonSpec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, CreateJsonOptions());
+            Assert.NotNull(jsonSpec);
+
+            service.ResolvePipelineSpecPaths(jsonSpec!, jsonPath);
+            Assert.Equal(Path.Combine(moduleRoot.FullName, "Build", "diagnostics.json"), jsonSpec!.Diagnostics!.BaselinePath);
+        }
+        finally
+        {
+            try { Directory.SetCurrentDirectory(previousCurrentDirectory); } catch { }
+            try { parent.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void WritePipelineSpecJson_keeps_package_build_paths_relative_to_project_root()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-json-packages-" + Guid.NewGuid().ToString("N")));
@@ -1520,6 +1565,68 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Equal(actionFile, action.Configuration.FilePath);
             Assert.Equal(actionWorkingDirectory, action.Configuration.WorkingDirectory);
             Assert.Equal(releaseRoot, release.Configuration.StageRoot);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void WritePipelineSpecJson_keeps_tokenized_artefact_layout_paths_output_relative()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-json-artefact-token-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var jsonPath = Path.Combine(root.FullName, ".powerforge", "powerforge.json");
+            var artefactRoot = Path.Combine(root.FullName, "Artefacts", "Unpacked");
+            var requiredModulesPath = Path.Combine(artefactRoot, "<TagModuleVersionWithPreRelease>", "RequiredModules");
+            var modulesPath = Path.Combine(artefactRoot, "<TagModuleVersionWithPreRelease>", "Modules");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "SampleModule",
+                    SourcePath = root.FullName
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Unpacked,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Path = artefactRoot,
+                            RequiredModules = new ArtefactRequiredModulesConfiguration
+                            {
+                                Path = requiredModulesPath,
+                                ModulesPath = modulesPath
+                            }
+                        }
+                    }
+                }
+            };
+
+            var service = new ModuleBuildPreparationService();
+            service.WritePipelineSpecJson(spec, jsonPath);
+
+            var json = File.ReadAllText(jsonPath);
+            Assert.Contains("\"Path\": \"Artefacts/Unpacked\"", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"Path\": \"Artefacts/Unpacked/<TagModuleVersionWithPreRelease>/RequiredModules\"", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"ModulesPath\": \"Artefacts/Unpacked/<TagModuleVersionWithPreRelease>/Modules\"", json, StringComparison.Ordinal);
+
+            var jsonSpec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, CreateJsonOptions());
+            Assert.NotNull(jsonSpec);
+            var exportedArtefact = Assert.IsType<ConfigurationArtefactSegment>(jsonSpec!.Segments[0]);
+            Assert.Equal("<TagModuleVersionWithPreRelease>/RequiredModules", exportedArtefact.Configuration.RequiredModules.Path);
+            Assert.Equal("<TagModuleVersionWithPreRelease>/Modules", exportedArtefact.Configuration.RequiredModules.ModulesPath);
+
+            service.ResolvePipelineSpecPaths(jsonSpec, jsonPath);
+            var artefact = Assert.IsType<ConfigurationArtefactSegment>(jsonSpec.Segments[0]);
+            Assert.Equal(artefactRoot, artefact.Configuration.Path);
+            Assert.Equal("<TagModuleVersionWithPreRelease>/RequiredModules", artefact.Configuration.RequiredModules.Path);
+            Assert.Equal("<TagModuleVersionWithPreRelease>/Modules", artefact.Configuration.RequiredModules.ModulesPath);
         }
         finally
         {
