@@ -1,4 +1,6 @@
 using System.IO.Compression;
+using System.Xml;
+using System.Xml.Linq;
 
 namespace PowerForge;
 
@@ -26,6 +28,7 @@ internal sealed class ManagedModuleArchiveExtractor
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         using var archive = ZipFile.OpenRead(packagePath);
+        var packageRoot = ResolvePackageRootFolder(archive);
         foreach (var entry in archive.Entries)
         {
             var normalized = Normalize(entry.FullName);
@@ -34,7 +37,11 @@ internal sealed class ManagedModuleArchiveExtractor
             if (!IsSafePath(normalized))
                 throw new InvalidOperationException($"Package contains unsafe path '{entry.FullName}'.");
 
-            var targetPath = Path.GetFullPath(Path.Combine(destinationRoot, normalized.Replace('/', Path.DirectorySeparatorChar)));
+            var extractionPath = TrimPackageRootFolder(normalized, packageRoot);
+            if (string.IsNullOrWhiteSpace(extractionPath) || IsPackageMetadata(extractionPath))
+                continue;
+
+            var targetPath = Path.GetFullPath(Path.Combine(destinationRoot, extractionPath.Replace('/', Path.DirectorySeparatorChar)));
             if (!IsInsideDirectory(destinationRoot, targetPath))
                 throw new InvalidOperationException($"Package entry '{entry.FullName}' escapes the destination directory.");
 
@@ -78,6 +85,7 @@ internal sealed class ManagedModuleArchiveExtractor
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read, leaveOpen: true);
+        var packageRoot = ResolvePackageRootFolder(archive);
         foreach (var entry in archive.Entries)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -87,7 +95,11 @@ internal sealed class ManagedModuleArchiveExtractor
             if (!IsSafePath(normalized))
                 throw new InvalidOperationException($"Package contains unsafe path '{entry.FullName}'.");
 
-            var targetPath = Path.GetFullPath(Path.Combine(destinationRoot, normalized.Replace('/', Path.DirectorySeparatorChar)));
+            var extractionPath = TrimPackageRootFolder(normalized, packageRoot);
+            if (string.IsNullOrWhiteSpace(extractionPath) || IsPackageMetadata(extractionPath))
+                continue;
+
+            var targetPath = Path.GetFullPath(Path.Combine(destinationRoot, extractionPath.Replace('/', Path.DirectorySeparatorChar)));
             if (!IsInsideDirectory(destinationRoot, targetPath))
                 throw new InvalidOperationException($"Package entry '{entry.FullName}' escapes the destination directory.");
 
@@ -118,6 +130,57 @@ internal sealed class ManagedModuleArchiveExtractor
 
     private static string Normalize(string path)
         => path.Replace('\\', '/').Trim('/');
+
+    private static string? ResolvePackageRootFolder(ZipArchive archive)
+    {
+        var packageId = ReadPackageId(archive);
+        if (string.IsNullOrWhiteSpace(packageId))
+            return null;
+
+        var root = packageId!.Trim();
+        var moduleManifestPath = root + "/" + root + ".psd1";
+        return archive.Entries.Any(entry => Normalize(entry.FullName).Equals(moduleManifestPath, StringComparison.OrdinalIgnoreCase))
+            ? root
+            : null;
+    }
+
+    private static string? ReadPackageId(ZipArchive archive)
+    {
+        var nuspec = archive.Entries
+            .Where(static entry => Normalize(entry.FullName).EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(static entry => Normalize(entry.FullName).Count(static ch => ch == '/'))
+            .ThenBy(static entry => Normalize(entry.FullName), StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        if (nuspec is null)
+            return null;
+
+        using var stream = nuspec.Open();
+        using var reader = XmlReader.Create(stream, new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null,
+            IgnoreComments = true
+        });
+        var document = XDocument.Load(reader);
+        return document.Descendants()
+            .FirstOrDefault(static element => element.Name.LocalName.Equals("id", StringComparison.OrdinalIgnoreCase))
+            ?.Value
+            ?.Trim();
+    }
+
+    private static string TrimPackageRootFolder(string normalizedPath, string? packageRoot)
+    {
+        if (string.IsNullOrWhiteSpace(packageRoot))
+            return normalizedPath;
+
+        if (normalizedPath.Equals(packageRoot, StringComparison.OrdinalIgnoreCase))
+            return string.Empty;
+
+        var prefix = packageRoot + "/";
+        return normalizedPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? normalizedPath.Substring(prefix.Length)
+            : normalizedPath;
+    }
 
     private static void EnsureDirectory(string path, HashSet<string> createdDirectories)
     {

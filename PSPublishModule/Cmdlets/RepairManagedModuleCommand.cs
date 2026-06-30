@@ -189,6 +189,7 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
                 ParseCleanupMode(Cleanup),
                 Family);
             ApplyLatestUpdateIntent(plan);
+            ApplyForceRepairIntent(plan);
             EnrichManagedLicenseMetadata(plan);
 
             var test = ModuleStateTestResult.FromPlan(plan);
@@ -470,6 +471,25 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
 
             action.Kind = ModuleStatePlanActionKind.Update.ToString();
             action.Reason = "Latest requested; update delivery will keep the module unchanged when the repository has no newer version.";
+        }
+    }
+
+    private void ApplyForceRepairIntent(ModuleStatePlanResult plan)
+    {
+        if (!Force.IsPresent || Latest.IsPresent || plan.Actions is null)
+            return;
+        if (plan.Actions.Any(static action => string.Equals(action.Kind, ModuleStatePlanActionKind.Remove.ToString(), StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        foreach (var action in plan.Actions)
+        {
+            if (!string.Equals(action.Kind, ModuleStatePlanActionKind.NoAction.ToString(), StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            action.Kind = ModuleStatePlanActionKind.Update.ToString();
+            action.IsRepair = true;
+            action.Force = true;
+            action.Reason = "Force requested; repair delivery will reinstall the selected module version.";
         }
     }
 

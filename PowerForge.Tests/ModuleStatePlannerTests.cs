@@ -457,6 +457,31 @@ public sealed class ModuleStatePlannerTests
     }
 
     [Fact]
+    public void CreatePlan_WithCleanup_KeepsSelectedVersionsPerScope()
+    {
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[]
+            {
+                new ModuleStateInstalledModule("Company.Tools", "2.0.0", scope: "CurrentUser", path: @"C:\User\Company.Tools\2.0.0"),
+                new ModuleStateInstalledModule("Company.Tools", "1.5.0", scope: "CurrentUser", path: @"C:\User\Company.Tools\1.5.0"),
+                new ModuleStateInstalledModule("Company.Tools", "1.5.0", scope: "AllUsers", path: @"C:\Program Files\Company.Tools\1.5.0")
+            }),
+            new[]
+            {
+                new ModuleStateDesiredModule("Company.Tools", ">=2.0.0", scope: "CurrentUser"),
+                new ModuleStateDesiredModule("Company.Tools", "=1.5.0", scope: "AllUsers")
+            },
+            cleanupMode: ModuleStateCleanupMode.OldVersions);
+
+        var plan = new ModuleStatePlanner().CreatePlan(request);
+        var cleanupAction = Assert.Single(plan.Actions, static action => action.Kind == ModuleStatePlanActionKind.Remove);
+
+        Assert.Equal("1.5.0", cleanupAction.InstalledVersion);
+        Assert.Equal("CurrentUser", cleanupAction.TargetScope);
+        Assert.Equal(@"C:\User\Company.Tools\1.5.0", cleanupAction.TargetPath);
+    }
+
+    [Fact]
     public void CreatePlan_WithCleanupAndLatestPolicy_KeepsCurrentHighestVersion()
     {
         var request = new ModuleStatePlanRequest(

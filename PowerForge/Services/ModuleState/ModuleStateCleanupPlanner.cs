@@ -24,13 +24,13 @@ internal sealed class ModuleStateCleanupPlanner
         foreach (var moduleGroup in GetManagedModuleGroups(request))
         {
             var installedModules = moduleGroup.ToArray();
-            var keepVersions = ResolveKeepVersions(request, moduleGroup.Key, installedModules);
-            if (keepVersions.Count == 0)
+            var keepModules = ResolveKeepModules(request, moduleGroup.Key, installedModules);
+            if (keepModules.Count == 0)
                 continue;
 
             foreach (var installedModule in installedModules)
             {
-                if (keepVersions.Contains(installedModule.Version))
+                if (keepModules.Contains(CreateKeepKey(installedModule)))
                     continue;
 
                 if (installedModule.IsLoaded)
@@ -87,12 +87,12 @@ internal sealed class ModuleStateCleanupPlanner
         return selectedModules.GroupBy(static module => module.Name, StringComparer.OrdinalIgnoreCase);
     }
 
-    private static HashSet<string> ResolveKeepVersions(
+    private static HashSet<string> ResolveKeepModules(
         ModuleStatePlanRequest request,
         string moduleName,
         ModuleStateInstalledModule[] installedModules)
     {
-        var keepVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var keepModules = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var receiptModule in request.MaintenanceReceipts.SelectMany(static receipt => receipt.Modules))
         {
@@ -104,7 +104,7 @@ internal sealed class ModuleStateCleanupPlanner
                          (string.IsNullOrWhiteSpace(receiptModule.Scope) ||
                           string.Equals(module.Scope, receiptModule.Scope, StringComparison.OrdinalIgnoreCase))))
             {
-                keepVersions.Add(installedModule.Version);
+                keepModules.Add(CreateKeepKey(installedModule));
             }
         }
 
@@ -131,11 +131,14 @@ internal sealed class ModuleStateCleanupPlanner
                 .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
                 .FirstOrDefault();
             if (selectedModule is not null)
-                keepVersions.Add(selectedModule.Version);
+                keepModules.Add(CreateKeepKey(selectedModule));
         }
 
-        return keepVersions;
+        return keepModules;
     }
+
+    private static string CreateKeepKey(ModuleStateInstalledModule module)
+        => string.Join("|", module.Version, module.Scope ?? string.Empty, NormalizeOptionalPath(module.Path));
 
     private static bool VersionsEquivalent(string installedVersion, string receiptVersion)
     {
@@ -185,6 +188,9 @@ internal sealed class ModuleStateCleanupPlanner
         => path.Trim()
             .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)
             .Replace('\\', '/');
+
+    private static string NormalizeOptionalPath(string? path)
+        => string.IsNullOrWhiteSpace(path) ? string.Empty : NormalizePath(path!);
 }
 
 internal sealed class ModuleStateCleanupPlan

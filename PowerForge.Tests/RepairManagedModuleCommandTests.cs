@@ -408,6 +408,36 @@ public sealed class RepairManagedModuleCommandTests
     }
 
     [Fact]
+    public void RepairManagedModule_ForcePlansReinstallForSatisfiedVersion()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("Name", new[] { "Company.Tools" })
+            .AddParameter("Version", "1.0.0")
+            .AddParameter("Repository", "LocalFeed")
+            .AddParameter("Force")
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions, static action =>
+            string.Equals(action.ModuleName, "Company.Tools", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("Update", action.Kind);
+        Assert.True(action.IsRepair);
+        Assert.True(action.Force);
+        Assert.True(result.Apply.CanApply);
+        var command = Assert.Single(result.Apply.Commands);
+        Assert.Contains("-Force", command.Arguments);
+        Assert.False(result.Apply.ExecutionRequested);
+        Assert.Empty(result.Apply.ExecutionResults);
+    }
+
+    [Fact]
     public void RepairManagedModule_ForceDoesNotApproveExplicitDowngradePolicy()
     {
         using var moduleRoot = new TemporaryDirectory();
