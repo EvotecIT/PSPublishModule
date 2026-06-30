@@ -48,7 +48,7 @@ Build-Module -ModuleName 'PSPublishModule.Artefacts' {
     New-ConfigurationInformation -IncludeAll 'Artefacts'
     New-ConfigurationBuild -Enable -MergeModuleOnBuild -InstallMissingModules:$false
     New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'DefaultPSM1', 'OnMergePSD1', 'OnMergePSM1' -EnableFormatting -Sort None
-    New-ConfigurationArtefact -Type Packed -Enable -Path 'Artefacts\Packed' -IncludeTagName -ArtefactName 'PSPublishModule.Artefacts.<TagModuleVersionWithPreRelease>.zip'
+    New-ConfigurationArtefact -Type Packed -Enable -Path '..\..\Artefacts\Packed' -IncludeTagName -ArtefactName 'PSPublishModule.Artefacts.<TagModuleVersionWithPreRelease>.zip'
     New-ConfigurationPublish -Type PowerShellGallery -FilePath $PowerShellGalleryApiKeyPath -Enabled:$false
     New-ConfigurationGate -Mode $RunMode
 } -ExitCode
