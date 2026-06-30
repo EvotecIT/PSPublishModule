@@ -216,7 +216,10 @@ internal sealed class ManagedModuleInstallContext
             if (string.IsNullOrWhiteSpace(manifestPath))
                 return Array.Empty<string>();
 
-            var manifestVersion = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "ModuleVersion");
+            var manifest = new ModuleManifestMetadataReader().Read(manifestPath);
+            var manifestVersion = string.IsNullOrWhiteSpace(manifest.PreRelease)
+                ? manifest.ModuleVersion
+                : manifest.ModuleVersion.Trim() + "-" + manifest.PreRelease!.Trim().TrimStart('-');
             return IsInstalledVersionDirectory(manifestVersion)
                 ? new[] { manifestVersion!.Trim() }
                 : Array.Empty<string>();

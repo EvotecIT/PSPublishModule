@@ -478,6 +478,8 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
     {
         if (!string.IsNullOrWhiteSpace(Repository))
             return Repository;
+        if (!string.IsNullOrWhiteSpace(ProfileName))
+            return new ModuleRepositoryProfileStore().GetProfile(ProfileName!)?.RepositoryName;
         return null;
     }
 

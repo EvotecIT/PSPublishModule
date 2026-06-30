@@ -37,6 +37,30 @@ public sealed class ManagedModuleInstallContextTests
     }
 
     [Fact]
+    public void EnumerateInstalledVersions_AppendsManifestPrereleaseForFlatInstall()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var modulePath = Path.Combine(moduleRoot.Path, "Company.Core");
+        Directory.CreateDirectory(modulePath);
+        File.WriteAllText(
+            Path.Combine(modulePath, "Company.Core.psd1"),
+            """
+            @{
+                ModuleVersion = '1.0.0'
+                PrivateData = @{
+                    PSData = @{
+                        Prerelease = 'beta1'
+                    }
+                }
+            }
+            """);
+
+        var versions = ManagedModuleInstallContext.EnumerateInstalledVersions(moduleRoot.Path, "Company.Core");
+
+        Assert.Equal(new[] { "1.0.0-beta1" }, versions);
+    }
+
+    [Fact]
     public async Task DependencyVersionSelectionCache_IsSharedAcrossBranchesAndRetriesFailures()
     {
         var context = new ManagedModuleInstallContext();

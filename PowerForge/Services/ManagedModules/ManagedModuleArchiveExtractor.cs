@@ -5,7 +5,7 @@ namespace PowerForge;
 internal sealed class ManagedModuleArchiveExtractor
 {
     private const int CopyBufferSize = 1024 * 1024;
-    private static readonly string[] PackageMetadataPrefixes = { "_rels/", "package/" };
+    private static readonly string[] PackageMetadataPrefixes = { "_rels/", "package/services/metadata/" };
     private static readonly string[] PackageMetadataFiles = { "[Content_Types].xml", ".signature.p7s" };
 
     public ManagedModuleArchiveExtractionResult ExtractPackage(string packagePath, string destinationPath)

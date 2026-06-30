@@ -376,10 +376,9 @@ public sealed class InitializeManagedModuleRepositoryCommand : PSCmdlet
         }
 
         if (Provider == PrivateGalleryProvider.NuGet &&
-            string.IsNullOrWhiteSpace(RepositoryUri) &&
-            string.IsNullOrWhiteSpace(RepositorySourceUri))
+            string.IsNullOrWhiteSpace(RepositoryUri))
         {
-            throw new ArgumentException("NuGet managed module repositories require RepositoryUri or RepositorySourceUri.");
+            throw new ArgumentException("NuGet managed module repositories require RepositoryUri.");
         }
 
         if (Provider == PrivateGalleryProvider.GitHubPackages &&

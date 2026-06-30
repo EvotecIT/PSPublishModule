@@ -668,6 +668,30 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task PublishPackageAsync_posts_to_direct_nuget_v2_publish_endpoint()
+    {
+        var requests = new List<RecordedRequest>();
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        File.WriteAllBytes(packagePath, TestPackageFactory.CreateBytes("Company.Tools", "1.0.0"));
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("LegacyPush", "https://push.example.test/api/v2/package");
+
+        var result = await repositoryClient.PublishPackageAsync(
+            repository,
+            packagePath,
+            new RepositoryCredential { Secret = "publish-key" });
+
+        Assert.True(result.Published);
+        Assert.Equal(201, result.StatusCode);
+        var publishRequest = Assert.Single(requests, request => request.Url == "https://push.example.test/api/v2/package");
+        Assert.Equal(HttpMethod.Put, publishRequest.Method);
+        Assert.Equal("publish-key", publishRequest.ApiKey);
+    }
+
+
+    [Fact]
     public async Task PublishPackageAsync_copies_package_to_local_folder_feed()
     {
         using var source = new TemporaryDirectory();
@@ -1109,6 +1133,9 @@ public sealed class ManagedModuleRepositoryClientTests
             }
 
             if (uri.AbsoluteUri == "https://psgallery.test/publish/" && request.Method == HttpMethod.Put)
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Created));
+
+            if (uri.AbsoluteUri == "https://push.example.test/api/v2/package" && request.Method == HttpMethod.Put)
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Created));
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));

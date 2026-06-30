@@ -322,6 +322,24 @@ public sealed class ManagedModuleAliasCommandTests
     }
 
     [Fact]
+    public void InitializeManagedModuleRepository_rejects_nuget_source_only_profile()
+    {
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Initialize-ManagedModuleRepository")
+            .AddParameter("ProfileName", "Company")
+            .AddParameter("Provider", PrivateGalleryProvider.NuGet)
+            .AddParameter("RepositoryName", "CompanyModules")
+            .AddParameter("RepositorySourceUri", "https://packages.example.test/api/v2")
+            .AddParameter("SkipConnect");
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+
+        Assert.Contains("RepositoryUri", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void NewConfigurationPublish_resolves_required_module_source_profile()
     {
         using var profileRoot = new TemporaryDirectory();

@@ -31,6 +31,7 @@ public sealed partial class ManagedModuleRepositoryClient
         {
             ManagedModuleRepositoryKind.LocalFolder => PublishLocalPackage(repository, packagePath, force),
             ManagedModuleRepositoryKind.NuGetV3 => await PublishNuGetPackageAsync(repository, packagePath, credential, cancellationToken).ConfigureAwait(false),
+            ManagedModuleRepositoryKind.NuGetV2 => await PublishNuGetPackageAsync(repository, packagePath, credential, cancellationToken).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
     }

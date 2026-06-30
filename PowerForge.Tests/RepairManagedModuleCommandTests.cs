@@ -187,6 +187,8 @@ public sealed class RepairManagedModuleCommandTests
         var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
 
         AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions);
+        Assert.Equal("CompanyModules", action.TargetRepository);
         var command = Assert.Single(result.Apply.Commands);
         Assert.Equal("Update-ManagedModule", command.CommandName);
         Assert.Contains("-ProfileName", command.Arguments);
