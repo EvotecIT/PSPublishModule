@@ -394,6 +394,29 @@ public sealed class ModuleStatePlannerTests
     }
 
     [Fact]
+    public void CreatePlan_WithCleanup_KeepsReceiptScopeOnly()
+    {
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[]
+            {
+                new ModuleStateInstalledModule("Company.Tools", "1.0.0", scope: "CurrentUser", path: @"C:\User\Company.Tools\1.0.0"),
+                new ModuleStateInstalledModule("Company.Tools", "2.0.0", scope: "AllUsers", path: @"C:\Program Files\Company.Tools\2.0.0")
+            }),
+            Array.Empty<ModuleStateDesiredModule>(),
+            maintenanceReceipts: new[]
+            {
+                new ModuleStateMaintenanceReceipt(
+                    "ModuleState",
+                    new[] { new ModuleStateMaintenanceReceiptModule("Company.Tools", "2.0.0", scope: "AllUsers") })
+            },
+            cleanupMode: ModuleStateCleanupMode.OldVersions);
+
+        var plan = new ModuleStatePlanner().CreatePlan(request);
+
+        Assert.DoesNotContain(plan.Actions, static action => action.Kind == ModuleStatePlanActionKind.Remove);
+    }
+
+    [Fact]
     public void CreatePlan_WithCleanup_KeepsDesiredScopeOnly()
     {
         var request = new ModuleStatePlanRequest(

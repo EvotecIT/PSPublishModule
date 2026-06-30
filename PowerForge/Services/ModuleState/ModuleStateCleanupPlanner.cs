@@ -76,7 +76,10 @@ internal sealed class ModuleStateCleanupPlanner
         foreach (var receiptModule in request.MaintenanceReceipts.SelectMany(static receipt => receipt.Modules))
         {
             AddCleanupCandidates(
-                request.Inventory.InstalledModules.Where(module => string.Equals(module.Name, receiptModule.Name, StringComparison.OrdinalIgnoreCase)),
+                request.Inventory.InstalledModules.Where(module =>
+                    string.Equals(module.Name, receiptModule.Name, StringComparison.OrdinalIgnoreCase) &&
+                    (string.IsNullOrWhiteSpace(receiptModule.Scope) ||
+                     string.Equals(module.Scope, receiptModule.Scope, StringComparison.OrdinalIgnoreCase))),
                 selectedModules,
                 seen);
         }
