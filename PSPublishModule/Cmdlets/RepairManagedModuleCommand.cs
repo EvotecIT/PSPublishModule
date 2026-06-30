@@ -334,6 +334,8 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
             force: Force.IsPresent,
             acceptLicense: AcceptLicense.IsPresent,
             allowErrorFindings: AllowConflict.IsPresent,
+            allowClobber: AllowClobber.IsPresent,
+            moduleRoot: ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot),
             transport: Transport);
         var service = new ModuleStateApplyService();
         var corePlan = ModuleStatePlanResultMapper.ToCorePlan(plan);

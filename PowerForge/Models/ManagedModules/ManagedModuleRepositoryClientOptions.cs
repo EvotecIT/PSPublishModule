@@ -21,6 +21,11 @@ public sealed class ManagedModuleRepositoryClientOptions
     public TimeSpan? RequestTimeout { get; set; } = TimeSpan.FromSeconds(100);
 
     /// <summary>
+    /// Maximum package bytes accepted while downloading or copying a package.
+    /// </summary>
+    public long MaxPackageBytes { get; set; } = 1024L * 1024L * 1024L;
+
+    /// <summary>
     /// Maximum concurrent HTTP connections allowed per repository host when the managed client owns the HTTP handler.
     /// </summary>
     public int MaxConnectionsPerServer { get; set; } = 32;

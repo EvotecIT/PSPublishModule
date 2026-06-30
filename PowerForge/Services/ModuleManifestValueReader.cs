@@ -16,7 +16,7 @@ internal static class ModuleManifestValueReader
     {
         value = null;
         return TryReadManifestText(manifestPath, out var manifestText) &&
-               ModuleManifestTextParser.TryGetQuotedStringValue(manifestText, key, out value);
+               ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(manifestText, key, out value);
     }
 
     internal static string[] ReadTopLevelStringOrArray(string manifestPath, string key)

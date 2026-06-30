@@ -7,6 +7,7 @@ public sealed partial class ManagedModuleRepositoryClient
     private static async Task<PackageCopyResult> CopyPackageStreamWithHashAsync(
         Stream source,
         string destinationPath,
+        long maxPackageBytes,
         CancellationToken cancellationToken)
     {
         using var sha256 = SHA256.Create();
@@ -21,6 +22,14 @@ public sealed partial class ManagedModuleRepositoryClient
                 if (bytesRead == 0)
                     break;
 
+                if (maxPackageBytes > 0 && bytesWritten + bytesRead > maxPackageBytes)
+                {
+                    destination.Dispose();
+                    TryDeleteFile(destinationPath);
+                    throw new InvalidOperationException(
+                        $"Package download exceeded the managed module package size limit of {maxPackageBytes} bytes.");
+                }
+
                 await destination.WriteAsync(buffer, 0, bytesRead, cancellationToken).ConfigureAwait(false);
                 sha256.TransformBlock(buffer, 0, bytesRead, null, 0);
                 bytesWritten += bytesRead;
@@ -29,6 +38,19 @@ public sealed partial class ManagedModuleRepositoryClient
 
         sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
         return new PackageCopyResult(bytesWritten, FormatSha256(sha256.Hash));
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch
+        {
+            // Best effort cleanup after refusing an oversized package payload.
+        }
     }
 
     private static string FormatSha256(byte[]? hash)

@@ -12,6 +12,8 @@ internal sealed class ModuleStateDeliveryOptions
         bool force = false,
         bool acceptLicense = false,
         bool allowErrorFindings = false,
+        bool allowClobber = false,
+        string? moduleRoot = null,
         ModuleStateDeliveryTransport transport = ModuleStateDeliveryTransport.PrivateModule)
     {
         ProfileName = NormalizeOptional(profileName);
@@ -21,6 +23,8 @@ internal sealed class ModuleStateDeliveryOptions
         Force = force;
         AcceptLicense = acceptLicense;
         AllowErrorFindings = allowErrorFindings;
+        AllowClobber = allowClobber;
+        ModuleRoot = NormalizeOptional(moduleRoot);
         Transport = transport;
     }
 
@@ -37,6 +41,10 @@ internal sealed class ModuleStateDeliveryOptions
     internal bool AcceptLicense { get; }
 
     internal bool AllowErrorFindings { get; }
+
+    internal bool AllowClobber { get; }
+
+    internal string? ModuleRoot { get; }
 
     internal ModuleStateDeliveryTransport Transport { get; }
 

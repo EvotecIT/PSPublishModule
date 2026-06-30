@@ -27,13 +27,19 @@ public sealed class PSPublishModuleManifestContractTests
         "New-ConfigurationRelease"
     };
 
-    private static readonly string[] ModuleStateCmdlets =
+    private static readonly string[] ManagedModuleCmdlets =
     {
-        "Get-ModuleState",
-        "Get-ModuleStatePlan",
-        "Invoke-ModuleState",
-        "Invoke-ModuleStatePlan",
-        "Test-ModuleState"
+        "Find-ManagedModule",
+        "Get-ManagedModule",
+        "Get-ManagedModuleRepository",
+        "Initialize-ManagedModuleRepository",
+        "Install-ManagedModule",
+        "Publish-ManagedModule",
+        "Remove-ManagedModuleRepository",
+        "Repair-ManagedModule",
+        "Save-ManagedModule",
+        "Set-ManagedModuleRepository",
+        "Update-ManagedModule"
     };
 
     [Fact]
@@ -98,13 +104,13 @@ public sealed class PSPublishModuleManifestContractTests
     }
 
     [Fact]
-    public void Module_exports_module_state_cmdlets()
+    public void Module_exports_managed_module_cmdlets()
     {
         var repoRoot = RepoRootLocator.Find();
         var manifestText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psd1"));
         var bootstrapperText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psm1"));
 
-        foreach (var cmdlet in ModuleStateCmdlets)
+        foreach (var cmdlet in ManagedModuleCmdlets)
         {
             Assert.Contains($"'{cmdlet}'", manifestText, StringComparison.Ordinal);
             Assert.Contains($"'{cmdlet}'", bootstrapperText, StringComparison.Ordinal);

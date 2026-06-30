@@ -95,6 +95,35 @@ public sealed class ManagedModulePackageReaderTests
     }
 
     [Fact]
+    public void ReadMetadata_prefers_manifest_dependency_constraint_over_stale_nuspec_constraint()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[]
+            {
+                new TestDependency("Company.Core", "1.0.0", null)
+            },
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = """
+                    @{
+                        ModuleVersion = '1.0.0'
+                        RequiredModules = @{ ModuleName = 'Company.Core'; RequiredVersion = '2.0.0' }
+                    }
+                    """
+            });
+
+        var metadata = new ManagedModulePackageReader().ReadMetadata(packagePath);
+
+        var dependency = Assert.Single(metadata.Dependencies, dependency => dependency.Id == "Company.Core");
+        Assert.Equal("[2.0.0]", dependency.VersionRange);
+    }
+
+    [Fact]
     public void ReadMetadata_excludes_manifest_external_modules_from_installable_dependencies()
     {
         using var temp = new TemporaryDirectory();

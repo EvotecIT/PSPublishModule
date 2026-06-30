@@ -66,21 +66,6 @@ public sealed partial class ManagedModuleInstallService
                 exists: true);
         }
 
-        if (request.Force &&
-            !string.IsNullOrWhiteSpace(request.Version) &&
-            GetInstalledVersions(moduleRoot, request.Name, context: null)
-                .Any(version => ManagedModuleVersionComparer.Instance.Compare(version, request.Version!.Trim()) == 0))
-        {
-            var requestedVersion = request.Version!.Trim();
-            var installedModulePath = Path.Combine(moduleRoot, request.Name.Trim(), requestedVersion);
-            return CreateInstallPlan(
-                request,
-                requestedVersion,
-                moduleRoot,
-                installedModulePath,
-                exists: true);
-        }
-
         var versionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken, resolveExactMetadata: true).ConfigureAwait(false);
         var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), versionInfo.Version);
         return CreateInstallPlan(

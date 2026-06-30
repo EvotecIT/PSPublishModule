@@ -141,6 +141,53 @@ public sealed class ManagedModulePackServiceTests
     }
 
     [Fact]
+    public void Pack_rejects_requested_name_that_disagrees_with_manifest()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var output = new TemporaryDirectory();
+        CreateModule(moduleRoot.Path, "Company.Tools", "1.0.0", prerelease: null);
+        var service = new ManagedModulePackService();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Pack(new ManagedModulePackRequest
+        {
+            ModulePath = moduleRoot.Path,
+            OutputDirectory = output.Path,
+            Name = "Other.Tools"
+        }));
+
+        Assert.Contains("does not match module manifest", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFiles(output.Path));
+    }
+
+    [Fact]
+    public void Pack_uses_top_level_module_version_when_required_modules_precede_manifest_version()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var output = new TemporaryDirectory();
+        Directory.CreateDirectory(moduleRoot.Path);
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "Company.Tools.psm1"), "function Get-CompanyTool { 'ok' }");
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "Company.Tools.psd1"), """
+@{
+    RootModule = 'Company.Tools.psm1'
+    RequiredModules = @{ ModuleName = 'Company.Core'; ModuleVersion = '9.9.9' }
+    ModuleVersion = '1.0.0'
+    Author = 'Evotec'
+    Description = 'Company tools module.'
+}
+""");
+        var service = new ManagedModulePackService();
+
+        var result = service.Pack(new ManagedModulePackRequest
+        {
+            ModulePath = moduleRoot.Path,
+            OutputDirectory = output.Path
+        });
+
+        Assert.Equal("1.0.0", result.Version);
+        Assert.EndsWith("Company.Tools.1.0.0.nupkg", result.PackagePath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Pack_uses_manifest_name_when_root_module_points_to_binary()
     {
         using var moduleRoot = new TemporaryDirectory();

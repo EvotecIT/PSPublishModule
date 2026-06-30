@@ -51,7 +51,7 @@ public sealed partial class ManagedModuleRepositoryClient
         PackageCopyResult packageCopy;
         using (var source = await ReadContentStreamAsync(response.Content, cancellationToken).ConfigureAwait(false))
         {
-            packageCopy = await CopyPackageStreamWithHashAsync(source, destinationPath, cancellationToken).ConfigureAwait(false);
+            packageCopy = await CopyPackageStreamWithHashAsync(source, destinationPath, _options.MaxPackageBytes, cancellationToken).ConfigureAwait(false);
         }
 
         return new ManagedModuleDownloadResult

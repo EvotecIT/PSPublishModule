@@ -40,7 +40,7 @@ public sealed partial class ModulePublisher
         string repositoryName,
         PublishRepositoryConfiguration? repoConfig)
     {
-        var source = FirstNonEmpty(repoConfig?.SourceUri, repoConfig?.Uri, repoConfig?.PublishUri);
+        var source = FirstNonEmpty(repoConfig?.PublishUri, repoConfig?.Uri, repoConfig?.SourceUri);
         if (string.IsNullOrWhiteSpace(source))
         {
             if (string.Equals(repositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase))

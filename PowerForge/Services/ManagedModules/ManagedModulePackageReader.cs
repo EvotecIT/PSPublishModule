@@ -147,7 +147,7 @@ public sealed class ManagedModulePackageReader
         using var stream = manifest.Open();
         using var reader = new StreamReader(stream);
         var manifestText = reader.ReadToEnd();
-        var version = ModuleManifestTextParser.TryGetQuotedStringValue(manifestText, "ModuleVersion", out var manifestVersion)
+        var version = ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(manifestText, "ModuleVersion", out var manifestVersion)
             ? manifestVersion
             : null;
         var prerelease = ModuleManifestValueReader.ReadPsDataStringOrArrayFromText(manifestText, "Prerelease").FirstOrDefault();
@@ -303,9 +303,9 @@ public sealed class ManagedModulePackageReader
         if (manifestDependencies.Count == 0)
             return nuspecDependencies;
 
-        var results = new List<ManagedModuleDependencyInfo>(nuspecDependencies);
-        var nuspecIds = new HashSet<string>(nuspecDependencies.Select(static dependency => dependency.Id), StringComparer.OrdinalIgnoreCase);
-        results.AddRange(manifestDependencies.Where(dependency => !nuspecIds.Contains(dependency.Id)));
+        var results = new List<ManagedModuleDependencyInfo>(manifestDependencies);
+        var manifestIds = new HashSet<string>(manifestDependencies.Select(static dependency => dependency.Id), StringComparer.OrdinalIgnoreCase);
+        results.AddRange(nuspecDependencies.Where(dependency => !manifestIds.Contains(dependency.Id)));
         return results;
     }
 

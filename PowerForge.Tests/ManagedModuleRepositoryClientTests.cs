@@ -444,6 +444,46 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task DownloadPackageAsync_rejects_oversized_package_while_streaming()
+    {
+        var requests = new List<RecordedRequest>();
+        using var temp = new TemporaryDirectory();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(
+            new NullLogger(),
+            client,
+            options: new ManagedModuleRepositoryClientOptions { MaxPackageBytes = 4 });
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            repositoryClient.DownloadPackageAsync(repository, "Company.Tools", "1.1.0", temp.Path));
+
+        Assert.Contains("package size limit", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFiles(temp.Path, "*.nupkg", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task DownloadPackageAsync_preserves_api_key_on_same_host_redirect()
+    {
+        var requests = new List<RecordedRequest>();
+        using var temp = new TemporaryDirectory();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/api/v2");
+
+        var result = await repositoryClient.DownloadPackageAsync(
+            repository,
+            "SameHost.Tools",
+            "1.0.0",
+            temp.Path,
+            new RepositoryCredential { Secret = "token" });
+
+        Assert.True(File.Exists(result.PackagePath));
+        Assert.Contains(requests, request => request.Url == "https://example.test/api/v2/package/SameHost.Tools/1.0.0" && request.ApiKey == "token");
+        Assert.Contains(requests, request => request.Url == "https://example.test/redirected/samehost.tools.1.0.0.nupkg" && request.ApiKey == "token");
+    }
+
+    [Fact]
     public async Task DownloadPackageAsync_writes_exact_package_from_nuget_v2_feed()
     {
         var requests = new List<RecordedRequest>();
@@ -868,6 +908,13 @@ public sealed class ManagedModuleRepositoryClientTests
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.1.0</d:Version><d:RequireLicenseAcceptance>true</d:RequireLicenseAcceptance><d:LicenseUrl>https://licenses.example.test/company-tools</d:LicenseUrl></m:properties></content></entry>" +
                     "</feed>");
 
+            if (uri.AbsoluteUri == "https://example.test/api/v2/FindPackagesById()?id='SameHost.Tools'")
+                return Xml(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                    "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\">" +
+                    "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.0.0</d:Version></m:properties></content></entry>" +
+                    "</feed>");
+
             if (uri.AbsoluteUri == "https://example.test/api/v2/Packages()?$filter=Id%20eq%20'Company.Tools'%20and%20IsLatestVersion&$top=1")
                 return Xml(
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
@@ -968,6 +1015,15 @@ public sealed class ManagedModuleRepositoryClientTests
                     }
                 });
 
+            if (uri.AbsoluteUri == "https://example.test/api/v2/package/SameHost.Tools/1.0.0")
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Redirect)
+                {
+                    Headers =
+                    {
+                        Location = new Uri("https://example.test/redirected/samehost.tools.1.0.0.nupkg")
+                    }
+                });
+
             if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v2/package/Pester/5.7.0")
             {
                 var bytes = TestPackageFactory.CreateBytes("Pester", "5.7.0");
@@ -992,6 +1048,15 @@ public sealed class ManagedModuleRepositoryClientTests
             if (uri.AbsoluteUri == "https://cdn.example.test/packages/company.tools.1.1.0.nupkg")
             {
                 var bytes = TestPackageFactory.CreateBytes("Company.Tools", "1.1.0");
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(bytes)
+                });
+            }
+
+            if (uri.AbsoluteUri == "https://example.test/redirected/samehost.tools.1.0.0.nupkg")
+            {
+                var bytes = TestPackageFactory.CreateBytes("SameHost.Tools", "1.0.0");
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new ByteArrayContent(bytes)

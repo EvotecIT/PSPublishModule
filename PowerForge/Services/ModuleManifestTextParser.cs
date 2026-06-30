@@ -27,6 +27,18 @@ internal static class ModuleManifestTextParser
         return !string.IsNullOrWhiteSpace(value);
     }
 
+    internal static bool TryGetTopLevelQuotedStringValue(string manifestText, string key, out string? value)
+    {
+        value = null;
+        if (!TryReadTopLevelAssignedExpressionByKey(manifestText, key, out var expression) ||
+            string.IsNullOrWhiteSpace(expression))
+        {
+            return false;
+        }
+
+        return TryParseQuotedStringExpression(expression!, out value);
+    }
+
     internal static bool TryGetPsDataStringValue(string manifestText, string key, out string? value)
     {
         value = null;
@@ -293,6 +305,51 @@ internal static class ModuleManifestTextParser
         expression = ReadAssignedValueExpression(text, ref index);
         return !string.IsNullOrWhiteSpace(expression);
     }
+
+    private static bool TryReadTopLevelAssignedExpressionByKey(string text, string key, out string? expression)
+    {
+        expression = null;
+        if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(key))
+            return false;
+
+        var body = TrimCompositeWrapper(text);
+        var index = 0;
+        while (index < body.Length)
+        {
+            index = SkipTrivia(body, index, treatCommasAsTrivia: false);
+            if (index >= body.Length)
+                break;
+
+            var keyStart = index;
+            while (index < body.Length && IsManifestKeyCharacter(body[index]))
+                index++;
+            if (keyStart == index)
+            {
+                index++;
+                continue;
+            }
+
+            var candidateKey = body.Substring(keyStart, index - keyStart);
+            index = SkipTrivia(body, index, treatCommasAsTrivia: false);
+            if (index >= body.Length || body[index] != '=')
+            {
+                continue;
+            }
+
+            index++;
+            var valueExpression = ReadAssignedValueExpression(body, ref index);
+            if (candidateKey.Equals(key, StringComparison.OrdinalIgnoreCase))
+            {
+                expression = valueExpression;
+                return !string.IsNullOrWhiteSpace(expression);
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsManifestKeyCharacter(char value)
+        => char.IsLetterOrDigit(value) || value == '_' || value == '-';
 
     private static string ReadAssignedValueExpression(string text, ref int index)
     {

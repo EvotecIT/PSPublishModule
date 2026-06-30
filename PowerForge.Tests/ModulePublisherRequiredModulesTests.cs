@@ -188,7 +188,7 @@ public sealed class ModulePublisherRequiredModulesTests
     }
 
     [Fact]
-    public void CreateManagedPublishRepository_PrefersSourceIndexOverPublishEndpoint()
+    public void CreateManagedPublishRepository_PrefersPublishEndpointOverSourceIndex()
     {
         var method = typeof(ModulePublisher).GetMethod(
             "CreateManagedPublishRepository",
@@ -203,7 +203,7 @@ public sealed class ModulePublisherRequiredModulesTests
         var repository = Assert.IsType<ManagedModuleRepository>(method!.Invoke(null, new object?[] { "Company", config }));
 
         Assert.Equal("Company", repository.Name);
-        Assert.Equal("https://packages.example.test/nuget/v3/index.json", repository.Source);
+        Assert.Equal("https://packages.example.test/nuget/v2/package", repository.Source);
     }
 
     [Fact]

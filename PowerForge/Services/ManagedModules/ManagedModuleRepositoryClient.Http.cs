@@ -119,7 +119,16 @@ public sealed partial class ManagedModuleRepositoryClient
         if (source.Headers.Authorization is not null &&
             source.RequestUri is not null &&
             string.Equals(source.RequestUri.Host, redirectUri.Host, StringComparison.OrdinalIgnoreCase))
+        {
             request.Headers.Authorization = source.Headers.Authorization;
+        }
+
+        if (source.RequestUri is not null &&
+            string.Equals(source.RequestUri.Host, redirectUri.Host, StringComparison.OrdinalIgnoreCase) &&
+            source.Headers.TryGetValues("X-NuGet-ApiKey", out var apiKeyValues))
+        {
+            request.Headers.TryAddWithoutValidation("X-NuGet-ApiKey", apiKeyValues);
+        }
 
         return request;
     }

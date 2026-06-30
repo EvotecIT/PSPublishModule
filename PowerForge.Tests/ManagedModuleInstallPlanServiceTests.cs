@@ -65,6 +65,11 @@ public sealed class ManagedModuleInstallPlanServiceTests
     {
         using var feed = new TemporaryDirectory();
         using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
         var existingPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
         Directory.CreateDirectory(existingPath);
         var service = new ManagedModuleInstallService(new NullLogger());
@@ -83,6 +88,28 @@ public sealed class ManagedModuleInstallPlanServiceTests
         Assert.True(plan.WouldWriteFiles);
         Assert.True(plan.ExistingVersionFound);
         Assert.Equal(existingPath, plan.ModulePath);
+    }
+
+    [Fact]
+    public async Task PlanInstallAsync_force_exact_installed_version_still_requires_repository_version()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PlanInstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            Force = true
+        }));
+
+        Assert.Contains("1.0.0", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("was not found", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

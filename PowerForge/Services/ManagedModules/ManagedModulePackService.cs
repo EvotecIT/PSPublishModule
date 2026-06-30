@@ -114,11 +114,19 @@ public sealed class ManagedModulePackService
 
     private static string ResolveName(string modulePath, string manifestPath, string? requestedName, string manifestText)
     {
-        if (!string.IsNullOrWhiteSpace(requestedName))
-            return requestedName!.Trim();
-
         var manifestName = Path.GetFileNameWithoutExtension(manifestPath);
-        return string.IsNullOrWhiteSpace(manifestName) ? Path.GetFileName(modulePath) : manifestName;
+        var resolvedManifestName = string.IsNullOrWhiteSpace(manifestName) ? Path.GetFileName(modulePath) : manifestName;
+        if (string.IsNullOrWhiteSpace(requestedName))
+            return resolvedManifestName;
+
+        var trimmed = ManagedModulePackageIdentity.RequireSafeId(requestedName!, nameof(requestedName));
+        if (!trimmed.Equals(resolvedManifestName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Requested package id '{trimmed}' does not match module manifest id '{resolvedManifestName}'.");
+        }
+
+        return trimmed;
     }
 
     private static string ResolveVersion(string? requestedVersion, string manifestPath)

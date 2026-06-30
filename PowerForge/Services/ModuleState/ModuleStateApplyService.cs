@@ -222,6 +222,12 @@ internal sealed class ModuleStateApplyService
             arguments.Add("-Path");
             arguments.Add(action.TargetPath!);
         }
+        else if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
+                 !string.IsNullOrWhiteSpace(deliveryOptions.ModuleRoot))
+        {
+            arguments.Add(action.Kind == ModuleStatePlanActionKind.Save ? "-Path" : "-ModuleRoot");
+            arguments.Add(deliveryOptions.ModuleRoot!);
+        }
 
         if (!string.IsNullOrWhiteSpace(action.TargetRepository))
         {
@@ -260,6 +266,13 @@ internal sealed class ModuleStateApplyService
             IsDeliveryAction(action.Kind))
         {
             arguments.Add("-AcceptLicense");
+        }
+
+        if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
+            deliveryOptions.AllowClobber &&
+            IsDeliveryAction(action.Kind))
+        {
+            arguments.Add("-AllowClobber");
         }
 
         return new ModuleStateDeliveryCommand(

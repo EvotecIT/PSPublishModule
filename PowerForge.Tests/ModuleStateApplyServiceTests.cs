@@ -63,6 +63,8 @@ public sealed class ModuleStateApplyServiceTests
                 installPrerequisites: true,
                 prerelease: true,
                 force: true,
+                allowClobber: true,
+                moduleRoot: @"C:\RepairRoot",
                 transport: ModuleStateDeliveryTransport.ManagedModule));
 
         Assert.True(result.Receipt.CanApply);
@@ -72,13 +74,13 @@ public sealed class ModuleStateApplyServiceTests
 
         var update = result.Receipt.Commands[0];
         Assert.Equal("Update-ManagedModule", update.CommandName);
-        Assert.Equal(new[] { "-Name", "Company.Tools", "-RequiredVersion", "1.2.0", "-Scope", "CurrentUser", "-Repository", "FallbackModules", "-Prerelease", "-ExpectedPackageSha256", new string('a', 64), "-Force" }, update.Arguments);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-RequiredVersion", "1.2.0", "-Scope", "CurrentUser", "-ModuleRoot", @"C:\RepairRoot", "-Repository", "FallbackModules", "-Prerelease", "-ExpectedPackageSha256", new string('a', 64), "-Force", "-AllowClobber" }, update.Arguments);
         Assert.True(update.Force);
         Assert.Contains("Update-ManagedModule", update.CommandText, StringComparison.Ordinal);
 
         var install = result.Receipt.Commands[1];
         Assert.Equal("Install-ManagedModule", install.CommandName);
-        Assert.Equal(new[] { "-Name", "Company.Other", "-VersionPolicy", ">=1.0.0 <2.0.0", "-Repository", "CompanyModules", "-Prerelease", "-Force" }, install.Arguments);
+        Assert.Equal(new[] { "-Name", "Company.Other", "-VersionPolicy", ">=1.0.0 <2.0.0", "-ModuleRoot", @"C:\RepairRoot", "-Repository", "CompanyModules", "-Prerelease", "-Force", "-AllowClobber" }, install.Arguments);
         Assert.Equal(">=1.0.0 <2.0.0", install.VersionPolicy);
         Assert.True(install.IsRepair);
         Assert.True(install.Force);
