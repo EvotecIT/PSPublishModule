@@ -515,6 +515,18 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
         Path = 'Artefacts/Packed'
     }
 }
+[PowerForge.ConfigurationPackageBuildSegment]@{
+    Configuration = [PowerForge.PackageBuildConfiguration]@{
+        RootPath = '.\Sources'
+        OutputPath = '.\Artefacts\Packages'
+    }
+}
+[PowerForge.ConfigurationActionSegment]@{
+    Configuration = [PowerForge.ModulePipelineActionConfiguration]@{
+        FilePath = '.\Build\Test-DocsShape.ps1'
+        WorkingDirectory = '.\Build'
+    }
+}
 """);
 
             using var runspace = RunspaceFactory.CreateRunspace();
@@ -537,10 +549,18 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 });
 
                 var buildLibraries = Assert.IsType<ConfigurationBuildLibrariesSegment>(prepared.PipelineSpec.Segments[0]);
-                Assert.Equal(Path.Combine(root.FullName, "Sources", "Demo", "Demo.csproj"), buildLibraries.BuildLibraries.NETProjectPath);
+                Assert.Equal(Path.Combine(moduleRoot.FullName, "Sources", "Demo", "Demo.csproj"), buildLibraries.BuildLibraries.NETProjectPath);
 
                 var artefact = Assert.IsType<ConfigurationArtefactSegment>(prepared.PipelineSpec.Segments[1]);
                 Assert.Equal("Artefacts/Packed", artefact.Configuration.Path);
+
+                var package = Assert.IsType<ConfigurationPackageBuildSegment>(prepared.PipelineSpec.Segments[2]);
+                Assert.Equal(Path.Combine(moduleRoot.FullName, "Sources"), package.Configuration.RootPath);
+                Assert.Equal(Path.Combine(moduleRoot.FullName, "Artefacts", "Packages"), package.Configuration.OutputPath);
+
+                var action = Assert.IsType<ConfigurationActionSegment>(prepared.PipelineSpec.Segments[3]);
+                Assert.Equal(Path.Combine(moduleRoot.FullName, "Build", "Test-DocsShape.ps1"), action.Configuration.FilePath);
+                Assert.Equal(Path.Combine(moduleRoot.FullName, "Build"), action.Configuration.WorkingDirectory);
             }
             finally
             {
@@ -1350,8 +1370,8 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             var action = Assert.IsType<ConfigurationActionSegment>(jsonSpec.Segments[11]);
             var release = Assert.IsType<ConfigurationReleaseSegment>(jsonSpec.Segments[12]);
             Assert.Equal(projectConfig, projectBuild.Configuration.ConfigPath);
-            Assert.Equal(projectOptionsOutputPath, projectBuild.Configuration.Options!["OutputPath"]);
-            Assert.Equal(projectOptionsPlanPath, projectBuild.Configuration.Options["PlanOutputPath"]);
+            Assert.Equal("../Artifacts/ProjectBuild/options", projectBuild.Configuration.Options!["OutputPath"]?.ToString());
+            Assert.Equal("project-options-plan.json", projectBuild.Configuration.Options["PlanOutputPath"]?.ToString());
             Assert.Equal(externalNetProject, buildLibraries.BuildLibraries.NETProjectPath);
             Assert.Equal(externalDevelopmentBinaries, buildLibraries.BuildLibraries.DevelopmentBinariesPath);
             Assert.Equal(developmentBinaries, buildLibraries.BuildLibraries.NETDevelopmentBinariesPath);

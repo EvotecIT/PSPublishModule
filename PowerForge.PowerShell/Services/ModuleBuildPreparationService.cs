@@ -47,7 +47,7 @@ internal sealed class ModuleBuildPreparationService
         var segments = useLegacy
             ? (string.Equals(request.ParameterSetName, "Configuration", StringComparison.Ordinal)
                 ? LegacySegmentAdapter.CollectFromLegacyConfiguration(request.Configuration)
-                : CollectSettingsFromWorkspace(request.Settings, UsesModuleFolderLayout(workspaceRoot, projectRoot) ? projectRoot : workspaceRoot))
+                : CollectSettingsFromWorkspace(request.Settings, projectRoot))
             : Array.Empty<IConfigurationSegment>();
         ResolveWorkspaceRelativeSegmentPaths(segments, workspaceRoot, projectRoot);
 
@@ -224,13 +224,10 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
-            var optionsRoot = projectRoot;
             if (!string.IsNullOrWhiteSpace(cfg.ConfigPath))
             {
                 cfg.ConfigPath = ResolveConfigPath(projectRoot, cfg.ConfigPath);
-                optionsRoot = Path.GetDirectoryName(cfg.ConfigPath) ?? projectRoot;
             }
-            ResolvePackageBuildOptionPaths(cfg.Options, optionsRoot);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationBuildLibrariesSegment>() ?? Enumerable.Empty<ConfigurationBuildLibrariesSegment>())
@@ -409,71 +406,71 @@ internal sealed class ModuleBuildPreparationService
             return;
 
         var preserveProjectRelativeSegmentPaths = UsesModuleFolderLayout(workspaceRoot, projectRoot);
+        var segmentRoot = preserveProjectRelativeSegmentPaths ? workspaceRoot : projectRoot;
         foreach (var segment in segments)
         {
             switch (segment)
             {
                 case ConfigurationBuildLibrariesSegment buildLibraries:
                     var libraries = buildLibraries.BuildLibraries;
-                    libraries.NETProjectPath = ResolveSegmentPath(workspaceRoot, projectRoot, libraries.NETProjectPath, preserveProjectRelativeSegmentPaths);
-                    libraries.DevelopmentBinariesPath = ResolveSegmentPath(workspaceRoot, projectRoot, libraries.DevelopmentBinariesPath, preserveProjectRelativeSegmentPaths);
-                    libraries.NETDevelopmentBinariesPath = ResolveSegmentPath(workspaceRoot, projectRoot, libraries.NETDevelopmentBinariesPath, preserveProjectRelativeSegmentPaths);
+                    libraries.NETProjectPath = ResolveSegmentPath(segmentRoot, projectRoot, libraries.NETProjectPath, preserveProjectRelativeSegmentPaths);
+                    libraries.DevelopmentBinariesPath = ResolveSegmentPath(segmentRoot, projectRoot, libraries.DevelopmentBinariesPath, preserveProjectRelativeSegmentPaths);
+                    libraries.NETDevelopmentBinariesPath = ResolveSegmentPath(segmentRoot, projectRoot, libraries.NETDevelopmentBinariesPath, preserveProjectRelativeSegmentPaths);
                     break;
                 case ConfigurationProjectBuildSegment projectBuild:
-                    projectBuild.Configuration.ConfigPath = ResolveSegmentPath(workspaceRoot, projectRoot, projectBuild.Configuration.ConfigPath, preserveProjectRelativeSegmentPaths) ?? string.Empty;
-                    ResolvePackageBuildOptionPaths(projectBuild.Configuration.Options, workspaceRoot, projectRoot, preserveProjectRelativeSegmentPaths);
+                    projectBuild.Configuration.ConfigPath = ResolveSegmentPath(segmentRoot, projectRoot, projectBuild.Configuration.ConfigPath, preserveProjectRelativeSegmentPaths) ?? string.Empty;
                     break;
                 case ConfigurationPackageBuildSegment packageBuild:
                     var package = packageBuild.Configuration;
-                    package.RootPath = ResolveSegmentPath(workspaceRoot, projectRoot, package.RootPath, preserveProjectRelativeSegmentPaths);
-                    package.OutputPath = ResolveSegmentPath(workspaceRoot, projectRoot, package.OutputPath, preserveProjectRelativeSegmentPaths);
-                    package.ReleaseZipOutputPath = ResolveSegmentPath(workspaceRoot, projectRoot, package.ReleaseZipOutputPath, preserveProjectRelativeSegmentPaths);
-                    package.StagingPath = ResolveSegmentPath(workspaceRoot, projectRoot, package.StagingPath, preserveProjectRelativeSegmentPaths);
-                    package.PlanOutputPath = ResolveSegmentPath(workspaceRoot, projectRoot, package.PlanOutputPath, preserveProjectRelativeSegmentPaths);
-                    package.PublishApiKeyFilePath = ResolveSegmentPath(workspaceRoot, projectRoot, package.PublishApiKeyFilePath, preserveProjectRelativeSegmentPaths);
-                    package.NugetCredentialSecretFilePath = ResolveSegmentPath(workspaceRoot, projectRoot, package.NugetCredentialSecretFilePath, preserveProjectRelativeSegmentPaths);
-                    package.GitHubAccessTokenFilePath = ResolveSegmentPath(workspaceRoot, projectRoot, package.GitHubAccessTokenFilePath, preserveProjectRelativeSegmentPaths);
-                    ResolvePackageBuildOptionPaths(package.Options, workspaceRoot, projectRoot, preserveProjectRelativeSegmentPaths);
+                    package.RootPath = ResolveSegmentPath(segmentRoot, projectRoot, package.RootPath, preserveProjectRelativeSegmentPaths);
+                    package.OutputPath = ResolveSegmentPath(segmentRoot, projectRoot, package.OutputPath, preserveProjectRelativeSegmentPaths);
+                    package.ReleaseZipOutputPath = ResolveSegmentPath(segmentRoot, projectRoot, package.ReleaseZipOutputPath, preserveProjectRelativeSegmentPaths);
+                    package.StagingPath = ResolveSegmentPath(segmentRoot, projectRoot, package.StagingPath, preserveProjectRelativeSegmentPaths);
+                    package.PlanOutputPath = ResolveSegmentPath(segmentRoot, projectRoot, package.PlanOutputPath, preserveProjectRelativeSegmentPaths);
+                    package.PublishApiKeyFilePath = ResolveSegmentPath(segmentRoot, projectRoot, package.PublishApiKeyFilePath, preserveProjectRelativeSegmentPaths);
+                    package.NugetCredentialSecretFilePath = ResolveSegmentPath(segmentRoot, projectRoot, package.NugetCredentialSecretFilePath, preserveProjectRelativeSegmentPaths);
+                    package.GitHubAccessTokenFilePath = ResolveSegmentPath(segmentRoot, projectRoot, package.GitHubAccessTokenFilePath, preserveProjectRelativeSegmentPaths);
+                    ResolvePackageBuildOptionPaths(package.Options, segmentRoot, projectRoot, preserveProjectRelativeSegmentPaths);
                     break;
                 case ConfigurationDocumentationSegment documentation:
-                    documentation.Configuration.Path = ResolveWorkspaceQualifiedPath(workspaceRoot, projectRoot, documentation.Configuration.Path) ?? string.Empty;
-                    documentation.Configuration.PathReadme = ResolveWorkspaceQualifiedPath(workspaceRoot, projectRoot, documentation.Configuration.PathReadme) ?? string.Empty;
+                    documentation.Configuration.Path = ResolveWorkspaceQualifiedPath(segmentRoot, projectRoot, documentation.Configuration.Path) ?? string.Empty;
+                    documentation.Configuration.PathReadme = ResolveWorkspaceQualifiedPath(segmentRoot, projectRoot, documentation.Configuration.PathReadme) ?? string.Empty;
                     break;
                 case ConfigurationBuildDocumentationSegment buildDocumentation:
                     buildDocumentation.Configuration.AboutTopicsSourcePath = ResolveWorkspaceQualifiedStagingRelativePaths(
-                        workspaceRoot,
+                        segmentRoot,
                         projectRoot,
                         buildDocumentation.Configuration.AboutTopicsSourcePath);
                     break;
                 case ConfigurationTestSegment test:
-                    test.Configuration.TestsPath = ResolveWorkspaceQualifiedPath(workspaceRoot, projectRoot, test.Configuration.TestsPath) ?? string.Empty;
+                    test.Configuration.TestsPath = ResolveWorkspaceQualifiedPath(segmentRoot, projectRoot, test.Configuration.TestsPath) ?? string.Empty;
                     break;
                 case ConfigurationValidationSegment validation:
-                    validation.Settings.Tests.TestPath = ResolveWorkspaceQualifiedPath(workspaceRoot, projectRoot, validation.Settings.Tests.TestPath);
+                    validation.Settings.Tests.TestPath = ResolveWorkspaceQualifiedPath(segmentRoot, projectRoot, validation.Settings.Tests.TestPath);
                     break;
                 case ConfigurationOptionsSegment options:
                     var signing = options.Options?.Signing;
                     if (signing is not null)
-                        signing.CertificatePFXPath = ResolveSegmentPath(workspaceRoot, projectRoot, signing.CertificatePFXPath, preserveProjectRelativeSegmentPaths);
+                        signing.CertificatePFXPath = ResolveSegmentPath(segmentRoot, projectRoot, signing.CertificatePFXPath, preserveProjectRelativeSegmentPaths);
                     break;
                 case ConfigurationReleaseSegment release:
-                    release.Configuration.StageRoot = ResolveSegmentPath(workspaceRoot, projectRoot, release.Configuration.StageRoot, preserveProjectRelativeSegmentPaths);
+                    release.Configuration.StageRoot = ResolveSegmentPath(segmentRoot, projectRoot, release.Configuration.StageRoot, preserveProjectRelativeSegmentPaths);
                     break;
                 case ConfigurationPublishSegment publish:
-                    publish.Configuration.ApiKeyFilePath = ResolveSegmentPath(workspaceRoot, projectRoot, publish.Configuration.ApiKeyFilePath, preserveProjectRelativeSegmentPaths);
+                    publish.Configuration.ApiKeyFilePath = ResolveSegmentPath(segmentRoot, projectRoot, publish.Configuration.ApiKeyFilePath, preserveProjectRelativeSegmentPaths);
                     break;
                 case ConfigurationActionSegment action:
-                    action.Configuration.FilePath = ResolveSegmentPath(workspaceRoot, projectRoot, action.Configuration.FilePath, preserveProjectRelativeSegmentPaths);
-                    action.Configuration.WorkingDirectory = ResolveSegmentPath(workspaceRoot, projectRoot, action.Configuration.WorkingDirectory, preserveProjectRelativeSegmentPaths);
+                    action.Configuration.FilePath = ResolveSegmentPath(segmentRoot, projectRoot, action.Configuration.FilePath, preserveProjectRelativeSegmentPaths);
+                    action.Configuration.WorkingDirectory = ResolveSegmentPath(segmentRoot, projectRoot, action.Configuration.WorkingDirectory, preserveProjectRelativeSegmentPaths);
                     break;
                 case ConfigurationAppleAppSegment appleApp:
-                    appleApp.Configuration.ProjectPath = ResolveWorkspaceQualifiedPath(workspaceRoot, projectRoot, appleApp.Configuration.ProjectPath) ?? string.Empty;
+                    appleApp.Configuration.ProjectPath = ResolveWorkspaceQualifiedPath(segmentRoot, projectRoot, appleApp.Configuration.ProjectPath) ?? string.Empty;
                     break;
                 case ConfigurationXcodeProjectVersionSegment xcodeProject:
-                    xcodeProject.Configuration.Path = ResolveWorkspaceQualifiedPath(workspaceRoot, projectRoot, xcodeProject.Configuration.Path) ?? string.Empty;
+                    xcodeProject.Configuration.Path = ResolveWorkspaceQualifiedPath(segmentRoot, projectRoot, xcodeProject.Configuration.Path) ?? string.Empty;
                     break;
                 case ConfigurationArtefactSegment artefact:
-                    ResolveWorkspaceRelativeArtefactPaths(artefact.Configuration, workspaceRoot, projectRoot);
+                    ResolveWorkspaceRelativeArtefactPaths(artefact.Configuration, segmentRoot, projectRoot);
                     break;
             }
         }
