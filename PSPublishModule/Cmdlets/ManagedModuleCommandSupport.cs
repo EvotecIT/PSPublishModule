@@ -148,6 +148,9 @@ internal static class ManagedModuleCommandSupport
             return trimmed;
         }
 
+        if (string.Equals(trimmed, DefaultRepositoryName, StringComparison.OrdinalIgnoreCase))
+            return DefaultRepositorySource;
+
         var providerPath = ResolveProviderPath(cmdlet, trimmed);
         if (!string.IsNullOrWhiteSpace(providerPath) && Directory.Exists(providerPath))
             return providerPath!;

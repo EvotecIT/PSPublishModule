@@ -72,7 +72,7 @@ public sealed class ManagedModuleRepository
             if (uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
                 uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
             {
-                return source.IndexOf("/api/v2", StringComparison.OrdinalIgnoreCase) >= 0
+                return IsNuGetV2Path(uri.AbsolutePath)
                     ? ManagedModuleRepositoryKind.NuGetV2
                     : ManagedModuleRepositoryKind.NuGetV3;
             }
@@ -85,5 +85,13 @@ public sealed class ManagedModuleRepository
             return ManagedModuleRepositoryKind.LocalFolder;
 
         return ManagedModuleRepositoryKind.NuGetV3;
+    }
+
+    private static bool IsNuGetV2Path(string path)
+    {
+        var normalized = (path ?? string.Empty).TrimEnd('/');
+        return normalized.EndsWith("/api/v2", StringComparison.OrdinalIgnoreCase) ||
+               normalized.EndsWith("/nuget/v2", StringComparison.OrdinalIgnoreCase) ||
+               normalized.EndsWith("/v2", StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -18,6 +18,17 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.Equal(ManagedModuleRepositoryKind.LocalFolder, repository.Kind);
     }
 
+    [Theory]
+    [InlineData("https://example.test/api/v2")]
+    [InlineData("https://pkgs.dev.azure.com/org/_packaging/feed/nuget/v2")]
+    [InlineData("https://example.test/packages/v2")]
+    public void ManagedModuleRepository_infers_common_v2_feed_paths(string source)
+    {
+        var repository = new ManagedModuleRepository("Feed", source);
+
+        Assert.Equal(ManagedModuleRepositoryKind.NuGetV2, repository.Kind);
+    }
+
     [Fact]
     public async Task GetVersionsAsync_uses_nuget_v3_package_base_address()
     {

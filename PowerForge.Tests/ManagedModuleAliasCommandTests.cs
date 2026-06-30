@@ -428,6 +428,20 @@ public sealed class ManagedModuleAliasCommandTests
     }
 
     [Fact]
+    public void ManagedModuleCommandSupport_resolves_builtin_psgallery_without_native_registration()
+    {
+        var source = ManagedModuleCommandSupport.ResolveRepositorySource(
+            null!,
+            ManagedModuleCommandSupport.DefaultRepositoryName,
+            out var resolvedRegisteredRepositoryName,
+            out var trusted);
+
+        Assert.Equal(ManagedModuleCommandSupport.DefaultRepositorySource, source);
+        Assert.Null(resolvedRegisteredRepositoryName);
+        Assert.False(trusted);
+    }
+
+    [Fact]
     public void NewConfigurationPublish_resolves_required_module_source_profile()
     {
         using var profileRoot = new TemporaryDirectory();

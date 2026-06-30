@@ -196,19 +196,22 @@ public sealed class ManagedModulePackageReader
 
     private static ZipArchiveEntry? SelectManifestEntry(ZipArchive archive, string packageId)
     {
-        var manifests = archive.Entries
-            .Where(static entry => entry.FullName.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase))
-            .Where(static entry => !string.IsNullOrWhiteSpace(NormalizePackagePath(entry.FullName)))
-            .ToArray();
-        if (manifests.Length == 0)
-            return null;
-
         var expectedName = packageId + ".psd1";
-        return manifests
-            .OrderByDescending(entry => Path.GetFileName(entry.FullName).Equals(expectedName, StringComparison.OrdinalIgnoreCase))
-            .ThenBy(static entry => NormalizePackagePath(entry.FullName).Count(ch => ch == '/'))
-            .ThenBy(static entry => entry.FullName, StringComparer.OrdinalIgnoreCase)
-            .First();
+        var expectedModuleFolderPath = packageId + "/" + expectedName;
+        return archive.Entries
+            .Where(entry => IsPackageModuleManifest(entry, expectedName, expectedModuleFolderPath))
+            .OrderBy(static entry => NormalizePackagePath(entry.FullName).Count(ch => ch == '/'))
+            .FirstOrDefault();
+    }
+
+    private static bool IsPackageModuleManifest(
+        ZipArchiveEntry entry,
+        string expectedName,
+        string expectedModuleFolderPath)
+    {
+        var normalized = NormalizePackagePath(entry.FullName);
+        return normalized.Equals(expectedName, StringComparison.OrdinalIgnoreCase) ||
+               normalized.Equals(expectedModuleFolderPath, StringComparison.OrdinalIgnoreCase);
     }
 
     private static int CountFiles(ZipArchive archive)
@@ -330,7 +333,28 @@ public sealed class ManagedModulePackageReader
         if (manifestDependencies.Count == 0)
             return nuspecDependencies;
 
-        var results = new List<ManagedModuleDependencyInfo>(manifestDependencies);
+        var nuspecById = nuspecDependencies
+            .GroupBy(static dependency => dependency.Id, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var results = new List<ManagedModuleDependencyInfo>(manifestDependencies.Count);
+        foreach (var manifestDependency in manifestDependencies)
+        {
+            if (string.IsNullOrWhiteSpace(manifestDependency.VersionRange) &&
+                nuspecById.TryGetValue(manifestDependency.Id, out var nuspecDependency) &&
+                !string.IsNullOrWhiteSpace(nuspecDependency.VersionRange))
+            {
+                results.Add(new ManagedModuleDependencyInfo
+                {
+                    Id = manifestDependency.Id,
+                    VersionRange = nuspecDependency.VersionRange,
+                    TargetFramework = manifestDependency.TargetFramework ?? nuspecDependency.TargetFramework
+                });
+                continue;
+            }
+
+            results.Add(manifestDependency);
+        }
+
         var manifestIds = new HashSet<string>(manifestDependencies.Select(static dependency => dependency.Id), StringComparer.OrdinalIgnoreCase);
         results.AddRange(nuspecDependencies.Where(dependency => !manifestIds.Contains(dependency.Id)));
         return results;
