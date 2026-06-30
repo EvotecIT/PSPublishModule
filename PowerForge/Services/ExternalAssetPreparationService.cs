@@ -44,9 +44,11 @@ internal sealed class ExternalAssetPreparationService
         var configuration = segment.Configuration ?? new ExternalAssetConfiguration();
         var name = RequireValue(configuration.Name, "External asset Name is required.");
         var outputRoot = ResolveProjectPath(projectRoot, RequireValue(configuration.OutputPath, $"External asset '{name}' requires OutputPath."));
+        EnsureSameOrChildPath(projectRoot, outputRoot, $"External asset '{name}' OutputPath");
         var manifestPath = string.IsNullOrWhiteSpace(configuration.ManifestPath)
             ? Path.Combine(outputRoot, "manifest.json")
             : ResolveProjectPath(projectRoot, configuration.ManifestPath!);
+        EnsureSameOrChildPath(projectRoot, manifestPath, $"External asset '{name}' ManifestPath");
         var manifestDirectory = Path.GetDirectoryName(manifestPath) ?? outputRoot;
         var files = configuration.Files ?? Array.Empty<ExternalAssetFileConfiguration>();
 
@@ -59,11 +61,12 @@ internal sealed class ExternalAssetPreparationService
         var fileResults = new List<ExternalAssetFilePreparationResult>();
         var manifestFiles = new List<ExternalAssetManifestFile>();
         var effectiveTimeout = timeout ?? TimeSpan.FromMinutes(5);
-        var preparedOutputPaths = new HashSet<string>(GetPathStringComparer());
+        var outputPathComparison = GetPathStringComparison(outputRoot);
+        var preparedOutputPaths = new HashSet<string>(GetPathStringComparer(outputPathComparison));
 
         foreach (var file in files)
         {
-            var resolvedFile = ResolveFile(outputRoot, manifestPath, file);
+            var resolvedFile = ResolveFile(outputRoot, manifestPath, outputPathComparison, file);
             var comparableOutputPath = NormalizePathForComparison(resolvedFile.TargetPath);
             if (!preparedOutputPaths.Add(comparableOutputPath))
                 throw new InvalidOperationException($"External asset file '{resolvedFile.OutputRelativePath}' resolves to an output path already used by another file entry.");
@@ -136,6 +139,7 @@ internal sealed class ExternalAssetPreparationService
     private static ResolvedExternalAssetFile ResolveFile(
         string outputRoot,
         string generatedManifestPath,
+        StringComparison pathComparison,
         ExternalAssetFileConfiguration? file)
     {
         if (file is null)
@@ -145,8 +149,8 @@ internal sealed class ExternalAssetPreparationService
         var fileName = RequireValue(file.FileName, $"External asset file for runtime '{runtime}' requires FileName.");
         var source = RequireValue(file.Uri, $"External asset file '{fileName}' requires Uri.");
         var outputRelativePath = NormalizeOutputRelativePath(file.Path, fileName);
-        var targetPath = ResolveOutputPath(outputRoot, outputRelativePath);
-        if (SamePath(targetPath, generatedManifestPath))
+        var targetPath = ResolveOutputPath(outputRoot, outputRelativePath, pathComparison);
+        if (SamePath(targetPath, generatedManifestPath, pathComparison))
             throw new InvalidOperationException($"External asset file '{outputRelativePath}' cannot use the generated manifest path '{generatedManifestPath}'.");
 
         return new ResolvedExternalAssetFile(
@@ -171,7 +175,7 @@ internal sealed class ExternalAssetPreparationService
         if (!File.Exists(sourcePath))
             throw new FileNotFoundException($"External asset source file was not found: {sourcePath}", sourcePath);
 
-        if (SamePath(sourcePath, targetPath))
+        if (SamePath(sourcePath, targetPath, GetPathStringComparison(Path.GetDirectoryName(targetPath) ?? projectRoot)))
             return;
 
         File.Copy(sourcePath, targetPath, overwrite: true);
@@ -193,10 +197,10 @@ internal sealed class ExternalAssetPreparationService
         return ResolveProjectPath(projectRoot, source);
     }
 
-    private static string ResolveOutputPath(string outputRoot, string outputRelativePath)
+    private static string ResolveOutputPath(string outputRoot, string outputRelativePath, StringComparison pathComparison)
     {
         var full = Path.GetFullPath(Path.Combine(outputRoot, outputRelativePath));
-        if (!IsSameOrChildPath(outputRoot, full))
+        if (!IsSameOrChildPath(outputRoot, full, pathComparison))
             throw new InvalidOperationException($"External asset output path '{outputRelativePath}' escapes output root '{outputRoot}'.");
 
         return full;
@@ -261,32 +265,84 @@ internal sealed class ExternalAssetPreparationService
         return trimmed.Length == 0 ? null : trimmed;
     }
 
-    private static bool SamePath(string left, string right)
+    private static bool SamePath(string left, string right, StringComparison pathComparison)
     {
         var leftFull = NormalizePathForComparison(left);
         var rightFull = NormalizePathForComparison(right);
-        return string.Equals(leftFull, rightFull, FrameworkCompatibility.PathStringComparison());
+        return string.Equals(leftFull, rightFull, pathComparison);
     }
 
     private static string NormalizePathForComparison(string path)
         => Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-    private static StringComparer GetPathStringComparer()
-        => FrameworkCompatibility.IsWindows()
+    private static StringComparer GetPathStringComparer(StringComparison pathComparison)
+        => pathComparison == StringComparison.OrdinalIgnoreCase
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
 
-    private static bool IsSameOrChildPath(string rootPath, string candidatePath)
+    private static void EnsureSameOrChildPath(string rootPath, string candidatePath, string label)
+    {
+        if (!IsSameOrChildPath(rootPath, candidatePath, GetPathStringComparison(rootPath)))
+            throw new InvalidOperationException($"{label} must resolve inside project root '{rootPath}'.");
+    }
+
+    private static bool IsSameOrChildPath(string rootPath, string candidatePath, StringComparison pathComparison)
     {
         var root = Path.GetFullPath(rootPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var candidate = Path.GetFullPath(candidatePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var comparison = FrameworkCompatibility.PathStringComparison();
-        if (string.Equals(root, candidate, comparison))
+        if (string.Equals(root, candidate, pathComparison))
             return true;
 
         var rootWithSeparator = root + Path.DirectorySeparatorChar;
         var candidateWithSeparator = candidate + Path.DirectorySeparatorChar;
-        return candidateWithSeparator.StartsWith(rootWithSeparator, comparison);
+        return candidateWithSeparator.StartsWith(rootWithSeparator, pathComparison);
+    }
+
+    private static StringComparison GetPathStringComparison(string directory)
+    {
+        try
+        {
+            if (Directory.Exists(directory))
+                return IsCaseSensitiveDirectory(directory)
+                    ? StringComparison.Ordinal
+                    : StringComparison.OrdinalIgnoreCase;
+        }
+        catch
+        {
+            // fall back to the platform default below
+        }
+
+        return FrameworkCompatibility.PathStringComparison();
+    }
+
+    private static bool IsCaseSensitiveDirectory(string directory)
+    {
+        var probeName = "powerforge-case-" + Guid.NewGuid().ToString("N") + "a.tmp";
+        var probePath = Path.Combine(directory, probeName);
+        var alternatePath = Path.Combine(directory, probeName.ToUpperInvariant());
+        try
+        {
+            File.WriteAllText(probePath, string.Empty);
+            return !File.Exists(alternatePath);
+        }
+        finally
+        {
+            TryDeleteFile(probePath);
+            TryDeleteFile(alternatePath);
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch
+        {
+            // best effort cleanup
+        }
     }
 
     private static string DownloadFile(Uri uri, string targetPath, TimeSpan timeout)

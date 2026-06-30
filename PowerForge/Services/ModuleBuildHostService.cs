@@ -81,6 +81,14 @@ public sealed class ModuleBuildHostService
             BuildModuleImportClause(modulePath),
             $"$targetJson = {QuoteLiteral(outputPath)}",
             "Remove-Item -LiteralPath Alias:Build-Module -Force -ErrorAction SilentlyContinue",
+            $"$buildScriptPath = (Get-Item -LiteralPath {QuoteLiteral(scriptPath)} -ErrorAction Stop).FullName",
+            "$buildScriptCommand = Get-Command -Name $buildScriptPath -CommandType ExternalScript -ErrorAction Stop",
+            "$buildScriptArguments = @()",
+            "if ($buildScriptCommand.Parameters.ContainsKey('RunMode')) {",
+            "  $buildScriptArguments += @('-RunMode', 'Publish')",
+            "} elseif ($buildScriptCommand.Parameters.ContainsKey('ConfigurationGateMode')) {",
+            "  $buildScriptArguments += @('-ConfigurationGateMode', 'Publish')",
+            "}",
             "function Invoke-ModuleBuild {",
             "  [CmdletBinding(PositionalBinding = $false)]",
             "  param(",
@@ -137,7 +145,7 @@ public sealed class ModuleBuildHostService
             "  }",
             "}",
             "Set-Alias -Name Invoke-ModuleBuilder -Value Invoke-ModuleBuild -Scope Local",
-            $". {QuoteLiteral(scriptPath)}"
+            ". $buildScriptPath @buildScriptArguments"
         });
     }
 

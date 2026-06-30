@@ -188,6 +188,149 @@ public sealed class ExternalAssetPreparationServiceTests
     }
 
     [Fact]
+    public void Prepare_RejectsOutputPathOutsideProjectRootBeforeMaterializingFiles()
+    {
+        var workspace = CreateTempDirectory();
+        try
+        {
+            var projectRoot = Path.Combine(workspace, "Project");
+            Directory.CreateDirectory(projectRoot);
+            var sourceRoot = Path.Combine(workspace, "Source");
+            Directory.CreateDirectory(sourceRoot);
+            var sourceFile = Path.Combine(sourceRoot, "tool.zip");
+            File.WriteAllText(sourceFile, "payload");
+
+            var outsideOutput = Path.Combine(workspace, "Outside", "VendorTool");
+            var service = new ExternalAssetPreparationService(new NullLogger());
+            var segment = new ConfigurationExternalAssetSegment
+            {
+                Configuration = new ExternalAssetConfiguration
+                {
+                    Name = "VendorTool",
+                    OutputPath = outsideOutput,
+                    Files = new[]
+                    {
+                        new ExternalAssetFileConfiguration
+                        {
+                            Runtime = "win-x64",
+                            FileName = "tool.zip",
+                            Uri = sourceFile
+                        }
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => service.Prepare(projectRoot, segment));
+            Assert.Contains("OutputPath", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(outsideOutput));
+        }
+        finally
+        {
+            TryDelete(workspace);
+        }
+    }
+
+    [Fact]
+    public void Prepare_RejectsManifestPathOutsideProjectRootBeforeMaterializingFiles()
+    {
+        var workspace = CreateTempDirectory();
+        try
+        {
+            var projectRoot = Path.Combine(workspace, "Project");
+            Directory.CreateDirectory(projectRoot);
+            var sourceRoot = Path.Combine(workspace, "Source");
+            Directory.CreateDirectory(sourceRoot);
+            var sourceFile = Path.Combine(sourceRoot, "tool.zip");
+            File.WriteAllText(sourceFile, "payload");
+
+            var outsideManifest = Path.Combine(workspace, "Outside", "manifest.json");
+            var service = new ExternalAssetPreparationService(new NullLogger());
+            var segment = new ConfigurationExternalAssetSegment
+            {
+                Configuration = new ExternalAssetConfiguration
+                {
+                    Name = "VendorTool",
+                    OutputPath = "Artefacts/VendorTool",
+                    ManifestPath = outsideManifest,
+                    Files = new[]
+                    {
+                        new ExternalAssetFileConfiguration
+                        {
+                            Runtime = "win-x64",
+                            FileName = "tool.zip",
+                            Uri = sourceFile
+                        }
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => service.Prepare(projectRoot, segment));
+            Assert.Contains("ManifestPath", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(outsideManifest));
+            Assert.False(Directory.Exists(Path.Combine(projectRoot, "Artefacts", "VendorTool")));
+        }
+        finally
+        {
+            TryDelete(workspace);
+        }
+    }
+
+    [Fact]
+    public void Prepare_UsesFilesystemCasingForDuplicateOutputPaths()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var sourceRoot = Path.Combine(root, "Source");
+            Directory.CreateDirectory(sourceRoot);
+            var firstSource = Path.Combine(sourceRoot, "first.zip");
+            var secondSource = Path.Combine(sourceRoot, "second.zip");
+            File.WriteAllText(firstSource, "first payload");
+            File.WriteAllText(secondSource, "second payload");
+
+            var service = new ExternalAssetPreparationService(new NullLogger());
+            var segment = new ConfigurationExternalAssetSegment
+            {
+                Configuration = new ExternalAssetConfiguration
+                {
+                    Name = "VendorTool",
+                    OutputPath = "Artefacts/VendorTool",
+                    Files = new[]
+                    {
+                        new ExternalAssetFileConfiguration
+                        {
+                            Runtime = "win-x64",
+                            FileName = "Tool.zip",
+                            Uri = firstSource
+                        },
+                        new ExternalAssetFileConfiguration
+                        {
+                            Runtime = "win-arm64",
+                            FileName = "tool.zip",
+                            Uri = secondSource
+                        }
+                    }
+                }
+            };
+
+            if (IsCaseSensitiveDirectory(root))
+            {
+                var result = service.Prepare(root, segment);
+                Assert.Equal(2, result.Files.Length);
+            }
+            else
+            {
+                var ex = Assert.Throws<InvalidOperationException>(() => service.Prepare(root, segment));
+                Assert.Contains("already used", ex.Message, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Run_StagesExternalAssetsWithoutStagingUnrelatedArtefacts()
     {
         var workspace = CreateTempDirectory();
@@ -400,6 +543,23 @@ public sealed class ExternalAssetPreparationServiceTests
         return path;
     }
 
+    private static bool IsCaseSensitiveDirectory(string directory)
+    {
+        var probeName = "powerforge-test-case-" + Guid.NewGuid().ToString("N") + "a.tmp";
+        var probePath = Path.Combine(directory, probeName);
+        var alternatePath = Path.Combine(directory, probeName.ToUpperInvariant());
+        try
+        {
+            File.WriteAllText(probePath, string.Empty);
+            return !File.Exists(alternatePath);
+        }
+        finally
+        {
+            TryDeleteFile(probePath);
+            TryDeleteFile(alternatePath);
+        }
+    }
+
     private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
     {
         Directory.CreateDirectory(moduleRoot);
@@ -425,6 +585,19 @@ public sealed class ExternalAssetPreparationServiceTests
         {
             if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
                 Directory.Delete(path!, recursive: true);
+        }
+        catch
+        {
+            // best effort cleanup
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
         }
         catch
         {
