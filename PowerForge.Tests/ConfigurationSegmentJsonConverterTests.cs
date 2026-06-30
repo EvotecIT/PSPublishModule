@@ -90,6 +90,60 @@ public sealed class ConfigurationSegmentJsonConverterTests
     }
 
     [Fact]
+    public void Deserialize_ReadsExternalAssetSegment()
+    {
+        const string json = """
+            {
+              "Build": {
+                "Name": "PSPublishModule.Artefacts",
+                "SourcePath": ".",
+                "Version": "1.0.0"
+              },
+              "Install": {
+                "Enabled": false
+              },
+              "Segments": [
+                {
+                  "Type": "ExternalAsset",
+                  "Configuration": {
+                    "Name": "AzureArtifactsCredentialProvider",
+                    "Version": "2.0.2",
+                    "OutputPath": "Artefacts/AzureArtifactsCredentialProvider",
+                    "Source": "https://github.com/microsoft/artifacts-credprovider/releases/tag/v2.0.2",
+                    "License": "MIT",
+                    "SkipDownload": true,
+                    "Files": [
+                      {
+                        "Runtime": "netcore",
+                        "Architecture": "x64",
+                        "FileName": "Microsoft.win-x64.NuGet.CredentialProvider.zip",
+                        "Uri": "https://example.test/Microsoft.win-x64.NuGet.CredentialProvider.zip"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+            """;
+
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        options.Converters.Add(new ConfigurationSegmentJsonConverter());
+
+        var spec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, options);
+
+        Assert.NotNull(spec);
+        var segment = Assert.IsType<ConfigurationExternalAssetSegment>(Assert.Single(spec!.Segments));
+        Assert.Equal("AzureArtifactsCredentialProvider", segment.Configuration.Name);
+        Assert.Equal("2.0.2", segment.Configuration.Version);
+        Assert.Equal("Artefacts/AzureArtifactsCredentialProvider", segment.Configuration.OutputPath);
+        Assert.True(segment.Configuration.SkipDownload);
+        var file = Assert.Single(segment.Configuration.Files);
+        Assert.Equal("netcore", file.Runtime);
+        Assert.Equal("x64", file.Architecture);
+    }
+
+    [Fact]
     public void Deserialize_ReadsXcodeProjectVersionSegment()
     {
         const string json = """

@@ -31,6 +31,8 @@ public enum ModulePipelineStepKind
     Action = 11,
     /// <summary>Build repository packages before the module lane.</summary>
     PackageBuild = 12,
+    /// <summary>Prepare external files before module staging.</summary>
+    ExternalAsset = 13,
 }
 
 /// <summary>
@@ -67,6 +69,9 @@ public sealed class ModulePipelineStep
     /// <summary>Optional inline package-build segment associated with the step.</summary>
     public ConfigurationPackageBuildSegment? PackageBuildSegment { get; }
 
+    /// <summary>Optional external asset segment associated with the step.</summary>
+    public ConfigurationExternalAssetSegment? ExternalAssetSegment { get; }
+
     /// <summary>Optional lifecycle action associated with the step.</summary>
     public ConfigurationActionSegment? ActionSegment { get; }
 
@@ -80,6 +85,7 @@ public sealed class ModulePipelineStep
         ConfigurationAppleAppSegment? appleAppSegment = null,
         ConfigurationProjectBuildSegment? projectBuildSegment = null,
         ConfigurationPackageBuildSegment? packageBuildSegment = null,
+        ConfigurationExternalAssetSegment? externalAssetSegment = null,
         ConfigurationActionSegment? actionSegment = null)
     {
         Kind = kind;
@@ -91,6 +97,7 @@ public sealed class ModulePipelineStep
         AppleAppSegment = appleAppSegment;
         ProjectBuildSegment = projectBuildSegment;
         PackageBuildSegment = packageBuildSegment;
+        ExternalAssetSegment = externalAssetSegment;
         ActionSegment = actionSegment;
     }
 
@@ -152,6 +159,7 @@ public sealed class ModulePipelineStep
 
         // 1) Build (always) - split into sub-steps for better progress visibility.
         AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeStaging);
+        AddExternalAssetSteps(steps, plan);
         steps.Add(new ModulePipelineStep(
             kind: ModulePipelineStepKind.Build,
             key: "build:stage",
@@ -439,6 +447,30 @@ public sealed class ModulePipelineStep
                     title: label,
                     packageBuildSegment: segment));
             }
+        }
+    }
+
+    private static void AddExternalAssetSteps(List<ModulePipelineStep> steps, ModulePipelinePlan plan)
+    {
+        if (plan.ExternalAssets is not { Length: > 0 })
+            return;
+
+        for (var i = 0; i < plan.ExternalAssets.Length; i++)
+        {
+            var segment = plan.ExternalAssets[i];
+            if (segment is null)
+                continue;
+
+            var name = segment.Configuration?.Name;
+            var label = string.IsNullOrWhiteSpace(name)
+                ? "Prepare external asset"
+                : $"Prepare external asset ({name})";
+
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.ExternalAsset,
+                key: $"asset:external:{i + 1:00}",
+                title: label,
+                externalAssetSegment: segment));
         }
     }
 }

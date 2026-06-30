@@ -205,6 +205,66 @@ public sealed class ModulePipelineStepTests
     }
 
     [Fact]
+    public void Create_IncludesExternalAssetStepBeforeStaging_WhenConfigured()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationExternalAssetSegment
+                    {
+                        Configuration = new ExternalAssetConfiguration
+                        {
+                            Name = "VendorTool",
+                            OutputPath = "Artefacts/VendorTool",
+                            Files = new[]
+                            {
+                                new ExternalAssetFileConfiguration
+                                {
+                                    Runtime = "win-x64",
+                                    FileName = "tool.zip",
+                                    Uri = "https://example.test/tool.zip"
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            var steps = ModulePipelineStep.Create(plan);
+
+            var idxExternalAsset = Array.FindIndex(steps, s => s.Key == "asset:external:01");
+            var idxStage = Array.FindIndex(steps, s => s.Key == "build:stage");
+
+            Assert.Single(plan.ExternalAssets);
+            Assert.True(idxExternalAsset >= 0);
+            Assert.True(idxStage >= 0);
+            Assert.True(idxExternalAsset < idxStage);
+            Assert.Equal(ModulePipelineStepKind.ExternalAsset, steps[idxExternalAsset].Kind);
+            Assert.Equal("VendorTool", steps[idxExternalAsset].ExternalAssetSegment?.Configuration.Name);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Create_IncludesPackageBuildStepsBeforeModuleBuildSteps()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

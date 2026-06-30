@@ -239,6 +239,30 @@ public sealed class PowerForgeProjectCmdletTests
     }
 
     [Fact]
+    public void NewConfigurationExternalAsset_EmitsSegment()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddScript("""
+            $file = New-ConfigurationExternalAssetFile -Runtime netcore -Architecture x64 -FileName tool.zip -Uri 'https://example.test/tool.zip'
+            New-ConfigurationExternalAsset -Name VendorTool -Version '1.2.3' -OutputPath 'Artefacts\VendorTool' -Source 'https://example.test/vendor-tool' -License 'MIT' -SkipDownload -Files @($file)
+            """);
+
+        var results = ps.Invoke();
+
+        Assert.False(ps.HadErrors);
+        var segment = Assert.IsType<ConfigurationExternalAssetSegment>(Assert.Single(results).BaseObject);
+        Assert.Equal("VendorTool", segment.Configuration.Name);
+        Assert.Equal("1.2.3", segment.Configuration.Version);
+        Assert.Equal("Artefacts\\VendorTool", segment.Configuration.OutputPath);
+        Assert.True(segment.Configuration.SkipDownload);
+        var file = Assert.Single(segment.Configuration.Files);
+        Assert.Equal("netcore", file.Runtime);
+        Assert.Equal("x64", file.Architecture);
+        Assert.Equal("tool.zip", file.FileName);
+        Assert.Equal("https://example.test/tool.zip", file.Uri);
+    }
+
+    [Fact]
     public void GetConfigurationBoolean_UsesEnvironmentValueOrDefault()
     {
         var name = "POWERFORGE_TEST_BOOL_" + Guid.NewGuid().ToString("N");
