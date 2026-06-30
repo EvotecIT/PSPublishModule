@@ -144,6 +144,11 @@ public sealed class ModuleBuildHostService
             "    Invoke-ModuleBuild @forwardArgs",
             "  }",
             "}",
+            "function Import-Module {",
+            "  $cmd = Get-Command -Name Import-Module -CommandType Cmdlet -Module Microsoft.PowerShell.Core",
+            "  & $cmd @args",
+            "  Remove-Item -LiteralPath Alias:Build-Module -Force -ErrorAction SilentlyContinue",
+            "}",
             "Set-Alias -Name Invoke-ModuleBuilder -Value Invoke-ModuleBuild -Scope Local",
             ". $buildScriptPath @buildScriptArguments"
         });
