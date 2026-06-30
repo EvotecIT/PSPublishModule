@@ -167,6 +167,137 @@ public sealed class ExternalAssetPreparationServiceTests
         }
     }
 
+    [Fact]
+    public void Run_StagesOnlyPreparedExternalAssetFiles()
+    {
+        var workspace = CreateTempDirectory();
+        string? stagingPath = null;
+        try
+        {
+            var projectRoot = Path.Combine(workspace, "TestModule");
+            const string moduleName = "TestModule";
+            WriteMinimalModule(projectRoot, moduleName, "1.0.0");
+
+            var sourceRoot = Path.Combine(workspace, "Input");
+            Directory.CreateDirectory(sourceRoot);
+            var sourceFile = Path.Combine(sourceRoot, "tool.zip");
+            File.WriteAllText(sourceFile, "payload");
+
+            var outputRoot = Path.Combine(projectRoot, "Artefacts", "VendorTool");
+            Directory.CreateDirectory(outputRoot);
+            File.WriteAllText(Path.Combine(outputRoot, "stale.zip"), "old");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = projectRoot,
+                    Version = "1.0.0",
+                    CsprojPath = null,
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationExternalAssetSegment
+                    {
+                        Configuration = new ExternalAssetConfiguration
+                        {
+                            Name = "VendorTool",
+                            OutputPath = "Artefacts/VendorTool",
+                            Files = new[]
+                            {
+                                new ExternalAssetFileConfiguration
+                                {
+                                    Runtime = "win-x64",
+                                    FileName = "tool.zip",
+                                    Uri = sourceFile
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var result = new ModulePipelineRunner(new NullLogger()).Run(spec);
+            stagingPath = result.BuildResult.StagingPath;
+
+            Assert.True(File.Exists(Path.Combine(stagingPath, "Artefacts", "VendorTool", "tool.zip")));
+            Assert.True(File.Exists(Path.Combine(stagingPath, "Artefacts", "VendorTool", "manifest.json")));
+            Assert.False(File.Exists(Path.Combine(stagingPath, "Artefacts", "VendorTool", "stale.zip")));
+        }
+        finally
+        {
+            TryDelete(stagingPath);
+            TryDelete(workspace);
+        }
+    }
+
+    [Fact]
+    public void Prepare_UsesCaseSensitiveOutputContainmentOutsideWindows()
+    {
+        if (FrameworkCompatibility.IsWindows())
+            return;
+
+        var root = CreateTempDirectory();
+        try
+        {
+            var sourceRoot = Path.Combine(root, "Source");
+            Directory.CreateDirectory(sourceRoot);
+            var sourceFile = Path.Combine(sourceRoot, "tool.zip");
+            File.WriteAllText(sourceFile, "sample payload");
+
+            var service = new ExternalAssetPreparationService(new NullLogger());
+            var segment = new ConfigurationExternalAssetSegment
+            {
+                Configuration = new ExternalAssetConfiguration
+                {
+                    Name = "VendorTool",
+                    OutputPath = "Artefacts/VendorTool",
+                    Files = new[]
+                    {
+                        new ExternalAssetFileConfiguration
+                        {
+                            Runtime = "win-x64",
+                            FileName = "tool.zip",
+                            Path = "../artefacts/VendorTool/tool.zip",
+                            Uri = sourceFile
+                        }
+                    }
+                }
+            };
+
+            Assert.Throws<InvalidOperationException>(() => service.Prepare(root, segment));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Schema_IncludesExternalAssetSegment()
+    {
+        var schemaPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Schemas", "powerforge.segments.schema.json"));
+        using var schema = JsonDocument.Parse(File.ReadAllText(schemaPath));
+        var definitions = schema.RootElement.GetProperty("$defs");
+
+        Assert.True(definitions.TryGetProperty("ExternalAssetConfiguration", out var configuration));
+        Assert.True(configuration.GetProperty("properties").TryGetProperty("Files", out _));
+        Assert.True(definitions.TryGetProperty("ExternalAssetFileConfiguration", out var fileConfiguration));
+        Assert.True(fileConfiguration.GetProperty("properties").TryGetProperty("Sha256", out _));
+        Assert.True(definitions.TryGetProperty("ExternalAssetSegment", out _));
+
+        var oneOf = definitions
+            .GetProperty("ConfigurationSegment")
+            .GetProperty("oneOf")
+            .EnumerateArray();
+
+        Assert.Contains(oneOf, item =>
+            string.Equals(item.GetProperty("$ref").GetString(), "#/$defs/ExternalAssetSegment", StringComparison.Ordinal));
+    }
+
     private static string ComputeSha256(string path)
     {
         using var stream = File.OpenRead(path);

@@ -244,19 +244,20 @@ internal sealed class ExternalAssetPreparationService
     {
         var leftFull = Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var rightFull = Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return string.Equals(leftFull, rightFull, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(leftFull, rightFull, FrameworkCompatibility.PathStringComparison());
     }
 
     private static bool IsSameOrChildPath(string rootPath, string candidatePath)
     {
         var root = Path.GetFullPath(rootPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var candidate = Path.GetFullPath(candidatePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (string.Equals(root, candidate, StringComparison.OrdinalIgnoreCase))
+        var comparison = FrameworkCompatibility.PathStringComparison();
+        if (string.Equals(root, candidate, comparison))
             return true;
 
         var rootWithSeparator = root + Path.DirectorySeparatorChar;
         var candidateWithSeparator = candidate + Path.DirectorySeparatorChar;
-        return candidateWithSeparator.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase);
+        return candidateWithSeparator.StartsWith(rootWithSeparator, comparison);
     }
 
     private static string DownloadFile(Uri uri, string targetPath, TimeSpan timeout)

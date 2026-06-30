@@ -31,6 +31,11 @@ internal static class FrameworkCompatibility
 #endif
     }
 
+    public static StringComparison PathStringComparison()
+        => IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
     public static string GetRelativePath(string relativeTo, string path)
     {
 #if NET472
