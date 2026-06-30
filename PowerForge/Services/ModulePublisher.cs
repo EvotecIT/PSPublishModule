@@ -220,15 +220,18 @@ public sealed partial class ModulePublisher
                 "PublishRequiredModules requires PSResourceGet because dependency mirroring saves and republishes dependency graphs before publishing the main module. Use Tool = PSResourceGet or disable PublishRequiredModules.");
         }
 
-        var credential = tool == PublishTool.ManagedModule
-            ? ResolveManagedPublishCredential(publish, repoConfig)
+        var readCredential = tool == PublishTool.ManagedModule
+            ? ResolveManagedReadCredential(repoConfig)
             : _repositoryPublisher.ResolveCredentialForRepository(repoConfig);
+        var publishCredential = tool == PublishTool.ManagedModule
+            ? ResolveManagedPublishCredential(publish, repoConfig)
+            : readCredential;
         string? temporaryPublishPath = null;
         string? temporaryPackagePath = null;
         var repositoryCreated = false;
         PublishRepositoryConfiguration? repositoryForPublish = repoConfig is null
             ? null
-            : CloneRepositoryForPublish(repoConfig, credential);
+            : CloneRepositoryForPublish(repoConfig, publishCredential);
         var versionText = ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
 
         try
@@ -243,7 +246,7 @@ public sealed partial class ModulePublisher
             if (tool != PublishTool.ManagedModule && repoConfig is not null && repoConfig.EnsureRegistered && HasRepositoryUris(repoConfig))
             {
                 repositoryCreated = EnsureRepositoryRegistered(tool, repositoryName, repoConfig);
-                repositoryForPublish = CloneRegisteredRepository(repoConfig, credential);
+                repositoryForPublish = CloneRegisteredRepository(repoConfig, publishCredential);
             }
 
             if (!publish.Force)
@@ -255,11 +258,11 @@ public sealed partial class ModulePublisher
                         plan.ModuleName,
                         plan.ResolvedVersion,
                         plan.PreRelease,
-                        credential);
+                        readCredential);
                 }
                 else
                 {
-                    EnsureVersionIsGreaterThanRepository(tool, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease, repositoryName, credential);
+                    EnsureVersionIsGreaterThanRepository(tool, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease, repositoryName, readCredential);
                 }
             }
 
@@ -272,7 +275,8 @@ public sealed partial class ModulePublisher
                 _managedRequiredModuleRepositoryValidator.Validate(
                     publish,
                     CreateManagedReadRepository(repositoryName, repoConfig),
-                    credential,
+                    readCredential,
+                    publishCredential,
                     plan,
                     buildResult);
 
@@ -283,7 +287,8 @@ public sealed partial class ModulePublisher
                     modulePath,
                     repositoryName,
                     repoConfig,
-                    credential,
+                    readCredential,
+                    publishCredential,
                     versionText,
                     temporaryPackagePath,
                     skipDependenciesCheck: true);
@@ -297,7 +302,7 @@ public sealed partial class ModulePublisher
                 _requiredModuleRepositoryValidator.Validate(
                     publish,
                     repositoryName,
-                    credential,
+                    readCredential,
                     repositoryForPublish,
                     plan,
                     buildResult);

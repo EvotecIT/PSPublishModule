@@ -88,6 +88,18 @@ function ConvertTo-ParameterValueLiteral {
     ConvertTo-ArrayLiteral $Value
 }
 
+function New-BenchmarkScratchRoot {
+    param([string] $Name)
+
+    $basePath = if ($script:IsWindowsHost -and -not [string]::IsNullOrWhiteSpace($env:ProgramData)) {
+        Join-Path $env:ProgramData 'PSPublishModuleBenchmarks'
+    } else {
+        Join-Path ([System.IO.Path]::GetTempPath()) 'PSPublishModuleBenchmarks'
+    }
+
+    Join-Path $basePath $Name
+}
+
 function New-ProviderRoot {
     param([string] $ScratchRoot)
 
@@ -155,7 +167,7 @@ function Invoke-CurrentUserMeasure {
     $providerRoot = ''
     try {
         if ($SelectedEngine -contains 'PSResourceGet' -or $SelectedEngine -contains 'PowerShellGet') {
-            $scratchRoot = Join-Path $env:ProgramData ('PSPublishModuleBenchmarks\Provider-' + [guid]::NewGuid().ToString('N'))
+            $scratchRoot = New-BenchmarkScratchRoot -Name ('Provider-' + [guid]::NewGuid().ToString('N'))
             Grant-BenchmarkPath -Path $scratchRoot
             $providerRoot = New-ProviderRoot -ScratchRoot $scratchRoot
         }
@@ -289,7 +301,7 @@ function Invoke-TemporaryUserMeasure {
     $passwordPlain = 'PFb!' + ([guid]::NewGuid().ToString('N')) + '9a'
     $secure = ConvertTo-SecureString $passwordPlain -AsPlainText -Force
     $credential = [pscredential]::new("$env:COMPUTERNAME\$user", $secure)
-    $scratchRoot = Join-Path $env:ProgramData ('PSPublishModuleBenchmarks\' + $user)
+    $scratchRoot = New-BenchmarkScratchRoot -Name $user
     $providerRoot = Join-Path $scratchRoot 'ProviderModules'
     $temporaryOutputPath = Join-Path $scratchRoot 'native-results.csv'
     $temporaryOutputRoot = Join-Path $scratchRoot 'Runs'

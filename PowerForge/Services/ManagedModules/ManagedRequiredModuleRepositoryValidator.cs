@@ -20,14 +20,16 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
         PublishConfiguration publish,
         ManagedModuleRepository targetRepository,
         RepositoryCredential? targetCredential,
+        RepositoryCredential? targetPublishCredential,
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult)
-        => ValidateAsync(publish, targetRepository, targetCredential, plan, buildResult).GetAwaiter().GetResult();
+        => ValidateAsync(publish, targetRepository, targetCredential, targetPublishCredential, plan, buildResult).GetAwaiter().GetResult();
 
     private async Task ValidateAsync(
         PublishConfiguration publish,
         ManagedModuleRepository targetRepository,
         RepositoryCredential? targetCredential,
+        RepositoryCredential? targetPublishCredential,
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
         CancellationToken cancellationToken = default)
@@ -82,6 +84,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
                         sourceCredential,
                         targetRepository,
                         targetCredential,
+                        targetPublishCredential,
                         cacheDirectory,
                         mirroredPackages,
                         visitingPackages,
@@ -124,6 +127,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
         RepositoryCredential? sourceCredential,
         ManagedModuleRepository targetRepository,
         RepositoryCredential? targetCredential,
+        RepositoryCredential? targetPublishCredential,
         string cacheDirectory,
         ISet<string> mirroredPackages,
         ISet<string> visitingPackages,
@@ -162,6 +166,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
                     sourceCredential,
                     targetRepository,
                     targetCredential,
+                    targetPublishCredential,
                     cacheDirectory,
                     mirroredPackages,
                     visitingPackages,
@@ -171,7 +176,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
             var publish = await _repositoryClient.PublishPackageAsync(
                 targetRepository,
                 download.PackagePath,
-                targetCredential,
+                targetPublishCredential,
                 force: false,
                 cancellationToken).ConfigureAwait(false);
             if (!publish.Published && !publish.Duplicate)

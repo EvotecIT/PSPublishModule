@@ -226,6 +226,41 @@ public sealed class ModulePublisherRequiredModulesTests
     }
 
     [Fact]
+    public void ResolveManagedPublishCredential_PrefersPublishApiKeyOverReadCredential()
+    {
+        var readCredential = new RepositoryCredential
+        {
+            UserName = "reader",
+            Secret = "read-token"
+        };
+        var publish = new PublishConfiguration
+        {
+            ApiKey = "publish-token"
+        };
+        var config = new PublishRepositoryConfiguration
+        {
+            Credential = readCredential
+        };
+        var readMethod = typeof(ModulePublisher).GetMethod(
+            "ResolveManagedReadCredential",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        var publishMethod = typeof(ModulePublisher).GetMethod(
+            "ResolveManagedPublishCredential",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(readMethod);
+        Assert.NotNull(publishMethod);
+
+        var resolvedReadCredential = Assert.IsType<RepositoryCredential>(readMethod!.Invoke(null, new object?[] { config }));
+        var resolvedPublishCredential = Assert.IsType<RepositoryCredential>(publishMethod!.Invoke(null, new object?[] { publish, config }));
+
+        Assert.Same(readCredential, resolvedReadCredential);
+        Assert.Equal("reader", resolvedReadCredential.UserName);
+        Assert.Equal("read-token", resolvedReadCredential.Secret);
+        Assert.Null(resolvedPublishCredential.UserName);
+        Assert.Equal("publish-token", resolvedPublishCredential.Secret);
+    }
+
+    [Fact]
     public void FindSavedModulePath_ReturnsVersionFolderContainingManifest()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

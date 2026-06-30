@@ -28,7 +28,7 @@ public sealed class ManagedRequiredModuleRepositoryValidatorTests
             manifestPath: Path.Combine(targetContainer.Path, "missing.psd1"),
             exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
 
-        validator.Validate(publish, targetRepository, targetCredential: null, plan, buildResult);
+        validator.Validate(publish, targetRepository, targetCredential: null, targetPublishCredential: null, plan, buildResult);
 
         Assert.True(File.Exists(Path.Combine(targetPath, "Company.Core.1.0.0.nupkg")));
     }
@@ -62,7 +62,7 @@ public sealed class ManagedRequiredModuleRepositoryValidatorTests
             manifestPath: Path.Combine(target.Path, "missing.psd1"),
             exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
 
-        validator.Validate(publish, new ManagedModuleRepository("Private", target.Path), targetCredential: null, plan, buildResult);
+        validator.Validate(publish, new ManagedModuleRepository("Private", target.Path), targetCredential: null, targetPublishCredential: null, plan, buildResult);
 
         Assert.True(File.Exists(Path.Combine(target.Path, "Company.Core.1.0.0.nupkg")));
         Assert.True(File.Exists(Path.Combine(target.Path, "Company.Dependency.1.0.0.nupkg")));
@@ -92,7 +92,7 @@ public sealed class ManagedRequiredModuleRepositoryValidatorTests
             exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
 
         var exception = Assert.Throws<InvalidOperationException>(
-            () => validator.Validate(publish, targetRepository, targetCredential: null, plan, buildResult));
+            () => validator.Validate(publish, targetRepository, targetCredential: null, targetPublishCredential: null, plan, buildResult));
 
         Assert.Contains("PSGallery", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("private repository", exception.Message, StringComparison.OrdinalIgnoreCase);

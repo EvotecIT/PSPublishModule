@@ -11,7 +11,8 @@ public sealed partial class ModulePublisher
         string modulePath,
         string repositoryName,
         PublishRepositoryConfiguration? repoConfig,
-        RepositoryCredential? credential,
+        RepositoryCredential? readCredential,
+        RepositoryCredential? publishCredential,
         string versionText,
         string temporaryPackagePath,
         bool skipDependenciesCheck)
@@ -23,7 +24,8 @@ public sealed partial class ModulePublisher
                     Repository = CreateManagedReadRepository(repositoryName, repoConfig),
                     PublishRepository = CreateManagedPublishRepository(repositoryName, repoConfig),
                     OutputDirectory = temporaryPackagePath,
-                    Credential = credential,
+                    Credential = readCredential,
+                    PublishCredential = publishCredential,
                     SkipDependenciesCheck = skipDependenciesCheck,
                     SkipModuleManifestValidate = false,
                     Force = publish.Force
@@ -76,9 +78,7 @@ public sealed partial class ModulePublisher
             $"Managed module publishing requires a repository Uri, SourceUri, or PublishUri for repository '{repositoryName}'.");
     }
 
-    private static RepositoryCredential? ResolveManagedPublishCredential(
-        PublishConfiguration publish,
-        PublishRepositoryConfiguration? repoConfig)
+    private static RepositoryCredential? ResolveManagedReadCredential(PublishRepositoryConfiguration? repoConfig)
     {
         if (repoConfig?.CredentialProvider is { Kind: not RepositoryCredentialProviderKind.None })
         {
@@ -86,12 +86,19 @@ public sealed partial class ModulePublisher
                 "Managed module publishing does not use external runtime credential providers. Provide ApiKey or static repository credentials, or use a compatibility publish tool.");
         }
 
-        if (repoConfig?.Credential is not null)
-            return repoConfig.Credential;
+        return repoConfig?.Credential;
+    }
 
-        return string.IsNullOrWhiteSpace(publish.ApiKey)
-            ? null
-            : new RepositoryCredential { Secret = publish.ApiKey };
+    private static RepositoryCredential? ResolveManagedPublishCredential(
+        PublishConfiguration publish,
+        PublishRepositoryConfiguration? repoConfig)
+    {
+        _ = ResolveManagedReadCredential(repoConfig);
+
+        if (!string.IsNullOrWhiteSpace(publish.ApiKey))
+            return new RepositoryCredential { Secret = publish.ApiKey };
+
+        return repoConfig?.Credential;
     }
 
     private static string? FirstNonEmpty(params string?[] values)
