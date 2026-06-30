@@ -38,11 +38,41 @@ public sealed partial class ModulePipelineRunner
         var staged = state.RequireStaged();
         foreach (var result in state.ExternalAssetResults)
         {
+            RemoveExternalAssetOutputFromStaging(plan.ProjectRoot, staged.StagingPath, result.OutputPath);
+
             foreach (var file in result.Files)
                 SyncExternalAssetFile(plan.ProjectRoot, staged.StagingPath, file.FilePath);
 
             SyncExternalAssetFile(plan.ProjectRoot, staged.StagingPath, result.ManifestPath);
         }
+    }
+
+    private static void ValidateExternalAssets(ModulePipelinePlan plan)
+    {
+        if (plan.ExternalAssets is not { Length: > 0 })
+            return;
+
+        ExternalAssetPreparationService.ValidateOutputPathConflicts(plan.ProjectRoot, plan.ExternalAssets);
+    }
+
+    private static void RemoveExternalAssetOutputFromStaging(string projectRoot, string stagingRoot, string sourceOutputDirectory)
+    {
+        if (!IsSameOrChildExternalAssetPath(projectRoot, sourceOutputDirectory))
+            throw new InvalidOperationException($"External asset output path must be under the module project root to be staged: {sourceOutputDirectory}");
+
+        var relativePath = FrameworkCompatibility.GetRelativePath(projectRoot, sourceOutputDirectory);
+        var stagingOutputDirectory = Path.Combine(stagingRoot, relativePath);
+        if (!IsSameOrChildExternalAssetPath(stagingRoot, stagingOutputDirectory) ||
+            string.Equals(
+                Path.GetFullPath(stagingRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                Path.GetFullPath(stagingOutputDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                FrameworkCompatibility.PathStringComparison()))
+        {
+            throw new InvalidOperationException($"External asset output path cannot resolve to the staging root: {sourceOutputDirectory}");
+        }
+
+        if (Directory.Exists(stagingOutputDirectory))
+            Directory.Delete(stagingOutputDirectory, recursive: true);
     }
 
     private static void SyncExternalAssetFile(string projectRoot, string stagingRoot, string sourceFile)

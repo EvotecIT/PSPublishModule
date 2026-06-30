@@ -105,6 +105,46 @@ internal sealed class ExternalAssetPreparationService
             fileResults.ToArray());
     }
 
+    public static void ValidateOutputPathConflicts(
+        string projectRoot,
+        IEnumerable<ConfigurationExternalAssetSegment>? segments)
+    {
+        if (string.IsNullOrWhiteSpace(projectRoot))
+            throw new ArgumentException("Project root is required.", nameof(projectRoot));
+        if (segments is null)
+            return;
+
+        var projectFullPath = Path.GetFullPath(projectRoot);
+        var pathComparison = GetPathStringComparison(projectFullPath);
+        var pathComparer = GetPathStringComparer(pathComparison);
+        var occupiedPaths = new Dictionary<string, string>(pathComparer);
+        var ownedOutputDirectories = new List<ExternalAssetOwnedDirectory>();
+
+        foreach (var segment in segments)
+        {
+            if (segment is null)
+                continue;
+
+            var configuration = segment.Configuration ?? new ExternalAssetConfiguration();
+            var name = RequireValue(configuration.Name, "External asset Name is required.");
+            var outputRoot = ResolveProjectPath(projectFullPath, RequireValue(configuration.OutputPath, $"External asset '{name}' requires OutputPath."));
+            EnsureSameOrChildPath(projectFullPath, outputRoot, $"External asset '{name}' OutputPath");
+            AddOwnedOutputDirectory(ownedOutputDirectories, outputRoot, $"external asset '{name}' OutputPath", pathComparison);
+
+            var manifestPath = string.IsNullOrWhiteSpace(configuration.ManifestPath)
+                ? Path.Combine(outputRoot, "manifest.json")
+                : ResolveProjectPath(projectFullPath, configuration.ManifestPath!);
+            EnsureSameOrChildPath(projectFullPath, manifestPath, $"External asset '{name}' ManifestPath");
+            AddOccupiedPath(occupiedPaths, manifestPath, $"external asset '{name}' manifest");
+
+            foreach (var file in configuration.Files ?? Array.Empty<ExternalAssetFileConfiguration>())
+            {
+                var resolvedFile = ResolveFile(outputRoot, manifestPath, pathComparison, file);
+                AddOccupiedPath(occupiedPaths, resolvedFile.TargetPath, $"external asset '{name}' file '{resolvedFile.OutputRelativePath}'");
+            }
+        }
+    }
+
     private ExternalAssetFilePreparationResult PrepareFile(
         string projectRoot,
         string manifestDirectory,
@@ -298,6 +338,34 @@ internal sealed class ExternalAssetPreparationService
         return candidateWithSeparator.StartsWith(rootWithSeparator, pathComparison);
     }
 
+    private static void AddOccupiedPath(Dictionary<string, string> occupiedPaths, string path, string description)
+    {
+        var normalized = NormalizePathForComparison(path);
+        if (occupiedPaths.TryGetValue(normalized, out var existing))
+            throw new InvalidOperationException($"External asset output collision: {description} resolves to '{path}', which is already used by {existing}.");
+
+        occupiedPaths.Add(normalized, description);
+    }
+
+    private static void AddOwnedOutputDirectory(
+        List<ExternalAssetOwnedDirectory> ownedDirectories,
+        string outputDirectory,
+        string description,
+        StringComparison pathComparison)
+    {
+        foreach (var ownedDirectory in ownedDirectories)
+        {
+            if (IsSameOrChildPath(ownedDirectory.Path, outputDirectory, pathComparison) ||
+                IsSameOrChildPath(outputDirectory, ownedDirectory.Path, pathComparison))
+            {
+                throw new InvalidOperationException(
+                    $"External asset output collision: {description} resolves to '{outputDirectory}', which overlaps {ownedDirectory.Description}.");
+            }
+        }
+
+        ownedDirectories.Add(new ExternalAssetOwnedDirectory(NormalizePathForComparison(outputDirectory), description));
+    }
+
     private static StringComparison GetPathStringComparison(string directory)
     {
         try
@@ -418,6 +486,19 @@ internal sealed class ExternalAssetPreparationService
         public string TargetPath { get; }
 
         public string? ExpectedSha256 { get; }
+    }
+
+    private sealed class ExternalAssetOwnedDirectory
+    {
+        public ExternalAssetOwnedDirectory(string path, string description)
+        {
+            Path = path;
+            Description = description;
+        }
+
+        public string Path { get; }
+
+        public string Description { get; }
     }
 }
 

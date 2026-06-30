@@ -465,6 +465,151 @@ public sealed class ExternalAssetPreparationServiceTests
     }
 
     [Fact]
+    public void Run_RemovesStaleExternalAssetFilesFromNonExcludedOutputPath()
+    {
+        var workspace = CreateTempDirectory();
+        string? stagingPath = null;
+        try
+        {
+            var projectRoot = Path.Combine(workspace, "TestModule");
+            const string moduleName = "TestModule";
+            WriteMinimalModule(projectRoot, moduleName, "1.0.0");
+
+            var sourceRoot = Path.Combine(workspace, "Input");
+            Directory.CreateDirectory(sourceRoot);
+            var sourceFile = Path.Combine(sourceRoot, "tool.zip");
+            File.WriteAllText(sourceFile, "payload");
+
+            var outputRoot = Path.Combine(projectRoot, "Resources", "VendorTool");
+            Directory.CreateDirectory(outputRoot);
+            File.WriteAllText(Path.Combine(outputRoot, "stale.zip"), "old");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = projectRoot,
+                    Version = "1.0.0",
+                    CsprojPath = null,
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationExternalAssetSegment
+                    {
+                        Configuration = new ExternalAssetConfiguration
+                        {
+                            Name = "VendorTool",
+                            OutputPath = "Resources/VendorTool",
+                            Files = new[]
+                            {
+                                new ExternalAssetFileConfiguration
+                                {
+                                    Runtime = "win-x64",
+                                    FileName = "tool.zip",
+                                    Uri = sourceFile
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var result = new ModulePipelineRunner(new NullLogger()).Run(spec);
+            stagingPath = result.BuildResult.StagingPath;
+
+            Assert.True(File.Exists(Path.Combine(stagingPath, "Resources", "VendorTool", "tool.zip")));
+            Assert.True(File.Exists(Path.Combine(stagingPath, "Resources", "VendorTool", "manifest.json")));
+            Assert.False(File.Exists(Path.Combine(stagingPath, "Resources", "VendorTool", "stale.zip")));
+        }
+        finally
+        {
+            TryDelete(stagingPath);
+            TryDelete(workspace);
+        }
+    }
+
+    [Fact]
+    public void Run_RejectsExternalAssetOutputCollisionsAcrossBundlesBeforeMaterializingFiles()
+    {
+        var workspace = CreateTempDirectory();
+        try
+        {
+            var projectRoot = Path.Combine(workspace, "TestModule");
+            const string moduleName = "TestModule";
+            WriteMinimalModule(projectRoot, moduleName, "1.0.0");
+
+            var sourceRoot = Path.Combine(workspace, "Input");
+            Directory.CreateDirectory(sourceRoot);
+            var firstSource = Path.Combine(sourceRoot, "first.zip");
+            var secondSource = Path.Combine(sourceRoot, "second.zip");
+            File.WriteAllText(firstSource, "first");
+            File.WriteAllText(secondSource, "second");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = projectRoot,
+                    Version = "1.0.0",
+                    CsprojPath = null,
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationExternalAssetSegment
+                    {
+                        Configuration = new ExternalAssetConfiguration
+                        {
+                            Name = "VendorTool",
+                            OutputPath = "Resources/VendorTool",
+                            Files = new[]
+                            {
+                                new ExternalAssetFileConfiguration
+                                {
+                                    Runtime = "win-x64",
+                                    FileName = "tool.zip",
+                                    Uri = firstSource
+                                }
+                            }
+                        }
+                    },
+                    new ConfigurationExternalAssetSegment
+                    {
+                        Configuration = new ExternalAssetConfiguration
+                        {
+                            Name = "VendorToolDuplicate",
+                            OutputPath = "Resources/VendorTool",
+                            Files = new[]
+                            {
+                                new ExternalAssetFileConfiguration
+                                {
+                                    Runtime = "win-arm64",
+                                    FileName = "tool.zip",
+                                    Uri = secondSource
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => new ModulePipelineRunner(new NullLogger()).Run(spec));
+
+            Assert.Contains("output collision", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(Path.Combine(projectRoot, "Resources", "VendorTool")));
+        }
+        finally
+        {
+            TryDelete(workspace);
+        }
+    }
+
+    [Fact]
     public void Prepare_UsesCaseSensitiveOutputContainmentOutsideWindows()
     {
         if (FrameworkCompatibility.IsWindows())

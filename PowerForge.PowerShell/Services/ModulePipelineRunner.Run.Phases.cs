@@ -26,13 +26,14 @@ public sealed partial class ModulePipelineRunner
 
         ModuleBuildPipeline.StagingResult staged;
         ExecuteActions(ModulePipelineActionStage.BeforeStaging, plan, session, state);
-        ExecuteExternalAssets(plan, session, state);
+        ValidateExternalAssets(plan);
         session.Start(session.StageStep);
         try
         {
             staged = pipeline.StageToStaging(plan.BuildSpec);
             state.Staged = staged;
             state.StagingPathForCleanup = staged.StagingPath;
+            ExecuteExternalAssets(plan, session, state);
             SyncExternalAssetsToStaging(plan, state);
             session.Done(session.StageStep);
         }
