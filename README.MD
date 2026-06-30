@@ -405,42 +405,44 @@ importing the small CSV result, and deleting the account/profile afterward. Use
 local benchmark account.
 
 The full table below was refreshed on June 30, 2026 from one complete matrix
-run on PowerShell 7 and Windows PowerShell 5.1. If `-RepeatCount` is greater
-than one, the README updater writes median timings for each scenario/tool row.
+run on PowerShell 7 and Windows PowerShell 5.1. The PowerShell 7
+PSScriptAnalyzer find row also includes three extra Managed repeats after one
+transient first-result outlier; when repeated rows exist, the README updater
+writes the median timing for that scenario/tool row.
 
 <!-- managed-module-benchmark-table:start -->
 | Scenario | Host | Operation | Managed | ModuleFast | PSResourceGet | PowerShellGet | Result |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Az.Accounts | PowerShell 7 | Find | 1.00x (0.60s) | NotEquivalent | 0.47x (0.28s) | 1.28x (0.77s) | Managed slower than PSResourceGet |
-| Az.Accounts | PowerShell 7 | Install | 1.00x (1.01s) | 0.72x (0.73s) | 1.47x (1.48s) | 3.10x (3.13s) | Managed slower than ModuleFast |
-| Az.Accounts | PowerShell 7 | Save | 1.00x (1.19s) | NotEquivalent | 1.23x (1.46s) | 3.54x (4.19s) | Managed fastest |
-| Az.Accounts | Windows PowerShell 5.1 | Find | 1.00x (0.34s) | NotEquivalent | 1.19x (0.41s) | 3.23x (1.11s) | Managed fastest |
-| Az.Accounts | Windows PowerShell 5.1 | Install | 1.00x (1.32s) | NotAvailable | 1.35x (1.78s) | 2.89x (3.80s) | Managed fastest |
-| Az.Accounts | Windows PowerShell 5.1 | Save | 1.00x (1.77s) | NotEquivalent | 1.04x (1.84s) | 2.26x (4.00s) | Managed fastest |
-| Az | PowerShell 7 | Find | 1.00x (0.28s) | NotEquivalent | 1.24x (0.35s) | 2.21x (0.62s) | Managed fastest |
-| Az | PowerShell 7 | Install | 1.00x (10.41s) | Failed | 12.91x (134.37s) | 11.25x (117.08s) | Managed fastest |
-| Az | PowerShell 7 | Save | 1.00x (9.97s) | NotEquivalent | 13.89x (138.46s) | 20.10x (200.34s) | Managed fastest |
-| Az | Windows PowerShell 5.1 | Find | 1.00x (0.35s) | NotEquivalent | 1.24x (0.43s) | 4.69x (1.64s) | Managed fastest |
-| Az | Windows PowerShell 5.1 | Install | 1.00x (8.21s) | NotAvailable | 16.79x (137.88s) | 21.24x (174.45s) | Managed fastest |
-| Az | Windows PowerShell 5.1 | Save | 1.00x (16.28s) | NotEquivalent | 9.60x (156.28s) | 7.99x (130.14s) | Managed fastest |
-| Graph.Authentication | PowerShell 7 | Find | 1.00x (0.30s) | NotEquivalent | 1.02x (0.30s) | 2.33x (0.70s) | Managed fastest |
-| Graph.Authentication | PowerShell 7 | Install | 1.00x (1.17s) | 0.85x (0.99s) | 1.10x (1.29s) | 3.79x (4.43s) | Managed slower than ModuleFast |
-| Graph.Authentication | PowerShell 7 | Save | 1.00x (1.27s) | NotEquivalent | 1.24x (1.56s) | 3.26x (4.13s) | Managed fastest |
-| Graph.Authentication | Windows PowerShell 5.1 | Find | 1.00x (0.24s) | NotEquivalent | 1.44x (0.35s) | 4.86x (1.18s) | Managed fastest |
-| Graph.Authentication | Windows PowerShell 5.1 | Install | 1.00x (1.44s) | NotAvailable | 1.01x (1.45s) | 3.20x (4.59s) | Managed fastest |
-| Graph.Authentication | Windows PowerShell 5.1 | Save | 1.00x (2.07s) | NotEquivalent | 0.96x (2.00s) | 1.20x (2.49s) | Managed slower than PSResourceGet |
-| Graph | PowerShell 7 | Find | 1.00x (0.25s) | NotEquivalent | 0.53x (0.13s) | 2.18x (0.55s) | Managed slower than PSResourceGet |
-| Graph | PowerShell 7 | Install | 1.00x (6.97s) | 0.88x (6.14s) | 7.71x (53.73s) | 10.25x (71.42s) | Managed slower than ModuleFast |
-| Graph | PowerShell 7 | Save | 1.00x (6.60s) | NotEquivalent | 9.59x (63.25s) | 11.62x (76.66s) | Managed fastest |
-| Graph | Windows PowerShell 5.1 | Find | 1.00x (0.23s) | NotEquivalent | 1.23x (0.29s) | 2.56x (0.60s) | Managed fastest |
-| Graph | Windows PowerShell 5.1 | Install | 1.00x (6.96s) | NotAvailable | 8.22x (57.26s) | 14.21x (99.00s) | Managed fastest |
-| Graph | Windows PowerShell 5.1 | Save | 1.00x (11.95s) | NotEquivalent | 5.24x (62.64s) | 5.47x (65.36s) | Managed fastest |
-| PSScriptAnalyzer | PowerShell 7 | Find | 1.00x (0.32s) | NotEquivalent | 1.25x (0.40s) | 6.55x (2.12s) | Managed fastest |
-| PSScriptAnalyzer | PowerShell 7 | Install | 1.00x (1.40s) | 1.12x (1.57s) | 1.40x (1.96s) | 6.44x (9.04s) | Managed fastest |
-| PSScriptAnalyzer | PowerShell 7 | Save | 1.00x (1.69s) | NotEquivalent | 1.29x (2.18s) | 2.87x (4.86s) | Managed fastest |
-| PSScriptAnalyzer | Windows PowerShell 5.1 | Find | 1.00x (0.38s) | NotEquivalent | 1.49x (0.56s) | 6.51x (2.45s) | Managed fastest |
-| PSScriptAnalyzer | Windows PowerShell 5.1 | Install | 1.00x (2.10s) | NotAvailable | 1.26x (2.65s) | 3.51x (7.38s) | Managed fastest |
-| PSScriptAnalyzer | Windows PowerShell 5.1 | Save | 1.00x (3.30s) | NotEquivalent | 0.79x (2.62s) | 1.25x (4.12s) | Managed slower than PSResourceGet |
+| Az.Accounts | PowerShell 7 | Find | 1.00x (0.19s) | NotEquivalent | 1.67x (0.32s) | 2.91x (0.55s) | Managed fastest |
+| Az.Accounts | PowerShell 7 | Install | 1.00x (0.43s) | 1.80x (0.77s) | 4.05x (1.73s) | 10.23x (4.37s) | Managed fastest |
+| Az.Accounts | PowerShell 7 | Save | 1.00x (0.59s) | NotEquivalent | 4.59x (2.70s) | 8.32x (4.90s) | Managed fastest |
+| Az.Accounts | Windows PowerShell 5.1 | Find | 1.00x (0.18s) | NotEquivalent | 1.64x (0.29s) | 5.19x (0.92s) | Managed fastest |
+| Az.Accounts | Windows PowerShell 5.1 | Install | 1.00x (0.63s) | NotAvailable | 2.47x (1.55s) | 5.85x (3.66s) | Managed fastest |
+| Az.Accounts | Windows PowerShell 5.1 | Save | 1.00x (0.75s) | NotEquivalent | 2.24x (1.68s) | 12.13x (9.07s) | Managed fastest |
+| Az | PowerShell 7 | Find | 1.00x (0.18s) | NotEquivalent | 1.89x (0.33s) | 3.11x (0.55s) | Managed fastest |
+| Az | PowerShell 7 | Install | 1.00x (16.06s) | Failed | 9.92x (159.21s) | 7.75x (124.51s) | Managed fastest |
+| Az | PowerShell 7 | Save | 1.00x (7.82s) | NotEquivalent | 20.66x (161.60s) | 18.83x (147.31s) | Managed fastest |
+| Az | Windows PowerShell 5.1 | Find | 1.00x (0.27s) | NotEquivalent | 1.55x (0.42s) | 4.14x (1.11s) | Managed fastest |
+| Az | Windows PowerShell 5.1 | Install | 1.00x (8.29s) | NotAvailable | 16.74x (138.79s) | 18.04x (149.54s) | Managed fastest |
+| Az | Windows PowerShell 5.1 | Save | 1.00x (19.26s) | NotEquivalent | 7.06x (136.04s) | 6.76x (130.28s) | Managed fastest |
+| Graph.Authentication | PowerShell 7 | Find | 1.00x (0.20s) | NotEquivalent | 6.06x (1.19s) | 2.83x (0.55s) | Managed fastest |
+| Graph.Authentication | PowerShell 7 | Install | 1.00x (0.51s) | 1.79x (0.91s) | 2.66x (1.34s) | 8.46x (4.28s) | Managed fastest |
+| Graph.Authentication | PowerShell 7 | Save | 1.00x (0.61s) | NotEquivalent | 12.77x (7.85s) | 24.43x (15.02s) | Managed fastest |
+| Graph.Authentication | Windows PowerShell 5.1 | Find | 1.00x (0.27s) | NotEquivalent | 1.72x (0.46s) | 2.90x (0.78s) | Managed fastest |
+| Graph.Authentication | Windows PowerShell 5.1 | Install | 1.00x (0.71s) | NotAvailable | 2.87x (2.05s) | 4.61x (3.30s) | Managed fastest |
+| Graph.Authentication | Windows PowerShell 5.1 | Save | 1.00x (0.68s) | NotEquivalent | 3.02x (2.06s) | 5.10x (3.48s) | Managed fastest |
+| Graph | PowerShell 7 | Find | 1.00x (0.24s) | NotEquivalent | 4.59x (1.10s) | 2.49x (0.59s) | Managed fastest |
+| Graph | PowerShell 7 | Install | 1.00x (6.60s) | 0.88x (5.81s) | 8.10x (53.46s) | 11.19x (73.84s) | Managed slower than ModuleFast |
+| Graph | PowerShell 7 | Save | 1.00x (3.55s) | NotEquivalent | 92.31x (327.79s) | 53.15x (188.73s) | Managed fastest |
+| Graph | Windows PowerShell 5.1 | Find | 1.00x (0.31s) | NotEquivalent | 2.56x (0.80s) | 3.69x (1.16s) | Managed fastest |
+| Graph | Windows PowerShell 5.1 | Install | 1.00x (11.54s) | NotAvailable | 4.93x (56.87s) | 6.88x (79.40s) | Managed fastest |
+| Graph | Windows PowerShell 5.1 | Save | 1.00x (4.65s) | NotEquivalent | 15.22x (70.76s) | 21.69x (100.80s) | Managed fastest |
+| PSScriptAnalyzer | PowerShell 7 | Find | 1.00x (0.65s) | NotEquivalent | 1.30x (0.84s) | 7.14x (4.62s) | Managed fastest |
+| PSScriptAnalyzer | PowerShell 7 | Install | 1.00x (0.82s) | 2.71x (2.23s) | 2.70x (2.23s) | 14.42x (11.90s) | Managed fastest |
+| PSScriptAnalyzer | PowerShell 7 | Save | 1.00x (1.24s) | NotEquivalent | 5.94x (7.35s) | 8.87x (10.97s) | Managed fastest |
+| PSScriptAnalyzer | Windows PowerShell 5.1 | Find | 1.00x (0.89s) | NotEquivalent | 1.56x (1.39s) | 3.50x (3.12s) | Managed fastest |
+| PSScriptAnalyzer | Windows PowerShell 5.1 | Install | 1.00x (1.58s) | NotAvailable | 2.71x (4.27s) | 4.51x (7.12s) | Managed fastest |
+| PSScriptAnalyzer | Windows PowerShell 5.1 | Save | 1.00x (1.25s) | NotEquivalent | 2.93x (3.67s) | 3.21x (4.02s) | Managed fastest |
 <!-- managed-module-benchmark-table:end -->
 
 Refresh the table with:
