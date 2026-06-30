@@ -100,6 +100,46 @@ public sealed class ArtefactConfigurationFactoryTests
         Assert.Equal(Normalize("Artefacts/Modules"), segment.Configuration.RequiredModules.Path);
     }
 
+    [Fact]
+    public void Create_resolves_merge_script_prefix_with_platform_path_casing()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-artefact-casing-" + Guid.NewGuid().ToString("N")));
+        var previousDirectory = Directory.GetCurrentDirectory();
+
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            var moduleBuildRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Build"));
+            File.WriteAllText(Path.Combine(moduleBuildRoot.FullName, "header.ps1"), "Write-Output 'workspace'");
+
+            var localLowerBuildRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "module", "Build"));
+            File.WriteAllText(Path.Combine(localLowerBuildRoot.FullName, "header.ps1"), "Write-Output 'local'");
+
+            if (!OperatingSystem.IsWindows())
+            {
+                var workspaceLowerBuildRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "module", "Build"));
+                File.WriteAllText(Path.Combine(workspaceLowerBuildRoot.FullName, "header.ps1"), "Write-Output 'workspace-lower'");
+            }
+
+            Directory.SetCurrentDirectory(moduleRoot.FullName);
+            var factory = new ArtefactConfigurationFactory(new NullLogger());
+
+            var segment = factory.Create(new ArtefactConfigurationRequest
+            {
+                Type = ArtefactType.Packed,
+                PreScriptMergePath = "module/Build/header.ps1"
+            });
+
+            var expected = OperatingSystem.IsWindows() ? "workspace" : "local";
+            Assert.Contains(expected, segment.Configuration.PreScriptMerge, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { Directory.SetCurrentDirectory(previousDirectory); } catch { }
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     private static string Normalize(string value)
     {
         return OperatingSystem.IsWindows()
