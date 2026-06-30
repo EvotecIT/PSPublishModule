@@ -140,6 +140,54 @@ public sealed class ExternalAssetPreparationServiceTests
     }
 
     [Fact]
+    public void Prepare_RejectsDuplicateOutputPathsWithoutOverwritingFirstFile()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var sourceRoot = Path.Combine(root, "Source");
+            Directory.CreateDirectory(sourceRoot);
+            var firstSource = Path.Combine(sourceRoot, "first.zip");
+            var secondSource = Path.Combine(sourceRoot, "second.zip");
+            File.WriteAllText(firstSource, "first payload");
+            File.WriteAllText(secondSource, "second payload");
+
+            var service = new ExternalAssetPreparationService(new NullLogger());
+            var segment = new ConfigurationExternalAssetSegment
+            {
+                Configuration = new ExternalAssetConfiguration
+                {
+                    Name = "VendorTool",
+                    OutputPath = "Artefacts/VendorTool",
+                    Files = new[]
+                    {
+                        new ExternalAssetFileConfiguration
+                        {
+                            Runtime = "win-x64",
+                            FileName = "tool.zip",
+                            Uri = firstSource
+                        },
+                        new ExternalAssetFileConfiguration
+                        {
+                            Runtime = "win-arm64",
+                            FileName = "tool.zip",
+                            Uri = secondSource
+                        }
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => service.Prepare(root, segment));
+            Assert.Contains("already used", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("first payload", File.ReadAllText(Path.Combine(root, "Artefacts", "VendorTool", "tool.zip")));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Run_StagesExternalAssetsWithoutStagingUnrelatedArtefacts()
     {
         var workspace = CreateTempDirectory();

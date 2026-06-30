@@ -59,10 +59,16 @@ internal sealed class ExternalAssetPreparationService
         var fileResults = new List<ExternalAssetFilePreparationResult>();
         var manifestFiles = new List<ExternalAssetManifestFile>();
         var effectiveTimeout = timeout ?? TimeSpan.FromMinutes(5);
+        var preparedOutputPaths = new HashSet<string>(GetPathStringComparer());
 
         foreach (var file in files)
         {
-            var result = PrepareFile(projectRoot, outputRoot, manifestDirectory, manifestPath, configuration.SkipDownload, file, effectiveTimeout);
+            var resolvedFile = ResolveFile(outputRoot, manifestPath, file);
+            var comparableOutputPath = NormalizePathForComparison(resolvedFile.TargetPath);
+            if (!preparedOutputPaths.Add(comparableOutputPath))
+                throw new InvalidOperationException($"External asset file '{resolvedFile.OutputRelativePath}' resolves to an output path already used by another file entry.");
+
+            var result = PrepareFile(projectRoot, manifestDirectory, configuration.SkipDownload, resolvedFile, effectiveTimeout);
             fileResults.Add(result);
             manifestFiles.Add(new ExternalAssetManifestFile
             {
@@ -98,12 +104,39 @@ internal sealed class ExternalAssetPreparationService
 
     private ExternalAssetFilePreparationResult PrepareFile(
         string projectRoot,
-        string outputRoot,
         string manifestDirectory,
-        string generatedManifestPath,
         bool skipDownload,
-        ExternalAssetFileConfiguration? file,
+        ResolvedExternalAssetFile file,
         TimeSpan timeout)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(file.TargetPath) ?? string.Empty);
+        if (skipDownload)
+        {
+            if (!File.Exists(file.TargetPath))
+                throw new FileNotFoundException($"External asset file '{file.TargetPath}' is missing and SkipDownload was specified.", file.TargetPath);
+        }
+        else
+        {
+            MaterializeSource(projectRoot, file.Source, file.TargetPath, timeout);
+        }
+
+        var sha256 = ComputeSha256(file.TargetPath);
+        ValidateSha256(file.TargetPath, sha256, file.ExpectedSha256);
+        var manifestPath = FrameworkCompatibility.GetRelativePath(manifestDirectory, file.TargetPath)
+            .Replace('\\', '/');
+
+        return new ExternalAssetFilePreparationResult(
+            file.Runtime,
+            file.Architecture,
+            file.TargetPath,
+            manifestPath,
+            sha256);
+    }
+
+    private static ResolvedExternalAssetFile ResolveFile(
+        string outputRoot,
+        string generatedManifestPath,
+        ExternalAssetFileConfiguration? file)
     {
         if (file is null)
             throw new InvalidOperationException("External asset file configuration is required.");
@@ -116,28 +149,13 @@ internal sealed class ExternalAssetPreparationService
         if (SamePath(targetPath, generatedManifestPath))
             throw new InvalidOperationException($"External asset file '{outputRelativePath}' cannot use the generated manifest path '{generatedManifestPath}'.");
 
-        Directory.CreateDirectory(Path.GetDirectoryName(targetPath) ?? outputRoot);
-        if (skipDownload)
-        {
-            if (!File.Exists(targetPath))
-                throw new FileNotFoundException($"External asset file '{targetPath}' is missing and SkipDownload was specified.", targetPath);
-        }
-        else
-        {
-            MaterializeSource(projectRoot, source, targetPath, timeout);
-        }
-
-        var sha256 = ComputeSha256(targetPath);
-        ValidateSha256(targetPath, sha256, file.Sha256);
-        var manifestPath = FrameworkCompatibility.GetRelativePath(manifestDirectory, targetPath)
-            .Replace('\\', '/');
-
-        return new ExternalAssetFilePreparationResult(
+        return new ResolvedExternalAssetFile(
             runtime,
             NormalizeOptionalValue(file.Architecture),
+            source,
+            outputRelativePath,
             targetPath,
-            manifestPath,
-            sha256);
+            file.Sha256);
     }
 
     private void MaterializeSource(string projectRoot, string source, string targetPath, TimeSpan timeout)
@@ -245,10 +263,18 @@ internal sealed class ExternalAssetPreparationService
 
     private static bool SamePath(string left, string right)
     {
-        var leftFull = Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var rightFull = Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var leftFull = NormalizePathForComparison(left);
+        var rightFull = NormalizePathForComparison(right);
         return string.Equals(leftFull, rightFull, FrameworkCompatibility.PathStringComparison());
     }
+
+    private static string NormalizePathForComparison(string path)
+        => Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+    private static StringComparer GetPathStringComparer()
+        => FrameworkCompatibility.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
 
     private static bool IsSameOrChildPath(string rootPath, string candidatePath)
     {
@@ -305,6 +331,37 @@ internal sealed class ExternalAssetPreparationService
 
         [JsonPropertyName("architecture")]
         public string? Architecture { get; set; }
+    }
+
+    private sealed class ResolvedExternalAssetFile
+    {
+        public ResolvedExternalAssetFile(
+            string runtime,
+            string? architecture,
+            string source,
+            string outputRelativePath,
+            string targetPath,
+            string? expectedSha256)
+        {
+            Runtime = runtime;
+            Architecture = architecture;
+            Source = source;
+            OutputRelativePath = outputRelativePath;
+            TargetPath = targetPath;
+            ExpectedSha256 = expectedSha256;
+        }
+
+        public string Runtime { get; }
+
+        public string? Architecture { get; }
+
+        public string Source { get; }
+
+        public string OutputRelativePath { get; }
+
+        public string TargetPath { get; }
+
+        public string? ExpectedSha256 { get; }
     }
 }
 

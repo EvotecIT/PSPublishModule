@@ -157,38 +157,38 @@ public sealed class ModuleBuildHostService
     {
         var arguments = new List<string>
         {
-            ".",
-            QuoteLiteral(scriptPath)
+            $"$buildScriptPath = (Get-Item -LiteralPath {QuoteLiteral(scriptPath)} -ErrorAction Stop).FullName",
+            "$buildScriptCommand = Get-Command -Name $buildScriptPath -CommandType ExternalScript -ErrorAction Stop",
+            "$buildScriptArguments = @()"
         };
 
         if (!string.IsNullOrWhiteSpace(request.Configuration))
         {
-            arguments.Add("-Configuration");
-            arguments.Add(QuoteLiteral(request.Configuration!));
+            arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('Configuration')) {{ $buildScriptArguments += @('-Configuration', {QuoteLiteral(request.Configuration!)}) }}");
         }
 
         if (request.NoDotnetBuild)
-            arguments.Add("-NoDotnetBuild");
+            arguments.Add("$buildScriptArguments += '-NoDotnetBuild'");
 
         if (!string.IsNullOrWhiteSpace(request.ModuleVersion))
         {
-            arguments.Add("-ModuleVersion");
-            arguments.Add(QuoteLiteral(request.ModuleVersion!));
+            arguments.Add($"$buildScriptArguments += @('-ModuleVersion', {QuoteLiteral(request.ModuleVersion!)})");
         }
 
         if (!string.IsNullOrWhiteSpace(request.PreReleaseTag))
         {
-            arguments.Add("-PreReleaseTag");
-            arguments.Add(QuoteLiteral(request.PreReleaseTag!));
+            arguments.Add($"$buildScriptArguments += @('-PreReleaseTag', {QuoteLiteral(request.PreReleaseTag!)})");
         }
 
         if (request.NoSign)
-            arguments.Add("-NoSign");
+            arguments.Add("$buildScriptArguments += '-NoSign'");
 
         if (request.SignModule)
-            arguments.Add("-SignModule");
+            arguments.Add("$buildScriptArguments += '-SignModule'");
 
-        return string.Join(" ", arguments);
+        arguments.Add(". $buildScriptPath @buildScriptArguments");
+
+        return string.Join(Environment.NewLine, arguments);
     }
 
     private static string BuildModuleImportClause(string modulePath)
