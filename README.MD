@@ -381,6 +381,20 @@ dependency graph, ModuleFast can be very fast. When the mirror is missing a
 dependency that the official Gallery resolves, the ModuleFast row should be
 treated as a source/index miss rather than a managed engine failure.
 
+Latest targeted PS 7 install rerun after the dependency fanout tuning, measured
+as the median of three side-by-side runs:
+
+| Scenario | Managed | ModuleFast | Result |
+| --- | ---: | ---: | --- |
+| Az.Accounts | 0.53s | 0.64s | Managed faster |
+| PSScriptAnalyzer | 0.79s | 1.00s | Managed faster |
+| Microsoft.Graph | 5.69s | 5.74s | Managed slightly faster |
+| Microsoft.Graph.Authentication | 0.65s | 0.57s | ModuleFast slightly faster |
+
+The full table below is a generated full-matrix snapshot. Refresh it only from
+a coherent full-matrix run across the same hosts, operations, tools, and source
+conditions.
+
 <!-- managed-module-benchmark-table:start -->
 | Scenario | Host | Operation | Managed | ModuleFast | PSResourceGet | PowerShellGet | Result |
 | --- | --- | --- | --- | --- | --- | --- | --- |

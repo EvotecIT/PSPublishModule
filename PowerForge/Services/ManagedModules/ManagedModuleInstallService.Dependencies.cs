@@ -92,28 +92,15 @@ public sealed partial class ManagedModuleInstallService
         }
 
         var results = new ManagedModuleInstallResult[dependencies.Length];
-        var startIndex = 0;
         var concurrencyLimit = ResolveDependencyInstallConcurrency(request);
         var concurrency = Math.Min(dependencies.Length, concurrencyLimit);
-        if (dependencies.Length > concurrencyLimit)
-        {
-            results[0] = await InstallDependencyBranchAsync(
-                request,
-                dependencies[0],
-                cacheDirectory,
-                context.CreateBranch(),
-                cancellationToken).ConfigureAwait(false);
-            startIndex = 1;
-            concurrency = Math.Min(dependencies.Length - startIndex, concurrencyLimit);
-        }
 
         using var gate = new SemaphoreSlim(concurrency, concurrency);
         var tasks = dependencies
-            .Skip(startIndex)
             .Select((dependency, offset) => InstallDependencyWithGateAsync(
                 request,
                 dependency,
-                startIndex + offset,
+                offset,
                 cacheDirectory,
                 context.CreateBranch(),
                 gate,

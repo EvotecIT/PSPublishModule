@@ -28,7 +28,7 @@ public sealed class ManagedModuleRepositoryClientOptions
     /// <summary>
     /// Maximum concurrent HTTP connections allowed per repository host when the managed client owns the HTTP handler.
     /// </summary>
-    public int MaxConnectionsPerServer { get; set; } = 32;
+    public int MaxConnectionsPerServer { get; set; } = 128;
 
     /// <summary>
     /// True when HTTP requests should use proxy configuration.

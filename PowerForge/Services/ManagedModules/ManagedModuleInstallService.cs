@@ -5,7 +5,7 @@ namespace PowerForge;
 /// </summary>
 public sealed partial class ManagedModuleInstallService
 {
-    private const int DefaultDependencyInstallConcurrency = 32;
+    private const int DefaultDependencyInstallConcurrency = 128;
     internal const int MaximumDependencyInstallConcurrency = 256;
 
     private readonly ILogger _logger;
