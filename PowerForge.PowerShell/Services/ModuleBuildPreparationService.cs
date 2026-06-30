@@ -591,7 +591,7 @@ internal sealed class ModuleBuildPreparationService
             {
                 try
                 {
-                    previousRunspaceLocation = runspace.SessionStateProxy.Path.CurrentFileSystemLocation?.ProviderPath;
+                    previousRunspaceLocation = runspace.SessionStateProxy.Path.CurrentLocation?.Path;
                     runspace.SessionStateProxy.Path.SetLocation(workspaceRoot);
                     runspaceLocationChanged = true;
                 }
@@ -689,10 +689,15 @@ internal sealed class ModuleBuildPreparationService
             if (ContainsPathToken(mapping.Source))
                 continue;
 
-            if (!string.IsNullOrWhiteSpace(requiredFirstSegment) && !StartsWithPathSegment(mapping.Source, requiredFirstSegment!))
+            if (string.IsNullOrWhiteSpace(requiredFirstSegment) || StartsWithPathSegment(mapping.Source, requiredFirstSegment!))
+            {
+                mapping.Source = PathValueResolver.Resolve(rootPath, mapping.Source);
                 continue;
+            }
 
-            mapping.Source = PathValueResolver.Resolve(rootPath, mapping.Source);
+            var workspaceCandidate = PathValueResolver.Resolve(rootPath, mapping.Source);
+            if (File.Exists(workspaceCandidate) || Directory.Exists(workspaceCandidate))
+                mapping.Source = workspaceCandidate;
         }
     }
 
@@ -850,7 +855,7 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
-            cfg.Path = MakeRelativeForProjectRoot(projectRoot, cfg.Path, preserveExternalRooted: true, workspaceRoot) ?? string.Empty;
+            cfg.Path = MakeDocumentationPathForJson(projectRoot, workspaceRoot, cfg.Path) ?? string.Empty;
             cfg.PathReadme = MakeRelativeForProjectRoot(projectRoot, cfg.PathReadme, preserveExternalRooted: true, workspaceRoot) ?? string.Empty;
         }
 
@@ -858,7 +863,7 @@ internal sealed class ModuleBuildPreparationService
         {
             var cfg = segment.Configuration;
             if (cfg is null) continue;
-            cfg.AboutTopicsSourcePath = MakePathsRelativeForProjectRoot(projectRoot, cfg.AboutTopicsSourcePath, preserveExternalRooted: true, workspaceRoot);
+            cfg.AboutTopicsSourcePath = MakeDocumentationPathsForJson(projectRoot, workspaceRoot, cfg.AboutTopicsSourcePath);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationTestSegment>() ?? Enumerable.Empty<ConfigurationTestSegment>())
@@ -950,6 +955,34 @@ internal sealed class ModuleBuildPreparationService
         return IsSameOrChildPath(artefactRoot, candidate)
             ? MakeRelativeForProjectRoot(projectRoot, candidate, preserveExternalRooted: true, workspaceRoot)
             : NormalizePathSeparators(layoutPath!);
+    }
+
+    private static string? MakeDocumentationPathForJson(string projectRoot, string workspaceRoot, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        var cleaned = PathValueResolver.Clean(path!);
+        if (Path.IsPathRooted(cleaned) &&
+            !SamePath(workspaceRoot, projectRoot) &&
+            IsSameOrChildPath(workspaceRoot, cleaned) &&
+            !IsSameOrChildPath(projectRoot, cleaned))
+        {
+            return NormalizePathSeparators(cleaned);
+        }
+
+        return MakeRelativeForProjectRoot(projectRoot, path, preserveExternalRooted: true, workspaceRoot);
+    }
+
+    private static string[] MakeDocumentationPathsForJson(string projectRoot, string workspaceRoot, string[]? paths)
+    {
+        if (paths is null || paths.Length == 0)
+            return Array.Empty<string>();
+
+        return paths
+            .Select(path => MakeDocumentationPathForJson(projectRoot, workspaceRoot, path) ?? string.Empty)
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .ToArray();
     }
 
     private static string MakeReleaseStageRootPathForJson(string projectRoot, string workspaceRoot, string stageRoot)

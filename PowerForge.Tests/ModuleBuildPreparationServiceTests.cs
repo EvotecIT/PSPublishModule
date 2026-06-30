@@ -295,13 +295,13 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Artefacts", "Packed"), artefact.Configuration.Path);
                 Assert.Equal(Path.Combine(root.FullName, "Module", "Build", "LICENSE"), artefact.Configuration.DirectoryOutput![0].Source);
                 Assert.Equal("LICENSE", artefact.Configuration.DirectoryOutput[0].Destination);
-                Assert.Equal("Build/Templates", artefact.Configuration.DirectoryOutput[1].Source);
+                Assert.Equal(Path.Combine(root.FullName, "Build", "Templates"), artefact.Configuration.DirectoryOutput[1].Source);
                 Assert.Equal("Templates", artefact.Configuration.DirectoryOutput[1].Destination);
                 Assert.Equal("Docs/Help", artefact.Configuration.DirectoryOutput[2].Source);
                 Assert.Equal("Help", artefact.Configuration.DirectoryOutput[2].Destination);
                 Assert.Equal("Examples/NOTICE.txt", artefact.Configuration.FilesOutput![0].Source);
                 Assert.Equal("NOTICE.txt", artefact.Configuration.FilesOutput[0].Destination);
-                Assert.Equal("Build/NOTICE.txt", artefact.Configuration.FilesOutput[1].Source);
+                Assert.Equal(Path.Combine(root.FullName, "Build", "NOTICE.txt"), artefact.Configuration.FilesOutput[1].Source);
                 Assert.Equal("RepoNotice.txt", artefact.Configuration.FilesOutput[1].Destination);
                 Assert.Equal("Artefacts/ProjectBuild/packages/Foo.nupkg", artefact.Configuration.FilesOutput[2].Source);
                 Assert.Equal("Packages/Foo.nupkg", artefact.Configuration.FilesOutput[2].Destination);
@@ -561,6 +561,59 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 var action = Assert.IsType<ConfigurationActionSegment>(prepared.PipelineSpec.Segments[3]);
                 Assert.Equal(Path.Combine(moduleRoot.FullName, "Build", "Test-DocsShape.ps1"), action.Configuration.FilePath);
                 Assert.Equal(Path.Combine(moduleRoot.FullName, "Build"), action.Configuration.WorkingDirectory);
+            }
+            finally
+            {
+                Runspace.DefaultRunspace = previousRunspace;
+            }
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Prepare_restores_nonfilesystem_runspace_location_after_collecting_settings()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-runspace-location-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "SampleModule"));
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "SampleModule.psd1"), "@{ ModuleVersion = '1.0.0' }");
+
+            var settings = ScriptBlock.Create("""
+[PowerForge.ConfigurationTestSegment]@{
+    Configuration = [PowerForge.TestConfiguration]@{
+        TestsPath = 'Tests'
+    }
+}
+""");
+
+            using var runspace = RunspaceFactory.CreateRunspace();
+            runspace.Open();
+            var previousRunspace = Runspace.DefaultRunspace;
+            Runspace.DefaultRunspace = runspace;
+            try
+            {
+                runspace.SessionStateProxy.Path.SetLocation("Env:");
+                var originalLocation = runspace.SessionStateProxy.Path.CurrentLocation.Path;
+
+                _ = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
+                {
+                    ParameterSetName = "Modern",
+                    ModuleName = "SampleModule",
+                    InputPath = root.FullName,
+                    Settings = settings,
+                    CurrentPath = root.FullName,
+                    ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
+                    DotNetFramework = Array.Empty<string>(),
+                    ExcludeDirectories = Array.Empty<string>(),
+                    ExcludeFiles = Array.Empty<string>()
+                });
+
+                Assert.Equal(originalLocation, runspace.SessionStateProxy.Path.CurrentLocation.Path);
             }
             finally
             {
@@ -893,6 +946,69 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
             Assert.Equal(externalReadme, documentation.Configuration.PathReadme);
             Assert.Equal("Help/About", buildDocumentation.Configuration.AboutTopicsSourcePath[0]);
             Assert.Equal(externalAboutTopics, buildDocumentation.Configuration.AboutTopicsSourcePath[1]);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void WritePipelineSpecJson_preserves_workspace_sibling_documentation_paths()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-json-workspace-docs-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            MarkRepositoryRoot(root.FullName);
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            var buildRoot = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Build"));
+            File.WriteAllText(Path.Combine(buildRoot.FullName, "Build-Module.ps1"), string.Empty);
+            var docsPath = Path.Combine(root.FullName, "Docs");
+            var aboutTopicsPath = Path.Combine(root.FullName, "Help", "About");
+            var jsonPath = Path.Combine(root.FullName, "Build", "powerforge.json");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = "SampleModule",
+                    SourcePath = moduleRoot.FullName
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationDocumentationSegment
+                    {
+                        Configuration = new DocumentationConfiguration
+                        {
+                            Path = docsPath
+                        }
+                    },
+                    new ConfigurationBuildDocumentationSegment
+                    {
+                        Configuration = new BuildDocumentationConfiguration
+                        {
+                            Enable = true,
+                            AboutTopicsSourcePath = new[] { aboutTopicsPath }
+                        }
+                    }
+                }
+            };
+
+            var service = new ModuleBuildPreparationService();
+            service.WritePipelineSpecJson(spec, jsonPath);
+
+            var json = File.ReadAllText(jsonPath);
+            Assert.Contains($"\"Path\": \"{docsPath.Replace('\\', '/')}\"", json, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(aboutTopicsPath.Replace('\\', '/'), json, StringComparison.OrdinalIgnoreCase);
+
+            var jsonSpec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, CreateJsonOptions());
+            Assert.NotNull(jsonSpec);
+
+            service.ResolvePipelineSpecPaths(jsonSpec!, jsonPath);
+            var documentation = Assert.IsType<ConfigurationDocumentationSegment>(jsonSpec!.Segments[0]);
+            var buildDocumentation = Assert.IsType<ConfigurationBuildDocumentationSegment>(jsonSpec.Segments[1]);
+            Assert.Equal(docsPath, documentation.Configuration.Path);
+            Assert.Equal(aboutTopicsPath, buildDocumentation.Configuration.AboutTopicsSourcePath[0]);
         }
         finally
         {
