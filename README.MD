@@ -358,6 +358,9 @@ generic package-provider workflow.
   and promotion run in one operation-local engine.
 - Large dependency graphs such as `Microsoft.Graph` and `Az` are resolved and
   installed concurrently instead of as one long serial provider walk.
+- Default dependency and HTTP fanout scales with processor count up to the
+  benchmark cap, while `-DependencyConcurrency` remains available when a runner
+  needs a lower or higher explicit limit.
 - Duplicate dependency requests are coalesced inside the same operation. If two
   branches ask for the same package/version, one install wins and the other
   branch reuses the completed result.

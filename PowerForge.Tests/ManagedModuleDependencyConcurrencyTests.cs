@@ -7,6 +7,17 @@ namespace PowerForge.Tests;
 public sealed class ManagedModuleDependencyConcurrencyTests
 {
     [Fact]
+    public void Managed_module_default_concurrency_scales_with_host_without_exceeding_benchmark_cap()
+    {
+        var expected = Math.Min(
+            ManagedModuleConcurrencyDefaults.MaximumDefaultConcurrency,
+            Math.Max(16, Environment.ProcessorCount * 8));
+
+        Assert.Equal(expected, ManagedModuleConcurrencyDefaults.ResolveDefault());
+        Assert.Equal(expected, new ManagedModuleRepositoryClientOptions().MaxConnectionsPerServer);
+    }
+
+    [Fact]
     public async Task InstallAsync_rejects_negative_dependency_concurrency()
     {
         var service = new ManagedModuleInstallService(new NullLogger());
