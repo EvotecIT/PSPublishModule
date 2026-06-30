@@ -44,6 +44,8 @@ public sealed class WebSeoDoctorOptions
     public bool CheckOrphanPages { get; set; } = true;
     /// <summary>When true, evaluate focus keyphrase hints from page metadata.</summary>
     public bool CheckFocusKeyphrase { get; set; }
+    /// <summary>When true, relax generic editorial checks on generated API reference pages while keeping structural SEO checks.</summary>
+    public bool ApplyGeneratedApiReferenceSeoProfile { get; set; } = true;
     /// <summary>When true, validate canonical link tags.</summary>
     public bool CheckCanonical { get; set; } = true;
     /// <summary>When true, validate hreflang alternate link tags.</summary>

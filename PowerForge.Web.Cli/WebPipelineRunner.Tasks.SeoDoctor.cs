@@ -80,6 +80,11 @@ internal static partial class WebPipelineRunner
             CheckDuplicateTitles = GetBool(step, "checkDuplicateTitles") ?? true,
             CheckOrphanPages = GetBool(step, "checkOrphanPages") ?? true,
             CheckFocusKeyphrase = GetBool(step, "checkFocusKeyphrase") ?? false,
+            ApplyGeneratedApiReferenceSeoProfile = GetBool(step, "applyGeneratedApiReferenceSeoProfile") ??
+                                                   GetBool(step, "apply-generated-api-reference-seo-profile") ??
+                                                   GetBool(step, "generatedApiReferenceSeoProfile") ??
+                                                   GetBool(step, "generated-api-reference-seo-profile") ??
+                                                   true,
             CheckCanonical = GetBool(step, "checkCanonical") ?? GetBool(step, "check-canonical") ?? true,
             CheckHreflang = GetBool(step, "checkHreflang") ?? GetBool(step, "check-hreflang") ?? true,
             CheckStructuredData = GetBool(step, "checkStructuredData") ?? GetBool(step, "check-structured-data") ?? true,

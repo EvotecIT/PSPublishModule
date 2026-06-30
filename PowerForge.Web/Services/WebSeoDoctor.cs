@@ -5,7 +5,7 @@ using HtmlTinkerX;
 namespace PowerForge.Web;
 
 /// <summary>Runs SEO-focused checks on generated HTML output.</summary>
-public static class WebSeoDoctor
+public static partial class WebSeoDoctor
 {
     private static readonly string[] DefaultExcludePatterns =
     {
@@ -169,8 +169,12 @@ public static class WebSeoDoctor
             var title = NormalizeWhitespace(doc.Title);
             var description = GetMetaNameValue(doc, "description");
             var bodyText = GetVisibleBodyText(doc.Body);
+            var isGeneratedApiReferencePage = options.ApplyGeneratedApiReferenceSeoProfile &&
+                IsGeneratedApiReferencePage(relativePath, doc);
             var canonicalLinks = GetCanonicalLinks(doc);
-            var hreflangAlternates = GetHreflangAlternates(doc);
+            var hreflangAlternates = GetHreflangAlternates(
+                doc,
+                includeMalformedAlternateCandidates: options.RequireHreflang || isGeneratedApiReferencePage);
             var titleTagCount = doc.QuerySelectorAll("title").Count();
             var visibleH1Count = doc.QuerySelectorAll("h1")
                 .Count(heading => !IsElementHidden(heading));
@@ -234,7 +238,7 @@ public static class WebSeoDoctor
                 {
                     AddIssue("warning", "title", relativePath, "missing <title>.", "title-missing");
                 }
-                else
+                else if (!isGeneratedApiReferencePage)
                 {
                     if (title.Length < titleMin)
                     {
@@ -258,7 +262,7 @@ public static class WebSeoDoctor
                 {
                     AddIssue("warning", "description", relativePath, "missing meta description.", "description-missing");
                 }
-                else
+                else if (!isGeneratedApiReferencePage)
                 {
                     if (description.Length < descriptionMin)
                     {
@@ -345,6 +349,7 @@ public static class WebSeoDoctor
                 ValidateHreflang(
                     relativePath,
                     options.RequireHreflang,
+                    suppressMissingHreflang: isGeneratedApiReferencePage,
                     options.RequireHreflangXDefault,
                     hreflangAlternates,
                     AddIssue);
@@ -756,25 +761,43 @@ public static class WebSeoDoctor
         }
     }
 
-    private static HreflangAlternateScan[] GetHreflangAlternates(AngleSharp.Dom.IDocument doc)
+    private static HreflangAlternateScan[] GetHreflangAlternates(
+        AngleSharp.Dom.IDocument doc,
+        bool includeMalformedAlternateCandidates = false)
     {
         if (doc.Head is null)
             return Array.Empty<HreflangAlternateScan>();
 
-        return doc.Head.QuerySelectorAll("link[rel][hreflang][href]")
+        return doc.Head.QuerySelectorAll("link[rel]")
             .Where(link => ContainsRelToken(link.GetAttribute("rel"), "alternate"))
+            .Where(link => link.HasAttribute("hreflang") ||
+                           (includeMalformedAlternateCandidates && IsLikelyHreflangAlternate(link)))
             .Select(link => new HreflangAlternateScan
             {
                 HrefLang = NormalizeWhitespace(link.GetAttribute("hreflang")).ToLowerInvariant(),
                 Href = NormalizeWhitespace(link.GetAttribute("href"))
             })
-            .Where(value => !string.IsNullOrWhiteSpace(value.HrefLang) && !string.IsNullOrWhiteSpace(value.Href))
             .ToArray();
+    }
+
+    private static bool IsLikelyHreflangAlternate(AngleSharp.Dom.IElement link)
+    {
+        if (link.HasAttribute("type") ||
+            link.HasAttribute("media") ||
+            link.HasAttribute("title") ||
+            link.HasAttribute("sizes"))
+        {
+            return false;
+        }
+
+        var href = NormalizeWhitespace(link.GetAttribute("href"));
+        return !string.IsNullOrWhiteSpace(href);
     }
 
     private static void ValidateHreflang(
         string relativePath,
         bool requireHreflang,
+        bool suppressMissingHreflang,
         bool requireXDefault,
         HreflangAlternateScan[] alternates,
         Action<string, string, string?, string, string?, string?> addIssue)
@@ -783,12 +806,13 @@ public static class WebSeoDoctor
 
         if (alternates.Length == 0)
         {
-            if (requireHreflang)
+            if (requireHreflang && !suppressMissingHreflang)
                 addIssue("warning", "hreflang", relativePath, "missing hreflang alternates.", "hreflang-missing", null);
             return;
         }
 
         var duplicateLanguageGroups = alternates
+            .Where(value => !string.IsNullOrWhiteSpace(value.HrefLang))
             .GroupBy(value => value.HrefLang, StringComparer.OrdinalIgnoreCase)
             .Where(group => group.Count() > 1)
             .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
@@ -803,7 +827,14 @@ public static class WebSeoDoctor
 
         foreach (var alternate in alternates)
         {
-            if (!HreflangTokenPattern.IsMatch(alternate.HrefLang))
+            if (string.IsNullOrWhiteSpace(alternate.HrefLang))
+            {
+                addIssue("warning", "hreflang", relativePath,
+                    "hreflang alternate is missing a language value.",
+                    "hreflang-language-missing",
+                    alternate.Href);
+            }
+            else if (!HreflangTokenPattern.IsMatch(alternate.HrefLang))
             {
                 addIssue("warning", "hreflang", relativePath,
                     $"invalid hreflang value '{alternate.HrefLang}'.",
@@ -811,7 +842,14 @@ public static class WebSeoDoctor
                     alternate.HrefLang);
             }
 
-            if (!IsAbsoluteHttpUrl(alternate.Href))
+            if (string.IsNullOrWhiteSpace(alternate.Href))
+            {
+                addIssue("warning", "hreflang", relativePath,
+                    $"hreflang '{alternate.HrefLang}' is missing an href value.",
+                    "hreflang-href-missing",
+                    alternate.HrefLang);
+            }
+            else if (!IsAbsoluteHttpUrl(alternate.Href))
             {
                 addIssue("warning", "hreflang", relativePath,
                     $"hreflang '{alternate.HrefLang}' should use an absolute http(s) URL but was '{alternate.Href}'.",

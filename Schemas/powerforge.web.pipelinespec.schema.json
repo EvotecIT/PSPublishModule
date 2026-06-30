@@ -3999,6 +3999,22 @@
         "checkDuplicateTitles": { "type": "boolean" },
         "checkOrphanPages": { "type": "boolean" },
         "checkFocusKeyphrase": { "type": "boolean" },
+        "applyGeneratedApiReferenceSeoProfile": {
+          "type": "boolean",
+          "description": "When true, relax generic editorial title/description length and missing-hreflang requirements on generated API reference pages while keeping structural SEO checks."
+        },
+        "apply-generated-api-reference-seo-profile": {
+          "type": "boolean",
+          "description": "Alias for applyGeneratedApiReferenceSeoProfile."
+        },
+        "generatedApiReferenceSeoProfile": {
+          "type": "boolean",
+          "description": "Alias for applyGeneratedApiReferenceSeoProfile."
+        },
+        "generated-api-reference-seo-profile": {
+          "type": "boolean",
+          "description": "Alias for applyGeneratedApiReferenceSeoProfile."
+        },
         "checkCanonical": { "type": "boolean" },
         "check-canonical": { "type": "boolean", "description": "Alias for checkCanonical." },
         "checkHreflang": { "type": "boolean" },

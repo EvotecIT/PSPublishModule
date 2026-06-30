@@ -1356,6 +1356,245 @@ public class WebSeoDoctorTests
     }
 
     [Fact]
+    public void Analyze_AppliesGeneratedApiReferenceSeoProfile_ToEditorialLengthAndRequiredHreflang()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-api-profile-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var apiRoot = Path.Combine(root, "api", "excel");
+            Directory.CreateDirectory(apiRoot);
+            File.WriteAllText(Path.Combine(apiRoot, "officeimo-excel-range.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>OfficeIMO.Excel.OfficeExcelRangeWithVeryLongGeneratedSymbolName - OfficeIMO API Reference</title>
+                  <meta name="description" content="API reference for OfficeExcelRange." />
+                </head>
+                <body class="pf-api-docs">
+                  <main class="api-content">
+                    <h1>OfficeIMO.Excel.OfficeExcelRange</h1>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = false,
+                RequireHreflang = true
+            });
+
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint == "title-long");
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint == "description-short");
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint == "hreflang-missing");
+            Assert.True(result.Success);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_CanDisableGeneratedApiReferenceSeoProfile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-api-profile-off-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var apiRoot = Path.Combine(root, "api", "excel");
+            Directory.CreateDirectory(apiRoot);
+            File.WriteAllText(Path.Combine(apiRoot, "officeimo-excel-range.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>OfficeIMO.Excel.OfficeExcelRangeWithVeryLongGeneratedSymbolName - OfficeIMO API Reference</title>
+                  <meta name="description" content="API reference for OfficeExcelRange." />
+                </head>
+                <body class="pf-api-docs">
+                  <main class="api-content">
+                    <h1>OfficeIMO.Excel.OfficeExcelRange</h1>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                ApplyGeneratedApiReferenceSeoProfile = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = false,
+                RequireHreflang = true
+            });
+
+            Assert.Contains(result.Issues, issue => issue.Hint == "title-long");
+            Assert.Contains(result.Issues, issue => issue.Hint == "description-short");
+            Assert.Contains(result.Issues, issue => issue.Hint == "hreflang-missing");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_AppliesGeneratedApiReferenceSeoProfile_FromGeneratorMarkerOutsideApiRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-api-profile-marker-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var apiRoot = Path.Combine(root, "projects", "officeimo", "api");
+            Directory.CreateDirectory(apiRoot);
+            File.WriteAllText(Path.Combine(apiRoot, "officeimo-excel-range.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>OfficeIMO.Excel.OfficeExcelRangeWithVeryLongGeneratedSymbolName - OfficeIMO API Reference</title>
+                  <meta name="generator" content="PowerForge.Web API Docs" data-pf="api-docs" />
+                  <meta name="description" content="API reference for OfficeExcelRange." />
+                </head>
+                <body class="custom-docs-shell">
+                  <main class="api-content">
+                    <h1>OfficeIMO.Excel.OfficeExcelRange</h1>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = false,
+                RequireHreflang = true
+            });
+
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint == "title-long");
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint == "description-short");
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint == "hreflang-missing");
+            Assert.True(result.Success);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_GeneratedApiReferenceSeoProfile_KeepsMalformedHreflangChecks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-api-profile-hreflang-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var apiRoot = Path.Combine(root, "api", "excel");
+            Directory.CreateDirectory(apiRoot);
+            File.WriteAllText(Path.Combine(apiRoot, "officeimo-excel-range.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>OfficeIMO.Excel.OfficeExcelRangeWithVeryLongGeneratedSymbolName - OfficeIMO API Reference</title>
+                  <meta name="description" content="API reference for OfficeExcelRange." />
+                  <link rel="alternate" hreflang="en" />
+                </head>
+                <body class="pf-api-docs">
+                  <main class="api-content">
+                    <h1>OfficeIMO.Excel.OfficeExcelRange</h1>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = false,
+                RequireHreflang = true
+            });
+
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint == "hreflang-missing");
+            Assert.Contains(result.Issues, issue => issue.Hint == "hreflang-href-missing");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_GeneratedApiReferenceSeoProfile_ReportsAlternateMissingHreflang()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-api-profile-hreflang-language-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var apiRoot = Path.Combine(root, "api", "excel");
+            Directory.CreateDirectory(apiRoot);
+            File.WriteAllText(Path.Combine(apiRoot, "officeimo-excel-range.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>OfficeIMO.Excel.OfficeExcelRangeWithVeryLongGeneratedSymbolName - OfficeIMO API Reference</title>
+                  <meta name="description" content="API reference for OfficeExcelRange." />
+                  <link rel="alternate" href="https://example.com/en/api/excel/officeimo-excel-range/" />
+                  <link rel="alternate" type="application/rss+xml" href="https://example.com/feed.xml" />
+                </head>
+                <body class="pf-api-docs">
+                  <main class="api-content">
+                    <h1>OfficeIMO.Excel.OfficeExcelRange</h1>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = false,
+                RequireHreflang = true
+            });
+
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint == "hreflang-missing");
+            Assert.Contains(result.Issues, issue =>
+                issue.Hint == "hreflang-language-missing" &&
+                issue.Message.Contains("missing a language value", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Issues, issue =>
+                issue.Key.Contains("feed.xml", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Analyze_PageAssertions_ValidateRepresentativeLocalizedPageOutsideScannedSubset()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-page-assertions-" + Guid.NewGuid().ToString("N"));
