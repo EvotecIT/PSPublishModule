@@ -220,6 +220,46 @@ public sealed class PrivateModuleWorkflowServiceTests
     }
 
     [Fact]
+    public void ManagedRequestMapping_PreservesExclusiveBoundsAsVersionPolicy()
+    {
+        var method = typeof(PrivateModuleWorkflowService).GetMethod(
+            "ResolveManagedVersionPolicy",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        var workflow = new PrivateModuleWorkflowRequest();
+        var module = new ModuleDependency(
+            "Company.Tools",
+            minimumVersion: "1.0.0",
+            maximumVersion: "2.0.0",
+            maximumVersionInclusive: false);
+
+        var policy = Assert.IsType<string>(method!.Invoke(null, new object[] { workflow, module }));
+
+        Assert.Equal(">=1.0.0 <2.0.0", policy);
+    }
+
+    [Fact]
+    public void ManagedRequestMapping_UsesModuleScopeBeforeWorkflowScope()
+    {
+        var method = typeof(PrivateModuleWorkflowService).GetMethod(
+            "ResolveManagedScope",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic,
+            null,
+            new[] { typeof(PrivateModuleWorkflowRequest), typeof(ModuleDependency) },
+            null);
+        Assert.NotNull(method);
+        var workflow = new PrivateModuleWorkflowRequest
+        {
+            ManagedScope = ManagedModuleInstallScope.CurrentUser
+        };
+        var module = new ModuleDependency("Company.Tools", installScope: "AllUsers");
+
+        var scope = Assert.IsType<ManagedModuleInstallScope>(method!.Invoke(null, new object[] { workflow, module }));
+
+        Assert.Equal(ManagedModuleInstallScope.AllUsers, scope);
+    }
+
+    [Fact]
     public void Execute_ExplicitManagedTransportWithPartialPrivateProvider_ReportsProviderLimitation()
     {
         var host = new FakePrivateGalleryHost();

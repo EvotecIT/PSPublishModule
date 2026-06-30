@@ -270,6 +270,49 @@ public sealed class ManagedModuleUpdatePlanServiceTests
     }
 
     [Fact]
+    public async Task PlanUpdateAsync_matches_exact_target_versions_semantically()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.Version = "1.0";
+
+        var plan = await service.PlanUpdateAsync(request);
+
+        Assert.Equal("1.0.0", plan.TargetVersion);
+        Assert.Equal(ManagedModuleUpdatePlanAction.InstallMissing, plan.Action);
+    }
+
+    [Fact]
+    public async Task PlanUpdateAsync_blocks_newer_installed_version_outside_upper_bound()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.5.0.nupkg"),
+            "Company.Tools",
+            "1.5.0",
+            files: CreateModuleFiles("1.5.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "3.0.0"));
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.VersionPolicy = "<2.0.0";
+
+        var plan = await service.PlanUpdateAsync(request);
+
+        Assert.Equal("1.5.0", plan.TargetVersion);
+        Assert.Equal("3.0.0", plan.PreviousVersion);
+        Assert.Equal(ManagedModuleUpdatePlanAction.DowngradeBlocked, plan.Action);
+        Assert.False(plan.WouldWriteFiles);
+    }
+
+    [Fact]
     public async Task PlanUpdateAsync_treats_missing_nuget_v3_family_package_as_missing_version()
     {
         var requests = new List<ManagedModuleRepositoryClientTests.RecordedRequest>();

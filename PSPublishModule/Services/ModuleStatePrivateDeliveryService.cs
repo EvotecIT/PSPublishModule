@@ -95,6 +95,7 @@ internal sealed class ModuleStatePrivateDeliveryService
                 .GroupBy(static action => action.ModuleName, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(static group => group.Key, static group => group.First().TargetScope!, StringComparer.OrdinalIgnoreCase),
             RepositoryName = repository ?? string.Empty,
+            ManagedRepositorySource = ResolveManagedRepositorySource(repository),
             InstallPrerequisites = options.InstallPrerequisites,
             Prerelease = options.Prerelease || RequiresPrereleaseDelivery(actions),
             Force = force,
@@ -159,6 +160,23 @@ internal sealed class ModuleStatePrivateDeliveryService
     private static bool ShouldApplyProfile(string? repository, ModuleRepositoryProfile profile)
         => string.IsNullOrWhiteSpace(repository) ||
            string.Equals(repository, profile.RepositoryName, StringComparison.OrdinalIgnoreCase);
+
+    private static string? ResolveManagedRepositorySource(string? repository)
+        => IsRepositorySource(repository) ? repository!.Trim() : null;
+
+    private static bool IsRepositorySource(string? repository)
+    {
+        if (string.IsNullOrWhiteSpace(repository))
+            return false;
+
+        var value = repository!.Trim();
+        if (Uri.TryCreate(value, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Scheme))
+            return true;
+
+        return value.StartsWith(".", StringComparison.Ordinal) ||
+               value.IndexOf('\\') >= 0 ||
+               value.IndexOf('/') >= 0;
+    }
 
     private static void ValidateNoConflictingDuplicateActions(IReadOnlyList<ModuleStatePlanAction> actions)
     {

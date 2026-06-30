@@ -160,7 +160,7 @@ public sealed class ManagedModuleUpdateService
             requiresVerifiedPackage: !string.IsNullOrWhiteSpace(request.ExpectedPackageSha256),
             sourceEvaluation);
         var familyActions = await PlanFamilyActionsAsync(moduleRoot, request, targetVersion, resolvePackageMetadata: true, cancellationToken).ConfigureAwait(false);
-        var selectedPathVersion = action is ManagedModuleUpdatePlanAction.SkipUpToDate or ManagedModuleUpdatePlanAction.SourceMismatchBlocked && currentVersion is not null
+        var selectedPathVersion = action is ManagedModuleUpdatePlanAction.SkipUpToDate or ManagedModuleUpdatePlanAction.SourceMismatchBlocked or ManagedModuleUpdatePlanAction.DowngradeBlocked && currentVersion is not null
             ? currentVersion
             : targetVersion;
 
@@ -344,7 +344,7 @@ public sealed class ManagedModuleUpdateService
         {
             return null;
         }
-        var repositoryVersion = versions.FirstOrDefault(version => version.Version.Equals(targetVersion, StringComparison.OrdinalIgnoreCase));
+        var repositoryVersion = versions.FirstOrDefault(version => ManagedModuleVersionComparer.Instance.Compare(version.Version, targetVersion) == 0);
         if (repositoryVersion is null)
             return null;
 
@@ -553,7 +553,7 @@ public sealed class ManagedModuleUpdateService
         }
         if (comparison > 0)
             return sourceEvaluation.IsSatisfied
-                ? ManagedModuleUpdatePlanAction.SkipUpToDate
+                ? ManagedModuleUpdatePlanAction.DowngradeBlocked
                 : ManagedModuleUpdatePlanAction.SourceMismatchBlocked;
 
         return ManagedModuleUpdatePlanAction.Update;
@@ -592,6 +592,11 @@ public sealed class ManagedModuleUpdateService
         ManagedModuleUpdatePlanAction action,
         SourcePolicyEvaluation sourceEvaluation)
     {
+        if (action == ManagedModuleUpdatePlanAction.DowngradeBlocked)
+        {
+            throw new InvalidOperationException("Managed module update selected a version lower than the installed version. Remove the newer installed version or request an explicit downgrade/cleanup workflow.");
+        }
+
         if (action != ManagedModuleUpdatePlanAction.SourceMismatchBlocked)
             return;
 

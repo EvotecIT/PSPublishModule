@@ -31,6 +31,11 @@ public enum ManagedModuleUpdatePlanAction
     SourceMismatchBlocked,
 
     /// <summary>
+    /// The installed copy is newer than the selected policy target and would require an implicit downgrade.
+    /// </summary>
+    DowngradeBlocked,
+
+    /// <summary>
     /// The installed copy already satisfies the selected version.
     /// </summary>
     SkipUpToDate

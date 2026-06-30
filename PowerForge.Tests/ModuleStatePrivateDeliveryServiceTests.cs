@@ -116,6 +116,20 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
     }
 
     [Fact]
+    public void CreateRequest_PopulatesManagedRepositorySourceForPathRepository()
+    {
+        var request = InvokeCreateRequest(
+            new[]
+            {
+                new ModuleStatePlanAction(ModuleStatePlanActionKind.Install, "Company.Tools", null, "1.2.0", "missing")
+            },
+            repository: @"C:\Feed");
+
+        Assert.Equal(@"C:\Feed", request.RepositoryName);
+        Assert.Equal(@"C:\Feed", request.ManagedRepositorySource);
+    }
+
+    [Fact]
     public void ResolveActionRepository_PreservesActionTargetOverGlobalRepository()
     {
         var action = new ModuleStatePlanAction(
@@ -230,7 +244,8 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
 
     private static PrivateModuleWorkflowRequest InvokeCreateRequest(
         IReadOnlyList<ModuleStatePlanAction> actions,
-        ModuleStatePrivateDeliveryOptions? options = null)
+        ModuleStatePrivateDeliveryOptions? options = null,
+        string? repository = "Company")
     {
         var method = typeof(ModuleStatePrivateDeliveryService).GetMethod(
             "CreateRequest",
@@ -242,7 +257,7 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
             new object?[]
             {
                 ModuleStatePlanActionKind.Install,
-                "Company",
+                repository,
                 actions.Any(static action => action.Force),
                 actions,
                 options ?? new ModuleStatePrivateDeliveryOptions()

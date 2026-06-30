@@ -393,11 +393,11 @@ internal sealed class PrivateModuleWorkflowService
             Repository = repository,
             Name = module.Name,
             Version = module.RequiredVersion,
-            MinimumVersion = module.MinimumVersion,
-            MaximumVersion = module.MaximumVersion,
-            VersionPolicy = workflow.VersionPolicy,
+            MinimumVersion = ResolveManagedMinimumVersion(module),
+            MaximumVersion = ResolveManagedMaximumVersion(module),
+            VersionPolicy = ResolveManagedVersionPolicy(workflow, module),
             IncludePrerelease = workflow.Prerelease,
-            Scope = ResolveManagedScope(workflow),
+            Scope = ResolveManagedScope(workflow, module),
             ShellEdition = workflow.ManagedShellEdition,
             ModuleRoot = workflow.ManagedModuleRoot,
             PackageCacheDirectory = workflow.ManagedPackageCacheDirectory,
@@ -423,11 +423,11 @@ internal sealed class PrivateModuleWorkflowService
             Repository = repository,
             Name = module.Name,
             Version = module.RequiredVersion,
-            MinimumVersion = module.MinimumVersion,
-            MaximumVersion = module.MaximumVersion,
-            VersionPolicy = workflow.VersionPolicy,
+            MinimumVersion = ResolveManagedMinimumVersion(module),
+            MaximumVersion = ResolveManagedMaximumVersion(module),
+            VersionPolicy = ResolveManagedVersionPolicy(workflow, module),
             IncludePrerelease = workflow.Prerelease,
-            Scope = ResolveManagedScope(workflow),
+            Scope = ResolveManagedScope(workflow, module),
             ShellEdition = workflow.ManagedShellEdition,
             ModuleRoot = workflow.ManagedModuleRoot,
             PackageCacheDirectory = workflow.ManagedPackageCacheDirectory,
@@ -441,6 +441,43 @@ internal sealed class PrivateModuleWorkflowService
         }).GetAwaiter().GetResult();
 
         return MapUpdateResult(result);
+    }
+
+    private static string? ResolveManagedMinimumVersion(ModuleDependency module)
+        => RequiresManagedVersionPolicy(module) ? null : module.MinimumVersion;
+
+    private static string? ResolveManagedMaximumVersion(ModuleDependency module)
+        => RequiresManagedVersionPolicy(module) ? null : module.MaximumVersion;
+
+    private static string? ResolveManagedVersionPolicy(PrivateModuleWorkflowRequest workflow, ModuleDependency module)
+    {
+        if (!string.IsNullOrWhiteSpace(workflow.VersionPolicy) || !RequiresManagedVersionPolicy(module))
+            return workflow.VersionPolicy;
+
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(module.MinimumVersion))
+            parts.Add((module.MinimumVersionInclusive ? ">=" : ">") + module.MinimumVersion);
+        if (!string.IsNullOrWhiteSpace(module.MaximumVersion))
+            parts.Add((module.MaximumVersionInclusive ? "<=" : "<") + module.MaximumVersion);
+
+        return parts.Count == 0 ? null : string.Join(" ", parts);
+    }
+
+    private static bool RequiresManagedVersionPolicy(ModuleDependency module)
+        => module.RequiredVersion is null &&
+           ((!string.IsNullOrWhiteSpace(module.MinimumVersion) && !module.MinimumVersionInclusive) ||
+            (!string.IsNullOrWhiteSpace(module.MaximumVersion) && !module.MaximumVersionInclusive));
+
+    private static ManagedModuleInstallScope ResolveManagedScope(PrivateModuleWorkflowRequest workflow, ModuleDependency module)
+    {
+        if (!string.IsNullOrWhiteSpace(workflow.ManagedModuleRoot))
+            return ManagedModuleInstallScope.Custom;
+        if (string.Equals(module.InstallScope, "AllUsers", StringComparison.OrdinalIgnoreCase))
+            return ManagedModuleInstallScope.AllUsers;
+        if (string.Equals(module.InstallScope, "CurrentUser", StringComparison.OrdinalIgnoreCase))
+            return ManagedModuleInstallScope.CurrentUser;
+
+        return workflow.ManagedScope;
     }
 
     private static ManagedModuleInstallScope ResolveManagedScope(PrivateModuleWorkflowRequest workflow)
