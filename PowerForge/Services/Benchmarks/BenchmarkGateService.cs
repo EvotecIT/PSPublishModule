@@ -73,6 +73,22 @@ public sealed class BenchmarkGateService
             metrics.Add(result);
         }
 
+        foreach (var entry in baseline.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            if (actual.ContainsKey(entry.Key))
+                continue;
+
+            failed = true;
+            metrics.Add(new BenchmarkGateMetricResult
+            {
+                Key = entry.Key,
+                Actual = null,
+                Baseline = entry.Value,
+                MissingInCurrent = true
+            });
+            messages.Add($"Benchmark metric '{entry.Key}' is missing from the current run.");
+        }
+
         return new BenchmarkGateResult
         {
             Passed = !failed,
@@ -99,7 +115,7 @@ public sealed class BenchmarkGateService
     private static string BuildKey(BenchmarkSummaryRow row, IReadOnlyList<string> groupBy, string metric)
     {
         var values = new List<string>();
-        foreach (var field in groupBy.Count == 0 ? new[] { "Suite", "Scenario", "Operation", "Engine", "Host" } : groupBy)
+        foreach (var field in groupBy.Count == 0 ? new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "Variables" } : groupBy)
         {
             values.Add(GetField(row, field));
         }
@@ -116,8 +132,23 @@ public sealed class BenchmarkGateService
         if (string.Equals(field, "Engine", StringComparison.OrdinalIgnoreCase)) return row.Engine;
         if (string.Equals(field, "Host", StringComparison.OrdinalIgnoreCase)) return row.Host;
         if (string.Equals(field, "Status", StringComparison.OrdinalIgnoreCase)) return row.Status;
+        if (string.Equals(field, "Variables", StringComparison.OrdinalIgnoreCase)) return FormatVariables(row.Variables);
+        const string variablePrefix = "Variables.";
+        if (field.StartsWith(variablePrefix, StringComparison.OrdinalIgnoreCase)
+            && row.Variables.TryGetValue(field.Substring(variablePrefix.Length), out var value))
+            return value ?? string.Empty;
         return string.Empty;
     }
+
+    private static string FormatVariables(IReadOnlyDictionary<string, string?> variables)
+        => string.Join(
+            ";",
+            (variables ?? new Dictionary<string, string?>())
+                .Where(k => !string.Equals(k.Key, "Engine", StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(k.Key, "Operation", StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(k.Key, "Host", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(k => string.Concat(k.Key, "=", k.Value ?? string.Empty)));
 
     private static Dictionary<string, double> ReadBaseline(string path)
     {

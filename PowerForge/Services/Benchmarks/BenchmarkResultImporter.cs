@@ -120,7 +120,7 @@ public sealed class BenchmarkResultImporter
                 map[headers[h]] = values[h];
 
             var method = Get(map, "Method", "Scenario", "Benchmark") ?? Path.GetFileNameWithoutExtension(path);
-            var mean = ParseDuration(Get(map, "Median", "Mean", "Mean [ns]", "Mean [us]", "Mean [ms]"));
+            var mean = ParseDuration(GetWithHeader(map, out var durationHeader, "Median", "Mean", "Mean [ns]", "Mean [us]", "Mean [ms]"), durationHeader);
             samples.Add(new BenchmarkSample
             {
                 RunId = "import",
@@ -153,14 +153,28 @@ public sealed class BenchmarkResultImporter
         return null;
     }
 
-    private static double? ParseDuration(string? raw)
+    private static string? GetWithHeader(IReadOnlyDictionary<string, string> values, out string? matchedHeader, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (values.TryGetValue(name, out var value) && !string.IsNullOrWhiteSpace(value))
+            {
+                matchedHeader = name;
+                return value.Trim();
+            }
+        }
+
+        matchedHeader = null;
+        return null;
+    }
+
+    private static double? ParseDuration(string? raw, string? header = null)
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
         var text = raw!.Trim().Replace(",", string.Empty);
-        var factor = 1.0;
-        if (text.EndsWith(" ns", StringComparison.OrdinalIgnoreCase)) factor = 0.000001;
-        else if (text.EndsWith(" us", StringComparison.OrdinalIgnoreCase) || text.EndsWith(" μs", StringComparison.OrdinalIgnoreCase)) factor = 0.001;
-        else if (text.EndsWith(" s", StringComparison.OrdinalIgnoreCase)) factor = 1000;
+        var factor = DurationFactor(text);
+        if (Math.Abs(factor - 1.0) < double.Epsilon && !HasDurationSuffix(text))
+            factor = DurationFactor(header);
 
         text = RemoveUnitSuffix(text).Trim();
         return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
@@ -214,4 +228,18 @@ public sealed class BenchmarkResultImporter
 
         return text;
     }
+
+    private static double DurationFactor(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return 1.0;
+        var trimmed = text!.Trim();
+        if (trimmed.EndsWith("[ms]", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith(" ms", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith("ms", StringComparison.OrdinalIgnoreCase)) return 1.0;
+        if (trimmed.EndsWith("[ns]", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith(" ns", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith("ns", StringComparison.OrdinalIgnoreCase)) return 0.000001;
+        if (trimmed.EndsWith("[us]", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith("[μs]", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith(" us", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith(" μs", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith("us", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith("μs", StringComparison.OrdinalIgnoreCase)) return 0.001;
+        if (trimmed.EndsWith("[s]", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith(" s", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith("s", StringComparison.OrdinalIgnoreCase)) return 1000;
+        return 1.0;
+    }
+
+    private static bool HasDurationSuffix(string text)
+        => RemoveUnitSuffix(text).Length != text.Length;
 }

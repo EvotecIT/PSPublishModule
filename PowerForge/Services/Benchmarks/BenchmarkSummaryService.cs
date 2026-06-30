@@ -13,17 +13,18 @@ public sealed class BenchmarkSummaryService
     public BenchmarkSummaryRow[] Summarize(IEnumerable<BenchmarkSample> samples)
     {
         return (samples ?? Array.Empty<BenchmarkSample>())
-            .GroupBy(s => MakeKey(s.Suite, s.Scenario, s.Operation, s.Engine, s.Host), StringComparer.OrdinalIgnoreCase)
+            .GroupBy(s => MakeKey(s.Suite, s.Scenario, s.Operation, s.Engine, s.Host, s.Variables), StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
                 var first = group.First();
-                return BuildSummaryRow(first.Suite, first.Scenario, first.Operation, first.Engine, first.Host, group);
+                return BuildSummaryRow(first.Suite, first.Scenario, first.Operation, first.Engine, first.Host, first.Variables, group);
             })
             .OrderBy(r => r.Suite, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.Scenario, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.Operation, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.Engine, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.Host, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(r => FormatVariables(r.Variables), StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
@@ -38,7 +39,7 @@ public sealed class BenchmarkSummaryService
     {
         var rows = (summary ?? Array.Empty<BenchmarkSummaryRow>()).ToArray();
         var result = new List<BenchmarkComparisonRow>();
-        foreach (var group in rows.GroupBy(r => MakeKey(r.Suite, r.Scenario, r.Operation, string.Empty, r.Host), StringComparer.OrdinalIgnoreCase))
+        foreach (var group in rows.GroupBy(r => MakeKey(r.Suite, r.Scenario, r.Operation, string.Empty, r.Host, r.Variables), StringComparer.OrdinalIgnoreCase))
         {
             var baseline = group.FirstOrDefault(r => string.Equals(r.Engine, baselineEngine, StringComparison.OrdinalIgnoreCase));
             var baselineValue = GetMetricValue(baseline, metric);
@@ -51,6 +52,7 @@ public sealed class BenchmarkSummaryService
                     Scenario = row.Scenario,
                     Operation = row.Operation,
                     Host = row.Host,
+                    Variables = CopyVariables(row.Variables),
                     Engine = row.Engine,
                     BaselineEngine = baselineEngine,
                     Metric = metric,
@@ -83,6 +85,7 @@ public sealed class BenchmarkSummaryService
         string operation,
         string engine,
         string host,
+        IReadOnlyDictionary<string, string?> variables,
         IEnumerable<BenchmarkSample> samples)
     {
         var all = samples.ToArray();
@@ -99,9 +102,16 @@ public sealed class BenchmarkSummaryService
             Operation = operation,
             Engine = engine,
             Host = host,
+            Variables = CopyVariables(variables),
             SampleCount = successful.Length,
             FailureCount = all.Count(s => s.Status == BenchmarkSampleStatus.Failed),
-            Status = successful.Length > 0 ? "Succeeded" : all.Any(s => s.Status == BenchmarkSampleStatus.Skipped) ? "Skipped" : "Failed",
+            Status = all.Any(s => s.Status == BenchmarkSampleStatus.Failed)
+                ? "Failed"
+                : successful.Length > 0
+                    ? "Succeeded"
+                    : all.Any(s => s.Status == BenchmarkSampleStatus.Skipped)
+                        ? "Skipped"
+                        : "Failed",
             MedianMs = Median(successful),
             MeanMs = successful.Length == 0 ? null : successful.Average(),
             MinMs = successful.Length == 0 ? null : successful.Min(),
@@ -127,6 +137,33 @@ public sealed class BenchmarkSummaryService
         return (values[middle - 1] + values[middle]) / 2.0;
     }
 
-    private static string MakeKey(string? suite, string? scenario, string? operation, string? engine, string? host)
-        => string.Join("\u001f", suite ?? string.Empty, scenario ?? string.Empty, operation ?? string.Empty, engine ?? string.Empty, host ?? string.Empty);
+    private static string MakeKey(
+        string? suite,
+        string? scenario,
+        string? operation,
+        string? engine,
+        string? host,
+        IReadOnlyDictionary<string, string?> variables)
+        => string.Join("\u001f", suite ?? string.Empty, scenario ?? string.Empty, operation ?? string.Empty, engine ?? string.Empty, host ?? string.Empty, FormatVariables(variables));
+
+    private static string FormatVariables(IReadOnlyDictionary<string, string?> variables)
+        => string.Join(
+            "\u001e",
+            (variables ?? new Dictionary<string, string?>())
+                .Where(k => !IsBuiltInAxis(k.Key))
+                .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(k => string.Concat(k.Key, "=", k.Value ?? string.Empty)));
+
+    private static bool IsBuiltInAxis(string key)
+        => string.Equals(key, "Engine", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "Operation", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "Host", StringComparison.OrdinalIgnoreCase);
+
+    private static Dictionary<string, string?> CopyVariables(IReadOnlyDictionary<string, string?> variables)
+    {
+        var copy = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in variables)
+            copy[entry.Key] = entry.Value;
+        return copy;
+    }
 }

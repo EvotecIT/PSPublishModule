@@ -126,6 +126,9 @@ public sealed class BenchmarkSummaryRow
     /// <summary>PowerShell host or runtime label.</summary>
     public string Host { get; set; } = string.Empty;
 
+    /// <summary>Case and matrix variables represented by this summary row.</summary>
+    public Dictionary<string, string?> Variables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Number of successful measured samples in this group.</summary>
     public int SampleCount { get; set; }
 
@@ -167,6 +170,9 @@ public sealed class BenchmarkComparisonRow
 
     /// <summary>PowerShell host or runtime label.</summary>
     public string Host { get; set; } = string.Empty;
+
+    /// <summary>Case and matrix variables represented by this comparison row.</summary>
+    public Dictionary<string, string?> Variables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Compared engine name.</summary>
     public string Engine { get; set; } = string.Empty;
@@ -250,7 +256,7 @@ public sealed class BenchmarkGateRequest
     public string Metric { get; set; } = "MedianMs";
 
     /// <summary>Fields used to construct stable metric keys.</summary>
-    public string[] GroupBy { get; set; } = { "Suite", "Scenario", "Operation", "Engine", "Host" };
+    public string[] GroupBy { get; set; } = { "Suite", "Scenario", "Operation", "Engine", "Host", "Variables" };
 
     /// <summary>Baseline behavior mode.</summary>
     public BenchmarkBaselineMode BaselineMode { get; set; } = BenchmarkBaselineMode.Verify;
@@ -305,6 +311,9 @@ public sealed class BenchmarkGateMetricResult
 
     /// <summary>True when the metric is new compared to the baseline.</summary>
     public bool MissingInBaseline { get; set; }
+
+    /// <summary>True when a baseline metric was not produced by the current run.</summary>
+    public bool MissingInCurrent { get; set; }
 
     /// <summary>True when the actual value exceeded the allowed cap.</summary>
     public bool Regressed { get; set; }
