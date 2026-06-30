@@ -369,6 +369,37 @@ public sealed class ModuleDependencyInstallerExactVersionTests
     }
 
     [Fact]
+    public void EnsureInstalled_SkipsScopedProbeForPrereleaseRequiredVersion()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = "1.2.0-preview1"
+            },
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase));
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureInstalled(
+            new[]
+            {
+                new ModuleDependency(
+                    "PSSharedGoods",
+                    requiredVersion: "1.2.0-preview1",
+                    installScope: "AllUsers")
+            },
+            repository: "Company",
+            prerelease: true);
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal(0, runner.ExactProbeCalls);
+        Assert.Equal(1, runner.InstallCalls);
+        Assert.NotNull(runner.LastInstallArguments);
+        Assert.Equal("1.2.0-preview1", runner.LastInstallArguments![1]);
+        Assert.Equal("AllUsers", runner.LastInstallArguments![3]);
+    }
+
+    [Fact]
     public void EnsureInstalled_TreatsInstalledPrereleaseAsSatisfied_WhenRangeAllowsIt()
     {
         var runner = new StubPowerShellRunner(

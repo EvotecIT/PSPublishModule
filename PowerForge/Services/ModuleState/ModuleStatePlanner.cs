@@ -81,7 +81,7 @@ internal sealed class ModuleStatePlanner
                     desiredModule.VersionPolicy,
                     "Installed module version satisfies desired policy but source repository does not match desired state.",
                     force: true,
-                    targetScope: desiredModule.Scope,
+                    targetScope: string.IsNullOrWhiteSpace(desiredModule.Scope) ? installedModule.Scope : desiredModule.Scope,
                     targetPath: desiredModule.TargetPath,
                     targetRepository: targetRepository,
                     expectedPackageSha256: desiredModule.ExpectedPackageSha256));

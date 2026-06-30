@@ -94,7 +94,7 @@ internal sealed class ModuleStateRepairPlanner
             if (installedFamilyModules.Length <= 1)
                 continue;
 
-            var targetModule = SelectInstalledModule(installedFamilyModules);
+            var targetModule = SelectHighestInstalledModule(installedFamilyModules);
             if (targetModule is null)
                 continue;
 
@@ -240,6 +240,11 @@ internal sealed class ModuleStateRepairPlanner
             .OrderByDescending(static module => module.IsLoaded)
             .ThenByDescending(static module => module.IsEffectiveImportCandidate)
             .ThenByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
+            .FirstOrDefault();
+
+    private static ModuleStateInstalledModule? SelectHighestInstalledModule(IEnumerable<ModuleStateInstalledModule> installedModules)
+        => installedModules
+            .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
             .FirstOrDefault();
 
     private static bool VersionsEqual(string installedVersion, string receiptVersion)

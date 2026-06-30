@@ -732,7 +732,8 @@ public sealed partial class ModuleDependencyInstaller
         => !(ModuleStateVersion.TryParse(requiredVersion, out var version) && version.IsPrerelease);
 
     private static bool CanUseScopedDependencyProbe(ModuleDependency dependency)
-        => !ContainsPrereleaseBoundary(dependency.MinimumVersion) &&
+        => !ContainsPrereleaseBoundary(dependency.RequiredVersion) &&
+           !ContainsPrereleaseBoundary(dependency.MinimumVersion) &&
            !ContainsPrereleaseBoundary(dependency.MaximumVersion);
 
     private static bool ContainsPrereleaseBoundary(string? version)

@@ -96,7 +96,7 @@ internal sealed class ModuleStatePrivateDeliveryService
                 .ToDictionary(static group => group.Key, static group => group.First().TargetScope!, StringComparer.OrdinalIgnoreCase),
             RepositoryName = repository ?? string.Empty,
             InstallPrerequisites = options.InstallPrerequisites,
-            Prerelease = options.Prerelease,
+            Prerelease = options.Prerelease || RequiresPrereleaseDelivery(actions),
             Force = force,
             DeliveryTransport = options.DeliveryTransport,
             CredentialUserName = options.CredentialUserName,
@@ -168,6 +168,17 @@ internal sealed class ModuleStatePrivateDeliveryService
 
     private static bool ResolveActionForce(ModuleStatePlanAction action, ModuleStatePrivateDeliveryOptions options)
         => action.Force || (options.Force && action.Kind == ModuleStatePlanActionKind.Install);
+
+    private static bool RequiresPrereleaseDelivery(IEnumerable<ModuleStatePlanAction> actions)
+        => actions.Any(static action => ConstraintHasPrerelease(ParseVersionConstraint(action.ModuleName, action.VersionPolicy)));
+
+    private static bool ConstraintHasPrerelease(ModuleStateVersionConstraint constraint)
+        => ContainsPrereleaseBoundary(constraint.RequiredVersion) ||
+           ContainsPrereleaseBoundary(constraint.MinimumVersion) ||
+           ContainsPrereleaseBoundary(constraint.MaximumVersion);
+
+    private static bool ContainsPrereleaseBoundary(string? version)
+        => ModuleStateVersion.TryParse(version, out var parsed) && parsed.IsPrerelease;
 
     private static Dictionary<string, string> CreateVersionDictionary(
         IEnumerable<ModuleStatePlanAction> actions,

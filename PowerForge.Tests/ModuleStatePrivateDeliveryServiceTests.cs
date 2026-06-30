@@ -40,6 +40,18 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
     }
 
     [Fact]
+    public void CreateRequest_EnablesPrereleaseWhenActionPolicyContainsPrerelease()
+    {
+        var request = InvokeCreateRequest(new[]
+        {
+            new ModuleStatePlanAction(ModuleStatePlanActionKind.Install, "Company.Exact", null, "=1.2.0-preview1", "missing"),
+            new ModuleStatePlanAction(ModuleStatePlanActionKind.Install, "Company.Range", null, ">=2.0.0-beta1 <3.0.0", "missing")
+        });
+
+        Assert.True(request.Prerelease);
+    }
+
+    [Fact]
     public void CreateRequest_ForcesActionRequestedRepair()
     {
         var request = InvokeCreateRequest(new[]
