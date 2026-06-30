@@ -185,7 +185,7 @@ public sealed class PowerShellBenchmarkRunner
             SetProperty(runObject, "Data", data);
 
             var stopwatch = Stopwatch.StartNew();
-            item.Handler.Invoke(caseObject, runObject);
+            InvokeStrict(item.Handler, caseObject, runObject);
             stopwatch.Stop();
 
             InvokeOptional(suite.Validate, caseObject, runObject);
@@ -228,11 +228,11 @@ public sealed class PowerShellBenchmarkRunner
     private static bool ShouldSkip(ScriptBlock? skip, PSObject caseObject)
     {
         if (skip is null) return false;
-        return skip.Invoke(caseObject).Any(value => LanguagePrimitives.IsTrue(value));
+        return InvokeStrict(skip, caseObject).Any(value => LanguagePrimitives.IsTrue(value));
     }
 
     private static Collection<PSObject> InvokeOptional(ScriptBlock? block, PSObject caseObject, PSObject runObject)
-        => block is null ? new Collection<PSObject>() : block.Invoke(caseObject, runObject);
+        => block is null ? new Collection<PSObject>() : InvokeStrict(block, caseObject, runObject);
 
     private static object? CaptureData(IReadOnlyList<PSObject> values)
     {
@@ -246,7 +246,7 @@ public sealed class PowerShellBenchmarkRunner
         var metrics = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
         foreach (var metric in suite.Metrics)
         {
-            var value = metric.ScriptBlock.Invoke(caseObject, runObject).FirstOrDefault()?.BaseObject;
+            var value = InvokeStrict(metric.ScriptBlock, caseObject, runObject).FirstOrDefault()?.BaseObject;
             if (TryConvertToDouble(value, out var number))
                 metrics[metric.Name] = number;
         }
@@ -435,21 +435,88 @@ public sealed class PowerShellBenchmarkRunner
 
     private static string WriteSamplesCsv(IEnumerable<BenchmarkSample> samples)
     {
+        var rows = samples.ToArray();
+        var variableHeaders = GetVariableHeaders(rows.Select(row => row.Variables));
         var builder = new StringBuilder();
-        builder.AppendLine("Suite,Scenario,Operation,Engine,Host,Iteration,Status,DurationMs,Reason");
-        foreach (var sample in samples)
-            builder.AppendLine(string.Join(",", Cell(sample.Suite), Cell(sample.Scenario), Cell(sample.Operation), Cell(sample.Engine), Cell(sample.Host), sample.Iteration.ToString(CultureInfo.InvariantCulture), sample.Status, sample.DurationMs.ToString("0.###", CultureInfo.InvariantCulture), Cell(sample.Reason)));
+        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host" }.Concat(variableHeaders).Concat(new[] { "Iteration", "Status", "DurationMs", "Reason" })));
+        foreach (var sample in rows)
+        {
+            var cells = new List<string>
+            {
+                Cell(sample.Suite),
+                Cell(sample.Scenario),
+                Cell(sample.Operation),
+                Cell(sample.Engine),
+                Cell(sample.Host)
+            };
+            cells.AddRange(variableHeaders.Select(header => Cell(sample.Variables.TryGetValue(header, out var value) ? value : null)));
+            cells.Add(sample.Iteration.ToString(CultureInfo.InvariantCulture));
+            cells.Add(sample.Status.ToString());
+            cells.Add(sample.DurationMs.ToString("0.###", CultureInfo.InvariantCulture));
+            cells.Add(Cell(sample.Reason));
+            builder.AppendLine(string.Join(",", cells));
+        }
+
         return builder.ToString();
     }
 
     private static string WriteSummaryCsv(IEnumerable<BenchmarkSummaryRow> rows)
     {
+        var summaryRows = rows.ToArray();
+        var variableHeaders = GetVariableHeaders(summaryRows.Select(row => row.Variables));
         var builder = new StringBuilder();
-        builder.AppendLine("Suite,Scenario,Operation,Engine,Host,SampleCount,FailureCount,Status,MedianMs,MeanMs,MinMs,MaxMs");
-        foreach (var row in rows)
-            builder.AppendLine(string.Join(",", Cell(row.Suite), Cell(row.Scenario), Cell(row.Operation), Cell(row.Engine), Cell(row.Host), row.SampleCount.ToString(CultureInfo.InvariantCulture), row.FailureCount.ToString(CultureInfo.InvariantCulture), Cell(row.Status), Number(row.MedianMs), Number(row.MeanMs), Number(row.MinMs), Number(row.MaxMs)));
+        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host" }.Concat(variableHeaders).Concat(new[] { "SampleCount", "FailureCount", "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs" })));
+        foreach (var row in summaryRows)
+        {
+            var cells = new List<string>
+            {
+                Cell(row.Suite),
+                Cell(row.Scenario),
+                Cell(row.Operation),
+                Cell(row.Engine),
+                Cell(row.Host)
+            };
+            cells.AddRange(variableHeaders.Select(header => Cell(row.Variables.TryGetValue(header, out var value) ? value : null)));
+            cells.Add(row.SampleCount.ToString(CultureInfo.InvariantCulture));
+            cells.Add(row.FailureCount.ToString(CultureInfo.InvariantCulture));
+            cells.Add(Cell(row.Status));
+            cells.Add(Number(row.MedianMs));
+            cells.Add(Number(row.MeanMs));
+            cells.Add(Number(row.MinMs));
+            cells.Add(Number(row.MaxMs));
+            builder.AppendLine(string.Join(",", cells));
+        }
+
         return builder.ToString();
     }
+
+    private static Collection<PSObject> InvokeStrict(ScriptBlock block, params object[] args)
+    {
+        var variables = new List<PSVariable>
+        {
+            new("ErrorActionPreference", ActionPreference.Stop)
+        };
+        return block.InvokeWithContext(functionsToDefine: null, variablesToDefine: variables, args);
+    }
+
+    private static string[] GetVariableHeaders(IEnumerable<Dictionary<string, string?>> variables)
+        => variables
+            .SelectMany(row => row.Keys)
+            .Where(key => !IsBenchmarkColumn(key))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static bool IsBenchmarkColumn(string key)
+        => IsBuiltInPathValue(key)
+           || string.Equals(key, "Suite", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "RunId", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "OS", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "RunMode", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "Iteration", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "Status", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "DurationMs", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "Reason", StringComparison.OrdinalIgnoreCase);
 
     private static string Number(double? value)
         => value.HasValue ? value.Value.ToString("0.###", CultureInfo.InvariantCulture) : string.Empty;

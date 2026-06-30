@@ -34,19 +34,44 @@ public sealed class BenchmarkResultImporter
 
     private BenchmarkRunResult ImportDirectory(string path, string? suite)
     {
-        var files = Directory.GetFiles(path, "*-report.csv", SearchOption.AllDirectories)
-            .Concat(Directory.GetFiles(path, "*.csv", SearchOption.TopDirectoryOnly))
+        var defaultSuite = suite ?? new DirectoryInfo(path).Name;
+        var sampleFiles = Directory.GetFiles(path, "samples.csv", SearchOption.AllDirectories)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        if (files.Length == 0)
+        if (sampleFiles.Length > 0)
+            return BuildImportedResult(defaultSuite, sampleFiles.SelectMany(file => ImportCsvSamples(file, suite, defaultSuite)).ToArray());
+
+        var benchmarkDotNetFiles = Directory.GetFiles(path, "*-report.csv", SearchOption.AllDirectories)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (benchmarkDotNetFiles.Length > 0)
+            return BuildImportedResult(defaultSuite, benchmarkDotNetFiles.SelectMany(file => ImportCsvSamples(file, suite, defaultSuite)).ToArray());
+
+        var summaryFiles = Directory.GetFiles(path, "summary.csv", SearchOption.AllDirectories)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (summaryFiles.Length > 0)
+            return BuildImportedSummaryResult(defaultSuite, summaryFiles.SelectMany(file => ImportCsvSummary(file, suite, defaultSuite)).ToArray());
+
+        var csvFiles = Directory.GetFiles(path, "*.csv", SearchOption.TopDirectoryOnly)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (csvFiles.Length == 0)
             throw new InvalidOperationException($"No benchmark CSV files were found under '{path}'.");
 
-        var samples = new List<BenchmarkSample>();
-        foreach (var file in files)
-            samples.AddRange(ImportCsvSamples(file, suite ?? new DirectoryInfo(path).Name));
+        var samples = csvFiles
+            .Where(file => !LooksLikeSummaryCsv(file))
+            .SelectMany(file => ImportCsvSamples(file, suite, defaultSuite))
+            .ToArray();
+        if (samples.Length > 0)
+            return BuildImportedResult(defaultSuite, samples);
 
-        return BuildImportedResult(suite ?? new DirectoryInfo(path).Name, samples);
+        var summary = csvFiles.SelectMany(file => ImportCsvSummary(file, suite, defaultSuite)).ToArray();
+        return BuildImportedSummaryResult(defaultSuite, summary);
     }
 
     private BenchmarkRunResult ImportJson(string path, string? suite)
@@ -91,8 +116,15 @@ public sealed class BenchmarkResultImporter
 
     private BenchmarkRunResult ImportCsv(string path, string? suite)
     {
-        var samples = ImportCsvSamples(path, suite ?? Path.GetFileNameWithoutExtension(path));
-        return BuildImportedResult(suite ?? Path.GetFileNameWithoutExtension(path), samples);
+        var defaultSuite = suite ?? Path.GetFileNameWithoutExtension(path);
+        if (LooksLikeSummaryCsv(path))
+        {
+            var summary = ImportCsvSummary(path, suite, defaultSuite);
+            return BuildImportedSummaryResult(suite ?? summary.FirstOrDefault()?.Suite ?? defaultSuite, summary);
+        }
+
+        var samples = ImportCsvSamples(path, suite, defaultSuite);
+        return BuildImportedResult(suite ?? samples.FirstOrDefault()?.Suite ?? defaultSuite, samples);
     }
 
     private static BenchmarkRunResult BuildImportedResult(string suite, IReadOnlyList<BenchmarkSample> samples)
@@ -114,7 +146,24 @@ public sealed class BenchmarkResultImporter
         };
     }
 
-    private static BenchmarkSample[] ImportCsvSamples(string path, string suite)
+    private static BenchmarkRunResult BuildImportedSummaryResult(string suite, IReadOnlyList<BenchmarkSummaryRow> summary)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new BenchmarkRunResult
+        {
+            RunId = "import-" + now.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture),
+            Suite = suite,
+            StartedUtc = now,
+            FinishedUtc = now,
+            Summary = summary.ToArray(),
+            Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["importedUtc"] = now.ToString("O", CultureInfo.InvariantCulture)
+            }
+        };
+    }
+
+    private static BenchmarkSample[] ImportCsvSamples(string path, string? suiteOverride, string defaultSuite)
     {
         var lines = File.ReadAllLines(path);
         if (lines.Length < 2) return Array.Empty<BenchmarkSample>();
@@ -130,25 +179,62 @@ public sealed class BenchmarkResultImporter
 
             var method = Get(map, "Method", "Scenario", "Benchmark") ?? Path.GetFileNameWithoutExtension(path);
             var mean = ParseDuration(GetWithHeader(map, out var durationHeader, "MedianMs", "MeanMs", "DurationMs", "Median", "Mean", "Mean [ns]", "Mean [us]", "Mean [ms]"), durationHeader);
+            var status = ParseSampleStatus(Get(map, "Status"), mean.HasValue);
             samples.Add(new BenchmarkSample
             {
                 RunId = "import",
-                Suite = suite,
+                Suite = suiteOverride ?? Get(map, "Suite") ?? defaultSuite,
                 Scenario = method,
                 Operation = Get(map, "Operation") ?? "Run",
                 Engine = Get(map, "Engine") ?? Get(map, "Job") ?? "BenchmarkDotNet",
                 Host = Get(map, "Host") ?? string.Empty,
                 Os = Get(map, "OS") ?? string.Empty,
                 RunMode = "import",
-                Iteration = 0,
-                Status = mean.HasValue ? BenchmarkSampleStatus.Succeeded : BenchmarkSampleStatus.Failed,
+                Iteration = ParseInt(Get(map, "Iteration")) ?? 0,
+                Status = status,
                 DurationMs = mean ?? 0,
-                Reason = mean.HasValue ? string.Empty : "Duration column could not be parsed.",
-                Variables = map.ToDictionary(k => k.Key, k => (string?)k.Value, StringComparer.OrdinalIgnoreCase)
+                Reason = Get(map, "Reason") ?? (mean.HasValue ? string.Empty : "Duration column could not be parsed."),
+                Variables = ExtractVariables(map, SampleMetadataColumns)
             });
         }
 
         return samples.ToArray();
+    }
+
+    private static BenchmarkSummaryRow[] ImportCsvSummary(string path, string? suiteOverride, string defaultSuite)
+    {
+        var lines = File.ReadAllLines(path);
+        if (lines.Length < 2) return Array.Empty<BenchmarkSummaryRow>();
+        var headers = ParseCsvLine(lines[0]);
+        var rows = new List<BenchmarkSummaryRow>();
+        for (var i = 1; i < lines.Length; i++)
+        {
+            if (string.IsNullOrWhiteSpace(lines[i])) continue;
+            var values = ParseCsvLine(lines[i]);
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            for (var h = 0; h < headers.Length && h < values.Length; h++)
+                map[headers[h]] = values[h];
+
+            var failureCount = ParseInt(Get(map, "FailureCount")) ?? 0;
+            rows.Add(new BenchmarkSummaryRow
+            {
+                Suite = suiteOverride ?? Get(map, "Suite") ?? defaultSuite,
+                Scenario = Get(map, "Scenario", "Method", "Benchmark") ?? Path.GetFileNameWithoutExtension(path),
+                Operation = Get(map, "Operation") ?? "Run",
+                Engine = Get(map, "Engine") ?? Get(map, "Job") ?? "BenchmarkDotNet",
+                Host = Get(map, "Host") ?? string.Empty,
+                Variables = ExtractVariables(map, SummaryMetadataColumns),
+                SampleCount = ParseInt(Get(map, "SampleCount")) ?? 0,
+                FailureCount = failureCount,
+                Status = Get(map, "Status") ?? (failureCount > 0 ? "Failed" : "Succeeded"),
+                MedianMs = ParseDuration(GetWithHeader(map, out var medianHeader, "MedianMs", "Median", "Median [ns]", "Median [us]", "Median [ms]"), medianHeader),
+                MeanMs = ParseDuration(GetWithHeader(map, out var meanHeader, "MeanMs", "Mean", "Mean [ns]", "Mean [us]", "Mean [ms]"), meanHeader),
+                MinMs = ParseDuration(GetWithHeader(map, out var minHeader, "MinMs", "Min", "Min [ns]", "Min [us]", "Min [ms]"), minHeader),
+                MaxMs = ParseDuration(GetWithHeader(map, out var maxHeader, "MaxMs", "Max", "Max [ns]", "Max [us]", "Max [ms]"), maxHeader)
+            });
+        }
+
+        return rows.ToArray();
     }
 
     private static void ApplySuiteOverride(BenchmarkRunResult result, string suite)
@@ -185,8 +271,8 @@ public sealed class BenchmarkResultImporter
                          ?? GetString(benchmark, "MethodTitle")
                          ?? Path.GetFileNameWithoutExtension(path);
             var statistics = TryGetObject(benchmark, "Statistics");
-            var mean = GetDouble(statistics, "Mean") ?? GetDouble(statistics, "Median");
-            if (mean.HasValue && LooksLikeNanoseconds(statistics))
+            var mean = GetDouble(statistics, "Median") ?? GetDouble(statistics, "Mean");
+            if (mean.HasValue)
                 mean *= 0.000001;
 
             var parameterText = GetString(benchmark, "Parameters") ?? string.Empty;
@@ -274,13 +360,6 @@ public sealed class BenchmarkResultImporter
         return null;
     }
 
-    private static bool LooksLikeNanoseconds(JsonElement? statistics)
-    {
-        var mean = GetDouble(statistics, "Mean");
-        var median = GetDouble(statistics, "Median");
-        return (mean.HasValue && mean.Value > 1000) || (median.HasValue && median.Value > 1000);
-    }
-
     private static double? ParseDuration(string? raw, string? header = null)
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
@@ -355,4 +434,43 @@ public sealed class BenchmarkResultImporter
 
     private static bool HasDurationSuffix(string text)
         => RemoveUnitSuffix(text).Length != text.Length;
+
+    private static bool LooksLikeSummaryCsv(string path)
+    {
+        var firstLine = File.ReadLines(path).FirstOrDefault();
+        if (firstLine is null) return false;
+        var headers = new HashSet<string>(ParseCsvLine(firstLine), StringComparer.OrdinalIgnoreCase);
+        return (headers.Contains("SampleCount") || headers.Contains("FailureCount") || headers.Contains("MedianMs"))
+               && !headers.Contains("Iteration")
+               && !headers.Contains("DurationMs");
+    }
+
+    private static BenchmarkSampleStatus ParseSampleStatus(string? value, bool hasDuration)
+    {
+        if (!string.IsNullOrWhiteSpace(value) && Enum.TryParse<BenchmarkSampleStatus>(value, ignoreCase: true, out var status))
+            return status;
+        return hasDuration ? BenchmarkSampleStatus.Succeeded : BenchmarkSampleStatus.Failed;
+    }
+
+    private static int? ParseInt(string? value)
+        => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
+
+    private static Dictionary<string, string?> ExtractVariables(IReadOnlyDictionary<string, string> values, HashSet<string> excludedColumns)
+        => values
+            .Where(k => !excludedColumns.Contains(k.Key))
+            .ToDictionary(k => k.Key, k => (string?)k.Value, StringComparer.OrdinalIgnoreCase);
+
+    private static readonly HashSet<string> SampleMetadataColumns = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "RunId", "Suite", "Scenario", "Method", "Benchmark", "Operation", "Engine", "Job", "Host", "OS", "RunMode",
+        "Iteration", "Status", "DurationMs", "MedianMs", "MeanMs", "Median", "Mean", "Mean [ns]", "Mean [us]", "Mean [ms]",
+        "Reason", "AllocatedBytes", "WorkingSetDeltaBytes", "OutputMetric"
+    };
+
+    private static readonly HashSet<string> SummaryMetadataColumns = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Suite", "Scenario", "Method", "Benchmark", "Operation", "Engine", "Job", "Host", "SampleCount", "FailureCount",
+        "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs", "Median", "Mean", "Min", "Max", "Median [ns]", "Median [us]",
+        "Median [ms]", "Mean [ns]", "Mean [us]", "Mean [ms]", "Min [ns]", "Min [us]", "Min [ms]", "Max [ns]", "Max [us]", "Max [ms]"
+    };
 }

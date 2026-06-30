@@ -268,6 +268,31 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_UsesBenchmarkDotNetMedianAndScalesNanoseconds()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "Demo-report-full-compressed.json");
+        File.WriteAllText(path, """
+{
+  "Title": "demo",
+  "Benchmarks": [
+    {
+      "DisplayInfo": "Write",
+      "Statistics": {
+        "Mean": 900,
+        "Median": 500
+      }
+    }
+  ]
+}
+""");
+
+        var result = new BenchmarkResultImporter().Import(path);
+
+        Assert.Equal(0.0005, Assert.Single(result.Summary).MedianMs);
+    }
+
+    [Fact]
     public void Importer_ReadsNormalizedCsvDurations()
     {
         var root = CreateTempRoot();
@@ -277,6 +302,39 @@ public sealed class BenchmarkServicesTests
         var result = new BenchmarkResultImporter().Import(csv, "demo");
 
         Assert.Equal(12.5, Assert.Single(result.Summary).MedianMs);
+    }
+
+    [Fact]
+    public void Importer_PreservesNormalizedCsvStatusSuiteAndVariables()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(csv, "Suite,Scenario,Operation,Engine,Host,Rows,Iteration,Status,DurationMs,Reason\nold,Write,Run,Managed,Current,10,0,Failed,12.5,boom\n");
+
+        var result = new BenchmarkResultImporter().Import(csv);
+        var sample = Assert.Single(result.Samples);
+
+        Assert.Equal("old", result.Suite);
+        Assert.Equal("old", sample.Suite);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Equal("boom", sample.Reason);
+        Assert.Equal("10", sample.Variables["Rows"]);
+        Assert.DoesNotContain("DurationMs", sample.Variables.Keys);
+        Assert.Equal("Failed", Assert.Single(result.Summary).Status);
+    }
+
+    [Fact]
+    public void Importer_DirectoryUsesSamplesWithoutMixingSummaryRows()
+    {
+        var root = CreateTempRoot();
+        File.WriteAllText(Path.Combine(root, "samples.csv"), "Suite,Scenario,Operation,Engine,Host,Rows,Iteration,Status,DurationMs,Reason\nsuite,Write,Run,Managed,Current,10,0,Succeeded,12.5,\n");
+        File.WriteAllText(Path.Combine(root, "summary.csv"), "Suite,Scenario,Operation,Engine,Host,Rows,SampleCount,FailureCount,Status,MedianMs,MeanMs,MinMs,MaxMs\nsuite,Write,Run,Managed,Current,10,1,0,Succeeded,12.5,12.5,12.5,12.5\n");
+
+        var result = new BenchmarkResultImporter().Import(root);
+
+        Assert.Single(result.Samples);
+        Assert.Single(result.Summary);
+        Assert.Equal("10", Assert.Single(result.Summary).Variables["Rows"]);
     }
 
     [Fact]
@@ -304,6 +362,15 @@ New-BenchmarkSuite 'long' {
         Assert.Equal(2, suites.Length);
         Assert.Single(runner.Plan(suites[0]));
         Assert.Single(runner.Plan(suites[1]));
+    }
+
+    [Fact]
+    public void InvokeBenchmarkSuiteCommand_ExposesSuiteOverrideParameter()
+    {
+        var property = typeof(PSPublishModule.InvokeBenchmarkSuiteCommand).GetProperty("Suite");
+
+        Assert.NotNull(property);
+        Assert.Contains(property!.GetCustomAttributes(inherit: true), attribute => attribute is ParameterAttribute);
     }
 
     [Fact]
@@ -363,6 +430,35 @@ New-BenchmarkSuite 'long' {
         Assert.Equal(2, result.Samples.Length);
         Assert.True(File.Exists(Path.Combine(suite.OutputRoot, result.RunId, "Default", "Managed", "Run", "Rows=10", "0", "output")));
         Assert.True(File.Exists(Path.Combine(suite.OutputRoot, result.RunId, "Default", "Managed", "Run", "Rows=20", "0", "output")));
+    }
+
+    [Fact]
+    public void Runner_WritesMatrixVariablesToCsvArtifacts()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Artifacts = BenchmarkArtifactKind.Csv;
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows", Values = { 10 } });
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        var samplesCsv = File.ReadAllText(result.Artifacts["samples.csv"]);
+        var summaryCsv = File.ReadAllText(result.Artifacts["summary.csv"]);
+        Assert.Contains("Suite,Scenario,Operation,Engine,Host,Rows,Iteration,Status,DurationMs,Reason", samplesCsv);
+        Assert.Contains("suite,Default,Run,Managed,Current,10,0,Succeeded", samplesCsv);
+        Assert.Contains("Suite,Scenario,Operation,Engine,Host,Rows,SampleCount,FailureCount,Status,MedianMs,MeanMs,MinMs,MaxMs", summaryCsv);
+    }
+
+    [Fact]
+    public void Runner_TreatsNonTerminatingHandlerErrorsAsFailures()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create("param($case, $run) Write-Error 'boom'");
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Contains("boom", sample.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

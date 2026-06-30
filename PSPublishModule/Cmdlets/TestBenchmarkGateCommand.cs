@@ -89,7 +89,7 @@ public sealed class TestBenchmarkGateCommand : PSCmdlet
             var message = result.Messages.Length > 0
                 ? result.Messages[0]
                 : "Benchmark gate failed.";
-            WriteError(new ErrorRecord(new InvalidOperationException(message), "BenchmarkGateFailed", ErrorCategory.InvalidResult, result));
+            ThrowTerminatingError(new ErrorRecord(new InvalidOperationException(message), "BenchmarkGateFailed", ErrorCategory.InvalidResult, result));
         }
     }
 }

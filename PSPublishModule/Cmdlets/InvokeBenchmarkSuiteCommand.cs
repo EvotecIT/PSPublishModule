@@ -58,6 +58,12 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
     public string? RunMode { get; set; }
 
     /// <summary>
+    /// Optional suite name override.
+    /// </summary>
+    [Parameter]
+    public string? Suite { get; set; }
+
+    /// <summary>
     /// Prints the resolved plan instead of executing measurements.
     /// </summary>
     [Parameter]
@@ -102,5 +108,6 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
         if (WarmupCount.HasValue) suite.WarmupCount = Math.Max(0, WarmupCount.Value);
         if (IterationCount.HasValue) suite.IterationCount = Math.Max(1, IterationCount.Value);
         if (!string.IsNullOrWhiteSpace(RunMode)) suite.RunMode = RunMode!;
+        if (!string.IsNullOrWhiteSpace(Suite)) suite.Name = Suite!;
     }
 }
