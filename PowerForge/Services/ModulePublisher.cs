@@ -573,7 +573,6 @@ public sealed partial class ModulePublisher
         if (exception is ManagedModuleRepositoryException localRepositoryException &&
             localRepositoryException.Operation.Equals("VersionQuery", StringComparison.OrdinalIgnoreCase) &&
             localRepositoryException.StatusCode is null &&
-            Path.IsPathRooted(localRepositoryException.RepositorySource) &&
             localRepositoryException.Message.IndexOf("Local repository folder was not found", StringComparison.OrdinalIgnoreCase) >= 0)
         {
             return true;

@@ -365,8 +365,48 @@ public sealed class ManagedModuleAliasCommandTests
 
         AssertNoPowerShellErrors(ps);
         Assert.True(result.Published);
-        Assert.Equal(feed.Path, result.RepositorySource);
+        Assert.Equal("https://example.invalid/v2", result.RepositorySource);
+        Assert.Equal(feed.Path, Path.GetDirectoryName(result.PublishSource));
         Assert.True(File.Exists(Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg")));
+    }
+
+    [Fact]
+    public void PublishManagedModule_uses_profile_source_for_dependency_checks_and_publish_uri_for_upload()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var readFeed = new TemporaryDirectory();
+        using var publishFeed = new TemporaryDirectory();
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        CreateModule(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            requiredModules: "    RequiredModules = @(@{ ModuleName = 'Company.Core'; RequiredVersion = '2.0.0' })");
+        TestPackageFactory.Create(Path.Combine(readFeed.Path, "Company.Core.2.0.0.nupkg"), "Company.Core", "2.0.0");
+        new ModuleRepositoryProfileStore().SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "Company",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "CompanyModules",
+            RepositoryUri = "https://example.invalid/v3/index.json",
+            RepositorySourceUri = readFeed.Path,
+            RepositoryPublishUri = publishFeed.Path
+        });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Publish-ManagedModule")
+            .AddParameter("Path", moduleRoot.Path)
+            .AddParameter("ProfileName", "Company");
+
+        var result = Assert.IsType<ManagedModulePublishResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.True(result.Published);
+        Assert.Equal(readFeed.Path, result.RepositorySource);
+        Assert.Equal(publishFeed.Path, Path.GetDirectoryName(result.PublishSource));
+        Assert.False(File.Exists(Path.Combine(readFeed.Path, "Company.Tools.1.0.0.nupkg")));
+        Assert.True(File.Exists(Path.Combine(publishFeed.Path, "Company.Tools.1.0.0.nupkg")));
     }
 
     [Fact]
@@ -438,7 +478,7 @@ public sealed class ManagedModuleAliasCommandTests
         return new TestEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH", path);
     }
 
-    private static void CreateModule(string root, string name, string version)
+    private static void CreateModule(string root, string name, string version, string? requiredModules = null)
     {
         Directory.CreateDirectory(root);
         File.WriteAllText(Path.Combine(root, name + ".psm1"), "function Get-CompanyTool { 'ok' }");
@@ -448,6 +488,7 @@ public sealed class ManagedModuleAliasCommandTests
     ModuleVersion = '{{version}}'
     Author = 'Evotec'
     Description = 'Company tools module.'
+{{requiredModules}}
     PrivateData = @{
         PSData = @{
             Tags = @('company', 'automation')

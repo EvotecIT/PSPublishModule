@@ -125,6 +125,7 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
         var modulePath = ManagedModuleCommandSupport.ResolveProviderPath(this, Path)!;
         var manifestPath = ManagedModuleCommandSupport.ResolveProviderPath(this, ManifestPath);
         var repository = ResolveRepository();
+        var publishRepository = ResolvePublishRepository();
         var outputDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, OutputDirectory);
         var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, null, ApiKey, ApiKeyFilePath);
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
@@ -141,6 +142,7 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
                     Name = Name,
                     Version = Version,
                     Repository = repository,
+                    PublishRepository = publishRepository,
                     OutputDirectory = outputDirectory,
                     Credential = credential,
                     Authors = Authors,
@@ -160,6 +162,16 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
     }
 
     private ManagedModuleRepository ResolveRepository()
+        => ManagedModuleCommandSupport.CreatePublishReadRepository(
+            this,
+            RepositoryName,
+            Repository,
+            OutputDirectory,
+            ProfileName,
+            MyInvocation.BoundParameters.ContainsKey(nameof(Repository)),
+            MyInvocation.BoundParameters.ContainsKey(nameof(OutputDirectory)));
+
+    private ManagedModuleRepository ResolvePublishRepository()
         => ManagedModuleCommandSupport.CreatePublishRepository(
             this,
             RepositoryName,

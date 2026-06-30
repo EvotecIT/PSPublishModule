@@ -167,6 +167,26 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
         Assert.Equal("https://first.example.test/v3/index.json", repository.Source);
     }
 
+    [Fact]
+    public void ManagedResolveRepository_PreservesActionTargetOverFallbackProfile()
+    {
+        var action = new ModuleStatePlanAction(
+            ModuleStatePlanActionKind.Install,
+            "Company.Tools",
+            installedVersion: null,
+            ">=1.2.0",
+            "missing",
+            targetRepository: "https://selected.example.test/v3/index.json");
+        var options = new ModuleStateManagedDeliveryOptions
+        {
+            ProfileName = "FallbackProfile"
+        };
+
+        var repository = InvokeManagedResolveRepository(action, options);
+
+        Assert.Equal("https://selected.example.test/v3/index.json", repository.Source);
+    }
+
     private static PrivateModuleWorkflowRequest InvokeCreateRequest(
         IReadOnlyList<ModuleStatePlanAction> actions,
         ModuleStatePrivateDeliveryOptions? options = null)

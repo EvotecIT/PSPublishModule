@@ -179,6 +179,19 @@ public sealed class ModulePublisherRepositoryVersionTests
     }
 
     [Fact]
+    public void IsRepositoryPackageNotFound_TreatsMissingRelativeLocalManagedFeedAsFirstPublish()
+    {
+        var exception = new ManagedModuleRepositoryException(
+            "VersionQuery",
+            "Local",
+            @".\feed",
+            @"Local repository folder was not found: .\feed",
+            "Create the feed.");
+
+        Assert.True(ModulePublisher.IsRepositoryPackageNotFound("EntraIDConfig", exception));
+    }
+
+    [Fact]
     public void Publish_RegistersConfiguredRepositoryBeforeVersionCheck()
     {
         var stagingRoot = Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N"));

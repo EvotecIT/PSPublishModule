@@ -9,7 +9,9 @@ internal static class ManagedModuleClobberDetector
             return;
 
         var incoming = ReadCommandExports(incomingManifest);
-        if (incoming.Count == 0 || !Directory.Exists(moduleRoot))
+        if (!incoming.HasAnyExport && !Directory.Exists(moduleRoot))
+            return;
+        if (!Directory.Exists(moduleRoot))
             return;
 
         foreach (var moduleDirectory in EnumerateDirectories(moduleRoot))
@@ -28,7 +30,13 @@ internal static class ManagedModuleClobberDetector
                     continue;
 
                 var existing = ReadCommandExports(existingManifest);
-                var conflict = incoming.Intersect(existing, StringComparer.OrdinalIgnoreCase)
+                if (HasWildcardConflict(incoming, existing))
+                {
+                    throw new InvalidOperationException(
+                        $"Managed module install detected wildcard export clobber risk between '{moduleName}' and existing module '{existingName}'. Use AllowClobber to permit this.");
+                }
+
+                var conflict = incoming.Names.Intersect(existing.Names, StringComparer.OrdinalIgnoreCase)
                     .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
                     .FirstOrDefault();
                 if (!string.IsNullOrWhiteSpace(conflict))
@@ -97,16 +105,41 @@ internal static class ManagedModuleClobberDetector
         }
     }
 
-    private static HashSet<string> ReadCommandExports(string manifestPath)
+    private static bool HasWildcardConflict(CommandExportSet incoming, CommandExportSet existing)
+    {
+        if (incoming.HasWildcard && existing.HasAnyExport)
+            return true;
+
+        return existing.HasWildcard && incoming.HasAnyExport;
+    }
+
+    private static CommandExportSet ReadCommandExports(string manifestPath)
     {
         var exports = ModuleManifestExportReader.ReadExports(manifestPath);
-        var names = exports.Functions
+        var allNames = exports.Functions
             .Concat(exports.Cmdlets)
             .Concat(exports.Aliases)
             .Where(static name => !string.IsNullOrWhiteSpace(name))
             .Select(static name => name.Trim())
-            .Where(static name => !name.Equals("*", StringComparison.Ordinal));
+            .ToArray();
+        var hasWildcard = allNames.Any(static name => name.Equals("*", StringComparison.Ordinal));
+        var names = allNames.Where(static name => !name.Equals("*", StringComparison.Ordinal));
 
-        return new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+        return new CommandExportSet(new HashSet<string>(names, StringComparer.OrdinalIgnoreCase), hasWildcard);
+    }
+
+    private sealed class CommandExportSet
+    {
+        public CommandExportSet(HashSet<string> names, bool hasWildcard)
+        {
+            Names = names;
+            HasWildcard = hasWildcard;
+        }
+
+        public HashSet<string> Names { get; }
+
+        public bool HasWildcard { get; }
+
+        public bool HasAnyExport => HasWildcard || Names.Count > 0;
     }
 }

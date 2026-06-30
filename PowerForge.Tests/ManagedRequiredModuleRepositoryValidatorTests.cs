@@ -33,6 +33,35 @@ public sealed class ManagedRequiredModuleRepositoryValidatorTests
         Assert.True(File.Exists(Path.Combine(targetPath, "Company.Core.1.0.0.nupkg")));
     }
 
+    [Fact]
+    public void Validate_rejects_publish_required_modules_when_target_source_is_psgallery_alias()
+    {
+        using var source = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(source.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0");
+        var validator = new ManagedRequiredModuleRepositoryValidator(new NullLogger());
+        var publish = new PublishConfiguration
+        {
+            PublishRequiredModules = true,
+            RequiredModuleSourceRepository = "Source",
+            RequiredModuleSourceRepositoryUri = source.Path
+        };
+        var targetRepository = new ManagedModuleRepository("CompanyAlias", "https://www.powershellgallery.com/api/v3/index.json");
+        var plan = CreatePlan(new RequiredModuleReference("Company.Core", requiredVersion: "1.0.0"));
+        var buildResult = new ModuleBuildResult(
+            stagingPath: source.Path,
+            manifestPath: Path.Combine(source.Path, "missing.psd1"),
+            exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => validator.Validate(publish, targetRepository, targetCredential: null, plan, buildResult));
+
+        Assert.Contains("PSGallery", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("private repository", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ModulePipelinePlan CreatePlan(params RequiredModuleReference[] requiredModules)
         => new(
             moduleName: "TestModule",

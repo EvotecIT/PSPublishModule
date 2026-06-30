@@ -61,6 +61,33 @@ public sealed class ManagedModuleClobberCommandTests
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
     }
 
+    [Fact]
+    public void InstallManagedModule_rejects_wildcard_export_clobber_risk_by_default()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Existing", "1.0.0", "Get-CompanyTool");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("Company.Tools", "1.0.0", "*"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ModuleRoot", moduleRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0");
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+
+        Assert.Contains("wildcard export clobber risk", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("AllowClobber", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+    }
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();

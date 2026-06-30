@@ -42,7 +42,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
             return;
 
         if (publish.PublishRequiredModules &&
-            string.Equals(targetRepository.Name, "PSGallery", StringComparison.OrdinalIgnoreCase))
+            IsPowerShellGalleryRepository(targetRepository))
         {
             throw new InvalidOperationException(
                 "PublishRequiredModules is only supported for private repository targets. Refusing to mirror dependencies to PSGallery.");
@@ -312,6 +312,18 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
 
         throw new InvalidOperationException(
             $"Managed required-module mirroring could not resolve source repository '{source}'. Use PSGallery, a repository URL, a local feed path, or the target repository name.");
+    }
+
+    private static bool IsPowerShellGalleryRepository(ManagedModuleRepository repository)
+    {
+        if (string.Equals(repository.Name, "PSGallery", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (!Uri.TryCreate(repository.Source, UriKind.Absolute, out var uri))
+            return false;
+
+        return uri.Host.Equals("www.powershellgallery.com", StringComparison.OrdinalIgnoreCase) ||
+               uri.Host.Equals("powershellgallery.com", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ResolveSourceRepositoryName(PublishConfiguration publish)
