@@ -82,8 +82,9 @@ public sealed class SaveManagedModuleCommandTests
         using var feed = new TemporaryDirectory();
         using var cache = new TemporaryDirectory();
         using var destination = new TemporaryDirectory();
+        var repositoryCache = Path.Combine(cache.Path, CreateRepositoryCacheKey(feed.Path));
         TestPackageFactory.Create(
-            Path.Combine(cache.Path, "Company.Tools.1.0.0.nupkg"),
+            Path.Combine(repositoryCache, "company.tools.1.0.0.nupkg"),
             "Company.Tools",
             "1.0.0",
             files: CreateToolFiles("1.0.0"));
@@ -258,5 +259,12 @@ public sealed class SaveManagedModuleCommandTests
     {
         if (ps.HadErrors)
             throw new InvalidOperationException(string.Join(Environment.NewLine, ps.Streams.Error.Select(error => error.ToString())));
+    }
+
+    private static string CreateRepositoryCacheKey(string source)
+    {
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        var hash = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(source.Trim().ToLowerInvariant()));
+        return string.Concat(hash.Take(8).Select(static value => value.ToString("x2")));
     }
 }

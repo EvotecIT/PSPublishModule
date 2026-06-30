@@ -113,6 +113,31 @@ public sealed class ManagedModuleInstallPlanServiceTests
     }
 
     [Fact]
+    public async Task PlanInstallAsync_uses_repository_normalized_exact_version()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var plan = await service.PlanInstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal("1.0.0", plan.Version);
+        Assert.EndsWith(Path.Combine("Company.Tools", "1.0.0"), plan.ModulePath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task PlanInstallAsync_filters_flat_layout_child_folders_from_installed_versions()
     {
         using var feed = new TemporaryDirectory();

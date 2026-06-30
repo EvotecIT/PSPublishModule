@@ -34,6 +34,42 @@ public sealed class ManagedRequiredModuleRepositoryValidatorTests
     }
 
     [Fact]
+    public void Validate_mirrors_merged_package_dependencies_without_raw_manifest_duplicates()
+    {
+        using var source = new TemporaryDirectory();
+        using var target = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(source.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Dependency", "[1.0.0]", targetFramework: null) },
+            files: new Dictionary<string, string>
+            {
+                ["Company.Core.psd1"] = "@{ ModuleVersion = '1.0.0'; RequiredModules = @('Company.Dependency') }"
+            });
+        TestPackageFactory.Create(Path.Combine(source.Path, "Company.Dependency.1.0.0.nupkg"), "Company.Dependency", "1.0.0");
+        TestPackageFactory.Create(Path.Combine(source.Path, "Company.Dependency.2.0.0.nupkg"), "Company.Dependency", "2.0.0");
+        var validator = new ManagedRequiredModuleRepositoryValidator(new NullLogger());
+        var publish = new PublishConfiguration
+        {
+            PublishRequiredModules = true,
+            RequiredModuleSourceRepository = "Source",
+            RequiredModuleSourceRepositoryUri = source.Path
+        };
+        var plan = CreatePlan(new RequiredModuleReference("Company.Core", requiredVersion: "1.0.0"));
+        var buildResult = new ModuleBuildResult(
+            stagingPath: target.Path,
+            manifestPath: Path.Combine(target.Path, "missing.psd1"),
+            exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+        validator.Validate(publish, new ManagedModuleRepository("Private", target.Path), targetCredential: null, plan, buildResult);
+
+        Assert.True(File.Exists(Path.Combine(target.Path, "Company.Core.1.0.0.nupkg")));
+        Assert.True(File.Exists(Path.Combine(target.Path, "Company.Dependency.1.0.0.nupkg")));
+        Assert.False(File.Exists(Path.Combine(target.Path, "Company.Dependency.2.0.0.nupkg")));
+    }
+
+    [Fact]
     public void Validate_rejects_publish_required_modules_when_target_source_is_psgallery_alias()
     {
         using var source = new TemporaryDirectory();

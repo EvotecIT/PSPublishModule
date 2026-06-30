@@ -41,6 +41,29 @@ public sealed class ManagedModulePackServiceTests
     }
 
     [Fact]
+    public void Pack_writes_content_types_for_packaged_file_extensions()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var output = new TemporaryDirectory();
+        CreateModule(moduleRoot.Path, "Company.Tools", "1.2.3", prerelease: null);
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "Company.Tools.deps.json"), "{}");
+        var service = new ManagedModulePackService();
+
+        var result = service.Pack(new ManagedModulePackRequest
+        {
+            ModulePath = moduleRoot.Path,
+            OutputDirectory = output.Path
+        });
+
+        using var archive = ZipFile.OpenRead(result.PackagePath);
+        var contentTypes = ReadEntry(archive, "[Content_Types].xml");
+
+        Assert.Contains("Extension=\"json\"", contentTypes, StringComparison.Ordinal);
+        Assert.Contains("Extension=\"psd1\"", contentTypes, StringComparison.Ordinal);
+        Assert.Contains("Extension=\"psm1\"", contentTypes, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Pack_appends_manifest_prerelease_label()
     {
         using var moduleRoot = new TemporaryDirectory();

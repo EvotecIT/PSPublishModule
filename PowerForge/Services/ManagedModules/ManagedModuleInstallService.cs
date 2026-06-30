@@ -648,14 +648,19 @@ public sealed partial class ManagedModuleInstallService
         if (!string.IsNullOrWhiteSpace(request.Version))
         {
             var exactVersion = request.Version!.Trim();
-            if (resolveExactMetadata)
+            if (resolveExactMetadata || RequiresExactVersionNormalization(exactVersion))
             {
-                var exactMatch = await TryResolveExactVersionInfoAsync(request, exactVersion, cancellationToken).ConfigureAwait(false);
+                var exactMatch = await TryResolveExactVersionInfoAsync(
+                    request,
+                    exactVersion,
+                    resolveExactMetadata,
+                    cancellationToken).ConfigureAwait(false);
                 if (exactMatch is not null)
                     return exactMatch;
 
-                throw new InvalidOperationException(
-                    $"Version '{exactVersion}' of '{request.Name}' was not found in repository '{request.Repository.Name}'.");
+                if (resolveExactMetadata)
+                    throw new InvalidOperationException(
+                        $"Version '{exactVersion}' of '{request.Name}' was not found in repository '{request.Repository.Name}'.");
             }
 
             return CreateRequestedVersionInfo(request, exactVersion);
@@ -707,6 +712,7 @@ public sealed partial class ManagedModuleInstallService
     private async Task<ManagedModuleVersionInfo?> TryResolveExactVersionInfoAsync(
         ManagedModuleInstallRequest request,
         string exactVersion,
+        bool enrichMetadata,
         CancellationToken cancellationToken)
     {
         var versions = await _repositoryClient.GetVersionsAsync(
@@ -716,14 +722,18 @@ public sealed partial class ManagedModuleInstallService
             request.Credential,
             cancellationToken).ConfigureAwait(false);
 
-        var exactMatch = versions.FirstOrDefault(version => version.Version.Equals(exactVersion, StringComparison.OrdinalIgnoreCase));
-        return exactMatch is null
-            ? null
-            : await EnrichVersionInfoWithPackageMetadataAsync(
+        var exactMatch = versions.FirstOrDefault(version =>
+            ManagedModuleVersionComparer.Instance.Compare(version.Version, exactVersion) == 0);
+        if (exactMatch is null)
+            return null;
+
+        return enrichMetadata
+            ? await EnrichVersionInfoWithPackageMetadataAsync(
                 request.Repository,
                 exactMatch,
                 request.Credential,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken).ConfigureAwait(false)
+            : exactMatch;
     }
 
     private async Task<ManagedModuleVersionInfo> EnrichVersionInfoWithPackageMetadataAsync(
@@ -762,6 +772,15 @@ public sealed partial class ManagedModuleInstallService
             License = metadata.License,
             RequireLicenseAcceptance = metadata.RequireLicenseAcceptance
         };
+
+    private static bool RequiresExactVersionNormalization(string version)
+    {
+        var prereleaseIndex = version.IndexOf('-');
+        var core = prereleaseIndex >= 0
+            ? version.Substring(0, prereleaseIndex)
+            : version;
+        return core.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries).Length < 3;
+    }
 
     private static ManagedModuleVersionInfo CreateRequestedVersionInfo(ManagedModuleInstallRequest request, string version)
         => new()

@@ -117,9 +117,23 @@ internal static class ManagedModuleCommandSupport
         if (!string.Equals(repositoryName, DefaultRepositoryName, StringComparison.OrdinalIgnoreCase))
             return repositoryName;
 
-        return GetRepositoryKind(repository) == ManagedModuleRepositoryKind.LocalFolder
-            ? "Local"
-            : repositoryName;
+        if (GetRepositoryKind(repository) == ManagedModuleRepositoryKind.LocalFolder)
+            return "Local";
+
+        if (IsBuiltInDefaultRepository(repositoryName, repository))
+            return repositoryName;
+
+        return Uri.TryCreate(repository, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host)
+            ? uri.Host
+            : "Repository";
+    }
+
+    internal static void ValidateSinglePackageHashTarget(string? expectedPackageSha256, string[] moduleNames)
+    {
+        if (string.IsNullOrWhiteSpace(expectedPackageSha256) || moduleNames.Length == 1)
+            return;
+
+        throw new InvalidOperationException("ExpectedPackageSha256 can only be used when exactly one module is targeted.");
     }
 
     internal static string ResolveRepositorySource(PSCmdlet cmdlet, string repository)

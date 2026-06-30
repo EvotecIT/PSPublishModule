@@ -189,6 +189,7 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var repositoryClient = ManagedModuleCommandSupport.CreateRepositoryClient(this, logger, Proxy, ProxyCredential);
         var service = new ManagedModuleInstallService(logger, repositoryClient);
+        ManagedModuleCommandSupport.ValidateSinglePackageHashTarget(ExpectedPackageSha256, Name);
 
         foreach (var moduleName in Name)
         {

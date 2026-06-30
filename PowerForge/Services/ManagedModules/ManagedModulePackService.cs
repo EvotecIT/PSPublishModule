@@ -46,7 +46,7 @@ public sealed class ManagedModulePackService
         using (var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create))
         {
             AddTextEntry(archive, $"{name}.nuspec", metadata.ToString(SaveOptions.DisableFormatting));
-            AddTextEntry(archive, "[Content_Types].xml", CreateContentTypes());
+            AddTextEntry(archive, "[Content_Types].xml", CreateContentTypes(moduleFiles));
             var corePropertiesPath = $"package/services/metadata/core-properties/{name}.{version}.psmdcp";
             AddTextEntry(archive, "_rels/.rels", CreateRelationships(name, corePropertiesPath));
             AddTextEntry(archive, corePropertiesPath, CreateCoreProperties(name, version, request, manifestPath, manifestText).ToString(SaveOptions.DisableFormatting));
@@ -416,18 +416,39 @@ public sealed class ManagedModulePackService
         writer.Write(content);
     }
 
-    private static string CreateContentTypes()
-        => "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
-           "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">" +
-           "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\" />" +
-           "<Default Extension=\"psmdcp\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\" />" +
-           "<Default Extension=\"nuspec\" ContentType=\"application/octet\" />" +
-           "<Default Extension=\"psd1\" ContentType=\"application/octet\" />" +
-           "<Default Extension=\"psm1\" ContentType=\"application/octet\" />" +
-           "<Default Extension=\"ps1\" ContentType=\"application/octet\" />" +
-           "<Default Extension=\"dll\" ContentType=\"application/octet\" />" +
-           "<Default Extension=\"xml\" ContentType=\"application/xml\" />" +
-           "</Types>";
+    private static string CreateContentTypes(IEnumerable<string> moduleFiles)
+    {
+        var defaults = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["rels"] = "application/vnd.openxmlformats-package.relationships+xml",
+            ["psmdcp"] = "application/vnd.openxmlformats-package.core-properties+xml",
+            ["nuspec"] = "application/octet"
+        };
+
+        foreach (var file in moduleFiles)
+        {
+            var extension = Path.GetExtension(file).TrimStart('.');
+            if (string.IsNullOrWhiteSpace(extension))
+                continue;
+
+            if (!defaults.ContainsKey(extension))
+                defaults.Add(extension, ResolveContentType(extension));
+        }
+
+        var ns = XNamespace.Get("http://schemas.openxmlformats.org/package/2006/content-types");
+        var document = new XDocument(
+            new XElement(ns + "Types",
+                defaults.Select(item => new XElement(ns + "Default",
+                    new XAttribute("Extension", item.Key),
+                    new XAttribute("ContentType", item.Value)))));
+
+        return document.ToString(SaveOptions.DisableFormatting);
+    }
+
+    private static string ResolveContentType(string extension)
+        => extension.Equals("xml", StringComparison.OrdinalIgnoreCase)
+            ? "application/xml"
+            : "application/octet";
 
     private static string CreateRelationships(string packageId, string corePropertiesPath)
         => "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +

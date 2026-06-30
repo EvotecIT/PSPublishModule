@@ -428,6 +428,20 @@ public sealed class ManagedModuleAliasCommandTests
     }
 
     [Fact]
+    public void InstallManagedModule_rejects_single_expected_hash_for_multiple_modules()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedModule")
+            .AddParameter("Name", new[] { "Company.One", "Company.Two" })
+            .AddParameter("ExpectedPackageSha256", new string('a', 64));
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+
+        Assert.Contains("ExpectedPackageSha256", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("exactly one module", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ManagedModuleCommandSupport_resolves_builtin_psgallery_without_native_registration()
     {
         var source = ManagedModuleCommandSupport.ResolveRepositorySource(
@@ -439,6 +453,16 @@ public sealed class ManagedModuleAliasCommandTests
         Assert.Equal(ManagedModuleCommandSupport.DefaultRepositorySource, source);
         Assert.Null(resolvedRegisteredRepositoryName);
         Assert.False(trusted);
+    }
+
+    [Fact]
+    public void ManagedModuleCommandSupport_names_explicit_non_gallery_urls_from_source()
+    {
+        var repositoryName = ManagedModuleCommandSupport.ResolveRepositoryName(
+            ManagedModuleCommandSupport.DefaultRepositoryName,
+            "https://packages.example.test/nuget/v3/index.json");
+
+        Assert.Equal("packages.example.test", repositoryName);
     }
 
     [Fact]

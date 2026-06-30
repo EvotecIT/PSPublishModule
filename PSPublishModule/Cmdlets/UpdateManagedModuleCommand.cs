@@ -235,6 +235,7 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
             WriteVerbose($"No installed modules were found under '{targetModuleRoot}'.");
             return;
         }
+        ManagedModuleCommandSupport.ValidateSinglePackageHashTarget(ExpectedPackageSha256, moduleNames);
 
         foreach (var moduleName in moduleNames)
         {

@@ -268,7 +268,6 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         return (metadata.Dependencies ?? Array.Empty<ManagedModuleDependencyInfo>())
-            .Concat(metadata.ManifestDependencies ?? Array.Empty<ManagedModuleDependencyInfo>())
             .Where(static dependency => !string.IsNullOrWhiteSpace(dependency.Id))
             .Where(dependency => !externalDependencies.Contains(dependency.Id))
             .GroupBy(static dependency => dependency.Id, StringComparer.OrdinalIgnoreCase)
