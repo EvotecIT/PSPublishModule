@@ -104,9 +104,10 @@ public sealed class BenchmarkGateService
         var map = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows ?? Array.Empty<BenchmarkSummaryRow>())
         {
-            var value = BenchmarkSummaryService.GetMetricValue(row, request.Metric);
+            var metric = NormalizeMetricName(request.Metric);
+            var value = BenchmarkSummaryService.GetMetricValue(row, metric);
             if (!value.HasValue) continue;
-            map[BuildKey(row, request.GroupBy, request.Metric)] = value.Value;
+            map[BuildKey(row, request.GroupBy, metric)] = value.Value;
         }
 
         return map;
@@ -120,7 +121,7 @@ public sealed class BenchmarkGateService
             values.Add(GetField(row, field));
         }
 
-        values.Add(metric);
+        values.Add(NormalizeMetricName(metric));
         return string.Join("|", values.Select(v => v.Replace("|", "\\|")));
     }
 
@@ -149,6 +150,16 @@ public sealed class BenchmarkGateService
                             && !string.Equals(k.Key, "Host", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(k => string.Concat(k.Key, "=", k.Value ?? string.Empty)));
+
+    private static string NormalizeMetricName(string? metric)
+    {
+        var name = string.IsNullOrWhiteSpace(metric) ? "MedianMs" : metric!.Trim();
+        if (string.Equals(name, "MedianMs", StringComparison.OrdinalIgnoreCase)) return "MedianMs";
+        if (string.Equals(name, "MeanMs", StringComparison.OrdinalIgnoreCase)) return "MeanMs";
+        if (string.Equals(name, "MinMs", StringComparison.OrdinalIgnoreCase)) return "MinMs";
+        if (string.Equals(name, "MaxMs", StringComparison.OrdinalIgnoreCase)) return "MaxMs";
+        return name;
+    }
 
     private static Dictionary<string, double> ReadBaseline(string path)
     {

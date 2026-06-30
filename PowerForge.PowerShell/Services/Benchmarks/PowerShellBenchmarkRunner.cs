@@ -166,6 +166,7 @@ public sealed class PowerShellBenchmarkRunner
             SafePathSegment(item.Scenario),
             SafePathSegment(item.Engine),
             SafePathSegment(item.Operation),
+            MatrixPathSegment(item.Values),
             iteration.ToString(CultureInfo.InvariantCulture));
         var runObject = ToPsObject(new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
@@ -394,6 +395,23 @@ public sealed class PowerShellBenchmarkRunner
             builder.Append(invalid.Contains(ch) ? '_' : ch);
         return builder.ToString();
     }
+
+    private static string MatrixPathSegment(IReadOnlyDictionary<string, object?> values)
+    {
+        var text = string.Join(
+            "_",
+            values
+                .Where(k => !IsBuiltInPathValue(k.Key))
+                .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(k => string.Concat(k.Key, "=", Convert.ToString(k.Value, CultureInfo.InvariantCulture) ?? string.Empty)));
+        return SafePathSegment(string.IsNullOrWhiteSpace(text) ? "matrix" : text);
+    }
+
+    private static bool IsBuiltInPathValue(string key)
+        => string.Equals(key, "Scenario", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "Engine", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "Operation", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "Host", StringComparison.OrdinalIgnoreCase);
 
     private static PSObject ToPsObject(IReadOnlyDictionary<string, object?> values)
     {

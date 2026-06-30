@@ -58,8 +58,8 @@ public sealed class BenchmarkResultImporter
         {
             var result = BenchmarkJson.Read<BenchmarkRunResult>(path);
             if (!string.IsNullOrWhiteSpace(suite))
-                result.Suite = suite!;
-            if (result.Summary.Length == 0)
+                ApplySuiteOverride(result, suite!);
+            else if (result.Summary.Length == 0)
                 result.Summary = new BenchmarkSummaryService().Summarize(result.Samples);
             return result;
         }
@@ -67,6 +67,12 @@ public sealed class BenchmarkResultImporter
         if (root.ValueKind == JsonValueKind.Array || (root.ValueKind == JsonValueKind.Object && BenchmarkJson.TryGetPropertyIgnoreCase(root, "summary", out _)))
         {
             var summary = BenchmarkJson.ReadSummary(path);
+            if (!string.IsNullOrWhiteSpace(suite))
+            {
+                foreach (var row in summary)
+                    row.Suite = suite!;
+            }
+
             return new BenchmarkRunResult
             {
                 RunId = "import-" + DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture),
@@ -76,6 +82,9 @@ public sealed class BenchmarkResultImporter
                 Summary = summary
             };
         }
+
+        if (root.ValueKind == JsonValueKind.Object && TryImportBenchmarkDotNetJson(root, path, suite, out var imported))
+            return imported;
 
         throw new InvalidOperationException($"Unsupported benchmark JSON shape: {path}");
     }
@@ -120,7 +129,7 @@ public sealed class BenchmarkResultImporter
                 map[headers[h]] = values[h];
 
             var method = Get(map, "Method", "Scenario", "Benchmark") ?? Path.GetFileNameWithoutExtension(path);
-            var mean = ParseDuration(GetWithHeader(map, out var durationHeader, "Median", "Mean", "Mean [ns]", "Mean [us]", "Mean [ms]"), durationHeader);
+            var mean = ParseDuration(GetWithHeader(map, out var durationHeader, "MedianMs", "MeanMs", "DurationMs", "Median", "Mean", "Mean [ns]", "Mean [us]", "Mean [ms]"), durationHeader);
             samples.Add(new BenchmarkSample
             {
                 RunId = "import",
@@ -140,6 +149,74 @@ public sealed class BenchmarkResultImporter
         }
 
         return samples.ToArray();
+    }
+
+    private static void ApplySuiteOverride(BenchmarkRunResult result, string suite)
+    {
+        result.Suite = suite;
+        foreach (var sample in result.Samples)
+            sample.Suite = suite;
+        result.Summary = result.Samples.Length > 0
+            ? new BenchmarkSummaryService().Summarize(result.Samples)
+            : result.Summary.Select(row =>
+            {
+                row.Suite = suite;
+                return row;
+            }).ToArray();
+        foreach (var row in result.Comparison)
+            row.Suite = suite;
+    }
+
+    private static bool TryImportBenchmarkDotNetJson(JsonElement root, string path, string? suite, out BenchmarkRunResult result)
+    {
+        result = new BenchmarkRunResult();
+        if (!BenchmarkJson.TryGetPropertyIgnoreCase(root, "Benchmarks", out var benchmarks) || benchmarks.ValueKind != JsonValueKind.Array)
+            return false;
+
+        var samples = new List<BenchmarkSample>();
+        foreach (var benchmark in benchmarks.EnumerateArray())
+        {
+            if (benchmark.ValueKind != JsonValueKind.Object)
+                continue;
+
+            var method = GetString(benchmark, "DisplayInfo")
+                         ?? GetString(benchmark, "FullName")
+                         ?? GetString(benchmark, "Method")
+                         ?? GetString(benchmark, "MethodTitle")
+                         ?? Path.GetFileNameWithoutExtension(path);
+            var statistics = TryGetObject(benchmark, "Statistics");
+            var mean = GetDouble(statistics, "Mean") ?? GetDouble(statistics, "Median");
+            if (mean.HasValue && LooksLikeNanoseconds(statistics))
+                mean *= 0.000001;
+
+            var parameterText = GetString(benchmark, "Parameters") ?? string.Empty;
+            var variables = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(parameterText))
+                variables["Parameters"] = parameterText;
+
+            samples.Add(new BenchmarkSample
+            {
+                RunId = "import",
+                Suite = suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path),
+                Scenario = method,
+                Operation = "Run",
+                Engine = "BenchmarkDotNet",
+                Host = GetString(root, "HostEnvironmentInfo") ?? string.Empty,
+                Os = string.Empty,
+                RunMode = "import",
+                Iteration = 0,
+                Status = mean.HasValue ? BenchmarkSampleStatus.Succeeded : BenchmarkSampleStatus.Failed,
+                DurationMs = mean ?? 0,
+                Reason = mean.HasValue ? string.Empty : "BenchmarkDotNet JSON duration could not be parsed.",
+                Variables = variables
+            });
+        }
+
+        if (samples.Count == 0)
+            return false;
+
+        result = BuildImportedResult(suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path), samples);
+        return true;
     }
 
     private static string? Get(IReadOnlyDictionary<string, string> values, params string[] names)
@@ -166,6 +243,42 @@ public sealed class BenchmarkResultImporter
 
         matchedHeader = null;
         return null;
+    }
+
+    private static JsonElement? TryGetObject(JsonElement node, string propertyName)
+    {
+        return BenchmarkJson.TryGetPropertyIgnoreCase(node, propertyName, out var value) && value.ValueKind == JsonValueKind.Object
+            ? value
+            : null;
+    }
+
+    private static string? GetString(JsonElement node, string propertyName)
+    {
+        if (!BenchmarkJson.TryGetPropertyIgnoreCase(node, propertyName, out var value))
+            return null;
+        if (value.ValueKind == JsonValueKind.String)
+            return value.GetString();
+        if (value.ValueKind == JsonValueKind.Number || value.ValueKind == JsonValueKind.True || value.ValueKind == JsonValueKind.False)
+            return value.ToString();
+        return null;
+    }
+
+    private static double? GetDouble(JsonElement? node, string propertyName)
+    {
+        if (!node.HasValue || !BenchmarkJson.TryGetPropertyIgnoreCase(node.Value, propertyName, out var value))
+            return null;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number))
+            return number;
+        if (value.ValueKind == JsonValueKind.String && double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out number))
+            return number;
+        return null;
+    }
+
+    private static bool LooksLikeNanoseconds(JsonElement? statistics)
+    {
+        var mean = GetDouble(statistics, "Mean");
+        var median = GetDouble(statistics, "Median");
+        return (mean.HasValue && mean.Value > 1000) || (median.HasValue && median.Value > 1000);
     }
 
     private static double? ParseDuration(string? raw, string? header = null)

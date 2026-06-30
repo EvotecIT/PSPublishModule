@@ -70,6 +70,27 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void MarkdownRenderer_IncludesVariablesColumn()
+    {
+        var markdown = new BenchmarkMarkdownRenderer().RenderSummaryTable(new[]
+        {
+            new BenchmarkSummaryRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                SampleCount = 1,
+                Status = "Succeeded",
+                Variables = new Dictionary<string, string?> { ["Rows"] = "100" }
+            }
+        });
+
+        Assert.Contains("| Scenario | Variables |", markdown);
+        Assert.Contains("Rows=100", markdown);
+    }
+
+    [Fact]
     public void GateService_UpdateAndVerifyDetectsRegression()
     {
         var root = CreateTempRoot();
@@ -134,6 +155,36 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void GateService_NormalizesMetricNamesInKeys()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        BenchmarkJson.Write(summaryPath, new[]
+        {
+            new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Run", Engine = "Managed", Host = "Current", MedianMs = 100 }
+        });
+
+        var service = new BenchmarkGateService();
+        service.Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            Metric = "medianMs",
+            BaselineMode = BenchmarkBaselineMode.Update
+        });
+        var verify = service.Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            Metric = "MedianMs"
+        });
+
+        Assert.True(verify.Passed);
+        Assert.DoesNotContain(verify.Metrics, m => m.MissingInCurrent || m.MissingInBaseline);
+    }
+
+    [Fact]
     public void BenchmarkJson_WritesAndReadsStringStatuses()
     {
         var root = CreateTempRoot();
@@ -170,6 +221,62 @@ public sealed class BenchmarkServicesTests
         var result = new BenchmarkResultImporter().Import(csv, "demo");
 
         Assert.Equal(1.5, Assert.Single(result.Summary).MedianMs);
+    }
+
+    [Fact]
+    public void Importer_PropagatesSuiteOverrideIntoNormalizedRun()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "run-report.json");
+        BenchmarkJson.Write(path, new BenchmarkRunResult
+        {
+            Suite = "old",
+            Samples = new[] { Sample("old", "case", "Run", "Managed", 1) }
+        });
+
+        var result = new BenchmarkResultImporter().Import(path, "new");
+
+        Assert.Equal("new", result.Suite);
+        Assert.Equal("new", Assert.Single(result.Samples).Suite);
+        Assert.Equal("new", Assert.Single(result.Summary).Suite);
+    }
+
+    [Fact]
+    public void Importer_ReadsBenchmarkDotNetJson()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "Demo-report-full-compressed.json");
+        File.WriteAllText(path, """
+{
+  "Title": "demo",
+  "Benchmarks": [
+    {
+      "DisplayInfo": "Write",
+      "Statistics": {
+        "Mean": 1500000
+      }
+    }
+  ]
+}
+""");
+
+        var result = new BenchmarkResultImporter().Import(path);
+
+        var row = Assert.Single(result.Summary);
+        Assert.Equal("Write", row.Scenario);
+        Assert.Equal(1.5, row.MedianMs);
+    }
+
+    [Fact]
+    public void Importer_ReadsNormalizedCsvDurations()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(csv, "Scenario,Operation,Engine,Host,DurationMs\nWrite,Run,Managed,Current,12.5\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+
+        Assert.Equal(12.5, Assert.Single(result.Summary).MedianMs);
     }
 
     [Fact]
@@ -241,7 +348,21 @@ New-BenchmarkSuite 'long' {
         var result = new PowerShellBenchmarkRunner().Run(suite);
 
         Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
-        Assert.True(File.Exists(Path.Combine(suite.OutputRoot, result.RunId, "Default", "Managed", "Run", "0", "output")));
+        Assert.True(File.Exists(Path.Combine(suite.OutputRoot, result.RunId, "Default", "Managed", "Run", "matrix", "0", "output")));
+    }
+
+    [Fact]
+    public void Runner_SeparatesOutputPathsByMatrixVariables()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows", Values = { 10, 20 } });
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create("param($case, $run) [IO.File]::WriteAllText($run.OutputPath, [string]$case.Rows)");
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        Assert.Equal(2, result.Samples.Length);
+        Assert.True(File.Exists(Path.Combine(suite.OutputRoot, result.RunId, "Default", "Managed", "Run", "Rows=10", "0", "output")));
+        Assert.True(File.Exists(Path.Combine(suite.OutputRoot, result.RunId, "Default", "Managed", "Run", "Rows=20", "0", "output")));
     }
 
     [Fact]

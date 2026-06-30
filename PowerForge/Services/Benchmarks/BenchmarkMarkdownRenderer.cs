@@ -17,15 +17,16 @@ public sealed class BenchmarkMarkdownRenderer
     {
         var rows = (summary ?? Array.Empty<BenchmarkSummaryRow>()).ToArray();
         var markdown = new StringBuilder();
-        markdown.AppendLine("| Scenario | Operation | Host | Engine | Samples | Median | Mean | Status |");
-        markdown.AppendLine("| --- | --- | --- | --- | ---: | ---: | ---: | --- |");
+        markdown.AppendLine("| Scenario | Variables | Operation | Host | Engine | Samples | Median | Mean | Status |");
+        markdown.AppendLine("| --- | --- | --- | --- | --- | ---: | ---: | ---: | --- |");
         foreach (var row in rows.OrderBy(r => r.Scenario, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(r => FormatVariables(r.Variables), StringComparer.OrdinalIgnoreCase)
                      .ThenBy(r => r.Operation, StringComparer.OrdinalIgnoreCase)
                      .ThenBy(r => r.Host, StringComparer.OrdinalIgnoreCase)
                      .ThenBy(r => r.Engine, StringComparer.OrdinalIgnoreCase))
         {
             markdown.AppendLine(
-                $"| {Cell(row.Scenario)} | {Cell(row.Operation)} | {Cell(row.Host)} | {Cell(row.Engine)} | {row.SampleCount} | {Number(row.MedianMs)} | {Number(row.MeanMs)} | {Cell(row.Status)} |");
+                $"| {Cell(row.Scenario)} | {Cell(FormatVariables(row.Variables))} | {Cell(row.Operation)} | {Cell(row.Host)} | {Cell(row.Engine)} | {row.SampleCount} | {Number(row.MedianMs)} | {Number(row.MeanMs)} | {Cell(row.Status)} |");
         }
 
         return markdown.ToString().TrimEnd() + Environment.NewLine;
@@ -40,15 +41,16 @@ public sealed class BenchmarkMarkdownRenderer
     {
         var rows = (comparison ?? Array.Empty<BenchmarkComparisonRow>()).ToArray();
         var markdown = new StringBuilder();
-        markdown.AppendLine("| Scenario | Operation | Host | Engine | Metric | Actual | Baseline | Ratio |");
-        markdown.AppendLine("| --- | --- | --- | --- | --- | ---: | ---: | ---: |");
+        markdown.AppendLine("| Scenario | Variables | Operation | Host | Engine | Metric | Actual | Baseline | Ratio |");
+        markdown.AppendLine("| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: |");
         foreach (var row in rows.OrderBy(r => r.Scenario, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(r => FormatVariables(r.Variables), StringComparer.OrdinalIgnoreCase)
                      .ThenBy(r => r.Operation, StringComparer.OrdinalIgnoreCase)
                      .ThenBy(r => r.Host, StringComparer.OrdinalIgnoreCase)
                      .ThenBy(r => r.Engine, StringComparer.OrdinalIgnoreCase))
         {
             markdown.AppendLine(
-                $"| {Cell(row.Scenario)} | {Cell(row.Operation)} | {Cell(row.Host)} | {Cell(row.Engine)} | {Cell(row.Metric)} | {Number(row.Actual)} | {Number(row.Baseline)} | {Number(row.Ratio)} |");
+                $"| {Cell(row.Scenario)} | {Cell(FormatVariables(row.Variables))} | {Cell(row.Operation)} | {Cell(row.Host)} | {Cell(row.Engine)} | {Cell(row.Metric)} | {Number(row.Actual)} | {Number(row.Baseline)} | {Number(row.Ratio)} |");
         }
 
         return markdown.ToString().TrimEnd() + Environment.NewLine;
@@ -59,4 +61,15 @@ public sealed class BenchmarkMarkdownRenderer
 
     private static string Number(double? value)
         => value.HasValue ? value.Value.ToString("0.###", CultureInfo.InvariantCulture) : string.Empty;
+
+    private static string FormatVariables(IReadOnlyDictionary<string, string?> variables)
+        => string.Join(
+            ", ",
+            (variables ?? new Dictionary<string, string?>())
+                .Where(k => !string.Equals(k.Key, "Engine", StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(k.Key, "Operation", StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(k.Key, "Host", StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(k.Key, "Scenario", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(k => string.Concat(k.Key, "=", k.Value ?? string.Empty)));
 }
