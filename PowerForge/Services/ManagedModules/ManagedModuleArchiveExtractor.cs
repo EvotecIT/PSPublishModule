@@ -128,7 +128,7 @@ internal sealed class ManagedModuleArchiveExtractor
 
     private static bool IsPackageMetadata(string normalizedPath)
     {
-        if (normalizedPath.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase))
+        if (normalizedPath.IndexOf('/') < 0 && normalizedPath.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase))
             return true;
         if (PackageMetadataFiles.Any(file => normalizedPath.Equals(file, StringComparison.OrdinalIgnoreCase)))
             return true;

@@ -52,6 +52,9 @@ public sealed partial class ManagedModuleRepositoryClient
             detail,
             "Verify the local feed path exists and contains .nupkg files readable by the current process.");
 
+    internal static bool IsRepositoryPackageNotFound(ManagedModuleRepositoryException exception)
+        => exception.StatusCode == (int)HttpStatusCode.NotFound;
+
     private static string ResolveHttpRemediation(HttpStatusCode statusCode)
     {
         var numeric = (int)statusCode;

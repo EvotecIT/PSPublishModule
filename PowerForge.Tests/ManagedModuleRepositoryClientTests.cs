@@ -303,6 +303,18 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task GetLatestVersionAsync_missing_nuget_v3_package_returns_null()
+    {
+        using var client = new HttpClient(new ManagedModuleHandler(new List<RecordedRequest>()));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        var version = await repositoryClient.GetLatestVersionAsync(repository, "Missing.Tools");
+
+        Assert.Null(version);
+    }
+
+    [Fact]
     public async Task GetVersionsAsync_malformed_versions_reports_repository_context()
     {
         using var client = new HttpClient(new ManagedModuleHandler(new List<RecordedRequest>()));
@@ -420,6 +432,18 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.True(result.PackageStream.CanSeek);
         Assert.Equal(0, result.PackageStream.Position);
         Assert.Contains(requests, request => request.Url == "https://example.test/packages/company.tools/1.1.0/company.tools.1.1.0.nupkg");
+    }
+
+    [Fact]
+    public async Task DownloadPackageToMemoryAsync_rejects_package_above_memory_cap_by_content_length()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests, companyToolsPackageContentLength: 129L * 1024 * 1024));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        await Assert.ThrowsAsync<ManagedModuleBufferedPackageTooLargeException>(() =>
+            repositoryClient.DownloadPackageToMemoryAsync(repository, "Company.Tools", "1.1.0"));
     }
 
 #endif
@@ -889,6 +913,7 @@ public sealed class ManagedModuleRepositoryClientTests
         private readonly bool _conflictPublishes;
         private readonly HttpStatusCode? _powerShellGalleryV3StatusCode;
         private readonly HttpStatusCode? _powerShellGalleryCdnStatusCode;
+        private readonly long? _companyToolsPackageContentLength;
         private int _serviceIndexFailures;
 
         public ManagedModuleHandler(
@@ -896,13 +921,15 @@ public sealed class ManagedModuleRepositoryClientTests
             bool conflictPublishes = false,
             int serviceIndexFailures = 0,
             HttpStatusCode? powerShellGalleryV3StatusCode = null,
-            HttpStatusCode? powerShellGalleryCdnStatusCode = null)
+            HttpStatusCode? powerShellGalleryCdnStatusCode = null,
+            long? companyToolsPackageContentLength = null)
         {
             _requests = requests;
             _conflictPublishes = conflictPublishes;
             _serviceIndexFailures = serviceIndexFailures;
             _powerShellGalleryV3StatusCode = powerShellGalleryV3StatusCode;
             _powerShellGalleryCdnStatusCode = powerShellGalleryCdnStatusCode;
+            _companyToolsPackageContentLength = companyToolsPackageContentLength;
         }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -1042,10 +1069,13 @@ public sealed class ManagedModuleRepositoryClientTests
                     "1.1.0",
                     requireLicenseAcceptance: true,
                     files: CreateCompanyToolsFiles("1.1.0"));
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                var response = new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new ByteArrayContent(bytes)
-                });
+                };
+                if (_companyToolsPackageContentLength.HasValue)
+                    response.Content.Headers.ContentLength = _companyToolsPackageContentLength.Value;
+                return Task.FromResult(response);
             }
 
             if (uri.AbsoluteUri == "https://example.test/packages/mismatch.tools/1.0.0/mismatch.tools.1.0.0.nupkg")

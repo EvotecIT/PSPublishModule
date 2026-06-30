@@ -45,7 +45,7 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
                     ApplyLicense(action, installPlan.License, installPlan.LicenseAcceptanceRequired, installPlan.LicenseAccepted);
                 }
             }
-            catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or NotSupportedException or UriFormatException)
+            catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or NotSupportedException or UriFormatException or ManagedModuleRepositoryException)
             {
                 logger.Verbose($"Managed module plan license metadata was not available for '{action.ModuleName}': {ex.Message}");
             }

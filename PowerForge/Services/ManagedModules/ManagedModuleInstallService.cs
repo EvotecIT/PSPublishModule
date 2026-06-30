@@ -417,7 +417,18 @@ public sealed partial class ManagedModuleInstallService
 #if !NET472
                 if (ShouldUseBufferedPackageExtraction(request, ownsCache))
                 {
-                    bufferedPackage = await DownloadBufferedPackageForInstallAsync(request, version, cancellationToken).ConfigureAwait(false);
+                    try
+                    {
+                        bufferedPackage = await DownloadBufferedPackageForInstallAsync(request, version, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (ManagedModuleBufferedPackageTooLargeException ex)
+                    {
+                        _logger.Verbose($"Managed module package is too large for in-memory extraction; using disk-backed extraction. {ex.Message}");
+                    }
+                }
+
+                if (bufferedPackage is not null)
+                {
                     download = bufferedPackage.Download;
                 }
                 else

@@ -319,7 +319,14 @@ public sealed partial class ManagedModuleRepositoryClient
             return await GetLatestNuGetV2VersionAsync(fallback, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false);
         }
 
-        return (await GetNuGetVersionsAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false)).LastOrDefault();
+        try
+        {
+            return (await GetNuGetVersionsAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false)).LastOrDefault();
+        }
+        catch (ManagedModuleRepositoryException ex) when (IsRepositoryPackageNotFound(ex))
+        {
+            return null;
+        }
     }
 
     private async Task<IReadOnlyList<ManagedModuleVersionInfo>> SearchNuGetPackagesWithPowerShellGalleryReadApiAsync(

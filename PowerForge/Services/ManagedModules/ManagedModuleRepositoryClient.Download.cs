@@ -4,6 +4,8 @@ namespace PowerForge;
 
 public sealed partial class ManagedModuleRepositoryClient
 {
+    private const long MaximumBufferedPackageBytes = 128L * 1024 * 1024;
+
     private static async Task<PackageCopyResult> CopyPackageStreamWithHashAsync(
         Stream source,
         string destinationPath,
@@ -157,10 +159,25 @@ public sealed partial class ManagedModuleRepositoryClient
         HttpResponseMessage response,
         CancellationToken cancellationToken)
     {
+        var contentLength = response.Content.Headers.ContentLength;
+        if (contentLength.HasValue && _options.MaxPackageBytes > 0 && contentLength.Value > _options.MaxPackageBytes)
+            throw new InvalidOperationException(
+                $"Package download exceeded the managed module package size limit of {_options.MaxPackageBytes} bytes.");
+        if (contentLength.HasValue && contentLength.Value > MaximumBufferedPackageBytes)
+            throw new ManagedModuleBufferedPackageTooLargeException(
+                $"Package '{packageId}' version '{version}' is {contentLength.Value} bytes, which exceeds the in-memory extraction cap of {MaximumBufferedPackageBytes} bytes.");
+
         BufferedPackageCopyResult packageCopy;
         using (var source = await ReadContentStreamAsync(response.Content, cancellationToken).ConfigureAwait(false))
         {
-            packageCopy = await CopyPackageStreamToMemoryWithHashAsync(source, _options.MaxPackageBytes, cancellationToken).ConfigureAwait(false);
+            packageCopy = await CopyPackageStreamToMemoryWithHashAsync(
+                    source,
+                    _options.MaxPackageBytes,
+                    MaximumBufferedPackageBytes,
+                    packageId,
+                    version,
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
 
         var metadata = ReadDownloadedPackageMetadata(packageId, version, packageCopy.Stream, packageUri.ToString());
@@ -182,6 +199,9 @@ public sealed partial class ManagedModuleRepositoryClient
     private static async Task<BufferedPackageCopyResult> CopyPackageStreamToMemoryWithHashAsync(
         Stream source,
         long maxPackageBytes,
+        long maxBufferedBytes,
+        string packageId,
+        string version,
         CancellationToken cancellationToken)
     {
         using var sha256 = SHA256.Create();
@@ -197,9 +217,13 @@ public sealed partial class ManagedModuleRepositoryClient
                 if (bytesRead == 0)
                     break;
 
-                if (maxPackageBytes > 0 && bytesWritten + bytesRead > maxPackageBytes)
+                var nextSize = bytesWritten + bytesRead;
+                if (maxPackageBytes > 0 && nextSize > maxPackageBytes)
                     throw new InvalidOperationException(
                         $"Package download exceeded the managed module package size limit of {maxPackageBytes} bytes.");
+                if (maxBufferedBytes > 0 && nextSize > maxBufferedBytes)
+                    throw new ManagedModuleBufferedPackageTooLargeException(
+                        $"Package '{packageId}' version '{version}' exceeded the in-memory extraction cap of {maxBufferedBytes} bytes.");
 
                 await destination.WriteAsync(buffer, 0, bytesRead, cancellationToken).ConfigureAwait(false);
                 sha256.TransformBlock(buffer, 0, bytesRead, null, 0);
@@ -215,7 +239,8 @@ public sealed partial class ManagedModuleRepositoryClient
             destination.Dispose();
             throw;
         }
-    }
+}
+
 #endif
 
     private static void TryDeleteFile(string path)
@@ -272,6 +297,14 @@ public sealed partial class ManagedModuleRepositoryClient
 }
 
 #if !NET472
+internal sealed class ManagedModuleBufferedPackageTooLargeException : Exception
+{
+    public ManagedModuleBufferedPackageTooLargeException(string message)
+        : base(message)
+    {
+    }
+}
+
 internal sealed class ManagedModuleBufferedPackage : IDisposable
 {
     public ManagedModuleBufferedPackage(ManagedModuleDownloadResult download, MemoryStream packageStream)

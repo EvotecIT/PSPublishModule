@@ -66,6 +66,8 @@ internal sealed class ModuleStateCleanupPlanner
             AddCleanupCandidates(
                 request.Inventory.InstalledModules.Where(module =>
                     string.Equals(module.Name, desiredModule.Name, StringComparison.OrdinalIgnoreCase) &&
+                    (string.IsNullOrWhiteSpace(desiredModule.Scope) ||
+                     string.Equals(module.Scope, desiredModule.Scope, StringComparison.OrdinalIgnoreCase)) &&
                     (string.IsNullOrWhiteSpace(desiredModule.TargetPath) || IsUnderTargetPath(module.Path, desiredModule.TargetPath!))),
                 selectedModules,
                 seen);

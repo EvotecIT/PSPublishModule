@@ -251,6 +251,49 @@ public sealed class ManagedModulePackServiceTests
     }
 
     [Fact]
+    public void Pack_excludes_existing_packages_when_output_is_module_root()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateModule(moduleRoot.Path, "Company.Tools", "1.0.0", prerelease: null);
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "Company.Tools.0.9.0.nupkg"), "old");
+        var service = new ManagedModulePackService();
+
+        var result = service.Pack(new ManagedModulePackRequest
+        {
+            ModulePath = moduleRoot.Path,
+            OutputDirectory = moduleRoot.Path
+        });
+
+        using var archive = ZipFile.OpenRead(result.PackagePath);
+        var names = archive.Entries.Select(static entry => entry.FullName).ToArray();
+        Assert.Contains("Company.Tools.psd1", names);
+        Assert.Contains("Company.Tools.psm1", names);
+        Assert.DoesNotContain("Company.Tools.0.9.0.nupkg", names);
+    }
+
+    [Fact]
+    public void Pack_rejects_explicit_manifest_outside_module_root()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var outside = new TemporaryDirectory();
+        using var output = new TemporaryDirectory();
+        CreateModule(moduleRoot.Path, "Company.Tools", "1.0.0", prerelease: null);
+        var outsideManifest = Path.Combine(outside.Path, "Company.Tools.psd1");
+        File.Copy(Path.Combine(moduleRoot.Path, "Company.Tools.psd1"), outsideManifest);
+        var service = new ManagedModulePackService();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Pack(new ManagedModulePackRequest
+        {
+            ModulePath = moduleRoot.Path,
+            ManifestPath = outsideManifest,
+            OutputDirectory = output.Path
+        }));
+
+        Assert.Contains("must be inside module folder", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFiles(output.Path));
+    }
+
+    [Fact]
     public void Pack_preserves_manifest_license_acceptance()
     {
         using var moduleRoot = new TemporaryDirectory();

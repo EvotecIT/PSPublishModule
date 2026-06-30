@@ -93,6 +93,8 @@ public sealed class ManagedModulePackService
             var resolved = Path.GetFullPath(manifestPath!.Trim().Trim('"'));
             if (!File.Exists(resolved))
                 throw new FileNotFoundException($"Module manifest was not found: {resolved}", resolved);
+            if (!IsSameDirectory(resolved, modulePath) && !IsUnderDirectory(resolved, modulePath))
+                throw new InvalidOperationException($"Module manifest '{resolved}' must be inside module folder '{modulePath}'.");
 
             return resolved;
         }
@@ -322,8 +324,14 @@ public sealed class ManagedModulePackService
         var fullPath = Path.GetFullPath(file);
         if (fullPath.Equals(Path.GetFullPath(packagePath), StringComparison.OrdinalIgnoreCase))
             return true;
-        if (IsUnderDirectory(Path.GetFullPath(outputDirectory), modulePath) &&
-            IsUnderDirectory(fullPath, outputDirectory))
+        var normalizedOutputDirectory = Path.GetFullPath(outputDirectory);
+        if (IsSameDirectory(normalizedOutputDirectory, modulePath))
+        {
+            if (fullPath.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        else if (IsUnderDirectory(normalizedOutputDirectory, modulePath) &&
+                 IsUnderDirectory(fullPath, normalizedOutputDirectory))
         {
             return true;
         }
@@ -350,8 +358,14 @@ public sealed class ManagedModulePackService
     private static bool IsUnderDirectory(string fullPath, string directory)
     {
         var root = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        return fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase);
+        return Path.GetFullPath(fullPath).StartsWith(root, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool IsSameDirectory(string left, string right)
+        => string.Equals(
+            Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            StringComparison.OrdinalIgnoreCase);
 
     private static bool IsManifestReferenced(string relativePath, ISet<string> manifestReferences)
     {

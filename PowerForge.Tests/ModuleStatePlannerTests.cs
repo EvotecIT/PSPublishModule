@@ -394,7 +394,7 @@ public sealed class ModuleStatePlannerTests
     }
 
     [Fact]
-    public void CreatePlan_WithCleanup_KeepsDesiredScopeVersion()
+    public void CreatePlan_WithCleanup_KeepsDesiredScopeOnly()
     {
         var request = new ModuleStatePlanRequest(
             new ModuleStateInventory(new[]
@@ -406,10 +406,8 @@ public sealed class ModuleStatePlannerTests
             cleanupMode: ModuleStateCleanupMode.OldVersions);
 
         var plan = new ModuleStatePlanner().CreatePlan(request);
-        var cleanupAction = Assert.Single(plan.Actions, static action => action.Kind == ModuleStatePlanActionKind.Remove);
 
-        Assert.Equal("2.0.0", cleanupAction.InstalledVersion);
-        Assert.Equal("CurrentUser", cleanupAction.TargetScope);
+        Assert.DoesNotContain(plan.Actions, static action => action.Kind == ModuleStatePlanActionKind.Remove);
     }
 
     [Fact]

@@ -318,12 +318,20 @@ public sealed class ManagedModuleUpdateService
         bool resolvePackageMetadata,
         CancellationToken cancellationToken)
     {
-        var versions = await _repositoryClient.GetVersionsAsync(
-            request.Repository,
-            moduleName,
-            request.IncludePrerelease || ContainsPrereleaseLabel(targetVersion),
-            request.Credential,
-            cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<ManagedModuleVersionInfo> versions;
+        try
+        {
+            versions = await _repositoryClient.GetVersionsAsync(
+                request.Repository,
+                moduleName,
+                request.IncludePrerelease || ContainsPrereleaseLabel(targetVersion),
+                request.Credential,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (ManagedModuleRepositoryException ex) when (ManagedModuleRepositoryClient.IsRepositoryPackageNotFound(ex))
+        {
+            return null;
+        }
         var repositoryVersion = versions.FirstOrDefault(version => version.Version.Equals(targetVersion, StringComparison.OrdinalIgnoreCase));
         if (repositoryVersion is null)
             return null;

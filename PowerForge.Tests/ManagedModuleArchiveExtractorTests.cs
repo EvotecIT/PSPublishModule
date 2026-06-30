@@ -15,9 +15,10 @@ public sealed class ManagedModuleArchiveExtractorTests
 
         var result = new ManagedModuleArchiveExtractor().ExtractPackage(packagePath, destination);
 
-        Assert.Equal(2, result.FileCount);
+        Assert.Equal(3, result.FileCount);
         Assert.True(File.Exists(Path.Combine(destination, "Company.Tools.psd1")));
         Assert.Equal("keep", File.ReadAllText(Path.Combine(destination, "package", "resources", "data.txt")));
+        Assert.Equal("nested", File.ReadAllText(Path.Combine(destination, "templates", "sample.nuspec")));
         Assert.False(File.Exists(Path.Combine(destination, "package", "services", "metadata", "core-properties", "metadata.psmdcp")));
     }
 
@@ -33,9 +34,10 @@ public sealed class ManagedModuleArchiveExtractorTests
         await using var stream = File.OpenRead(packagePath);
         var result = await new ManagedModuleArchiveExtractor().ExtractPackageAsync(stream, destination, CancellationToken.None);
 
-        Assert.Equal(2, result.FileCount);
+        Assert.Equal(3, result.FileCount);
         Assert.True(File.Exists(Path.Combine(destination, "Company.Tools.psd1")));
         Assert.Equal("keep", File.ReadAllText(Path.Combine(destination, "package", "resources", "data.txt")));
+        Assert.Equal("nested", File.ReadAllText(Path.Combine(destination, "templates", "sample.nuspec")));
         Assert.False(File.Exists(Path.Combine(destination, "package", "services", "metadata", "core-properties", "metadata.psmdcp")));
     }
 #endif
@@ -46,6 +48,7 @@ public sealed class ManagedModuleArchiveExtractorTests
         AddEntry(archive, "Company.Tools.nuspec", TestPackageFactory.CreateNuspec("Company.Tools", "1.0.0"));
         AddEntry(archive, "Company.Tools.psd1", "@{ ModuleVersion = '1.0.0' }");
         AddEntry(archive, "package/resources/data.txt", "keep");
+        AddEntry(archive, "templates/sample.nuspec", "nested");
         AddEntry(archive, "package/services/metadata/core-properties/metadata.psmdcp", "metadata");
     }
 

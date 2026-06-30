@@ -20,7 +20,10 @@ internal static class ManagedModuleCommandSupport
             : !string.IsNullOrWhiteSpace(resolvedRegisteredRepositoryName)
                 ? resolvedRegisteredRepositoryName!
                 : ResolveRepositoryName(repositoryName, source);
-        return new ManagedModuleRepository(name, source, ManagedModuleRepositoryKind.Auto, resolvedRegisteredRepositoryName is null || resolvedRegisteredRepositoryTrusted);
+        var trusted = resolvedRegisteredRepositoryName is not null
+            ? resolvedRegisteredRepositoryTrusted
+            : IsBuiltInDefaultRepository(repositoryName, source);
+        return new ManagedModuleRepository(name, source, ManagedModuleRepositoryKind.Auto, trusted);
     }
 
     internal static ManagedModuleRepository CreateRepository(
@@ -112,7 +115,7 @@ internal static class ManagedModuleCommandSupport
         if (!string.IsNullOrWhiteSpace(providerPath) && Directory.Exists(providerPath))
             return providerPath!;
 
-        if (Path.IsPathRooted(trimmed) || trimmed.StartsWith(".", StringComparison.Ordinal))
+        if (Path.IsPathRooted(trimmed) || trimmed.StartsWith(".", StringComparison.Ordinal) || LooksLikeLocalPath(trimmed))
             return providerPath ?? trimmed;
 
         if (new PowerShellRepositorySourceResolver().TryResolveSource(cmdlet, trimmed, out var registeredSource, out var registeredTrusted) &&
@@ -135,6 +138,13 @@ internal static class ManagedModuleCommandSupport
 
     private static bool LooksLikeRepositoryName(string repository)
         => repository.IndexOfAny(new[] { '/', '\\', ':', '?' }) < 0;
+
+    private static bool LooksLikeLocalPath(string repository)
+        => repository.IndexOfAny(new[] { '/', '\\' }) >= 0;
+
+    private static bool IsBuiltInDefaultRepository(string repositoryName, string source)
+        => string.Equals(repositoryName, DefaultRepositoryName, StringComparison.OrdinalIgnoreCase) &&
+           string.Equals(source, DefaultRepositorySource, StringComparison.OrdinalIgnoreCase);
 
     internal static string? ResolveProviderPath(PSCmdlet cmdlet, string? path)
     {

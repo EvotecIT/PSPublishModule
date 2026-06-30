@@ -270,6 +270,37 @@ public sealed class ManagedModuleUpdatePlanServiceTests
     }
 
     [Fact]
+    public async Task PlanUpdateAsync_treats_missing_nuget_v3_family_package_as_missing_version()
+    {
+        var requests = new List<ManagedModuleRepositoryClientTests.RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleRepositoryClientTests.ManagedModuleHandler(requests));
+        using var moduleRoot = new TemporaryDirectory();
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var service = new ManagedModuleUpdateService(new NullLogger(), repositoryClient);
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Missing", "1.0.0"));
+        var request = new ManagedModuleUpdateRequest
+        {
+            Repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json"),
+            Name = "Company.Tools",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            FamilyPolicy = new ManagedModuleFamilyPolicy
+            {
+                ModuleNamePrefix = "Company."
+            }
+        };
+
+        var plan = await service.PlanUpdateAsync(request);
+
+        var familyAction = Assert.Single(plan.FamilyActions);
+        Assert.Equal("Company.Missing", familyAction.Name);
+        Assert.Equal(ManagedModuleFamilyUpdatePlanAction.MissingRepositoryVersion, familyAction.Action);
+        Assert.False(familyAction.RepositoryVersionAvailable);
+        Assert.False(familyAction.WouldWriteFiles);
+    }
+
+    [Fact]
     public async Task PlanUpdateAsync_repairs_source_mismatch_for_current_version()
     {
         using var feed = new TemporaryDirectory();

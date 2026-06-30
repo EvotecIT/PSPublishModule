@@ -290,6 +290,35 @@ public sealed class ManagedModuleAliasCommandTests
     }
 
     [Fact]
+    public void InstallManagedModule_rejects_raw_repository_when_trust_is_required()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = "@{ ModuleVersion = '1.0.0' }"
+            });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Scope", ManagedModuleInstallScope.Custom)
+            .AddParameter("ModuleRoot", moduleRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("RequireTrustedRepository");
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+
+        Assert.Contains("not trusted", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools")));
+    }
+
+    [Fact]
     public void PublishManagedModule_uses_repository_profile_publish_source()
     {
         using var moduleRoot = new TemporaryDirectory();
