@@ -6,6 +6,36 @@ namespace PowerForge.Tests;
 public sealed class ConfigurationSegmentJsonConverterTests
 {
     [Fact]
+    public void SegmentsSchema_IncludesGateSegment()
+    {
+        using var schema = JsonDocument.Parse(File.ReadAllText(SchemaPath("powerforge.segments.schema.json")));
+        var defs = schema.RootElement.GetProperty("$defs");
+
+        Assert.True(defs.TryGetProperty("GateConfiguration", out var gateConfiguration));
+        Assert.True(defs.TryGetProperty("GateSegment", out var gateSegment));
+        var modes = gateConfiguration
+            .GetProperty("properties")
+            .GetProperty("Mode")
+            .GetProperty("enum")
+            .EnumerateArray()
+            .Select(static item => item.GetString())
+            .ToArray();
+        Assert.Contains("Manifest", modes);
+        Assert.Contains("Build", modes);
+        Assert.Contains("Publish", modes);
+        Assert.Contains("Mode", gateConfiguration.GetProperty("required").EnumerateArray().Select(static item => item.GetString()));
+        Assert.Contains("Configuration", gateSegment.GetProperty("required").EnumerateArray().Select(static item => item.GetString()));
+
+        var segmentRefs = defs
+            .GetProperty("ConfigurationSegment")
+            .GetProperty("oneOf")
+            .EnumerateArray()
+            .Select(static item => item.GetProperty("$ref").GetString())
+            .ToArray();
+        Assert.Contains("#/$defs/GateSegment", segmentRefs);
+    }
+
+    [Fact]
     public void Deserialize_ReadsGateSegment()
     {
         const string json = """
@@ -343,4 +373,7 @@ public sealed class ConfigurationSegmentJsonConverterTests
         Assert.Equal("DEMO_CONFIGURATION", segment.BuildLibraries.NETDevelopmentConfigurationEnvironmentVariable);
         Assert.Equal(ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile, segment.BuildLibraries.NETDevelopmentSourceBootstrapperMode);
     }
+
+    private static string SchemaPath(string fileName)
+        => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Schemas", fileName));
 }

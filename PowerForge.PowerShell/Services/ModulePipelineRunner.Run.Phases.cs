@@ -90,6 +90,9 @@ public sealed partial class ModulePipelineRunner
                     plan);
 
             if (!plan.BuildSpec.RefreshManifestOnly)
+                TryWriteTypeAcceleratorSurfaceReport(plan, buildResult, state);
+
+            if (!plan.BuildSpec.RefreshManifestOnly)
                 TryRegenerateSourceDevelopmentBootstrapperFromManifest(buildResult, plan);
 
             session.Done(session.ManifestStep);

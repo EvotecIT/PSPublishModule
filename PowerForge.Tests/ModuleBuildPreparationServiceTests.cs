@@ -4,11 +4,55 @@ using System.Management.Automation.Runspaces;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PowerForge;
+using PSPublishModule;
 
 namespace PowerForge.Tests;
 
 public sealed class ModuleBuildPreparationServiceTests
 {
+    [Fact]
+    public void InvokeModuleBuild_RunMode_AllowsLegacyConfigurationParameterSet()
+    {
+        var runMode = typeof(InvokeModuleBuildCommand).GetProperty(nameof(InvokeModuleBuildCommand.RunMode));
+        Assert.NotNull(runMode);
+
+        var parameterSets = runMode!
+            .GetCustomAttributes(typeof(ParameterAttribute), inherit: false)
+            .Cast<ParameterAttribute>()
+            .Select(static attribute => attribute.ParameterSetName)
+            .ToArray();
+
+        Assert.Contains("Configuration", parameterSets);
+    }
+
+    [Fact]
+    public void Prepare_from_modern_request_appends_run_mode_gate_segment()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-runmode-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var prepared = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
+            {
+                ParameterSetName = "Modern",
+                ModuleName = "SampleModule",
+                RunMode = ConfigurationGateMode.Manifest,
+                CurrentPath = root.FullName,
+                ResolvePath = path => path,
+                DotNetFramework = Array.Empty<string>(),
+                ExcludeDirectories = Array.Empty<string>(),
+                ExcludeFiles = Array.Empty<string>()
+            });
+
+            var gate = Assert.IsType<ConfigurationGateSegment>(Assert.Single(prepared.PipelineSpec.Segments));
+            Assert.Equal(ConfigurationGateMode.Manifest, gate.Configuration.Mode);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Fact]
     public void Prepare_from_modern_request_builds_project_paths_and_spec()
     {

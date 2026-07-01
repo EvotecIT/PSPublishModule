@@ -146,6 +146,11 @@ public sealed class ModulePipelineResult
     public ModuleOwnerNote[] OwnerNotes { get; }
 
     /// <summary>
+    /// Type accelerator public-surface report when ALC type exposure was configured; otherwise null.
+    /// </summary>
+    public ModuleTypeAcceleratorSurfaceReport? TypeAcceleratorSurfaceReport { get; internal set; }
+
+    /// <summary>
     /// Creates a new result instance.
     /// </summary>
     public ModulePipelineResult(

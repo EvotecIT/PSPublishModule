@@ -10,6 +10,7 @@ internal sealed class ModuleBuildPreparationRequest
     public IDictionary Configuration { get; set; } = new Hashtable();
     public string? ConfigPath { get; set; }
     public string? ModuleName { get; set; }
+    public ConfigurationGateMode? RunMode { get; set; }
     public string? InputPath { get; set; }
     public string? StagingPath { get; set; }
     public string? CsprojPath { get; set; }

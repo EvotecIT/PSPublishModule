@@ -105,14 +105,23 @@
         "NETDevelopmentConfigurationEnvironmentVariable": { "type": ["string", "null"] },
         "DevelopmentSourceBootstrapperMode": { "type": ["string", "null"], "enum": ["PreserveSingleFile", "ReplaceSingleFile", null] },
         "NETDevelopmentSourceBootstrapperMode": { "type": ["string", "null"], "enum": ["PreserveSingleFile", "ReplaceSingleFile", null] },
-        "AssemblyTypeAcceleratorMode": { "type": ["string", "null"], "enum": ["None", "AllowList", "Assembly", null] },
-        "NETAssemblyTypeAcceleratorMode": { "type": ["string", "null"], "enum": ["None", "AllowList", "Assembly", null] },
+        "AssemblyTypeAcceleratorMode": { "type": ["string", "null"], "enum": ["None", "AllowList", "Assembly", "Enums", null] },
+        "NETAssemblyTypeAcceleratorMode": { "type": ["string", "null"], "enum": ["None", "AllowList", "Assembly", "Enums", null] },
         "AssemblyTypeAccelerators": { "type": ["array", "null"], "items": { "type": "string" } },
         "NETAssemblyTypeAccelerators": { "type": ["array", "null"], "items": { "type": "string" } },
         "AssemblyTypeAcceleratorAssemblies": { "type": ["array", "null"], "items": { "type": "string" } },
         "NETAssemblyTypeAcceleratorAssemblies": { "type": ["array", "null"], "items": { "type": "string" } },
         "NETDoNotCopyLibrariesRecursively": { "type": ["boolean", "null"] }
       }
+    },
+
+    "GateConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Mode": { "type": "string", "enum": ["Manifest", "Build", "Publish"] }
+      },
+      "required": ["Mode"]
     },
 
     "DocumentationConfiguration": {
@@ -819,6 +828,16 @@
       "required": ["Type"]
     },
 
+    "GateSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Gate" },
+        "Configuration": { "$ref": "#/$defs/GateConfiguration" }
+      },
+      "required": ["Type", "Configuration"]
+    },
+
     "InformationSegment": {
       "type": "object",
       "additionalProperties": false,
@@ -1046,6 +1065,7 @@
         { "$ref": "#/$defs/ManifestSegment" },
         { "$ref": "#/$defs/BuildSegment" },
         { "$ref": "#/$defs/BuildLibrariesSegment" },
+        { "$ref": "#/$defs/GateSegment" },
         { "$ref": "#/$defs/InformationSegment" },
         { "$ref": "#/$defs/OptionsSegment" },
         { "$ref": "#/$defs/FormattingSegment" },

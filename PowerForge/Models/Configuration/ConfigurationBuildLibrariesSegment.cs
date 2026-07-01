@@ -142,5 +142,10 @@ public enum AssemblyTypeAcceleratorExportMode
     /// <summary>
     /// Register all public types from explicitly configured assemblies, plus any explicitly configured type names.
     /// </summary>
-    Assembly = 2
+    Assembly = 2,
+
+    /// <summary>
+    /// Register public enum types from explicitly configured assemblies, plus any explicitly configured type names.
+    /// </summary>
+    Enums = 3
 }
