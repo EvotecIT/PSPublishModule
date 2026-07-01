@@ -170,9 +170,26 @@ public sealed class BenchmarkGateService
         if (string.Equals(field, "Variables", StringComparison.OrdinalIgnoreCase)) return FormatVariables(row.Variables);
         const string variablePrefix = "Variables.";
         if (field.StartsWith(variablePrefix, StringComparison.OrdinalIgnoreCase)
-            && row.Variables.TryGetValue(field.Substring(variablePrefix.Length), out var value))
+            && TryGetVariable(row.Variables, field.Substring(variablePrefix.Length), out var value))
             return value ?? string.Empty;
         return string.Empty;
+    }
+
+    private static bool TryGetVariable(IReadOnlyDictionary<string, string?> variables, string name, out string? value)
+    {
+        if (variables.TryGetValue(name, out value))
+            return true;
+        foreach (var entry in variables)
+        {
+            if (string.Equals(entry.Key, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = entry.Value;
+                return true;
+            }
+        }
+
+        value = null;
+        return false;
     }
 
     private static string FormatVariables(IReadOnlyDictionary<string, string?> variables)

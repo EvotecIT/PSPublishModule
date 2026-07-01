@@ -183,14 +183,14 @@ public sealed class BenchmarkResultImporter
 
     private static BenchmarkSample[] ImportCsvSamples(string path, string? suiteOverride, string defaultSuite)
     {
-        var lines = File.ReadAllLines(path);
-        if (lines.Length < 2) return Array.Empty<BenchmarkSample>();
-        var headers = ParseCsvLine(lines[0]);
+        var records = ReadCsvRecords(path);
+        if (records.Length < 2) return Array.Empty<BenchmarkSample>();
+        var headers = records[0];
         var samples = new List<BenchmarkSample>();
-        for (var i = 1; i < lines.Length; i++)
+        for (var i = 1; i < records.Length; i++)
         {
-            if (string.IsNullOrWhiteSpace(lines[i])) continue;
-            var values = ParseCsvLine(lines[i]);
+            var values = records[i];
+            if (values.Length == 0 || values.All(string.IsNullOrWhiteSpace)) continue;
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             for (var h = 0; h < headers.Length && h < values.Length; h++)
                 map[headers[h]] = values[h];
@@ -223,14 +223,14 @@ public sealed class BenchmarkResultImporter
 
     private static BenchmarkSummaryRow[] ImportCsvSummary(string path, string? suiteOverride, string defaultSuite)
     {
-        var lines = File.ReadAllLines(path);
-        if (lines.Length < 2) return Array.Empty<BenchmarkSummaryRow>();
-        var headers = ParseCsvLine(lines[0]);
+        var records = ReadCsvRecords(path);
+        if (records.Length < 2) return Array.Empty<BenchmarkSummaryRow>();
+        var headers = records[0];
         var rows = new List<BenchmarkSummaryRow>();
-        for (var i = 1; i < lines.Length; i++)
+        for (var i = 1; i < records.Length; i++)
         {
-            if (string.IsNullOrWhiteSpace(lines[i])) continue;
-            var values = ParseCsvLine(lines[i]);
+            var values = records[i];
+            if (values.Length == 0 || values.All(string.IsNullOrWhiteSpace)) continue;
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             for (var h = 0; h < headers.Length && h < values.Length; h++)
                 map[headers[h]] = values[h];
@@ -432,6 +432,57 @@ public sealed class BenchmarkResultImporter
         return values.ToArray();
     }
 
+    private static string[][] ReadCsvRecords(string path)
+    {
+        var source = File.ReadAllText(path);
+        var records = new List<string[]>();
+        var values = new List<string>();
+        var current = new System.Text.StringBuilder();
+        var quoted = false;
+        for (var i = 0; i < source.Length; i++)
+        {
+            var ch = source[i];
+            if (ch == '"')
+            {
+                if (quoted && i + 1 < source.Length && source[i + 1] == '"')
+                {
+                    current.Append('"');
+                    i++;
+                }
+                else
+                {
+                    quoted = !quoted;
+                }
+            }
+            else if (ch == ',' && !quoted)
+            {
+                values.Add(current.ToString());
+                current.Clear();
+            }
+            else if ((ch == '\r' || ch == '\n') && !quoted)
+            {
+                if (ch == '\r' && i + 1 < source.Length && source[i + 1] == '\n')
+                    i++;
+                values.Add(current.ToString());
+                current.Clear();
+                records.Add(values.ToArray());
+                values.Clear();
+            }
+            else
+            {
+                current.Append(ch);
+            }
+        }
+
+        if (current.Length > 0 || values.Count > 0)
+        {
+            values.Add(current.ToString());
+            records.Add(values.ToArray());
+        }
+
+        return records.ToArray();
+    }
+
     private static string RemoveUnitSuffix(string text)
     {
         foreach (var suffix in new[] { " ms", " ns", " us", " μs", " s", "ms", "ns", "us", "μs", "s" })
@@ -459,9 +510,9 @@ public sealed class BenchmarkResultImporter
 
     private static bool LooksLikeSummaryCsv(string path)
     {
-        var firstLine = File.ReadLines(path).FirstOrDefault();
-        if (firstLine is null) return false;
-        var headers = new HashSet<string>(ParseCsvLine(firstLine), StringComparer.OrdinalIgnoreCase);
+        var firstRecord = ReadCsvRecords(path).FirstOrDefault();
+        if (firstRecord is null) return false;
+        var headers = new HashSet<string>(firstRecord, StringComparer.OrdinalIgnoreCase);
         return (headers.Contains("SampleCount") || headers.Contains("FailureCount") || headers.Contains("MedianMs"))
                && !headers.Contains("Iteration")
                && !headers.Contains("DurationMs");

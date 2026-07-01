@@ -505,7 +505,8 @@ public sealed class PowerShellBenchmarkRunner
     {
         var variables = new List<PSVariable>
         {
-            new("ErrorActionPreference", ActionPreference.Stop)
+            new("ErrorActionPreference", ActionPreference.Stop),
+            new("PSNativeCommandUseErrorActionPreference", true)
         };
         return block.InvokeWithContext(functionsToDefine: null, variablesToDefine: variables, args);
     }

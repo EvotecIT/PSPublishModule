@@ -222,6 +222,46 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void GateService_ResolvesGroupedVariablesCaseInsensitively()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        BenchmarkJson.Write(summaryPath, new[]
+        {
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                MedianMs = 100,
+                Variables = new Dictionary<string, string?> { ["Rows"] = "10" }
+            }
+        });
+
+        var service = new BenchmarkGateService();
+        service.Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            GroupBy = new[] { "Variables.rows" },
+            BaselineMode = BenchmarkBaselineMode.Update
+        });
+
+        var verify = service.Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            GroupBy = new[] { "Variables.rows" }
+        });
+
+        Assert.True(verify.Passed);
+        Assert.DoesNotContain(verify.Metrics, metric => metric.MissingInBaseline || metric.MissingInCurrent);
+    }
+
+    [Fact]
     public void SummaryService_ReadsCustomMetricsCaseInsensitively()
     {
         var row = new BenchmarkSummaryRow
@@ -484,6 +524,21 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_HandlesQuotedMultilineCsvRecords()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(csv, "Suite,Scenario,Operation,Engine,Host,Rows,Iteration,Status,DurationMs,Reason\nsuite,Write,Run,Managed,Current,10,0,Failed,12.5,\"line one\nline two\"\n");
+
+        var result = new BenchmarkResultImporter().Import(csv);
+        var sample = Assert.Single(result.Samples);
+
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Equal("line one\nline two", sample.Reason);
+        Assert.Single(result.Summary);
+    }
+
+    [Fact]
     public void Importer_DirectoryUsesSamplesWithoutMixingSummaryRows()
     {
         var root = CreateTempRoot();
@@ -674,6 +729,19 @@ benchmark 'none' {
         var sample = Assert.Single(result.Samples);
         Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
         Assert.Contains("boom", sample.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Runner_TreatsNativeCommandExitsAsFailures()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create("param($case, $run) dotnet --not-a-real-option");
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Contains("stopped", sample.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
