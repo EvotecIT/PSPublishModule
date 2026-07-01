@@ -47,8 +47,10 @@ public sealed class PowerShellBenchmarkRunner
         var cases = suite.Cases.Count == 0
             ? new[] { new PowerShellBenchmarkCase { Name = "Default" } }
             : suite.Cases.ToArray();
+        ValidateMetricNames(suite);
         ValidateCaseVariables(suite, cases);
         ValidateAxisCaseValueCollisions(suite, cases);
+        ValidateMetricVariableCollisions(suite, cases);
         var expanded = ExpandCases(cases, suite.Axes);
         var engineAxis = GetAxisValues(suite.Axes, "Engine") ?? suite.Engines.Select(e => (object?)e.Name).ToArray();
         var explicitOperationAxis = GetAxisValues(suite.Axes, "Operation");
@@ -145,7 +147,7 @@ public sealed class PowerShellBenchmarkRunner
         var runnable = new List<PowerShellBenchmarkWorkItem>();
         foreach (var item in workItems)
         {
-            if (item.IsSkipped || ShouldSkip(suite.Skip, ToPsObject(item.Values)))
+            if (item.IsSkipped)
             {
                 samples.Add(CreateSample(runId, suite, item, 0, BenchmarkSampleStatus.Skipped, 0, "Skipped by benchmark rule.", null));
                 continue;
@@ -326,6 +328,17 @@ public sealed class PowerShellBenchmarkRunner
         }
     }
 
+    private static void ValidateMetricNames(PowerShellBenchmarkSuite suite)
+    {
+        foreach (var metric in suite.Metrics)
+        {
+            if (string.IsNullOrWhiteSpace(metric.Name))
+                throw new InvalidOperationException($"Benchmark suite '{suite.Name}' defines a metric without a name.");
+            if (IsBenchmarkColumn(metric.Name) || ReservedMatrixAxisNames.Contains(metric.Name))
+                throw new NotSupportedException($"Benchmark suite '{suite.Name}' metric '{metric.Name}' conflicts with a built-in benchmark artifact column. Use a different metric name.");
+        }
+    }
+
     private static void ValidateAxisCaseValueCollisions(PowerShellBenchmarkSuite suite, IEnumerable<PowerShellBenchmarkCase> cases)
     {
         var matrixAxes = suite.Axes
@@ -341,6 +354,24 @@ public sealed class PowerShellBenchmarkRunner
         {
             if (axisNames.Contains(key))
                 throw new NotSupportedException($"Benchmark suite '{suite.Name}' matrix axis '{key}' conflicts with case '{benchmarkCase.Name}' variable '{key}'. Use either a case variable or a matrix axis for that value, not both.");
+        }
+    }
+
+    private static void ValidateMetricVariableCollisions(PowerShellBenchmarkSuite suite, IEnumerable<PowerShellBenchmarkCase> cases)
+    {
+        if (suite.Metrics.Count == 0)
+            return;
+
+        var variableNames = suite.Axes
+            .Where(axis => !IsBuiltInPathValue(axis.Name))
+            .Select(axis => axis.Name)
+            .Concat(cases.SelectMany(benchmarkCase => benchmarkCase.Values.Keys))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var metric in suite.Metrics)
+        {
+            if (variableNames.Contains(metric.Name))
+                throw new NotSupportedException($"Benchmark suite '{suite.Name}' metric '{metric.Name}' conflicts with a matrix or case variable of the same name. Use distinct names so CSV artifacts can round-trip.");
         }
     }
 

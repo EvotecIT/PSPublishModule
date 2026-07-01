@@ -150,7 +150,7 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
             result = BenchmarkJson.Read<BenchmarkRunResult>(resultPath);
             failed = result.Samples.Any(sample => sample.Status == BenchmarkSampleStatus.Failed);
             EnrichResult(result, request, identity.UserName, scratchRoot, ShouldKeep(request.Cleanup, failed));
-            RewriteRunReport(result);
+            RewriteEnrichedArtifacts(result);
             return result;
         }
         finally
@@ -261,10 +261,12 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
         result.Metadata["temporaryUserProfileRetained"] = retained ? "true" : "false";
     }
 
-    private static void RewriteRunReport(BenchmarkRunResult result)
+    internal static void RewriteEnrichedArtifacts(BenchmarkRunResult result)
     {
         if (result.Artifacts.TryGetValue("run-report.json", out var reportPath) && File.Exists(reportPath))
             BenchmarkJson.Write(reportPath, result);
+        if (result.Artifacts.TryGetValue("metadata.json", out var metadataPath) && File.Exists(metadataPath))
+            BenchmarkJson.Write(metadataPath, result.Metadata);
     }
 
     private static void TryDeleteDirectory(string path)

@@ -891,6 +891,37 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_PrefersDurationMsForNormalizedSampleCsv()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(csv, "Suite,Scenario,Operation,Engine,Host,Iteration,Status,DurationMs,Reason,Mean\nsuite,case,Run,Managed,Current,0,Succeeded,12,,999\n");
+
+        var result = new BenchmarkResultImporter().Import(csv);
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(12, sample.DurationMs);
+        Assert.Equal(999, sample.Metrics["Mean"]);
+        Assert.Equal(12, Assert.Single(result.Summary).MedianMs);
+    }
+
+    [Fact]
+    public void Importer_FailsNonFiniteCsvDurations()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "Demo-report.csv");
+        File.WriteAllText(csv, "Method,Mean\nWrite,NaN\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Equal(0, sample.DurationMs);
+        Assert.Contains("Duration", sample.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Failed", Assert.Single(result.Summary).Status);
+    }
+
+    [Fact]
     public void Importer_PropagatesSuiteOverrideIntoNormalizedRun()
     {
         var root = CreateTempRoot();
@@ -2480,6 +2511,19 @@ benchmark 'path-temp-user' -out 'out' {
     }
 
     [Fact]
+    public void Runner_RejectsMetricVariableCsvHeaderCollisions()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows", Values = { 10 } });
+        suite.Metrics.Add(new PowerShellBenchmarkMetric { Name = "Rows", ScriptBlock = ScriptBlock.Create("42") });
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Plan(suite));
+
+        Assert.Contains("Rows", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("variable", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Runner_FailsMalformedSuitesWithNoWork()
     {
         var suite = new PowerShellBenchmarkSuite { Name = "empty" };
@@ -2508,6 +2552,17 @@ benchmark 'path-temp-user' -out 'out' {
         var suite = CreateRunnableSuite();
         suite.Data = ScriptBlock.Create("1; 2; 3");
         suite.Engines[0].Operations["Run"] = ScriptBlock.Create("param($case, $run) if (([object[]]$run.Data).Count -ne 3) { throw 'missing data' }");
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
+    }
+
+    [Fact]
+    public void Runner_EvaluatesSkipRulesOnlyDuringPlanning()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Skip = ScriptBlock.Create("if ($null -eq $script:SkipCounter) { $script:SkipCounter = 0 }; $script:SkipCounter++; $script:SkipCounter -gt 1");
 
         var result = new PowerShellBenchmarkRunner().Run(suite);
 
@@ -2750,6 +2805,35 @@ benchmark 'path-temp-user' -out 'out' {
         Assert.Contains("\"Metric,Name\"", samplesHeader, StringComparison.Ordinal);
         Assert.Contains("\"Rows,Size\"", summaryHeader, StringComparison.Ordinal);
         Assert.Contains("\"Metric,Name\"", summaryHeader, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MarkdownRenderer_RendersConflictingVariableNames()
+    {
+        var markdown = new BenchmarkMarkdownRenderer().RenderSummaryTable(new[]
+        {
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                Status = "Succeeded",
+                Variables = new Dictionary<string, string?>
+                {
+                    ["Engine"] = "ParamEngine",
+                    ["Operation"] = "ParamOperation",
+                    ["Host"] = "ParamHost",
+                    ["Scenario"] = "ParamScenario"
+                }
+            }
+        });
+
+        Assert.Contains("Engine=ParamEngine", markdown, StringComparison.Ordinal);
+        Assert.Contains("Operation=ParamOperation", markdown, StringComparison.Ordinal);
+        Assert.Contains("Host=ParamHost", markdown, StringComparison.Ordinal);
+        Assert.Contains("Scenario=ParamScenario", markdown, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -3045,6 +3129,46 @@ benchmark 'path-temp-user' -out 'out' {
         {
             Runspace.DefaultRunspace = previousRunspace;
         }
+    }
+
+    [Fact]
+    public void TemporaryUserExecutor_RewritesEnrichedMetadataArtifact()
+    {
+        var root = CreateTempRoot();
+        var reportPath = Path.Combine(root, "run-report.json");
+        var metadataPath = Path.Combine(root, "metadata.json");
+        var result = new BenchmarkRunResult
+        {
+            Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["profile"] = PowerShellBenchmarkProfileKind.TemporaryLocalUser.ToString(),
+                ["cleanup"] = PowerShellBenchmarkCleanupMode.KeepOnFailure.ToString()
+            },
+            Artifacts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["run-report.json"] = reportPath,
+                ["metadata.json"] = metadataPath
+            }
+        };
+        BenchmarkJson.Write(reportPath, new BenchmarkRunResult
+        {
+            Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["profile"] = PowerShellBenchmarkProfileKind.Current.ToString()
+            }
+        });
+        BenchmarkJson.Write(metadataPath, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["profile"] = PowerShellBenchmarkProfileKind.Current.ToString()
+        });
+
+        PowerShellBenchmarkTemporaryUserExecutor.RewriteEnrichedArtifacts(result);
+
+        var report = BenchmarkJson.Read<BenchmarkRunResult>(reportPath);
+        var metadata = BenchmarkJson.Read<Dictionary<string, string>>(metadataPath);
+        Assert.Equal(PowerShellBenchmarkProfileKind.TemporaryLocalUser.ToString(), report.Metadata["profile"]);
+        Assert.Equal(PowerShellBenchmarkProfileKind.TemporaryLocalUser.ToString(), metadata["profile"]);
+        Assert.Equal(PowerShellBenchmarkCleanupMode.KeepOnFailure.ToString(), metadata["cleanup"]);
     }
 
     private static BenchmarkSample Sample(

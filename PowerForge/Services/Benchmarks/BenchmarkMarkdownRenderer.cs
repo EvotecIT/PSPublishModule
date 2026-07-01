@@ -68,10 +68,6 @@ public sealed class BenchmarkMarkdownRenderer
         => string.Join(
             ", ",
             (variables ?? new Dictionary<string, string?>())
-                .Where(k => !string.Equals(k.Key, "Engine", StringComparison.OrdinalIgnoreCase)
-                            && !string.Equals(k.Key, "Operation", StringComparison.OrdinalIgnoreCase)
-                            && !string.Equals(k.Key, "Host", StringComparison.OrdinalIgnoreCase)
-                            && !string.Equals(k.Key, "Scenario", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(k => string.Concat(k.Key, "=", k.Value ?? string.Empty)));
 }

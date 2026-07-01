@@ -223,7 +223,7 @@ public sealed class BenchmarkResultImporter
             var metricHeaders = SampleMetricColumnsFor(headers, isBenchmarkDotNetCsv);
             var metadataColumns = SampleMetadataColumnsFor(map, isBenchmarkDotNetCsv);
             var method = GetCsvScenarioName(map, isBenchmarkDotNetCsv) ?? Path.GetFileNameWithoutExtension(path);
-            var mean = ParseDuration(GetWithHeader(map, out var durationHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median [s]", "Median", "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean [s]", "Mean", "DurationMs"), durationHeader);
+            var mean = ParseDuration(GetCsvSampleDuration(map, isBenchmarkDotNetCsv, out var durationHeader), durationHeader);
             var status = ParseSampleStatus(Get(map, "Status"), mean.HasValue);
             samples.Add(new BenchmarkSample
             {
@@ -594,6 +594,11 @@ public sealed class BenchmarkResultImporter
     private static string GetCsvHost(IReadOnlyDictionary<string, string> values, bool isBenchmarkDotNetCsv)
         => isBenchmarkDotNetCsv ? string.Empty : Get(values, "Host") ?? string.Empty;
 
+    private static string? GetCsvSampleDuration(IReadOnlyDictionary<string, string> values, bool isBenchmarkDotNetCsv, out string? matchedHeader)
+        => isBenchmarkDotNetCsv
+            ? GetWithHeader(values, out matchedHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median [s]", "Median", "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean [s]", "Mean", "DurationMs")
+            : GetWithHeader(values, out matchedHeader, "DurationMs", "MedianMs", "MeanMs");
+
     private static string? GetWithHeader(IReadOnlyDictionary<string, string> values, out string? matchedHeader, params string[] names)
     {
         foreach (var name in names)
@@ -652,10 +657,15 @@ public sealed class BenchmarkResultImporter
             factor = HeaderDurationFactor(header);
 
         text = RemoveUnitSuffix(text).Trim();
-        return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
-            ? value * factor
-            : null;
+        if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+            return null;
+
+        var duration = value * factor;
+        return IsFinite(duration) ? duration : null;
     }
+
+    private static bool IsFinite(double value)
+        => !double.IsNaN(value) && !double.IsInfinity(value);
 
     private static double? ParseNumericMetric(string? raw, string? header = null)
         => ParseByteSize(raw) ?? ParseDuration(raw, header);
