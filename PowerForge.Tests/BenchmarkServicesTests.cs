@@ -249,6 +249,36 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void BenchmarkJson_ReadsPascalCasePowerShellJson()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "run-report.json");
+        File.WriteAllText(path, """
+{
+  "Suite": "demo",
+  "Samples": [
+    {
+      "Suite": "demo",
+      "Scenario": "case",
+      "Operation": "Run",
+      "Engine": "Managed",
+      "Host": "Current",
+      "Iteration": 0,
+      "Status": "Succeeded",
+      "DurationMs": 1.25
+    }
+  ]
+}
+""");
+
+        var result = new BenchmarkResultImporter().Import(path);
+
+        Assert.Equal("demo", result.Suite);
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
+        Assert.Equal(1.25, Assert.Single(result.Summary).MedianMs);
+    }
+
+    [Fact]
     public void Importer_ReadsBenchmarkDotNetCsv()
     {
         var root = CreateTempRoot();
@@ -676,7 +706,7 @@ benchmark 'none' {
     public void Runner_WritesRunReportAfterArtifactMapIsPopulated()
     {
         var suite = CreateRunnableSuite();
-        suite.Artifacts = BenchmarkArtifactKind.Json;
+        suite.Artifacts = BenchmarkArtifactKind.Json | BenchmarkArtifactKind.Csv | BenchmarkArtifactKind.Markdown;
 
         var result = new PowerShellBenchmarkRunner().Run(suite);
         var report = BenchmarkJson.Read<BenchmarkRunResult>(result.Artifacts["run-report.json"]);
@@ -684,6 +714,10 @@ benchmark 'none' {
         Assert.Contains("run-report.json", report.Artifacts.Keys);
         Assert.Contains("samples.json", report.Artifacts.Keys);
         Assert.Contains("metadata.json", report.Artifacts.Keys);
+        Assert.Contains("samples.csv", report.Artifacts.Keys);
+        Assert.Contains("summary.csv", report.Artifacts.Keys);
+        Assert.Contains("summary.md", report.Artifacts.Keys);
+        Assert.Contains("comparison.md", report.Artifacts.Keys);
         Assert.True(File.Exists(result.Artifacts["metadata.json"]));
     }
 

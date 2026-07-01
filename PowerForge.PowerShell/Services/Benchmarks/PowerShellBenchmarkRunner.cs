@@ -299,7 +299,6 @@ public sealed class PowerShellBenchmarkRunner
             BenchmarkJson.Write(summaryPath, result.Summary);
             BenchmarkJson.Write(comparisonPath, result.Comparison);
             BenchmarkJson.Write(metadataPath, result.Metadata);
-            BenchmarkJson.Write(runReportPath, result);
         }
 
         if (suite.Artifacts.HasFlag(BenchmarkArtifactKind.Csv))
@@ -322,6 +321,9 @@ public sealed class PowerShellBenchmarkRunner
             result.Artifacts["summary.md"] = summaryMd;
             result.Artifacts["comparison.md"] = comparisonMd;
         }
+
+        if (suite.Artifacts.HasFlag(BenchmarkArtifactKind.Json) && result.Artifacts.TryGetValue("run-report.json", out var runReportFinalPath))
+            BenchmarkJson.Write(runReportFinalPath, result);
     }
 
     private static void UpdateReadmeBlocks(PowerShellBenchmarkSuite suite, BenchmarkRunResult result)

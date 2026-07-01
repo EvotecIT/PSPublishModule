@@ -12,6 +12,7 @@ public static class BenchmarkJson
     private static readonly JsonSerializerOptions Options = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
         WriteIndented = true,
         Converters = { new JsonStringEnumConverter() }
     };
