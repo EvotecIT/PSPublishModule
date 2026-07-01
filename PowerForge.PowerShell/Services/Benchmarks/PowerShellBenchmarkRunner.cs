@@ -307,6 +307,11 @@ public sealed class PowerShellBenchmarkRunner
             throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested an OS axis, but this runner only supports the current operating system. Run the suite on each target OS and compare imported results instead.");
         if (GetAxisValues(suite.Axes, "RunMode") is not null)
             throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested a RunMode axis, but RunMode is suite metadata. Set suite RunMode once, or use a different matrix variable name.");
+        foreach (var axis in suite.Axes)
+        {
+            if (ReservedMatrixAxisNames.Contains(axis.Name))
+                throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested reserved matrix axis '{axis.Name}'. Use a different matrix variable name.");
+        }
     }
 
     private static void ValidateComparisons(PowerShellBenchmarkSuite suite)
@@ -783,6 +788,26 @@ finally {
            || string.Equals(key, "Status", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "DurationMs", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "Reason", StringComparison.OrdinalIgnoreCase);
+
+    private static readonly HashSet<string> ReservedMatrixAxisNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Name",
+        "Suite",
+        "RunId",
+        "Iteration",
+        "Status",
+        "DurationMs",
+        "Reason",
+        "AllocatedBytes",
+        "WorkingSetDeltaBytes",
+        "OutputMetric",
+        "SampleCount",
+        "FailureCount",
+        "MedianMs",
+        "MeanMs",
+        "MinMs",
+        "MaxMs"
+    };
 
     private static string Number(double? value)
         => value.HasValue ? value.Value.ToString("G17", CultureInfo.InvariantCulture) : string.Empty;

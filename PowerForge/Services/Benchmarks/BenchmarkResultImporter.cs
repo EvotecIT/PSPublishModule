@@ -221,9 +221,9 @@ public sealed class BenchmarkResultImporter
 
             var isBenchmarkDotNetCsv = LooksLikeBenchmarkDotNetCsv(headers);
             var metricHeaders = SampleMetricColumnsFor(headers, isBenchmarkDotNetCsv);
-            var metadataColumns = SampleMetadataColumnsFor(map);
-            var method = Get(map, "Scenario", "Method", "Benchmark") ?? Path.GetFileNameWithoutExtension(path);
-            var mean = ParseDuration(GetWithHeader(map, out var durationHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median", "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean", "DurationMs"), durationHeader);
+            var metadataColumns = SampleMetadataColumnsFor(map, isBenchmarkDotNetCsv);
+            var method = GetCsvScenarioName(map, isBenchmarkDotNetCsv) ?? Path.GetFileNameWithoutExtension(path);
+            var mean = ParseDuration(GetWithHeader(map, out var durationHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median [s]", "Median", "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean [s]", "Mean", "DurationMs"), durationHeader);
             var status = ParseSampleStatus(Get(map, "Status"), mean.HasValue);
             samples.Add(new BenchmarkSample
             {
@@ -266,12 +266,12 @@ public sealed class BenchmarkResultImporter
 
             var isBenchmarkDotNetCsv = LooksLikeBenchmarkDotNetCsv(headers);
             var metricHeaders = SummaryMetricColumnsFor(headers, isBenchmarkDotNetCsv);
-            var metadataColumns = SummaryMetadataColumnsFor(map);
+            var metadataColumns = SummaryMetadataColumnsFor(map, isBenchmarkDotNetCsv);
             var failureCount = ParseInt(Get(map, "FailureCount")) ?? 0;
             rows.Add(new BenchmarkSummaryRow
             {
                 Suite = suiteOverride ?? Get(map, "Suite") ?? defaultSuite,
-                Scenario = Get(map, "Scenario", "Method", "Benchmark") ?? Path.GetFileNameWithoutExtension(path),
+                Scenario = GetCsvScenarioName(map, isBenchmarkDotNetCsv) ?? Path.GetFileNameWithoutExtension(path),
                 Operation = Get(map, "Operation") ?? "Run",
                 Engine = Get(map, "Engine") ?? Get(map, "Job") ?? "BenchmarkDotNet",
                 Host = Get(map, "Host") ?? string.Empty,
@@ -280,10 +280,10 @@ public sealed class BenchmarkResultImporter
                 SampleCount = ParseInt(Get(map, "SampleCount")) ?? 0,
                 FailureCount = failureCount,
                 Status = Get(map, "Status") ?? (failureCount > 0 ? "Failed" : "Succeeded"),
-                MedianMs = ParseDuration(GetWithHeader(map, out var medianHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median"), medianHeader),
-                MeanMs = ParseDuration(GetWithHeader(map, out var meanHeader, "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean"), meanHeader),
-                MinMs = ParseDuration(GetWithHeader(map, out var minHeader, "MinMs", "Min [ns]", "Min [us]", "Min [ms]", "Min"), minHeader),
-                MaxMs = ParseDuration(GetWithHeader(map, out var maxHeader, "MaxMs", "Max [ns]", "Max [us]", "Max [ms]", "Max"), maxHeader),
+                MedianMs = ParseDuration(GetWithHeader(map, out var medianHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median [s]", "Median"), medianHeader),
+                MeanMs = ParseDuration(GetWithHeader(map, out var meanHeader, "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean [s]", "Mean"), meanHeader),
+                MinMs = ParseDuration(GetWithHeader(map, out var minHeader, "MinMs", "Min [ns]", "Min [us]", "Min [ms]", "Min [s]", "Min"), minHeader),
+                MaxMs = ParseDuration(GetWithHeader(map, out var maxHeader, "MaxMs", "Max [ns]", "Max [us]", "Max [ms]", "Max [s]", "Max"), maxHeader),
                 Metrics = ExtractMetrics(map, metricHeaders, isBenchmarkDotNetCsv)
             });
         }
@@ -470,12 +470,25 @@ public sealed class BenchmarkResultImporter
         if (string.IsNullOrWhiteSpace(type) && !string.IsNullOrWhiteSpace(fullName))
             type = TryExtractBenchmarkDotNetType(fullName!, scenario);
 
-        if (!string.IsNullOrWhiteSpace(ns))
-            variables["Namespace"] = ns;
-        if (!string.IsNullOrWhiteSpace(type))
-            variables["Type"] = type;
-        if (!string.IsNullOrWhiteSpace(fullName))
-            variables["FullName"] = fullName;
+        AddBenchmarkDotNetIdentityVariable(variables, "Namespace", ns);
+        AddBenchmarkDotNetIdentityVariable(variables, "Type", type);
+        AddBenchmarkDotNetIdentityVariable(variables, "FullName", fullName);
+    }
+
+    private static void AddBenchmarkDotNetIdentityVariable(IDictionary<string, string?> variables, string name, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        if (!variables.ContainsKey(name))
+        {
+            variables[name] = value;
+            return;
+        }
+
+        var fallback = "BenchmarkDotNet" + name;
+        if (!variables.ContainsKey(fallback))
+            variables[fallback] = value;
     }
 
     private static string? TryExtractBenchmarkDotNetType(string fullName, string scenario)
@@ -566,6 +579,11 @@ public sealed class BenchmarkResultImporter
 
         return null;
     }
+
+    private static string? GetCsvScenarioName(IReadOnlyDictionary<string, string> values, bool isBenchmarkDotNetCsv)
+        => isBenchmarkDotNetCsv
+            ? Get(values, "Method", "Benchmark")
+            : Get(values, "Scenario", "Method", "Benchmark");
 
     private static string? GetWithHeader(IReadOnlyDictionary<string, string> values, out string? matchedHeader, params string[] names)
     {
@@ -864,7 +882,7 @@ public sealed class BenchmarkResultImporter
     private static readonly HashSet<string> SampleMetadataColumns = new(StringComparer.OrdinalIgnoreCase)
     {
         "RunId", "Suite", "Scenario", "Method", "Benchmark", "Operation", "Engine", "Job", "Host", "OS", "RunMode",
-        "Iteration", "Status", "DurationMs", "MedianMs", "MeanMs", "Median", "Mean", "Median [ns]", "Median [us]", "Median [ms]", "Mean [ns]", "Mean [us]", "Mean [ms]",
+        "Iteration", "Status", "DurationMs", "MedianMs", "MeanMs", "Median", "Mean", "Median [ns]", "Median [us]", "Median [ms]", "Median [s]", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean [s]",
         "Reason", "AllocatedBytes", "WorkingSetDeltaBytes", "OutputMetric"
     };
 
@@ -872,12 +890,18 @@ public sealed class BenchmarkResultImporter
     {
         "Suite", "Scenario", "Method", "Benchmark", "Operation", "Engine", "Job", "Host", "OS", "SampleCount", "FailureCount",
         "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs", "Median", "Mean", "Min", "Max", "Median [ns]", "Median [us]",
-        "Median [ms]", "Mean [ns]", "Mean [us]", "Mean [ms]", "Min [ns]", "Min [us]", "Min [ms]", "Max [ns]", "Max [us]", "Max [ms]"
+        "Median [ms]", "Median [s]", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean [s]", "Min [ns]", "Min [us]", "Min [ms]", "Min [s]", "Max [ns]", "Max [us]", "Max [ms]", "Max [s]"
     };
 
-    private static HashSet<string> SampleMetadataColumnsFor(IReadOnlyDictionary<string, string> values)
+    private static HashSet<string> SampleMetadataColumnsFor(IReadOnlyDictionary<string, string> values, bool isBenchmarkDotNetCsv)
     {
         var columns = new HashSet<string>(SampleMetadataColumns, StringComparer.OrdinalIgnoreCase);
+        if (isBenchmarkDotNetCsv)
+        {
+            columns.Remove("Scenario");
+            return columns;
+        }
+
         if (HasText(values, "Scenario"))
         {
             columns.Remove("Method");
@@ -887,9 +911,15 @@ public sealed class BenchmarkResultImporter
         return columns;
     }
 
-    private static HashSet<string> SummaryMetadataColumnsFor(IReadOnlyDictionary<string, string> values)
+    private static HashSet<string> SummaryMetadataColumnsFor(IReadOnlyDictionary<string, string> values, bool isBenchmarkDotNetCsv)
     {
         var columns = new HashSet<string>(SummaryMetadataColumns, StringComparer.OrdinalIgnoreCase);
+        if (isBenchmarkDotNetCsv)
+        {
+            columns.Remove("Scenario");
+            return columns;
+        }
+
         if (HasText(values, "Scenario"))
         {
             columns.Remove("Method");

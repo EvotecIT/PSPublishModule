@@ -758,6 +758,19 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_HonorsBenchmarkDotNetSecondHeaderUnits()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "Demo-report.csv");
+        File.WriteAllText(csv, "Method,Median [s],Mean [s]\nWrite,1.5,9\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+
+        Assert.Equal(1500, Assert.Single(result.Summary).MedianMs);
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
+    }
+
+    [Fact]
     public void Importer_PropagatesSuiteOverrideIntoNormalizedRun()
     {
         var root = CreateTempRoot();
@@ -1069,6 +1082,24 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_PreservesBenchmarkDotNetScenarioParameter()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "Demo-report.csv");
+        File.WriteAllText(csv, "Method,Scenario,Mean [ms]\nInstall,Az,12\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+        var sample = Assert.Single(result.Samples);
+        var row = Assert.Single(result.Summary);
+
+        Assert.Equal("Install", sample.Scenario);
+        Assert.Equal("Az", sample.Variables["Scenario"]);
+        Assert.DoesNotContain("Method", sample.Variables.Keys);
+        Assert.Equal("Install", row.Scenario);
+        Assert.Equal("Az", row.Variables["Scenario"]);
+    }
+
+    [Fact]
     public void Importer_PreservesBenchmarkDotNetStatisticsAsMetrics()
     {
         var root = CreateTempRoot();
@@ -1135,6 +1166,42 @@ public sealed class BenchmarkServicesTests
         Assert.Equal(2, result.Summary.Length);
         Assert.Contains(result.Summary, row => row.Scenario == "Write" && row.Variables["Type"] == "Demo.FastBench");
         Assert.Contains(result.Summary, row => row.Scenario == "Write" && row.Variables["Type"] == "Demo.SlowBench");
+    }
+
+    [Fact]
+    public void Importer_PreservesBenchmarkDotNetJsonTypeParameter()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "Demo-report-full-compressed.json");
+        File.WriteAllText(path, """
+{
+  "Title": "demo",
+  "Benchmarks": [
+    {
+      "FullName": "Demo.Bench.Write()",
+      "Method": "Write",
+      "Parameters": "Type=Fast",
+      "Statistics": {
+        "Median": 500
+      }
+    },
+    {
+      "FullName": "Demo.Bench.Write()",
+      "Method": "Write",
+      "Parameters": "Type=Slow",
+      "Statistics": {
+        "Median": 700
+      }
+    }
+  ]
+}
+""");
+
+        var result = new BenchmarkResultImporter().Import(path);
+
+        Assert.Equal(2, result.Summary.Length);
+        Assert.Contains(result.Summary, row => row.Variables["Type"] == "Fast" && row.Variables["BenchmarkDotNetType"] == "Demo.Bench");
+        Assert.Contains(result.Summary, row => row.Variables["Type"] == "Slow" && row.Variables["BenchmarkDotNetType"] == "Demo.Bench");
     }
 
     [Fact]
@@ -2117,6 +2184,24 @@ benchmark 'path-temp-user' -out 'out' {
         var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Plan(suite));
 
         Assert.Contains("RunMode axis", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("Name")]
+    [InlineData("Suite")]
+    [InlineData("RunId")]
+    [InlineData("Status")]
+    [InlineData("DurationMs")]
+    [InlineData("Reason")]
+    public void Runner_RejectsReservedMatrixAxisNames(string axisName)
+    {
+        var suite = CreateRunnableSuite();
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = axisName, Values = { "one", "two" } });
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Plan(suite));
+
+        Assert.Contains("reserved matrix axis", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(axisName, ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
