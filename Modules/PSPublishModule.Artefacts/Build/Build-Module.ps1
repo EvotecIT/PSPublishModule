@@ -7,8 +7,12 @@ param(
     [switch] $SkipDownload,
     [string] $ModuleVersion = '1.0.X',
     [string] $PreReleaseTag,
-    [string] $PowerShellGalleryApiKeyPath = 'C:\Support\Important\PowerShellGalleryAPI.txt'
+    [string] $PowerShellGalleryApiKeyPath
 )
+
+if ($RunMode -eq 'Publish' -and [string]::IsNullOrWhiteSpace($PowerShellGalleryApiKeyPath)) {
+    throw 'PowerShellGalleryApiKeyPath is required when RunMode is Publish.'
+}
 
 Import-Module PSPublishModule -Force -ErrorAction Stop
 

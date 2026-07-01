@@ -50,6 +50,7 @@ internal sealed class ExternalAssetPreparationService
             ? Path.Combine(outputRoot, "manifest.json")
             : ResolveProjectPath(projectRoot, configuration.ManifestPath!);
         EnsureSameOrChildPath(projectRoot, manifestPath, $"External asset '{name}' ManifestPath");
+        EnsureManifestFilePath(outputRoot, manifestPath, $"External asset '{name}' ManifestPath", FrameworkCompatibility.GetPathStringComparison(projectRoot));
         var manifestDirectory = Path.GetDirectoryName(manifestPath) ?? outputRoot;
         var files = configuration.Files ?? Array.Empty<ExternalAssetFileConfiguration>();
 
@@ -120,30 +121,34 @@ internal sealed class ExternalAssetPreparationService
         var pathComparer = GetPathStringComparer(pathComparison);
         var occupiedPaths = new Dictionary<string, string>(pathComparer);
         var ownedOutputDirectories = new List<ExternalAssetOwnedDirectory>();
+        var segmentIndex = 0;
 
         foreach (var segment in segments)
         {
             if (segment is null)
                 continue;
 
+            segmentIndex++;
             var configuration = segment.Configuration ?? new ExternalAssetConfiguration();
             var name = RequireValue(configuration.Name, "External asset Name is required.");
-            var owner = $"external asset '{name}'";
+            var owner = $"external asset segment {segmentIndex}";
+            var description = $"external asset '{name}'";
             var outputRoot = ResolveProjectPath(projectFullPath, RequireValue(configuration.OutputPath, $"External asset '{name}' requires OutputPath."));
-            EnsureSameOrChildPath(projectFullPath, outputRoot, $"External asset '{name}' OutputPath");
-            EnsureChildPath(projectFullPath, outputRoot, $"External asset '{name}' OutputPath");
-            AddOwnedOutputDirectory(ownedOutputDirectories, occupiedPaths, outputRoot, $"{owner} OutputPath", owner, pathComparison);
+            EnsureSameOrChildPath(projectFullPath, outputRoot, $"{description} OutputPath");
+            EnsureChildPath(projectFullPath, outputRoot, $"{description} OutputPath");
+            AddOwnedOutputDirectory(ownedOutputDirectories, occupiedPaths, outputRoot, $"{description} OutputPath", owner, pathComparison);
 
             var manifestPath = string.IsNullOrWhiteSpace(configuration.ManifestPath)
                 ? Path.Combine(outputRoot, "manifest.json")
                 : ResolveProjectPath(projectFullPath, configuration.ManifestPath!);
-            EnsureSameOrChildPath(projectFullPath, manifestPath, $"External asset '{name}' ManifestPath");
-            AddOccupiedPath(occupiedPaths, ownedOutputDirectories, manifestPath, $"{owner} manifest", owner, pathComparison);
+            EnsureSameOrChildPath(projectFullPath, manifestPath, $"{description} ManifestPath");
+            EnsureManifestFilePath(outputRoot, manifestPath, $"{description} ManifestPath", pathComparison);
+            AddOccupiedPath(occupiedPaths, ownedOutputDirectories, manifestPath, $"{description} manifest", owner, pathComparison);
 
             foreach (var file in configuration.Files ?? Array.Empty<ExternalAssetFileConfiguration>())
             {
                 var resolvedFile = ResolveFile(outputRoot, manifestPath, pathComparison, file);
-                AddOccupiedPath(occupiedPaths, ownedOutputDirectories, resolvedFile.TargetPath, $"{owner} file '{resolvedFile.OutputRelativePath}'", owner, pathComparison);
+                AddOccupiedPath(occupiedPaths, ownedOutputDirectories, resolvedFile.TargetPath, $"{description} file '{resolvedFile.OutputRelativePath}'", owner, pathComparison);
             }
         }
     }
@@ -209,8 +214,7 @@ internal sealed class ExternalAssetPreparationService
     {
         if (TryCreateHttpUri(source, out var httpUri))
         {
-            _logger.Info($"Downloading external asset file '{Path.GetFileName(targetPath)}' from {httpUri}");
-            _downloadFile(httpUri!, targetPath, timeout);
+            MaterializeHttpSource(httpUri!, targetPath, timeout);
             return;
         }
 
@@ -222,6 +226,25 @@ internal sealed class ExternalAssetPreparationService
             return;
 
         File.Copy(sourcePath, targetPath, overwrite: true);
+    }
+
+    private void MaterializeHttpSource(Uri uri, string targetPath, TimeSpan timeout)
+    {
+        var targetDirectory = Path.GetDirectoryName(targetPath) ?? ".";
+        var tempPath = Path.Combine(targetDirectory, $".{Path.GetFileName(targetPath)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            _logger.Info($"Downloading external asset file '{Path.GetFileName(targetPath)}' from {uri}");
+            _downloadFile(uri, tempPath, timeout);
+            if (File.Exists(targetPath))
+                File.Replace(tempPath, targetPath, null);
+            else
+                File.Move(tempPath, targetPath);
+        }
+        finally
+        {
+            TryDeleteFile(tempPath);
+        }
     }
 
     private static string ResolveProjectPath(string projectRoot, string path)
@@ -335,6 +358,19 @@ internal sealed class ExternalAssetPreparationService
             throw new InvalidOperationException($"{label} must resolve to a child path under project root '{rootPath}'.");
     }
 
+    private static void EnsureManifestFilePath(
+        string outputRoot,
+        string manifestPath,
+        string label,
+        StringComparison pathComparison)
+    {
+        if (SamePath(outputRoot, manifestPath, pathComparison))
+            throw new InvalidOperationException($"{label} must resolve to a file path, not the external asset output directory.");
+
+        if (Directory.Exists(manifestPath))
+            throw new InvalidOperationException($"{label} must resolve to a file path, not an existing directory.");
+    }
+
     private static bool IsSameOrChildPath(string rootPath, string candidatePath, StringComparison pathComparison)
     {
         var root = Path.GetFullPath(rootPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -411,6 +447,19 @@ internal sealed class ExternalAssetPreparationService
         using var output = File.Create(targetPath);
         input.CopyTo(output);
         return targetPath;
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch
+        {
+            // best effort cleanup
+        }
     }
 
     private sealed class ExternalAssetManifest
