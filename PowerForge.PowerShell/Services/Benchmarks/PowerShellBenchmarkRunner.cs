@@ -132,6 +132,7 @@ public sealed class PowerShellBenchmarkRunner
     {
         if (suite is null) throw new ArgumentNullException(nameof(suite));
         ValidateComparisons(suite);
+        ValidateReadmeBlocks(suite);
         var runId = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
         var started = DateTimeOffset.UtcNow;
         var samples = new List<BenchmarkSample>();
@@ -280,12 +281,25 @@ public sealed class PowerShellBenchmarkRunner
 
     private static void ValidateComparisons(PowerShellBenchmarkSuite suite)
     {
+        var engineValues = GetAxisValues(suite.Axes, "Engine") ?? suite.Engines.Select(e => (object?)e.Name).ToArray();
         foreach (var comparison in suite.Comparisons)
         {
             if (string.IsNullOrWhiteSpace(comparison.Baseline))
                 throw new InvalidOperationException("Benchmark comparison baseline is required.");
             if (!string.Equals(comparison.Dimension, "Engine", StringComparison.OrdinalIgnoreCase))
                 throw new NotSupportedException($"Benchmark comparison dimension '{comparison.Dimension}' is not supported. Only Engine comparisons are supported.");
+            if (!engineValues.Any(value => string.Equals(Convert.ToString(value, CultureInfo.InvariantCulture), comparison.Baseline, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException($"Benchmark comparison baseline engine '{comparison.Baseline}' is not declared by suite '{suite.Name}'.");
+        }
+    }
+
+    private static void ValidateReadmeBlocks(PowerShellBenchmarkSuite suite)
+    {
+        foreach (var block in suite.ReadmeBlocks)
+        {
+            if (IsSupportedReadmeRenderer(block.Renderer))
+                continue;
+            throw new NotSupportedException($"Benchmark README renderer '{block.Renderer}' is not supported.");
         }
     }
 
@@ -414,6 +428,10 @@ public sealed class PowerShellBenchmarkRunner
             updater.UpdateBlock(block.Path, block.BlockId, markdown);
         }
     }
+
+    private static bool IsSupportedReadmeRenderer(string? renderer)
+        => string.Equals(renderer, "SummaryTable", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(renderer, "ComparisonTable", StringComparison.OrdinalIgnoreCase);
 
     private static List<Dictionary<string, object?>> ExpandCases(IEnumerable<PowerShellBenchmarkCase> cases, IEnumerable<PowerShellBenchmarkAxis> axes)
     {

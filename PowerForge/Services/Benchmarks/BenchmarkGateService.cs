@@ -9,6 +9,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class BenchmarkGateService
 {
+    private static readonly string[] DefaultGroupBy = { "Suite", "Scenario", "Operation", "Engine", "Host", "OS", "Variables" };
+
     /// <summary>
     /// Evaluates or updates a benchmark baseline.
     /// </summary>
@@ -136,7 +138,14 @@ public sealed class BenchmarkGateService
             var metric = NormalizeMetricName(request.Metric);
             var value = BenchmarkSummaryService.GetMetricValue(row, metric);
             if (!value.HasValue) continue;
-            map[BuildKey(row, request.GroupBy, metric)] = value.Value;
+            var key = BuildKey(row, request.GroupBy, metric);
+            if (map.ContainsKey(key))
+            {
+                var fields = string.Join(", ", EffectiveGroupBy(request.GroupBy));
+                throw new InvalidOperationException($"Benchmark gate GroupBy fields '{fields}' produced duplicate metric key '{key}'. Include enough fields to keep benchmark lanes distinct.");
+            }
+
+            map[key] = value.Value;
         }
 
         return map;
@@ -175,7 +184,7 @@ public sealed class BenchmarkGateService
     private static string BuildKey(BenchmarkSummaryRow row, IReadOnlyList<string> groupBy, string metric)
     {
         var values = new List<string>();
-        foreach (var field in groupBy.Count == 0 ? new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS", "Variables" } : groupBy)
+        foreach (var field in EffectiveGroupBy(groupBy))
         {
             var value = GetField(row, field);
             values.Add(IsVariablesField(field) ? value : EscapeKeyComponent(value));
@@ -184,6 +193,9 @@ public sealed class BenchmarkGateService
         values.Add(EscapeKeyComponent(NormalizeMetricName(metric)));
         return string.Join("|", values);
     }
+
+    private static IReadOnlyList<string> EffectiveGroupBy(IReadOnlyList<string>? groupBy)
+        => groupBy is { Count: > 0 } ? groupBy : DefaultGroupBy;
 
     private static string GetField(BenchmarkSummaryRow row, string field)
     {

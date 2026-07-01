@@ -256,6 +256,31 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void GateService_RejectsDuplicateGroupKeys()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        BenchmarkJson.Write(summaryPath, new[]
+        {
+            new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Find", Engine = "Managed", Host = "Current", MedianMs = 100 },
+            new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Find", Engine = "Other", Host = "Current", MedianMs = 120 }
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new BenchmarkGateService().Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            BaselineMode = BenchmarkBaselineMode.Update,
+            GroupBy = new[] { "Suite", "Scenario" }
+        }));
+
+        Assert.Contains("duplicate metric key", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("GroupBy", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(baselinePath));
+    }
+
+    [Fact]
     public void GateService_FailsWhenBaselineMetricDisappears()
     {
         var root = CreateTempRoot();
@@ -1527,6 +1552,43 @@ benchmark 'dup' {
     }
 
     [Fact]
+    public void DslRuntime_RejectsDuplicateAxisNames()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'dup-axis' {
+    axis Rows 1
+    axis rows 2
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+
+        Assert.Contains("already defines axis", ex.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void DslRuntime_RejectsDuplicateOperationNames()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'dup-operation' {
+    axis Operation Run
+    axis Engine Managed
+    engine Managed {
+        operation Run { param($case, $run) }
+        operation run { param($case, $run) }
+    }
+}
+");
+
+        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+
+        Assert.Contains("already defines operation", ex.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void DslRuntime_PreservesNearestCapturedScopeAndUserPathVariables()
     {
         var root = CreateTempRoot();
@@ -2032,9 +2094,26 @@ benchmark 'path' -out 'relative-out' {
     }
 
     [Fact]
+    public void Runner_RejectsMissingComparisonBaselineBeforeMeasurement()
+    {
+        var suite = CreateRunnableSuite();
+        var output = Path.Combine(suite.OutputRoot, "missing-baseline-side-effect.txt");
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create($"[IO.File]::WriteAllText('{output.Replace("'", "''")}', 'executed')");
+        suite.Comparisons.Add(new PowerShellBenchmarkComparison { Dimension = "Engine", Baseline = "Manged" });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new PowerShellBenchmarkRunner().Run(suite));
+
+        Assert.Contains("Manged", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("baseline engine", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(output));
+    }
+
+    [Fact]
     public void Runner_RejectsUnknownReadmeRenderers()
     {
         var suite = CreateRunnableSuite();
+        var output = Path.Combine(suite.OutputRoot, "readme-side-effect.txt");
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create($"[IO.File]::WriteAllText('{output.Replace("'", "''")}', 'executed')");
         var readme = Path.Combine(CreateTempRoot(), "README.md");
         File.WriteAllText(readme, "<!-- BENCHMARK:results:START -->\nold\n<!-- BENCHMARK:results:END -->\n");
         suite.ReadmeBlocks.Add(new PowerShellBenchmarkReadmeBlock
@@ -2047,6 +2126,7 @@ benchmark 'path' -out 'relative-out' {
         var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Run(suite));
 
         Assert.Contains("ComparsionTable", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(output));
     }
 
     private static BenchmarkSample Sample(

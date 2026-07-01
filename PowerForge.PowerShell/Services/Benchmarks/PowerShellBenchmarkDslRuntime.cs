@@ -126,7 +126,10 @@ public static class PowerShellBenchmarkDslRuntime
     public static void Axis(string name, object?[] values)
     {
         var suite = RequireSuite();
-        var axis = new PowerShellBenchmarkAxis { Name = RequireName(name, "axis name") };
+        var axisName = RequireName(name, "axis name");
+        if (suite.Axes.Any(axis => string.Equals(axis.Name, axisName, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException($"Benchmark suite '{suite.Name}' already defines axis '{axisName}'.");
+        var axis = new PowerShellBenchmarkAxis { Name = axisName };
         axis.Values.AddRange(Flatten(values));
         suite.Axes.Add(axis);
     }
@@ -190,7 +193,11 @@ public static class PowerShellBenchmarkDslRuntime
         var context = RequireContext();
         if (context.EngineStack.Count == 0)
             throw new InvalidOperationException("operation can only be used inside engine.");
-        context.EngineStack.Peek().Operations[RequireName(name, "operation name")] = CaptureScriptBlock(scriptBlock);
+        var operationName = RequireName(name, "operation name");
+        var engine = context.EngineStack.Peek();
+        if (engine.Operations.ContainsKey(operationName))
+            throw new InvalidOperationException($"Benchmark engine '{engine.Name}' already defines operation '{operationName}'.");
+        engine.Operations[operationName] = CaptureScriptBlock(scriptBlock);
     }
 
     /// <summary>
