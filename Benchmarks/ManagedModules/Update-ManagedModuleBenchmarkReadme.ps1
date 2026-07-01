@@ -4,7 +4,10 @@ param(
     [Parameter(Mandatory)]
     [string] $ResultPath,
 
-    [string] $ReadmePath = (Join-Path $PSScriptRoot '..\..\README.MD')
+    [string] $ReadmePath = (Join-Path $PSScriptRoot '..\..\README.MD'),
+
+    [ValidateSet('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')]
+    [string[]] $Engine = @()
 )
 
 Set-StrictMode -Version Latest
@@ -138,13 +141,32 @@ function ConvertTo-BenchmarkSummaryRows {
 }
 
 function ConvertTo-BenchmarkMarkdown {
-    param([object[]] $Rows)
+    param(
+        [object[]] $Rows,
+        [string[]] $SelectedEngine
+    )
 
     $Rows = @(ConvertTo-BenchmarkSummaryRows -Rows $Rows)
-    $engines = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
+    $knownEngines = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
+    $presentEngines = @($Rows | ForEach-Object { $_.Engine } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+    $engines = if ($SelectedEngine.Count -gt 0) {
+        @($SelectedEngine)
+    } else {
+        @($knownEngines | Where-Object { $presentEngines -contains $_ })
+    }
+
+    $extraEngines = @($presentEngines | Where-Object { $engines -notcontains $_ } | Sort-Object)
+    if ($extraEngines.Count -gt 0) {
+        $engines += $extraEngines
+    }
+
+    if ($engines.Count -eq 0) {
+        throw 'No benchmark engines were found in the result CSV.'
+    }
+
     $lines = [System.Collections.Generic.List[string]]::new()
-    $lines.Add('| Scenario | Host | Operation | Managed | ModuleFast | PSResourceGet | PowerShellGet | Result |') | Out-Null
-    $lines.Add('| --- | --- | --- | --- | --- | --- | --- | --- |') | Out-Null
+    $lines.Add(('| Scenario | Host | Operation | {0} | Result |' -f ($engines -join ' | '))) | Out-Null
+    $lines.Add(('| --- | --- | --- | {0} | --- |' -f (@($engines | ForEach-Object { '---' }) -join ' | '))) | Out-Null
 
     $groups = $Rows |
         Group-Object ScenarioLabel, Host, Operation |
@@ -163,14 +185,11 @@ function ConvertTo-BenchmarkMarkdown {
             Format-BenchmarkCell -Row $row -ManagedSeconds $managedSeconds
         }
         $result = Get-ManagedResultText -Rows $items -ManagedRow $managed
-        $lines.Add(('| {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} |' -f
+        $lines.Add(('| {0} | {1} | {2} | {3} | {4} |' -f
             $first.ScenarioLabel,
             $first.Host,
             $first.Operation,
-            $cells[0],
-            $cells[1],
-            $cells[2],
-            $cells[3],
+            ($cells -join ' | '),
             $result)) | Out-Null
     }
 
@@ -182,7 +201,7 @@ if ($rows.Count -eq 0) {
     throw "No benchmark rows were found in '$ResultPath'."
 }
 
-$table = ConvertTo-BenchmarkMarkdown -Rows $rows
+$table = ConvertTo-BenchmarkMarkdown -Rows $rows -SelectedEngine $Engine
 $readme = Get-Content -LiteralPath $ReadmePath -Raw
 $start = '<!-- managed-module-benchmark-table:start -->'
 $end = '<!-- managed-module-benchmark-table:end -->'

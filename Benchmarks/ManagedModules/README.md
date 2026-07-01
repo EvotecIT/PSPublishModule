@@ -61,7 +61,9 @@ larger than wall-clock time because dependency downloads and extraction run in
 parallel; the max and root elapsed columns are usually better indicators for
 the critical path.
 
-Run the default focused Managed-vs-ModuleFast install comparison:
+Run the default focused Managed-vs-ModuleFast install comparison. This is the
+normal tuning loop now; it skips PSResourceGet and PowerShellGet because those
+provider baselines are already much slower and make every iteration expensive:
 
 ```powershell
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -BenchmarkHost PowerShell7 -RepeatCount 1
@@ -70,10 +72,9 @@ pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModule
 `-BenchmarkHost PowerShell7` selects the highest available `pwsh` 7 executable
 instead of assuming `C:\Program Files\PowerShell\7\pwsh.exe` is the newest host.
 
-That default profile skips PSResourceGet/PowerShellGet native install baselines
-and only runs the install rows where ModuleFast has an equivalent public
-command. Use it for the active performance loop; the native-provider matrix is
-kept only for occasional baseline refreshes because those rows are much slower:
+That default profile only runs install rows where ModuleFast has an equivalent
+public command. Use the native-provider matrix only for occasional compatibility
+or release-baseline refreshes:
 
 ```powershell
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -ComparisonProfile Full -BenchmarkHost PowerShell7 -RepeatCount 1
@@ -82,9 +83,9 @@ pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModule
 Use the focused profile while tuning install throughput. By default it compares
 the development managed engine in this worktree with the `Install-ModuleFast`
 command visible in the benchmark PowerShell host, usually the installed
-ModuleFast module from the user/module path. To compare against the refreshed
-C# ModuleFast branch instead, pass that branch's manifest, script module, or
-module folder:
+PSGallery ModuleFast module from the user/module path. To compare against the
+refreshed development C# ModuleFast branch, pass that branch's manifest, script
+module, or module folder:
 
 ```powershell
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -BenchmarkHost PowerShell7 -RepeatCount 1 -ModuleFastModulePath .\Ignore\External\ModuleFast-csharp\ModuleFast.psd1 -OutputPath .\Ignore\Benchmarks\ManagedModules\managed-vs-modulefast-dev.csv -OutputRoot .\Ignore\Benchmarks\ManagedModules\ManagedVsModuleFastDev
@@ -94,7 +95,8 @@ pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModule
 does not select a different ModuleFast implementation. The result CSV records
 `ModuleFastSource`, `ModuleFastModulePath`, `EngineCommandPath`,
 `EngineModuleBase`, and `EngineModuleVersion` for each row so installed-gallery
-and development-branch comparisons stay separate.
+and development-branch comparisons stay separate. If `ModuleFastModulePath` is
+blank, the row is not a C# ModuleFast development-branch comparison.
 
 Append Windows PowerShell 5.1 results:
 
