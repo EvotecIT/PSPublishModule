@@ -604,7 +604,7 @@ Test-BenchmarkGate `
     -SummaryPath .\Build\Benchmarks\managed-modules\latest\summary.json `
     -BaselinePath .\Build\Benchmarks\managed-modules\baseline.json `
     -Metric 'medianMs' `
-    -GroupBy suite,scenario,operation,engine,host `
+    -GroupBy suite,scenario,operation,engine,host,os,variables `
     -RelativeTolerance 0.15 `
     -AbsoluteToleranceMs 50
 ```
@@ -782,6 +782,66 @@ rows should preserve a reason category such as `Setup`, `Warmup`, `Operation`,
 `Validation`, `Metric`, or `Skip`. That lets reports distinguish "slow" from
 "did not produce valid evidence".
 
+### Cleanup Hooks
+
+Cleanup needs to be a first-class lifecycle hook, not a convention copied into
+each benchmark script. It was part of the lifecycle direction, but the first
+implementation slice has not yet exposed a dedicated `cleanup { ... }` DSL block
+or long-form `Set-BenchmarkCleanup` command.
+
+The cleanup contract should be:
+
+- cleanup runs outside measured time
+- cleanup is attempted in a `finally` path for each work item, including setup,
+  warmup, operation, validation, metric, and skip failures
+- cleanup receives the same case/run context as validation and metrics
+- cleanup can remove scenario-created temp folders, caches, downloaded fixtures,
+  expanded archives, and per-case scratch output
+- runner-owned evidence such as samples, summaries, manifests, comparison files,
+  and requested report artifacts is retained according to the profile or suite
+  retention policy
+- cleanup failures are recorded on the sample or run manifest with reason
+  category `Cleanup`
+- cleanup failures should fail the suite by default in CI/publish profiles, while
+  local quick profiles may warn and retain the failed cleanup path for inspection
+
+Authoring shape:
+
+```powershell
+benchmark 'excel-workflows' -out 'Ignore/Benchmarks/ExcelPerformance' {
+    setup {
+        param($case, $run)
+        $run.ScratchPath = New-Item -ItemType Directory -Force -Path (
+            Join-Path $run.TempRoot $case.Name)
+    }
+
+    operation {
+        param($case, $run)
+        # measured work only
+    }
+
+    cleanup {
+        param($case, $run)
+        if ($run.ScratchPath) {
+            Remove-Item -LiteralPath $run.ScratchPath -Recurse -Force
+        }
+    }
+}
+```
+
+Long-form shape:
+
+```powershell
+Set-BenchmarkCleanup {
+    param($case, $run)
+    Remove-Item -LiteralPath $run.ScratchPath -Recurse -Force
+}
+```
+
+This keeps benchmark specs small while preventing benchmark output folders,
+package caches, temp module roots, generated files, and expanded fixtures from
+becoming permanent repo clutter.
+
 ### Run Metadata And Manifest
 
 Every run should write a manifest that makes comparison claims inspectable. The
@@ -896,10 +956,12 @@ The upgrade should land in small slices:
 4. Add profile model and DSL support, then wire `Invoke-BenchmarkSuite -Profile`.
 5. Formalize run metadata keys and write the manifest through the existing JSON
    artifact path.
-6. Extend Markdown renderers with renderer options and unit-aware metric output.
-7. Add reason categories for failed samples without breaking the existing status
+6. Add cleanup hooks and output-retention policy so scenario temp state is
+   removed without deleting requested evidence.
+7. Extend Markdown renderers with renderer options and unit-aware metric output.
+8. Add reason categories for failed samples without breaking the existing status
    enum.
-8. Improve plan output with handler/source/profile information.
+9. Improve plan output with handler/source/profile information.
 
 Each slice should keep cmdlets thin and put reusable behavior in `PowerForge` or
 `PowerForge.PowerShell`.

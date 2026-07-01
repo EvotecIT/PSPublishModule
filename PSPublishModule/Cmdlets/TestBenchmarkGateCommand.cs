@@ -39,7 +39,7 @@ public sealed class TestBenchmarkGateCommand : PSCmdlet
     /// Fields used to construct stable metric keys.
     /// </summary>
     [Parameter]
-    public string[] GroupBy { get; set; } = { "Suite", "Scenario", "Operation", "Engine", "Host", "Variables" };
+    public string[] GroupBy { get; set; } = { "Suite", "Scenario", "Operation", "Engine", "Host", "OS", "Variables" };
 
     /// <summary>
     /// Updates the baseline instead of verifying it.

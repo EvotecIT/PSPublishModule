@@ -221,7 +221,7 @@ public sealed class BenchmarkServicesTests
         {
             metrics = new Dictionary<string, double>
             {
-                ["suite|case|Run|Managed|Current||MedianMs"] = 100
+                ["suite|case|Run|Managed|Current|||MedianMs"] = 100
             }
         });
         BenchmarkJson.Write(summaryPath, new[]
@@ -238,6 +238,32 @@ public sealed class BenchmarkServicesTests
         Assert.False(verify.Passed);
         Assert.Contains(verify.Metrics, m => m.MissingInCurrent);
         Assert.Contains(verify.Messages, m => m.Contains("failed samples", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void GateService_DefaultKeysIncludeOperatingSystem()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        BenchmarkJson.Write(summaryPath, new[]
+        {
+            new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Run", Engine = "Managed", Host = "Current", Os = "Windows", MedianMs = 100 },
+            new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Run", Engine = "Managed", Host = "Current", Os = "Linux", MedianMs = 200 }
+        });
+
+        var service = new BenchmarkGateService();
+        var update = service.Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            BaselineMode = BenchmarkBaselineMode.Update
+        });
+
+        Assert.True(update.Passed);
+        Assert.Equal(2, update.Metrics.Length);
+        Assert.Contains(update.Metrics, metric => metric.Key.Contains("|Windows|", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(update.Metrics, metric => metric.Key.Contains("|Linux|", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -681,7 +707,7 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
-    public void Importer_ExcludesBenchmarkDotNetStatisticsFromVariables()
+    public void Importer_PreservesBenchmarkDotNetStatisticsAsMetrics()
     {
         var root = CreateTempRoot();
         var csv = Path.Combine(root, "Demo-report.csv");
@@ -696,6 +722,44 @@ public sealed class BenchmarkServicesTests
         Assert.DoesNotContain("Error", sample.Variables.Keys);
         Assert.DoesNotContain("StdDev", sample.Variables.Keys);
         Assert.DoesNotContain("Allocated", sample.Variables.Keys);
+        Assert.Equal(1.2, sample.Metrics["Error"]);
+        Assert.Equal(3.4, sample.Metrics["StdDev"]);
+        Assert.Equal(8192, sample.Metrics["Allocated"]);
+        Assert.Equal(8192, Assert.Single(result.Summary).Metrics["Allocated"]);
+    }
+
+    [Fact]
+    public void Importer_PreservesBenchmarkDotNetJsonTypeIdentity()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "Demo-report-full-compressed.json");
+        File.WriteAllText(path, """
+{
+  "Title": "demo",
+  "Benchmarks": [
+    {
+      "FullName": "Demo.FastBench.Write()",
+      "Method": "Write",
+      "Statistics": {
+        "Median": 500
+      }
+    },
+    {
+      "FullName": "Demo.SlowBench.Write()",
+      "Method": "Write",
+      "Statistics": {
+        "Median": 700
+      }
+    }
+  ]
+}
+""");
+
+        var result = new BenchmarkResultImporter().Import(path);
+
+        Assert.Equal(2, result.Summary.Length);
+        Assert.Contains(result.Summary, row => row.Scenario == "Write" && row.Variables["Type"] == "Demo.FastBench");
+        Assert.Contains(result.Summary, row => row.Scenario == "Write" && row.Variables["Type"] == "Demo.SlowBench");
     }
 
     [Fact]
@@ -909,6 +973,30 @@ benchmark 'rooted' {
         var benchmarkCase = Assert.Single(suite.Cases);
 
         Assert.Equal(root, benchmarkCase.Values["Root"]);
+    }
+
+    [Fact]
+    public void DslRuntime_PreservesSpecLocalVariablesInCapturedBlocks()
+    {
+        var root = CreateTempRoot();
+        var fixture = Path.Combine(root, "fixture.txt");
+        File.WriteAllText(fixture, "ok");
+        var script = ScriptBlock.Create(@"
+$fixture = Join-Path $PSScriptRoot 'fixture.txt'
+benchmark 'closure' {
+    axis Operation Run
+    axis Engine Managed
+    setup { param($case, $run) $run.FixtureText = Get-Content -LiteralPath $fixture -Raw }
+    engine Managed { operation Run { param($case, $run) if ($run.FixtureText -ne 'ok') { throw 'closure missing' } } }
+}
+");
+
+        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script, root));
+        suite.WarmupCount = 0;
+        suite.IterationCount = 1;
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
     }
 
     [Fact]

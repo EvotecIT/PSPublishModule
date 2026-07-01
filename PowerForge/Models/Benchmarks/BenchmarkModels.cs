@@ -262,7 +262,7 @@ public sealed class BenchmarkGateRequest
     public string Metric { get; set; } = "MedianMs";
 
     /// <summary>Fields used to construct stable metric keys.</summary>
-    public string[] GroupBy { get; set; } = { "Suite", "Scenario", "Operation", "Engine", "Host", "Variables" };
+    public string[] GroupBy { get; set; } = { "Suite", "Scenario", "Operation", "Engine", "Host", "OS", "Variables" };
 
     /// <summary>Baseline behavior mode.</summary>
     public BenchmarkBaselineMode BaselineMode { get; set; } = BenchmarkBaselineMode.Verify;

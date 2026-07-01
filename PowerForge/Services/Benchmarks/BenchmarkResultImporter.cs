@@ -202,7 +202,7 @@ public sealed class BenchmarkResultImporter
             for (var h = 0; h < headers.Length && h < values.Length; h++)
                 map[headers[h]] = values[h];
 
-            var metricHeaders = HeadersAfter(headers, "Reason");
+            var metricHeaders = SampleMetricColumnsFor(headers);
             var metadataColumns = SampleMetadataColumnsFor(map);
             var method = Get(map, "Scenario", "Method", "Benchmark") ?? Path.GetFileNameWithoutExtension(path);
             var mean = ParseDuration(GetWithHeader(map, out var durationHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median", "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean", "DurationMs"), durationHeader);
@@ -243,7 +243,7 @@ public sealed class BenchmarkResultImporter
             for (var h = 0; h < headers.Length && h < values.Length; h++)
                 map[headers[h]] = values[h];
 
-            var metricHeaders = HeadersAfter(headers, "MaxMs");
+            var metricHeaders = SummaryMetricColumnsFor(headers);
             var metadataColumns = SummaryMetadataColumnsFor(map);
             var failureCount = ParseInt(Get(map, "FailureCount")) ?? 0;
             rows.Add(new BenchmarkSummaryRow
@@ -308,7 +308,9 @@ public sealed class BenchmarkResultImporter
                 mean *= 0.000001;
 
             var variables = ParseBenchmarkDotNetParameters(GetString(benchmark, "Parameters"));
+            AddBenchmarkDotNetIdentityVariables(benchmark, variables, method);
             var engine = GetBenchmarkDotNetEngine(benchmark);
+            var metrics = ExtractBenchmarkDotNetMetrics(statistics);
 
             samples.Add(new BenchmarkSample
             {
@@ -324,7 +326,8 @@ public sealed class BenchmarkResultImporter
                 Status = mean.HasValue ? BenchmarkSampleStatus.Succeeded : BenchmarkSampleStatus.Failed,
                 DurationMs = mean ?? 0,
                 Reason = mean.HasValue ? string.Empty : "BenchmarkDotNet JSON duration could not be parsed.",
-                Variables = variables
+                Variables = variables,
+                Metrics = metrics
             });
         }
 
@@ -413,6 +416,59 @@ public sealed class BenchmarkResultImporter
         return variables;
     }
 
+    private static void AddBenchmarkDotNetIdentityVariables(
+        JsonElement benchmark,
+        IDictionary<string, string?> variables,
+        string scenario)
+    {
+        var fullName = GetString(benchmark, "FullName");
+        var type = GetString(benchmark, "Type") ?? GetString(benchmark, "TypeName");
+        var ns = GetString(benchmark, "Namespace");
+
+        if (string.IsNullOrWhiteSpace(type) && !string.IsNullOrWhiteSpace(fullName))
+            type = TryExtractBenchmarkDotNetType(fullName!, scenario);
+
+        if (!string.IsNullOrWhiteSpace(ns))
+            variables["Namespace"] = ns;
+        if (!string.IsNullOrWhiteSpace(type))
+            variables["Type"] = type;
+        if (!string.IsNullOrWhiteSpace(fullName))
+            variables["FullName"] = fullName;
+    }
+
+    private static string? TryExtractBenchmarkDotNetType(string fullName, string scenario)
+    {
+        var text = fullName.Trim();
+        var parameterIndex = text.IndexOf('(');
+        if (parameterIndex >= 0)
+            text = text.Substring(0, parameterIndex);
+
+        var suffix = "." + scenario;
+        if (text.EndsWith(suffix, StringComparison.Ordinal))
+            text = text.Substring(0, text.Length - suffix.Length);
+
+        return string.IsNullOrWhiteSpace(text) ? null : text;
+    }
+
+    private static Dictionary<string, double> ExtractBenchmarkDotNetMetrics(JsonElement? statistics)
+    {
+        var metrics = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        if (!statistics.HasValue || statistics.Value.ValueKind != JsonValueKind.Object)
+            return metrics;
+
+        foreach (var property in statistics.Value.EnumerateObject())
+        {
+            if (!IsBenchmarkDotNetMetricColumn(property.Name))
+                continue;
+
+            var value = GetDouble(statistics, property.Name);
+            if (value.HasValue)
+                metrics[property.Name] = value.Value * BenchmarkDotNetJsonMetricFactor(property.Name);
+        }
+
+        return metrics;
+    }
+
     private static string? Get(IReadOnlyDictionary<string, string> values, params string[] names)
     {
         foreach (var name in names)
@@ -480,6 +536,25 @@ public sealed class BenchmarkResultImporter
         return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
             ? value * factor
             : null;
+    }
+
+    private static double? ParseNumericMetric(string? raw, string? header = null)
+        => ParseByteSize(raw) ?? ParseDuration(raw, header);
+
+    private static double? ParseByteSize(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var text = raw!.Trim().Replace(",", string.Empty);
+        foreach (var unit in ByteUnits)
+        {
+            if (!text.EndsWith(unit.Suffix, StringComparison.OrdinalIgnoreCase))
+                continue;
+            var numberText = text.Substring(0, text.Length - unit.Suffix.Length).Trim();
+            if (double.TryParse(numberText, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+                return value * unit.Factor;
+        }
+
+        return null;
     }
 
     private static string[] ParseCsvLine(string line)
@@ -631,9 +706,25 @@ public sealed class BenchmarkResultImporter
     private static Dictionary<string, double> ExtractMetrics(IReadOnlyDictionary<string, string> values, HashSet<string> metricColumns)
         => metricColumns
             .Where(values.ContainsKey)
-            .Select(name => new { name, value = ParseDuration(values[name]) })
+            .Select(name => new { name, value = ParseNumericMetric(values[name], name) })
             .Where(item => item.value.HasValue)
             .ToDictionary(item => item.name, item => item.value!.Value, StringComparer.OrdinalIgnoreCase);
+
+    private static HashSet<string> SampleMetricColumnsFor(string[] headers)
+    {
+        var metrics = HeadersAfter(headers, "Reason");
+        foreach (var header in headers.Where(IsBenchmarkDotNetMetricColumn))
+            metrics.Add(header);
+        return metrics;
+    }
+
+    private static HashSet<string> SummaryMetricColumnsFor(string[] headers)
+    {
+        var metrics = HeadersAfter(headers, "MaxMs");
+        foreach (var header in headers.Where(IsBenchmarkDotNetMetricColumn))
+            metrics.Add(header);
+        return metrics;
+    }
 
     private static HashSet<string> HeadersAfter(string[] headers, string marker)
     {
@@ -693,6 +784,13 @@ public sealed class BenchmarkResultImporter
         return BenchmarkDotNetStatisticColumns.Contains(normalized);
     }
 
+    private static bool IsBenchmarkDotNetMetricColumn(string key)
+    {
+        var normalized = RemoveBracketUnit(key).Replace(" ", string.Empty);
+        return BenchmarkDotNetStatisticColumns.Contains(normalized)
+               && !BenchmarkDotNetPrimaryDurationColumns.Contains(normalized);
+    }
+
     private static string RemoveBracketUnit(string key)
     {
         var index = key.IndexOf('[');
@@ -705,5 +803,30 @@ public sealed class BenchmarkResultImporter
         "P0", "P25", "P50", "P75", "P90", "P95", "P99", "P100",
         "Error", "StdErr", "StdDev", "Ratio", "RatioSD",
         "Gen0", "Gen1", "Gen2", "Allocated", "CodeSize", "OperationsPerSecond"
+    };
+
+    private static readonly HashSet<string> BenchmarkDotNetPrimaryDurationColumns = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Mean", "Median", "Min", "Max"
+    };
+
+    private static double BenchmarkDotNetJsonMetricFactor(string name)
+    {
+        var normalized = RemoveBracketUnit(name).Replace(" ", string.Empty);
+        return normalized is "Error" or "StdErr" or "StdDev" or "Q1" or "Q3"
+            || normalized.StartsWith("P", StringComparison.OrdinalIgnoreCase)
+            ? 0.000001
+            : 1.0;
+    }
+
+    private static readonly (string Suffix, double Factor)[] ByteUnits =
+    {
+        ("GiB", 1024d * 1024d * 1024d),
+        ("MiB", 1024d * 1024d),
+        ("KiB", 1024d),
+        ("GB", 1024d * 1024d * 1024d),
+        ("MB", 1024d * 1024d),
+        ("KB", 1024d),
+        ("B", 1d)
     };
 }

@@ -150,7 +150,7 @@ public sealed class BenchmarkGateService
     private static string BuildKey(BenchmarkSummaryRow row, IReadOnlyList<string> groupBy, string metric)
     {
         var values = new List<string>();
-        foreach (var field in groupBy.Count == 0 ? new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "Variables" } : groupBy)
+        foreach (var field in groupBy.Count == 0 ? new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS", "Variables" } : groupBy)
         {
             values.Add(GetField(row, field));
         }
@@ -166,6 +166,7 @@ public sealed class BenchmarkGateService
         if (string.Equals(field, "Operation", StringComparison.OrdinalIgnoreCase)) return row.Operation;
         if (string.Equals(field, "Engine", StringComparison.OrdinalIgnoreCase)) return row.Engine;
         if (string.Equals(field, "Host", StringComparison.OrdinalIgnoreCase)) return row.Host;
+        if (string.Equals(field, "OS", StringComparison.OrdinalIgnoreCase) || string.Equals(field, "Os", StringComparison.OrdinalIgnoreCase)) return row.Os;
         if (string.Equals(field, "Status", StringComparison.OrdinalIgnoreCase)) return row.Status;
         if (string.Equals(field, "Variables", StringComparison.OrdinalIgnoreCase)) return FormatVariables(row.Variables);
         const string variablePrefix = "Variables.";
