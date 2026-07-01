@@ -48,28 +48,73 @@ function Test-IsWindowsAdministrator {
     $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+function Get-PowerShellExecutableVersion {
+    param([string] $Path)
+
+    try {
+        $versionText = & $Path -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>$null |
+            Select-Object -First 1
+        if ([string]::IsNullOrWhiteSpace($versionText)) {
+            return $null
+        }
+
+        return [version]$versionText
+    } catch {
+        return $null
+    }
+}
+
+function Resolve-PowerShell7Executable {
+    $candidatePaths = New-Object System.Collections.Generic.List[string]
+    foreach ($command in @(Get-Command pwsh -All -ErrorAction SilentlyContinue)) {
+        if (-not [string]::IsNullOrWhiteSpace($command.Source)) {
+            $candidatePaths.Add($command.Source)
+        }
+    }
+
+    if (Test-Path -LiteralPath 'C:\Program Files\PowerShell\7\pwsh.exe') {
+        $candidatePaths.Add('C:\Program Files\PowerShell\7\pwsh.exe')
+    }
+
+    $candidates = @($candidatePaths |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        Select-Object -Unique |
+        ForEach-Object {
+            $version = Get-PowerShellExecutableVersion -Path $_
+            if ($version -and $version.Major -ge 7) {
+                [pscustomobject]@{
+                    Path = $_
+                    Version = $version
+                }
+            }
+        })
+
+    if ($candidates.Count -gt 0) {
+        return ($candidates | Sort-Object Version -Descending | Select-Object -First 1).Path
+    }
+
+    return (Get-Command pwsh -ErrorAction Stop).Source
+}
+
 function Resolve-BenchmarkHostExecutable {
     switch ($BenchmarkHost) {
         'WindowsPowerShell' {
             return "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"
         }
         'PowerShell7' {
-            if (Test-Path -LiteralPath 'C:\Program Files\PowerShell\7\pwsh.exe') {
-                return 'C:\Program Files\PowerShell\7\pwsh.exe'
-            }
-
-            return (Get-Command pwsh -ErrorAction Stop).Source
+            return Resolve-PowerShell7Executable
         }
         default {
             if ($PSVersionTable.PSEdition -eq 'Desktop') {
                 return (Join-Path $PSHOME 'powershell.exe')
             }
 
-            if (Test-Path -LiteralPath 'C:\Program Files\PowerShell\7\pwsh.exe') {
-                return 'C:\Program Files\PowerShell\7\pwsh.exe'
+            $currentPwsh = Join-Path $PSHOME 'pwsh.exe'
+            if (Test-Path -LiteralPath $currentPwsh) {
+                return $currentPwsh
             }
 
-            return (Get-Command pwsh -ErrorAction Stop).Source
+            return Resolve-PowerShell7Executable
         }
     }
 }

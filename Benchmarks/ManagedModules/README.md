@@ -67,6 +67,9 @@ Run the default focused Managed-vs-ModuleFast install comparison:
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -BenchmarkHost PowerShell7 -RepeatCount 1
 ```
 
+`-BenchmarkHost PowerShell7` selects the highest available `pwsh` 7 executable
+instead of assuming `C:\Program Files\PowerShell\7\pwsh.exe` is the newest host.
+
 That default profile skips PSResourceGet/PowerShellGet native install baselines
 and only runs the install rows where ModuleFast has an equivalent public
 command. Use it for the active performance loop; the native-provider matrix is
