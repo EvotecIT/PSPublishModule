@@ -141,6 +141,22 @@ public sealed class ManagedModuleSimpleBenchmarkScriptTests
     }
 
     [Fact]
+    public void MeasureScript_RewritesOutputWhenCsvColumnsChange()
+    {
+        var script = File.ReadAllText(Path.Combine(
+            RepoRootLocator.Find(),
+            "Benchmarks",
+            "ManagedModules",
+            "Measure-ManagedModuleBenchmark.ps1"));
+
+        Assert.Contains("Get-CsvHeaderColumns", script, StringComparison.Ordinal);
+        Assert.Contains("Join-CsvColumns", script, StringComparison.Ordinal);
+        Assert.Contains("Test-CsvColumnsEqual", script, StringComparison.Ordinal);
+        Assert.Contains("ConvertTo-CsvRowsWithColumns", script, StringComparison.Ordinal);
+        Assert.Contains("Export-Csv -LiteralPath $OutputPath -NoTypeInformation", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MeasureScript_EmitsBenchmarkProvenanceColumns()
     {
         var script = File.ReadAllText(Path.Combine(
