@@ -482,7 +482,8 @@ public sealed partial class ManagedModuleRepositoryClient
                 PackageSource = file,
                 IsPrerelease = metadata.IsPrerelease,
                 License = metadata.License,
-                RequireLicenseAcceptance = metadata.RequireLicenseAcceptance
+                RequireLicenseAcceptance = metadata.RequireLicenseAcceptance,
+                Dependencies = metadata.Dependencies
             });
         }
 
@@ -1081,8 +1082,42 @@ public sealed partial class ManagedModuleRepositoryClient
             Listed = !item.TryGetProperty("listed", out var listedElement) || listedElement.ValueKind != JsonValueKind.False,
             License = ReadOptionalString(item, "licenseExpression") ??
                       ReadOptionalString(item, "licenseUrl"),
-            RequireLicenseAcceptance = ReadOptionalBoolean(item, "requireLicenseAcceptance")
+            RequireLicenseAcceptance = ReadOptionalBoolean(item, "requireLicenseAcceptance"),
+            Dependencies = ReadSearchDependencies(item)
         };
+    }
+
+    private static IReadOnlyList<ManagedModuleDependencyInfo> ReadSearchDependencies(JsonElement item)
+    {
+        if (!item.TryGetProperty("dependencyGroups", out var groups) || groups.ValueKind != JsonValueKind.Array)
+            return Array.Empty<ManagedModuleDependencyInfo>();
+
+        var dependencies = new List<ManagedModuleDependencyInfo>();
+        foreach (var group in groups.EnumerateArray())
+        {
+            var targetFramework = ReadOptionalString(group, "targetFramework");
+            if (!group.TryGetProperty("dependencies", out var dependencyItems) ||
+                dependencyItems.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var dependency in dependencyItems.EnumerateArray())
+            {
+                var id = ReadOptionalString(dependency, "id");
+                if (string.IsNullOrWhiteSpace(id))
+                    continue;
+
+                dependencies.Add(new ManagedModuleDependencyInfo
+                {
+                    Id = id!,
+                    VersionRange = ReadOptionalString(dependency, "range"),
+                    TargetFramework = targetFramework
+                });
+            }
+        }
+
+        return dependencies.Count == 0 ? Array.Empty<ManagedModuleDependencyInfo>() : dependencies;
     }
 
     private static string? ReadSearchVersion(JsonElement item)

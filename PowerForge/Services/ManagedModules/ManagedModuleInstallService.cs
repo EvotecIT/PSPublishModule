@@ -232,6 +232,7 @@ public sealed partial class ManagedModuleInstallService
             {
                 var result = await InstallResolvedAsync(
                     request,
+                    versionInfo,
                     context,
                     cancellationToken,
                     stopwatch,
@@ -278,6 +279,7 @@ public sealed partial class ManagedModuleInstallService
                         {
                             var result = await InstallResolvedAsync(
                                 request,
+                                versionInfo,
                                 context,
                                 cancellationToken,
                                 stopwatch,
@@ -302,6 +304,7 @@ public sealed partial class ManagedModuleInstallService
 
             return await InstallResolvedAsync(
                 request,
+                versionInfo,
                 context,
                 cancellationToken,
                 stopwatch,
@@ -368,6 +371,7 @@ public sealed partial class ManagedModuleInstallService
 
     private async Task<ManagedModuleInstallResult> InstallResolvedAsync(
         ManagedModuleInstallRequest request,
+        ManagedModuleVersionInfo versionInfo,
         ManagedModuleInstallContext context,
         CancellationToken cancellationToken,
         System.Diagnostics.Stopwatch stopwatch,
@@ -396,6 +400,12 @@ public sealed partial class ManagedModuleInstallService
 
         try
         {
+            StartDependencyVersionSelectionPrewarm(
+                request,
+                CreateRepositoryDependencyHintMetadata(versionInfo),
+                context,
+                cancellationToken);
+
             using (AcquireInstallLock(moduleRoot, request.Name, cancellationToken, out var resolvedLockWaitElapsed))
             {
                 installLockWaitElapsed += resolvedLockWaitElapsed;
@@ -834,8 +844,19 @@ public sealed partial class ManagedModuleInstallService
             IsPrerelease = versionInfo.IsPrerelease,
             Listed = versionInfo.Listed,
             License = metadata.License,
-            RequireLicenseAcceptance = metadata.RequireLicenseAcceptance
+            RequireLicenseAcceptance = metadata.RequireLicenseAcceptance,
+            Dependencies = metadata.Dependencies
         };
+
+    private static ManagedModulePackageMetadata? CreateRepositoryDependencyHintMetadata(ManagedModuleVersionInfo versionInfo)
+        => versionInfo.Dependencies is not { Count: > 0 }
+            ? null
+            : new ManagedModulePackageMetadata
+            {
+                Id = versionInfo.Name,
+                Version = versionInfo.Version,
+                Dependencies = versionInfo.Dependencies
+            };
 
     private static bool RequiresExactVersionNormalization(string version)
     {

@@ -69,18 +69,19 @@ pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModule
 
 That default profile skips PSResourceGet/PowerShellGet native install baselines
 and only runs the install rows where ModuleFast has an equivalent public
-command. The full native-provider matrix is still available when you need a
-fresh baseline:
+command. Use it for the active performance loop; the native-provider matrix is
+kept only for occasional baseline refreshes because those rows are much slower:
 
 ```powershell
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -ComparisonProfile Full -BenchmarkHost PowerShell7 -RepeatCount 1
 ```
 
 Use the focused profile while tuning install throughput. By default it compares
-the managed engine with the `Install-ModuleFast` command visible in the
-benchmark PowerShell host, usually the installed ModuleFast module from the
-user/module path. To compare a local or development ModuleFast build, pass its
-manifest, script module, or module folder:
+the development managed engine in this worktree with the `Install-ModuleFast`
+command visible in the benchmark PowerShell host, usually the installed
+ModuleFast module from the user/module path. To compare against the refreshed
+C# ModuleFast branch instead, pass that branch's manifest, script module, or
+module folder:
 
 ```powershell
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -BenchmarkHost PowerShell7 -RepeatCount 1 -ModuleFastModulePath .\Ignore\External\ModuleFast-csharp\ModuleFast.psd1 -OutputPath .\Ignore\Benchmarks\ManagedModules\managed-vs-modulefast-dev.csv -OutputRoot .\Ignore\Benchmarks\ManagedModules\ManagedVsModuleFastDev

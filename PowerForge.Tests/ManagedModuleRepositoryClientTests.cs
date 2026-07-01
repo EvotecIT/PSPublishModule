@@ -169,6 +169,10 @@ public sealed class ManagedModuleRepositoryClientTests
         var latest = Assert.Single(versions, version => version.Version == "1.1.0");
         Assert.True(latest.RequireLicenseAcceptance);
         Assert.Equal("https://licenses.example.test/company-tools", latest.License);
+        var dependency = Assert.Single(latest.Dependencies);
+        Assert.Equal("Company.Core", dependency.Id);
+        Assert.Equal("[2.0.0, )", dependency.VersionRange);
+        Assert.Equal("net8.0", dependency.TargetFramework);
         Assert.All(versions, version =>
         {
             Assert.Equal("Gallery", version.RepositoryName);
@@ -1279,7 +1283,7 @@ public sealed class ManagedModuleRepositoryClientTests
                     "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\">" +
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.0.0</d:Version></m:properties></content></entry>" +
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.1.0-beta1</d:Version></m:properties></content></entry>" +
-                    "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.1.0</d:Version><d:RequireLicenseAcceptance>true</d:RequireLicenseAcceptance><d:LicenseUrl>https://licenses.example.test/company-tools</d:LicenseUrl></m:properties></content></entry>" +
+                    "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.1.0</d:Version><d:RequireLicenseAcceptance>true</d:RequireLicenseAcceptance><d:LicenseUrl>https://licenses.example.test/company-tools</d:LicenseUrl><d:Dependencies>Company.Core:[2.0.0, ):net8.0</d:Dependencies></m:properties></content></entry>" +
                     "</feed>");
 
             if (uri.AbsoluteUri == "https://example.test/api/v2/FindPackagesById()?id='SameHost.Tools'&semVerLevel=2.0.0")
