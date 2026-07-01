@@ -77,45 +77,49 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
 
         try
         {
-            foreach (var assemblyName in requestedAssemblies)
+            if (mode == AssemblyTypeAcceleratorExportMode.Assembly ||
+                mode == AssemblyTypeAcceleratorExportMode.Enums)
             {
-                var assemblyPath = ResolveAssemblyPath(libraryDirectory, assemblyName);
-                if (assemblyPath is null)
+                foreach (var assemblyName in requestedAssemblies)
                 {
-                    assemblyReports.Add(new ModuleTypeAcceleratorAssemblyReport(
-                        assemblyName,
-                        error: $"Assembly '{assemblyName}' was not found in '{libraryDirectory}'."));
-                    continue;
-                }
+                    var assemblyPath = ResolveAssemblyPath(libraryDirectory, assemblyName);
+                    if (assemblyPath is null)
+                    {
+                        assemblyReports.Add(new ModuleTypeAcceleratorAssemblyReport(
+                            assemblyName,
+                            error: $"Assembly '{assemblyName}' was not found in '{libraryDirectory}'."));
+                        continue;
+                    }
 
-                var assembly = LoadAssembly(alc, assemblyPath, loadedAssemblies, loadedPaths, warnings);
-                if (assembly is null)
-                {
+                    var assembly = LoadAssembly(alc, assemblyPath, loadedAssemblies, loadedPaths, warnings);
+                    if (assembly is null)
+                    {
+                        assemblyReports.Add(new ModuleTypeAcceleratorAssemblyReport(
+                            assemblyName,
+                            assemblyPath,
+                            error: $"Assembly '{assemblyName}' could not be loaded for reporting."));
+                        continue;
+                    }
+
+                    var exported = GetExportedTypes(assembly, warnings, assemblyName);
+                    var registered = exported
+                        .Where(type => mode == AssemblyTypeAcceleratorExportMode.Assembly || type.IsEnum)
+                        .Where(static type => !string.IsNullOrWhiteSpace(type.FullName))
+                        .Select(static type => type.FullName!)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                    var skipped = mode == AssemblyTypeAcceleratorExportMode.Enums
+                        ? exported.Count(type => !type.IsEnum)
+                        : 0;
+
                     assemblyReports.Add(new ModuleTypeAcceleratorAssemblyReport(
                         assemblyName,
                         assemblyPath,
-                        error: $"Assembly '{assemblyName}' could not be loaded for reporting."));
-                    continue;
+                        exported.Length,
+                        registered,
+                        skipped));
                 }
-
-                var exported = GetExportedTypes(assembly, warnings, assemblyName);
-                var registered = exported
-                    .Where(type => mode == AssemblyTypeAcceleratorExportMode.Assembly || type.IsEnum)
-                    .Where(static type => !string.IsNullOrWhiteSpace(type.FullName))
-                    .Select(static type => type.FullName!)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-                var skipped = mode == AssemblyTypeAcceleratorExportMode.Enums
-                    ? exported.Count(type => !type.IsEnum)
-                    : 0;
-
-                assemblyReports.Add(new ModuleTypeAcceleratorAssemblyReport(
-                    assemblyName,
-                    assemblyPath,
-                    exported.Length,
-                    registered,
-                    skipped));
             }
 
             var explicitFound = new List<string>();
@@ -323,19 +327,12 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
             return null;
 
         var trimmed = assemblyName!.Trim();
-        if (Path.IsPathRooted(trimmed) && File.Exists(trimmed))
-            return Path.GetFullPath(trimmed);
-
-        var simpleName = Path.GetFileNameWithoutExtension(trimmed);
-        if (string.IsNullOrWhiteSpace(simpleName))
-            return null;
-
-        var direct = Path.Combine(libraryDirectory, simpleName + ".dll");
+        var direct = Path.Combine(libraryDirectory, trimmed + ".dll");
         if (File.Exists(direct))
             return Path.GetFullPath(direct);
 
         return Directory.EnumerateFiles(libraryDirectory, "*.dll", SearchOption.TopDirectoryOnly)
-            .FirstOrDefault(file => string.Equals(Path.GetFileNameWithoutExtension(file), simpleName, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(file => string.Equals(Path.GetFileNameWithoutExtension(file), trimmed, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string[] Normalize(IEnumerable<string>? values)

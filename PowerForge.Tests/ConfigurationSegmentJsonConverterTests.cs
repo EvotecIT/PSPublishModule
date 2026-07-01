@@ -12,7 +12,7 @@ public sealed class ConfigurationSegmentJsonConverterTests
         var defs = schema.RootElement.GetProperty("$defs");
 
         Assert.True(defs.TryGetProperty("GateConfiguration", out var gateConfiguration));
-        Assert.True(defs.TryGetProperty("GateSegment", out _));
+        Assert.True(defs.TryGetProperty("GateSegment", out var gateSegment));
         var modes = gateConfiguration
             .GetProperty("properties")
             .GetProperty("Mode")
@@ -23,6 +23,8 @@ public sealed class ConfigurationSegmentJsonConverterTests
         Assert.Contains("Manifest", modes);
         Assert.Contains("Build", modes);
         Assert.Contains("Publish", modes);
+        Assert.Contains("Mode", gateConfiguration.GetProperty("required").EnumerateArray().Select(static item => item.GetString()));
+        Assert.Contains("Configuration", gateSegment.GetProperty("required").EnumerateArray().Select(static item => item.GetString()));
 
         var segmentRefs = defs
             .GetProperty("ConfigurationSegment")
