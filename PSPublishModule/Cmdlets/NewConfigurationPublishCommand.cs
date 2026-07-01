@@ -11,7 +11,7 @@ namespace PSPublishModule;
 /// <para>
 /// This cmdlet emits publish configuration consumed by <c>Invoke-ModuleBuild</c> / <c>Build-Module</c>.
 /// Use <c>-Type</c> to choose a destination. For repository publishing, <c>-Tool</c> selects the provider
-/// (PowerShellGet/PSResourceGet/Auto).
+/// (PowerShellGet/PSResourceGet/ManagedModule/Auto).
 /// </para>
 /// <para>
 /// For private repositories (for example Azure DevOps Artifacts, JFrog Artifactory, GitHub Packages, or private NuGet v3 feeds), provide repository URIs
@@ -276,7 +276,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "JFrog")]
     public SwitchParameter UseAsDependencyVersionSource { get; set; }
 
-    /// <summary>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module. Requires PSResourceGet.</summary>
+    /// <summary>When set, publishes missing manifest RequiredModules to the target repository before publishing the main module.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "AzureArtifacts")]
@@ -291,6 +291,14 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "Profile")]
     [Parameter(ParameterSetName = "JFrog")]
     public string? RequiredModuleSourceRepository { get; set; }
+
+    /// <summary>Repository URL or local feed path used by managed publishing as the source for missing RequiredModules.</summary>
+    [Parameter(ParameterSetName = "ApiKey")]
+    [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "Profile")]
+    [Parameter(ParameterSetName = "JFrog")]
+    public string? RequiredModuleSourceRepositoryUri { get; set; }
 
     /// <summary>Emits publish configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
@@ -308,6 +316,8 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
         var repositoryUri = RepositoryUri;
         var repositorySourceUri = RepositorySourceUri;
         var repositoryPublishUri = RepositoryPublishUri;
+        var requiredModuleSourceRepository = RequiredModuleSourceRepository;
+        var requiredModuleSourceRepositoryUri = RequiredModuleSourceRepositoryUri;
 
         if (ParameterSetName == "JFrog")
         {
@@ -362,6 +372,19 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             }
         }
 
+        if (string.IsNullOrWhiteSpace(requiredModuleSourceRepositoryUri) &&
+            !string.IsNullOrWhiteSpace(requiredModuleSourceRepository))
+        {
+            var sourceProfile = ModuleRepositoryProfileCommandSupport.TryResolve(requiredModuleSourceRepository);
+            if (sourceProfile is not null)
+            {
+                requiredModuleSourceRepository = sourceProfile.RepositoryName;
+                requiredModuleSourceRepositoryUri = !string.IsNullOrWhiteSpace(sourceProfile.RepositoryUri)
+                    ? sourceProfile.RepositoryUri
+                    : sourceProfile.RepositorySourceUri;
+            }
+        }
+
         var settings = new PublishConfigurationFactory().Create(new PublishConfigurationRequest
         {
             ParameterSetName = parameterSetName,
@@ -406,7 +429,8 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             GenerateReleaseNotes = GenerateReleaseNotes.IsPresent,
             UseAsDependencyVersionSource = UseAsDependencyVersionSource.IsPresent,
             PublishRequiredModules = PublishRequiredModules.IsPresent,
-            RequiredModuleSourceRepository = RequiredModuleSourceRepository,
+            RequiredModuleSourceRepository = requiredModuleSourceRepository,
+            RequiredModuleSourceRepositoryUri = requiredModuleSourceRepositoryUri,
             Verbose = MyInvocation.BoundParameters.ContainsKey("Verbose")
         });
 

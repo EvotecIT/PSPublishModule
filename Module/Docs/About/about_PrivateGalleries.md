@@ -43,7 +43,7 @@ If the feed uses basic/PAT credentials, create a non-secret profile and pass
 the credential when publishing:
 
 ```powershell
-Set-ModuleRepositoryProfile -Name 'CompanyNuGet' -Provider NuGet -RepositoryName 'CompanyModules' -RepositoryUri 'https://packages.company.test/nuget/v3/index.json' -RepositorySourceUri 'https://packages.company.test/nuget/v3/index.json' -RepositoryPublishUri 'https://packages.company.test/nuget/v3/index.json' -Tool PSResourceGet
+Set-ManagedModuleRepository -Name 'CompanyNuGet' -Provider NuGet -RepositoryName 'CompanyModules' -RepositoryUri 'https://packages.company.test/nuget/v3/index.json' -RepositorySourceUri 'https://packages.company.test/nuget/v3/index.json' -RepositoryPublishUri 'https://packages.company.test/nuget/v3/index.json' -Tool PSResourceGet
 ```
 
 ```powershell
@@ -61,20 +61,20 @@ Artifacts Credential Provider.
 Create a profile:
 
 ```powershell
-Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules'
+Set-ManagedModuleRepository -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules'
 ```
 
 Onboard a workstation:
 
 ```powershell
-Initialize-ModuleRepository -ProfileName 'Company' -InstallPrerequisites
+Initialize-ManagedModuleRepository -ProfileName 'Company' -InstallPrerequisites
 ```
 
 Install and update modules:
 
 ```powershell
-Install-PrivateModule -ProfileName 'Company' -Name 'Company.Tools' -InstallPrerequisites
-Update-PrivateModule  -ProfileName 'Company' -Name 'Company.Tools'
+Install-ManagedModule -ProfileName 'Company' -Name 'Company.Tools'
+Update-ManagedModule  -ProfileName 'Company' -Name 'Company.Tools'
 ```
 
 Publish a module:
@@ -147,7 +147,7 @@ New-ConfigurationPublish -JFrogBaseUri 'https://company.jfrog.io/artifactory' -J
 For interactive workstation proof, use JFrog CLI bootstrap mode:
 
 ```powershell
-Connect-ModuleRepository -Provider JFrog -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -Name 'JFrogPS' -Tool PSResourceGet -BootstrapMode JFrogCli -InstallPrerequisites -Verbose
+Initialize-ManagedModuleRepository -Provider JFrog -JFrogBaseUri 'https://company.jfrog.io/artifactory' -JFrogRepository 'powershell-virtual' -Name 'JFrogPS' -Tool PSResourceGet -BootstrapMode JFrogCli -InstallPrerequisites -Verbose
 ```
 
 This runs jf login and then probes whether PowerShell repository tooling can
@@ -186,9 +186,8 @@ Microsoft Artifact Registry is a read-only PSResourceGet
 container-registry repository for Microsoft-owned PowerShell packages.
 
 ```powershell
-Register-ModuleRepository -MicrosoftArtifactRegistry
-Connect-ModuleRepository -MicrosoftArtifactRegistry
-Install-PrivateModule -MicrosoftArtifactRegistry -Name Microsoft.PowerShell.SecretManagement
+Initialize-ManagedModuleRepository -MicrosoftArtifactRegistry
+Install-PSResource -Repository MAR -Name Microsoft.PowerShell.SecretManagement -TrustRepository
 ```
 
 Do not use MAR as a publish target. For production estates, promote approved
@@ -215,10 +214,10 @@ authenticates as themselves.
 Useful commands:
 
 ```powershell
-Test-ModuleRepositoryProfile -ProfileName 'Company'
-Export-ModuleRepositoryProfile -Name 'Company' -Path .\Company.profile.json -Force
-Import-ModuleRepositoryProfile -Path .\Company.profile.json -Scope Machine -Overwrite
-New-ModuleRepositoryBootstrap -ProfileName 'Company' -OutputDirectory .\CompanyGalleryBootstrap -InstallModule 'Company.Tools' -Force
+Get-ManagedModuleRepository -ProfileName 'Company' -Test
+Get-ManagedModuleRepository -Name 'Company' -ExportPath .\Company.profile.json -Force
+Initialize-ManagedModuleRepository -Path .\Company.profile.json -Scope Machine -Overwrite
+Initialize-ManagedModuleRepository -ProfileName 'Company' -BootstrapPath .\CompanyGalleryBootstrap -InstallModule 'Company.Tools' -BootstrapForce
 ```
 
 VALIDATION
@@ -226,8 +225,8 @@ VALIDATION
 Before calling a feed ready:
 
 1. Register/connect the repository from a clean shell.
-2. Install a known module with Install-PrivateModule.
-3. Update the module with Update-PrivateModule.
+2. Install a known module with Install-ManagedModule.
+3. Update the module with Update-ManagedModule.
 4. Generate publish configuration and confirm secrets are not stored.
 5. Publish a disposable package or module version.
 6. If PublishRequiredModules is enabled, prove a missing dependency is
@@ -255,7 +254,7 @@ PS> New-ConfigurationPublish -Type PowerShellGallery -RepositoryName CompanyModu
 Configures a standard NuGet-compatible private feed that uses a NuGet API key for package push.
 
 ```powershell
-PS> Initialize-ModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
+PS> Initialize-ManagedModuleRepository -ProfileName Company -Organization contoso -Project Platform -Feed Modules -InstallPrerequisites
 ```
 
 Creates and connects an Azure Artifacts profile with Entra/MFA-capable credential-provider authentication.

@@ -55,6 +55,7 @@ public sealed partial class ModuleDependencyInstaller
         RepositoryCredential? credential = null,
         bool prerelease = false,
         bool preferPowerShellGet = false,
+        bool allowClobber = false,
         TimeSpan? timeoutPerModule = null)
     {
         var list = (dependencies ?? Array.Empty<ModuleDependency>())
@@ -100,7 +101,8 @@ public sealed partial class ModuleDependencyInstaller
                     currentDecision.NeedsInstall &&
                     !string.IsNullOrWhiteSpace(installedBefore) &&
                     exactRequiredVersion is not null &&
-                    HasInstalledRequiredVersion(dep.Name, exactRequiredVersion))
+                    CanUseExactVersionProbe(exactRequiredVersion) &&
+                    HasInstalledRequiredVersion(dep.Name, exactRequiredVersion, dep.InstallScope))
                 {
                     var exactMessage = string.IsNullOrWhiteSpace(installedBefore) || string.Equals(installedBefore, exactRequiredVersion, StringComparison.OrdinalIgnoreCase)
                         ? $"Exact required version {exactRequiredVersion} already installed"
@@ -115,14 +117,44 @@ public sealed partial class ModuleDependencyInstaller
                     continue;
                 }
 
+                if (!force &&
+                    currentDecision.NeedsInstall &&
+                    exactRequiredVersion is null &&
+                    ShouldProbeInstalledRange(dep) &&
+                    HasInstalledModuleSatisfyingDependency(dep))
+                {
+                    actions.Add(new ActionItem(
+                        dep.Name,
+                        installedBefore,
+                        currentDecision.RequestedVersion,
+                        ModuleDependencyInstallStatus.Satisfied,
+                        installer: null,
+                        message: $"Version requirements already satisfied by an installed side-by-side copy (latest installed: {installedBefore})"));
+                    continue;
+                }
+
                 if (!currentDecision.NeedsInstall)
                 {
+                    if (RequiresScopedInstall(dep) && !CanUseScopedDependencyProbe(dep))
+                    {
+                        var scopedInstallStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force, preferPowerShellGet, allowClobber, timeout: perModuleTimeout);
+                        actions.Add(new ActionItem(dep.Name, installedBefore, currentDecision.RequestedVersion, ModuleDependencyInstallStatus.Updated, installer: scopedInstallStatus, message: "Module is not installed in requested scope"));
+                        continue;
+                    }
+
+                    if (RequiresScopedInstall(dep) && !HasInstalledModuleSatisfyingDependency(dep))
+                    {
+                        var scopedInstallStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force, preferPowerShellGet, allowClobber, timeout: perModuleTimeout);
+                        actions.Add(new ActionItem(dep.Name, installedBefore, currentDecision.RequestedVersion, ModuleDependencyInstallStatus.Updated, installer: scopedInstallStatus, message: "Module is not installed in requested scope"));
+                        continue;
+                    }
+
                     actions.Add(new ActionItem(dep.Name, installedBefore, currentDecision.RequestedVersion, ModuleDependencyInstallStatus.Satisfied, installer: null, message: currentDecision.Reason));
                     continue;
                 }
 
                 var installStatus = installedBefore is null ? ModuleDependencyInstallStatus.Installed : ModuleDependencyInstallStatus.Updated;
-                var usedInstaller = TryInstall(dep, currentDecision.VersionArgument, repository, credential, prerelease, force, preferPowerShellGet, perModuleTimeout);
+                var usedInstaller = TryInstall(dep, currentDecision.VersionArgument, repository, credential, prerelease, force, preferPowerShellGet, allowClobber, perModuleTimeout);
                 actions.Add(new ActionItem(dep.Name, installedBefore, currentDecision.RequestedVersion, installStatus, installer: usedInstaller, message: currentDecision.Reason));
             }
             catch (Exception ex)
@@ -160,13 +192,19 @@ public sealed partial class ModuleDependencyInstaller
         var installedBefore = before.TryGetValue(dependency.Name, out var version) ? version : null;
         var decision = Decide(dependency, installedBefore, force);
         if (!decision.NeedsInstall)
-            return false;
+        {
+            if (!RequiresScopedInstall(dependency))
+                return false;
 
-        var requiredVersion = dependency.RequiredVersion;
+            return !CanUseScopedDependencyProbe(dependency) || !HasInstalledModuleSatisfyingDependency(dependency);
+        }
+
+        var requiredVersion = dependency.RequiredVersion?.Trim();
         if (!force &&
             !string.IsNullOrWhiteSpace(installedBefore) &&
             !string.IsNullOrWhiteSpace(requiredVersion) &&
-            HasInstalledRequiredVersion(dependency.Name, requiredVersion!.Trim()))
+            CanUseExactVersionProbe(requiredVersion!) &&
+            HasInstalledRequiredVersion(dependency.Name, requiredVersion!, dependency.InstallScope))
         {
             return false;
         }
@@ -174,7 +212,7 @@ public sealed partial class ModuleDependencyInstaller
         return true;
     }
 
-    private bool HasInstalledRequiredVersion(string name, string requiredVersion)
+    private bool HasInstalledRequiredVersion(string name, string requiredVersion, string? installScope = null)
     {
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(requiredVersion))
             return false;
@@ -187,7 +225,34 @@ public sealed partial class ModuleDependencyInstaller
             // The shared locator script expects positional Required/Minimum/Maximum values.
             // Keep blank placeholders here so the exact-version probe stays aligned with that signature.
             string.Empty,
-            string.Empty
+            string.Empty,
+            installScope ?? string.Empty,
+            "1",
+            "1"
+        };
+
+        var result = RunScript(script, args, ExactVersionProbeTimeout);
+        if (result.ExitCode != 0)
+        {
+            var msg = TryExtractModuleLocatorError(result.StdOut) ?? result.StdErr;
+            throw new InvalidOperationException($"Get-Module -ListAvailable failed (exit {result.ExitCode}). {msg}".Trim());
+        }
+
+        return SplitLines(result.StdOut).Any(static line => line.StartsWith("PFMODLOC::FOUND::", StringComparison.Ordinal));
+    }
+
+    private bool HasInstalledModuleSatisfyingDependency(ModuleDependency dependency)
+    {
+        var script = BuildFindInstalledModuleScript();
+        var args = new List<string>(7)
+        {
+            dependency.Name,
+            dependency.RequiredVersion ?? string.Empty,
+            dependency.MinimumVersion ?? string.Empty,
+            dependency.MaximumVersion ?? string.Empty,
+            dependency.InstallScope ?? string.Empty,
+            dependency.MinimumVersionInclusive ? "1" : "0",
+            dependency.MaximumVersionInclusive ? "1" : "0"
         };
 
         var result = RunScript(script, args, ExactVersionProbeTimeout);
@@ -210,6 +275,7 @@ public sealed partial class ModuleDependencyInstaller
         RepositoryCredential? credential = null,
         bool prerelease = false,
         bool preferPowerShellGet = false,
+        bool force = false,
         TimeSpan? timeoutPerModule = null)
     {
         var list = (dependencies ?? Array.Empty<ModuleDependency>())
@@ -246,12 +312,64 @@ public sealed partial class ModuleDependencyInstaller
             {
                 if (string.IsNullOrWhiteSpace(installedBefore))
                 {
-                    var installStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet, perModuleTimeout);
+                    var installStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
                     actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Installed, installer: installStatus, message: "Not installed"));
+                }
+                else if (force)
+                {
+                    var installStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: true, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
+                    actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Updated, installer: installStatus, message: "Force requested", force: true));
+                }
+                else if (!string.IsNullOrWhiteSpace(dep.RequiredVersion))
+                {
+                    var exactRequiredVersion = dep.RequiredVersion!.Trim();
+                    if (CanUseExactVersionProbe(exactRequiredVersion) &&
+                        HasInstalledRequiredVersion(dep.Name, exactRequiredVersion, dep.InstallScope))
+                    {
+                        var exactMessage = VersionsEquivalent(installedBefore, exactRequiredVersion)
+                            ? $"Exact required version {exactRequiredVersion} already installed"
+                            : $"Exact required version {exactRequiredVersion} already present (latest installed: {installedBefore})";
+                        actions.Add(new ActionItem(
+                            dep.Name,
+                            installedBefore,
+                            exactRequiredVersion,
+                            ModuleDependencyInstallStatus.Satisfied,
+                            installer: null,
+                            message: exactMessage));
+                        continue;
+                    }
+
+                    var installStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
+                    actions.Add(new ActionItem(dep.Name, installedBefore, exactRequiredVersion, ModuleDependencyInstallStatus.Updated, installer: installStatus, message: $"Exact version required: {exactRequiredVersion} (installed: {installedBefore})"));
                 }
                 else
                 {
-                    var updateStatus = TryUpdate(dep, installedBefore!, repository, credential, prerelease, preferPowerShellGet, perModuleTimeout);
+                    string? updateStatus;
+                    if (RequiresScopedInstall(dep) && (!CanUseScopedDependencyProbe(dep) || !HasInstalledModuleSatisfyingDependency(dep)))
+                    {
+                        updateStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
+                    }
+                    else if (HasVersionConstraint(dep))
+                    {
+                        if (CanUseScopedDependencyProbe(dep) && HasInstalledModuleSatisfyingDependency(dep))
+                        {
+                            actions.Add(new ActionItem(
+                                dep.Name,
+                                installedBefore,
+                                dep.RequiredVersion ?? dep.MinimumVersion,
+                                ModuleDependencyInstallStatus.Satisfied,
+                                installer: null,
+                                message: $"Version requirements already satisfied by an installed side-by-side copy (latest installed: {installedBefore})"));
+                            continue;
+                        }
+
+                        updateStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: true, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
+                    }
+                    else
+                    {
+                        updateStatus = TryUpdate(dep, installedBefore!, repository, credential, prerelease, preferPowerShellGet, perModuleTimeout);
+                    }
+
                     actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Updated, installer: updateStatus, message: "Update requested"));
                 }
             }
@@ -269,7 +387,9 @@ public sealed partial class ModuleDependencyInstaller
                 var status = a.Status;
                 var message = a.Message;
 
-                if (a.Status == ModuleDependencyInstallStatus.Updated &&
+                if (!a.Force &&
+                    a.Status == ModuleDependencyInstallStatus.Updated &&
+                    string.IsNullOrWhiteSpace(a.RequestedVersion) &&
                     VersionsEquivalent(a.InstalledBefore, resolvedVersion))
                 {
                     status = ModuleDependencyInstallStatus.Satisfied;
@@ -302,20 +422,14 @@ public sealed partial class ModuleDependencyInstaller
             return new Decision(needsInstall: true, requestedVersion: dep.RequiredVersion ?? dep.MinimumVersion, versionArgument: arg, reason: "Not installed");
         }
 
-        if (!TryParseVersion(installedVersion, out var installed))
-        {
-            var arg = BuildVersionArgument(dep);
-            return new Decision(needsInstall: true, requestedVersion: dep.RequiredVersion ?? dep.MinimumVersion, versionArgument: arg, reason: $"Unable to parse installed version '{installedVersion}'");
-        }
-
         if (!string.IsNullOrWhiteSpace(dep.RequiredVersion))
         {
-            if (!TryParseVersion(dep.RequiredVersion, out var required))
+            if (!TryCompareModuleVersions(installedVersion, dep.RequiredVersion, out var comparison))
             {
                 return new Decision(needsInstall: true, requestedVersion: dep.RequiredVersion, versionArgument: dep.RequiredVersion, reason: $"Unable to parse RequiredVersion '{dep.RequiredVersion}'");
             }
 
-            if (installed != required)
+            if (comparison != 0)
                 return new Decision(needsInstall: true, requestedVersion: dep.RequiredVersion, versionArgument: dep.RequiredVersion, reason: $"Exact version required: {dep.RequiredVersion} (installed: {installedVersion})");
 
             return new Decision(needsInstall: false, requestedVersion: dep.RequiredVersion, versionArgument: dep.RequiredVersion, reason: "Exact version already installed");
@@ -323,25 +437,28 @@ public sealed partial class ModuleDependencyInstaller
 
         if (!string.IsNullOrWhiteSpace(dep.MinimumVersion))
         {
-            if (!TryParseVersion(dep.MinimumVersion, out var min))
+            if (!TryCompareModuleVersions(installedVersion, dep.MinimumVersion, out var minimumComparison))
             {
                 var arg = BuildVersionArgument(dep);
                 return new Decision(needsInstall: true, requestedVersion: dep.MinimumVersion, versionArgument: arg, reason: $"Unable to parse MinimumVersion '{dep.MinimumVersion}'");
             }
 
-            if (installed < min)
+            if (minimumComparison < 0 || (minimumComparison == 0 && !dep.MinimumVersionInclusive))
             {
-                var arg = BuildNuGetRange(minInclusive: dep.MinimumVersion, maxInclusive: dep.MaximumVersion);
+                var arg = BuildNuGetRange(dep.MinimumVersion, dep.MaximumVersion, dep.MinimumVersionInclusive, dep.MaximumVersionInclusive);
                 return new Decision(needsInstall: true, requestedVersion: dep.MinimumVersion, versionArgument: arg, reason: $"Below minimum version: {dep.MinimumVersion} (installed: {installedVersion})");
             }
         }
 
         if (!string.IsNullOrWhiteSpace(dep.MaximumVersion))
         {
-            if (TryParseVersion(dep.MaximumVersion, out var max))
+            if (TryCompareModuleVersions(installedVersion, dep.MaximumVersion, out var maximumComparison))
             {
-                if (installed > max)
-                    return new Decision(needsInstall: false, requestedVersion: null, versionArgument: null, reason: $"Above maximum version: {dep.MaximumVersion} (installed: {installedVersion}) - keeping newer");
+                if (maximumComparison > 0 || (maximumComparison == 0 && !dep.MaximumVersionInclusive))
+                {
+                    var arg = BuildNuGetRange(dep.MinimumVersion, dep.MaximumVersion, dep.MinimumVersionInclusive, dep.MaximumVersionInclusive);
+                    return new Decision(needsInstall: true, requestedVersion: dep.MaximumVersion, versionArgument: arg, reason: $"Above maximum version: {dep.MaximumVersion} (installed: {installedVersion})");
+                }
             }
         }
 
@@ -356,18 +473,26 @@ public sealed partial class ModuleDependencyInstaller
         bool prerelease,
         bool force,
         bool preferPowerShellGet,
+        bool allowClobber,
         TimeSpan timeout)
     {
         if (preferPowerShellGet)
         {
-            try
+            if (!RequiresPSResourceGetVersionRange(dep))
             {
-                InstallWithPowerShellGet(dep, repository, credential, timeout);
-                return "PowerShellGet";
+                try
+                {
+                    InstallWithPowerShellGet(dep, repository, credential, prerelease, allowClobber, timeout);
+                    return "PowerShellGet";
+                }
+                catch (PowerShellToolNotAvailableException)
+                {
+                    _logger.Warn($"PowerShellGet not available; trying PSResourceGet Install-PSResource for '{dep.Name}'.");
+                }
             }
-            catch (PowerShellToolNotAvailableException)
+            else
             {
-                _logger.Warn($"PowerShellGet not available; trying PSResourceGet Install-PSResource for '{dep.Name}'.");
+                _logger.Warn($"PowerShellGet Install-Module cannot preserve the requested version range for '{dep.Name}'; trying PSResourceGet Install-PSResource.");
             }
         }
 
@@ -379,7 +504,7 @@ public sealed partial class ModuleDependencyInstaller
                 name: dep.Name,
                 version: versionArgument,
                 repository: repository,
-                scope: "CurrentUser",
+                scope: ResolveInstallScope(dep),
                 prerelease: prerelease,
                 reinstall: force,
                 trustRepository: true,
@@ -395,7 +520,7 @@ public sealed partial class ModuleDependencyInstaller
             _logger.Warn($"PSResourceGet not available; falling back to PowerShellGet Install-Module for '{dep.Name}'.");
             try
             {
-                InstallWithPowerShellGet(dep, repository, credential, timeout);
+                InstallWithPowerShellGet(dep, repository, credential, prerelease, allowClobber, timeout);
                 return "PowerShellGet";
             }
             catch (PowerShellToolNotAvailableException) when (CanDirectBootstrapPSResourceGet(dep, repository, credential))
@@ -453,17 +578,27 @@ public sealed partial class ModuleDependencyInstaller
         }
     }
 
-    private void InstallWithPowerShellGet(ModuleDependency dep, string? repository, RepositoryCredential? credential, TimeSpan timeout)
+    private static string ResolveInstallScope(ModuleDependency dep)
+        => string.IsNullOrWhiteSpace(dep.InstallScope) ? "CurrentUser" : dep.InstallScope!;
+
+    private void InstallWithPowerShellGet(ModuleDependency dep, string? repository, RepositoryCredential? credential, bool prerelease, bool allowClobber, TimeSpan timeout)
     {
+        if (RequiresPSResourceGetVersionRange(dep))
+            throw new InvalidOperationException($"PowerShellGet Install-Module cannot preserve the requested version range for '{dep.Name}'. Use PSResourceGet for range-constrained delivery.");
+
         var script = BuildInstallModuleScript();
-        var args = new List<string>(6)
+        var args = new List<string>(10)
         {
             dep.Name,
             dep.RequiredVersion ?? string.Empty,
             dep.MinimumVersion ?? string.Empty,
+            dep.MaximumVersion ?? string.Empty,
             repository ?? string.Empty,
+            ResolveInstallScope(dep),
             credential?.UserName ?? string.Empty,
-            credential?.Secret ?? string.Empty
+            credential?.Secret ?? string.Empty,
+            prerelease ? "1" : "0",
+            allowClobber ? "1" : "0"
         };
         var result = RunScript(script, args, timeout);
         if (result.ExitCode != 0)
@@ -479,13 +614,14 @@ public sealed partial class ModuleDependencyInstaller
     private void UpdateWithPSResourceGet(ModuleDependency dep, string? repository, RepositoryCredential? credential, bool prerelease, TimeSpan timeout)
     {
         var script = BuildUpdatePSResourceScript();
-        var args = new List<string>(5)
+        var args = new List<string>(6)
         {
             dep.Name,
             repository ?? string.Empty,
             prerelease ? "1" : "0",
             credential?.UserName ?? string.Empty,
-            credential?.Secret ?? string.Empty
+            credential?.Secret ?? string.Empty,
+            dep.InstallScope ?? string.Empty
         };
         var result = RunScript(script, args, timeout);
         if (result.ExitCode != 0)
@@ -503,7 +639,7 @@ public sealed partial class ModuleDependencyInstaller
         if (!string.IsNullOrWhiteSpace(repository))
         {
             var scopedRepository = repository!;
-            var latestRepositoryVersion = GetLatestPowerShellGetRepositoryVersion(dep.Name, scopedRepository, credential, prerelease, timeout);
+            var latestRepositoryVersion = GetLatestPowerShellGetRepositoryVersion(dep, scopedRepository, credential, prerelease, timeout);
             if (string.IsNullOrWhiteSpace(latestRepositoryVersion))
                 throw new InvalidOperationException($"Unable to find module '{dep.Name}' in repository '{scopedRepository}' for PowerShellGet update fallback.");
 
@@ -513,17 +649,18 @@ public sealed partial class ModuleDependencyInstaller
             if (CompareVersionStrings(latestRepositoryVersion, installedVersion) <= 0)
                 return null;
 
-            InstallWithPowerShellGet(new ModuleDependency(dep.Name, requiredVersion: latestRepositoryVersion), scopedRepository, credential, timeout);
+            InstallWithPowerShellGet(new ModuleDependency(dep.Name, requiredVersion: latestRepositoryVersion, installScope: dep.InstallScope), scopedRepository, credential, prerelease, allowClobber: false, timeout: timeout);
             return "PowerShellGet";
         }
 
         var script = BuildUpdateModuleScript();
-        var args = new List<string>(4)
+        var args = new List<string>(5)
         {
             dep.Name,
             prerelease ? "1" : "0",
             credential?.UserName ?? string.Empty,
-            credential?.Secret ?? string.Empty
+            credential?.Secret ?? string.Empty,
+            ResolveInstallScope(dep)
         };
         var result = RunScript(script, args, timeout);
         if (result.ExitCode != 0)
@@ -538,12 +675,12 @@ public sealed partial class ModuleDependencyInstaller
         return "PowerShellGet";
     }
 
-    private string? GetLatestPowerShellGetRepositoryVersion(string moduleName, string repository, RepositoryCredential? credential, bool prerelease, TimeSpan timeout)
+    private string? GetLatestPowerShellGetRepositoryVersion(ModuleDependency dep, string repository, RepositoryCredential? credential, bool prerelease, TimeSpan timeout)
     {
         var client = new PowerShellGetClient(_runner, _logger);
         var items = client.Find(
             new PowerShellGetFindOptions(
-                names: new[] { moduleName },
+                names: new[] { dep.Name },
                 prerelease: prerelease,
                 repositories: new[] { repository },
                 credential: credential),
@@ -551,6 +688,7 @@ public sealed partial class ModuleDependencyInstaller
 
         return items
             .Where(static item => !string.IsNullOrWhiteSpace(item.Version))
+            .Where(item => SatisfiesVersionBounds(item.Version, dep))
             .OrderByDescending(static item => item.Version, Comparer<string>.Create(CompareVersionStrings))
             .Select(static item => item.Version)
             .FirstOrDefault();
@@ -604,24 +742,78 @@ public sealed partial class ModuleDependencyInstaller
     {
         if (!string.IsNullOrWhiteSpace(dep.RequiredVersion)) return dep.RequiredVersion;
         if (!string.IsNullOrWhiteSpace(dep.MinimumVersion))
-            return BuildNuGetRange(minInclusive: dep.MinimumVersion, maxInclusive: dep.MaximumVersion);
+            return BuildNuGetRange(dep.MinimumVersion, dep.MaximumVersion, dep.MinimumVersionInclusive, dep.MaximumVersionInclusive);
+        if (!string.IsNullOrWhiteSpace(dep.MaximumVersion))
+            return BuildNuGetRange(dep.MinimumVersion, dep.MaximumVersion, dep.MinimumVersionInclusive, dep.MaximumVersionInclusive);
         return null;
     }
 
-    private static string BuildNuGetRange(string? minInclusive, string? maxInclusive)
+    private static string BuildNuGetRange(
+        string? minimumVersion,
+        string? maximumVersion,
+        bool minimumInclusive = true,
+        bool maximumInclusive = true)
     {
-        if (string.IsNullOrWhiteSpace(minInclusive) && string.IsNullOrWhiteSpace(maxInclusive))
+        if (string.IsNullOrWhiteSpace(minimumVersion) && string.IsNullOrWhiteSpace(maximumVersion))
             return string.Empty;
 
-        // NuGet version range syntax. See Install-PSResource -Version help.
-        // [min, ] = minimum inclusive
-        // (, max] = maximum inclusive
-        // [min, max] = inclusive range
-        if (!string.IsNullOrWhiteSpace(minInclusive) && !string.IsNullOrWhiteSpace(maxInclusive))
-            return $"[{minInclusive}, {maxInclusive}]";
-        if (!string.IsNullOrWhiteSpace(minInclusive))
-            return $"[{minInclusive}, ]";
-        return $"[, {maxInclusive}]";
+        var minimum = string.IsNullOrWhiteSpace(minimumVersion) ? string.Empty : minimumVersion!.Trim();
+        var maximum = string.IsNullOrWhiteSpace(maximumVersion) ? string.Empty : maximumVersion!.Trim();
+        var minimumDelimiter = minimum.Length == 0 ? "(" : minimumInclusive ? "[" : "(";
+        var maximumDelimiter = maximum.Length == 0 ? ")" : maximumInclusive ? "]" : ")";
+
+        return $"{minimumDelimiter}{minimum}, {maximum}{maximumDelimiter}";
+    }
+
+    private static bool HasVersionConstraint(ModuleDependency dep)
+        => !string.IsNullOrWhiteSpace(dep.RequiredVersion) ||
+           !string.IsNullOrWhiteSpace(dep.MinimumVersion) ||
+           !string.IsNullOrWhiteSpace(dep.MaximumVersion);
+
+    private static bool RequiresScopedInstall(ModuleDependency dep)
+        => !string.IsNullOrWhiteSpace(dep.InstallScope);
+
+    private static bool ShouldProbeInstalledRange(ModuleDependency dep)
+        => string.IsNullOrWhiteSpace(dep.RequiredVersion) &&
+           !string.IsNullOrWhiteSpace(dep.MaximumVersion) &&
+           CanUseScopedDependencyProbe(dep);
+
+    private static bool CanUseExactVersionProbe(string requiredVersion)
+        => !(ModuleStateVersion.TryParse(requiredVersion, out var version) && version.IsPrerelease);
+
+    private static bool CanUseScopedDependencyProbe(ModuleDependency dependency)
+        => !ContainsPrereleaseBoundary(dependency.RequiredVersion) &&
+           !ContainsPrereleaseBoundary(dependency.MinimumVersion) &&
+           !ContainsPrereleaseBoundary(dependency.MaximumVersion);
+
+    private static bool ContainsPrereleaseBoundary(string? version)
+        => ModuleStateVersion.TryParse(version, out var parsed) && parsed.IsPrerelease;
+
+    private static bool RequiresPSResourceGetVersionRange(ModuleDependency dep)
+        => string.IsNullOrWhiteSpace(dep.RequiredVersion) &&
+           (!dep.MinimumVersionInclusive ||
+            !dep.MaximumVersionInclusive);
+
+    private static bool SatisfiesVersionBounds(string? version, ModuleDependency dep)
+    {
+        if (string.IsNullOrWhiteSpace(dep.MinimumVersion) && string.IsNullOrWhiteSpace(dep.MaximumVersion))
+            return true;
+
+        if (!string.IsNullOrWhiteSpace(dep.MinimumVersion))
+        {
+            var comparison = CompareVersionStrings(version, dep.MinimumVersion);
+            if (comparison < 0 || (comparison == 0 && !dep.MinimumVersionInclusive))
+                return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(dep.MaximumVersion))
+        {
+            var comparison = CompareVersionStrings(version, dep.MaximumVersion);
+            if (comparison > 0 || (comparison == 0 && !dep.MaximumVersionInclusive))
+                return false;
+        }
+
+        return true;
     }
 
     private static bool TryParseVersion(string? text, out Version version)
@@ -649,6 +841,9 @@ public sealed partial class ModuleDependencyInstaller
         if (string.Equals(left, right, StringComparison.OrdinalIgnoreCase))
             return true;
 
+        if (TryCompareSemanticVersions(left, right, out var semanticComparison))
+            return semanticComparison == 0;
+
         if (TryParseVersion(left, out var parsedLeft) && TryParseVersion(right, out var parsedRight))
             return parsedLeft == parsedRight;
 
@@ -667,6 +862,21 @@ public sealed partial class ModuleDependencyInstaller
             return parsedLeft.CompareTo(parsedRight);
 
         return string.Compare(left, right, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryCompareModuleVersions(string? left, string? right, out int comparison)
+    {
+        if (TryCompareSemanticVersions(left, right, out comparison))
+            return true;
+
+        if (TryParseVersion(left, out var parsedLeft) && TryParseVersion(right, out var parsedRight))
+        {
+            comparison = parsedLeft.CompareTo(parsedRight);
+            return true;
+        }
+
+        comparison = 0;
+        return false;
     }
 
     private static bool TryCompareSemanticVersions(string? left, string? right, out int comparison)
@@ -923,8 +1133,9 @@ public sealed partial class ModuleDependencyInstaller
         public ModuleDependencyInstallStatus Status { get; }
         public string? Installer { get; }
         public string? Message { get; }
+        public bool Force { get; }
 
-        public ActionItem(string name, string? installedBefore, string? requestedVersion, ModuleDependencyInstallStatus status, string? installer, string? message)
+        public ActionItem(string name, string? installedBefore, string? requestedVersion, ModuleDependencyInstallStatus status, string? installer, string? message, bool force = false)
         {
             Name = name;
             InstalledBefore = installedBefore;
@@ -932,6 +1143,7 @@ public sealed partial class ModuleDependencyInstaller
             Status = status;
             Installer = installer;
             Message = message;
+            Force = force;
         }
     }
 }

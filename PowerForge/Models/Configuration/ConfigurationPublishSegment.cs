@@ -75,6 +75,12 @@ public sealed class PublishConfiguration
     /// <summary>Repository used as the source when <see cref="PublishRequiredModules"/> mirrors dependencies.</summary>
     public string? RequiredModuleSourceRepository { get; set; } = "PSGallery";
 
+    /// <summary>
+    /// Optional repository URL or local feed path used as the source when managed required-module mirroring needs
+    /// a private upstream that is not the publish target repository.
+    /// </summary>
+    public string? RequiredModuleSourceRepositoryUri { get; set; }
+
     /// <summary>Verbose mode requested.</summary>
     public bool Verbose { get; set; }
 }

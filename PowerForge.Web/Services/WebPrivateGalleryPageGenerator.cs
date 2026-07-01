@@ -112,10 +112,10 @@ public static class WebPrivateGalleryPageGenerator
         sb.AppendLine();
         sb.AppendLine($"Private gallery modules generated from `{gallery.Feed.Name}`.");
         sb.AppendLine();
-        sb.AppendLine("## Register once");
+        sb.AppendLine("## Initialize once");
         sb.AppendLine();
         sb.AppendLine("```powershell");
-        sb.AppendLine($"Initialize-ModuleRepository -ProfileName {QuotePowerShell(profileName)} -Organization {QuotePowerShell(gallery.Feed.Organization ?? "<organization>")} -Project {QuotePowerShell(gallery.Feed.Project ?? "<project>")} -Feed {QuotePowerShell(gallery.Feed.Name)} -InstallPrerequisites");
+        sb.AppendLine($"Initialize-ManagedModuleRepository -ProfileName {QuotePowerShell(profileName)} -Organization {QuotePowerShell(gallery.Feed.Organization ?? "<organization>")} -Project {QuotePowerShell(gallery.Feed.Project ?? "<project>")} -Feed {QuotePowerShell(gallery.Feed.Name)} -InstallPrerequisites");
         sb.AppendLine("```");
         sb.AppendLine();
         sb.AppendLine("## Available modules");
@@ -157,8 +157,8 @@ public static class WebPrivateGalleryPageGenerator
         if (dependencies.Count == 0)
             dependencies = package.Versions.SelectMany(static version => version.Dependencies).ToList();
 
-        var install = $"Install-PrivateModule -ProfileName {QuotePowerShell(profileName)} -Name {QuotePowerShell(package.Name)} -InstallPrerequisites";
-        var update = $"Update-PrivateModule -ProfileName {QuotePowerShell(profileName)} -Name {QuotePowerShell(package.Name)} -InstallPrerequisites";
+        var install = $"Install-ManagedModule -ProfileName {QuotePowerShell(profileName)} -Name {QuotePowerShell(package.Name)}";
+        var update = $"Update-ManagedModule -ProfileName {QuotePowerShell(profileName)} -Name {QuotePowerShell(package.Name)}";
         var nativeInstall = $"Install-PSResource -Name {QuotePowerShell(package.Name)} -Repository {QuotePowerShell(repositoryName)} -TrustRepository";
 
         var sb = new StringBuilder();

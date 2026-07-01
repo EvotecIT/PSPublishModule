@@ -70,7 +70,7 @@ Describe 'Private gallery command metadata' {
         $moduleManifest = if ($env:PSPUBLISHMODULE_TEST_MANIFEST_PATH) { $env:PSPUBLISHMODULE_TEST_MANIFEST_PATH } else { Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..') -ChildPath 'PSPublishModule.psd1' }
         $script:PrivateGalleryTestModule = Import-PrivateGalleryTestModule -ModuleManifest $moduleManifest
 
-        $command = Get-Command Connect-ModuleRepository -ErrorAction Stop
+        $command = Get-Command Initialize-ManagedModuleRepository -ErrorAction Stop
         $script:PrivateGalleryTestAssembly = if ($script:PrivateGalleryTestModule.ImplementingAssembly) {
             $script:PrivateGalleryTestModule.ImplementingAssembly
         } else {
@@ -533,162 +533,131 @@ Describe 'Private gallery command metadata' {
         }
     }
 
-    It 'exposes the private gallery wrapper cmdlets' {
+    It 'exposes the unified managed module repository cmdlets' {
         $module = $script:PrivateGalleryTestModule
-        $module.ExportedCmdlets.Keys | Should -Contain 'Connect-ModuleRepository'
-        $module.ExportedCmdlets.Keys | Should -Contain 'Export-ModuleRepositoryProfile'
-        $module.ExportedCmdlets.Keys | Should -Contain 'Register-ModuleRepository'
-        $module.ExportedCmdlets.Keys | Should -Contain 'Install-PrivateModule'
-        $module.ExportedCmdlets.Keys | Should -Contain 'Get-ModuleRepositoryProfile'
-        $module.ExportedCmdlets.Keys | Should -Contain 'Import-ModuleRepositoryProfile'
-        $module.ExportedCmdlets.Keys | Should -Contain 'Initialize-ModuleRepository'
-        $module.ExportedCmdlets.Keys | Should -Contain 'New-ModuleRepositoryBootstrap'
-        $module.ExportedCmdlets.Keys | Should -Contain 'Set-ModuleRepositoryProfile'
-        $module.ExportedCmdlets.Keys | Should -Contain 'Remove-ModuleRepositoryProfile'
-        $module.ExportedCmdlets.Keys | Should -Contain 'Test-ModuleRepositoryProfile'
-        $module.ExportedCmdlets.Keys | Should -Contain 'Update-PrivateModule'
-        $module.ExportedCmdlets.Keys | Should -Contain 'Update-ModuleRepository'
-        $module.ExportedCmdlets.Keys | Should -Contain 'Publish-NugetPackage'
+        $expected = @(
+            'Set-ManagedModuleRepository',
+            'Get-ManagedModuleRepository',
+            'Initialize-ManagedModuleRepository',
+            'Remove-ManagedModuleRepository',
+            'Find-ManagedModule',
+            'Save-ManagedModule',
+            'Install-ManagedModule',
+            'Update-ManagedModule',
+            'Repair-ManagedModule',
+            'Publish-ManagedModule',
+            'Publish-NugetPackage'
+        )
+
+        foreach ($commandName in $expected) {
+            $module.ExportedCmdlets.Keys | Should -Contain $commandName
+        }
+
+        $removed = @(
+            'Connect-ModuleRepository',
+            'Export-ModuleRepositoryProfile',
+            'Import-ModuleRepositoryProfile',
+            'Initialize-ModuleRepository',
+            'Install-PrivateModule',
+            'New-ModuleRepositoryBootstrap',
+            'Register-ModuleRepository',
+            'Remove-ModuleRepositoryProfile',
+            'Set-ModuleRepositoryProfile',
+            'Test-ModuleRepositoryProfile',
+            'Update-ModuleRepository',
+            'Update-PrivateModule'
+        )
+
+        foreach ($commandName in $removed) {
+            $module.ExportedCmdlets.Keys | Should -Not -Contain $commandName
+        }
 
         $manifest = Get-Content -LiteralPath $script:PrivateGalleryManifestPath -Raw
-        $manifest | Should -Match "'New-ModuleRepositoryBootstrap'"
-        $manifest | Should -Match "'New-GalleryBootstrap'"
-        $manifest | Should -Match "'Initialize-Gallery'"
-        $manifest | Should -Match "'Export-GalleryProfile'"
-        $manifest | Should -Match "'Import-GalleryProfile'"
-        $manifest | Should -Match "'Test-GalleryProfile'"
+        $manifest | Should -Match "'Initialize-ManagedModuleRepository'"
+        $manifest | Should -Match "'Get-ManagedModuleRepository'"
+        $manifest | Should -Match "'Set-ManagedModuleRepository'"
+        $manifest | Should -Match "'Remove-ManagedModuleRepository'"
+        $manifest | Should -Not -Match "'Install-PrivateModule'"
+        $manifest | Should -Not -Match "'Connect-Gallery'"
     }
 
-    It 'keeps install/update wrapper parameter sets intact' {
-        $install = Get-Command Install-PrivateModule -ErrorAction Stop
-        $install.DefaultParameterSet | Should -Be 'Repository'
-        $install.ParameterSets.Name | Should -Contain 'Repository'
-        $install.ParameterSets.Name | Should -Contain 'AzureArtifacts'
-        $install.ParameterSets.Name | Should -Contain 'MicrosoftArtifactRegistry'
-
-        $update = Get-Command Update-PrivateModule -ErrorAction Stop
-        $update.DefaultParameterSet | Should -Be 'Repository'
-        $update.ParameterSets.Name | Should -Contain 'Repository'
-        $update.ParameterSets.Name | Should -Contain 'AzureArtifacts'
-        $update.ParameterSets.Name | Should -Contain 'MicrosoftArtifactRegistry'
-        $update.ParameterSets.Name | Should -Contain 'Profile'
-    }
-
-    It 'offers onboarding-friendly aliases' {
-        $module = $script:PrivateGalleryTestModule
-        $connect = $module.ExportedCmdlets['Connect-ModuleRepository']
-        $connect.Parameters['AzureDevOpsOrganization'].Aliases | Should -Contain 'Organization'
-        $connect.Parameters['AzureDevOpsProject'].Aliases | Should -Contain 'Project'
-        $connect.Parameters['AzureArtifactsFeed'].Aliases | Should -Contain 'Feed'
-        $connect.Parameters['PromptForCredential'].Aliases | Should -Contain 'Interactive'
-        $connect.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
-        $connect.Parameters.Keys | Should -Contain 'InstallPrerequisites'
-        $connect.Parameters.Keys | Should -Contain 'MicrosoftArtifactRegistry'
-        $connect.Parameters['Repository'].ParameterSets.Keys | Should -Contain 'MicrosoftArtifactRegistry'
-        $connect.ParameterSets.Name | Should -Contain 'MicrosoftArtifactRegistry'
-        $connect.ParameterSets.Name | Should -Contain 'Profile'
-
-        $register = $module.ExportedCmdlets['Register-ModuleRepository']
-        $register.Parameters['AzureDevOpsOrganization'].Aliases | Should -Contain 'Organization'
-        $register.Parameters['AzureDevOpsProject'].Aliases | Should -Contain 'Project'
-        $register.Parameters['AzureArtifactsFeed'].Aliases | Should -Contain 'Feed'
-        $register.Parameters['PromptForCredential'].Aliases | Should -Contain 'Interactive'
-        $register.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
-        $register.Parameters.Keys | Should -Contain 'InstallPrerequisites'
-        $register.Parameters.Keys | Should -Contain 'MicrosoftArtifactRegistry'
-        $register.Parameters.Keys | Should -Contain 'Repository'
-        $register.Parameters['Repository'].ParameterSets.Keys | Should -Contain 'MicrosoftArtifactRegistry'
-        $register.Parameters.Keys | Should -Contain 'RepositoryUri'
-        $register.Parameters.Keys | Should -Contain 'JFrogBaseUri'
-        $register.Parameters.Keys | Should -Contain 'JFrogRepository'
-        $register.ParameterSets.Name | Should -Contain 'MicrosoftArtifactRegistry'
-        $register.ParameterSets.Name | Should -Contain 'Profile'
-
-        $updateRepository = $module.ExportedCmdlets['Update-ModuleRepository']
-        $updateRepository.Parameters['Repository'].ParameterSets.Keys | Should -Contain 'MicrosoftArtifactRegistry'
-
-        $install = $module.ExportedCmdlets['Install-PrivateModule']
+    It 'keeps managed install and update parameters focused on managed delivery' {
+        $install = Get-Command Install-ManagedModule -ErrorAction Stop
+        $install.Parameters.Keys | Should -Contain 'Name'
         $install.Parameters['Name'].Aliases | Should -Contain 'ModuleName'
-        $install.Parameters['PromptForCredential'].Aliases | Should -Contain 'Interactive'
-        $install.Parameters['CredentialSecret'].Aliases | Should -Contain 'Token'
-        $install.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
-        $install.Parameters.Keys | Should -Contain 'InstallPrerequisites'
-        $install.Parameters.Keys | Should -Contain 'MicrosoftArtifactRegistry'
-        $install.Parameters.Keys | Should -Contain 'RepositoryUri'
-        $install.Parameters.Keys | Should -Contain 'JFrogBaseUri'
-        $install.Parameters.Keys | Should -Contain 'JFrogRepository'
-        $install.ParameterSets.Name | Should -Contain 'Profile'
+        $install.Parameters.Keys | Should -Contain 'Repository'
+        $install.Parameters.Keys | Should -Contain 'RepositoryName'
+        $install.Parameters.Keys | Should -Contain 'ProfileName'
+        $install.Parameters.Keys | Should -Contain 'Version'
+        $install.Parameters['Version'].Aliases | Should -Contain 'RequiredVersion'
+        $install.Parameters.Keys | Should -Contain 'VersionPolicy'
+        $install.Parameters.Keys | Should -Contain 'Scope'
+        $install.Parameters.Keys | Should -Contain 'Plan'
+        $install.Parameters.Keys | Should -Not -Contain 'Transport'
+        $install.Parameters.Keys | Should -Not -Contain 'InstallPrerequisites'
+        $install.Parameters.Keys | Should -Not -Contain 'MicrosoftArtifactRegistry'
 
-        $update = $module.ExportedCmdlets['Update-PrivateModule']
+        $update = Get-Command Update-ManagedModule -ErrorAction Stop
+        $update.Parameters.Keys | Should -Contain 'Name'
         $update.Parameters['Name'].Aliases | Should -Contain 'ModuleName'
-        $update.Parameters['PromptForCredential'].Aliases | Should -Contain 'Interactive'
-        $update.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
-        $update.Parameters.Keys | Should -Contain 'InstallPrerequisites'
-        $update.Parameters.Keys | Should -Contain 'MicrosoftArtifactRegistry'
-        $update.Parameters.Keys | Should -Contain 'RepositoryUri'
-        $update.Parameters.Keys | Should -Contain 'JFrogBaseUri'
-        $update.Parameters.Keys | Should -Contain 'JFrogRepository'
-        $update.ParameterSets.Name | Should -Contain 'Profile'
+        $update.Parameters.Keys | Should -Contain 'Repository'
+        $update.Parameters.Keys | Should -Contain 'RepositoryName'
+        $update.Parameters.Keys | Should -Contain 'ProfileName'
+        $update.Parameters.Keys | Should -Contain 'VersionPolicy'
+        $update.Parameters.Keys | Should -Contain 'Scope'
+        $update.Parameters.Keys | Should -Contain 'Plan'
+        $update.Parameters.Keys | Should -Not -Contain 'Transport'
+        $update.Parameters.Keys | Should -Not -Contain 'InstallPrerequisites'
+        $update.Parameters.Keys | Should -Not -Contain 'MicrosoftArtifactRegistry'
+    }
 
-        $profile = $module.ExportedCmdlets['Set-ModuleRepositoryProfile']
-        $profile.Parameters['Name'].Aliases | Should -Contain 'ProfileName'
-        $profile.Parameters['AzureDevOpsOrganization'].Aliases | Should -Contain 'Organization'
-        $profile.Parameters['AzureDevOpsProject'].Aliases | Should -Contain 'Project'
-        $profile.Parameters['AzureArtifactsFeed'].Aliases | Should -Contain 'Feed'
-        $profile.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
-        $profile.Parameters.Keys | Should -Contain 'Repository'
-        $profile.Parameters.Keys | Should -Contain 'RepositoryUri'
-        $profile.Parameters.Keys | Should -Contain 'JFrogBaseUri'
-        $profile.Parameters.Keys | Should -Contain 'JFrogRepository'
-        $profile.Parameters.Keys | Should -Contain 'GitHubOwner'
-        $profile.Parameters['GitHubOwner'].Aliases | Should -Contain 'Owner'
-        $profile.Parameters['GitHubOwner'].Aliases | Should -Contain 'Namespace'
-        $profile.Parameters.Keys | Should -Contain 'Scope'
-
-        $exportProfile = $module.ExportedCmdlets['Export-ModuleRepositoryProfile']
-        $exportProfile.Parameters['Name'].Aliases | Should -Contain 'ProfileName'
-        $exportProfile.Parameters.Keys | Should -Contain 'Scope'
-
-        $importProfile = $module.ExportedCmdlets['Import-ModuleRepositoryProfile']
-        $importProfile.Parameters.Keys | Should -Contain 'Overwrite'
-        $importProfile.Parameters.Keys | Should -Contain 'Scope'
-
-        $initialize = $module.ExportedCmdlets['Initialize-ModuleRepository']
+    It 'offers repository onboarding through managed module repository parameter sets' {
+        $initialize = $script:PrivateGalleryTestModule.ExportedCmdlets['Initialize-ManagedModuleRepository']
         $initialize.ParameterSets.Name | Should -Contain 'Profile'
         $initialize.ParameterSets.Name | Should -Contain 'Import'
-        $initialize.ParameterSets.Name | Should -Contain 'AzureArtifacts'
+        $initialize.ParameterSets.Name | Should -Contain 'Repository'
+        $initialize.ParameterSets.Name | Should -Contain 'MicrosoftArtifactRegistry'
         $initialize.Parameters['ProfileName'].Aliases | Should -Contain 'Profile'
         $initialize.Parameters['ProfileName'].Aliases | Should -Contain 'Name'
         $initialize.Parameters['AzureDevOpsOrganization'].Aliases | Should -Contain 'Organization'
         $initialize.Parameters['AzureDevOpsProject'].Aliases | Should -Contain 'Project'
         $initialize.Parameters['AzureArtifactsFeed'].Aliases | Should -Contain 'Feed'
         $initialize.Parameters['PromptForCredential'].Aliases | Should -Contain 'Interactive'
+        $initialize.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
         $initialize.Parameters.Keys | Should -Contain 'InstallPrerequisites'
         $initialize.Parameters.Keys | Should -Contain 'SkipConnect'
-        $initialize.Parameters.Keys | Should -Contain 'Repository'
-        $initialize.Parameters.Keys | Should -Contain 'RepositoryUri'
-        $initialize.Parameters.Keys | Should -Contain 'JFrogBaseUri'
-        $initialize.Parameters.Keys | Should -Contain 'JFrogRepository'
+        $initialize.Parameters.Keys | Should -Contain 'BootstrapPath'
+        $initialize.Parameters.Keys | Should -Contain 'InstallModule'
+        $initialize.Parameters['InstallModule'].Aliases | Should -Contain 'ModuleName'
+        $initialize.Parameters.Keys | Should -Contain 'MicrosoftArtifactRegistry'
         $initialize.Parameters.Keys | Should -Contain 'Scope'
 
-        $bootstrap = $module.ExportedCmdlets['New-ModuleRepositoryBootstrap']
-        $bootstrap.Parameters['ProfileName'].Aliases | Should -Contain 'Name'
-        $bootstrap.Parameters['InstallModule'].Aliases | Should -Contain 'ModuleName'
-        $bootstrap.Parameters.Keys | Should -Contain 'Scope'
+        $getRepository = $script:PrivateGalleryTestModule.ExportedCmdlets['Get-ManagedModuleRepository']
+        $getRepository.Parameters['Name'].Aliases | Should -Contain 'ProfileName'
+        $getRepository.Parameters.Keys | Should -Contain 'Test'
+        $getRepository.Parameters.Keys | Should -Contain 'ExportPath'
+        $getRepository.Parameters['ExportPath'].Aliases | Should -Contain 'Path'
+        $getRepository.Parameters.Keys | Should -Contain 'PassThru'
+        $getRepository.Parameters.Keys | Should -Contain 'Scope'
 
-        $testProfile = $module.ExportedCmdlets['Test-ModuleRepositoryProfile']
-        $testProfile.Parameters['ProfileName'].Aliases | Should -Contain 'Name'
-        $testProfile.Parameters['ProfileName'].Aliases | Should -Contain 'Profile'
-        $testProfile.Parameters.Keys | Should -Contain 'Scope'
+        $setRepository = $script:PrivateGalleryTestModule.ExportedCmdlets['Set-ManagedModuleRepository']
+        $setRepository.Parameters['Name'].Aliases | Should -Contain 'ProfileName'
+        $setRepository.Parameters['AzureDevOpsOrganization'].Aliases | Should -Contain 'Organization'
+        $setRepository.Parameters['AzureDevOpsProject'].Aliases | Should -Contain 'Project'
+        $setRepository.Parameters['AzureArtifactsFeed'].Aliases | Should -Contain 'Feed'
+        $setRepository.Parameters['BootstrapMode'].Aliases | Should -Contain 'Mode'
+        $setRepository.Parameters.Keys | Should -Contain 'GitHubOwner'
+        $setRepository.Parameters['GitHubOwner'].Aliases | Should -Contain 'Owner'
+        $setRepository.Parameters['GitHubOwner'].Aliases | Should -Contain 'Namespace'
+        $setRepository.Parameters.Keys | Should -Contain 'Scope'
 
-        $publishPackage = $module.ExportedCmdlets['Publish-NugetPackage']
+        $publishPackage = $script:PrivateGalleryTestModule.ExportedCmdlets['Publish-NugetPackage']
         $publishPackage.ParameterSets.Name | Should -Contain 'Profile'
         $publishPackage.Parameters['ProfileName'].Aliases | Should -Contain 'Profile'
         $publishPackage.Parameters.Keys | Should -Contain 'InstallPrerequisites'
     }
-
     It 'saves Azure Artifacts profiles with Entra-first defaults' {
-        $profile = Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules'
+        $profile = Set-ManagedModuleRepository -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules'
 
         $profile.Name | Should -Be 'Company'
         $profile.RepositoryName | Should -Be 'Modules'
@@ -700,7 +669,7 @@ Describe 'Private gallery command metadata' {
     }
 
     It 'saves JFrog profiles with credential-prompt defaults' {
-        $profile = Set-ModuleRepositoryProfile -Name 'JFrogCompany' -Provider JFrog -Repository 'powershell-virtual' -JFrogBaseUri 'https://company.jfrog.io/artifactory'
+        $profile = Set-ManagedModuleRepository -Name 'JFrogCompany' -Provider JFrog -Repository 'powershell-virtual' -JFrogBaseUri 'https://company.jfrog.io/artifactory'
 
         $profile.Name | Should -Be 'JFrogCompany'
         $profile.Provider.ToString() | Should -Be 'JFrog'
@@ -714,7 +683,7 @@ Describe 'Private gallery command metadata' {
     }
 
     It 'saves GitHub Packages profiles with owner-scoped NuGet endpoints' {
-        $profile = Set-ModuleRepositoryProfile -Name 'Licensing' -Provider GitHubPackages -GitHubOwner 'EvotecIT' -RepositoryName 'github-evotec'
+        $profile = Set-ManagedModuleRepository -Name 'Licensing' -Provider GitHubPackages -GitHubOwner 'EvotecIT' -RepositoryName 'github-evotec'
 
         $profile.Name | Should -Be 'Licensing'
         $profile.Provider.ToString() | Should -Be 'GitHubPackages'
@@ -729,36 +698,36 @@ Describe 'Private gallery command metadata' {
     }
 
     It 'resolves machine-wide profiles for other users without sharing credentials' {
-        Set-ModuleRepositoryProfile -Name 'CompanyMachine' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -Scope Machine | Out-Null
+        Set-ManagedModuleRepository -Name 'CompanyMachine' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -Scope Machine | Out-Null
 
         Test-Path -LiteralPath $script:PrivateGalleryMachineProfilePath | Should -BeTrue
         Test-Path -LiteralPath $script:PrivateGalleryProfilePath | Should -BeTrue
 
-        $profile = Get-ModuleRepositoryProfile -Name 'CompanyMachine'
+        $profile = Get-ManagedModuleRepository -Name 'CompanyMachine'
         $profile.Name | Should -Be 'CompanyMachine'
         $profile.Scope | Should -Be ([PowerForge.ModuleRepositoryProfileScope]::Machine)
         $profile.ProfileStorePath | Should -Be $script:PrivateGalleryMachineProfilePath
         $profile.AuthenticationMode | Should -Be 'AzureArtifactsCredentialProvider'
 
-        $readiness = Test-ModuleRepositoryProfile -ProfileName 'CompanyMachine'
+        $readiness = Get-ManagedModuleRepository -ProfileName 'CompanyMachine' -Test
         $readiness.ProfileFound | Should -BeTrue
         $readiness.Scope | Should -Be ([PowerForge.ModuleRepositoryProfileScope]::Machine)
         $readiness.ProfileStorePath | Should -Be $script:PrivateGalleryMachineProfilePath
 
-        $userProfile = Set-ModuleRepositoryProfile -Name 'CompanyMachine' -AzureDevOpsOrganization 'fabrikam' -AzureArtifactsFeed 'UserModules'
+        $userProfile = Set-ManagedModuleRepository -Name 'CompanyMachine' -AzureDevOpsOrganization 'fabrikam' -AzureArtifactsFeed 'UserModules'
         $userProfile.Scope | Should -Be ([PowerForge.ModuleRepositoryProfileScope]::User)
 
-        $resolved = Get-ModuleRepositoryProfile -Name 'CompanyMachine'
+        $resolved = Get-ManagedModuleRepository -Name 'CompanyMachine'
         $resolved.Scope | Should -Be ([PowerForge.ModuleRepositoryProfileScope]::User)
         $resolved.AzureDevOpsOrganization | Should -Be 'fabrikam'
         $resolved.ProfileStorePath | Should -Be $script:PrivateGalleryProfilePath
     }
 
     It 'exports and imports non-secret managed profile files' {
-        Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
+        Set-ManagedModuleRepository -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
         $exportPath = Join-Path $script:PrivateGalleryProfileRoot 'Company.profile.json'
 
-        $exported = Export-ModuleRepositoryProfile -Name 'Company' -Path $exportPath -Force -PassThru
+        $exported = Get-ManagedModuleRepository -Name 'Company' -ExportPath $exportPath -Force -PassThru
         $json = Get-Content -LiteralPath $exportPath -Raw
 
         $exported.Name | Should -Be 'Company'
@@ -767,13 +736,13 @@ Describe 'Private gallery command metadata' {
         $json | Should -Not -Match '"Password"'
         $json | Should -Not -Match '"Token"'
 
-        Remove-ModuleRepositoryProfile -Name 'Company'
-        Get-ModuleRepositoryProfile -Name 'Company' -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+        Remove-ManagedModuleRepository -Name 'Company'
+        { Get-ManagedModuleRepository -Name 'Company' -ErrorAction Stop } | Should -Throw "*was not found*"
 
-        $imported = Import-ModuleRepositoryProfile -Path $exportPath
+        $imported = Initialize-ManagedModuleRepository -Path $exportPath -SkipConnect
 
-        $imported.Name | Should -Be 'Company'
-        $profile = Get-ModuleRepositoryProfile -Name 'Company'
+        $imported.ProfileName | Should -Be 'Company'
+        $profile = Get-ManagedModuleRepository -Name 'Company'
         $profile.AzureDevOpsOrganization | Should -Be 'contoso'
         $profile.AzureDevOpsProject | Should -Be 'Platform'
         $profile.AzureArtifactsFeed | Should -Be 'Modules'
@@ -781,16 +750,16 @@ Describe 'Private gallery command metadata' {
     }
 
     It 'creates non-secret managed workstation bootstrap packages' {
-        Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
+        Set-ManagedModuleRepository -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
         $outputDirectory = Join-Path $script:PrivateGalleryProfileRoot 'bootstrap'
 
-        $package = New-ModuleRepositoryBootstrap -ProfileName 'Company' -OutputDirectory $outputDirectory -InstallModule 'ModuleA' -Force
+        $package = Initialize-ManagedModuleRepository -ProfileName 'Company' -BootstrapPath $outputDirectory -InstallModule 'ModuleA' -BootstrapForce -SkipConnect
 
         $package | Should -Not -BeNullOrEmpty
         $package.ProfileNames | Should -Contain 'Company'
         $package.InstallModules | Should -Contain 'ModuleA'
         $package.ContainsSecrets | Should -BeFalse
-        $package.RecommendedCommand | Should -Be ".\Initialize-PrivateGallery.ps1 -ProfileName 'Company'"
+        $package.RecommendedCommand | Should -Be ".\Initialize-ManagedModuleRepository.ps1 -ProfileName 'Company'"
         Test-Path -LiteralPath $package.ProfilePath -PathType Leaf | Should -BeTrue
         Test-Path -LiteralPath $package.ScriptPath -PathType Leaf | Should -BeTrue
 
@@ -807,7 +776,7 @@ Describe 'Private gallery command metadata' {
 
         $global:BootstrapInitializeArguments = $null
         $global:BootstrapInstallArguments = $null
-        function global:Initialize-ModuleRepository {
+        function global:Initialize-ManagedModuleRepository {
             param(
                 [string] $Path,
                 [string] $ProfileName,
@@ -820,7 +789,7 @@ Describe 'Private gallery command metadata' {
             [pscustomobject]@{ ProfileName = $ProfileName }
         }
 
-        function global:Install-PrivateModule {
+        function global:Install-ManagedModule {
             param(
                 [string] $ProfileName,
                 [string[]] $Name,
@@ -842,29 +811,29 @@ Describe 'Private gallery command metadata' {
             $global:BootstrapInstallArguments.Name | Should -Contain 'ModuleA'
             $global:BootstrapInstallArguments.InstallPrerequisites.IsPresent | Should -BeFalse
         } finally {
-            Remove-Item Function:\Initialize-ModuleRepository -ErrorAction SilentlyContinue
-            Remove-Item Function:\Install-PrivateModule -ErrorAction SilentlyContinue
+            Remove-Item Function:\Initialize-ManagedModuleRepository -ErrorAction SilentlyContinue
+            Remove-Item Function:\Install-ManagedModule -ErrorAction SilentlyContinue
             Remove-Variable -Name BootstrapInitializeArguments -Scope Global -ErrorAction SilentlyContinue
             Remove-Variable -Name BootstrapInstallArguments -Scope Global -ErrorAction SilentlyContinue
         }
     }
 
     It 'requires overwrite when importing an existing managed profile' {
-        Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureArtifactsFeed 'Modules' | Out-Null
+        Set-ManagedModuleRepository -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureArtifactsFeed 'Modules' | Out-Null
         $exportPath = Join-Path $script:PrivateGalleryProfileRoot 'Company.overwrite.profile.json'
-        Export-ModuleRepositoryProfile -Name 'Company' -Path $exportPath -Force
+        Get-ManagedModuleRepository -Name 'Company' -ExportPath $exportPath -Force
 
         {
-            Import-ModuleRepositoryProfile -Path $exportPath
+            Initialize-ManagedModuleRepository -Path $exportPath
         } | Should -Throw "*already exists*"
 
-        $imported = Import-ModuleRepositoryProfile -Path $exportPath -Overwrite
+        $imported = Initialize-ManagedModuleRepository -Path $exportPath -Overwrite -SkipConnect
 
-        $imported.Name | Should -Be 'Company'
+        $imported.ProfileName | Should -Be 'Company'
     }
 
     It 'initializes a new Azure Artifacts profile without connecting when requested' {
-        $result = Initialize-ModuleRepository -Name 'CompanyInit' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -SkipConnect
+        $result = Initialize-ManagedModuleRepository -Name 'CompanyInit' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -SkipConnect
 
         $result | Should -Not -BeNullOrEmpty
         $result.GetType().FullName | Should -Be 'PSPublishModule.ModuleRepositoryOnboardingResult'
@@ -878,32 +847,32 @@ Describe 'Private gallery command metadata' {
         $result.Profile.Priority | Should -Be 40
         $result.Readiness.RepositoryName | Should -Be 'CompanyInit'
         $result.Readiness.Priority | Should -Be 40
-        $result.RecommendedInstallCommand | Should -Be "Install-PrivateModule -ProfileName 'CompanyInit' -Name <ModuleName>"
-        $result.RecommendedUpdateCommand | Should -Be "Update-PrivateModule -ProfileName 'CompanyInit' -Name <ModuleName>"
+        $result.RecommendedInstallCommand | Should -Be "Install-ManagedModule -ProfileName 'CompanyInit' -Name <ModuleName>"
+        $result.RecommendedUpdateCommand | Should -Be "Update-ManagedModule -ProfileName 'CompanyInit' -Name <ModuleName>"
 
-        $profile = Get-ModuleRepositoryProfile -Name 'CompanyInit'
+        $profile = Get-ManagedModuleRepository -Name 'CompanyInit'
         $profile.AuthenticationMode | Should -Be 'AzureArtifactsCredentialProvider'
     }
 
     It 'initializes a new Azure Artifacts profile using the canonical ProfileName parameter' {
-        $result = Initialize-ModuleRepository -ProfileName 'CompanyCanonical' -AzureDevOpsOrganization 'contoso' -AzureArtifactsFeed 'Modules' -SkipConnect
+        $result = Initialize-ManagedModuleRepository -ProfileName 'CompanyCanonical' -AzureDevOpsOrganization 'contoso' -AzureArtifactsFeed 'Modules' -SkipConnect
 
         $result.ProfileName | Should -Be 'CompanyCanonical'
         $result.ProfileWritten | Should -BeTrue
         $result.Profile.AzureDevOpsOrganization | Should -Be 'contoso'
 
-        $profile = Get-ModuleRepositoryProfile -Name 'CompanyCanonical'
+        $profile = Get-ManagedModuleRepository -Name 'CompanyCanonical'
         $profile.RepositoryName | Should -Be 'CompanyCanonical'
         $profile.Priority | Should -Be 40
     }
 
     It 'initializes from a managed profile file in one command without connecting when requested' {
-        Set-ModuleRepositoryProfile -Name 'CompanyFile' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
+        Set-ManagedModuleRepository -Name 'CompanyFile' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
         $exportPath = Join-Path $script:PrivateGalleryProfileRoot 'CompanyFile.profile.json'
-        Export-ModuleRepositoryProfile -Name 'CompanyFile' -Path $exportPath -Force
-        Remove-ModuleRepositoryProfile -Name 'CompanyFile'
+        Get-ManagedModuleRepository -Name 'CompanyFile' -ExportPath $exportPath -Force
+        Remove-ManagedModuleRepository -Name 'CompanyFile'
 
-        $result = Initialize-ModuleRepository -Path $exportPath -ProfileName 'CompanyFile' -Overwrite -SkipConnect
+        $result = Initialize-ManagedModuleRepository -Path $exportPath -ProfileName 'CompanyFile' -Overwrite -SkipConnect
 
         $result.ProfileName | Should -Be 'CompanyFile'
         $result.ProfileWritten | Should -BeTrue
@@ -912,17 +881,17 @@ Describe 'Private gallery command metadata' {
         $result.ConnectSkipped | Should -BeTrue
         $result.Profile.AzureDevOpsProject | Should -Be 'Platform'
 
-        $profile = Get-ModuleRepositoryProfile -Name 'CompanyFile'
+        $profile = Get-ManagedModuleRepository -Name 'CompanyFile'
         $profile.AzureArtifactsFeed | Should -Be 'Modules'
     }
 
     It 'initializes a managed profile file with WhatIf without writing or probing' {
-        Set-ModuleRepositoryProfile -Name 'CompanyWhatIf' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
+        Set-ManagedModuleRepository -Name 'CompanyWhatIf' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
         $exportPath = Join-Path $script:PrivateGalleryProfileRoot 'CompanyWhatIf.profile.json'
-        Export-ModuleRepositoryProfile -Name 'CompanyWhatIf' -Path $exportPath -Force
-        Remove-ModuleRepositoryProfile -Name 'CompanyWhatIf'
+        Get-ManagedModuleRepository -Name 'CompanyWhatIf' -ExportPath $exportPath -Force
+        Remove-ManagedModuleRepository -Name 'CompanyWhatIf'
 
-        $result = Initialize-ModuleRepository -Path $exportPath -ProfileName 'CompanyWhatIf' -Overwrite -InstallPrerequisites -WhatIf -WarningAction SilentlyContinue
+        $result = Initialize-ManagedModuleRepository -Path $exportPath -ProfileName 'CompanyWhatIf' -Overwrite -InstallPrerequisites -WhatIf -WarningAction SilentlyContinue
 
         $result | Should -Not -BeNullOrEmpty
         $result.ProfileName | Should -Be 'CompanyWhatIf'
@@ -931,13 +900,13 @@ Describe 'Private gallery command metadata' {
         $result.ConnectSkipped | Should -BeTrue
         $result.Succeeded | Should -BeTrue
         $result.Connection | Should -BeNullOrEmpty
-        Get-ModuleRepositoryProfile -Name 'CompanyWhatIf' -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+        { Get-ManagedModuleRepository -Name 'CompanyWhatIf' -ErrorAction Stop } | Should -Throw "*was not found*"
     }
 
     It 'tests saved profile readiness without registering repositories' {
-        Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
+        Set-ManagedModuleRepository -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
 
-        $result = Test-ModuleRepositoryProfile -ProfileName 'Company'
+        $result = Get-ManagedModuleRepository -ProfileName 'Company' -Test
 
         $result | Should -Not -BeNullOrEmpty
         $result.GetType().FullName | Should -Be 'PSPublishModule.ModuleRepositoryProfileReadinessResult'
@@ -948,21 +917,21 @@ Describe 'Private gallery command metadata' {
         $result.PowerShellGetSourceUri | Should -Be 'https://pkgs.dev.azure.com/contoso/Platform/_packaging/Modules/nuget/v2'
         $result.ProfileStorePath | Should -Be $script:PrivateGalleryProfilePath
         $result.AuthenticationMode | Should -Be 'AzureArtifactsCredentialProvider'
-        $result.RecommendedConnectCommand | Should -Match "Connect-ModuleRepository -ProfileName 'Company'"
-        $result.RecommendedOnboardingCommand | Should -Match "Initialize-ModuleRepository -ProfileName 'Company'"
-        $result.RecommendedInstallCommand | Should -Be "Install-PrivateModule -Name <ModuleName> -ProfileName 'Company'"
+        $result.RecommendedConnectCommand | Should -Match "Initialize-ManagedModuleRepository -ProfileName 'Company'"
+        $result.RecommendedOnboardingCommand | Should -Match "Initialize-ManagedModuleRepository -ProfileName 'Company'"
+        $result.RecommendedInstallCommand | Should -Be "Install-ManagedModule -Name <ModuleName> -ProfileName 'Company'"
         $result.ReadinessMessages | Should -Not -BeNullOrEmpty
     }
 
     It 'returns a non-terminating readiness object for a missing profile' {
-        $result = Test-ModuleRepositoryProfile -ProfileName 'MissingCompany'
+        $result = Get-ManagedModuleRepository -ProfileName 'MissingCompany' -Test
 
         $result | Should -Not -BeNullOrEmpty
         $result.Name | Should -Be 'MissingCompany'
         $result.ProfileFound | Should -BeFalse
         $result.IsReady | Should -BeFalse
         $result.ProfileStorePath | Should -Be $script:PrivateGalleryProfilePath
-        $result.ReadinessMessages | Should -Contain "Module repository profile 'MissingCompany' was not found. Create or import it with Initialize-ModuleRepository before installing, updating, or publishing."
+        $result.ReadinessMessages | Should -Contain "Managed module repository 'MissingCompany' was not found. Create it with Set-ManagedModuleRepository or import it with Initialize-ManagedModuleRepository before installing, updating, or publishing."
     }
 
     It 'treats an ExistingSession profile as not ready when PSResourceGet is below the Entra bootstrap version' {
@@ -987,18 +956,19 @@ Describe 'Private gallery command metadata' {
     }
 
     It 'uses saved profiles for WhatIf repository connection without prompting' {
-        Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
+        Set-ManagedModuleRepository -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
 
-        $result = Connect-ModuleRepository -ProfileName 'Company' -InstallPrerequisites -WhatIf -WarningAction SilentlyContinue
+        $result = Initialize-ManagedModuleRepository -ProfileName 'Company' -InstallPrerequisites -WhatIf -WarningAction SilentlyContinue
 
         $result | Should -Not -BeNullOrEmpty
-        $result.RepositoryName | Should -Be 'Modules'
-        $result.BootstrapModeUsed | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::ExistingSession)
-        $result.RegistrationPerformed | Should -BeFalse
+        $result.ProfileName | Should -Be 'Company'
+        $result.Connection.RepositoryName | Should -Be 'Modules'
+        $result.Connection.BootstrapModeUsed | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::ExistingSession)
+        $result.Connection.RegistrationPerformed | Should -BeFalse
     }
 
     It 'uses saved profiles for Azure Artifacts publish configuration' {
-        Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
+        Set-ManagedModuleRepository -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
 
         $publish = New-ConfigurationPublish -ProfileName 'Company' -Enabled
 
@@ -1009,7 +979,7 @@ Describe 'Private gallery command metadata' {
     }
 
     It 'uses saved JFrog profiles with repository credentials for publish configuration' {
-        Set-ModuleRepositoryProfile -Name 'JFrogCompany' -Provider JFrog -Repository 'powershell-virtual' -JFrogBaseUri 'https://company.jfrog.io/artifactory' | Out-Null
+        Set-ManagedModuleRepository -Name 'JFrogCompany' -Provider JFrog -Repository 'powershell-virtual' -JFrogBaseUri 'https://company.jfrog.io/artifactory' | Out-Null
 
         $publish = New-ConfigurationPublish -ProfileName 'JFrogCompany' -RepositoryCredentialUserName 'publisher' -RepositoryCredentialSecret 'token' -Enabled
 
@@ -1046,13 +1016,13 @@ Describe 'Private gallery command metadata' {
     }
 
     It 'requires publish auth when enabling saved JFrog profiles for publish configuration' {
-        Set-ModuleRepositoryProfile -Name 'JFrogCompanyNoAuth' -Provider JFrog -Repository 'powershell-virtual' -JFrogBaseUri 'https://company.jfrog.io/artifactory' | Out-Null
+        Set-ManagedModuleRepository -Name 'JFrogCompanyNoAuth' -Provider JFrog -Repository 'powershell-virtual' -JFrogBaseUri 'https://company.jfrog.io/artifactory' | Out-Null
 
         { New-ConfigurationPublish -ProfileName 'JFrogCompanyNoAuth' -Enabled } | Should -Throw '*ApiKey, FilePath, or repository credentials are required*'
     }
 
     It 'uses saved profiles for Azure Artifacts NuGet package publishing' {
-        Set-ModuleRepositoryProfile -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
+        Set-ManagedModuleRepository -Name 'Company' -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' | Out-Null
         $packageRoot = Join-Path $script:PrivateGalleryProfileRoot 'packages'
         New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
         $packagePath = Join-Path $packageRoot 'Company.Tools.1.0.0.nupkg'
@@ -1070,7 +1040,7 @@ Describe 'Private gallery command metadata' {
     }
 
     It 'uses GitHub token environment variables for GitHub Packages NuGet publishing' {
-        Set-ModuleRepositoryProfile -Name 'LicensingPackages' -Provider GitHubPackages -GitHubOwner 'EvotecIT' -RepositoryName 'github-evotec' | Out-Null
+        Set-ManagedModuleRepository -Name 'LicensingPackages' -Provider GitHubPackages -GitHubOwner 'EvotecIT' -RepositoryName 'github-evotec' | Out-Null
         $packageRoot = Join-Path $script:PrivateGalleryProfileRoot 'github-packages'
         New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
         $packagePath = Join-Path $packageRoot 'Licensing.Verification.1.0.0.nupkg'
@@ -1106,7 +1076,7 @@ Describe 'Private gallery command metadata' {
     }
 
     It 'requires an API key when publishing packages to saved JFrog profiles' {
-        Set-ModuleRepositoryProfile -Name 'JFrogPackagePublish' -Provider JFrog -Repository 'powershell-virtual' -JFrogBaseUri 'https://company.jfrog.io/artifactory' | Out-Null
+        Set-ManagedModuleRepository -Name 'JFrogPackagePublish' -Provider JFrog -Repository 'powershell-virtual' -JFrogBaseUri 'https://company.jfrog.io/artifactory' | Out-Null
         $packageRoot = Join-Path $script:PrivateGalleryProfileRoot 'jfrog-packages'
         New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
         $packagePath = Join-Path $packageRoot 'Company.Tools.1.0.0.nupkg'
@@ -1155,12 +1125,12 @@ Describe 'Private gallery command metadata' {
         $result.CredentialPromptBootstrapReady | Should -BeTrue
         $result.RecommendedBootstrapMode | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::ExistingSession)
         $installPrerequisitesRecommended | Should -BeFalse
-        $result.RecommendedBootstrapCommand | Should -Be "Register-ModuleRepository -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -Name 'Company' -BootstrapMode ExistingSession"
+        $result.RecommendedBootstrapCommand | Should -Be "Initialize-ManagedModuleRepository -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -Name 'Company' -BootstrapMode ExistingSession"
         $result.InstallPSResourceReady | Should -BeTrue
         $result.InstallModuleReady | Should -BeFalse
         $result.ReadyCommands | Should -Contain 'Install-PSResource'
         $result.PreferredInstallCommand | Should -Be 'Install-PSResource'
-        $result.RecommendedWrapperInstallCommand | Should -Be "Install-PrivateModule -Name <ModuleName> -Repository 'Company'"
+        $result.RecommendedWrapperInstallCommand | Should -Be "Install-ManagedModule -Name <ModuleName> -Repository 'Company'"
         $result.RecommendedNativeInstallCommand | Should -Be "Install-PSResource -Name <ModuleName> -Repository 'Company'"
         $result.ToolRequested | Should -Be ([PowerForge.RepositoryRegistrationTool]::Auto)
         $result.ToolUsed | Should -Be ([PowerForge.RepositoryRegistrationTool]::PSResourceGet)
@@ -1221,7 +1191,7 @@ Describe 'Private gallery command metadata' {
 
         $installPrerequisitesRecommended | Should -BeTrue
         $result.RecommendedBootstrapMode | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::CredentialPrompt)
-        $result.RecommendedBootstrapCommand | Should -Be "Register-ModuleRepository -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -Name 'Company' -InstallPrerequisites -BootstrapMode CredentialPrompt -Interactive"
+        $result.RecommendedBootstrapCommand | Should -Be "Initialize-ManagedModuleRepository -AzureDevOpsOrganization 'contoso' -AzureDevOpsProject 'Platform' -AzureArtifactsFeed 'Modules' -Name 'Company' -InstallPrerequisites -BootstrapMode CredentialPrompt -Interactive"
     }
 
     It 'prefers Install-Module when PSResourceGet cannot support ExistingSession bootstrap' {
@@ -1281,29 +1251,31 @@ Describe 'Private gallery command metadata' {
         } | Should -Throw "*RepositoryName cannot be 'PSGallery' when using the Azure Artifacts preset.*"
     }
 
-    It 'returns a registration result for Connect-ModuleRepository -WhatIf' {
-        $result = Connect-ModuleRepository -AzureDevOpsOrganization 'contoso' -AzureArtifactsFeed 'Modules' -BootstrapMode ExistingSession -WhatIf -WarningAction SilentlyContinue
+    It 'returns a registration result for Initialize-ManagedModuleRepository -MicrosoftArtifactRegistry -WhatIf' {
+        $result = Initialize-ManagedModuleRepository -MicrosoftArtifactRegistry -WhatIf -WarningAction SilentlyContinue
 
         $result | Should -Not -BeNullOrEmpty
         $result.GetType().FullName | Should -Be 'PSPublishModule.ModuleRepositoryRegistrationResult'
         $result.RegistrationPerformed | Should -BeFalse
     }
 
-    It 'does not prompt for credentials during Register-ModuleRepository -WhatIf' {
-        $result = Register-ModuleRepository -AzureDevOpsOrganization 'contoso' -AzureArtifactsFeed 'Modules' -BootstrapMode CredentialPrompt -WhatIf -WarningAction SilentlyContinue
+    It 'does not prompt for credentials during Azure profile Initialize-ManagedModuleRepository -WhatIf' {
+        $result = Initialize-ManagedModuleRepository -ProfileName 'CompanyWhatIfDirect' -AzureDevOpsOrganization 'contoso' -AzureArtifactsFeed 'Modules' -BootstrapMode CredentialPrompt -WhatIf -WarningAction SilentlyContinue
 
         $result | Should -Not -BeNullOrEmpty
-        $result.GetType().FullName | Should -Be 'PSPublishModule.ModuleRepositoryRegistrationResult'
-        $result.RegistrationPerformed | Should -BeFalse
-        $result.BootstrapModeUsed | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::CredentialPrompt)
+        $result.GetType().FullName | Should -Be 'PSPublishModule.ModuleRepositoryOnboardingResult'
+        $result.ConnectAttempted | Should -BeFalse
+        $result.ConnectSkipped | Should -BeTrue
+        $result.ProfileWritten | Should -BeFalse
     }
 
-    It 'does not prompt for credentials during Update-ModuleRepository -WhatIf' {
-        $result = Update-ModuleRepository -AzureDevOpsOrganization 'contoso' -AzureArtifactsFeed 'Modules' -BootstrapMode CredentialPrompt -WhatIf -WarningAction SilentlyContinue
+    It 'does not prompt for credentials during imported profile Initialize-ManagedModuleRepository -WhatIf' {
+        Set-ManagedModuleRepository -Name 'CompanyPromptWhatIf' -AzureDevOpsOrganization 'contoso' -AzureArtifactsFeed 'Modules' | Out-Null
 
+        $result = Initialize-ManagedModuleRepository -ProfileName 'CompanyPromptWhatIf' -InstallPrerequisites -WhatIf -WarningAction SilentlyContinue
         $result | Should -Not -BeNullOrEmpty
-        $result.GetType().FullName | Should -Be 'PSPublishModule.ModuleRepositoryRegistrationResult'
-        $result.RegistrationPerformed | Should -BeFalse
-        $result.BootstrapModeUsed | Should -Be ([PowerForge.PrivateGalleryBootstrapMode]::CredentialPrompt)
+        $result.GetType().FullName | Should -Be 'PSPublishModule.ModuleRepositoryOnboardingResult'
+        $result.ConnectAttempted | Should -BeTrue
+        $result.ConnectSkipped | Should -BeTrue
     }
 }

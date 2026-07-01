@@ -36,7 +36,7 @@ New-ConfigurationPublish -AzureDevOpsOrganization 'evotecpl' -AzureDevOpsProject
 Optional maintainer preflight:
 
 ```powershell
-Initialize-ModuleRepository -ProfileName EvotecPowerShellGallery -Organization evotecpl -Project PowerShellGallery -Feed PowerShellGalleryFeed -InstallPrerequisites
+Initialize-ManagedModuleRepository -ProfileName EvotecPowerShellGallery -Organization evotecpl -Project PowerShellGallery -Feed PowerShellGalleryFeed -InstallPrerequisites
 ```
 
 The preflight installs or refreshes prerequisites, registers/probes the feed,
@@ -62,14 +62,14 @@ PSPublishModule:
 ```powershell
 Install-Module PSPublishModule -Scope CurrentUser
 
-Initialize-ModuleRepository -ProfileName EvotecPowerShellGallery -Organization evotecpl -Project PowerShellGallery -Feed PowerShellGalleryFeed -InstallPrerequisites
+Initialize-ManagedModuleRepository -ProfileName EvotecPowerShellGallery -Organization evotecpl -Project PowerShellGallery -Feed PowerShellGalleryFeed -InstallPrerequisites
 ```
 
 After that, normal install/update commands use the private feed profile:
 
 ```powershell
-Install-PrivateModule -ProfileName EvotecPowerShellGallery -Name PSPublishModule -InstallPrerequisites
-Update-PrivateModule -ProfileName EvotecPowerShellGallery -Name PSPublishModule -InstallPrerequisites
+Install-ManagedModule -ProfileName EvotecPowerShellGallery -Name PSPublishModule
+Update-ManagedModule -ProfileName EvotecPowerShellGallery -Name PSPublishModule
 ```
 
 For other approved private modules, replace `PSPublishModule` with the module
@@ -85,9 +85,11 @@ Install-PSResource -Name PSPublishModule -Repository EvotecPowerShellGallery -Tr
 Update-PSResource -Name PSPublishModule
 ```
 
-The PSPublishModule wrappers remain preferred for users because they refresh the
-repository registration and run the same access probe/session-prime path before
-installing or updating.
+The PSPublishModule managed commands remain preferred for users because they use
+the saved profile and the managed install/update engine. Run
+`Initialize-ManagedModuleRepository -ProfileName EvotecPowerShellGallery` again
+when a workstation needs repository registration, prerequisites, or a refreshed
+credential-provider session.
 
 ## What Users Should Expect
 
@@ -106,7 +108,7 @@ The process has been validated with PSPublishModule published to the private
 feed and then installed locally through:
 
 ```powershell
-Install-PrivateModule -ProfileName EvotecPowerShellGallery -Name PSPublishModule -InstallPrerequisites
+Install-ManagedModule -ProfileName EvotecPowerShellGallery -Name PSPublishModule
 ```
 
 The verbose output showed the repository was refreshed, the access probe reached

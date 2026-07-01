@@ -26,6 +26,7 @@ public sealed class ModulePublishConfigurationReaderTests
                 "RepositoryName": "PSGallery",
                 "PublishRequiredModules": true,
                 "RequiredModuleSourceRepository": "InternalUpstream",
+                "RequiredModuleSourceRepositoryUri": "https://packages.example.test/nuget/v3/index.json",
                 "Repository": {
                   "Name": "PSGallery",
                   "Uri": "https://www.powershellgallery.com/api/v2",
@@ -74,6 +75,7 @@ public sealed class ModulePublishConfigurationReaderTests
         Assert.Equal("PSGallery", repositoryPublish.RepositoryName);
         Assert.True(repositoryPublish.PublishRequiredModules);
         Assert.Equal("InternalUpstream", repositoryPublish.RequiredModuleSourceRepository);
+        Assert.Equal("https://packages.example.test/nuget/v3/index.json", repositoryPublish.RequiredModuleSourceRepositoryUri);
         Assert.NotNull(repositoryPublish.Repository);
         Assert.Equal("PSGallery", repositoryPublish.Repository!.Name);
         Assert.Equal("https://www.powershellgallery.com/api/v2", repositoryPublish.Repository.Uri);

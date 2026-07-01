@@ -43,30 +43,120 @@ public sealed class ModuleDependencyInstallerExactVersionTests
     }
 
     [Fact]
+    public void EnsureUpdated_InstallsExactRequiredVersion_WhenLatestInstalledVersionDiffers()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = "0.26.0"
+            },
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase));
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureUpdated(new[]
+        {
+            new ModuleDependency("PSSharedGoods", requiredVersion: "0.25.0")
+        });
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal("0.26.0", result.InstalledVersion);
+        Assert.Equal("0.25.0", result.RequestedVersion);
+        Assert.Equal("Exact version required: 0.25.0 (installed: 0.26.0)", result.Message);
+        Assert.Equal(1, runner.ExactProbeCalls);
+        Assert.Equal(1, runner.InstallCalls);
+    }
+
+    [Fact]
+    public void EnsureUpdated_DoesNotInstall_WhenExactRequiredVersionAlreadyExistsBesideNewerVersion()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = "0.26.0"
+            },
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = new HashSet<string>(new[] { "0.25.0" }, StringComparer.OrdinalIgnoreCase)
+            });
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureUpdated(new[]
+        {
+            new ModuleDependency("PSSharedGoods", requiredVersion: "0.25.0")
+        });
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Satisfied, result.Status);
+        Assert.Equal("0.26.0", result.InstalledVersion);
+        Assert.Equal("0.25.0", result.RequestedVersion);
+        Assert.Equal("Exact required version 0.25.0 already present (latest installed: 0.26.0)", result.Message);
+        Assert.Equal(1, runner.ExactProbeCalls);
+        Assert.Equal(0, runner.InstallCalls);
+    }
+
+    [Fact]
+    public void EnsureUpdated_InstallsExactRequiredVersion_WhenOnlyDifferentScopeHasRequiredVersion()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = "0.26.0"
+            },
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = new HashSet<string>(new[] { "0.25.0" }, StringComparer.OrdinalIgnoreCase)
+            },
+            installedExactScopes: new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["0.25.0"] = "AllUsers"
+                }
+            });
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureUpdated(new[]
+        {
+            new ModuleDependency("PSSharedGoods", requiredVersion: "0.25.0", installScope: "CurrentUser")
+        });
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal("0.25.0", result.RequestedVersion);
+        Assert.Equal(1, runner.ExactProbeCalls);
+        Assert.Equal(1, runner.InstallCalls);
+        Assert.NotNull(runner.LastExactProbeArguments);
+        Assert.Equal("CurrentUser", runner.LastExactProbeArguments![4]);
+        Assert.NotNull(runner.LastInstallArguments);
+        Assert.Equal("CurrentUser", runner.LastInstallArguments![3]);
+    }
+
+    [Fact]
     public void EnsureInstalled_ReportsProbeFailureForCurrentDependency_AndContinuesProcessing()
     {
         var runner = new StubPowerShellRunner(
             latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
             {
-                ["Preview.Module"] = "2.0.0",
+                ["Probe.Module"] = "2.0.0",
                 ["Stable.Module"] = "1.0.0"
             },
             installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase),
             failingExactVersions: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["Preview.Module"] = "1.0.0-preview"
+                ["Probe.Module"] = "1.1.0"
             });
         var installer = new ModuleDependencyInstaller(runner, new NullLogger());
 
         var results = installer.EnsureInstalled(new[]
         {
-            new ModuleDependency("Preview.Module", requiredVersion: "1.0.0-preview"),
+            new ModuleDependency("Probe.Module", requiredVersion: "1.1.0"),
             new ModuleDependency("Stable.Module", requiredVersion: "1.0.0")
         });
 
         Assert.Equal(2, results.Count);
 
-        var failed = Assert.Single(results, r => string.Equals(r.Name, "Preview.Module", StringComparison.OrdinalIgnoreCase));
+        var failed = Assert.Single(results, r => string.Equals(r.Name, "Probe.Module", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(ModuleDependencyInstallStatus.Failed, failed.Status);
         Assert.Contains("Get-Module -ListAvailable failed", failed.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
 
@@ -115,6 +205,227 @@ public sealed class ModuleDependencyInstallerExactVersionTests
         Assert.Equal(ModuleDependencyInstallStatus.Installed, result.Status);
         Assert.Equal(0, runner.ExactProbeCalls);
         Assert.Equal(1, runner.InstallCalls);
+    }
+
+    [Fact]
+    public void EnsureInstalled_PassesInstallScopeToPSResourceGet()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase),
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase));
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        installer.EnsureInstalled(
+            new[] { new ModuleDependency("PSSharedGoods", requiredVersion: "0.25.0", installScope: "AllUsers") },
+            repository: "Company");
+
+        Assert.Equal(1, runner.InstallCalls);
+        Assert.NotNull(runner.LastInstallArguments);
+        Assert.Equal("PSSharedGoods", runner.LastInstallArguments![0]);
+        Assert.Equal("0.25.0", runner.LastInstallArguments[1]);
+        Assert.Equal("Company", runner.LastInstallArguments[2]);
+        Assert.Equal("AllUsers", runner.LastInstallArguments[3]);
+    }
+
+    [Fact]
+    public void EnsureInstalled_UsesOpenLowerBoundForMaxOnlyPSResourceRange()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase),
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase));
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        installer.EnsureInstalled(
+            new[]
+            {
+                new ModuleDependency(
+                    "PSSharedGoods",
+                    maximumVersion: "2.0.0",
+                    maximumVersionInclusive: false)
+            },
+            repository: "Company");
+
+        Assert.Equal(1, runner.InstallCalls);
+        Assert.NotNull(runner.LastInstallArguments);
+        Assert.Equal("(, 2.0.0)", runner.LastInstallArguments![1]);
+    }
+
+    [Fact]
+    public void EnsureInstalled_InstallsConstrainedVersion_WhenExclusiveMaximumIsViolated()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = "2.0.0"
+            },
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase));
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureInstalled(
+            new[]
+            {
+                new ModuleDependency(
+                    "PSSharedGoods",
+                    maximumVersion: "2.0.0",
+                    maximumVersionInclusive: false)
+            },
+            repository: "Company");
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal(1, runner.InstallCalls);
+        Assert.NotNull(runner.LastInstallArguments);
+        Assert.Equal("(, 2.0.0)", runner.LastInstallArguments![1]);
+    }
+
+    [Fact]
+    public void EnsureInstalled_InstallsWhenOnlyAnotherScopeSatisfiesAnyVersionPolicy()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = "0.26.0"
+            },
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase));
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureInstalled(
+            new[] { new ModuleDependency("PSSharedGoods", installScope: "AllUsers") });
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal("Module is not installed in requested scope", result.Message);
+        Assert.Equal(1, runner.ExactProbeCalls);
+        Assert.Equal(1, runner.InstallCalls);
+        Assert.NotNull(runner.LastExactProbeArguments);
+        Assert.Equal("AllUsers", runner.LastExactProbeArguments![4]);
+        Assert.NotNull(runner.LastInstallArguments);
+        Assert.Equal("AllUsers", runner.LastInstallArguments![3]);
+    }
+
+    [Fact]
+    public void EnsureInstalled_PassesExclusiveBoundsToScopedProbe()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = "1.3.0"
+            },
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase));
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureInstalled(
+            new[]
+            {
+                new ModuleDependency(
+                    "PSSharedGoods",
+                    minimumVersion: "1.2.0",
+                    minimumVersionInclusive: false,
+                    installScope: "AllUsers")
+            });
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal(1, runner.ExactProbeCalls);
+        Assert.NotNull(runner.LastExactProbeArguments);
+        Assert.Equal("1.2.0", runner.LastExactProbeArguments![2]);
+        Assert.Equal("AllUsers", runner.LastExactProbeArguments![4]);
+        Assert.Equal("0", runner.LastExactProbeArguments![5]);
+        Assert.Equal("1", runner.LastExactProbeArguments![6]);
+        Assert.Equal(1, runner.InstallCalls);
+    }
+
+    [Fact]
+    public void EnsureInstalled_SkipsScopedProbeForPrereleaseRangeBounds()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = "1.2.0-preview1"
+            },
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase));
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureInstalled(
+            new[]
+            {
+                new ModuleDependency(
+                    "PSSharedGoods",
+                    minimumVersion: "1.2.0-preview1",
+                    maximumVersion: "1.2.0",
+                    maximumVersionInclusive: false,
+                    installScope: "AllUsers")
+            },
+            repository: "Company",
+            prerelease: true);
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal(0, runner.ExactProbeCalls);
+        Assert.Equal(1, runner.InstallCalls);
+        Assert.NotNull(runner.LastInstallArguments);
+        Assert.Equal("[1.2.0-preview1, 1.2.0)", runner.LastInstallArguments![1]);
+        Assert.Equal("AllUsers", runner.LastInstallArguments![3]);
+    }
+
+    [Fact]
+    public void EnsureInstalled_SkipsScopedProbeForPrereleaseRequiredVersion()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = "1.2.0-preview1"
+            },
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase));
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureInstalled(
+            new[]
+            {
+                new ModuleDependency(
+                    "PSSharedGoods",
+                    requiredVersion: "1.2.0-preview1",
+                    installScope: "AllUsers")
+            },
+            repository: "Company",
+            prerelease: true);
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal(0, runner.ExactProbeCalls);
+        Assert.Equal(1, runner.InstallCalls);
+        Assert.NotNull(runner.LastInstallArguments);
+        Assert.Equal("1.2.0-preview1", runner.LastInstallArguments![1]);
+        Assert.Equal("AllUsers", runner.LastInstallArguments![3]);
+    }
+
+    [Fact]
+    public void EnsureInstalled_TreatsInstalledPrereleaseAsSatisfied_WhenRangeAllowsIt()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PSSharedGoods"] = "1.2.0-preview1"
+            },
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase));
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureInstalled(
+            new[]
+            {
+                new ModuleDependency(
+                    "PSSharedGoods",
+                    minimumVersion: "1.2.0-preview1",
+                    maximumVersion: "1.2.0",
+                    maximumVersionInclusive: false)
+            },
+            repository: "Company",
+            prerelease: true);
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Satisfied, result.Status);
+        Assert.Equal("1.2.0-preview1", result.InstalledVersion);
+        Assert.Equal(0, runner.InstallCalls);
     }
 
     [Fact]
@@ -168,18 +479,23 @@ public sealed class ModuleDependencyInstallerExactVersionTests
     {
         private readonly IReadOnlyDictionary<string, string?> _latestInstalledVersions;
         private readonly IReadOnlyDictionary<string, HashSet<string>> _installedExactVersions;
+        private readonly IReadOnlyDictionary<string, Dictionary<string, string>> _installedExactScopes;
         private readonly IReadOnlyDictionary<string, string> _failingExactVersions;
 
         public int ExactProbeCalls { get; private set; }
         public int InstallCalls { get; private set; }
+        public IReadOnlyList<string>? LastInstallArguments { get; private set; }
+        public IReadOnlyList<string>? LastExactProbeArguments { get; private set; }
 
         public StubPowerShellRunner(
             IReadOnlyDictionary<string, string?> latestInstalledVersions,
             IReadOnlyDictionary<string, HashSet<string>> installedExactVersions,
+            IReadOnlyDictionary<string, Dictionary<string, string>>? installedExactScopes = null,
             IReadOnlyDictionary<string, string>? failingExactVersions = null)
         {
             _latestInstalledVersions = latestInstalledVersions;
             _installedExactVersions = installedExactVersions;
+            _installedExactScopes = installedExactScopes ?? new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
             _failingExactVersions = failingExactVersions ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
 
@@ -203,6 +519,7 @@ public sealed class ModuleDependencyInstallerExactVersionTests
             if (script.Contains(ExactVersionProbeMarker, StringComparison.Ordinal))
             {
                 ExactProbeCalls++;
+                LastExactProbeArguments = request.Arguments;
                 var name = request.Arguments[0];
                 var requiredVersion = request.Arguments[1];
                 if (_failingExactVersions.TryGetValue(name, out var failingVersion) &&
@@ -212,6 +529,15 @@ public sealed class ModuleDependencyInstallerExactVersionTests
                 }
 
                 var found = _installedExactVersions.TryGetValue(name, out var versions) && versions.Contains(requiredVersion);
+                if (found &&
+                    _installedExactScopes.TryGetValue(name, out var scopedVersions) &&
+                    scopedVersions.TryGetValue(requiredVersion, out var installedScope) &&
+                    request.Arguments.Count > 4 &&
+                    !string.IsNullOrWhiteSpace(request.Arguments[4]) &&
+                    !string.Equals(installedScope, request.Arguments[4], StringComparison.OrdinalIgnoreCase))
+                {
+                    found = false;
+                }
                 if (!found)
                     return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe");
 
@@ -224,6 +550,7 @@ public sealed class ModuleDependencyInstallerExactVersionTests
                 script.Contains(PowerShellGetInstallMarker, StringComparison.Ordinal))
             {
                 InstallCalls++;
+                LastInstallArguments = request.Arguments;
                 return new PowerShellRunResult(0, PsResourceInstallMarker, string.Empty, "pwsh.exe");
             }
 
