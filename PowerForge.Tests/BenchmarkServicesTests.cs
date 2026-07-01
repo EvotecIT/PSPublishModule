@@ -502,6 +502,75 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void GateService_IgnoresSkippedRowsWhenMetricIsMissing()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        BenchmarkJson.Write(summaryPath, new[]
+        {
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                Status = "Succeeded",
+                Metrics = new Dictionary<string, double> { ["RowsPerSecond"] = 100 }
+            },
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "SkippedEngine",
+                Host = "Current",
+                Status = "Skipped"
+            }
+        });
+
+        var update = new BenchmarkGateService().Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            Metric = "RowsPerSecond",
+            BaselineMode = BenchmarkBaselineMode.Update
+        });
+
+        Assert.True(update.Passed);
+        Assert.True(update.BaselineUpdated);
+        Assert.Single(update.Metrics);
+        Assert.DoesNotContain(update.Messages, message => message.Contains("SkippedEngine", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void TestBenchmarkGateCommand_WhatIfSkipsBaselineUpdate()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        BenchmarkJson.Write(summaryPath, new[]
+        {
+            new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Run", Engine = "Managed", Host = "Current", MedianMs = 100 }
+        });
+        var initialSessionState = System.Management.Automation.Runspaces.InitialSessionState.CreateDefault();
+        initialSessionState.Commands.Add(new System.Management.Automation.Runspaces.SessionStateCmdletEntry("Test-BenchmarkGate", typeof(PSPublishModule.TestBenchmarkGateCommand), helpFileName: null));
+        using var runspace = System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace(initialSessionState);
+        runspace.Open();
+        using var ps = System.Management.Automation.PowerShell.Create(runspace);
+        ps.AddCommand("Test-BenchmarkGate")
+            .AddParameter("SummaryPath", summaryPath)
+            .AddParameter("BaselinePath", baselinePath)
+            .AddParameter("Update")
+            .AddParameter("WhatIf", true);
+
+        ps.Invoke();
+
+        Assert.False(File.Exists(baselinePath));
+    }
+
+    [Fact]
     public void GateService_ResolvesGroupedVariablesCaseInsensitively()
     {
         var root = CreateTempRoot();
@@ -1790,6 +1859,26 @@ benchmark 'path' -out 'relative-out' {
         Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status);
         Assert.True(sample.DurationMs > 0);
         Assert.True(sample.Metrics["RowsPerSecond"] > 0);
+    }
+
+    [Fact]
+    public void Runner_SkipsValidationAndMetricsDuringWarmup()
+    {
+        var suite = CreateRunnableSuite();
+        suite.WarmupCount = 1;
+        suite.Validate = ScriptBlock.Create("param($case, $run) if ($run.Iteration -lt 0) { throw 'warmup validation should not run' }");
+        suite.Metrics.Add(new PowerShellBenchmarkMetric
+        {
+            Name = "MeasuredOnly",
+            ScriptBlock = ScriptBlock.Create("param($case, $run) if ($run.Iteration -lt 0) { throw 'warmup metric should not run' }; 1")
+        });
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+        var sample = Assert.Single(result.Samples);
+
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status);
+        Assert.Equal(0, sample.Iteration);
+        Assert.Equal(1, sample.Metrics["MeasuredOnly"]);
     }
 
     [Fact]

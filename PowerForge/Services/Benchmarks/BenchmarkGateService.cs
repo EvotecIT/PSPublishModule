@@ -131,6 +131,8 @@ public sealed class BenchmarkGateService
         var map = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows ?? Array.Empty<BenchmarkSummaryRow>())
         {
+            if (IsSkippedRow(row))
+                continue;
             var metric = NormalizeMetricName(request.Metric);
             var value = BenchmarkSummaryService.GetMetricValue(row, metric);
             if (!value.HasValue) continue;
@@ -156,7 +158,7 @@ public sealed class BenchmarkGateService
         var metric = NormalizeMetricName(request.Metric);
         foreach (var row in rows ?? Array.Empty<BenchmarkSummaryRow>())
         {
-            if (IsFailedRow(row))
+            if (IsFailedRow(row) || IsSkippedRow(row))
                 continue;
             if (BenchmarkSummaryService.GetMetricValue(row, metric).HasValue)
                 continue;
@@ -166,6 +168,9 @@ public sealed class BenchmarkGateService
 
     private static bool IsFailedRow(BenchmarkSummaryRow row)
         => row.FailureCount > 0 || string.Equals(row.Status, "Failed", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSkippedRow(BenchmarkSummaryRow row)
+        => string.Equals(row.Status, "Skipped", StringComparison.OrdinalIgnoreCase);
 
     private static string BuildKey(BenchmarkSummaryRow row, IReadOnlyList<string> groupBy, string metric)
     {

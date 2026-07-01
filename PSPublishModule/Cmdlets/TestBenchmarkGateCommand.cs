@@ -11,7 +11,7 @@ namespace PSPublishModule;
 /// <summary>Verify a benchmark summary against a baseline</summary>
 /// <code>Test-BenchmarkGate -SummaryPath .\Build\Benchmarks\summary.json -BaselinePath .\Build\Benchmarks\baseline.json -Metric MedianMs</code>
 /// </example>
-[Cmdlet(VerbsDiagnostic.Test, "BenchmarkGate")]
+[Cmdlet(VerbsDiagnostic.Test, "BenchmarkGate", SupportsShouldProcess = true)]
 [OutputType(typeof(BenchmarkGateResult))]
 public sealed class TestBenchmarkGateCommand : PSCmdlet
 {
@@ -76,10 +76,15 @@ public sealed class TestBenchmarkGateCommand : PSCmdlet
     /// </summary>
     protected override void ProcessRecord()
     {
+        var summaryPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(SummaryPath);
+        var baselinePath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(BaselinePath);
+        if (Update && !ShouldProcess(baselinePath, "Update benchmark baseline"))
+            return;
+
         var request = new BenchmarkGateRequest
         {
-            SummaryPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(SummaryPath),
-            BaselinePath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(BaselinePath),
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
             Metric = Metric,
             GroupBy = GroupBy,
             BaselineMode = Update ? BenchmarkBaselineMode.Update : BenchmarkBaselineMode.Verify,

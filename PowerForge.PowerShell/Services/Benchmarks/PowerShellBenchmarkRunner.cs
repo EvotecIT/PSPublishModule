@@ -232,6 +232,9 @@ public sealed class PowerShellBenchmarkRunner
             durationMs = stopwatch.Elapsed.TotalMilliseconds;
             SetProperty(runObject, "DurationMs", durationMs);
 
+            if (!recordSample)
+                return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Succeeded, durationMs, string.Empty, null);
+
             InvokeOptional(suite.Validate, caseObject, runObject);
             var metrics = CaptureMetrics(suite, caseObject, runObject);
             return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Succeeded, durationMs, string.Empty, metrics);
