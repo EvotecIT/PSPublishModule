@@ -53,7 +53,7 @@ public sealed class ManagedModuleUpdateService
             currentVersion,
             targetVersion,
             request.Force,
-            requiresVerifiedPackage: !string.IsNullOrWhiteSpace(request.ExpectedPackageSha256),
+            requiresPackageMetadataBeforeNoOp: RequiresPackageMetadataBeforeNoOp(request),
             sourceEvaluation);
         ThrowIfSourcePolicyBlocked(action, sourceEvaluation);
         var targetWouldWrite = ActionWritesFiles(action);
@@ -157,7 +157,7 @@ public sealed class ManagedModuleUpdateService
             currentVersion,
             targetVersion,
             request.Force,
-            requiresVerifiedPackage: !string.IsNullOrWhiteSpace(request.ExpectedPackageSha256),
+            requiresPackageMetadataBeforeNoOp: RequiresPackageMetadataBeforeNoOp(request),
             sourceEvaluation);
         var familyActions = await PlanFamilyActionsAsync(moduleRoot, request, targetVersion, resolvePackageMetadata: true, cancellationToken).ConfigureAwait(false);
         var selectedPathVersion = action is ManagedModuleUpdatePlanAction.SkipUpToDate or ManagedModuleUpdatePlanAction.SourceMismatchBlocked or ManagedModuleUpdatePlanAction.DowngradeBlocked && currentVersion is not null
@@ -576,7 +576,7 @@ public sealed class ManagedModuleUpdateService
         string? currentVersion,
         string targetVersion,
         bool force,
-        bool requiresVerifiedPackage,
+        bool requiresPackageMetadataBeforeNoOp,
         SourcePolicyEvaluation sourceEvaluation)
     {
         if (currentVersion is null)
@@ -585,7 +585,7 @@ public sealed class ManagedModuleUpdateService
         var comparison = ManagedModuleVersionComparer.Instance.Compare(currentVersion, targetVersion);
         if (comparison == 0)
         {
-            if (force || requiresVerifiedPackage)
+            if (force || requiresPackageMetadataBeforeNoOp)
                 return ManagedModuleUpdatePlanAction.Reinstall;
             return sourceEvaluation.IsSatisfied
                 ? ManagedModuleUpdatePlanAction.SkipUpToDate
@@ -598,6 +598,10 @@ public sealed class ManagedModuleUpdateService
 
         return ManagedModuleUpdatePlanAction.Update;
     }
+
+    private static bool RequiresPackageMetadataBeforeNoOp(ManagedModuleUpdateRequest request)
+        => !string.IsNullOrWhiteSpace(request.ExpectedPackageSha256) ||
+           ManagedModuleTrustEvaluator.HasAllowedAuthorPolicy(request.TrustPolicy);
 
     private static bool ActionWritesFiles(ManagedModuleUpdatePlanAction action)
         => action is ManagedModuleUpdatePlanAction.InstallMissing

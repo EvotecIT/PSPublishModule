@@ -31,6 +31,33 @@ public sealed class ManagedModuleUpdateServiceTests
     }
 
     [Fact]
+    public async Task UpdateAsync_validates_allowed_author_before_same_version_noop()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"),
+            authors: "OtherPublisher");
+        var installedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(installedPath);
+        File.WriteAllText(Path.Combine(installedPath, "Company.Tools.psd1"), "@{ ModuleVersion = '1.0.0' }");
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.TrustPolicy = new ManagedModuleTrustPolicy
+        {
+            AllowedAuthors = new[] { "Evotec" }
+        };
+
+        var exception = await Assert.ThrowsAsync<ManagedModuleTrustException>(() => service.UpdateAsync(request));
+
+        Assert.Equal("PackageAuthorNotAllowed", exception.Reason);
+        Assert.Equal("Company.Tools", exception.ModuleName);
+    }
+
+    [Fact]
     public async Task UpdateAsync_installs_newer_stable_version()
     {
         using var feed = new TemporaryDirectory();
