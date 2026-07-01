@@ -2,7 +2,8 @@ param(
   [string]$Name,
   [string]$PrereleaseFlag,
   [string]$CredentialUser,
-  [string]$CredentialSecret
+  [string]$CredentialSecret,
+  [string]$Scope
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -30,8 +31,8 @@ try {
     Name = $Name
     Force = $true
     ErrorAction = 'Stop'
-    Scope = 'CurrentUser'
   }
+  if ([string]::IsNullOrWhiteSpace($Scope)) { $params.Scope = 'CurrentUser' } else { $params.Scope = $Scope }
   if ($PrereleaseFlag -eq '1') { $params.AllowPrerelease = $true }
   $updateCommand = Get-Command Update-Module -ErrorAction Stop
   if ($updateCommand.Parameters.ContainsKey('AcceptLicense')) { $params.AcceptLicense = $true }

@@ -1163,7 +1163,7 @@ public sealed partial class ManagedModuleRepositoryClient
     private static string GetRepositoryCacheKey(ManagedModuleRepository repository)
     {
         using var sha256 = SHA256.Create();
-        var source = Encoding.UTF8.GetBytes(repository.Source.Trim().ToLowerInvariant());
+        var source = Encoding.UTF8.GetBytes(repository.Source.Trim());
         var hash = sha256.ComputeHash(source);
         return string.Concat(hash.Take(8).Select(static value => value.ToString("x2")));
     }

@@ -524,7 +524,7 @@ public sealed partial class ManagedModuleInstallService
                 {
                     promotionLockWaitElapsed += resolvedPromotionLockWaitElapsed;
                     installLockWaitElapsed += resolvedPromotionLockWaitElapsed;
-                    if (IsInstalledModulePathSatisfied(modulePath, request.Name, version) && !request.Force && !RequiresVerifiedPackage(request))
+                    if (IsInstalledModulePathSatisfied(modulePath, request.Name, version) && !request.Force && !RequiresPackageDownloadBeforeNoOp(request))
                     {
                         _logger.Verbose($"Managed module install skipped concurrently installed version: {modulePath}");
                         context.RecordInstalledVersion(moduleRoot, request.Name, version);

@@ -88,6 +88,22 @@ internal sealed class ModuleStatePlanner
                 continue;
             }
 
+            if (!string.IsNullOrWhiteSpace(desiredModule.ExpectedPackageSha256))
+            {
+                actions.Add(new ModuleStatePlanAction(
+                    ResolveSourceDeliveryActionKind(desiredModule),
+                    desiredModule.Name,
+                    installedModule.Version,
+                    desiredModule.VersionPolicy,
+                    "Installed module version satisfies desired policy but package hash verification is required.",
+                    force: true,
+                    targetScope: string.IsNullOrWhiteSpace(desiredModule.Scope) ? installedModule.Scope : desiredModule.Scope,
+                    targetPath: desiredModule.TargetPath,
+                    targetRepository: targetRepository,
+                    expectedPackageSha256: desiredModule.ExpectedPackageSha256));
+                continue;
+            }
+
             actions.Add(new ModuleStatePlanAction(
                 ModuleStatePlanActionKind.NoAction,
                 desiredModule.Name,

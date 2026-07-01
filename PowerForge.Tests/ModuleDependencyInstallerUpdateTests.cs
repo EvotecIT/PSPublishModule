@@ -216,6 +216,30 @@ public sealed class ModuleDependencyInstallerUpdateTests
     }
 
     [Fact]
+    public void EnsureUpdated_PassesScopeToPowerShellGetUpdateFallback()
+    {
+        var runner = new QueuePowerShellRunner(new[]
+        {
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.0.0")), string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, "PFMODLOC::FOUND::ModuleA", string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(1, string.Empty, "PSResourceGet unavailable", "pwsh.exe"),
+            new PowerShellRunResult(0, "PFMOD::UPDATE::OK", string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.1.0")), string.Empty, "pwsh.exe")
+        });
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureUpdated(
+            new[] { new ModuleDependency("ModuleA", installScope: "AllUsers") });
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal("PowerShellGet", result.Installer);
+        Assert.Equal("AllUsers", runner.Requests[3].Arguments[4]);
+        Assert.Contains("[string]$Scope", runner.ScriptTexts[3], StringComparison.Ordinal);
+        Assert.Contains("$params.Scope = $Scope", runner.ScriptTexts[3], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EnsureUpdated_DoesNotDowngrade_WhenRepositoryFallbackFindsOlderVersion()
     {
         var runner = new QueuePowerShellRunner(new[]
@@ -322,6 +346,36 @@ public sealed class ModuleDependencyInstallerUpdateTests
         Assert.Contains("Install-PSResource", runner.ScriptTexts[1], StringComparison.Ordinal);
         Assert.Equal("(, 2.0.0)", installRequest.Arguments[1]);
         Assert.Equal("AllUsers", installRequest.Arguments[3]);
+    }
+
+    [Fact]
+    public void EnsureInstalled_PreservesAllowClobber_WhenRequestedScopeIsMissing()
+    {
+        var runner = new QueuePowerShellRunner(new[]
+        {
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "3.0.0")), string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, "PFPSRG::INSTALL::OK", string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.9.0")), string.Empty, "pwsh.exe")
+        });
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureInstalled(
+            new[]
+            {
+                new ModuleDependency(
+                    "ModuleA",
+                    requiredVersion: "1.9.0",
+                    installScope: "AllUsers")
+            },
+            repository: "Company",
+            preferPowerShellGet: true,
+            allowClobber: true);
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal("PowerShellGet", result.Installer);
+        Assert.Equal("1", runner.Requests[2].Arguments[9]);
     }
 
     [Fact]

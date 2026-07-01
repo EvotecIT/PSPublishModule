@@ -204,7 +204,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
             sourceCredential,
             cancellationToken).ConfigureAwait(false);
         var selected = versions
-            .Where(version => range.IsSatisfiedBy(version.Version))
+            .Where(version => IsSelectableDependencyVersion(version, range))
             .LastOrDefault();
         if (selected is null)
             throw new InvalidOperationException(
@@ -229,7 +229,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
                 targetCredential,
                 cancellationToken).ConfigureAwait(false);
 
-            return versions.Any(version => range.IsSatisfiedBy(version.Version));
+            return versions.Any(version => IsSelectableDependencyVersion(version, range));
         }
         catch (Exception ex) when (ModulePublisher.IsRepositoryPackageNotFound(packageId, ex) ||
                                    ex is DirectoryNotFoundException ||
@@ -251,6 +251,11 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
             packageId,
             ManagedModuleVersionRange.Parse("[" + version + "]"),
             cancellationToken);
+
+    internal static bool IsSelectableDependencyVersion(ManagedModuleVersionInfo version, ManagedModuleVersionRange range)
+        => version is not null &&
+           range.IsSatisfiedBy(version.Version) &&
+           (range.ExactVersion is not null || version.Listed);
 
     private static bool IsMissingLocalRepository(Exception exception)
         => exception is ManagedModuleRepositoryException

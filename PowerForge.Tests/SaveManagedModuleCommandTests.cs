@@ -264,7 +264,7 @@ public sealed class SaveManagedModuleCommandTests
     private static string CreateRepositoryCacheKey(string source)
     {
         using var sha256 = System.Security.Cryptography.SHA256.Create();
-        var hash = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(source.Trim().ToLowerInvariant()));
+        var hash = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(source.Trim()));
         return string.Concat(hash.Take(8).Select(static value => value.ToString("x2")));
     }
 }

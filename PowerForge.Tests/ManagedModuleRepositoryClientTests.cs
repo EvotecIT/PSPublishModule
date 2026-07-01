@@ -286,6 +286,24 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public void DownloadPackageAsync_package_cache_key_preserves_feed_path_case()
+    {
+        using var cache = new TemporaryDirectory();
+        var upper = BuildCachedPackagePath(
+            cache.Path,
+            new ManagedModuleRepository("Upper", "https://example.test/Feed"),
+            "Company.Tools",
+            "1.0.0");
+        var lower = BuildCachedPackagePath(
+            cache.Path,
+            new ManagedModuleRepository("Lower", "https://example.test/feed"),
+            "Company.Tools",
+            "1.0.0");
+
+        Assert.NotEqual(upper, lower);
+    }
+
+    [Fact]
     public async Task GetLatestVersionAsync_uses_powershellgallery_v2_read_api_for_canonical_default()
     {
         var requests = new List<RecordedRequest>();
@@ -1074,7 +1092,7 @@ public sealed class ManagedModuleRepositoryClientTests
     private static string GetRepositoryCacheKey(ManagedModuleRepository repository)
     {
         using var sha256 = SHA256.Create();
-        var source = Encoding.UTF8.GetBytes(repository.Source.Trim().ToLowerInvariant());
+        var source = Encoding.UTF8.GetBytes(repository.Source.Trim());
         var hash = sha256.ComputeHash(source);
         return string.Concat(hash.Take(8).Select(static value => value.ToString("x2")));
     }

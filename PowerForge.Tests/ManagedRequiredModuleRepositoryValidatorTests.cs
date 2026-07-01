@@ -70,6 +70,24 @@ public sealed class ManagedRequiredModuleRepositoryValidatorTests
     }
 
     [Fact]
+    public void IsSelectableDependencyVersion_rejects_unlisted_versions_for_ranges_only()
+    {
+        var unlisted = new ManagedModuleVersionInfo
+        {
+            Name = "Company.Dependency",
+            Version = "1.2.0",
+            Listed = false
+        };
+
+        Assert.False(ManagedRequiredModuleRepositoryValidator.IsSelectableDependencyVersion(
+            unlisted,
+            ManagedModuleVersionRange.Parse(">=1.0.0")));
+        Assert.True(ManagedRequiredModuleRepositoryValidator.IsSelectableDependencyVersion(
+            unlisted,
+            ManagedModuleVersionRange.Parse("[1.2.0]")));
+    }
+
+    [Fact]
     public void Validate_rejects_publish_required_modules_when_target_source_is_psgallery_alias()
     {
         using var source = new TemporaryDirectory();

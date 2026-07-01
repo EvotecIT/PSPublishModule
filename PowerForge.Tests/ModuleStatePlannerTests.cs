@@ -48,6 +48,23 @@ public sealed class ModuleStatePlannerTests
     }
 
     [Fact]
+    public void CreatePlan_PlansForcedDeliveryWhenHashPolicyIsPresent()
+    {
+        var expectedSha256 = new string('a', 64);
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[] { new ModuleStateInstalledModule("Company.Tools", "1.3.0", scope: "CurrentUser") }),
+            new[] { new ModuleStateDesiredModule("Company.Tools", ">=1.2.0 <2.0.0", scope: "CurrentUser", expectedPackageSha256: expectedSha256) });
+
+        var action = Assert.Single(new ModuleStatePlanner().CreatePlan(request).Actions);
+
+        Assert.Equal(ModuleStatePlanActionKind.Install, action.Kind);
+        Assert.True(action.Force);
+        Assert.Equal("CurrentUser", action.TargetScope);
+        Assert.Equal(expectedSha256, action.ExpectedPackageSha256);
+        Assert.Contains("hash", action.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void CreatePlan_PlansForcedInstallWhenSatisfiedVersionUsesDisallowedSource()
     {
         var request = new ModuleStatePlanRequest(

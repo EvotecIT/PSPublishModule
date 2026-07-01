@@ -121,14 +121,14 @@ public sealed partial class ModuleDependencyInstaller
                 {
                     if (RequiresScopedInstall(dep) && !CanUseScopedDependencyProbe(dep))
                     {
-                        var scopedInstallStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force, preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
+                        var scopedInstallStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force, preferPowerShellGet, allowClobber, timeout: perModuleTimeout);
                         actions.Add(new ActionItem(dep.Name, installedBefore, currentDecision.RequestedVersion, ModuleDependencyInstallStatus.Updated, installer: scopedInstallStatus, message: "Module is not installed in requested scope"));
                         continue;
                     }
 
                     if (RequiresScopedInstall(dep) && !HasInstalledModuleSatisfyingDependency(dep))
                     {
-                        var scopedInstallStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force, preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
+                        var scopedInstallStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force, preferPowerShellGet, allowClobber, timeout: perModuleTimeout);
                         actions.Add(new ActionItem(dep.Name, installedBefore, currentDecision.RequestedVersion, ModuleDependencyInstallStatus.Updated, installer: scopedInstallStatus, message: "Module is not installed in requested scope"));
                         continue;
                     }
@@ -610,12 +610,13 @@ public sealed partial class ModuleDependencyInstaller
         }
 
         var script = BuildUpdateModuleScript();
-        var args = new List<string>(4)
+        var args = new List<string>(5)
         {
             dep.Name,
             prerelease ? "1" : "0",
             credential?.UserName ?? string.Empty,
-            credential?.Secret ?? string.Empty
+            credential?.Secret ?? string.Empty,
+            ResolveInstallScope(dep)
         };
         var result = RunScript(script, args, timeout);
         if (result.ExitCode != 0)
