@@ -1,4 +1,4 @@
----
+﻿---
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
@@ -252,6 +252,12 @@ Creates a DotNet publish target entry for DotNet publish DSL.
 ### [New-ConfigurationExecute](New-ConfigurationExecute.md)
 Creates a module pipeline lifecycle action.
 
+### [New-ConfigurationExternalAsset](New-ConfigurationExternalAsset.md)
+Adds an external asset bundle that is prepared before module staging.
+
+### [New-ConfigurationExternalAssetFile](New-ConfigurationExternalAssetFile.md)
+Creates a file entry for an external asset bundle.
+
 ### [New-ConfigurationFileConsistency](New-ConfigurationFileConsistency.md)
 Creates configuration for file consistency checking (encoding and line endings) during module build.
 
@@ -272,6 +278,9 @@ Creates a configuration manifest for a PowerShell module.
 
 ### [New-ConfigurationModule](New-ConfigurationModule.md)
 Provides a way to configure required, external, embedded, or approved modules used in the project.
+
+### [New-ConfigurationModuleBuildProfile](New-ConfigurationModuleBuildProfile.md)
+Emits a reusable module build profile for common PowerForge module builds.
 
 ### [New-ConfigurationModuleSkip](New-ConfigurationModuleSkip.md)
 Provides a way to ignore certain commands or modules during build-time dependency validation.

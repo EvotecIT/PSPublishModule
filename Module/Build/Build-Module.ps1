@@ -151,7 +151,7 @@ Invoke-ModuleBuild @buildParams -Settings {
         SkipBuiltinReplacements       = $true
         DotSourceLibraries            = $true
         DotSourceClasses              = $true
-        NETProjectPath                = 'PSPublishModule'
+        NETProjectPath                = (Join-Path $repoRoot 'PSPublishModule')
         NETProjectName                = 'PSPublishModule'
         NETConfiguration              = $Configuration
         NETFramework                  = 'net8.0', 'net472'
