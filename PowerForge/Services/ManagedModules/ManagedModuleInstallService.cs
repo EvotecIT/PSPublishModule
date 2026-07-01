@@ -387,6 +387,9 @@ public sealed partial class ManagedModuleInstallService
         var stageRoot = CreateStageRoot(moduleRoot, moduleName);
         var stageModulePath = CreateStageModulePath(stageRoot, moduleName, version);
         ManagedModuleExtractedPackageLease? directPayloadLease = null;
+        CancellationTokenSource? earlyDependencyCancellation = null;
+        Task<IReadOnlyList<ManagedModuleInstallResult>>? earlyDependencyTask = null;
+        System.Diagnostics.Stopwatch? earlyDependencyStopwatch = null;
 #if !NET472
         ManagedModuleBufferedPackage? bufferedPackage = null;
 #endif
@@ -455,6 +458,18 @@ public sealed partial class ManagedModuleInstallService
             ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, download.Metadata, request.TrustPolicy);
             ThrowIfLicenseAcceptanceRequired(download.Metadata, request);
             StartDependencyVersionSelectionPrewarm(request, download.Metadata, context, cancellationToken);
+            if (ShouldStartDependencyInstallBeforeExtraction(request, download.Metadata))
+            {
+                earlyDependencyCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                earlyDependencyStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                earlyDependencyTask = InstallDependenciesAsync(
+                    request,
+                    download.Metadata,
+                    cacheDirectory,
+                    context,
+                    earlyDependencyCancellation.Token);
+            }
+
             var validationModulePath = stageModulePath;
             ManagedModuleArchiveExtractionResult? extraction = null;
             if (useExtractedPackageCache && !request.Force && !RequiresVerifiedPackage(request))
@@ -499,10 +514,24 @@ public sealed partial class ManagedModuleInstallService
             if (!request.AllowClobber)
                 ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), validationModulePath);
 
-            var dependencyStopwatch = System.Diagnostics.Stopwatch.StartNew();
-            var dependencyResults = request.SkipDependencyCheck
-                ? Array.Empty<ManagedModuleInstallResult>()
-                : await InstallDependenciesAsync(request, download.Metadata, cacheDirectory, context, cancellationToken).ConfigureAwait(false);
+            System.Diagnostics.Stopwatch dependencyStopwatch;
+            IReadOnlyList<ManagedModuleInstallResult> dependencyResults;
+            if (request.SkipDependencyCheck)
+            {
+                dependencyStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                dependencyResults = Array.Empty<ManagedModuleInstallResult>();
+            }
+            else if (earlyDependencyTask is not null)
+            {
+                dependencyStopwatch = earlyDependencyStopwatch ?? System.Diagnostics.Stopwatch.StartNew();
+                dependencyResults = await earlyDependencyTask.ConfigureAwait(false);
+            }
+            else
+            {
+                dependencyStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                dependencyResults = await InstallDependenciesAsync(request, download.Metadata, cacheDirectory, context, cancellationToken).ConfigureAwait(false);
+            }
+
             dependencyStopwatch.Stop();
 
             var promotionStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -644,8 +673,26 @@ public sealed partial class ManagedModuleInstallService
             _receiptStore.WriteReceipt(request.Repository, result);
             return result;
         }
+        catch
+        {
+            if (earlyDependencyTask is not null)
+            {
+                earlyDependencyCancellation?.Cancel();
+                try
+                {
+                    await earlyDependencyTask.ConfigureAwait(false);
+                }
+                catch
+                {
+                    // The original package failure remains the actionable error.
+                }
+            }
+
+            throw;
+        }
         finally
         {
+            earlyDependencyCancellation?.Dispose();
 #if !NET472
             bufferedPackage?.Dispose();
 #endif

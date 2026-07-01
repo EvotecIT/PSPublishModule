@@ -5,6 +5,35 @@ namespace PowerForge.Tests;
 public sealed class ManagedModuleInstallDependencyFanoutTests
 {
     [Fact]
+    public void ShouldStartDependencyInstallBeforeExtraction_RequiresFastSafeInstallPath()
+    {
+        var metadata = new ManagedModulePackageMetadata
+        {
+            Dependencies = new[] { new ManagedModuleDependencyInfo { Id = "Company.Core", VersionRange = "[1.0.0]" } }
+        };
+        var request = new ManagedModuleInstallRequest
+        {
+            AllowClobber = true
+        };
+
+        Assert.True(InvokeShouldStartDependencyInstallBeforeExtraction(request, metadata));
+
+        request.AllowClobber = false;
+        Assert.False(InvokeShouldStartDependencyInstallBeforeExtraction(request, metadata));
+
+        request.AllowClobber = true;
+        request.AuthenticodeCheck = true;
+        Assert.False(InvokeShouldStartDependencyInstallBeforeExtraction(request, metadata));
+
+        request.AuthenticodeCheck = false;
+        request.SkipDependencyCheck = true;
+        Assert.False(InvokeShouldStartDependencyInstallBeforeExtraction(request, metadata));
+
+        request.SkipDependencyCheck = false;
+        Assert.False(InvokeShouldStartDependencyInstallBeforeExtraction(request, new ManagedModulePackageMetadata()));
+    }
+
+    [Fact]
     public async Task InstallAsync_seeds_first_dependency_before_broad_parallel_fanout()
     {
         using var feed = new TemporaryDirectory();
@@ -69,4 +98,14 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
         {
             [moduleName + ".psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
+
+    private static bool InvokeShouldStartDependencyInstallBeforeExtraction(
+        ManagedModuleInstallRequest request,
+        ManagedModulePackageMetadata metadata)
+    {
+        var method = typeof(ManagedModuleInstallService).GetMethod(
+            "ShouldStartDependencyInstallBeforeExtraction",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+        return (bool)method!.Invoke(null, new object?[] { request, metadata })!;
+    }
 }
