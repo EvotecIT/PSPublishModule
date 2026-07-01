@@ -611,6 +611,21 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task DownloadPackageToMemoryAsync_uses_known_content_length_as_initial_capacity()
+    {
+        const int expectedCapacity = 1024 * 1024 + 123;
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests, companyToolsPackageContentLength: expectedCapacity));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        using var result = await repositoryClient.DownloadPackageToMemoryAsync(repository, "Company.Tools", "1.1.0");
+
+        Assert.Equal(expectedCapacity, result.PackageStream.Capacity);
+        Assert.True(result.PackageStream.Length < expectedCapacity);
+    }
+
+    [Fact]
     public async Task DownloadPackageToMemoryAsync_rejects_package_above_memory_cap_by_content_length()
     {
         var requests = new List<RecordedRequest>();
