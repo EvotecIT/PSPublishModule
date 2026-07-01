@@ -316,6 +316,7 @@ public sealed class BenchmarkResultImporter
             AddBenchmarkDotNetIdentityVariables(benchmark, variables, method);
             var engine = GetBenchmarkDotNetEngine(benchmark);
             var metrics = ExtractBenchmarkDotNetMetrics(statistics);
+            AddBenchmarkDotNetMemoryMetrics(TryGetObject(benchmark, "Memory"), metrics);
 
             samples.Add(new BenchmarkSample
             {
@@ -491,6 +492,37 @@ public sealed class BenchmarkResultImporter
         }
 
         return metrics;
+    }
+
+    private static void AddBenchmarkDotNetMemoryMetrics(JsonElement? memory, IDictionary<string, double> metrics)
+    {
+        if (!memory.HasValue || memory.Value.ValueKind != JsonValueKind.Object)
+            return;
+
+        foreach (var property in memory.Value.EnumerateObject())
+        {
+            var value = GetDouble(memory, property.Name);
+            if (!value.HasValue)
+                continue;
+
+            metrics[property.Name] = value.Value;
+            var alias = BenchmarkDotNetMemoryMetricAlias(property.Name);
+            if (!string.IsNullOrWhiteSpace(alias))
+                metrics[alias!] = value.Value;
+        }
+    }
+
+    private static string? BenchmarkDotNetMemoryMetricAlias(string name)
+    {
+        var normalized = name.Replace(" ", string.Empty);
+        if (string.Equals(normalized, "BytesAllocatedPerOperation", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalized, "AllocatedBytes", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalized, "Allocated", StringComparison.OrdinalIgnoreCase))
+            return "Allocated";
+        if (string.Equals(normalized, "Gen0Collections", StringComparison.OrdinalIgnoreCase)) return "Gen0";
+        if (string.Equals(normalized, "Gen1Collections", StringComparison.OrdinalIgnoreCase)) return "Gen1";
+        if (string.Equals(normalized, "Gen2Collections", StringComparison.OrdinalIgnoreCase)) return "Gen2";
+        return null;
     }
 
     private static string? Get(IReadOnlyDictionary<string, string> values, params string[] names)

@@ -150,6 +150,28 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void MarkdownRenderer_KeepsTinyBenchmarkValuesVisible()
+    {
+        var markdown = new BenchmarkMarkdownRenderer().RenderSummaryTable(new[]
+        {
+            new BenchmarkSummaryRow
+            {
+                Scenario = "tiny",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                SampleCount = 1,
+                Status = "Succeeded",
+                MedianMs = 0.00042,
+                MeanMs = 0.00043
+            }
+        });
+
+        Assert.Contains("0.00042", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("| 0 | 0 |", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void UpdateBenchmarkDocumentCommand_RejectsUnknownRenderers()
     {
         var root = CreateTempRoot();
@@ -884,6 +906,42 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_PreservesBenchmarkDotNetJsonMemoryMetrics()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "Demo-report-full.json");
+        File.WriteAllText(path, """
+{
+  "Title": "demo",
+  "Benchmarks": [
+    {
+      "FullName": "Demo.Bench.Write()",
+      "Method": "Write",
+      "Statistics": {
+        "Median": 200
+      },
+      "Memory": {
+        "Gen0Collections": 3,
+        "Gen1Collections": 2,
+        "Gen2Collections": 1,
+        "BytesAllocatedPerOperation": 4096
+      }
+    }
+  ]
+}
+""");
+
+        var result = new BenchmarkResultImporter().Import(path);
+        var row = Assert.Single(result.Summary);
+
+        Assert.Equal(4096, row.Metrics["Allocated"]);
+        Assert.Equal(3, row.Metrics["Gen0"]);
+        Assert.Equal(2, row.Metrics["Gen1"]);
+        Assert.Equal(1, row.Metrics["Gen2"]);
+        Assert.Equal(4096, row.Metrics["BytesAllocatedPerOperation"]);
+    }
+
+    [Fact]
     public void Importer_PreservesNormalizedCsvStatusSuiteAndVariables()
     {
         var root = CreateTempRoot();
@@ -1118,6 +1176,63 @@ benchmark 'closure' {
         var result = new PowerShellBenchmarkRunner().Run(suite);
 
         Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
+    }
+
+    [Fact]
+    public void DslRuntime_PreservesNearestCapturedScopeAndUserPathVariables()
+    {
+        var root = CreateTempRoot();
+        File.WriteAllText(Path.Combine(root, "outer.txt"), "outer");
+        File.WriteAllText(Path.Combine(root, "inner.txt"), "inner");
+        var script = ScriptBlock.Create(@"
+$Path = Join-Path $PSScriptRoot 'outer.txt'
+$fixture = 'outer'
+benchmark 'closure' {
+    $Path = Join-Path $PSScriptRoot 'inner.txt'
+    $fixture = 'inner'
+    axis Operation Run
+    axis Engine Managed
+    setup {
+        param($case, $run)
+        $run.FixtureText = Get-Content -LiteralPath $Path -Raw
+        $run.FixtureName = $fixture
+    }
+    engine Managed {
+        operation Run {
+            param($case, $run)
+            if ($run.FixtureText -ne 'inner' -or $run.FixtureName -ne 'inner') {
+                throw 'wrong captured scope'
+            }
+        }
+    }
+}
+");
+
+        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script, root));
+        suite.WarmupCount = 0;
+        suite.IterationCount = 1;
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
+    }
+
+    [Fact]
+    public void DslRuntime_HandlesOrderedDictionaryCaseSources()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'ordered' {
+    cases { Add-BenchmarkCaseSource { [ordered]@{ Name = 'A'; Rows = 10 } } }
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var benchmarkCase = Assert.Single(suite.Cases);
+
+        Assert.Equal("A", benchmarkCase.Name);
+        Assert.Equal(10, benchmarkCase.Values["Rows"]);
     }
 
     [Fact]

@@ -256,8 +256,6 @@ param([scriptblock] $ScriptBlock)
 $captured = @{}
 $skipNames = @(
     'args', 'input', 'this', 'PSItem', '_', 'Error',
-    'Name', 'OutputRoot', 'Values', 'ScriptBlock', 'Dimension',
-    'Baseline', 'Metric', 'Path', 'Block', 'Renderer',
     'captured', 'scriptText'
 )
 for ($scope = 2; $scope -lt 20; $scope++) {
@@ -269,6 +267,7 @@ for ($scope = 2; $scope -lt 20; $scope++) {
 
     foreach ($variable in $variables) {
         if ($skipNames -contains $variable.Name) { continue }
+        if ($captured.ContainsKey($variable.Name)) { continue }
         if (($variable.Options -band [System.Management.Automation.ScopedItemOptions]::Constant) -or
             ($variable.Options -band [System.Management.Automation.ScopedItemOptions]::ReadOnly)) { continue }
         $captured[$variable.Name] = $variable.Value
@@ -319,9 +318,9 @@ $scriptText = $ScriptBlock.ToString()
     {
         var item = new PowerShellBenchmarkCase();
         var baseObject = value.BaseObject;
-        if (baseObject is Hashtable table)
+        if (baseObject is IDictionary dictionary)
         {
-            foreach (DictionaryEntry entry in table)
+            foreach (DictionaryEntry entry in dictionary)
                 item.Values[Convert.ToString(entry.Key, CultureInfo.InvariantCulture) ?? string.Empty] = entry.Value;
         }
         else

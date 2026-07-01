@@ -62,7 +62,7 @@ public sealed class BenchmarkMarkdownRenderer
         => (value ?? string.Empty).Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ").Trim();
 
     private static string Number(double? value)
-        => value.HasValue ? value.Value.ToString("0.###", CultureInfo.InvariantCulture) : string.Empty;
+        => value.HasValue ? value.Value.ToString("G15", CultureInfo.InvariantCulture) : string.Empty;
 
     private static string FormatVariables(IReadOnlyDictionary<string, string?> variables)
         => string.Join(
