@@ -131,6 +131,7 @@ public sealed class PowerShellBenchmarkRunner
     private BenchmarkRunResult RunInCurrentRunspace(PowerShellBenchmarkSuite suite)
     {
         if (suite is null) throw new ArgumentNullException(nameof(suite));
+        ValidateComparisons(suite);
         var runId = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
         var started = DateTimeOffset.UtcNow;
         var samples = new List<BenchmarkSample>();
@@ -170,7 +171,6 @@ public sealed class PowerShellBenchmarkRunner
 
         var summarizer = new BenchmarkSummaryService();
         var summary = summarizer.Summarize(samples);
-        ValidateComparisons(suite);
         var comparisons = suite.Comparisons
             .Where(c => !string.IsNullOrWhiteSpace(c.Baseline))
             .SelectMany(c => c.Metrics.SelectMany(m => summarizer.Compare(summary, c.Baseline, m)))

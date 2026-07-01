@@ -21,21 +21,23 @@ public sealed class BenchmarkGateService
         ValidateGroupBy(request.GroupBy);
         var actual = BuildMetricMap(rows, request);
         var failedRowMessages = BuildFailedRowMessages(rows, request).ToArray();
+        var missingMetricMessages = BuildMissingMetricMessages(rows, request).ToArray();
         var missingMetricMessage = actual.Count == 0
             ? $"No benchmark metric values were produced for metric '{NormalizeMetricName(request.Metric)}'."
             : null;
         if (request.BaselineMode == BenchmarkBaselineMode.Update)
         {
-            if (failedRowMessages.Length > 0 || missingMetricMessage is not null)
+            if (failedRowMessages.Length > 0 || missingMetricMessages.Length > 0 || missingMetricMessage is not null)
             {
+                var updateMessages = failedRowMessages.Concat(missingMetricMessages);
+                if (missingMetricMessage is not null)
+                    updateMessages = updateMessages.Concat(new[] { missingMetricMessage });
                 return new BenchmarkGateResult
                 {
                     Passed = false,
                     BaselineUpdated = false,
                     BaselinePath = Path.GetFullPath(request.BaselinePath),
-                    Messages = missingMetricMessage is null
-                        ? failedRowMessages
-                        : failedRowMessages.Concat(new[] { missingMetricMessage }).ToArray()
+                    Messages = updateMessages.ToArray()
                 };
             }
 
@@ -57,8 +59,9 @@ public sealed class BenchmarkGateService
         var baseline = ReadBaseline(request.BaselinePath);
         var metrics = new List<BenchmarkGateMetricResult>();
         var messages = new List<string>();
-        var failed = failedRowMessages.Length > 0 || missingMetricMessage is not null;
+        var failed = failedRowMessages.Length > 0 || missingMetricMessages.Length > 0 || missingMetricMessage is not null;
         messages.AddRange(failedRowMessages);
+        messages.AddRange(missingMetricMessages);
         if (missingMetricMessage is not null)
             messages.Add(missingMetricMessage);
         foreach (var entry in actual.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
@@ -145,6 +148,19 @@ public sealed class BenchmarkGateService
             if (!IsFailedRow(row))
                 continue;
             yield return $"Benchmark row '{BuildKey(row, request.GroupBy, metric)}' has failed samples.";
+        }
+    }
+
+    private static IEnumerable<string> BuildMissingMetricMessages(IEnumerable<BenchmarkSummaryRow> rows, BenchmarkGateRequest request)
+    {
+        var metric = NormalizeMetricName(request.Metric);
+        foreach (var row in rows ?? Array.Empty<BenchmarkSummaryRow>())
+        {
+            if (IsFailedRow(row))
+                continue;
+            if (BenchmarkSummaryService.GetMetricValue(row, metric).HasValue)
+                continue;
+            yield return $"Benchmark row '{BuildKey(row, request.GroupBy, metric)}' has no value for metric '{metric}'.";
         }
     }
 

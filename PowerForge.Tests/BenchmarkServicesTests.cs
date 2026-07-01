@@ -459,6 +459,49 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void GateService_FailsWhenSuccessfulRowsMissRequestedMetric()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        BenchmarkJson.Write(summaryPath, new[]
+        {
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                Status = "Succeeded",
+                Metrics = new Dictionary<string, double> { ["RowsPerSecond"] = 100 }
+            },
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                Status = "Succeeded"
+            }
+        });
+
+        var update = new BenchmarkGateService().Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            Metric = "RowsPerSecond",
+            BaselineMode = BenchmarkBaselineMode.Update
+        });
+
+        Assert.False(update.Passed);
+        Assert.False(update.BaselineUpdated);
+        Assert.Contains(update.Messages, message => message.Contains("Other", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(update.Messages, message => message.Contains("RowsPerSecond", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void GateService_ResolvesGroupedVariablesCaseInsensitively()
     {
         var root = CreateTempRoot();
@@ -749,6 +792,37 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_DirectoryPrefersFullBenchmarkDotNetJsonOverCsv()
+    {
+        var root = CreateTempRoot();
+        File.WriteAllText(Path.Combine(root, "Demo-report.csv"), "Method,Median\nWrite,1.000 ms\n");
+        File.WriteAllText(Path.Combine(root, "Demo-report-full.json"), """
+{
+  "Title": "demo",
+  "Benchmarks": [
+    {
+      "FullName": "Demo.Bench.Write()",
+      "Method": "Write",
+      "Statistics": {
+        "Median": 200
+      },
+      "Memory": {
+        "BytesAllocatedPerOperation": 4096
+      }
+    }
+  ]
+}
+""");
+
+        var result = new BenchmarkResultImporter().Import(root);
+        var row = Assert.Single(result.Summary);
+
+        Assert.InRange(row.MedianMs.GetValueOrDefault(), 0.000199, 0.000201);
+        Assert.Equal("Demo.Bench", row.Variables["Type"]);
+        Assert.Equal(4096, row.Metrics["Allocated"]);
+    }
+
+    [Fact]
     public void Importer_UsesBenchmarkDotNetMedianAndScalesNanoseconds()
     {
         var root = CreateTempRoot();
@@ -837,21 +911,32 @@ public sealed class BenchmarkServicesTests
     {
         var root = CreateTempRoot();
         var csv = Path.Combine(root, "Demo-report.csv");
-        File.WriteAllText(csv, "Method,Rows,Median [us],Mean [us],Error,StdDev,Allocated\nWrite,10,1500,9000,1.2,3.4,8 KB\n");
+        File.WriteAllText(csv, "Method,Rows,Median [us],Mean [us],Min [us],Max [us],Error,StdDev,Allocated\nWrite,10,1500,9000,1000,12000,1.2,3.4,8 KB\n");
 
         var result = new BenchmarkResultImporter().Import(csv, "demo");
         var sample = Assert.Single(result.Samples);
+        var row = Assert.Single(result.Summary);
 
         Assert.Equal("10", sample.Variables["Rows"]);
         Assert.DoesNotContain("Median [us]", sample.Variables.Keys);
         Assert.DoesNotContain("Mean [us]", sample.Variables.Keys);
+        Assert.DoesNotContain("Min [us]", sample.Variables.Keys);
+        Assert.DoesNotContain("Max [us]", sample.Variables.Keys);
         Assert.DoesNotContain("Error", sample.Variables.Keys);
         Assert.DoesNotContain("StdDev", sample.Variables.Keys);
         Assert.DoesNotContain("Allocated", sample.Variables.Keys);
+        Assert.Equal(1.5, sample.Metrics["MedianMs"]);
+        Assert.Equal(9, sample.Metrics["MeanMs"]);
+        Assert.Equal(1, sample.Metrics["MinMs"]);
+        Assert.Equal(12, sample.Metrics["MaxMs"]);
         Assert.Equal(1.2, sample.Metrics["Error"]);
         Assert.Equal(3.4, sample.Metrics["StdDev"]);
         Assert.Equal(8192, sample.Metrics["Allocated"]);
-        Assert.Equal(8192, Assert.Single(result.Summary).Metrics["Allocated"]);
+        Assert.Equal(1.5, row.MedianMs);
+        Assert.Equal(9, row.MeanMs);
+        Assert.Equal(1, row.MinMs);
+        Assert.Equal(12, row.MaxMs);
+        Assert.Equal(8192, row.Metrics["Allocated"]);
     }
 
     [Fact]
@@ -1142,6 +1227,7 @@ public sealed class BenchmarkServicesTests
         var result = new BenchmarkResultImporter().Import(root);
         var sample = Assert.Single(result.Samples);
 
+        Assert.Equal("suite", result.Suite);
         Assert.Equal("New", sample.Scenario);
         Assert.Equal("2", sample.Variables["Rows"]);
     }
@@ -1310,6 +1396,65 @@ benchmark 'helpers' {
         var result = new PowerShellBenchmarkRunner().Run(suite);
 
         Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
+    }
+
+    [Fact]
+    public void DslRuntime_RestoresCapturedHelperFunctionsAfterUse()
+    {
+        var previousRunspace = System.Management.Automation.Runspaces.Runspace.DefaultRunspace;
+        using var runspace = System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace();
+        runspace.Open();
+        System.Management.Automation.Runspaces.Runspace.DefaultRunspace = runspace;
+        try
+        {
+            using (var ps = System.Management.Automation.PowerShell.Create(runspace))
+            {
+                ps.AddScript("function Get-PowerForgeBenchmarkProbe { 'original' }");
+                ps.Invoke();
+            }
+
+            var script = ScriptBlock.Create(@"
+function Get-PowerForgeBenchmarkProbe { 'captured' }
+benchmark 'helpers' {
+    axis Operation Run
+    axis Engine Managed
+    setup { param($case, $run) $run.Probe = Get-PowerForgeBenchmarkProbe }
+    engine Managed { operation Run { param($case, $run) if ($run.Probe -ne 'captured') { throw 'helper missing' } } }
+}
+");
+
+            var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+            suite.WarmupCount = 0;
+            suite.IterationCount = 1;
+            var result = new PowerShellBenchmarkRunner().Run(suite);
+
+            using var verify = System.Management.Automation.PowerShell.Create(runspace);
+            verify.AddScript("Get-PowerForgeBenchmarkProbe");
+            var restored = Assert.Single(verify.Invoke()).BaseObject;
+            Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
+            Assert.Equal("original", restored);
+        }
+        finally
+        {
+            System.Management.Automation.Runspaces.Runspace.DefaultRunspace = previousRunspace;
+        }
+    }
+
+    [Fact]
+    public void DslRuntime_RejectsDuplicateEngineNames()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'dup' {
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+    engine managed { operation Other { param($case, $run) } }
+}
+");
+
+        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+
+        Assert.Contains("already defines engine", ex.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1787,11 +1932,14 @@ benchmark 'path' -out 'relative-out' {
     public void Runner_RejectsUnsupportedComparisonDimensions()
     {
         var suite = CreateRunnableSuite();
+        var output = Path.Combine(suite.OutputRoot, "comparison-side-effect.txt");
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create($"[IO.File]::WriteAllText('{output.Replace("'", "''")}', 'executed')");
         suite.Comparisons.Add(new PowerShellBenchmarkComparison { Dimension = "Operation", Baseline = "Run" });
 
         var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Run(suite));
 
         Assert.Contains("Operation", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(output));
     }
 
     [Fact]

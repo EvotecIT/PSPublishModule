@@ -164,7 +164,10 @@ public static class PowerShellBenchmarkDslRuntime
     {
         var context = RequireContext();
         var suite = RequireSuite();
-        var engine = new PowerShellBenchmarkEngine { Name = RequireName(name, "engine name") };
+        var engineName = RequireName(name, "engine name");
+        if (suite.Engines.Any(engine => string.Equals(engine.Name, engineName, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException($"Benchmark suite '{suite.Name}' already defines engine '{engineName}'.");
+        var engine = new PowerShellBenchmarkEngine { Name = engineName };
         suite.Engines.Add(engine);
         context.EngineStack.Push(engine);
         try
@@ -299,13 +302,34 @@ foreach ($function in Get-Command -CommandType Function -ErrorAction SilentlyCon
 
 $scriptText = $ScriptBlock.ToString()
 {
-    foreach ($entry in $capturedFunctions.GetEnumerator()) {
-        Set-Item -Path "Function:\$($entry.Key)" -Value ([scriptblock]::Create([string] $entry.Value)) -ErrorAction Stop
+    $previousFunctions = @{}
+    $missingFunctions = @{}
+    try {
+        foreach ($entry in $capturedFunctions.GetEnumerator()) {
+            $functionPath = "Function:\$($entry.Key)"
+            $existingFunction = Get-Item -Path $functionPath -ErrorAction SilentlyContinue
+            if ($null -eq $existingFunction) {
+                $missingFunctions[$entry.Key] = $true
+            } else {
+                $previousFunctions[$entry.Key] = $existingFunction.ScriptBlock
+            }
+            Set-Item -Path $functionPath -Value ([scriptblock]::Create([string] $entry.Value)) -ErrorAction Stop
+        }
+        foreach ($entry in $captured.GetEnumerator()) {
+            Set-Variable -Name $entry.Key -Value $entry.Value -Scope Local
+        }
+        & ([scriptblock]::Create($scriptText)) @args
     }
-    foreach ($entry in $captured.GetEnumerator()) {
-        Set-Variable -Name $entry.Key -Value $entry.Value -Scope Local
+    finally {
+        foreach ($entry in $capturedFunctions.GetEnumerator()) {
+            $functionPath = "Function:\$($entry.Key)"
+            if ($previousFunctions.ContainsKey($entry.Key)) {
+                Set-Item -Path $functionPath -Value $previousFunctions[$entry.Key] -ErrorAction SilentlyContinue
+            } elseif ($missingFunctions.ContainsKey($entry.Key)) {
+                Remove-Item -Path $functionPath -ErrorAction SilentlyContinue
+            }
+        }
     }
-    & ([scriptblock]::Create($scriptText)) @args
 }.GetNewClosure()
 """),
             ["benchmark"] = ScriptBlock.Create("param([Parameter(Position=0)] [string] $Name, [Alias('out')] [string] $OutputRoot, [Parameter(Position=1)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Benchmark($Name, $OutputRoot, $ScriptBlock)"),

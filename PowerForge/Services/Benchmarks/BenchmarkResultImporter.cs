@@ -46,14 +46,10 @@ public sealed class BenchmarkResultImporter
             .OrderByDescending(File.GetLastWriteTimeUtc)
             .ToArray();
         if (sampleFiles.Length > 0)
-            return BuildImportedResult(defaultSuite, ImportCsvSamples(sampleFiles[0], suite, defaultSuite));
-
-        var benchmarkDotNetFiles = Directory.GetFiles(path, "*-report.csv", SearchOption.AllDirectories)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (benchmarkDotNetFiles.Length > 0)
-            return BuildImportedResult(defaultSuite, benchmarkDotNetFiles.SelectMany(file => ImportCsvSamples(file, suite, defaultSuite)).ToArray());
+        {
+            var runnerSamples = ImportCsvSamples(sampleFiles[0], suite, defaultSuite);
+            return BuildImportedResult(suite ?? runnerSamples.FirstOrDefault()?.Suite ?? defaultSuite, runnerSamples);
+        }
 
         var benchmarkDotNetJsonFiles = Directory.GetFiles(path, "*-report*.json", SearchOption.AllDirectories)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -66,6 +62,16 @@ public sealed class BenchmarkResultImporter
             .ToArray();
         if (benchmarkDotNetJsonFiles.Length > 0)
             return BuildImportedResult(defaultSuite, benchmarkDotNetJsonFiles.SelectMany(file => ImportJson(file, suite).Samples).ToArray());
+
+        var benchmarkDotNetFiles = Directory.GetFiles(path, "*-report.csv", SearchOption.AllDirectories)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (benchmarkDotNetFiles.Length > 0)
+        {
+            var benchmarkDotNetSamples = benchmarkDotNetFiles.SelectMany(file => ImportCsvSamples(file, suite, defaultSuite)).ToArray();
+            return BuildImportedResult(suite ?? benchmarkDotNetSamples.FirstOrDefault()?.Suite ?? defaultSuite, benchmarkDotNetSamples);
+        }
 
         var summaryFiles = Directory.GetFiles(path, "summary.csv", SearchOption.AllDirectories)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -86,10 +92,10 @@ public sealed class BenchmarkResultImporter
             .SelectMany(file => ImportCsvSamples(file, suite, defaultSuite))
             .ToArray();
         if (samples.Length > 0)
-            return BuildImportedResult(defaultSuite, samples);
+            return BuildImportedResult(suite ?? samples.FirstOrDefault()?.Suite ?? defaultSuite, samples);
 
         var summary = csvFiles.SelectMany(file => ImportCsvSummary(file, suite, defaultSuite)).ToArray();
-        return BuildImportedSummaryResult(defaultSuite, summary);
+        return BuildImportedSummaryResult(suite ?? summary.FirstOrDefault()?.Suite ?? defaultSuite, summary);
     }
 
     private BenchmarkRunResult ImportJson(string path, string? suite)
@@ -228,7 +234,7 @@ public sealed class BenchmarkResultImporter
                 DurationMs = mean ?? 0,
                 Reason = Get(map, "Reason") ?? (mean.HasValue ? string.Empty : "Duration column could not be parsed."),
                 Variables = ExtractVariables(map, metadataColumns, metricHeaders, isBenchmarkDotNetCsv),
-                Metrics = ExtractMetrics(map, metricHeaders)
+                Metrics = ExtractMetrics(map, metricHeaders, isBenchmarkDotNetCsv)
             });
         }
 
@@ -269,7 +275,7 @@ public sealed class BenchmarkResultImporter
                 MeanMs = ParseDuration(GetWithHeader(map, out var meanHeader, "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean"), meanHeader),
                 MinMs = ParseDuration(GetWithHeader(map, out var minHeader, "MinMs", "Min [ns]", "Min [us]", "Min [ms]", "Min"), minHeader),
                 MaxMs = ParseDuration(GetWithHeader(map, out var maxHeader, "MaxMs", "Max [ns]", "Max [us]", "Max [ms]", "Max"), maxHeader),
-                Metrics = ExtractMetrics(map, metricHeaders)
+                Metrics = ExtractMetrics(map, metricHeaders, isBenchmarkDotNetCsv)
             });
         }
 
@@ -777,12 +783,23 @@ public sealed class BenchmarkResultImporter
             .Where(k => !IsExcludedVariableColumn(k.Key, excludedColumns, excludeBenchmarkDotNetStatisticColumns) && (metricColumns is null || !metricColumns.Contains(k.Key)))
             .ToDictionary(k => k.Key, k => (string?)k.Value, StringComparer.OrdinalIgnoreCase);
 
-    private static Dictionary<string, double> ExtractMetrics(IReadOnlyDictionary<string, string> values, HashSet<string> metricColumns)
-        => metricColumns
-            .Where(values.ContainsKey)
-            .Select(name => new { name, value = ParseNumericMetric(values[name], name) })
-            .Where(item => item.value.HasValue)
-            .ToDictionary(item => item.name, item => item.value!.Value, StringComparer.OrdinalIgnoreCase);
+    private static Dictionary<string, double> ExtractMetrics(IReadOnlyDictionary<string, string> values, HashSet<string> metricColumns, bool normalizeBenchmarkDotNetMetrics)
+    {
+        var metrics = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in metricColumns.Where(values.ContainsKey))
+        {
+            var value = ParseNumericMetric(values[name], name);
+            if (!value.HasValue)
+                continue;
+
+            var metricName = normalizeBenchmarkDotNetMetrics
+                ? BenchmarkDotNetStatisticMetricName(name) ?? name
+                : name;
+            metrics[metricName] = value.Value;
+        }
+
+        return metrics;
+    }
 
     private static HashSet<string> SampleMetricColumnsFor(string[] headers, bool includeBenchmarkDotNetStatisticColumns)
     {
@@ -877,8 +894,7 @@ public sealed class BenchmarkResultImporter
     private static bool IsBenchmarkDotNetMetricColumn(string key)
     {
         var normalized = RemoveBracketUnit(key).Replace(" ", string.Empty);
-        return BenchmarkDotNetStatisticColumns.Contains(normalized)
-               && !BenchmarkDotNetPrimaryDurationColumns.Contains(normalized);
+        return BenchmarkDotNetStatisticColumns.Contains(normalized);
     }
 
     private static string? BenchmarkDotNetStatisticMetricName(string key)
