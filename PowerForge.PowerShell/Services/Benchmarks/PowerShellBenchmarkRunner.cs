@@ -522,8 +522,28 @@ public sealed class PowerShellBenchmarkRunner
             new("ErrorActionPreference", ActionPreference.Stop),
             new("PSNativeCommandUseErrorActionPreference", true)
         };
-        return block.InvokeWithContext(functionsToDefine: null, variablesToDefine: variables, args);
+        return NativeExitAwareInvokeWrapper.InvokeWithContext(functionsToDefine: null, variablesToDefine: variables, new object[] { block, args });
     }
+
+    private static readonly ScriptBlock NativeExitAwareInvokeWrapper = ScriptBlock.Create("""
+param([scriptblock] $Block, [object[]] $Arguments)
+$previousLastExitCode = $global:LASTEXITCODE
+$global:LASTEXITCODE = 0
+try {
+    & $Block @Arguments
+    $nativeExitCode = $global:LASTEXITCODE
+    if ($null -ne $nativeExitCode -and $nativeExitCode -ne 0) {
+        throw "Native command exited with code $nativeExitCode."
+    }
+}
+finally {
+    if ($null -eq $previousLastExitCode) {
+        Remove-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
+    } else {
+        $global:LASTEXITCODE = $previousLastExitCode
+    }
+}
+""");
 
     private static string[] GetVariableHeaders(IEnumerable<Dictionary<string, string?>> variables)
         => variables

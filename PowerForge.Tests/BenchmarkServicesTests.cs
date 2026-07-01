@@ -559,6 +559,21 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_PreservesRunnerScenarioWhenMethodIsVariable()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(csv, "Suite,Scenario,Operation,Engine,Host,Method,Iteration,Status,DurationMs,Reason\nsuite,CaseA,Run,Managed,Current,Fast,0,Succeeded,12.5,\n");
+
+        var result = new BenchmarkResultImporter().Import(csv);
+        var sample = Assert.Single(result.Samples);
+
+        Assert.Equal("CaseA", sample.Scenario);
+        Assert.Equal("Fast", sample.Variables["Method"]);
+        Assert.Equal("Fast", Assert.Single(result.Summary).Variables["Method"]);
+    }
+
+    [Fact]
     public void Importer_HandlesQuotedMultilineCsvRecords()
     {
         var root = CreateTempRoot();
@@ -689,6 +704,47 @@ benchmark 'none' {
 
         Assert.NotNull(property);
         Assert.Contains(property!.GetCustomAttributes(inherit: true), attribute => attribute is ParameterAttribute);
+    }
+
+    [Fact]
+    public void InvokeBenchmarkSuiteCommand_ResolvesRelativeOutputRootFromPowerShellLocation()
+    {
+        var processRoot = CreateTempRoot();
+        var shellRoot = CreateTempRoot();
+        var previousCurrentDirectory = Environment.CurrentDirectory;
+        try
+        {
+            Environment.CurrentDirectory = processRoot;
+            var initialSessionState = System.Management.Automation.Runspaces.InitialSessionState.CreateDefault();
+            initialSessionState.Commands.Add(new System.Management.Automation.Runspaces.SessionStateCmdletEntry("Invoke-BenchmarkSuite", typeof(PSPublishModule.InvokeBenchmarkSuiteCommand), helpFileName: null));
+            using var runspace = System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace(initialSessionState);
+            runspace.Open();
+            using var ps = System.Management.Automation.PowerShell.Create(runspace);
+            ps.AddCommand("Set-Location").AddParameter("Path", shellRoot);
+            ps.Invoke();
+            ps.Commands.Clear();
+
+            var settings = ScriptBlock.Create(@"
+benchmark 'path' -out 'relative-out' {
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+            ps.AddCommand("Invoke-BenchmarkSuite")
+                .AddParameter("Settings", settings)
+                .AddParameter("WarmupCount", 0)
+                .AddParameter("IterationCount", 1);
+
+            var result = Assert.IsType<BenchmarkRunResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+            Assert.StartsWith(Path.Combine(shellRoot, "relative-out"), result.Artifacts["run-report.json"], StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(Path.Combine(processRoot, "relative-out")));
+        }
+        finally
+        {
+            Environment.CurrentDirectory = previousCurrentDirectory;
+        }
     }
 
     [Fact]
@@ -841,6 +897,19 @@ benchmark 'none' {
         var sample = Assert.Single(result.Samples);
         Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
         Assert.Contains("stopped", sample.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Runner_TreatsDesktopNativeExitCodesAsFailures()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create("param($case, $run) $global:LASTEXITCODE = 23");
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Contains("23", sample.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

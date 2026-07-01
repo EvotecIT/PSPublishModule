@@ -95,6 +95,7 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
         foreach (var suite in suites)
         {
             ApplyOverrides(suite);
+            ResolveSuitePaths(suite);
             if (Plan)
             {
                 WriteObject(runner.Plan(suite), enumerateCollection: true);
@@ -113,4 +114,19 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
         if (!string.IsNullOrWhiteSpace(RunMode)) suite.RunMode = RunMode!;
         if (!string.IsNullOrWhiteSpace(Suite)) suite.Name = Suite!;
     }
+
+    private void ResolveSuitePaths(PowerShellBenchmarkSuite suite)
+    {
+        suite.OutputRoot = ResolveFileSystemPath(suite.OutputRoot);
+        foreach (var block in suite.ReadmeBlocks)
+        {
+            if (!string.IsNullOrWhiteSpace(block.Path))
+                block.Path = ResolveFileSystemPath(block.Path);
+        }
+    }
+
+    private string ResolveFileSystemPath(string path)
+        => System.IO.Path.IsPathRooted(path)
+            ? path
+            : SessionState.Path.GetUnresolvedProviderPathFromPSPath(path);
 }

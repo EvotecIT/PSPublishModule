@@ -196,7 +196,8 @@ public sealed class BenchmarkResultImporter
                 map[headers[h]] = values[h];
 
             var metricHeaders = HeadersAfter(headers, "Reason");
-            var method = Get(map, "Method", "Scenario", "Benchmark") ?? Path.GetFileNameWithoutExtension(path);
+            var metadataColumns = SampleMetadataColumnsFor(map);
+            var method = Get(map, "Scenario", "Method", "Benchmark") ?? Path.GetFileNameWithoutExtension(path);
             var mean = ParseDuration(GetWithHeader(map, out var durationHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median", "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean", "DurationMs"), durationHeader);
             var status = ParseSampleStatus(Get(map, "Status"), mean.HasValue);
             samples.Add(new BenchmarkSample
@@ -213,7 +214,7 @@ public sealed class BenchmarkResultImporter
                 Status = status,
                 DurationMs = mean ?? 0,
                 Reason = Get(map, "Reason") ?? (mean.HasValue ? string.Empty : "Duration column could not be parsed."),
-                Variables = ExtractVariables(map, SampleMetadataColumns, metricHeaders),
+                Variables = ExtractVariables(map, metadataColumns, metricHeaders),
                 Metrics = ExtractMetrics(map, metricHeaders)
             });
         }
@@ -236,6 +237,7 @@ public sealed class BenchmarkResultImporter
                 map[headers[h]] = values[h];
 
             var metricHeaders = HeadersAfter(headers, "MaxMs");
+            var metadataColumns = SummaryMetadataColumnsFor(map);
             var failureCount = ParseInt(Get(map, "FailureCount")) ?? 0;
             rows.Add(new BenchmarkSummaryRow
             {
@@ -244,7 +246,7 @@ public sealed class BenchmarkResultImporter
                 Operation = Get(map, "Operation") ?? "Run",
                 Engine = Get(map, "Engine") ?? Get(map, "Job") ?? "BenchmarkDotNet",
                 Host = Get(map, "Host") ?? string.Empty,
-                Variables = ExtractVariables(map, SummaryMetadataColumns, metricHeaders),
+                Variables = ExtractVariables(map, metadataColumns, metricHeaders),
                 SampleCount = ParseInt(Get(map, "SampleCount")) ?? 0,
                 FailureCount = failureCount,
                 Status = Get(map, "Status") ?? (failureCount > 0 ? "Failed" : "Succeeded"),
@@ -616,6 +618,25 @@ public sealed class BenchmarkResultImporter
         "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs", "Median", "Mean", "Min", "Max", "Median [ns]", "Median [us]",
         "Median [ms]", "Mean [ns]", "Mean [us]", "Mean [ms]", "Min [ns]", "Min [us]", "Min [ms]", "Max [ns]", "Max [us]", "Max [ms]"
     };
+
+    private static HashSet<string> SampleMetadataColumnsFor(IReadOnlyDictionary<string, string> values)
+    {
+        var columns = new HashSet<string>(SampleMetadataColumns, StringComparer.OrdinalIgnoreCase);
+        if (HasText(values, "Scenario"))
+            columns.Remove("Method");
+        return columns;
+    }
+
+    private static HashSet<string> SummaryMetadataColumnsFor(IReadOnlyDictionary<string, string> values)
+    {
+        var columns = new HashSet<string>(SummaryMetadataColumns, StringComparer.OrdinalIgnoreCase);
+        if (HasText(values, "Scenario"))
+            columns.Remove("Method");
+        return columns;
+    }
+
+    private static bool HasText(IReadOnlyDictionary<string, string> values, string key)
+        => values.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value);
 
     private static bool IsExcludedVariableColumn(string key, HashSet<string> excludedColumns)
         => excludedColumns.Contains(key) || IsBenchmarkDotNetStatisticColumn(key);
