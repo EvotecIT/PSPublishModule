@@ -14694,6 +14694,19 @@ Defaults to powerforge.json in the project root.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="ConfigurationGateMode">
+          <maml:name>RunMode</maml:name>
+          <maml:description>
+            <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Build runs local build/package lanes,&#xD;
+and Publish enables configured publish destinations.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>Settings</maml:name>
           <maml:description>
@@ -14908,6 +14921,19 @@ Defaults to powerforge.json in the project root.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="ConfigurationGateMode">
+          <maml:name>RunMode</maml:name>
+          <maml:description>
+            <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Build runs local build/package lanes,&#xD;
+and Publish enables configured publish destinations.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>UpdateDiagnosticsBaseline</maml:name>
           <maml:description>
@@ -15082,6 +15108,19 @@ Defaults to powerforge.json in the project root.</maml:para>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="ConfigurationGateMode">
+          <maml:name>RunMode</maml:name>
+          <maml:description>
+            <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Build runs local build/package lanes,&#xD;
+and Publish enables configured publish destinations.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -15550,6 +15589,19 @@ Defaults to powerforge.json in the project root.</maml:para>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
         <dev:type>
           <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="ConfigurationGateMode">
+        <maml:name>RunMode</maml:name>
+        <maml:description>
+          <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Build runs local build/package lanes,&#xD;
+and Publish enables configured publish destinations.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <dev:type>
+          <maml:name>Nullable`1</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
