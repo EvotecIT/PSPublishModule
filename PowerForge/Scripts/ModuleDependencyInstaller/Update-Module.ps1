@@ -2,10 +2,16 @@ param(
   [string]$Name,
   [string]$PrereleaseFlag,
   [string]$CredentialUser,
-  [string]$CredentialSecret
+  [string]$CredentialSecret,
+  [string]$Scope
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+
+try {
+  [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+} catch {
+}
 
 function Enc([string]$s) {
   return [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string]$s)))
@@ -25,10 +31,11 @@ try {
     Name = $Name
     Force = $true
     ErrorAction = 'Stop'
-    Scope = 'CurrentUser'
-    AcceptLicense = $true
   }
+  if ([string]::IsNullOrWhiteSpace($Scope)) { $params.Scope = 'CurrentUser' } else { $params.Scope = $Scope }
   if ($PrereleaseFlag -eq '1') { $params.AllowPrerelease = $true }
+  $updateCommand = Get-Command Update-Module -ErrorAction Stop
+  if ($updateCommand.Parameters.ContainsKey('AcceptLicense')) { $params.AcceptLicense = $true }
   if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
     $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
     $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)

@@ -78,7 +78,7 @@ internal static class ModuleRepositoryProfileReadinessMapper
             RecommendedBootstrapMode = PrivateGalleryVersionPolicy.GetRecommendedBootstrapMode(status),
             RecommendedConnectCommand = BuildRecommendedConnectCommand(profile.Name, installPrerequisitesRecommended),
             RecommendedOnboardingCommand = BuildRecommendedOnboardingCommand(profile.Name, installPrerequisitesRecommended),
-            RecommendedInstallCommand = $"Install-PrivateModule -Name <ModuleName> -ProfileName '{profile.Name}'",
+            RecommendedInstallCommand = $"Install-ManagedModule -Name <ModuleName> -ProfileName '{profile.Name}'",
             ReadinessMessages = status.ReadinessMessages
         };
     }
@@ -91,7 +91,7 @@ internal static class ModuleRepositoryProfileReadinessMapper
         var normalizedName = string.IsNullOrWhiteSpace(name) ? string.Empty : name.Trim();
         var messages = new List<string>(1)
         {
-            $"Module repository profile '{normalizedName}' was not found. Create or import it with Initialize-ModuleRepository before installing, updating, or publishing."
+            $"Managed module repository '{normalizedName}' was not found. Create it with Set-ManagedModuleRepository or import it with Initialize-ManagedModuleRepository before installing, updating, or publishing."
         };
 
         return new ModuleRepositoryProfileReadinessResult
@@ -108,7 +108,7 @@ internal static class ModuleRepositoryProfileReadinessMapper
     {
         var parts = new List<string>
         {
-            "Connect-ModuleRepository",
+            "Initialize-ManagedModuleRepository",
             $"-ProfileName '{profileName}'"
         };
 
@@ -122,7 +122,7 @@ internal static class ModuleRepositoryProfileReadinessMapper
     {
         var parts = new List<string>
         {
-            "Initialize-ModuleRepository",
+            "Initialize-ManagedModuleRepository",
             $"-ProfileName '{profileName}'"
         };
 

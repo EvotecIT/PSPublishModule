@@ -270,10 +270,20 @@ public sealed class PowerShellRunner : IPowerShellRunner
             try
             {
                 var candidate = Path.Combine(dir, fileName);
-                if (File.Exists(candidate)) return candidate;
+                if (File.Exists(candidate) && !IsWindowsAppsExecutionAlias(candidate))
+                    return candidate;
             }
             catch { /* ignore */ }
         }
         return null;
+    }
+
+    private static bool IsWindowsAppsExecutionAlias(string path)
+    {
+        if (Path.DirectorySeparatorChar != '\\')
+            return false;
+
+        var normalized = path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+        return normalized.Contains(@"\WindowsApps\", StringComparison.OrdinalIgnoreCase);
     }
 }

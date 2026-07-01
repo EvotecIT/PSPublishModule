@@ -16,7 +16,7 @@ internal static class ModuleManifestValueReader
     {
         value = null;
         return TryReadManifestText(manifestPath, out var manifestText) &&
-               ModuleManifestTextParser.TryGetQuotedStringValue(manifestText, key, out value);
+               ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(manifestText, key, out value);
     }
 
     internal static string[] ReadTopLevelStringOrArray(string manifestPath, string key)
@@ -49,6 +49,11 @@ internal static class ModuleManifestValueReader
         if (!TryReadManifestText(manifestPath, out var manifestText))
             return Array.Empty<string>();
 
+        return ReadPsDataStringOrArrayFromText(manifestText, key);
+    }
+
+    internal static string[] ReadPsDataStringOrArrayFromText(string manifestText, string key)
+    {
         if (ModuleManifestTextParser.TryReadPsDataAssignedExpression(manifestText, key, out var expression) &&
             !string.IsNullOrWhiteSpace(expression))
         {
@@ -72,6 +77,25 @@ internal static class ModuleManifestValueReader
             return new[] { fallbackValue! };
 
         return Array.Empty<string>();
+    }
+
+    internal static bool ReadPsDataBoolean(string manifestPath, string key)
+    {
+        if (!TryReadManifestText(manifestPath, out var manifestText))
+            return false;
+
+        return ReadPsDataBooleanFromText(manifestText, key);
+    }
+
+    internal static bool ReadPsDataBooleanFromText(string manifestText, string key)
+    {
+        if (!ModuleManifestTextParser.TryReadPsDataAssignedExpression(manifestText, key, out var expression) ||
+            string.IsNullOrWhiteSpace(expression))
+        {
+            return false;
+        }
+
+        return ModuleManifestTextParser.TryParseBooleanExpression(expression!, out var value) && value;
     }
 
     internal static RequiredModuleReference[] ReadRequiredModules(string manifestPath)

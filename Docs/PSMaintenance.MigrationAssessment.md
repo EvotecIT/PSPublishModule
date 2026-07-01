@@ -182,7 +182,7 @@ This CoreCLR resolver is useful and should ship with the migration, but it is no
 ## What Not To Duplicate
 
 - Do not duplicate `New-ConfigurationDelivery` concepts. Read the same `PrivateData.PSData.Delivery` metadata PowerForge already writes.
-- Do not create a parallel repository registration/private module install flow. PSPublishModule already has `Register-ModuleRepository`, `Connect-ModuleRepository`, `Install-PrivateModule`, `Update-PrivateModule`, and related services.
+- Do not create a parallel repository registration or module lifecycle flow. PSPublishModule already has `Set-ManagedModuleRepository`, `Initialize-ManagedModuleRepository`, `Install-ManagedModule`, `Update-ManagedModule`, and related services.
 - Do not copy the existing 95 KB `HtmlExporter` as-is. Split it first, or it will become the next large file that blocks maintenance.
 - Do not put renderer package dependencies into `PowerForge` core.
 - Do not preserve PSMaintenance token storage as an implicit singleton without an abstraction. The new service should make token source precedence explicit: parameter, environment, stored profile token.

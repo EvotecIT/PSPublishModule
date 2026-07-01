@@ -153,12 +153,12 @@ Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifact
             $setProfile.AzureDevOpsProject = $project
         }
 
-        $profile = Set-ModuleRepositoryProfile @setProfile
+        $profile = Set-ManagedModuleRepository @setProfile
         $profile.Name | Should -Be $profileName
         $profile.AuthenticationMode | Should -Be 'AzureArtifactsCredentialProvider'
 
         $bootstrapRoot = Join-Path $script:LiveProfileRoot 'bootstrap'
-        $bootstrapPackage = New-ModuleRepositoryBootstrap -ProfileName $profileName -OutputDirectory $bootstrapRoot -InstallModule $moduleName -Force
+        $bootstrapPackage = Initialize-ManagedModuleRepository -ProfileName $profileName -BootstrapPath $bootstrapRoot -InstallModule $moduleName -Force
         $bootstrapPackage | Should -Not -BeNullOrEmpty
         $bootstrapPackage.ContainsSecrets | Should -BeFalse
         $bootstrapPackage.ProfileNames | Should -Contain $profileName
@@ -172,8 +172,8 @@ Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifact
         $bootstrapProfileJson | Should -Not -Match '"Token"'
 
         $profileFile = Join-Path $script:LiveProfileRoot "$profileName.profile.json"
-        Export-ModuleRepositoryProfile -Name $profileName -Path $profileFile -Force | Out-Null
-        Remove-ModuleRepositoryProfile -Name $profileName
+        Get-ManagedModuleRepository -Name $profileName -ExportPath $profileFile -Force | Out-Null
+        Remove-ManagedModuleRepository -Name $profileName
 
         $bootstrapOutput = @(& $bootstrapPackage.ScriptPath -ErrorAction Stop)
         $onboarding = @(
@@ -195,10 +195,10 @@ Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifact
         $publish.Configuration.Repository.Uri | Should -Match '^https://pkgs\.dev\.azure\.com/'
         $publish.Configuration.Repository.Credential | Should -BeNullOrEmpty
 
-        $install = Install-PrivateModule -ProfileName $profileName -Name $moduleName -InstallPrerequisites -Force -ErrorAction Stop
+        $install = Install-ManagedModule -ProfileName $profileName -Name $moduleName -InstallPrerequisites -Force -ErrorAction Stop
         $install | Should -Not -BeNullOrEmpty
 
-        $update = Update-PrivateModule -ProfileName $profileName -Name $moduleName -InstallPrerequisites -ErrorAction Stop
+        $update = Update-ManagedModule -ProfileName $profileName -Name $moduleName -InstallPrerequisites -ErrorAction Stop
         $update | Should -Not -BeNullOrEmpty
 
         Add-AzureArtifactsLiveEvidenceItem @{
@@ -262,7 +262,7 @@ Describe 'Azure Artifacts private gallery live flow' -Tag 'Live', 'AzureArtifact
         $publishPackagePath = Join-Path $packageRoot ([IO.Path]::GetFileName($packagePath))
         Copy-Item -LiteralPath $packagePath -Destination $publishPackagePath -Force
 
-        $onboarding = Initialize-ModuleRepository @setProfile -InstallPrerequisites -ErrorAction Stop
+        $onboarding = Initialize-ManagedModuleRepository @setProfile -InstallPrerequisites -ErrorAction Stop
         $onboarding.Succeeded | Should -BeTrue
         $onboarding.Connection.AccessProbeSucceeded | Should -BeTrue
 

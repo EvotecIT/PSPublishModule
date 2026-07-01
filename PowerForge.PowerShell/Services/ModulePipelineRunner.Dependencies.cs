@@ -213,6 +213,8 @@ public sealed partial class ModulePipelineRunner
                 case PublishTool.PSResourceGet:
                     AddFeatureDependency(dependencies, new ModuleDependency("Microsoft.PowerShell.PSResourceGet"));
                     break;
+                case PublishTool.ManagedModule:
+                    break;
                 case PublishTool.Auto:
                     AddRepositoryToolDependencyForAuto(dependencies);
                     break;

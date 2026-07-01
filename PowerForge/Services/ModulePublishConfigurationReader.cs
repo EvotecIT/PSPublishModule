@@ -63,6 +63,7 @@ public sealed class ModulePublishConfigurationReader
             Force = configuration.Force,
             PublishRequiredModules = configuration.PublishRequiredModules,
             RequiredModuleSourceRepository = configuration.RequiredModuleSourceRepository,
+            RequiredModuleSourceRepositoryUri = configuration.RequiredModuleSourceRepositoryUri,
             OverwriteTagName = configuration.OverwriteTagName,
             DoNotMarkAsPreRelease = configuration.DoNotMarkAsPreRelease,
             GenerateReleaseNotes = configuration.GenerateReleaseNotes,

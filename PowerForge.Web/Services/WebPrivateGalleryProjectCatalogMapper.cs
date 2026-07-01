@@ -307,13 +307,13 @@ public static class WebPrivateGalleryProjectCatalogMapper
     private static string BuildInstallCommand(string repositoryName, string packageName)
     {
         var repository = string.IsNullOrWhiteSpace(repositoryName) ? "<RepositoryName>" : repositoryName.Trim();
-        return $"Install-PrivateModule -Repository {QuotePowerShell(repository)} -Name {QuotePowerShell(packageName)} -InstallPrerequisites";
+        return $"Install-ManagedModule -Repository {QuotePowerShell(repository)} -Name {QuotePowerShell(packageName)}";
     }
 
     private static string BuildUpdateCommand(string repositoryName, string packageName)
     {
         var repository = string.IsNullOrWhiteSpace(repositoryName) ? "<RepositoryName>" : repositoryName.Trim();
-        return $"Update-PrivateModule -Repository {QuotePowerShell(repository)} -Name {QuotePowerShell(packageName)} -InstallPrerequisites";
+        return $"Update-ManagedModule -Repository {QuotePowerShell(repository)} -Name {QuotePowerShell(packageName)}";
     }
 
     private static string QuotePowerShell(string value)

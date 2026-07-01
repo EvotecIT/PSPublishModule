@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -94,6 +95,36 @@ public sealed class ModulePublisherRequiredModulesTests
     }
 
     [Fact]
+    public void GetExternalModulesForPublish_ReadsManifestPsDataBeforePlanFallback()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(
+                root.FullName,
+                moduleName,
+                "1.0.0",
+                "            ExternalModuleDependencies = @('external.dependency', 'External.Dependency')");
+            var buildResult = new ModuleBuildResult(
+                stagingPath: root.FullName,
+                manifestPath: Path.Combine(root.FullName, $"{moduleName}.psd1"),
+                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+            var plan = CreatePlan(externalModuleDependencies: new[] { "Plan.Only" });
+
+            var externalModules = RequiredModuleRepositoryValidator.GetExternalModulesForPublish(buildResult, plan);
+
+            Assert.Contains("external.dependency", externalModules, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Plan.Only", externalModules, StringComparer.OrdinalIgnoreCase);
+            Assert.Single(externalModules);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void SelectRequiredModuleVersionForPublish_PicksHighestMatchingVersion()
     {
         var required = new RequiredModuleReference(
@@ -154,6 +185,79 @@ public sealed class ModulePublisherRequiredModulesTests
         var range = RequiredModuleRepositoryPublisher.BuildPSResourceGetVersionRange(required);
 
         Assert.Equal(expected, range);
+    }
+
+    [Fact]
+    public void CreateManagedPublishRepository_PrefersPublishEndpointOverSourceIndex()
+    {
+        var method = typeof(ModulePublisher).GetMethod(
+            "CreateManagedPublishRepository",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        var config = new PublishRepositoryConfiguration
+        {
+            SourceUri = "https://packages.example.test/nuget/v3/index.json",
+            PublishUri = "https://packages.example.test/nuget/v2/package"
+        };
+
+        var repository = Assert.IsType<ManagedModuleRepository>(method!.Invoke(null, new object?[] { "Company", config }));
+
+        Assert.Equal("Company", repository.Name);
+        Assert.Equal("https://packages.example.test/nuget/v2/package", repository.Source);
+    }
+
+    [Fact]
+    public void CreateManagedReadRepository_PrefersSourceIndexOverPublishEndpoint()
+    {
+        var method = typeof(ModulePublisher).GetMethod(
+            "CreateManagedReadRepository",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        var config = new PublishRepositoryConfiguration
+        {
+            SourceUri = "https://packages.example.test/nuget/v3/index.json",
+            PublishUri = "https://packages.example.test/nuget/v2/package"
+        };
+
+        var repository = Assert.IsType<ManagedModuleRepository>(method!.Invoke(null, new object?[] { "Company", config }));
+
+        Assert.Equal("Company", repository.Name);
+        Assert.Equal("https://packages.example.test/nuget/v3/index.json", repository.Source);
+    }
+
+    [Fact]
+    public void ResolveManagedPublishCredential_PrefersPublishApiKeyOverReadCredential()
+    {
+        var readCredential = new RepositoryCredential
+        {
+            UserName = "reader",
+            Secret = "read-token"
+        };
+        var publish = new PublishConfiguration
+        {
+            ApiKey = "publish-token"
+        };
+        var config = new PublishRepositoryConfiguration
+        {
+            Credential = readCredential
+        };
+        var readMethod = typeof(ModulePublisher).GetMethod(
+            "ResolveManagedReadCredential",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        var publishMethod = typeof(ModulePublisher).GetMethod(
+            "ResolveManagedPublishCredential",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(readMethod);
+        Assert.NotNull(publishMethod);
+
+        var resolvedReadCredential = Assert.IsType<RepositoryCredential>(readMethod!.Invoke(null, new object?[] { config }));
+        var resolvedPublishCredential = Assert.IsType<RepositoryCredential>(publishMethod!.Invoke(null, new object?[] { publish, config }));
+
+        Assert.Same(readCredential, resolvedReadCredential);
+        Assert.Equal("reader", resolvedReadCredential.UserName);
+        Assert.Equal("read-token", resolvedReadCredential.Secret);
+        Assert.Null(resolvedPublishCredential.UserName);
+        Assert.Equal("publish-token", resolvedPublishCredential.Secret);
     }
 
     [Fact]
@@ -324,7 +428,11 @@ public sealed class ModulePublisherRequiredModulesTests
         }
     }
 
-    private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
+    private static void WriteMinimalModule(
+        string moduleRoot,
+        string moduleName,
+        string version,
+        string? psDataLine = null)
     {
         Directory.CreateDirectory(moduleRoot);
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psm1"), string.Empty);
@@ -337,9 +445,73 @@ public sealed class ModulePublisherRequiredModulesTests
             "    FunctionsToExport = @()",
             "    CmdletsToExport = @()",
             "    AliasesToExport = @()",
+            "    PrivateData = @{",
+            "        PSData = @{",
+            string.IsNullOrWhiteSpace(psDataLine) ? string.Empty : psDataLine!,
+            "        }",
+            "    }",
             "}"
-        }) + Environment.NewLine;
+        }.Where(static line => line.Length > 0)) + Environment.NewLine;
 
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psd1"), psd1);
+    }
+
+    private static ModulePipelinePlan CreatePlan(string[]? externalModuleDependencies = null)
+    {
+        return new ModulePipelinePlan(
+            moduleName: "TestModule",
+            projectRoot: @"C:\repo\TestModule",
+            expectedVersion: "1.0.0",
+            resolvedVersion: "1.0.0",
+            preRelease: null,
+            manifest: null,
+            buildSpec: new ModuleBuildSpec
+            {
+                Name = "TestModule",
+                SourcePath = @"C:\repo\TestModule",
+                Version = "1.0.0"
+            },
+            resolvedCsprojPath: null,
+            syncNETProjectVersion: false,
+            compatiblePSEditions: Array.Empty<string>(),
+            requiredModules: Array.Empty<RequiredModuleReference>(),
+            externalModuleDependencies: externalModuleDependencies ?? Array.Empty<string>(),
+            requiredModulesForPackaging: Array.Empty<RequiredModuleReference>(),
+            information: null,
+            documentation: null,
+            delivery: null,
+            documentationBuild: null,
+            compatibilitySettings: null,
+            fileConsistencySettings: null,
+            validationSettings: null,
+            formatting: null,
+            importModules: null,
+            placeHolders: Array.Empty<PlaceHolderReplacement>(),
+            placeHolderOption: null,
+            commandModuleDependencies: new Dictionary<string, string[]>(),
+            testsAfterMerge: Array.Empty<TestConfiguration>(),
+            actions: Array.Empty<ConfigurationActionSegment>(),
+            mergeModule: false,
+            mergeMissing: false,
+            doNotAttemptToFixRelativePaths: false,
+            approvedModules: Array.Empty<string>(),
+            moduleSkip: null,
+            signModule: false,
+            signing: null,
+            publishes: Array.Empty<ConfigurationPublishSegment>(),
+            artefacts: Array.Empty<ConfigurationArtefactSegment>(),
+            installEnabled: false,
+            installStrategy: InstallationStrategy.AutoRevision,
+            installKeepVersions: 3,
+            installRoots: Array.Empty<string>(),
+            installLegacyFlatHandling: LegacyFlatModuleHandling.Warn,
+            installPreserveVersions: Array.Empty<string>(),
+            installMissingModules: false,
+            installMissingModulesForce: false,
+            installMissingModulesPrerelease: false,
+            installMissingModulesRepository: null,
+            installMissingModulesCredential: null,
+            stagingWasGenerated: true,
+            deleteGeneratedStagingAfterRun: true);
     }
 }

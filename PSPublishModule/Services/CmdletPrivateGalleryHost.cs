@@ -13,7 +13,10 @@ internal sealed class CmdletPrivateGalleryHost : IPrivateGalleryHost
         _cmdlet = cmdlet ?? throw new ArgumentNullException(nameof(cmdlet));
     }
 
-    public bool ShouldProcess(string target, string action) => _cmdlet.ShouldProcess(target, action);
+    public bool ShouldProcess(string target, string action)
+        => _cmdlet is AsyncPSCmdlet asyncCmdlet
+            ? asyncCmdlet.ShouldProcess(target, action)
+            : _cmdlet.ShouldProcess(target, action);
 
     public bool IsWhatIfRequested =>
         _cmdlet.MyInvocation.BoundParameters.TryGetValue("WhatIf", out var whatIfValue) &&
@@ -22,7 +25,9 @@ internal sealed class CmdletPrivateGalleryHost : IPrivateGalleryHost
 
     public RepositoryCredential? PromptForCredential(string caption, string message)
     {
-        var promptCredential = _cmdlet.Host.UI.PromptForCredential(caption, message, string.Empty, string.Empty);
+        var promptCredential = _cmdlet is AsyncPSCmdlet asyncCmdlet
+            ? asyncCmdlet.PromptForCredential(caption, message, string.Empty, string.Empty)
+            : _cmdlet.Host.UI.PromptForCredential(caption, message, string.Empty, string.Empty);
         if (promptCredential is null)
             return null;
 
@@ -33,7 +38,19 @@ internal sealed class CmdletPrivateGalleryHost : IPrivateGalleryHost
         };
     }
 
-    public void WriteVerbose(string message) => _cmdlet.WriteVerbose(message);
+    public void WriteVerbose(string message)
+    {
+        if (_cmdlet is AsyncPSCmdlet asyncCmdlet)
+            asyncCmdlet.WriteVerbose(message);
+        else
+            _cmdlet.WriteVerbose(message);
+    }
 
-    public void WriteWarning(string message) => _cmdlet.WriteWarning(message);
+    public void WriteWarning(string message)
+    {
+        if (_cmdlet is AsyncPSCmdlet asyncCmdlet)
+            asyncCmdlet.WriteWarning(message);
+        else
+            _cmdlet.WriteWarning(message);
+    }
 }
