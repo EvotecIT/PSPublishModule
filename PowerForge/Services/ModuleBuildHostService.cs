@@ -181,7 +181,9 @@ public sealed class ModuleBuildHostService
         }
 
         if (request.NoDotnetBuild)
-            arguments.Add("$buildScriptArguments += '-NoDotnetBuild'");
+        {
+            arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('NoDotnetBuild')) { $buildScriptArguments += '-NoDotnetBuild' }");
+        }
 
         if (!string.IsNullOrWhiteSpace(request.ModuleVersion))
         {
@@ -197,7 +199,9 @@ public sealed class ModuleBuildHostService
             arguments.Add("$buildScriptArguments += '-NoSign'");
 
         if (request.SignModule)
-            arguments.Add("$buildScriptArguments += '-SignModule'");
+        {
+            arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('SignModule')) { $buildScriptArguments += '-SignModule:$true' }");
+        }
 
         arguments.Add(". $buildScriptPath @buildScriptArguments");
 

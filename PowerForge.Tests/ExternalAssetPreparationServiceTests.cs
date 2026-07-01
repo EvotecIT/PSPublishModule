@@ -276,6 +276,53 @@ public sealed class ExternalAssetPreparationServiceTests
     }
 
     [Fact]
+    public void Prepare_RejectsExistingProjectManifestPathBeforeMaterializingFiles()
+    {
+        var workspace = CreateTempDirectory();
+        try
+        {
+            var projectRoot = Path.Combine(workspace, "Project");
+            Directory.CreateDirectory(projectRoot);
+            var sourceRoot = Path.Combine(workspace, "Source");
+            Directory.CreateDirectory(sourceRoot);
+            var sourceFile = Path.Combine(sourceRoot, "tool.zip");
+            File.WriteAllText(sourceFile, "payload");
+            var projectManifest = Path.Combine(projectRoot, "TestModule.psd1");
+            File.WriteAllText(projectManifest, "@{ ModuleVersion = '1.0.0' }");
+
+            var service = new ExternalAssetPreparationService(new NullLogger());
+            var segment = new ConfigurationExternalAssetSegment
+            {
+                Configuration = new ExternalAssetConfiguration
+                {
+                    Name = "VendorTool",
+                    OutputPath = "Artefacts/VendorTool",
+                    ManifestPath = "TestModule.psd1",
+                    Files = new[]
+                    {
+                        new ExternalAssetFileConfiguration
+                        {
+                            Runtime = "win-x64",
+                            FileName = "tool.zip",
+                            Uri = sourceFile
+                        }
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => service.Prepare(projectRoot, segment));
+
+            Assert.Contains("existing project file", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("@{ ModuleVersion = '1.0.0' }", File.ReadAllText(projectManifest));
+            Assert.False(File.Exists(Path.Combine(projectRoot, "Artefacts", "VendorTool", "tool.zip")));
+        }
+        finally
+        {
+            TryDelete(workspace);
+        }
+    }
+
+    [Fact]
     public void Prepare_RejectsProjectRootOutputPathBeforeMaterializingFiles()
     {
         var workspace = CreateTempDirectory();
@@ -959,6 +1006,69 @@ public sealed class ExternalAssetPreparationServiceTests
 
             Assert.Contains("output collision", ex.Message, StringComparison.OrdinalIgnoreCase);
             Assert.False(Directory.Exists(Path.Combine(projectRoot, "Resources")));
+        }
+        finally
+        {
+            TryDelete(workspace);
+        }
+    }
+
+    [Fact]
+    public void Run_RejectsExternalAssetManifestThatOverwritesProjectFileBeforeMaterializingFiles()
+    {
+        var workspace = CreateTempDirectory();
+        try
+        {
+            var projectRoot = Path.Combine(workspace, "TestModule");
+            const string moduleName = "TestModule";
+            WriteMinimalModule(projectRoot, moduleName, "1.0.0");
+
+            var sourceRoot = Path.Combine(workspace, "Input");
+            Directory.CreateDirectory(sourceRoot);
+            var sourceFile = Path.Combine(sourceRoot, "tool.zip");
+            File.WriteAllText(sourceFile, "payload");
+            var projectManifest = Path.Combine(projectRoot, $"{moduleName}.psd1");
+            var originalManifest = File.ReadAllText(projectManifest);
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = projectRoot,
+                    Version = "1.0.0",
+                    CsprojPath = null,
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationExternalAssetSegment
+                    {
+                        Configuration = new ExternalAssetConfiguration
+                        {
+                            Name = "VendorTool",
+                            OutputPath = "Resources/VendorTool",
+                            ManifestPath = $"{moduleName}.psd1",
+                            Files = new[]
+                            {
+                                new ExternalAssetFileConfiguration
+                                {
+                                    Runtime = "win-x64",
+                                    FileName = "tool.zip",
+                                    Uri = sourceFile
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => new ModulePipelineRunner(new NullLogger()).Run(spec));
+
+            Assert.Contains("existing project file", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(originalManifest, File.ReadAllText(projectManifest));
+            Assert.False(Directory.Exists(Path.Combine(projectRoot, "Resources", "VendorTool")));
         }
         finally
         {

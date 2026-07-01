@@ -1,5 +1,5 @@
 ﻿param(
-    [string] $ProjectPath = $PSScriptRoot
+    [string] $ProjectPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 )
 
 Import-Module PSPublishModule -Force -ErrorAction Stop

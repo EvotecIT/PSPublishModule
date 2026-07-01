@@ -285,10 +285,30 @@ public sealed class PowerForgeProjectCmdletTests
         var build = segments.OfType<ConfigurationBuildSegment>().Single().BuildModule;
         Assert.True(build.Enable);
         Assert.True(build.Merge);
+        Assert.Null(build.MergeMissing);
         Assert.False(build.SignMerged);
         Assert.True(build.InstallMissingModules);
         Assert.Equal(InstallationStrategy.AutoRevision, build.VersionedInstallStrategy);
         Assert.Equal(3, build.VersionedInstallKeep);
+    }
+
+    [Fact]
+    public void NewConfigurationModuleBuildProfile_EmitsApprovedModuleMergeOnlyWhenRequested()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ConfigurationModuleBuildProfile")
+            .AddParameter("Documentation", false)
+            .AddParameter("MergeFunctionsFromApprovedModules", true);
+
+        var results = ps.Invoke();
+
+        Assert.False(ps.HadErrors);
+        var build = results
+            .Select(static result => result.BaseObject)
+            .OfType<ConfigurationBuildSegment>()
+            .Single()
+            .BuildModule;
+        Assert.True(build.MergeMissing);
     }
 
     [Fact]

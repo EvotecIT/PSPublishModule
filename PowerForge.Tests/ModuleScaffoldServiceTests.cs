@@ -116,6 +116,7 @@ public class ModuleScaffoldServiceTests
 
             var testRunner = File.ReadAllText(Path.Combine(projectRoot, "Tests", "Invoke-ModuleTests.ps1"));
             Assert.Contains("Invoke-ModuleTestSuite", testRunner, StringComparison.Ordinal);
+            Assert.Contains("Join-Path $PSScriptRoot '..'", testRunner, StringComparison.Ordinal);
             Assert.DoesNotContain("SkipPublisherCheck", testRunner, StringComparison.Ordinal);
         }
         finally

@@ -171,7 +171,7 @@ internal sealed class ModuleBuildProfileFactory
             Enable = true,
             MergeModuleOnBuildSpecified = true,
             MergeModuleOnBuild = request.MergeModuleOnBuild,
-            MergeFunctionsFromApprovedModulesSpecified = true,
+            MergeFunctionsFromApprovedModulesSpecified = request.MergeFunctionsFromApprovedModulesSpecified,
             MergeFunctionsFromApprovedModules = request.MergeFunctionsFromApprovedModules,
             SignModuleSpecified = true,
             SignModule = request.SignModule,

@@ -22,6 +22,7 @@ internal sealed class ModuleBuildProfileRequest
     public bool ImportSelf { get; set; } = true;
     public bool ImportRequiredModules { get; set; }
     public bool MergeModuleOnBuild { get; set; } = true;
+    public bool MergeFunctionsFromApprovedModulesSpecified { get; set; }
     public bool MergeFunctionsFromApprovedModules { get; set; }
     public bool SignModule { get; set; }
     public string? CertificateThumbprint { get; set; }

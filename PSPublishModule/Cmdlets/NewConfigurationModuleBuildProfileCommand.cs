@@ -230,6 +230,7 @@ public sealed class NewConfigurationModuleBuildProfileCommand : PSCmdlet
             ImportSelf = ImportSelf,
             ImportRequiredModules = ImportRequiredModules,
             MergeModuleOnBuild = MergeModuleOnBuild,
+            MergeFunctionsFromApprovedModulesSpecified = bound.ContainsKey(nameof(MergeFunctionsFromApprovedModules)),
             MergeFunctionsFromApprovedModules = MergeFunctionsFromApprovedModules,
             SignModule = SignModule,
             CertificateThumbprint = CertificateThumbprint,

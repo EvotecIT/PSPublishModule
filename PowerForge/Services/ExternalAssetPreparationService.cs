@@ -51,6 +51,7 @@ internal sealed class ExternalAssetPreparationService
             : ResolveProjectPath(projectRoot, configuration.ManifestPath!);
         EnsureSameOrChildPath(projectRoot, manifestPath, $"External asset '{name}' ManifestPath");
         EnsureManifestFilePath(outputRoot, manifestPath, $"External asset '{name}' ManifestPath", FrameworkCompatibility.GetPathStringComparison(projectRoot));
+        EnsureManifestDoesNotOverwriteProjectFile(outputRoot, manifestPath, $"External asset '{name}' ManifestPath", FrameworkCompatibility.GetPathStringComparison(projectRoot));
         var manifestDirectory = Path.GetDirectoryName(manifestPath) ?? outputRoot;
         var files = configuration.Files ?? Array.Empty<ExternalAssetFileConfiguration>();
 
@@ -143,6 +144,7 @@ internal sealed class ExternalAssetPreparationService
                 : ResolveProjectPath(projectFullPath, configuration.ManifestPath!);
             EnsureSameOrChildPath(projectFullPath, manifestPath, $"{description} ManifestPath");
             EnsureManifestFilePath(outputRoot, manifestPath, $"{description} ManifestPath", pathComparison);
+            EnsureManifestDoesNotOverwriteProjectFile(outputRoot, manifestPath, $"{description} ManifestPath", pathComparison);
             AddOccupiedPath(occupiedPaths, ownedOutputDirectories, manifestPath, $"{description} manifest", owner, pathComparison);
 
             foreach (var file in configuration.Files ?? Array.Empty<ExternalAssetFileConfiguration>())
@@ -225,7 +227,7 @@ internal sealed class ExternalAssetPreparationService
         if (SamePath(sourcePath, targetPath, FrameworkCompatibility.GetPathStringComparison(Path.GetDirectoryName(targetPath) ?? projectRoot)))
             return;
 
-        File.Copy(sourcePath, targetPath, overwrite: true);
+        MaterializeFileSource(sourcePath, targetPath);
     }
 
     private void MaterializeHttpSource(Uri uri, string targetPath, TimeSpan timeout)
@@ -236,15 +238,35 @@ internal sealed class ExternalAssetPreparationService
         {
             _logger.Info($"Downloading external asset file '{Path.GetFileName(targetPath)}' from {uri}");
             _downloadFile(uri, tempPath, timeout);
-            if (File.Exists(targetPath))
-                File.Replace(tempPath, targetPath, null);
-            else
-                File.Move(tempPath, targetPath);
+            MovePreparedFile(tempPath, targetPath);
         }
         finally
         {
             TryDeleteFile(tempPath);
         }
+    }
+
+    private static void MaterializeFileSource(string sourcePath, string targetPath)
+    {
+        var targetDirectory = Path.GetDirectoryName(targetPath) ?? ".";
+        var tempPath = Path.Combine(targetDirectory, $".{Path.GetFileName(targetPath)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            File.Copy(sourcePath, tempPath, overwrite: true);
+            MovePreparedFile(tempPath, targetPath);
+        }
+        finally
+        {
+            TryDeleteFile(tempPath);
+        }
+    }
+
+    private static void MovePreparedFile(string tempPath, string targetPath)
+    {
+        if (File.Exists(targetPath))
+            File.Replace(tempPath, targetPath, null);
+        else
+            File.Move(tempPath, targetPath);
     }
 
     private static string ResolveProjectPath(string projectRoot, string path)
@@ -369,6 +391,21 @@ internal sealed class ExternalAssetPreparationService
 
         if (Directory.Exists(manifestPath))
             throw new InvalidOperationException($"{label} must resolve to a file path, not an existing directory.");
+    }
+
+    private static void EnsureManifestDoesNotOverwriteProjectFile(
+        string outputRoot,
+        string manifestPath,
+        string label,
+        StringComparison pathComparison)
+    {
+        if (IsSameOrChildPath(outputRoot, manifestPath, pathComparison))
+            return;
+
+        if (File.Exists(manifestPath))
+        {
+            throw new InvalidOperationException($"{label} resolves to existing project file '{manifestPath}' outside external asset output '{outputRoot}'.");
+        }
     }
 
     private static bool IsSameOrChildPath(string rootPath, string candidatePath, StringComparison pathComparison)
