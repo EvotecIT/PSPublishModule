@@ -53,6 +53,30 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task GetVersionsAsync_keeps_case_distinct_service_index_cache_entries()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+
+        var upperVersions = await repositoryClient.GetVersionsAsync(
+            new ManagedModuleRepository("Upper", "https://EXAMPLE.test/Feed/v3/index.json"),
+            "Company.Tools",
+            includePrerelease: false);
+        var lowerVersions = await repositoryClient.GetVersionsAsync(
+            new ManagedModuleRepository("Lower", "https://example.test/feed/v3/index.json"),
+            "Company.Tools",
+            includePrerelease: false);
+
+        Assert.Equal(new[] { "1.0.0" }, upperVersions.Select(version => version.Version));
+        Assert.Equal(new[] { "2.0.0" }, lowerVersions.Select(version => version.Version));
+        Assert.Contains(requests, request => request.Url == "https://example.test/Feed/v3/index.json");
+        Assert.Contains(requests, request => request.Url == "https://example.test/feed/v3/index.json");
+        Assert.Contains(requests, request => request.Url == "https://example.test/Feed/packages/company.tools/index.json");
+        Assert.Contains(requests, request => request.Url == "https://example.test/feed/packages/company.tools/index.json");
+    }
+
+    [Fact]
     public async Task GetVersionsAsync_treats_trailing_slash_service_index_as_v3_index()
     {
         var requests = new List<RecordedRequest>();
@@ -1175,6 +1199,22 @@ public sealed class ManagedModuleRepositoryClientTests
                             "]}");
             }
 
+            if (uri.AbsoluteUri == "https://example.test/Feed/v3/index.json")
+            {
+                return Json("{\"resources\":[" +
+                            "{\"@id\":\"https://example.test/Feed/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}," +
+                            "{\"@id\":\"https://example.test/Feed/search\",\"@type\":\"SearchQueryService/3.5.0\"}" +
+                            "]}");
+            }
+
+            if (uri.AbsoluteUri == "https://example.test/feed/v3/index.json")
+            {
+                return Json("{\"resources\":[" +
+                            "{\"@id\":\"https://example.test/feed/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}," +
+                            "{\"@id\":\"https://example.test/feed/search\",\"@type\":\"SearchQueryService/3.5.0\"}" +
+                            "]}");
+            }
+
             if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v3/index.json")
             {
                 if (_powerShellGalleryV3StatusCode.HasValue)
@@ -1189,6 +1229,12 @@ public sealed class ManagedModuleRepositoryClientTests
 
             if (uri.AbsoluteUri == "https://example.test/packages/company.tools/index.json")
                 return Json("{\"versions\":[\"1.0.0\",\"1.1.0-beta1\",\"1.1.0\"]}");
+
+            if (uri.AbsoluteUri == "https://example.test/Feed/packages/company.tools/index.json")
+                return Json("{\"versions\":[\"1.0.0\"]}");
+
+            if (uri.AbsoluteUri == "https://example.test/feed/packages/company.tools/index.json")
+                return Json("{\"versions\":[\"2.0.0\"]}");
 
             if (uri.AbsoluteUri == "https://example.test/packages/unlisted.tools/index.json")
                 return Json("{\"versions\":[\"1.0.0\",\"1.5.0\",\"2.0.0\",\"3.0.0\"]}");

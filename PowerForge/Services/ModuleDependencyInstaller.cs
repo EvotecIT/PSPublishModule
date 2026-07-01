@@ -275,6 +275,7 @@ public sealed partial class ModuleDependencyInstaller
         RepositoryCredential? credential = null,
         bool prerelease = false,
         bool preferPowerShellGet = false,
+        bool force = false,
         TimeSpan? timeoutPerModule = null)
     {
         var list = (dependencies ?? Array.Empty<ModuleDependency>())
@@ -313,6 +314,11 @@ public sealed partial class ModuleDependencyInstaller
                 {
                     var installStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
                     actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Installed, installer: installStatus, message: "Not installed"));
+                }
+                else if (force)
+                {
+                    var installStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: true, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
+                    actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Updated, installer: installStatus, message: "Force requested", force: true));
                 }
                 else if (!string.IsNullOrWhiteSpace(dep.RequiredVersion))
                 {
@@ -381,7 +387,8 @@ public sealed partial class ModuleDependencyInstaller
                 var status = a.Status;
                 var message = a.Message;
 
-                if (a.Status == ModuleDependencyInstallStatus.Updated &&
+                if (!a.Force &&
+                    a.Status == ModuleDependencyInstallStatus.Updated &&
                     string.IsNullOrWhiteSpace(a.RequestedVersion) &&
                     VersionsEquivalent(a.InstalledBefore, resolvedVersion))
                 {
@@ -1126,8 +1133,9 @@ public sealed partial class ModuleDependencyInstaller
         public ModuleDependencyInstallStatus Status { get; }
         public string? Installer { get; }
         public string? Message { get; }
+        public bool Force { get; }
 
-        public ActionItem(string name, string? installedBefore, string? requestedVersion, ModuleDependencyInstallStatus status, string? installer, string? message)
+        public ActionItem(string name, string? installedBefore, string? requestedVersion, ModuleDependencyInstallStatus status, string? installer, string? message, bool force = false)
         {
             Name = name;
             InstalledBefore = installedBefore;
@@ -1135,6 +1143,7 @@ public sealed partial class ModuleDependencyInstaller
             Status = status;
             Installer = installer;
             Message = message;
+            Force = force;
         }
     }
 }

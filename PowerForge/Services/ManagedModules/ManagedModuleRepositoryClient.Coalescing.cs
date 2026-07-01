@@ -95,6 +95,6 @@ public sealed partial class ManagedModuleRepositoryClient
         if (Path.IsPathRooted(trimmed))
             return Path.GetFullPath(trimmed).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-        return trimmed.TrimEnd('/', '\\');
+        return NormalizeRepositorySourceCacheKey(trimmed.TrimEnd('/', '\\'));
     }
 }

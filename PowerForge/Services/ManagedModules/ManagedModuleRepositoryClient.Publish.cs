@@ -59,7 +59,7 @@ public sealed partial class ManagedModuleRepositoryClient
         var source = repository.Source.Trim();
         var serviceIndexSource = source.TrimEnd('/');
         var isServiceIndex = serviceIndexSource.EndsWith("index.json", StringComparison.OrdinalIgnoreCase);
-        var cacheKey = isServiceIndex ? serviceIndexSource : source;
+        var cacheKey = NormalizeRepositorySourceCacheKey(isServiceIndex ? serviceIndexSource : source);
         if (_packagePublishAddressCache.TryGetValue(cacheKey, out var cached))
             return cached;
 

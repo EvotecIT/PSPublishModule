@@ -18,14 +18,14 @@ public sealed partial class ManagedModuleRepositoryClient
     private readonly HttpClient _httpClient;
     private readonly ManagedModulePackageReader _packageReader;
     private readonly ManagedModuleRepositoryClientOptions _options;
-    private readonly ConcurrentDictionary<string, string> _packageBaseAddressCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, string> _searchQueryServiceCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, string> _packagePublishAddressCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, string> _registrationBaseAddressCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _packageBaseAddressCache = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, string> _searchQueryServiceCache = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, string> _packagePublishAddressCache = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, string> _registrationBaseAddressCache = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _packageDownloadLocks = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<ManagedModuleVersionInfo>>>> _versionQueryTasks = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, Lazy<Task<ManagedModuleVersionInfo?>>> _latestVersionQueryTasks = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<ManagedModuleVersionInfo>>>> _searchQueryTasks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<ManagedModuleVersionInfo>>>> _versionQueryTasks = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, Lazy<Task<ManagedModuleVersionInfo?>>> _latestVersionQueryTasks = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<ManagedModuleVersionInfo>>>> _searchQueryTasks = new(StringComparer.Ordinal);
     private long _requestCount;
 
     /// <summary>
@@ -759,13 +759,14 @@ public sealed partial class ManagedModuleRepositoryClient
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
-        if (_packageBaseAddressCache.TryGetValue(repository.Source, out var cached))
+        var cacheKey = NormalizeRepositorySourceCacheKey(repository.Source);
+        if (_packageBaseAddressCache.TryGetValue(cacheKey, out var cached))
             return cached;
 
         if (!TryNormalizeServiceIndexSource(repository.Source, out var serviceIndexSource))
         {
             var flat = EnsureTrailingSlash(repository.Source);
-            _packageBaseAddressCache[repository.Source] = flat;
+            _packageBaseAddressCache[cacheKey] = flat;
             return flat;
         }
 
@@ -797,21 +798,21 @@ public sealed partial class ManagedModuleRepositoryClient
             else if (IsSearchQueryServiceResource(resource))
             {
                 var resolved = NormalizeServiceResource(id!);
-                _searchQueryServiceCache[repository.Source] = resolved;
+                _searchQueryServiceCache[cacheKey] = resolved;
             }
             else if (IsRegistrationBaseResource(resource))
             {
                 var resolved = EnsureTrailingSlash(id!);
-                _registrationBaseAddressCache[repository.Source] = resolved;
+                _registrationBaseAddressCache[cacheKey] = resolved;
                 registrationBaseDiscovered = true;
             }
         }
 
         if (!registrationBaseDiscovered)
-            _registrationBaseAddressCache.TryAdd(repository.Source, string.Empty);
+            _registrationBaseAddressCache.TryAdd(cacheKey, string.Empty);
         if (!string.IsNullOrWhiteSpace(packageBase))
         {
-            _packageBaseAddressCache[repository.Source] = packageBase!;
+            _packageBaseAddressCache[cacheKey] = packageBase!;
             return packageBase!;
         }
 
@@ -841,7 +842,8 @@ public sealed partial class ManagedModuleRepositoryClient
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
-        if (_searchQueryServiceCache.TryGetValue(repository.Source, out var cached))
+        var cacheKey = NormalizeRepositorySourceCacheKey(repository.Source);
+        if (_searchQueryServiceCache.TryGetValue(cacheKey, out var cached))
             return cached;
 
         if (!TryNormalizeServiceIndexSource(repository.Source, out var serviceIndexSource))
@@ -878,21 +880,21 @@ public sealed partial class ManagedModuleRepositoryClient
             else if (IsPackageBaseAddressResource(resource))
             {
                 var resolved = EnsureTrailingSlash(id!);
-                _packageBaseAddressCache[repository.Source] = resolved;
+                _packageBaseAddressCache[cacheKey] = resolved;
             }
             else if (IsRegistrationBaseResource(resource))
             {
                 var resolved = EnsureTrailingSlash(id!);
-                _registrationBaseAddressCache[repository.Source] = resolved;
+                _registrationBaseAddressCache[cacheKey] = resolved;
                 registrationBaseDiscovered = true;
             }
         }
 
         if (!registrationBaseDiscovered)
-            _registrationBaseAddressCache.TryAdd(repository.Source, string.Empty);
+            _registrationBaseAddressCache.TryAdd(cacheKey, string.Empty);
         if (!string.IsNullOrWhiteSpace(searchService))
         {
-            _searchQueryServiceCache[repository.Source] = searchService!;
+            _searchQueryServiceCache[cacheKey] = searchService!;
             return searchService!;
         }
 
@@ -904,7 +906,8 @@ public sealed partial class ManagedModuleRepositoryClient
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
-        if (_registrationBaseAddressCache.TryGetValue(repository.Source, out var cached))
+        var cacheKey = NormalizeRepositorySourceCacheKey(repository.Source);
+        if (_registrationBaseAddressCache.TryGetValue(cacheKey, out var cached))
             return string.IsNullOrWhiteSpace(cached) ? null : cached;
 
         if (!TryNormalizeServiceIndexSource(repository.Source, out var serviceIndexSource))
@@ -937,17 +940,35 @@ public sealed partial class ManagedModuleRepositoryClient
             else if (IsPackageBaseAddressResource(resource))
             {
                 var resolved = EnsureTrailingSlash(id!);
-                _packageBaseAddressCache[repository.Source] = resolved;
+                _packageBaseAddressCache[cacheKey] = resolved;
             }
             else if (IsSearchQueryServiceResource(resource))
             {
                 var resolved = NormalizeServiceResource(id!);
-                _searchQueryServiceCache[repository.Source] = resolved;
+                _searchQueryServiceCache[cacheKey] = resolved;
             }
         }
 
-        _registrationBaseAddressCache[repository.Source] = registrationBase ?? string.Empty;
+        _registrationBaseAddressCache[cacheKey] = registrationBase ?? string.Empty;
         return registrationBase;
+    }
+
+    internal static string NormalizeRepositorySourceCacheKey(string source)
+    {
+        var trimmed = source.Trim().Trim('"');
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) &&
+            (uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+             uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        {
+            var builder = new UriBuilder(uri)
+            {
+                Scheme = uri.Scheme.ToLowerInvariant(),
+                Host = uri.Host.ToLowerInvariant()
+            };
+            return builder.Uri.AbsoluteUri;
+        }
+
+        return trimmed;
     }
 
     private static HttpRequestMessage CreateRequest(HttpMethod method, Uri uri, RepositoryCredential? credential, string accept)

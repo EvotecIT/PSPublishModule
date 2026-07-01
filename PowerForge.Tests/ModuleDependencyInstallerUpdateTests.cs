@@ -31,6 +31,33 @@ public sealed class ModuleDependencyInstallerUpdateTests
     }
 
     [Fact]
+    public void EnsureUpdated_ForceReinstalls_WhenInstalledVersionDidNotChange()
+    {
+        var runner = new QueuePowerShellRunner(new[]
+        {
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.0.0")), string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, "PFPSRG::INSTALL::OK", string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.0.0")), string.Empty, "pwsh.exe")
+        });
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureUpdated(
+            new[] { new ModuleDependency("ModuleA") },
+            repository: "Company",
+            force: true);
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
+        Assert.Equal("1.0.0", result.InstalledVersion);
+        Assert.Equal("1.0.0", result.ResolvedVersion);
+        Assert.Equal("PSResourceGet", result.Installer);
+        Assert.Equal("Force requested", result.Message);
+        Assert.Equal(3, runner.Requests.Count);
+        Assert.Contains("Install-PSResource", runner.ScriptTexts[1], StringComparison.Ordinal);
+        Assert.Equal("1", runner.Requests[1].Arguments[9]);
+    }
+
+    [Fact]
     public void EnsureUpdated_ReturnsUpdated_WhenInstalledVersionChanged()
     {
         var runner = new QueuePowerShellRunner(new[]

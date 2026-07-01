@@ -600,6 +600,7 @@ internal sealed class PrivateModuleWorkflowService
                 credential: request.Credential,
                 prerelease: request.Prerelease,
                 preferPowerShellGet: request.PreferPowerShellGet,
+                force: request.Force,
                 timeoutPerModule: TimeSpan.FromMinutes(10));
     }
 
