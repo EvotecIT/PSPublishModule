@@ -20,16 +20,21 @@ public sealed class BenchmarkGateService
         var rows = BenchmarkJson.ReadSummary(request.SummaryPath);
         var actual = BuildMetricMap(rows, request);
         var failedRowMessages = BuildFailedRowMessages(rows, request).ToArray();
+        var missingMetricMessage = actual.Count == 0
+            ? $"No benchmark metric values were produced for metric '{NormalizeMetricName(request.Metric)}'."
+            : null;
         if (request.BaselineMode == BenchmarkBaselineMode.Update)
         {
-            if (failedRowMessages.Length > 0)
+            if (failedRowMessages.Length > 0 || missingMetricMessage is not null)
             {
                 return new BenchmarkGateResult
                 {
                     Passed = false,
                     BaselineUpdated = false,
                     BaselinePath = Path.GetFullPath(request.BaselinePath),
-                    Messages = failedRowMessages
+                    Messages = missingMetricMessage is null
+                        ? failedRowMessages
+                        : failedRowMessages.Concat(new[] { missingMetricMessage }).ToArray()
                 };
             }
 
@@ -51,8 +56,10 @@ public sealed class BenchmarkGateService
         var baseline = ReadBaseline(request.BaselinePath);
         var metrics = new List<BenchmarkGateMetricResult>();
         var messages = new List<string>();
-        var failed = failedRowMessages.Length > 0;
+        var failed = failedRowMessages.Length > 0 || missingMetricMessage is not null;
         messages.AddRange(failedRowMessages);
+        if (missingMetricMessage is not null)
+            messages.Add(missingMetricMessage);
         foreach (var entry in actual.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
         {
             var result = new BenchmarkGateMetricResult

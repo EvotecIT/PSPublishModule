@@ -540,7 +540,7 @@ public sealed class PowerShellBenchmarkRunner
            || string.Equals(key, "Reason", StringComparison.OrdinalIgnoreCase);
 
     private static string Number(double? value)
-        => value.HasValue ? value.Value.ToString("0.###", CultureInfo.InvariantCulture) : string.Empty;
+        => value.HasValue ? value.Value.ToString("G17", CultureInfo.InvariantCulture) : string.Empty;
 
     private static string Cell(string? value)
     {

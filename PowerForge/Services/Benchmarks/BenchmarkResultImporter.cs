@@ -488,7 +488,7 @@ public sealed class BenchmarkResultImporter
 
     private static Dictionary<string, string?> ExtractVariables(IReadOnlyDictionary<string, string> values, HashSet<string> excludedColumns, HashSet<string>? metricColumns = null)
         => values
-            .Where(k => !excludedColumns.Contains(k.Key) && (metricColumns is null || !metricColumns.Contains(k.Key)))
+            .Where(k => !IsExcludedVariableColumn(k.Key, excludedColumns) && (metricColumns is null || !metricColumns.Contains(k.Key)))
             .ToDictionary(k => k.Key, k => (string?)k.Value, StringComparer.OrdinalIgnoreCase);
 
     private static Dictionary<string, double> ExtractMetrics(IReadOnlyDictionary<string, string> values, HashSet<string> metricColumns)
@@ -509,7 +509,7 @@ public sealed class BenchmarkResultImporter
     private static readonly HashSet<string> SampleMetadataColumns = new(StringComparer.OrdinalIgnoreCase)
     {
         "RunId", "Suite", "Scenario", "Method", "Benchmark", "Operation", "Engine", "Job", "Host", "OS", "RunMode",
-        "Iteration", "Status", "DurationMs", "MedianMs", "MeanMs", "Median", "Mean", "Mean [ns]", "Mean [us]", "Mean [ms]",
+        "Iteration", "Status", "DurationMs", "MedianMs", "MeanMs", "Median", "Mean", "Median [ns]", "Median [us]", "Median [ms]", "Mean [ns]", "Mean [us]", "Mean [ms]",
         "Reason", "AllocatedBytes", "WorkingSetDeltaBytes", "OutputMetric"
     };
 
@@ -518,5 +518,28 @@ public sealed class BenchmarkResultImporter
         "Suite", "Scenario", "Method", "Benchmark", "Operation", "Engine", "Job", "Host", "SampleCount", "FailureCount",
         "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs", "Median", "Mean", "Min", "Max", "Median [ns]", "Median [us]",
         "Median [ms]", "Mean [ns]", "Mean [us]", "Mean [ms]", "Min [ns]", "Min [us]", "Min [ms]", "Max [ns]", "Max [us]", "Max [ms]"
+    };
+
+    private static bool IsExcludedVariableColumn(string key, HashSet<string> excludedColumns)
+        => excludedColumns.Contains(key) || IsBenchmarkDotNetStatisticColumn(key);
+
+    private static bool IsBenchmarkDotNetStatisticColumn(string key)
+    {
+        var normalized = RemoveBracketUnit(key).Replace(" ", string.Empty);
+        return BenchmarkDotNetStatisticColumns.Contains(normalized);
+    }
+
+    private static string RemoveBracketUnit(string key)
+    {
+        var index = key.IndexOf('[');
+        return index < 0 ? key.Trim() : key.Substring(0, index).Trim();
+    }
+
+    private static readonly HashSet<string> BenchmarkDotNetStatisticColumns = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Mean", "Median", "Min", "Max", "Q1", "Q3",
+        "P0", "P25", "P50", "P75", "P90", "P95", "P99", "P100",
+        "Error", "StdErr", "StdDev", "Ratio", "RatioSD",
+        "Gen0", "Gen1", "Gen2", "Allocated", "CodeSize", "OperationsPerSecond"
     };
 }

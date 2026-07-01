@@ -38,7 +38,10 @@ public static class PowerShellBenchmarkDslRuntime
             }
 
             compareAlias = RemoveAlias("compare");
-            var variables = new List<PSVariable>();
+            var variables = new List<PSVariable>
+            {
+                new("ErrorActionPreference", ActionPreference.Stop)
+            };
             if (!string.IsNullOrWhiteSpace(scriptRoot))
                 variables.Add(new PSVariable("PSScriptRoot", scriptRoot));
             scriptBlock.InvokeWithContext(CreateFunctions(), variables, Array.Empty<object>());

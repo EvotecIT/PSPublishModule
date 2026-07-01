@@ -186,6 +186,42 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void GateService_FailsWhenNoMetricValuesAreProduced()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        BenchmarkJson.Write(summaryPath, new[]
+        {
+            new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Run", Engine = "Managed", Host = "Current", MedianMs = 100 }
+        });
+
+        var update = new BenchmarkGateService().Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            Metric = "P95Ms",
+            BaselineMode = BenchmarkBaselineMode.Update
+        });
+
+        Assert.False(update.Passed);
+        Assert.False(update.BaselineUpdated);
+        Assert.False(File.Exists(baselinePath));
+        Assert.Contains(update.Messages, message => message.Contains("No benchmark metric values", StringComparison.OrdinalIgnoreCase));
+
+        BenchmarkJson.Write(baselinePath, new { metrics = new Dictionary<string, double>() });
+        var verify = new BenchmarkGateService().Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            Metric = "P95Ms"
+        });
+
+        Assert.False(verify.Passed);
+        Assert.Contains(verify.Messages, message => message.Contains("No benchmark metric values", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void SummaryService_ReadsCustomMetricsCaseInsensitively()
     {
         var row = new BenchmarkSummaryRow
@@ -366,6 +402,24 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_ExcludesBenchmarkDotNetStatisticsFromVariables()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "Demo-report.csv");
+        File.WriteAllText(csv, "Method,Rows,Median [us],Mean [us],Error,StdDev,Allocated\nWrite,10,1500,9000,1.2,3.4,8 KB\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+        var sample = Assert.Single(result.Samples);
+
+        Assert.Equal("10", sample.Variables["Rows"]);
+        Assert.DoesNotContain("Median [us]", sample.Variables.Keys);
+        Assert.DoesNotContain("Mean [us]", sample.Variables.Keys);
+        Assert.DoesNotContain("Error", sample.Variables.Keys);
+        Assert.DoesNotContain("StdDev", sample.Variables.Keys);
+        Assert.DoesNotContain("Allocated", sample.Variables.Keys);
+    }
+
+    [Fact]
     public void Importer_PreservesNormalizedCsvStatusSuiteAndVariables()
     {
         var root = CreateTempRoot();
@@ -455,6 +509,23 @@ benchmark 'bad' {
         var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
 
         Assert.Contains("case boom", ex.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void DslRuntime_StopsRootSpecErrors()
+    {
+        var script = ScriptBlock.Create(@"
+Write-Error 'root boom'
+benchmark 'bad' {
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+
+        Assert.Contains("root boom", ex.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -549,15 +620,17 @@ benchmark 'none' {
         var suite = CreateRunnableSuite();
         suite.Artifacts = BenchmarkArtifactKind.Csv;
         suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows", Values = { 10 } });
-        suite.Metrics.Add(new PowerShellBenchmarkMetric { Name = "RowsPerSecond", ScriptBlock = ScriptBlock.Create("42") });
+        suite.Metrics.Add(new PowerShellBenchmarkMetric { Name = "TinyMetric", ScriptBlock = ScriptBlock.Create("0.00042") });
 
         var result = new PowerShellBenchmarkRunner().Run(suite);
 
         var samplesCsv = File.ReadAllText(result.Artifacts["samples.csv"]);
         var summaryCsv = File.ReadAllText(result.Artifacts["summary.csv"]);
-        Assert.Contains("Suite,Scenario,Operation,Engine,Host,Rows,Iteration,Status,DurationMs,Reason,RowsPerSecond", samplesCsv);
+        Assert.Contains("Suite,Scenario,Operation,Engine,Host,Rows,Iteration,Status,DurationMs,Reason,TinyMetric", samplesCsv);
         Assert.Contains("suite,Default,Run,Managed,Current,10,0,Succeeded", samplesCsv);
-        Assert.Contains("Suite,Scenario,Operation,Engine,Host,Rows,SampleCount,FailureCount,Status,MedianMs,MeanMs,MinMs,MaxMs,RowsPerSecond", summaryCsv);
+        Assert.Contains(",0.00042", samplesCsv);
+        Assert.Contains("Suite,Scenario,Operation,Engine,Host,Rows,SampleCount,FailureCount,Status,MedianMs,MeanMs,MinMs,MaxMs,TinyMetric", summaryCsv);
+        Assert.Contains(",0.00042", summaryCsv);
     }
 
     [Fact]
