@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 
@@ -125,7 +126,8 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
                     IterationCount = suite.IterationCount,
                     RunMode = suite.RunMode,
                     SuiteName = suite.Name,
-                    Cleanup = suite.Cleanup
+                    Cleanup = suite.Cleanup,
+                    ReadmePaths = suite.ReadmeBlocks.Select(block => block.Path).ToArray()
                 }));
                 continue;
             }

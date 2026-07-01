@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Globalization;
 using System.Management.Automation;
 using System.Runtime.InteropServices;
 using System.Security;
@@ -40,6 +39,9 @@ public sealed class PowerShellBenchmarkTemporaryUserRequest
     /// <summary>Cleanup mode requested by the suite.</summary>
     public PowerShellBenchmarkCleanupMode Cleanup { get; set; } = PowerShellBenchmarkCleanupMode.Always;
 
+    /// <summary>Resolved README/document block paths that the child runner may update.</summary>
+    public string[] ReadmePaths { get; set; } = Array.Empty<string>();
+
     /// <summary>Prefix used for generated local account names.</summary>
     public string UserNamePrefix { get; set; } = "PFBench";
 }
@@ -69,6 +71,8 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
         var stdoutPath = Path.Combine(scratchRoot, "stdout.txt");
         var stderrPath = Path.Combine(scratchRoot, "stderr.txt");
         var wrapperPath = Path.Combine(scratchRoot, "run-benchmark.ps1");
+        var readmePathFile = Path.Combine(scratchRoot, "readme-paths.txt");
+        var childRequestPath = Path.Combine(scratchRoot, "child-request.json");
         var grantedAccessPaths = new List<string>();
         var failed = true;
         BenchmarkRunResult? result = null;
@@ -84,11 +88,31 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
             GrantFileAccess(request.SpecPath, accountName, "R", grantedAccessPaths);
             GrantFileAccess(GetPowerForgeAssemblyPath(), accountName, "R", grantedAccessPaths);
             GrantFileAccess(GetPowerForgePowerShellAssemblyPath(), accountName, "R", grantedAccessPaths);
+            foreach (var readmePath in request.ReadmePaths.Where(path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.OrdinalIgnoreCase))
+                GrantFileAccess(readmePath, accountName, "M", grantedAccessPaths);
 
             File.WriteAllText(wrapperPath, ChildRunnerScript, new UTF8Encoding(false));
+            File.WriteAllLines(readmePathFile, request.ReadmePaths.Where(path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.OrdinalIgnoreCase), new UTF8Encoding(false));
+            BenchmarkJson.Write(childRequestPath, new ChildRunnerRequest
+            {
+                SpecPath = request.SpecPath,
+                SuiteIndex = request.SuiteIndex,
+                ResultPath = resultPath,
+                PowerForgeAssemblyPath = GetPowerForgeAssemblyPath(),
+                PowerForgePowerShellAssemblyPath = GetPowerForgePowerShellAssemblyPath(),
+                ReadmePathFile = readmePathFile,
+                WorkingDirectory = request.WorkingDirectory,
+                OutputRoot = request.OutputRoot,
+                WarmupCount = request.WarmupCount,
+                IterationCount = request.IterationCount,
+                RunMode = request.RunMode ?? string.Empty,
+                SuiteName = request.SuiteName ?? string.Empty
+            });
             GrantFileAccess(wrapperPath, accountName, "R", grantedAccessPaths);
+            GrantFileAccess(readmePathFile, accountName, "R", grantedAccessPaths);
+            GrantFileAccess(childRequestPath, accountName, "R", grantedAccessPaths);
 
-            var processResult = RunChildProcess(request, userName, securePassword, wrapperPath, resultPath, stdoutPath, stderrPath);
+            var processResult = RunChildProcess(request, userName, securePassword, wrapperPath, childRequestPath, stdoutPath, stderrPath);
             if (processResult.ExitCode != 0)
                 throw new InvalidOperationException($"Temporary benchmark user process failed with exit code {processResult.ExitCode}. STDOUT: {processResult.Stdout} STDERR: {processResult.Stderr} Scratch: {scratchRoot}");
 
@@ -209,7 +233,7 @@ Get-CimInstance Win32_UserProfile |
         string userName,
         SecureString password,
         string wrapperPath,
-        string resultPath,
+        string childRequestPath,
         string stdoutPath,
         string stderrPath)
     {
@@ -219,7 +243,7 @@ Get-CimInstance Win32_UserProfile |
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            WorkingDirectory = request.WorkingDirectory,
+            WorkingDirectory = Path.GetDirectoryName(wrapperPath) ?? request.WorkingDirectory,
             CreateNoWindow = true
         };
 #pragma warning disable CA1416
@@ -237,26 +261,8 @@ Get-CimInstance Win32_UserProfile |
             "Bypass",
             "-File",
             wrapperPath,
-            "-SpecPath",
-            request.SpecPath,
-            "-SuiteIndex",
-            request.SuiteIndex.ToString(CultureInfo.InvariantCulture),
-            "-ResultPath",
-            resultPath,
-            "-PowerForgeAssemblyPath",
-            GetPowerForgeAssemblyPath(),
-            "-PowerForgePowerShellAssemblyPath",
-            GetPowerForgePowerShellAssemblyPath(),
-            "-OutputRoot",
-            request.OutputRoot,
-            "-WarmupCount",
-            request.WarmupCount.ToString(CultureInfo.InvariantCulture),
-            "-IterationCount",
-            request.IterationCount.ToString(CultureInfo.InvariantCulture),
-            "-RunMode",
-            request.RunMode ?? string.Empty,
-            "-SuiteName",
-            request.SuiteName ?? string.Empty);
+            "-RequestPath",
+            childRequestPath);
 
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start temporary benchmark user process.");
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
@@ -452,41 +458,60 @@ Get-CimInstance Win32_UserProfile |
         }
     }
 
+    private sealed class ChildRunnerRequest
+    {
+        public string SpecPath { get; set; } = string.Empty;
+        public int SuiteIndex { get; set; }
+        public string ResultPath { get; set; } = string.Empty;
+        public string PowerForgeAssemblyPath { get; set; } = string.Empty;
+        public string PowerForgePowerShellAssemblyPath { get; set; } = string.Empty;
+        public string ReadmePathFile { get; set; } = string.Empty;
+        public string WorkingDirectory { get; set; } = string.Empty;
+        public string OutputRoot { get; set; } = string.Empty;
+        public int WarmupCount { get; set; }
+        public int IterationCount { get; set; }
+        public string RunMode { get; set; } = string.Empty;
+        public string SuiteName { get; set; } = string.Empty;
+    }
+
     private const string ChildRunnerScript = """
 param(
-    [Parameter(Mandatory = $true)] [string] $SpecPath,
-    [Parameter(Mandatory = $true)] [int] $SuiteIndex,
-    [Parameter(Mandatory = $true)] [string] $ResultPath,
-    [Parameter(Mandatory = $true)] [string] $PowerForgeAssemblyPath,
-    [Parameter(Mandatory = $true)] [string] $PowerForgePowerShellAssemblyPath,
-    [Parameter(Mandatory = $true)] [string] $OutputRoot,
-    [Parameter(Mandatory = $true)] [int] $WarmupCount,
-    [Parameter(Mandatory = $true)] [int] $IterationCount,
-    [Parameter(Mandatory = $true)] [string] $RunMode,
-    [Parameter(Mandatory = $true)] [string] $SuiteName
+    [Parameter(Mandatory = $true)] [string] $RequestPath
 )
 $ErrorActionPreference = 'Stop'
-Add-Type -Path $PowerForgeAssemblyPath
-Add-Type -Path $PowerForgePowerShellAssemblyPath
-$scriptRoot = [System.IO.Path]::GetDirectoryName($SpecPath)
-$block = [scriptblock]::Create([System.IO.File]::ReadAllText($SpecPath))
+$request = [System.IO.File]::ReadAllText($RequestPath) | ConvertFrom-Json
+Set-Location -LiteralPath $request.WorkingDirectory
+[System.Environment]::CurrentDirectory = (Get-Location).ProviderPath
+Add-Type -Path $request.PowerForgeAssemblyPath
+Add-Type -Path $request.PowerForgePowerShellAssemblyPath
+$scriptRoot = [System.IO.Path]::GetDirectoryName($request.SpecPath)
+$block = [scriptblock]::Create([System.IO.File]::ReadAllText($request.SpecPath))
 $suites = [PowerForge.PowerShellBenchmarkDslRuntime]::Evaluate($block, $scriptRoot)
-if ($SuiteIndex -ge $suites.Length) {
-    throw "Benchmark spec '$SpecPath' did not produce suite index $SuiteIndex."
+if ($request.SuiteIndex -ge $suites.Length) {
+    throw "Benchmark spec '$($request.SpecPath)' did not produce suite index $($request.SuiteIndex)."
 }
-$suite = $suites[$SuiteIndex]
+$suite = $suites[$request.SuiteIndex]
 $suite.Profile = [PowerForge.PowerShellBenchmarkProfileKind]::Current
-$suite.OutputRoot = $OutputRoot
-$suite.WarmupCount = [Math]::Max(0, $WarmupCount)
-$suite.IterationCount = [Math]::Max(1, $IterationCount)
-if (-not [string]::IsNullOrWhiteSpace($RunMode)) {
-    $suite.RunMode = $RunMode
+$suite.OutputRoot = $request.OutputRoot
+$suite.WarmupCount = [Math]::Max(0, [int]$request.WarmupCount)
+$suite.IterationCount = [Math]::Max(1, [int]$request.IterationCount)
+if (-not [string]::IsNullOrWhiteSpace($request.RunMode)) {
+    $suite.RunMode = $request.RunMode
 }
-if (-not [string]::IsNullOrWhiteSpace($SuiteName)) {
-    $suite.Name = $SuiteName
+if (-not [string]::IsNullOrWhiteSpace($request.SuiteName)) {
+    $suite.Name = $request.SuiteName
+}
+$readmePaths = @()
+if ([System.IO.File]::Exists($request.ReadmePathFile)) {
+    $readmePaths = @([System.IO.File]::ReadAllLines($request.ReadmePathFile))
+}
+for ($index = 0; $index -lt $suite.ReadmeBlocks.Count -and $index -lt $readmePaths.Count; $index++) {
+    if (-not [string]::IsNullOrWhiteSpace($readmePaths[$index])) {
+        $suite.ReadmeBlocks[$index].Path = $readmePaths[$index]
+    }
 }
 $result = [PowerForge.PowerShellBenchmarkRunner]::new().Run($suite)
-[PowerForge.BenchmarkJson]::Write($ResultPath, $result)
+[PowerForge.BenchmarkJson]::Write($request.ResultPath, $result)
 """;
 
     private sealed class ChildProcessResult

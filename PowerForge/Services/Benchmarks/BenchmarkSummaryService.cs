@@ -42,6 +42,9 @@ public sealed class BenchmarkSummaryService
         var result = new List<BenchmarkComparisonRow>();
         foreach (var group in rows.GroupBy(r => MakeKey(r.Suite, r.Scenario, r.Operation, string.Empty, r.Host, r.Os, r.Variables), StringComparer.OrdinalIgnoreCase))
         {
+            if (group.All(r => string.Equals(r.Status, "Skipped", StringComparison.OrdinalIgnoreCase)))
+                continue;
+
             var baseline = group.FirstOrDefault(r => string.Equals(r.Engine, baselineEngine, StringComparison.OrdinalIgnoreCase));
             if (baseline is null)
                 throw new InvalidOperationException($"Benchmark comparison baseline '{baselineEngine}' was not found for {DescribeGroup(group.First())}.");
@@ -103,8 +106,10 @@ public sealed class BenchmarkSummaryService
         IEnumerable<BenchmarkSample> samples)
     {
         var all = samples.ToArray();
-        var successful = all
+        var successfulSamples = all
             .Where(s => s.Status == BenchmarkSampleStatus.Succeeded)
+            .ToArray();
+        var successful = successfulSamples
             .Select(s => s.DurationMs)
             .OrderBy(v => v)
             .ToArray();
@@ -133,11 +138,12 @@ public sealed class BenchmarkSummaryService
             MaxMs = successful.Length == 0 ? null : successful.Max()
         };
 
-        foreach (var metric in all
-                     .Where(s => s.Status == BenchmarkSampleStatus.Succeeded)
+        foreach (var metric in successfulSamples
                      .SelectMany(s => s.Metrics)
                      .GroupBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
         {
+            if (metric.Count() != successfulSamples.Length)
+                continue;
             row.Metrics[metric.Key] = metric.Average(k => k.Value);
         }
 

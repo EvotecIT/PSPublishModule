@@ -351,6 +351,8 @@ public sealed class PowerShellBenchmarkRunner
                 continue;
             foreach (var group in workItems.GroupBy(item => ComparisonGroupKey(suite.Name, item), StringComparer.OrdinalIgnoreCase))
             {
+                if (group.All(item => item.IsSkipped))
+                    continue;
                 if (group.Any(item => !item.IsSkipped && string.Equals(item.Engine, comparison.Baseline, StringComparison.OrdinalIgnoreCase)))
                     continue;
                 var first = group.First();

@@ -81,7 +81,10 @@ public sealed class BenchmarkResultImporter
             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         if (summaryFiles.Length > 0)
-            return BuildImportedSummaryResult(defaultSuite, summaryFiles.SelectMany(file => ImportCsvSummary(file, suite, defaultSuite)).ToArray());
+        {
+            var summaryRows = summaryFiles.SelectMany(file => ImportCsvSummary(file, suite, defaultSuite)).ToArray();
+            return BuildImportedSummaryResult(suite ?? summaryRows.FirstOrDefault()?.Suite ?? defaultSuite, summaryRows);
+        }
 
         var csvFiles = Directory.GetFiles(path, "*.csv", SearchOption.TopDirectoryOnly)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -235,6 +238,9 @@ public sealed class BenchmarkResultImporter
                 Iteration = ParseInt(Get(map, "Iteration")) ?? 0,
                 Status = status,
                 DurationMs = mean ?? 0,
+                AllocatedBytes = ParseLong(Get(map, "AllocatedBytes")),
+                WorkingSetDeltaBytes = ParseLong(Get(map, "WorkingSetDeltaBytes")),
+                OutputMetric = ParseNumericMetric(Get(map, "OutputMetric")),
                 Reason = Get(map, "Reason") ?? (mean.HasValue ? string.Empty : "Duration column could not be parsed."),
                 Variables = ExtractVariables(map, metadataColumns, metricHeaders, isBenchmarkDotNetCsv),
                 Metrics = ExtractMetrics(map, metricHeaders, isBenchmarkDotNetCsv)
@@ -794,6 +800,9 @@ public sealed class BenchmarkResultImporter
 
     private static int? ParseInt(string? value)
         => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
+
+    private static long? ParseLong(string? value)
+        => long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
 
     private static Dictionary<string, string?> ExtractVariables(
         IReadOnlyDictionary<string, string> values,

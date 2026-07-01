@@ -677,6 +677,18 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void SummaryService_DropsMetricsMissingFromSomeSuccessfulSamples()
+    {
+        var first = Sample("suite", "case", "Run", "Managed", 10);
+        first.Metrics["Rows"] = 1;
+        var second = Sample("suite", "case", "Run", "Managed", 20);
+
+        var row = Assert.Single(new BenchmarkSummaryService().Summarize(new[] { first, second }));
+
+        Assert.DoesNotContain("Rows", row.Metrics.Keys);
+    }
+
+    [Fact]
     public void BenchmarkJson_WritesAndReadsStringStatuses()
     {
         var root = CreateTempRoot();
@@ -1314,6 +1326,23 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_PreservesNormalizedSampleOptionalFields()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(csv, "Suite,Scenario,Operation,Engine,Host,Iteration,Status,DurationMs,AllocatedBytes,WorkingSetDeltaBytes,OutputMetric,Reason\nsuite,case,Run,Managed,Current,0,Succeeded,12.5,4096,-128,42,\n");
+
+        var sample = Assert.Single(new BenchmarkResultImporter().Import(csv).Samples);
+
+        Assert.Equal(4096, sample.AllocatedBytes);
+        Assert.Equal(-128, sample.WorkingSetDeltaBytes);
+        Assert.Equal(42, sample.OutputMetric);
+        Assert.DoesNotContain("AllocatedBytes", sample.Variables.Keys);
+        Assert.DoesNotContain("WorkingSetDeltaBytes", sample.Variables.Keys);
+        Assert.DoesNotContain("OutputMetric", sample.Variables.Keys);
+    }
+
+    [Fact]
     public void Importer_PreservesCsvCustomMetrics()
     {
         var root = CreateTempRoot();
@@ -1442,6 +1471,22 @@ public sealed class BenchmarkServicesTests
         Assert.Equal("suite", result.Suite);
         Assert.Equal("New", sample.Scenario);
         Assert.Equal("2", sample.Variables["Rows"]);
+    }
+
+    [Fact]
+    public void Importer_UsesSummaryCsvSuiteForSummaryOnlyDirectory()
+    {
+        var root = CreateTempRoot();
+        var run = Path.Combine(root, "run1");
+        Directory.CreateDirectory(run);
+        File.WriteAllText(
+            Path.Combine(run, "summary.csv"),
+            "Suite,Scenario,Operation,Engine,Host,SampleCount,FailureCount,Status,MedianMs\nactual,case,Run,Managed,Current,1,0,Succeeded,12.5\n");
+
+        var result = new BenchmarkResultImporter().Import(root);
+
+        Assert.Equal("actual", result.Suite);
+        Assert.Equal("actual", Assert.Single(result.Summary).Suite);
     }
 
     [Fact]
@@ -2504,6 +2549,25 @@ benchmark 'path-temp-user' -out 'out' {
         Assert.Contains("Managed", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Rows=2", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.False(File.Exists(output));
+    }
+
+    [Fact]
+    public void Runner_AllowsFullySkippedComparisonGroups()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows", Values = { 1, 2 } });
+        var other = new PowerShellBenchmarkEngine { Name = "Other" };
+        other.Operations["Run"] = ScriptBlock.Create("param($case, $run)");
+        suite.Engines.Add(other);
+        suite.Axes.Single(axis => axis.Name == "Engine").Values.Add("Other");
+        suite.Skip = ScriptBlock.Create("param($case) $case.Rows -eq 2");
+        suite.Comparisons.Add(new PowerShellBenchmarkComparison { Dimension = "Engine", Baseline = "Managed" });
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        Assert.Equal(4, result.Samples.Length);
+        Assert.Equal(2, result.Samples.Count(sample => sample.Status == BenchmarkSampleStatus.Skipped));
+        Assert.DoesNotContain(result.Comparison, row => row.Variables.TryGetValue("Rows", out var rows) && rows == "2");
     }
 
     [Fact]
