@@ -54,11 +54,13 @@ public sealed partial class ManagedModuleRepositoryClient
         CancellationToken cancellationToken,
         Func<CancellationToken, Task<T>> factory)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var lazy = tasks.GetOrAdd(
             key,
             _ => new Lazy<Task<T>>(
                 () => factory(CancellationToken.None),
                 LazyThreadSafetyMode.ExecutionAndPublication));
+        cancellationToken.ThrowIfCancellationRequested();
         var sharedTask = lazy.Value;
         _ = sharedTask.ContinueWith(
             _ => ((ICollection<KeyValuePair<string, Lazy<Task<T>>>>)tasks)

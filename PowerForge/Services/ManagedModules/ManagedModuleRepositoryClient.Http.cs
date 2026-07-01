@@ -176,7 +176,13 @@ public sealed partial class ManagedModuleRepositoryClient
 
     private static HttpRequestMessage CreateRedirectRequest(HttpRequestMessage source, Uri redirectUri)
     {
-        var request = new HttpRequestMessage(source.Method, redirectUri);
+        var request = new HttpRequestMessage(source.Method, redirectUri)
+        {
+            Version = source.Version
+        };
+#if !NET472
+        request.VersionPolicy = source.VersionPolicy;
+#endif
         foreach (var header in source.Headers.Accept)
             request.Headers.Accept.Add(header);
         foreach (var header in source.Headers.UserAgent)

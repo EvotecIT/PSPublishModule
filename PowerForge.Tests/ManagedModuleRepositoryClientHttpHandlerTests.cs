@@ -137,6 +137,26 @@ public sealed class ManagedModuleRepositoryClientHttpHandlerTests
         Assert.Equal(HttpVersion.Version20, client.DefaultRequestVersion);
         Assert.Equal(HttpVersionPolicy.RequestVersionOrLower, client.DefaultVersionPolicy);
     }
+
+    [Fact]
+    public void CreateRequest_sets_http2_policy_on_explicit_repository_messages()
+    {
+        var method = typeof(ManagedModuleRepositoryClient).GetMethod(
+            "CreateRequest",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        using var request = Assert.IsType<HttpRequestMessage>(method!.Invoke(null, new object[]
+        {
+            HttpMethod.Get,
+            new Uri("https://feed.example.test/v3/index.json"),
+            null!,
+            "application/json"
+        }));
+
+        Assert.Equal(HttpVersion.Version20, request.Version);
+        Assert.Equal(HttpVersionPolicy.RequestVersionOrLower, request.VersionPolicy);
+    }
 #endif
 
     [Fact]
@@ -149,6 +169,10 @@ public sealed class ManagedModuleRepositoryClientHttpHandlerTests
         using var source = new HttpRequestMessage(HttpMethod.Get, "https://feed.example.test:8443/packages");
         source.Headers.Authorization = new AuthenticationHeaderValue("Basic", "secret");
         source.Headers.Add("X-NuGet-ApiKey", "api-secret");
+#if !NET472
+        source.Version = HttpVersion.Version20;
+        source.VersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+#endif
 
         using var sameOrigin = Assert.IsType<HttpRequestMessage>(method!.Invoke(null, new object[]
         {
@@ -168,6 +192,10 @@ public sealed class ManagedModuleRepositoryClientHttpHandlerTests
 
         Assert.NotNull(sameOrigin.Headers.Authorization);
         Assert.True(sameOrigin.Headers.Contains("X-NuGet-ApiKey"));
+#if !NET472
+        Assert.Equal(HttpVersion.Version20, sameOrigin.Version);
+        Assert.Equal(HttpVersionPolicy.RequestVersionOrLower, sameOrigin.VersionPolicy);
+#endif
         Assert.Null(downgraded.Headers.Authorization);
         Assert.False(downgraded.Headers.Contains("X-NuGet-ApiKey"));
         Assert.Null(differentPort.Headers.Authorization);

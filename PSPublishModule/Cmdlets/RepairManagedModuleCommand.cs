@@ -182,12 +182,6 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             ValidateVersionPolicy();
             var deliveryModuleRoot = ResolveManagedDeliveryModuleRoot();
             var credentialSecretFilePath = ResolveCredentialSecretFilePath();
-            var repositoryCredential = ManagedModuleCommandSupport.ResolveCredential(
-                this,
-                Credential,
-                CredentialUserName,
-                CredentialSecret,
-                credentialSecretFilePath);
 
             var inventory = ResolveInventory();
             var selectedModules = SelectBaselineModules(inventory).ToArray();
@@ -201,11 +195,13 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             ApplySelectedInventoryTargets(plan, selectedModules);
             ApplyLatestUpdateIntent(plan);
             ApplyForceRepairIntent(plan);
-            var managedDeliveryOptions = CreateManagedDeliveryOptions(inventory, deliveryModuleRoot, repositoryCredential);
+            var managedDeliveryOptions = CreateManagedDeliveryOptions(inventory, deliveryModuleRoot);
             var repositoriesResolved = PreResolveManagedDeliveryRepositories(
                 plan,
                 managedDeliveryOptions,
                 required: !Plan.IsPresent);
+            if (repositoriesResolved && ShouldResolveManagedCredential(plan))
+                managedDeliveryOptions.Credential = ResolveRepositoryCredential(credentialSecretFilePath);
             if (repositoriesResolved)
                 await EnrichManagedLicenseMetadataAsync(plan, managedDeliveryOptions).ConfigureAwait(false);
 
@@ -555,6 +551,22 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             Credential = credential,
             LoadedModules = ResolveLoadedModules(inventory)
         };
+
+    private RepositoryCredential? ResolveRepositoryCredential(string? credentialSecretFilePath)
+        => ManagedModuleCommandSupport.ResolveCredential(
+            this,
+            Credential,
+            CredentialUserName,
+            CredentialSecret,
+            credentialSecretFilePath);
+
+    private bool ShouldResolveManagedCredential(ModuleStatePlanResult plan)
+        => Transport == ModuleStateDeliveryTransport.ManagedModule &&
+           HasDeliveryActions(plan);
+
+    private static bool HasDeliveryActions(ModuleStatePlanResult plan)
+        => (plan.Actions ?? Array.Empty<ModuleStatePlanActionResult>())
+            .Any(static action => action.Kind is "Install" or "Update" or "Save");
 
     private string? ResolveCredentialSecretFilePath()
         => ManagedModuleCommandSupport.ResolveProviderPath(this, CredentialSecretFilePath);

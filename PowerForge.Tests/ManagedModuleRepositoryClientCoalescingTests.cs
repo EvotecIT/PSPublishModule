@@ -54,6 +54,23 @@ public sealed class ManagedModuleRepositoryClientCoalescingTests
     }
 
     [Fact]
+    public async Task GetVersionsAsync_does_not_start_query_for_already_canceled_waiter()
+    {
+        using var handler = new CoalescingHandler();
+        using var client = new HttpClient(handler);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            repositoryClient.GetVersionsAsync(repository, "Company.Tools", cancellationToken: cancellation.Token));
+
+        Assert.Equal(0, handler.Count("https://example.test/v3/index.json"));
+        Assert.Equal(0, handler.Count("https://example.test/packages/company.tools/index.json"));
+    }
+
+    [Fact]
     public async Task GetVersionsAsync_keeps_credentialed_remote_queries_independent()
     {
         using var handler = new CoalescingHandler();

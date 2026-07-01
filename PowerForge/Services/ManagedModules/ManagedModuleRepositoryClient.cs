@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -974,6 +975,10 @@ public sealed partial class ManagedModuleRepositoryClient
     private static HttpRequestMessage CreateRequest(HttpMethod method, Uri uri, RepositoryCredential? credential, string accept)
     {
         var request = new HttpRequestMessage(method, uri);
+#if !NET472
+        request.Version = HttpVersion.Version20;
+        request.VersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+#endif
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(accept));
         request.Headers.UserAgent.ParseAdd("PowerForge-ManagedModule/1.0");
         ApplyCredential(request, credential);
