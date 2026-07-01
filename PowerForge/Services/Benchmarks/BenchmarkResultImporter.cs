@@ -297,10 +297,7 @@ public sealed class BenchmarkResultImporter
             if (mean.HasValue)
                 mean *= 0.000001;
 
-            var parameterText = GetString(benchmark, "Parameters") ?? string.Empty;
-            var variables = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-            if (!string.IsNullOrWhiteSpace(parameterText))
-                variables["Parameters"] = parameterText;
+            var variables = ParseBenchmarkDotNetParameters(GetString(benchmark, "Parameters"));
 
             samples.Add(new BenchmarkSample
             {
@@ -309,7 +306,7 @@ public sealed class BenchmarkResultImporter
                 Scenario = method,
                 Operation = "Run",
                 Engine = "BenchmarkDotNet",
-                Host = GetString(root, "HostEnvironmentInfo") ?? string.Empty,
+                Host = GetBenchmarkDotNetHost(root),
                 Os = string.Empty,
                 RunMode = "import",
                 Iteration = 0,
@@ -325,6 +322,55 @@ public sealed class BenchmarkResultImporter
 
         result = BuildImportedResult(suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path), samples);
         return true;
+    }
+
+    private static string GetBenchmarkDotNetHost(JsonElement root)
+    {
+        var host = GetString(root, "HostEnvironmentInfo");
+        if (!string.IsNullOrWhiteSpace(host))
+            return host!;
+        if (!BenchmarkJson.TryGetPropertyIgnoreCase(root, "HostEnvironmentInfo", out var hostNode) || hostNode.ValueKind != JsonValueKind.Object)
+            return string.Empty;
+
+        var parts = new[]
+        {
+            GetString(hostNode, "BenchmarkDotNetCaption"),
+            GetString(hostNode, "RuntimeVersion"),
+            GetString(hostNode, "Runtime"),
+            GetString(hostNode, "Jit"),
+            GetString(hostNode, "Platform"),
+            GetString(hostNode, "Architecture"),
+            GetString(hostNode, "OperatingSystem")
+        }
+        .Where(part => !string.IsNullOrWhiteSpace(part))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+        return parts.Length == 0 ? hostNode.GetRawText() : string.Join("; ", parts);
+    }
+
+    private static Dictionary<string, string?> ParseBenchmarkDotNetParameters(string? parameterText)
+    {
+        var variables = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(parameterText))
+            return variables;
+
+        foreach (var segment in parameterText!.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var trimmed = segment.Trim();
+            var separator = trimmed.IndexOf('=');
+            if (separator < 0)
+                separator = trimmed.IndexOf(':');
+            if (separator <= 0 || separator >= trimmed.Length - 1)
+                continue;
+            var name = trimmed.Substring(0, separator).Trim().Trim('"', '\'');
+            var value = trimmed.Substring(separator + 1).Trim().Trim('"', '\'');
+            if (!string.IsNullOrWhiteSpace(name))
+                variables[name] = value;
+        }
+
+        if (variables.Count == 0)
+            variables["Parameters"] = parameterText;
+        return variables;
     }
 
     private static string? Get(IReadOnlyDictionary<string, string> values, params string[] names)

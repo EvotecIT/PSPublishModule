@@ -448,6 +448,41 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_PreservesBenchmarkDotNetHostAndSplitsParameters()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "Demo-report-full-compressed.json");
+        File.WriteAllText(path, """
+{
+  "Title": "demo",
+  "HostEnvironmentInfo": {
+    "BenchmarkDotNetCaption": "BenchmarkDotNet v0.15",
+    "RuntimeVersion": ".NET 10.0",
+    "Architecture": "X64",
+    "OperatingSystem": "Windows"
+  },
+  "Benchmarks": [
+    {
+      "DisplayInfo": "Write",
+      "Parameters": "Rows=10, Profile=Fast",
+      "Statistics": {
+        "Median": 500
+      }
+    }
+  ]
+}
+""");
+
+        var result = new BenchmarkResultImporter().Import(path);
+        var sample = Assert.Single(result.Samples);
+
+        Assert.Contains(".NET 10.0", sample.Host, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("10", sample.Variables["Rows"]);
+        Assert.Equal("Fast", sample.Variables["Profile"]);
+        Assert.DoesNotContain("Parameters", sample.Variables.Keys);
+    }
+
+    [Fact]
     public void Importer_ReadsNormalizedCsvDurations()
     {
         var root = CreateTempRoot();
@@ -597,6 +632,23 @@ benchmark 'bad' {
     }
 
     [Fact]
+    public void DslRuntime_StopsCaseSourceNativeCommandFailures()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'bad' {
+    cases { Add-BenchmarkCaseSource { dotnet --not-a-real-option } }
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+
+        Assert.Contains("stopped", ex.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void DslRuntime_StopsRootSpecErrors()
     {
         var script = ScriptBlock.Create(@"
@@ -683,6 +735,53 @@ benchmark 'none' {
         Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
         Assert.True(File.Exists(Path.Combine(suite.OutputRoot, result.RunId, "Default", "Managed", "Run", "matrix", "0", "output")));
         Assert.DoesNotContain("Scenario", Assert.Single(result.Samples).Variables.Keys);
+    }
+
+    [Fact]
+    public void Runner_ExcludesGeneratedCaseNameFromVariables()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Cases.Clear();
+        suite.Cases.Add(new PowerShellBenchmarkCase
+        {
+            Name = "Generated",
+            Values = { ["Name"] = "Generated", ["Rows"] = 10 }
+        });
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+        var sample = Assert.Single(result.Samples);
+
+        Assert.Equal("Generated", sample.Scenario);
+        Assert.Equal("10", sample.Variables["Rows"]);
+        Assert.DoesNotContain("Name", sample.Variables.Keys);
+    }
+
+    [Fact]
+    public void Runner_UsesFreshCaseObjectForEachMeasuredIteration()
+    {
+        var suite = CreateRunnableSuite();
+        suite.IterationCount = 2;
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create("param($case, $run) if ($case.Seen) { throw 'case reused' } $case.Seen = $true");
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        Assert.Equal(2, result.Samples.Length);
+        Assert.All(result.Samples, sample => Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status));
+    }
+
+    [Fact]
+    public void Runner_RotatesWorkItemsBetweenMeasuredIterations()
+    {
+        var suite = CreateRunnableSuite();
+        suite.IterationCount = 2;
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows", Values = { 1, 2, 3 } });
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+        var firstIteration = result.Samples.Where(sample => sample.Iteration == 0).Select(sample => sample.Variables["Rows"]).ToArray();
+        var secondIteration = result.Samples.Where(sample => sample.Iteration == 1).Select(sample => sample.Variables["Rows"]).ToArray();
+
+        Assert.Equal(new[] { "1", "2", "3" }, firstIteration);
+        Assert.Equal(new[] { "2", "3", "1" }, secondIteration);
     }
 
     [Fact]

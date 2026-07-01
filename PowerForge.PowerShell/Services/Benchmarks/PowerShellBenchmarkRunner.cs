@@ -100,10 +100,10 @@ public sealed class PowerShellBenchmarkRunner
         var started = DateTimeOffset.UtcNow;
         var samples = new List<BenchmarkSample>();
         var workItems = Plan(suite);
+        var runnable = new List<PowerShellBenchmarkWorkItem>();
         foreach (var item in workItems)
         {
-            var caseObject = ToPsObject(item.Values);
-            if (ShouldSkip(suite.Skip, caseObject))
+            if (ShouldSkip(suite.Skip, ToPsObject(item.Values)))
             {
                 samples.Add(CreateSample(runId, suite, item, 0, BenchmarkSampleStatus.Skipped, 0, "Skipped by benchmark rule.", null));
                 continue;
@@ -112,7 +112,7 @@ public sealed class PowerShellBenchmarkRunner
             var warmupFailed = false;
             for (var warmup = 0; warmup < Math.Max(0, suite.WarmupCount); warmup++)
             {
-                var warmupSample = InvokeMeasuredIteration(suite, item, caseObject, -warmup - 1, runId, recordSample: false);
+                var warmupSample = InvokeMeasuredIteration(suite, item, ToPsObject(item.Values), -warmup - 1, runId, recordSample: false);
                 if (warmupSample.Status == BenchmarkSampleStatus.Failed)
                 {
                     samples.Add(warmupSample);
@@ -124,8 +124,13 @@ public sealed class PowerShellBenchmarkRunner
             if (warmupFailed)
                 continue;
 
-            for (var iteration = 0; iteration < Math.Max(1, suite.IterationCount); iteration++)
-                samples.Add(InvokeMeasuredIteration(suite, item, caseObject, iteration, runId, recordSample: true));
+            runnable.Add(item);
+        }
+
+        for (var iteration = 0; iteration < Math.Max(1, suite.IterationCount); iteration++)
+        {
+            foreach (var item in Rotate(runnable, iteration))
+                samples.Add(InvokeMeasuredIteration(suite, item, ToPsObject(item.Values), iteration, runId, recordSample: true));
         }
 
         var summarizer = new BenchmarkSummaryService();
@@ -229,6 +234,15 @@ public sealed class PowerShellBenchmarkRunner
     {
         if (skip is null) return false;
         return InvokeStrict(skip, caseObject).Any(value => LanguagePrimitives.IsTrue(value));
+    }
+
+    private static IEnumerable<PowerShellBenchmarkWorkItem> Rotate(IReadOnlyList<PowerShellBenchmarkWorkItem> items, int iteration)
+    {
+        if (items.Count == 0)
+            yield break;
+        var offset = iteration % items.Count;
+        for (var i = 0; i < items.Count; i++)
+            yield return items[(offset + i) % items.Count];
     }
 
     private static Collection<PSObject> InvokeOptional(ScriptBlock? block, PSObject caseObject, PSObject runObject)
@@ -533,6 +547,7 @@ public sealed class PowerShellBenchmarkRunner
 
     private static bool IsBenchmarkColumn(string key)
         => IsBuiltInPathValue(key)
+           || string.Equals(key, "Name", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "Suite", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "RunId", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "OS", StringComparison.OrdinalIgnoreCase)
