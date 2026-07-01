@@ -349,15 +349,30 @@ public sealed partial class ManagedModuleInstallService
                 cancellationToken);
             if (latestCacheKey is not null)
             {
-                var latest = await context.GetOrAddDependencyVersionSelection(
+                var latest = await context.GetOrAddOptionalDependencyVersionSelection(
                     latestCacheKey,
-                    () => ResolveLatestDependencyVersionAsync(
+                    () => ResolveLatestDependencyVersionOrNullAsync(
                         request,
                         dependencyName,
                         includePrerelease,
                         cancellationToken)).ConfigureAwait(false);
-                if (range.IsSatisfiedBy(latest.Version))
-                    return latest;
+                if (latest.HasValue && range.IsSatisfiedBy(latest.Value.Version))
+                    return latest.Value;
+            }
+            else
+            {
+                var latestVersion = await _repositoryClient.GetLatestVersionAsync(
+                    request.Repository,
+                    dependencyName,
+                    includePrerelease,
+                    request.Credential,
+                    cancellationToken).ConfigureAwait(false);
+                if (latestVersion is not null)
+                {
+                    var latest = new ManagedModuleDependencyVersionSelection(latestVersion.Version, shared: false);
+                    if (range.IsSatisfiedBy(latest.Version))
+                        return latest;
+                }
             }
         }
 
@@ -388,7 +403,7 @@ public sealed partial class ManagedModuleInstallService
         return new ManagedModuleDependencyVersionSelection(version, shared: false);
     }
 
-    private async Task<string> ResolveLatestDependencyVersionAsync(
+    private async Task<string?> ResolveLatestDependencyVersionOrNullAsync(
         ManagedModuleInstallRequest request,
         string dependencyName,
         bool includePrerelease,
@@ -400,10 +415,8 @@ public sealed partial class ManagedModuleInstallService
             includePrerelease,
             request.Credential,
             cancellationToken).ConfigureAwait(false);
-        if (latestVersion is null)
-            throw new InvalidOperationException($"No dependency versions of '{dependencyName}' were found in repository '{request.Repository.Name}'.");
 
-        return latestVersion.Version;
+        return latestVersion?.Version;
     }
 
     private async Task<string> ResolveDependencyVersionUncachedAsync(

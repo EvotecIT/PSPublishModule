@@ -4,6 +4,8 @@ namespace PowerForge;
 
 internal sealed class ManagedModuleInstallContext
 {
+    private const string MissingDependencyVersionSelection = "\0";
+
     private readonly HashSet<string> _active;
     private readonly HashSet<string> _ownedInstallKeys;
     private readonly ConcurrentDictionary<string, ManagedModuleInstallPending> _inFlightInstalls;
@@ -164,6 +166,19 @@ internal sealed class ManagedModuleInstallContext
             _ => newLazy);
 
         return CompleteDependencyVersionSelectionAsync(key, lazy, !ReferenceEquals(lazy, newLazy));
+    }
+
+    public async Task<ManagedModuleDependencyVersionSelection?> GetOrAddOptionalDependencyVersionSelection(string key, Func<Task<string?>> factory)
+    {
+        if (factory is null)
+            throw new ArgumentNullException(nameof(factory));
+
+        var selection = await GetOrAddDependencyVersionSelection(
+            key,
+            async () => await factory().ConfigureAwait(false) ?? MissingDependencyVersionSelection).ConfigureAwait(false);
+        return string.Equals(selection.Version, MissingDependencyVersionSelection, StringComparison.Ordinal)
+            ? null
+            : selection;
     }
 
     private static string CreateInstalledVersionKey(string moduleRoot, string moduleName)
