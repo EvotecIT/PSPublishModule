@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
@@ -391,11 +392,34 @@ $scriptText = $ScriptBlock.ToString()
     private static IEnumerable<PSObject> InvokeRootBlock(ScriptBlock scriptBlock, Hashtable functionsToDefine)
     {
         var block = PrepareRootScriptBlock(scriptBlock);
-        return block.InvokeWithContext(functionsToDefine, CreateInvocationVariables(), Array.Empty<object>());
+        return InvokeWithNativeExitCheck(block, functionsToDefine);
     }
 
     private static IEnumerable<PSObject> InvokeWithScriptRoot(ScriptBlock scriptBlock, Hashtable? functionsToDefine)
-        => scriptBlock.InvokeWithContext(functionsToDefine, CreateInvocationVariables(), Array.Empty<object>());
+        => InvokeWithNativeExitCheck(scriptBlock, functionsToDefine);
+
+    private static Collection<PSObject> InvokeWithNativeExitCheck(ScriptBlock scriptBlock, Hashtable? functionsToDefine)
+        => NativeExitAwareInvokeWrapper.InvokeWithContext(functionsToDefine, CreateInvocationVariables(), new object[] { scriptBlock });
+
+    private static readonly ScriptBlock NativeExitAwareInvokeWrapper = ScriptBlock.Create("""
+param([scriptblock] $Block)
+$previousLastExitCode = $global:LASTEXITCODE
+$global:LASTEXITCODE = 0
+try {
+    & $Block
+    $nativeExitCode = $global:LASTEXITCODE
+    if ($null -ne $nativeExitCode -and $nativeExitCode -ne 0) {
+        throw "Native command exited with code $nativeExitCode."
+    }
+}
+finally {
+    if ($null -eq $previousLastExitCode) {
+        Remove-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
+    } else {
+        $global:LASTEXITCODE = $previousLastExitCode
+    }
+}
+""");
 
     private static ScriptBlock CaptureScriptBlock(ScriptBlock scriptBlock)
         => scriptBlock;

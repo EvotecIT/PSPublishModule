@@ -589,7 +589,7 @@ public sealed class BenchmarkResultImporter
         var text = raw!.Trim().Replace(",", string.Empty);
         var factor = DurationFactor(text);
         if (Math.Abs(factor - 1.0) < double.Epsilon && !HasDurationSuffix(text))
-            factor = DurationFactor(header);
+            factor = HeaderDurationFactor(header);
 
         text = RemoveUnitSuffix(text).Trim();
         return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
@@ -722,6 +722,17 @@ public sealed class BenchmarkResultImporter
         if (trimmed.EndsWith("[ns]", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith(" ns", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith("ns", StringComparison.OrdinalIgnoreCase)) return 0.000001;
         if (trimmed.EndsWith("[us]", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith("[μs]", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith(" us", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith(" μs", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith("us", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith("μs", StringComparison.OrdinalIgnoreCase)) return 0.001;
         if (trimmed.EndsWith("[s]", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith(" s", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith("s", StringComparison.OrdinalIgnoreCase)) return 1000;
+        return 1.0;
+    }
+
+    private static double HeaderDurationFactor(string? header)
+    {
+        if (string.IsNullOrWhiteSpace(header)) return 1.0;
+        var trimmed = header!.Trim();
+        if (trimmed.EndsWith("[ms]", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith(" ms", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith("Ms", StringComparison.Ordinal)) return 1.0;
+        if (trimmed.EndsWith("[ns]", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith(" ns", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith("Ns", StringComparison.Ordinal)) return 0.000001;
+        if (trimmed.EndsWith("[us]", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith("[μs]", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith(" us", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith(" μs", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith("Us", StringComparison.Ordinal) || trimmed.EndsWith("μs", StringComparison.OrdinalIgnoreCase)) return 0.001;
+        if (trimmed.EndsWith("[s]", StringComparison.OrdinalIgnoreCase) || trimmed.EndsWith(" s", StringComparison.OrdinalIgnoreCase)) return 1000;
         return 1.0;
     }
 

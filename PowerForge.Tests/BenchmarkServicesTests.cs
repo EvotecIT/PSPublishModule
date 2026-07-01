@@ -1032,6 +1032,20 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_ParsesGenericCsvMetricsWithoutDurationUnits()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(csv, "Suite,Scenario,Operation,Engine,Host,Iteration,Status,DurationMs,Reason,Rows\nsuite,Write,Run,Managed,Current,0,Succeeded,12.5,,42\n");
+
+        var result = new BenchmarkResultImporter().Import(csv);
+        var sample = Assert.Single(result.Samples);
+
+        Assert.Equal(42, sample.Metrics["Rows"]);
+        Assert.Equal(42, Assert.Single(result.Summary).Metrics["Rows"]);
+    }
+
+    [Fact]
     public void Importer_PreservesRunnerScenarioWhenMethodIsVariable()
     {
         var root = CreateTempRoot();
@@ -1191,6 +1205,23 @@ benchmark 'bad' {
         var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
 
         Assert.Contains("stopped", ex.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void DslRuntime_StopsDesktopNativeExitCodes()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'bad' {
+    cases { Add-BenchmarkCaseSource { $global:LASTEXITCODE = 23 } }
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+
+        Assert.Contains("23", ex.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1482,6 +1513,17 @@ benchmark 'path' -out 'relative-out' {
     }
 
     [Fact]
+    public void Runner_LabelsOperatingSystemsDistinctly()
+    {
+        var suite = CreateRunnableSuite();
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+        var sample = Assert.Single(result.Samples);
+
+        Assert.Contains(sample.Os, new[] { "Windows", "Linux", "macOS" });
+    }
+
+    [Fact]
     public void Runner_ExcludesGeneratedCaseNameFromVariables()
     {
         var suite = CreateRunnableSuite();
@@ -1620,12 +1662,30 @@ benchmark 'path' -out 'relative-out' {
     }
 
     [Fact]
+    public void Runner_EscapesMatrixOutputPathDelimiters()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Cases.Clear();
+        suite.Cases.Add(new PowerShellBenchmarkCase { Name = "Same", Values = { ["A"] = "B_C=D" } });
+        suite.Cases.Add(new PowerShellBenchmarkCase { Name = "Same", Values = { ["A"] = "B", ["C"] = "D" } });
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create("param($case, $run) [IO.File]::WriteAllText($run.OutputPath, 'ok')");
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+        var outputFiles = Directory.GetFiles(Path.Combine(suite.OutputRoot, result.RunId), "output", SearchOption.AllDirectories);
+
+        Assert.Equal(2, outputFiles.Length);
+        Assert.Contains(outputFiles, path => path.Contains("A=B%5FC%3DD", StringComparison.Ordinal));
+        Assert.Contains(outputFiles, path => path.Contains("A=B_C=D", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Runner_WritesMatrixVariablesToCsvArtifacts()
     {
         var suite = CreateRunnableSuite();
         suite.Artifacts = BenchmarkArtifactKind.Csv;
         suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows", Values = { 10 } });
         suite.Metrics.Add(new PowerShellBenchmarkMetric { Name = "TinyMetric", ScriptBlock = ScriptBlock.Create("0.00042") });
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create("param($case, $run) Start-Sleep -Milliseconds 5");
 
         var result = new PowerShellBenchmarkRunner().Run(suite);
 
@@ -1633,6 +1693,7 @@ benchmark 'path' -out 'relative-out' {
         var summaryCsv = File.ReadAllText(result.Artifacts["summary.csv"]);
         Assert.Contains("Suite,Scenario,Operation,Engine,Host,OS,Rows,Iteration,Status,DurationMs,Reason,TinyMetric", samplesCsv);
         Assert.Contains($",Managed,{result.Samples[0].Host},{result.Samples[0].Os},10,0,Succeeded", samplesCsv);
+        Assert.Contains(result.Samples[0].DurationMs.ToString("G17", System.Globalization.CultureInfo.InvariantCulture), samplesCsv);
         Assert.Contains(",0.00042", samplesCsv);
         Assert.Contains("Suite,Scenario,Operation,Engine,Host,OS,Rows,SampleCount,FailureCount,Status,MedianMs,MeanMs,MinMs,MaxMs,TinyMetric", summaryCsv);
         Assert.Contains(",0.00042", summaryCsv);

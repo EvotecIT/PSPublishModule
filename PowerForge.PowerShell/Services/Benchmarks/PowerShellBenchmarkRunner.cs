@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace PowerForge;
@@ -258,7 +259,7 @@ public sealed class PowerShellBenchmarkRunner
             Operation = item.Operation,
             Engine = item.Engine,
             Host = item.Host,
-            Os = Environment.OSVersion.Platform.ToString(),
+            Os = GetOperatingSystemLabel(),
             RunMode = suite.RunMode,
             Iteration = iteration,
             Status = status,
@@ -497,8 +498,22 @@ public sealed class PowerShellBenchmarkRunner
             values
                 .Where(k => !IsBuiltInPathValue(k.Key))
                 .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
-                .Select(k => string.Concat(k.Key, "=", Convert.ToString(k.Value, CultureInfo.InvariantCulture) ?? string.Empty)));
+                .Select(k => string.Concat(EscapeMatrixPathPart(k.Key), "=", EscapeMatrixPathPart(Convert.ToString(k.Value, CultureInfo.InvariantCulture) ?? string.Empty))));
         return SafePathSegment(string.IsNullOrWhiteSpace(text) ? "matrix" : text);
+    }
+
+    private static string EscapeMatrixPathPart(string value)
+    {
+        var escaped = Uri.EscapeDataString(value ?? string.Empty);
+        return escaped.Replace("_", "%5F");
+    }
+
+    private static string GetOperatingSystemLabel()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return "Windows";
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) return "Linux";
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) return "macOS";
+        return Environment.OSVersion.Platform.ToString();
     }
 
     private static bool IsBuiltInPathValue(string key)
@@ -550,7 +565,7 @@ public sealed class PowerShellBenchmarkRunner
             cells.AddRange(variableHeaders.Select(header => Cell(sample.Variables.TryGetValue(header, out var value) ? value : null)));
             cells.Add(sample.Iteration.ToString(CultureInfo.InvariantCulture));
             cells.Add(sample.Status.ToString());
-            cells.Add(sample.DurationMs.ToString("0.###", CultureInfo.InvariantCulture));
+            cells.Add(Number(sample.DurationMs));
             cells.Add(Cell(sample.Reason));
             cells.AddRange(metricHeaders.Select(header => sample.Metrics.TryGetValue(header, out var value) ? Number(value) : string.Empty));
             builder.AppendLine(string.Join(",", cells));
