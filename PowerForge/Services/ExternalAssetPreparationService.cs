@@ -441,7 +441,7 @@ internal sealed class ExternalAssetPreparationService
     private static string DownloadFile(Uri uri, string targetPath, TimeSpan timeout)
     {
         using var http = new HttpClient { Timeout = timeout };
-        using var response = http.GetAsync(uri).GetAwaiter().GetResult();
+        using var response = http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead).GetAwaiter().GetResult();
         response.EnsureSuccessStatusCode();
         using var input = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult();
         using var output = File.Create(targetPath);

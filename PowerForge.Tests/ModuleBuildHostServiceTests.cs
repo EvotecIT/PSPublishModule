@@ -28,7 +28,9 @@ public sealed class ModuleBuildHostServiceTests
         Assert.Contains("JsonPath = $targetJson", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("Remove-Item -LiteralPath Alias:Build-Module -Force -ErrorAction SilentlyContinue", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('RunMode')", captured.CommandText!, StringComparison.Ordinal);
-        Assert.Contains("$buildScriptArguments += @('-RunMode', 'Publish')", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments += @('-RunMode', 'Build')", captured.CommandText!, StringComparison.Ordinal);
+        Assert.DoesNotContain("'-RunMode', 'Publish'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.DoesNotContain("'-ConfigurationGateMode', 'Publish'", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("function Import-Module", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("& $cmd @args", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains(". $buildScriptPath @buildScriptArguments", captured.CommandText!, StringComparison.Ordinal);
