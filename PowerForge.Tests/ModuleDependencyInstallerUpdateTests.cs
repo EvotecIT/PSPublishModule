@@ -340,12 +340,41 @@ public sealed class ModuleDependencyInstallerUpdateTests
         var result = Assert.Single(results);
         Assert.Equal(ModuleDependencyInstallStatus.Updated, result.Status);
         Assert.Equal("PSResourceGet", result.Installer);
-        Assert.Equal(3, runner.Requests.Count);
+        Assert.Equal(4, runner.Requests.Count);
 
-        var installRequest = runner.Requests[1];
-        Assert.Contains("Install-PSResource", runner.ScriptTexts[1], StringComparison.Ordinal);
+        var installRequest = runner.Requests[2];
+        Assert.Contains("Install-PSResource", runner.ScriptTexts[2], StringComparison.Ordinal);
         Assert.Equal("(, 2.0.0)", installRequest.Arguments[1]);
         Assert.Equal("AllUsers", installRequest.Arguments[3]);
+    }
+
+    [Fact]
+    public void EnsureInstalled_SkipsMaximumRangeInstall_WhenSideBySideCopySatisfiesRange()
+    {
+        var runner = new QueuePowerShellRunner(new[]
+        {
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "3.0.0")), string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, "PFMODLOC::FOUND::ModuleA", string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "3.0.0")), string.Empty, "pwsh.exe")
+        });
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureInstalled(
+            new[]
+            {
+                new ModuleDependency(
+                    "ModuleA",
+                    maximumVersion: "2.0.0",
+                    maximumVersionInclusive: false)
+            },
+            repository: "Company");
+
+        var result = Assert.Single(results);
+        Assert.Equal(ModuleDependencyInstallStatus.Satisfied, result.Status);
+        Assert.Null(result.Installer);
+        Assert.Equal(3, runner.Requests.Count);
+        Assert.Equal("2.0.0", runner.Requests[1].Arguments[3]);
+        Assert.DoesNotContain(runner.ScriptTexts, script => script.Contains("Install-PSResource", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -384,6 +413,7 @@ public sealed class ModuleDependencyInstallerUpdateTests
         var runner = new QueuePowerShellRunner(new[]
         {
             new PowerShellRunResult(0, BuildInstalledVersionsStdOut(), string.Empty, "pwsh.exe"),
+            new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe"),
             new PowerShellRunResult(0, "PFPSRG::INSTALL::OK", string.Empty, "pwsh.exe"),
             new PowerShellRunResult(0, BuildInstalledVersionsStdOut(("ModuleA", "1.9.0")), string.Empty, "pwsh.exe")
         });
@@ -403,9 +433,9 @@ public sealed class ModuleDependencyInstallerUpdateTests
         var result = Assert.Single(results);
         Assert.Equal(ModuleDependencyInstallStatus.Installed, result.Status);
         Assert.Equal("PSResourceGet", result.Installer);
-        Assert.Equal(3, runner.Requests.Count);
-        Assert.Contains("Install-PSResource", runner.ScriptTexts[1], StringComparison.Ordinal);
-        Assert.Equal("(, 2.0.0)", runner.Requests[1].Arguments[1]);
+        Assert.Equal(4, runner.Requests.Count);
+        Assert.Contains("Install-PSResource", runner.ScriptTexts[2], StringComparison.Ordinal);
+        Assert.Equal("(, 2.0.0)", runner.Requests[2].Arguments[1]);
     }
 
     [Fact]

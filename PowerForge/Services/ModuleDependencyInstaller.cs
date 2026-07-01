@@ -117,6 +117,22 @@ public sealed partial class ModuleDependencyInstaller
                     continue;
                 }
 
+                if (!force &&
+                    currentDecision.NeedsInstall &&
+                    exactRequiredVersion is null &&
+                    ShouldProbeInstalledRange(dep) &&
+                    HasInstalledModuleSatisfyingDependency(dep))
+                {
+                    actions.Add(new ActionItem(
+                        dep.Name,
+                        installedBefore,
+                        currentDecision.RequestedVersion,
+                        ModuleDependencyInstallStatus.Satisfied,
+                        installer: null,
+                        message: $"Version requirements already satisfied by an installed side-by-side copy (latest installed: {installedBefore})"));
+                    continue;
+                }
+
                 if (!currentDecision.NeedsInstall)
                 {
                     if (RequiresScopedInstall(dep) && !CanUseScopedDependencyProbe(dep))
@@ -728,6 +744,11 @@ public sealed partial class ModuleDependencyInstaller
 
     private static bool RequiresScopedInstall(ModuleDependency dep)
         => !string.IsNullOrWhiteSpace(dep.InstallScope);
+
+    private static bool ShouldProbeInstalledRange(ModuleDependency dep)
+        => string.IsNullOrWhiteSpace(dep.RequiredVersion) &&
+           !string.IsNullOrWhiteSpace(dep.MaximumVersion) &&
+           CanUseScopedDependencyProbe(dep);
 
     private static bool CanUseExactVersionProbe(string requiredVersion)
         => !(ModuleStateVersion.TryParse(requiredVersion, out var version) && version.IsPrerelease);

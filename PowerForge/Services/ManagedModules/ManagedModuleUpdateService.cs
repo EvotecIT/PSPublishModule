@@ -43,7 +43,7 @@ public sealed class ManagedModuleUpdateService
         using var requestScope = _repositoryClient.BeginRequestScope();
 
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
-        var targetVersionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken).ConfigureAwait(false);
+        var targetVersionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken, resolveExactMetadata: true, enrichExactMetadata: false).ConfigureAwait(false);
         var targetVersion = targetVersionInfo.Version;
         var installedVersions = GetInstalledVersions(moduleRoot, request.Name);
         var currentVersion = installedVersions.LastOrDefault();
@@ -445,20 +445,31 @@ public sealed class ManagedModuleUpdateService
     private async Task<ManagedModuleVersionInfo> ResolveSelectedVersionInfoAsync(
         ManagedModuleUpdateRequest request,
         CancellationToken cancellationToken,
-        bool resolveExactMetadata = false)
+        bool resolveExactMetadata = false,
+        bool enrichExactMetadata = true)
     {
         if (!string.IsNullOrWhiteSpace(request.Version))
         {
             var exactVersion = request.Version!.Trim();
             if (resolveExactMetadata)
             {
-                var exactMatch = await TryResolveRepositoryVersionWithPackageMetadataAsync(
+                var exactMatch = await TryResolveRepositoryVersionAsync(
                     request,
                     request.Name,
                     exactVersion,
+                    resolvePackageMetadata: false,
+                    requireListed: false,
                     cancellationToken).ConfigureAwait(false);
                 if (exactMatch is not null)
-                    return exactMatch;
+                {
+                    return enrichExactMetadata
+                        ? await EnrichVersionInfoWithPackageMetadataAsync(
+                            request.Repository,
+                            exactMatch,
+                            request.Credential,
+                            cancellationToken).ConfigureAwait(false)
+                        : exactMatch;
+                }
 
                 throw new InvalidOperationException(
                     $"Version '{exactVersion}' of '{request.Name}' was not found in repository '{request.Repository.Name}'.");
@@ -482,7 +493,7 @@ public sealed class ManagedModuleUpdateService
         if (latest is null)
             throw new InvalidOperationException($"No versions of '{request.Name}' satisfying range '{range}' were found in repository '{request.Repository.Name}'.");
 
-        return resolveExactMetadata
+        return resolveExactMetadata && enrichExactMetadata
             ? await EnrichVersionInfoWithPackageMetadataAsync(
                 request.Repository,
                 latest,

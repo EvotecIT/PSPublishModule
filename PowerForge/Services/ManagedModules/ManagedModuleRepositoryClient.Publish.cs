@@ -56,23 +56,27 @@ public sealed partial class ManagedModuleRepositoryClient
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
-        if (_packagePublishAddressCache.TryGetValue(repository.Source, out var cached))
+        var source = repository.Source.Trim();
+        var serviceIndexSource = source.TrimEnd('/');
+        var isServiceIndex = serviceIndexSource.EndsWith("index.json", StringComparison.OrdinalIgnoreCase);
+        var cacheKey = isServiceIndex ? serviceIndexSource : source;
+        if (_packagePublishAddressCache.TryGetValue(cacheKey, out var cached))
             return cached;
 
-        if (!repository.Source.EndsWith("index.json", StringComparison.OrdinalIgnoreCase))
+        if (!isServiceIndex)
         {
             var publishAddress = repository.Kind == ManagedModuleRepositoryKind.NuGetV2
-                ? ResolveNuGetV2PackagePublishAddress(repository.Source)
-                : repository.Source;
-            _packagePublishAddressCache[repository.Source] = publishAddress;
+                ? ResolveNuGetV2PackagePublishAddress(source)
+                : source;
+            _packagePublishAddressCache[cacheKey] = publishAddress;
             return publishAddress;
         }
 
         using var response = await SendWithPolicyAsync(
-            () => CreateRequest(HttpMethod.Get, new Uri(repository.Source), credential, "application/json"),
+            () => CreateRequest(HttpMethod.Get, new Uri(serviceIndexSource), credential, "application/json"),
             cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw CreateRepositoryHttpException(repository, "PublishServiceDiscovery", response.StatusCode, $"Unable to query NuGet service index '{repository.Source}'.");
+            throw CreateRepositoryHttpException(repository, "PublishServiceDiscovery", response.StatusCode, $"Unable to query NuGet service index '{serviceIndexSource}'.");
 
         using var document = await ReadJsonDocumentAsync(
             response.Content,
@@ -91,7 +95,7 @@ public sealed partial class ManagedModuleRepositoryClient
             var id = resource.TryGetProperty("@id", out var idElement) ? idElement.GetString() : null;
             if (!string.IsNullOrWhiteSpace(id))
             {
-                _packagePublishAddressCache[repository.Source] = id!;
+                _packagePublishAddressCache[cacheKey] = id!;
                 return id!;
             }
         }

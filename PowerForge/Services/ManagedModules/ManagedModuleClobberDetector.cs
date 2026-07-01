@@ -122,11 +122,14 @@ internal static class ManagedModuleClobberDetector
             .Where(static name => !string.IsNullOrWhiteSpace(name))
             .Select(static name => name.Trim())
             .ToArray();
-        var hasWildcard = allNames.Any(static name => name.Equals("*", StringComparison.Ordinal));
-        var names = allNames.Where(static name => !name.Equals("*", StringComparison.Ordinal));
+        var hasWildcard = allNames.Any(IsWildcardExport);
+        var names = allNames.Where(static name => !IsWildcardExport(name));
 
         return new CommandExportSet(new HashSet<string>(names, StringComparer.OrdinalIgnoreCase), hasWildcard);
     }
+
+    private static bool IsWildcardExport(string name)
+        => name.IndexOf('*') >= 0 || name.IndexOf('?') >= 0;
 
     private sealed class CommandExportSet
     {

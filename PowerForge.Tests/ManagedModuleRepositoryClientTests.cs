@@ -819,6 +819,29 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task PublishPackageAsync_treats_trailing_slash_service_index_as_v3_index()
+    {
+        var requests = new List<RecordedRequest>();
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        File.WriteAllBytes(packagePath, TestPackageFactory.CreateBytes("Company.Tools", "1.0.0"));
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json/");
+
+        var result = await repositoryClient.PublishPackageAsync(
+            repository,
+            packagePath,
+            new RepositoryCredential { Secret = "publish-key" });
+
+        Assert.True(result.Published);
+        Assert.Contains(requests, request => request.Url == "https://example.test/v3/index.json");
+        var publishRequest = Assert.Single(requests, request => request.Url == "https://example.test/publish/");
+        Assert.Equal(HttpMethod.Put, publishRequest.Method);
+        Assert.DoesNotContain(requests, request => request.Url == "https://example.test/v3/index.json/");
+    }
+
+    [Fact]
     public async Task PublishPackageAsync_resolves_powershellgallery_publish_endpoint_with_api_key()
     {
         var requests = new List<RecordedRequest>();

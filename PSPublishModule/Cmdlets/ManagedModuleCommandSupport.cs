@@ -66,13 +66,24 @@ internal static class ManagedModuleCommandSupport
             var source = ResolveProfileSource(profile, profileName!, publish: true);
             return new ManagedModuleRepository(
                 ResolveProfileRepositoryName(profile, profileName!),
-                ResolveRepositorySource(cmdlet, source),
+                ResolveRepositoryPublishSource(cmdlet, source, out _, out _),
                 ManagedModuleRepositoryKind.Auto,
                 profile.Trusted);
         }
 
         if (!string.IsNullOrWhiteSpace(repository))
-            return CreateRepository(cmdlet, repositoryName, repository!);
+        {
+            var source = ResolveRepositoryPublishSource(cmdlet, repository!, out var resolvedRegisteredRepositoryName, out var resolvedRegisteredRepositoryTrusted);
+            var name = !string.Equals(repositoryName, DefaultRepositoryName, StringComparison.OrdinalIgnoreCase)
+                ? repositoryName
+                : !string.IsNullOrWhiteSpace(resolvedRegisteredRepositoryName)
+                    ? resolvedRegisteredRepositoryName!
+                    : ResolveRepositoryName(repositoryName, source);
+            var trusted = resolvedRegisteredRepositoryName is not null
+                ? resolvedRegisteredRepositoryTrusted
+                : IsBuiltInDefaultRepository(repositoryName, source);
+            return new ManagedModuleRepository(name, source, ManagedModuleRepositoryKind.Auto, trusted);
+        }
 
         if (!string.IsNullOrWhiteSpace(outputDirectory))
             return new ManagedModuleRepository("Local", ResolveProviderPath(cmdlet, outputDirectory)!);
@@ -142,9 +153,20 @@ internal static class ManagedModuleCommandSupport
     internal static string ResolveRepositorySource(PSCmdlet cmdlet, string repository, out string? resolvedRegisteredRepositoryName)
         => ResolveRepositorySource(cmdlet, repository, out resolvedRegisteredRepositoryName, out _);
 
+    internal static string ResolveRepositoryPublishSource(PSCmdlet cmdlet, string repository, out string? resolvedRegisteredRepositoryName, out bool resolvedRegisteredRepositoryTrusted)
+        => ResolveRepositorySource(cmdlet, repository, publish: true, out resolvedRegisteredRepositoryName, out resolvedRegisteredRepositoryTrusted);
+
     internal static string ResolveRepositorySource(
         PSCmdlet cmdlet,
         string repository,
+        out string? resolvedRegisteredRepositoryName,
+        out bool resolvedRegisteredRepositoryTrusted)
+        => ResolveRepositorySource(cmdlet, repository, publish: false, out resolvedRegisteredRepositoryName, out resolvedRegisteredRepositoryTrusted);
+
+    private static string ResolveRepositorySource(
+        PSCmdlet cmdlet,
+        string repository,
+        bool publish,
         out string? resolvedRegisteredRepositoryName,
         out bool resolvedRegisteredRepositoryTrusted)
     {
@@ -172,7 +194,13 @@ internal static class ManagedModuleCommandSupport
         if (Path.IsPathRooted(trimmed) || trimmed.StartsWith(".", StringComparison.Ordinal) || LooksLikeLocalPath(trimmed))
             return providerPath ?? trimmed;
 
-        if (new PowerShellRepositorySourceResolver().TryResolveSource(cmdlet, trimmed, out var registeredSource, out var registeredTrusted) &&
+        var resolver = new PowerShellRepositorySourceResolver();
+        string? registeredSource;
+        bool registeredTrusted;
+        var resolved = publish
+            ? resolver.TryResolvePublishSource(cmdlet, trimmed, out registeredSource, out registeredTrusted)
+            : resolver.TryResolveSource(cmdlet, trimmed, out registeredSource, out registeredTrusted);
+        if (resolved &&
             !string.IsNullOrWhiteSpace(registeredSource))
         {
             resolvedRegisteredRepositoryName = trimmed;

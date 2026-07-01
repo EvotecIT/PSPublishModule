@@ -166,6 +166,30 @@ public sealed class ManagedModuleUpdateServiceTests
     }
 
     [Fact]
+    public async Task UpdateAsync_normalizes_requested_exact_target_version()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "0.9.0"));
+        var service = new ManagedModuleUpdateService(new NullLogger());
+
+        var request = CreateRequest(feed.Path, moduleRoot.Path);
+        request.Version = "1.0";
+        var result = await service.UpdateAsync(request);
+
+        Assert.Equal(ManagedModuleUpdateStatus.Updated, result.Status);
+        Assert.Equal("1.0.0", result.TargetVersion);
+        Assert.Equal(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"), result.ModulePath);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0")));
+    }
+
+    [Fact]
     public async Task UpdateAsync_rejects_package_when_expected_sha256_does_not_match()
     {
         using var feed = new TemporaryDirectory();

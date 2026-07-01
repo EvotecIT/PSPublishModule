@@ -30,6 +30,24 @@ public sealed class PowerShellRepositorySourceResolver
     /// <returns>True when a registered repository source was found.</returns>
     public bool TryResolveSource(PSCmdlet cmdlet, string? repositoryName, out string? source, out bool trusted)
     {
+        return TryResolveRepositoryLocation(cmdlet, repositoryName, publish: false, out source, out trusted);
+    }
+
+    /// <summary>
+    /// Attempts to resolve a registered repository name to a publish URI or local feed path and trust state.
+    /// </summary>
+    /// <param name="cmdlet">Cmdlet whose current runspace should be inspected.</param>
+    /// <param name="repositoryName">Repository name to resolve.</param>
+    /// <param name="source">Resolved publish URI or path when available.</param>
+    /// <param name="trusted">Registered trust state when available.</param>
+    /// <returns>True when a registered repository publish source was found.</returns>
+    public bool TryResolvePublishSource(PSCmdlet cmdlet, string? repositoryName, out string? source, out bool trusted)
+    {
+        return TryResolveRepositoryLocation(cmdlet, repositoryName, publish: true, out source, out trusted);
+    }
+
+    private static bool TryResolveRepositoryLocation(PSCmdlet cmdlet, string? repositoryName, bool publish, out string? source, out bool trusted)
+    {
         source = null;
         trusted = false;
         if (cmdlet is null)
@@ -38,8 +56,11 @@ public sealed class PowerShellRepositorySourceResolver
             return false;
 
         var name = repositoryName!.Trim();
-        return TryResolveWithCommand(cmdlet, "Get-PSResourceRepository", name, new[] { "Uri", "SourceLocation" }, out source, out trusted) ||
-               TryResolveWithCommand(cmdlet, "Get-PSRepository", name, new[] { "SourceLocation" }, out source, out trusted);
+        return publish
+            ? TryResolveWithCommand(cmdlet, "Get-PSResourceRepository", name, new[] { "PublishLocation", "PublishUri", "Uri", "SourceLocation" }, out source, out trusted) ||
+              TryResolveWithCommand(cmdlet, "Get-PSRepository", name, new[] { "PublishLocation", "SourceLocation" }, out source, out trusted)
+            : TryResolveWithCommand(cmdlet, "Get-PSResourceRepository", name, new[] { "Uri", "SourceLocation" }, out source, out trusted) ||
+              TryResolveWithCommand(cmdlet, "Get-PSRepository", name, new[] { "SourceLocation" }, out source, out trusted);
     }
 
     private static bool TryResolveWithCommand(
