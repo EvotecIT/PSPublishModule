@@ -10,7 +10,7 @@ public sealed partial class ManagedModuleRepositoryClient
         var client = new HttpClient(CreateDefaultHttpMessageHandler(options));
 #if !NET472
         client.DefaultRequestVersion = HttpVersion.Version20;
-        client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrHigher;
+        client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
 #endif
         return client;
     }
@@ -35,6 +35,7 @@ public sealed partial class ManagedModuleRepositoryClient
         var handler = new SocketsHttpHandler
         {
             UseProxy = options.UseProxy,
+            AllowAutoRedirect = false,
             AutomaticDecompression = decompression,
             MaxConnectionsPerServer = Math.Max(1, options.MaxConnectionsPerServer),
             EnableMultipleHttp2Connections = true,

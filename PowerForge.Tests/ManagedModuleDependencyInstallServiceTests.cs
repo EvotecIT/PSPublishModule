@@ -212,6 +212,7 @@ public sealed class ManagedModuleDependencyInstallServiceTests
         using var moduleRoot = new TemporaryDirectory();
         using var handler = new RootDependencyPrewarmFeedHandler();
         using var httpClient = new HttpClient(handler);
+        using var cancellation = new CancellationTokenSource();
         var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), httpClient);
         var service = new ManagedModuleInstallService(new NullLogger(), repositoryClient);
 
@@ -222,7 +223,7 @@ public sealed class ManagedModuleDependencyInstallServiceTests
             Version = "1.0.0",
             Scope = ManagedModuleInstallScope.Custom,
             ModuleRoot = moduleRoot.Path
-        });
+        }, cancellation.Token);
 
         var dependency = Assert.Single(result.DependencyResults);
         Assert.Equal("Company.Core", dependency.Name);

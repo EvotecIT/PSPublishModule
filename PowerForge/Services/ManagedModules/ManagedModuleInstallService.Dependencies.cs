@@ -12,8 +12,7 @@ public sealed partial class ManagedModuleInstallService
     {
         if (request.SkipDependencyCheck ||
             request.AuthenticodeCheck ||
-            request.Credential is not null ||
-            cancellationToken.CanBeCanceled)
+            request.Credential is not null)
         {
             return;
         }
@@ -449,7 +448,7 @@ public sealed partial class ManagedModuleInstallService
         bool includePrerelease,
         CancellationToken cancellationToken)
     {
-        if (request.Credential is not null || cancellationToken.CanBeCanceled)
+        if (request.Credential is not null)
             return null;
 
         return string.Join(
@@ -468,7 +467,7 @@ public sealed partial class ManagedModuleInstallService
         bool includePrerelease,
         CancellationToken cancellationToken)
     {
-        if (request.Credential is not null || cancellationToken.CanBeCanceled)
+        if (request.Credential is not null)
             return null;
 
         return string.Join(

@@ -11,12 +11,13 @@ public sealed class ManagedModuleRepositoryClientCoalescingTests
     {
         using var handler = new CoalescingHandler();
         using var client = new HttpClient(handler);
+        using var cancellation = new CancellationTokenSource();
         var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
         var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
 
-        var first = repositoryClient.GetVersionsAsync(repository, "Company.Tools");
+        var first = repositoryClient.GetVersionsAsync(repository, "Company.Tools", cancellationToken: cancellation.Token);
         await handler.WaitForVersionRequestAsync();
-        var second = repositoryClient.GetVersionsAsync(repository, "Company.Tools");
+        var second = repositoryClient.GetVersionsAsync(repository, "Company.Tools", cancellationToken: cancellation.Token);
         handler.ReleaseVersionRequest();
         await Task.WhenAll(first, second);
         var firstResult = await first;

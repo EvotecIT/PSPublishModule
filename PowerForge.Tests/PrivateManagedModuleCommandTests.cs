@@ -62,6 +62,39 @@ public sealed class PrivateManagedModuleCommandTests
     }
 
     [Fact]
+    public void InstallManagedModule_resolves_provider_cache_path_before_multiple_async_installs()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        using var cacheRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.One.1.0.0.nupkg"),
+            "Company.One",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0", "Company.One"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Two.1.0.0.nupkg"),
+            "Company.Two",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0", "Company.Two"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedModule")
+            .AddParameter("Name", new[] { "Company.One", "Company.Two" })
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", moduleRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("PackageCacheDirectory", "FileSystem::" + cacheRoot.Path);
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal(2, results.Count);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.One", "1.0.0", "Company.One.psd1")));
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Two", "1.0.0", "Company.Two.psd1")));
+    }
+
+    [Fact]
     public void InstallManagedModule_defaults_to_managed_transport_from_registered_repository_source()
     {
         using var feed = new TemporaryDirectory();
@@ -233,10 +266,10 @@ public sealed class PrivateManagedModuleCommandTests
         Assert.Contains("registered PowerShell repository name", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static IReadOnlyDictionary<string, string> CreateModuleFiles(string version)
+    private static IReadOnlyDictionary<string, string> CreateModuleFiles(string version, string moduleName = "Company.Tools")
         => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Company.Tools.psd1"] = "@{ ModuleVersion = '" + version + "' }"
+            [moduleName + ".psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
 
     private static void SaveProfile(string feedPath)

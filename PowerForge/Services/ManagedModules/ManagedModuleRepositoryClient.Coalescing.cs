@@ -76,7 +76,7 @@ public sealed partial class ManagedModuleRepositoryClient
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
-        if (credential is not null || cancellationToken.CanBeCanceled)
+        if (credential is not null)
             return null;
 
         return string.Join(

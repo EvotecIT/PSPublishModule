@@ -105,6 +105,19 @@ public sealed class ManagedModuleRepositoryClientHttpHandlerTests
 #endif
     }
 
+    [Fact]
+    public void CreateDefaultHttpMessageHandler_disables_automatic_redirects_for_repository_policy()
+    {
+        var rawHandler = ManagedModuleRepositoryClient.CreateDefaultHttpMessageHandler(new ManagedModuleRepositoryClientOptions());
+
+#if NET472
+        var handler = Assert.IsType<HttpClientHandler>(rawHandler);
+#else
+        var handler = Assert.IsType<SocketsHttpHandler>(rawHandler);
+#endif
+        Assert.False(handler.AllowAutoRedirect);
+    }
+
 #if !NET472
     [Fact]
     public void CreateDefaultHttpMessageHandler_enables_multiple_http2_connections_on_modern_runtime()
@@ -117,12 +130,12 @@ public sealed class ManagedModuleRepositoryClientHttpHandlerTests
     }
 
     [Fact]
-    public void CreateDefaultHttpClient_prefers_http2_or_higher_on_modern_runtime()
+    public void CreateDefaultHttpClient_prefers_http2_with_http11_fallback_on_modern_runtime()
     {
         using var client = ManagedModuleRepositoryClient.CreateDefaultHttpClient(new ManagedModuleRepositoryClientOptions());
 
         Assert.Equal(HttpVersion.Version20, client.DefaultRequestVersion);
-        Assert.Equal(HttpVersionPolicy.RequestVersionOrHigher, client.DefaultVersionPolicy);
+        Assert.Equal(HttpVersionPolicy.RequestVersionOrLower, client.DefaultVersionPolicy);
     }
 #endif
 

@@ -179,6 +179,7 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
     protected override async Task ProcessRecordAsync()
     {
         var moduleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot);
+        var packageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory);
         var repository = ManagedModuleCommandSupport.CreateRepository(
             this,
             RepositoryName,
@@ -206,7 +207,7 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
                 Scope = string.IsNullOrWhiteSpace(moduleRoot) ? Scope : ManagedModuleInstallScope.Custom,
                 ShellEdition = ShellEdition,
                 ModuleRoot = moduleRoot,
-                PackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
+                PackageCacheDirectory = packageCacheDirectory,
                 DependencyConcurrency = DependencyConcurrency,
                 ExpectedPackageSha256 = ExpectedPackageSha256,
                 TrustPolicy = trustPolicy,
