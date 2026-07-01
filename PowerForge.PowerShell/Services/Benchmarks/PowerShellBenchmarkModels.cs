@@ -3,6 +3,33 @@ using System.Management.Automation;
 namespace PowerForge;
 
 /// <summary>
+/// PowerShell benchmark profile isolation mode.
+/// </summary>
+public enum PowerShellBenchmarkProfileKind
+{
+    /// <summary>Run in the current user and host context.</summary>
+    Current,
+
+    /// <summary>Run from a temporary local Windows account with a loaded user profile.</summary>
+    TemporaryLocalUser
+}
+
+/// <summary>
+/// Cleanup behavior for benchmark-owned temporary environment state.
+/// </summary>
+public enum PowerShellBenchmarkCleanupMode
+{
+    /// <summary>Always remove benchmark-owned temporary environment state.</summary>
+    Always,
+
+    /// <summary>Keep benchmark-owned temporary environment state when a run fails.</summary>
+    KeepOnFailure,
+
+    /// <summary>Always keep benchmark-owned temporary environment state for inspection.</summary>
+    KeepAlways
+}
+
+/// <summary>
 /// PowerShell-authored benchmark suite definition.
 /// </summary>
 public sealed class PowerShellBenchmarkSuite
@@ -21,6 +48,12 @@ public sealed class PowerShellBenchmarkSuite
 
     /// <summary>Run mode label.</summary>
     public string RunMode { get; set; } = "standard";
+
+    /// <summary>PowerShell profile isolation mode.</summary>
+    public PowerShellBenchmarkProfileKind Profile { get; set; } = PowerShellBenchmarkProfileKind.Current;
+
+    /// <summary>Cleanup behavior for benchmark-owned temporary environment state.</summary>
+    public PowerShellBenchmarkCleanupMode Cleanup { get; set; } = PowerShellBenchmarkCleanupMode.Always;
 
     /// <summary>Declared benchmark cases.</summary>
     public List<PowerShellBenchmarkCase> Cases { get; } = new();

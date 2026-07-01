@@ -1741,6 +1741,42 @@ benchmark 'reserved-metric' {
     }
 
     [Fact]
+    public void DslRuntime_ParsesTemporaryLocalUserProfileAndCleanup()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'temp-user' {
+    profile TemporaryLocalUser -Cleanup KeepOnFailure
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+
+        Assert.Equal(PowerShellBenchmarkProfileKind.TemporaryLocalUser, suite.Profile);
+        Assert.Equal(PowerShellBenchmarkCleanupMode.KeepOnFailure, suite.Cleanup);
+    }
+
+    [Fact]
+    public void DslRuntime_RejectsUnsupportedProfileNames()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'bad-profile' {
+    profile LocalAdmin
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+
+        Assert.Contains("LocalAdmin", ex.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("profile", ex.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void DslRuntime_PreservesNearestCapturedScopeAndUserPathVariables()
     {
         var root = CreateTempRoot();
@@ -1913,6 +1949,62 @@ benchmark 'whatif' -out '{escapedRoot}' {{
     }
 
     [Fact]
+    public void InvokeBenchmarkSuiteCommand_RejectsInlineTemporaryLocalUserSettings()
+    {
+        var initialSessionState = System.Management.Automation.Runspaces.InitialSessionState.CreateDefault();
+        initialSessionState.Commands.Add(new System.Management.Automation.Runspaces.SessionStateCmdletEntry("Invoke-BenchmarkSuite", typeof(PSPublishModule.InvokeBenchmarkSuiteCommand), helpFileName: null));
+        using var runspace = System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace(initialSessionState);
+        runspace.Open();
+        using var ps = System.Management.Automation.PowerShell.Create(runspace);
+        var settings = ScriptBlock.Create(@"
+benchmark 'inline-temp-user' {
+    profile TemporaryLocalUser
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+        ps.AddCommand("Invoke-BenchmarkSuite")
+            .AddParameter("Settings", settings);
+
+        var ex = Assert.Throws<System.Management.Automation.CmdletInvocationException>(() => ps.Invoke());
+
+        Assert.Contains("-Path", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void InvokeBenchmarkSuiteCommand_WhatIfSkipsTemporaryLocalUserExecution()
+    {
+        var root = CreateTempRoot();
+        var spec = Path.Combine(root, "temp-user.benchmark.ps1");
+        File.WriteAllText(spec, """
+benchmark 'path-temp-user' -out 'out' {
+    profile TemporaryLocalUser
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+""");
+        var initialSessionState = System.Management.Automation.Runspaces.InitialSessionState.CreateDefault();
+        initialSessionState.Commands.Add(new System.Management.Automation.Runspaces.SessionStateCmdletEntry("Invoke-BenchmarkSuite", typeof(PSPublishModule.InvokeBenchmarkSuiteCommand), helpFileName: null));
+        using var runspace = System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace(initialSessionState);
+        runspace.Open();
+        using var ps = System.Management.Automation.PowerShell.Create(runspace);
+        ps.AddCommand("Set-Location").AddParameter("Path", root);
+        ps.Invoke();
+        ps.Commands.Clear();
+        ps.AddCommand("Invoke-BenchmarkSuite")
+            .AddParameter("Path", spec)
+            .AddParameter("WhatIf");
+
+        var output = ps.Invoke();
+
+        Assert.Empty(output);
+        Assert.Empty(ps.Streams.Error);
+        Assert.False(Directory.Exists(Path.Combine(root, "out")));
+    }
+
+    [Fact]
     public void Runner_RejectsUnsupportedHostAxis()
     {
         var suite = CreateRunnableSuite();
@@ -1921,6 +2013,18 @@ benchmark 'whatif' -out '{escapedRoot}' {{
         var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Plan(suite));
 
         Assert.Contains("only supports the current PowerShell host", ex.Message);
+    }
+
+    [Fact]
+    public void Runner_RejectsTemporaryLocalUserProfileWithoutFileBackedExecutor()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Profile = PowerShellBenchmarkProfileKind.TemporaryLocalUser;
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new PowerShellBenchmarkRunner().Run(suite));
+
+        Assert.Contains("TemporaryLocalUser", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("file-backed", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

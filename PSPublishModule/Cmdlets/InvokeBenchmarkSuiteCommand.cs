@@ -74,13 +74,16 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
     /// </summary>
     protected override void ProcessRecord()
     {
-        var scriptRoot = SessionState.Path.CurrentFileSystemLocation.Path;
+        var callerRoot = SessionState.Path.CurrentFileSystemLocation.Path;
+        var scriptRoot = callerRoot;
+        string? resolvedSpecPath = null;
         ScriptBlock block;
         if (ParameterSetName == ParameterSetPath)
         {
             var resolved = SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path);
+            resolvedSpecPath = resolved;
             scriptRoot = System.IO.Path.GetDirectoryName(resolved) ?? scriptRoot;
-            block = ScriptBlock.Create(". '" + resolved.Replace("'", "''") + "'");
+            block = ScriptBlock.Create(File.ReadAllText(resolved));
         }
         else
         {
@@ -92,13 +95,38 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
             ThrowTerminatingError(new ErrorRecord(new InvalidOperationException("Benchmark spec did not declare any benchmark suites."), "BenchmarkSuiteMissing", ErrorCategory.InvalidData, Path));
 
         var runner = new PowerShellBenchmarkRunner();
-        foreach (var suite in suites)
+        var temporaryUserRunner = new PowerShellBenchmarkTemporaryUserExecutor();
+        for (var suiteIndex = 0; suiteIndex < suites.Length; suiteIndex++)
         {
+            var suite = suites[suiteIndex];
             ApplyOverrides(suite);
             ResolveSuitePaths(suite);
             if (Plan)
             {
                 WriteObject(runner.Plan(suite), enumerateCollection: true);
+                continue;
+            }
+
+            if (suite.Profile == PowerShellBenchmarkProfileKind.TemporaryLocalUser)
+            {
+                if (string.IsNullOrWhiteSpace(resolvedSpecPath))
+                    ThrowTerminatingError(new ErrorRecord(new InvalidOperationException("Benchmark profile 'TemporaryLocalUser' requires Invoke-BenchmarkSuite -Path because inline -Settings script blocks cannot be re-evaluated in a temporary Windows user profile."), "BenchmarkTemporaryUserRequiresPath", ErrorCategory.InvalidOperation, suite));
+
+                if (!ShouldProcess(suite.OutputRoot, $"Run benchmark suite '{suite.Name}' in a temporary local Windows user profile"))
+                    continue;
+
+                WriteObject(temporaryUserRunner.Run(new PowerShellBenchmarkTemporaryUserRequest
+                {
+                    SpecPath = resolvedSpecPath!,
+                    SuiteIndex = suiteIndex,
+                    WorkingDirectory = callerRoot,
+                    OutputRoot = suite.OutputRoot,
+                    WarmupCount = suite.WarmupCount,
+                    IterationCount = suite.IterationCount,
+                    RunMode = suite.RunMode,
+                    SuiteName = suite.Name,
+                    Cleanup = suite.Cleanup
+                }));
                 continue;
             }
 

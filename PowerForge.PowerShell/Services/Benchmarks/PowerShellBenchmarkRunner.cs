@@ -131,6 +131,7 @@ public sealed class PowerShellBenchmarkRunner
     private BenchmarkRunResult RunInCurrentRunspace(PowerShellBenchmarkSuite suite)
     {
         if (suite is null) throw new ArgumentNullException(nameof(suite));
+        ValidateCurrentRunspaceProfile(suite);
         ValidateComparisons(suite);
         ValidateReadmeBlocks(suite);
         var runId = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
@@ -308,6 +309,12 @@ public sealed class PowerShellBenchmarkRunner
         }
     }
 
+    private static void ValidateCurrentRunspaceProfile(PowerShellBenchmarkSuite suite)
+    {
+        if (suite.Profile == PowerShellBenchmarkProfileKind.TemporaryLocalUser)
+            throw new InvalidOperationException("Benchmark profile 'TemporaryLocalUser' requires a file-backed Invoke-BenchmarkSuite run so the benchmark spec can be re-evaluated inside the temporary Windows user profile.");
+    }
+
     private static void ValidateComparisonWorkItems(PowerShellBenchmarkSuite suite, IReadOnlyList<PowerShellBenchmarkWorkItem> workItems)
     {
         foreach (var comparison in suite.Comparisons)
@@ -380,7 +387,9 @@ public sealed class PowerShellBenchmarkRunner
             ["suite"] = suite.Name,
             ["pwsh"] = PSVersionInfo(),
             ["machine"] = Environment.MachineName,
-            ["os"] = Environment.OSVersion.ToString()
+            ["os"] = Environment.OSVersion.ToString(),
+            ["profile"] = suite.Profile.ToString(),
+            ["cleanup"] = suite.Cleanup.ToString()
         };
 
     private static string PSVersionInfo()

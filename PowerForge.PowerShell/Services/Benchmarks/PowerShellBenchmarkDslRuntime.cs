@@ -159,6 +159,28 @@ public static class PowerShellBenchmarkDslRuntime
     public static void Validate(ScriptBlock scriptBlock) => RequireSuite().Validate = CaptureScriptBlock(scriptBlock);
 
     /// <summary>
+    /// Sets suite profile isolation mode.
+    /// </summary>
+    /// <param name="name">Profile name.</param>
+    /// <param name="cleanup">Optional cleanup mode.</param>
+    public static void Profile(string name, string? cleanup)
+    {
+        var suite = RequireSuite();
+        if (!Enum.TryParse<PowerShellBenchmarkProfileKind>(RequireName(name, "profile name"), ignoreCase: true, out var profile))
+            throw new NotSupportedException($"Benchmark profile '{name}' is not supported.");
+        suite.Profile = profile;
+        if (!string.IsNullOrWhiteSpace(cleanup))
+            suite.Cleanup = ParseCleanup(cleanup!);
+    }
+
+    /// <summary>
+    /// Sets suite cleanup mode.
+    /// </summary>
+    /// <param name="name">Cleanup mode name.</param>
+    public static void Cleanup(string name)
+        => RequireSuite().Cleanup = ParseCleanup(name);
+
+    /// <summary>
     /// Adds an engine.
     /// </summary>
     /// <param name="name">Engine name.</param>
@@ -270,6 +292,14 @@ public static class PowerShellBenchmarkDslRuntime
         RequireSuite().Artifacts = kinds;
     }
 
+    private static PowerShellBenchmarkCleanupMode ParseCleanup(string name)
+    {
+        var cleanupName = RequireName(name, "cleanup mode");
+        if (!Enum.TryParse<PowerShellBenchmarkCleanupMode>(cleanupName, ignoreCase: true, out var cleanup))
+            throw new NotSupportedException($"Benchmark cleanup mode '{cleanupName}' is not supported.");
+        return cleanup;
+    }
+
     private static IEnumerable<PSObject> InvokeStrict(ScriptBlock scriptBlock)
         => InvokeWithScriptRoot(scriptBlock, functionsToDefine: null);
 
@@ -286,9 +316,9 @@ $skipNames = @(
 )
 $skipFunctions = @(
     '__PowerForgeCloseBenchmarkBlock',
-    'benchmark', 'cases', 'case', 'from', 'axis', 'setup', 'data', 'skip', 'validate', 'engine', 'operation', 'metric', 'compare', 'readme', 'artifacts',
+    'benchmark', 'cases', 'case', 'from', 'axis', 'setup', 'data', 'skip', 'validate', 'profile', 'cleanup', 'engine', 'operation', 'metric', 'compare', 'readme', 'artifacts',
     'New-BenchmarkSuite', 'Add-BenchmarkCases', 'Add-BenchmarkCase', 'Add-BenchmarkCaseSource', 'Add-BenchmarkAxis',
-    'Set-BenchmarkSetup', 'Set-BenchmarkDataFactory', 'Add-BenchmarkEngine', 'Add-BenchmarkOperation',
+    'Set-BenchmarkSetup', 'Set-BenchmarkDataFactory', 'Set-BenchmarkProfile', 'Set-BenchmarkCleanup', 'Add-BenchmarkEngine', 'Add-BenchmarkOperation',
     'Add-BenchmarkSkipRule', 'Add-BenchmarkValidation', 'Add-BenchmarkMetric', 'Add-BenchmarkComparison',
     'Add-BenchmarkReadmeBlock', 'Set-BenchmarkArtifacts'
 )
@@ -362,6 +392,8 @@ $scriptText = $ScriptBlock.ToString()
             ["data"] = ScriptBlock.Create("param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Data((__PowerForgeCloseBenchmarkBlock $ScriptBlock))"),
             ["skip"] = ScriptBlock.Create("param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Skip((__PowerForgeCloseBenchmarkBlock $ScriptBlock))"),
             ["validate"] = ScriptBlock.Create("param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Validate((__PowerForgeCloseBenchmarkBlock $ScriptBlock))"),
+            ["profile"] = ScriptBlock.Create("param([Parameter(Position=0)] [string] $Name, [string] $Cleanup) [PowerForge.PowerShellBenchmarkDslRuntime]::Profile($Name, $Cleanup)"),
+            ["cleanup"] = ScriptBlock.Create("param([Parameter(Position=0)] [string] $Name) [PowerForge.PowerShellBenchmarkDslRuntime]::Cleanup($Name)"),
             ["engine"] = ScriptBlock.Create("param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Engine($Name, $ScriptBlock)"),
             ["operation"] = ScriptBlock.Create("param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Operation($Name, (__PowerForgeCloseBenchmarkBlock $ScriptBlock))"),
             ["metric"] = ScriptBlock.Create("param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Metric($Name, (__PowerForgeCloseBenchmarkBlock $ScriptBlock))"),
@@ -375,6 +407,8 @@ $scriptText = $ScriptBlock.ToString()
             ["Add-BenchmarkAxis"] = ScriptBlock.Create("param([Parameter(Position=0)] [string] $Name, [Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) [PowerForge.PowerShellBenchmarkDslRuntime]::Axis($Name, $Values)"),
             ["Set-BenchmarkSetup"] = ScriptBlock.Create("param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Setup((__PowerForgeCloseBenchmarkBlock $ScriptBlock))"),
             ["Set-BenchmarkDataFactory"] = ScriptBlock.Create("param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Data((__PowerForgeCloseBenchmarkBlock $ScriptBlock))"),
+            ["Set-BenchmarkProfile"] = ScriptBlock.Create("param([Parameter(Position=0)] [string] $Name, [string] $Cleanup) [PowerForge.PowerShellBenchmarkDslRuntime]::Profile($Name, $Cleanup)"),
+            ["Set-BenchmarkCleanup"] = ScriptBlock.Create("param([Parameter(Position=0)] [string] $Name) [PowerForge.PowerShellBenchmarkDslRuntime]::Cleanup($Name)"),
             ["Add-BenchmarkEngine"] = ScriptBlock.Create("param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Engine($Name, $ScriptBlock)"),
             ["Add-BenchmarkOperation"] = ScriptBlock.Create("param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Operation($Name, (__PowerForgeCloseBenchmarkBlock $ScriptBlock))"),
             ["Add-BenchmarkSkipRule"] = ScriptBlock.Create("param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Skip((__PowerForgeCloseBenchmarkBlock $ScriptBlock))"),
