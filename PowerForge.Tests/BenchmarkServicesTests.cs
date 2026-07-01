@@ -26,6 +26,19 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void SummaryService_RejectsMissingComparisonBaseline()
+    {
+        var summary = new BenchmarkSummaryService().Summarize(new[]
+        {
+            Sample("suite", "case", "Run", "Other", 20)
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new BenchmarkSummaryService().Compare(summary, "Managed"));
+
+        Assert.Contains("Managed", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void SummaryService_KeepsVariablesSeparateAndMarksPartialFailures()
     {
         var samples = new[]
@@ -420,6 +433,60 @@ public sealed class BenchmarkServicesTests
         var row = Assert.Single(result.Summary);
         Assert.Equal("Write", row.Scenario);
         Assert.Equal(1.5, row.MedianMs);
+    }
+
+    [Fact]
+    public void Importer_UsesStableBenchmarkDotNetMethodName()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "Demo-report-full-compressed.json");
+        File.WriteAllText(path, """
+{
+  "Title": "demo",
+  "Benchmarks": [
+    {
+      "DisplayInfo": "Write [Rows=10]",
+      "Method": "Write",
+      "Parameters": "Rows=10",
+      "Statistics": {
+        "Median": 500
+      }
+    }
+  ]
+}
+""");
+
+        var result = new BenchmarkResultImporter().Import(path);
+        var sample = Assert.Single(result.Samples);
+
+        Assert.Equal("Write", sample.Scenario);
+        Assert.Equal("10", sample.Variables["Rows"]);
+    }
+
+    [Fact]
+    public void Importer_DirectoryDiscoversBenchmarkDotNetJsonReports()
+    {
+        var root = CreateTempRoot();
+        var artifactRoot = Path.Combine(root, "BenchmarkDotNet.Artifacts");
+        Directory.CreateDirectory(artifactRoot);
+        File.WriteAllText(Path.Combine(artifactRoot, "Demo-report-full-compressed.json"), """
+{
+  "Title": "demo",
+  "Benchmarks": [
+    {
+      "Method": "Write",
+      "Statistics": {
+        "Median": 500
+      }
+    }
+  ]
+}
+""");
+
+        var result = new BenchmarkResultImporter().Import(root);
+
+        Assert.Single(result.Samples);
+        Assert.Equal("Write", Assert.Single(result.Summary).Scenario);
     }
 
     [Fact]
@@ -955,6 +1022,17 @@ benchmark 'path' -out 'relative-out' {
         Assert.Contains("summary.md", report.Artifacts.Keys);
         Assert.Contains("comparison.md", report.Artifacts.Keys);
         Assert.True(File.Exists(result.Artifacts["metadata.json"]));
+    }
+
+    [Fact]
+    public void Runner_RejectsUnsupportedComparisonDimensions()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Comparisons.Add(new PowerShellBenchmarkComparison { Dimension = "Operation", Baseline = "Run" });
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Run(suite));
+
+        Assert.Contains("Operation", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private static BenchmarkSample Sample(

@@ -42,6 +42,8 @@ public sealed class BenchmarkSummaryService
         foreach (var group in rows.GroupBy(r => MakeKey(r.Suite, r.Scenario, r.Operation, string.Empty, r.Host, r.Variables), StringComparer.OrdinalIgnoreCase))
         {
             var baseline = group.FirstOrDefault(r => string.Equals(r.Engine, baselineEngine, StringComparison.OrdinalIgnoreCase));
+            if (baseline is null)
+                throw new InvalidOperationException($"Benchmark comparison baseline '{baselineEngine}' was not found for {DescribeGroup(group.First())}.");
             var baselineValue = GetMetricValue(baseline, metric);
             foreach (var row in group.OrderBy(r => r.Engine, StringComparer.OrdinalIgnoreCase))
             {
@@ -152,6 +154,9 @@ public sealed class BenchmarkSummaryService
         string? host,
         IReadOnlyDictionary<string, string?> variables)
         => string.Join("\u001f", suite ?? string.Empty, scenario ?? string.Empty, operation ?? string.Empty, engine ?? string.Empty, host ?? string.Empty, FormatVariables(variables));
+
+    private static string DescribeGroup(BenchmarkSummaryRow row)
+        => $"suite '{row.Suite}', scenario '{row.Scenario}', operation '{row.Operation}', host '{row.Host}', variables '{FormatVariables(row.Variables)}'";
 
     private static string FormatVariables(IReadOnlyDictionary<string, string?> variables)
         => string.Join(

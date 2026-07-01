@@ -55,6 +55,13 @@ public sealed class BenchmarkResultImporter
         if (benchmarkDotNetFiles.Length > 0)
             return BuildImportedResult(defaultSuite, benchmarkDotNetFiles.SelectMany(file => ImportCsvSamples(file, suite, defaultSuite)).ToArray());
 
+        var benchmarkDotNetJsonFiles = Directory.GetFiles(path, "*-report*.json", SearchOption.AllDirectories)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (benchmarkDotNetJsonFiles.Length > 0)
+            return BuildImportedResult(defaultSuite, benchmarkDotNetJsonFiles.SelectMany(file => ImportJson(file, suite).Samples).ToArray());
+
         var summaryFiles = Directory.GetFiles(path, "summary.csv", SearchOption.AllDirectories)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
@@ -289,10 +296,10 @@ public sealed class BenchmarkResultImporter
             if (benchmark.ValueKind != JsonValueKind.Object)
                 continue;
 
-            var method = GetString(benchmark, "DisplayInfo")
-                         ?? GetString(benchmark, "FullName")
-                         ?? GetString(benchmark, "Method")
+            var method = GetString(benchmark, "Method")
                          ?? GetString(benchmark, "MethodTitle")
+                         ?? GetString(benchmark, "FullName")
+                         ?? GetString(benchmark, "DisplayInfo")
                          ?? Path.GetFileNameWithoutExtension(path);
             var statistics = TryGetObject(benchmark, "Statistics");
             var mean = GetDouble(statistics, "Median") ?? GetDouble(statistics, "Mean");

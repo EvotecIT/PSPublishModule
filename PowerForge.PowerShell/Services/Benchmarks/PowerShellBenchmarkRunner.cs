@@ -135,8 +135,9 @@ public sealed class PowerShellBenchmarkRunner
 
         var summarizer = new BenchmarkSummaryService();
         var summary = summarizer.Summarize(samples);
+        ValidateComparisons(suite);
         var comparisons = suite.Comparisons
-            .Where(c => string.Equals(c.Dimension, "Engine", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(c.Baseline))
+            .Where(c => !string.IsNullOrWhiteSpace(c.Baseline))
             .SelectMany(c => c.Metrics.SelectMany(m => summarizer.Compare(summary, c.Baseline, m)))
             .ToArray();
 
@@ -234,6 +235,17 @@ public sealed class PowerShellBenchmarkRunner
     {
         if (skip is null) return false;
         return InvokeStrict(skip, caseObject).Any(value => LanguagePrimitives.IsTrue(value));
+    }
+
+    private static void ValidateComparisons(PowerShellBenchmarkSuite suite)
+    {
+        foreach (var comparison in suite.Comparisons)
+        {
+            if (string.IsNullOrWhiteSpace(comparison.Baseline))
+                throw new InvalidOperationException("Benchmark comparison baseline is required.");
+            if (!string.Equals(comparison.Dimension, "Engine", StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedException($"Benchmark comparison dimension '{comparison.Dimension}' is not supported. Only Engine comparisons are supported.");
+        }
     }
 
     private static IEnumerable<PowerShellBenchmarkWorkItem> Rotate(IReadOnlyList<PowerShellBenchmarkWorkItem> items, int iteration)
