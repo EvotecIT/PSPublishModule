@@ -43,10 +43,10 @@ public sealed class BenchmarkResultImporter
 
         var sampleFiles = Directory.GetFiles(path, "samples.csv", SearchOption.AllDirectories)
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(File.GetLastWriteTimeUtc)
             .ToArray();
         if (sampleFiles.Length > 0)
-            return BuildImportedResult(defaultSuite, sampleFiles.SelectMany(file => ImportCsvSamples(file, suite, defaultSuite)).ToArray());
+            return BuildImportedResult(defaultSuite, ImportCsvSamples(sampleFiles[0], suite, defaultSuite));
 
         var benchmarkDotNetFiles = Directory.GetFiles(path, "*-report.csv", SearchOption.AllDirectories)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -307,6 +307,7 @@ public sealed class BenchmarkResultImporter
                 mean *= 0.000001;
 
             var variables = ParseBenchmarkDotNetParameters(GetString(benchmark, "Parameters"));
+            var engine = GetBenchmarkDotNetEngine(benchmark);
 
             samples.Add(new BenchmarkSample
             {
@@ -314,7 +315,7 @@ public sealed class BenchmarkResultImporter
                 Suite = suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path),
                 Scenario = method,
                 Operation = "Run",
-                Engine = "BenchmarkDotNet",
+                Engine = engine,
                 Host = GetBenchmarkDotNetHost(root),
                 Os = string.Empty,
                 RunMode = "import",
@@ -331,6 +332,35 @@ public sealed class BenchmarkResultImporter
 
         result = BuildImportedResult(suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path), samples);
         return true;
+    }
+
+    private static string GetBenchmarkDotNetEngine(JsonElement benchmark)
+    {
+        var job = GetString(benchmark, "Job")
+                  ?? GetString(benchmark, "JobDisplayInfo")
+                  ?? GetString(benchmark, "JobId");
+        if (!string.IsNullOrWhiteSpace(job))
+            return job!;
+
+        if (BenchmarkJson.TryGetPropertyIgnoreCase(benchmark, "Job", out var jobNode) && jobNode.ValueKind == JsonValueKind.Object)
+        {
+            var parts = new[]
+            {
+                GetString(jobNode, "DisplayInfo"),
+                GetString(jobNode, "Id"),
+                GetString(jobNode, "Runtime"),
+                GetString(jobNode, "RuntimeMoniker"),
+                GetString(jobNode, "Platform"),
+                GetString(jobNode, "Jit")
+            }
+            .Where(part => !string.IsNullOrWhiteSpace(part))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+            if (parts.Length > 0)
+                return string.Join("; ", parts);
+        }
+
+        return "BenchmarkDotNet";
     }
 
     private static string GetBenchmarkDotNetHost(JsonElement root)

@@ -358,9 +358,12 @@ public sealed class PowerShellBenchmarkRunner
         var renderer = new BenchmarkMarkdownRenderer();
         foreach (var block in suite.ReadmeBlocks)
         {
-            var markdown = string.Equals(block.Renderer, "ComparisonTable", StringComparison.OrdinalIgnoreCase)
-                ? renderer.RenderComparisonTable(result.Comparison)
-                : renderer.RenderSummaryTable(result.Summary);
+            var markdown = block.Renderer switch
+            {
+                var value when string.Equals(value, "SummaryTable", StringComparison.OrdinalIgnoreCase) => renderer.RenderSummaryTable(result.Summary),
+                var value when string.Equals(value, "ComparisonTable", StringComparison.OrdinalIgnoreCase) => renderer.RenderComparisonTable(result.Comparison),
+                _ => throw new NotSupportedException($"Benchmark README renderer '{block.Renderer}' is not supported.")
+            };
             updater.UpdateBlock(block.Path, block.BlockId, markdown);
         }
     }

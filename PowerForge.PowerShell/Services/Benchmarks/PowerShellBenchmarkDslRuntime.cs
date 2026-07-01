@@ -238,8 +238,12 @@ public static class PowerShellBenchmarkDslRuntime
         var kinds = BenchmarkArtifactKind.None;
         foreach (var value in Flatten(values))
         {
-            if (Enum.TryParse<BenchmarkArtifactKind>(Convert.ToString(value, CultureInfo.InvariantCulture), ignoreCase: true, out var kind))
-                kinds |= kind;
+            var name = Convert.ToString(value, CultureInfo.InvariantCulture);
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+            if (!Enum.TryParse<BenchmarkArtifactKind>(name, ignoreCase: true, out var kind))
+                throw new NotSupportedException($"Benchmark artifact kind '{name}' is not supported.");
+            kinds |= kind;
         }
 
         RequireSuite().Artifacts = kinds;

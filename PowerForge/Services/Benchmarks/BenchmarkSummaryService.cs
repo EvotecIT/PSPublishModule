@@ -45,6 +45,8 @@ public sealed class BenchmarkSummaryService
             if (baseline is null)
                 throw new InvalidOperationException($"Benchmark comparison baseline '{baselineEngine}' was not found for {DescribeGroup(group.First())}.");
             var baselineValue = GetMetricValue(baseline, metric);
+            if (!baselineValue.HasValue)
+                throw new InvalidOperationException($"Benchmark comparison baseline '{baselineEngine}' has no value for metric '{metric}' in {DescribeGroup(baseline)}.");
             foreach (var row in group.OrderBy(r => r.Engine, StringComparer.OrdinalIgnoreCase))
             {
                 var actual = GetMetricValue(row, metric);

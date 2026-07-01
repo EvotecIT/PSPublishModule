@@ -39,6 +39,37 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void SummaryService_RejectsComparisonBaselineWithNoMetric()
+    {
+        var summary = new[]
+        {
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                Status = "Failed"
+            },
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                Status = "Succeeded",
+                MedianMs = 10
+            }
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new BenchmarkSummaryService().Compare(summary, "Managed"));
+
+        Assert.Contains("MedianMs", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void SummaryService_KeepsVariablesSeparateAndMarksPartialFailures()
     {
         var samples = new[]
@@ -464,6 +495,41 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_PreservesBenchmarkDotNetJobIdentity()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "Demo-report-full-compressed.json");
+        File.WriteAllText(path, """
+{
+  "Title": "demo",
+  "Benchmarks": [
+    {
+      "Method": "Write",
+      "Job": "Net80",
+      "Parameters": "Rows=10",
+      "Statistics": {
+        "Median": 500
+      }
+    },
+    {
+      "Method": "Write",
+      "Job": "Net10",
+      "Parameters": "Rows=10",
+      "Statistics": {
+        "Median": 700
+      }
+    }
+  ]
+}
+""");
+
+        var result = new BenchmarkResultImporter().Import(path);
+
+        Assert.Contains(result.Summary, row => row.Engine == "Net80" && row.Variables["Rows"] == "10");
+        Assert.Contains(result.Summary, row => row.Engine == "Net10" && row.Variables["Rows"] == "10");
+    }
+
+    [Fact]
     public void Importer_DirectoryDiscoversBenchmarkDotNetJsonReports()
     {
         var root = CreateTempRoot();
@@ -670,6 +736,28 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_DirectoryUsesLatestRunnerSamplesCsv()
+    {
+        var root = CreateTempRoot();
+        var older = Path.Combine(root, "20260101-000000-old");
+        var newer = Path.Combine(root, "20260102-000000-new");
+        Directory.CreateDirectory(older);
+        Directory.CreateDirectory(newer);
+        var olderSamples = Path.Combine(older, "samples.csv");
+        var newerSamples = Path.Combine(newer, "samples.csv");
+        File.WriteAllText(olderSamples, "Suite,Scenario,Operation,Engine,Host,Rows,Iteration,Status,DurationMs,Reason\nsuite,Old,Run,Managed,Current,1,0,Succeeded,1,\n");
+        File.WriteAllText(newerSamples, "Suite,Scenario,Operation,Engine,Host,Rows,Iteration,Status,DurationMs,Reason\nsuite,New,Run,Managed,Current,2,0,Succeeded,2,\n");
+        File.SetLastWriteTimeUtc(olderSamples, DateTime.UtcNow.AddMinutes(-5));
+        File.SetLastWriteTimeUtc(newerSamples, DateTime.UtcNow);
+
+        var result = new BenchmarkResultImporter().Import(root);
+        var sample = Assert.Single(result.Samples);
+
+        Assert.Equal("New", sample.Scenario);
+        Assert.Equal("2", sample.Variables["Rows"]);
+    }
+
+    [Fact]
     public void DslRuntime_ResolvesShortAndLongEngineForms()
     {
         var script = ScriptBlock.Create(@"
@@ -762,6 +850,23 @@ benchmark 'none' {
         var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
 
         Assert.Equal(BenchmarkArtifactKind.None, suite.Artifacts);
+    }
+
+    [Fact]
+    public void DslRuntime_RejectsUnknownArtifactNames()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'bad' {
+    artifacts Json, MarkDownn
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+
+        Assert.Contains("MarkDownn", ex.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1033,6 +1138,24 @@ benchmark 'path' -out 'relative-out' {
         var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Run(suite));
 
         Assert.Contains("Operation", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Runner_RejectsUnknownReadmeRenderers()
+    {
+        var suite = CreateRunnableSuite();
+        var readme = Path.Combine(CreateTempRoot(), "README.md");
+        File.WriteAllText(readme, "<!-- BENCHMARK:results:START -->\nold\n<!-- BENCHMARK:results:END -->\n");
+        suite.ReadmeBlocks.Add(new PowerShellBenchmarkReadmeBlock
+        {
+            Path = readme,
+            BlockId = "results",
+            Renderer = "ComparsionTable"
+        });
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Run(suite));
+
+        Assert.Contains("ComparsionTable", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private static BenchmarkSample Sample(
