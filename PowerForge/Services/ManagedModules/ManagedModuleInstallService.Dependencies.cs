@@ -141,14 +141,6 @@ public sealed partial class ManagedModuleInstallService
         return results;
     }
 
-    internal static bool ShouldStartDependencyInstallBeforeExtraction(
-        ManagedModuleInstallRequest request,
-        ManagedModulePackageMetadata? metadata)
-        => request.AllowClobber &&
-           !request.AuthenticodeCheck &&
-           !request.SkipDependencyCheck &&
-           SelectDependencies(metadata).Any();
-
     private async Task InstallDependencyWithGateAsync(
         ManagedModuleInstallRequest request,
         ManagedModuleDependencyInfo dependency,

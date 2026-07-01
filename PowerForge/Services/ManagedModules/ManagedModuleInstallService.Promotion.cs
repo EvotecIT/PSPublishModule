@@ -2,19 +2,6 @@ namespace PowerForge;
 
 public sealed partial class ManagedModuleInstallService
 {
-    private sealed class NoopDisposable : IDisposable
-    {
-        public static readonly NoopDisposable Instance = new();
-
-        private NoopDisposable()
-        {
-        }
-
-        public void Dispose()
-        {
-        }
-    }
-
     private readonly struct ManagedModulePromotionResult
     {
         public ManagedModulePromotionResult(
@@ -124,18 +111,9 @@ public sealed partial class ManagedModuleInstallService
 
     private static IDisposable AcquirePromotionLock(
         string moduleRoot,
-        bool allowClobber,
         CancellationToken cancellationToken,
         out TimeSpan waitElapsed)
-    {
-        if (allowClobber)
-        {
-            waitElapsed = TimeSpan.Zero;
-            return NoopDisposable.Instance;
-        }
-
-        return AcquireInstallLock(moduleRoot, ".promotion", cancellationToken, out waitElapsed);
-    }
+        => AcquireInstallLock(moduleRoot, ".promotion", cancellationToken, out waitElapsed);
 
     private static void RestoreBackup(string modulePath, string? backupPath)
     {
