@@ -612,6 +612,298 @@ Test-BenchmarkGate `
 DotNet publish can continue to expose `BenchmarkGates[]`, but the implementation
 should eventually call the same generic gate service.
 
+## Engine Upgrade Design
+
+The next upgrade should improve the benchmark engine itself, not add
+scenario-specific switches to the engine. A command option such as
+`-NoPSModulePathUpdate` belongs inside one operation handler when that operation
+needs it. The shared benchmark layer should instead make it easy to declare,
+run, compare, validate, publish, and gate benchmark evidence consistently across
+PowerShell, .NET, and repo-specific workflows.
+
+### Capability Model
+
+The benchmark engine should treat a run as five separate contracts:
+
+- **Plan contract**: cases, axes, engines, operations, hosts, and resolved work
+  items. This answers what will run before anything is measured.
+- **Lifecycle contract**: setup, data, warmup, measure, validate, metric capture,
+  cleanup, and failure recording. This defines what is timed and what is not.
+- **Metric contract**: duration and custom numeric metrics with unit, direction,
+  aggregation, and formatting metadata.
+- **Comparison contract**: how summary rows are grouped, which dimension is being
+  compared, which baseline value is used, and how missing or failed rows are
+  handled.
+- **Evidence contract**: raw samples, summaries, comparisons, metadata, artifact
+  paths, and document updates that can be reproduced or audited later.
+
+Keeping these contracts separate prevents the engine from becoming a collection
+of benchmark-specific knobs.
+
+### Profiles
+
+Profiles should describe runner behavior, not product command-line flags. They
+are useful because a quick local benchmark, a CI gate, and a publishable benchmark
+need different repeat counts and artifact policies.
+
+Example authoring shape:
+
+```powershell
+benchmark 'excel-workflows' -out 'Ignore/Benchmarks/ExcelPerformance' {
+    profile Quick -Warmup 1 -Iterations 3 -Artifacts Json,Csv
+    profile Publish -Warmup 3 -Iterations 10 -Artifacts Default -Isolation Process
+
+    # cases, axes, engines, operations, reports, and gates
+}
+```
+
+`Invoke-BenchmarkSuite -Profile Quick` should select those runner settings. When
+no profile is specified, the suite should keep today's explicit/default values.
+
+Profile-owned settings:
+
+- warmup count
+- measured iteration count
+- isolation mode
+- artifact set
+- failure policy
+- optional randomization or rotation policy
+- optional output retention policy
+- optional metadata probes
+
+Operation-owned settings:
+
+- command-specific flags
+- repository names
+- paths needed by the operation
+- product-specific setup
+- validation rules for the product output
+
+This lets scenarios stay honest without making the benchmark engine know about
+installer, document, database, or website-specific flags.
+
+### Metric Definitions
+
+Duration should remain the default metric, but custom metrics need more structure
+than a name and script block. A metric definition should carry:
+
+- name
+- unit, such as `ms`, `bytes`, `files`, `rows`, `ops/s`, or `count`
+- direction, usually `LowerIsBetter` or `HigherIsBetter`
+- aggregation, such as `Median`, `Mean`, `Min`, `Max`, `Sum`, or `Last`
+- format string or renderer hint
+- optional description for generated docs
+
+Example:
+
+```powershell
+metric FileSizeBytes -Unit bytes -Direction LowerIsBetter -Aggregate Mean {
+    param($case, $run)
+    (Get-Item -LiteralPath $run.OutputPath).Length
+}
+
+metric RowsPerSecond -Unit 'rows/s' -Direction HigherIsBetter -Aggregate Median {
+    param($case, $run)
+    $case.Rows / ($run.DurationMs / 1000)
+}
+```
+
+The runner can keep accepting the current simple `metric Name { ... }` form and
+lower it into a metric definition with safe defaults.
+
+### Comparison Specs
+
+Comparison should be a reusable service over normalized summary rows. It should
+not require a suite to have just finished running. Imported BenchmarkDotNet
+results, normalized CSV, and PowerShell runner output should all be comparable
+through the same contract.
+
+Comparison definition:
+
+- dimension, initially `Engine`, later any structural or variable field
+- baseline value
+- metrics
+- group-by fields
+- missing-baseline policy
+- missing-current policy
+- failed-row policy
+- direction override when metric metadata is not available
+
+Default grouping should keep comparable lanes separate:
+
+```text
+Suite, Scenario, Operation, Host, OS, Variables
+```
+
+Example DSL:
+
+```powershell
+compare Engine `
+    -Baseline PSWriteOffice `
+    -Metric MedianMs, FileSizeBytes `
+    -GroupBy Suite,Scenario,Operation,Host,OS,Variables `
+    -MissingBaseline Fail `
+    -FailedRows Fail
+```
+
+Example command form:
+
+```powershell
+Compare-BenchmarkResult `
+    -SummaryPath .\Build\Benchmarks\latest\summary.json `
+    -Dimension Engine `
+    -Baseline PSWriteOffice `
+    -Metric MedianMs, FileSizeBytes `
+    -OutputPath .\Build\Benchmarks\latest\comparison.json
+```
+
+`Compare-BenchmarkResult` would be thin over the same core service used by
+`Invoke-BenchmarkSuite`.
+
+### Validation And Status
+
+Validation must remain outside measured time, but validation failures should be
+first-class benchmark data. A benchmark can be fast and still invalid. The status
+model should make that visible.
+
+Recommended status handling:
+
+- setup failure records a failed sample before measurement
+- warmup failure records a failed warmup/sample row and prevents measured samples
+  for that work item
+- operation failure records a failed measured sample
+- validation failure records a failed measured sample with the measured duration
+  retained when available
+- metric failure records a failed sample unless the metric is explicitly optional
+- skipped rows stay visible in samples and summaries
+
+The current `Succeeded`, `Failed`, and `Skipped` statuses can remain, but result
+rows should preserve a reason category such as `Setup`, `Warmup`, `Operation`,
+`Validation`, `Metric`, or `Skip`. That lets reports distinguish "slow" from
+"did not produce valid evidence".
+
+### Run Metadata And Manifest
+
+Every run should write a manifest that makes comparison claims inspectable. The
+current metadata dictionary is a good start; the upgrade should formalize it into
+stable keys and optional sections.
+
+Baseline metadata:
+
+- run id
+- suite name and suite file path
+- selected profile
+- invocation command when available
+- git branch, commit, and dirty state
+- OS description and architecture
+- process architecture
+- PowerShell edition and version
+- .NET runtime and SDK version when available
+- processor count
+- culture
+- runner version
+- output root and artifact paths
+
+Optional probes:
+
+- module versions
+- package versions
+- executable versions
+- repository/source metadata
+- fixture hashes or generated data description
+
+The manifest should avoid committing machine-specific absolute paths unless the
+artifact is explicitly local evidence. Reports can show friendly summaries while
+the full manifest remains in JSON.
+
+### Report Renderers
+
+Report rendering should be data-driven and independent of the runner. A renderer
+should take summary/comparison rows plus renderer options. It should not know how
+the benchmark was executed.
+
+Initial renderers:
+
+- `SummaryTable`: one row per summary lane
+- `ComparisonTable`: baseline, actual, ratio, and winner/regression hints
+- `RegressionTable`: gate-focused output for changed or failed metrics
+- `LatestRun`: small run metadata block for README or docs
+- `MatrixTable`: grouped view for multi-axis benchmark families
+
+Renderer options should include:
+
+- metrics to show
+- group-by fields
+- sort fields
+- maximum rows
+- status filter
+- ratio precision
+- unit display
+- whether to include machine-specific caveats
+
+Markdown block updates should keep using marker replacement. Website renderers
+can consume the same normalized JSON instead of parsing Markdown.
+
+### Planning And Explainability
+
+Plan mode should become the primary way to understand a benchmark before running
+it. It should return structured work items and a readable table.
+
+The plan should include:
+
+- suite
+- scenario
+- engine
+- operation
+- host
+- OS lane when known
+- variables
+- handler source location when available
+- output directory/path
+- selected profile
+- skip prediction when static skip data is available
+- missing handler or unsupported host errors before execution
+
+This directly addresses the "what code is executed for this matrix row?"
+problem.
+
+### Public Surface Additions
+
+The current public surface can stay. The upgrade should add only surfaces that
+remove real friction:
+
+- `Compare-BenchmarkResult`
+  - standalone comparison over imported or freshly generated summary rows
+- profile support in `.benchmark.ps1`
+  - short form `profile`
+  - explicit form `Add-BenchmarkProfile`
+- richer metric support
+  - optional `-Unit`, `-Direction`, and `-Aggregate`
+- renderer options on `readme` / `Add-BenchmarkReadmeBlock`
+- optional `-Profile` on `Invoke-BenchmarkSuite`
+
+Everything else should remain an engine model or service until more than one
+consumer needs it.
+
+### Implementation Sequence
+
+The upgrade should land in small slices:
+
+1. Add metric metadata and comparison specs to core models.
+2. Move comparison grouping/direction/missing-policy logic into a reusable
+   comparison service.
+3. Add `Compare-BenchmarkResult` over normalized summaries.
+4. Add profile model and DSL support, then wire `Invoke-BenchmarkSuite -Profile`.
+5. Formalize run metadata keys and write the manifest through the existing JSON
+   artifact path.
+6. Extend Markdown renderers with renderer options and unit-aware metric output.
+7. Add reason categories for failed samples without breaking the existing status
+   enum.
+8. Improve plan output with handler/source/profile information.
+
+Each slice should keep cmdlets thin and put reusable behavior in `PowerForge` or
+`PowerForge.PowerShell`.
+
 ## Migration Plan
 
 ### Phase 1: Import, Summarize, Update
