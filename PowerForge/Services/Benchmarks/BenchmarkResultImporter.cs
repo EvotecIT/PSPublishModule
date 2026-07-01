@@ -195,8 +195,9 @@ public sealed class BenchmarkResultImporter
             for (var h = 0; h < headers.Length && h < values.Length; h++)
                 map[headers[h]] = values[h];
 
+            var metricHeaders = HeadersAfter(headers, "Reason");
             var method = Get(map, "Method", "Scenario", "Benchmark") ?? Path.GetFileNameWithoutExtension(path);
-            var mean = ParseDuration(GetWithHeader(map, out var durationHeader, "MedianMs", "MeanMs", "DurationMs", "Median", "Mean", "Mean [ns]", "Mean [us]", "Mean [ms]"), durationHeader);
+            var mean = ParseDuration(GetWithHeader(map, out var durationHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median", "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean", "DurationMs"), durationHeader);
             var status = ParseSampleStatus(Get(map, "Status"), mean.HasValue);
             samples.Add(new BenchmarkSample
             {
@@ -212,7 +213,8 @@ public sealed class BenchmarkResultImporter
                 Status = status,
                 DurationMs = mean ?? 0,
                 Reason = Get(map, "Reason") ?? (mean.HasValue ? string.Empty : "Duration column could not be parsed."),
-                Variables = ExtractVariables(map, SampleMetadataColumns)
+                Variables = ExtractVariables(map, SampleMetadataColumns, metricHeaders),
+                Metrics = ExtractMetrics(map, metricHeaders)
             });
         }
 
@@ -233,6 +235,7 @@ public sealed class BenchmarkResultImporter
             for (var h = 0; h < headers.Length && h < values.Length; h++)
                 map[headers[h]] = values[h];
 
+            var metricHeaders = HeadersAfter(headers, "MaxMs");
             var failureCount = ParseInt(Get(map, "FailureCount")) ?? 0;
             rows.Add(new BenchmarkSummaryRow
             {
@@ -241,14 +244,15 @@ public sealed class BenchmarkResultImporter
                 Operation = Get(map, "Operation") ?? "Run",
                 Engine = Get(map, "Engine") ?? Get(map, "Job") ?? "BenchmarkDotNet",
                 Host = Get(map, "Host") ?? string.Empty,
-                Variables = ExtractVariables(map, SummaryMetadataColumns),
+                Variables = ExtractVariables(map, SummaryMetadataColumns, metricHeaders),
                 SampleCount = ParseInt(Get(map, "SampleCount")) ?? 0,
                 FailureCount = failureCount,
                 Status = Get(map, "Status") ?? (failureCount > 0 ? "Failed" : "Succeeded"),
-                MedianMs = ParseDuration(GetWithHeader(map, out var medianHeader, "MedianMs", "Median", "Median [ns]", "Median [us]", "Median [ms]"), medianHeader),
-                MeanMs = ParseDuration(GetWithHeader(map, out var meanHeader, "MeanMs", "Mean", "Mean [ns]", "Mean [us]", "Mean [ms]"), meanHeader),
-                MinMs = ParseDuration(GetWithHeader(map, out var minHeader, "MinMs", "Min", "Min [ns]", "Min [us]", "Min [ms]"), minHeader),
-                MaxMs = ParseDuration(GetWithHeader(map, out var maxHeader, "MaxMs", "Max", "Max [ns]", "Max [us]", "Max [ms]"), maxHeader)
+                MedianMs = ParseDuration(GetWithHeader(map, out var medianHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median"), medianHeader),
+                MeanMs = ParseDuration(GetWithHeader(map, out var meanHeader, "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean"), meanHeader),
+                MinMs = ParseDuration(GetWithHeader(map, out var minHeader, "MinMs", "Min [ns]", "Min [us]", "Min [ms]", "Min"), minHeader),
+                MaxMs = ParseDuration(GetWithHeader(map, out var maxHeader, "MaxMs", "Max [ns]", "Max [us]", "Max [ms]", "Max"), maxHeader),
+                Metrics = ExtractMetrics(map, metricHeaders)
             });
         }
 
@@ -482,10 +486,25 @@ public sealed class BenchmarkResultImporter
     private static int? ParseInt(string? value)
         => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
 
-    private static Dictionary<string, string?> ExtractVariables(IReadOnlyDictionary<string, string> values, HashSet<string> excludedColumns)
+    private static Dictionary<string, string?> ExtractVariables(IReadOnlyDictionary<string, string> values, HashSet<string> excludedColumns, HashSet<string>? metricColumns = null)
         => values
-            .Where(k => !excludedColumns.Contains(k.Key))
+            .Where(k => !excludedColumns.Contains(k.Key) && (metricColumns is null || !metricColumns.Contains(k.Key)))
             .ToDictionary(k => k.Key, k => (string?)k.Value, StringComparer.OrdinalIgnoreCase);
+
+    private static Dictionary<string, double> ExtractMetrics(IReadOnlyDictionary<string, string> values, HashSet<string> metricColumns)
+        => metricColumns
+            .Where(values.ContainsKey)
+            .Select(name => new { name, value = ParseDuration(values[name]) })
+            .Where(item => item.value.HasValue)
+            .ToDictionary(item => item.name, item => item.value!.Value, StringComparer.OrdinalIgnoreCase);
+
+    private static HashSet<string> HeadersAfter(string[] headers, string marker)
+    {
+        var index = Array.FindIndex(headers, header => string.Equals(header, marker, StringComparison.OrdinalIgnoreCase));
+        return index < 0 || index + 1 >= headers.Length
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(headers.Skip(index + 1), StringComparer.OrdinalIgnoreCase);
+    }
 
     private static readonly HashSet<string> SampleMetadataColumns = new(StringComparer.OrdinalIgnoreCase)
     {

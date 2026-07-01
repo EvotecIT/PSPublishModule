@@ -88,6 +88,9 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
         }
 
         var suites = PowerShellBenchmarkDslRuntime.Evaluate(block, scriptRoot);
+        if (suites.Length == 0)
+            ThrowTerminatingError(new ErrorRecord(new InvalidOperationException("Benchmark spec did not declare any benchmark suites."), "BenchmarkSuiteMissing", ErrorCategory.InvalidData, Path));
+
         var runner = new PowerShellBenchmarkRunner();
         foreach (var suite in suites)
         {

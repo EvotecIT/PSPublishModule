@@ -186,6 +186,20 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void SummaryService_ReadsCustomMetricsCaseInsensitively()
+    {
+        var row = new BenchmarkSummaryRow
+        {
+            Metrics = new Dictionary<string, double>
+            {
+                ["RowsPerSecond"] = 42
+            }
+        };
+
+        Assert.Equal(42, BenchmarkSummaryService.GetMetricValue(row, "rowspersecond"));
+    }
+
+    [Fact]
     public void BenchmarkJson_WritesAndReadsStringStatuses()
     {
         var root = CreateTempRoot();
@@ -340,6 +354,18 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_PrefersBenchmarkDotNetMedianUnits()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "Demo-report.csv");
+        File.WriteAllText(csv, "Method,Median [us],Mean [us]\nWrite,1500,9000\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+
+        Assert.Equal(1.5, Assert.Single(result.Summary).MedianMs);
+    }
+
+    [Fact]
     public void Importer_PreservesNormalizedCsvStatusSuiteAndVariables()
     {
         var root = CreateTempRoot();
@@ -356,6 +382,21 @@ public sealed class BenchmarkServicesTests
         Assert.Equal("10", sample.Variables["Rows"]);
         Assert.DoesNotContain("DurationMs", sample.Variables.Keys);
         Assert.Equal("Failed", Assert.Single(result.Summary).Status);
+    }
+
+    [Fact]
+    public void Importer_PreservesCsvCustomMetrics()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(csv, "Suite,Scenario,Operation,Engine,Host,Rows,Iteration,Status,DurationMs,Reason,RowsPerSecond\nsuite,Write,Run,Managed,Current,10,0,Succeeded,12.5,,42\n");
+
+        var result = new BenchmarkResultImporter().Import(csv);
+        var sample = Assert.Single(result.Samples);
+
+        Assert.Equal(42, sample.Metrics["RowsPerSecond"]);
+        Assert.Equal(42, Assert.Single(result.Summary).Metrics["RowsPerSecond"]);
+        Assert.DoesNotContain("RowsPerSecond", sample.Variables.Keys);
     }
 
     [Fact]
@@ -530,6 +571,18 @@ benchmark 'none' {
         var sample = Assert.Single(result.Samples);
         Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
         Assert.Contains("boom", sample.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Runner_AllowsSetupToAddRunContextProperties()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Setup = ScriptBlock.Create("param($case, $run) $run.Prepared = 'ok'");
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create("param($case, $run) if ($run.Prepared -ne 'ok') { throw 'missing setup property' }");
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
     }
 
     [Fact]

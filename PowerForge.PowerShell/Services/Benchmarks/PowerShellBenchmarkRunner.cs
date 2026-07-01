@@ -418,9 +418,11 @@ public sealed class PowerShellBenchmarkRunner
 
     private static PSObject ToPsObject(IReadOnlyDictionary<string, object?> values)
     {
-        var psObject = new PSObject();
+        var expando = new System.Dynamic.ExpandoObject();
+        var psObject = new PSObject(expando);
+        var members = (IDictionary<string, object?>)expando;
         foreach (var entry in values)
-            psObject.Properties.Add(new PSNoteProperty(entry.Key, entry.Value));
+            members[entry.Key] = entry.Value;
         return psObject;
     }
 

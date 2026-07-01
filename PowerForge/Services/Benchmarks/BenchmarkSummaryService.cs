@@ -76,7 +76,14 @@ public sealed class BenchmarkSummaryService
         if (string.Equals(name, "MeanMs", StringComparison.OrdinalIgnoreCase)) return row.MeanMs;
         if (string.Equals(name, "MinMs", StringComparison.OrdinalIgnoreCase)) return row.MinMs;
         if (string.Equals(name, "MaxMs", StringComparison.OrdinalIgnoreCase)) return row.MaxMs;
-        return row.Metrics.TryGetValue(name, out var value) ? value : null;
+        if (row.Metrics.TryGetValue(name, out var value)) return value;
+        foreach (var entry in row.Metrics)
+        {
+            if (string.Equals(entry.Key, name, StringComparison.OrdinalIgnoreCase))
+                return entry.Value;
+        }
+
+        return null;
     }
 
     private static BenchmarkSummaryRow BuildSummaryRow(
