@@ -1233,6 +1233,66 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_PreservesBenchmarkDotNetJsonPercentiles()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "Demo-report-full.json");
+        File.WriteAllText(path, """
+{
+  "Title": "demo",
+  "Benchmarks": [
+    {
+      "Method": "Write",
+      "Statistics": {
+        "Median": 200,
+        "Percentiles": {
+          "P95": 950,
+          "P99": 990
+        }
+      }
+    }
+  ]
+}
+""");
+
+        var result = new BenchmarkResultImporter().Import(path);
+        var row = Assert.Single(result.Summary);
+
+        Assert.InRange(row.Metrics["P95"], 0.000949, 0.000951);
+        Assert.InRange(row.Metrics["P99"], 0.000989, 0.000991);
+    }
+
+    [Fact]
+    public void Importer_PreservesBenchmarkDotNetJsonDeviationStatistics()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "Demo-report-full.json");
+        File.WriteAllText(path, """
+{
+  "Title": "demo",
+  "Benchmarks": [
+    {
+      "Method": "Write",
+      "Statistics": {
+        "Median": 200,
+        "StandardError": 50,
+        "StandardDeviation": 120
+      }
+    }
+  ]
+}
+""");
+
+        var result = new BenchmarkResultImporter().Import(path);
+        var row = Assert.Single(result.Summary);
+
+        Assert.InRange(row.Metrics["StdErr"], 0.000049, 0.000051);
+        Assert.InRange(row.Metrics["StdDev"], 0.000119, 0.000121);
+        Assert.InRange(row.Metrics["StandardError"], 0.000049, 0.000051);
+        Assert.InRange(row.Metrics["StandardDeviation"], 0.000119, 0.000121);
+    }
+
+    [Fact]
     public void Importer_PreservesNormalizedCsvStatusSuiteAndVariables()
     {
         var root = CreateTempRoot();
@@ -1663,6 +1723,24 @@ benchmark 'dup-metric' {
     }
 
     [Fact]
+    public void DslRuntime_RejectsReservedPrimaryMetricNames()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'reserved-metric' {
+    axis Operation Run
+    axis Engine Managed
+    metric MedianMs { 123 }
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+
+        Assert.Contains("reserved", ex.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("MedianMs", ex.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void DslRuntime_PreservesNearestCapturedScopeAndUserPathVariables()
     {
         var root = CreateTempRoot();
@@ -1801,6 +1879,37 @@ benchmark 'path' -out 'relative-out' {
         {
             Environment.CurrentDirectory = previousCurrentDirectory;
         }
+    }
+
+    [Fact]
+    public void InvokeBenchmarkSuiteCommand_WhatIfSkipsReadmeRewrite()
+    {
+        var root = CreateTempRoot();
+        var readme = Path.Combine(root, "README.md");
+        File.WriteAllText(readme, "<!-- BENCHMARK:results:START -->\nold\n<!-- BENCHMARK:results:END -->\n");
+        var initialSessionState = System.Management.Automation.Runspaces.InitialSessionState.CreateDefault();
+        initialSessionState.Commands.Add(new System.Management.Automation.Runspaces.SessionStateCmdletEntry("Invoke-BenchmarkSuite", typeof(PSPublishModule.InvokeBenchmarkSuiteCommand), helpFileName: null));
+        using var runspace = System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace(initialSessionState);
+        runspace.Open();
+        using var ps = System.Management.Automation.PowerShell.Create(runspace);
+        var escapedRoot = root.Replace("'", "''");
+        var settings = ScriptBlock.Create($@"
+benchmark 'whatif' -out '{escapedRoot}' {{
+    axis Operation Run
+    axis Engine Managed
+    readme '{readme.Replace("'", "''")}' -block results -renderer SummaryTable
+    engine Managed {{ operation Run {{ param($case, $run) }} }}
+}}
+");
+        ps.AddCommand("Invoke-BenchmarkSuite")
+            .AddParameter("Settings", settings)
+            .AddParameter("WhatIf");
+
+        var output = ps.Invoke();
+
+        Assert.Empty(output);
+        Assert.Empty(ps.Streams.Error);
+        Assert.Contains("old", File.ReadAllText(readme), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -2198,6 +2307,26 @@ benchmark 'path' -out 'relative-out' {
 
         Assert.Contains("Managed", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("no runnable work items", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(output));
+    }
+
+    [Fact]
+    public void Runner_RejectsSkippedComparisonBaselinePerLaneBeforeMeasurement()
+    {
+        var suite = CreateRunnableSuite();
+        var output = Path.Combine(suite.OutputRoot, "skipped-lane-baseline-side-effect.txt");
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows", Values = { 1, 2 } });
+        var other = new PowerShellBenchmarkEngine { Name = "Other" };
+        other.Operations["Run"] = ScriptBlock.Create($"[IO.File]::WriteAllText('{output.Replace("'", "''")}', 'executed')");
+        suite.Engines.Add(other);
+        suite.Axes.Single(axis => axis.Name == "Engine").Values.Add("Other");
+        suite.Skip = ScriptBlock.Create("param($case) $case.Engine -eq 'Managed' -and $case.Rows -eq 2");
+        suite.Comparisons.Add(new PowerShellBenchmarkComparison { Dimension = "Engine", Baseline = "Managed" });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new PowerShellBenchmarkRunner().Run(suite));
+
+        Assert.Contains("Managed", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Rows=2", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.False(File.Exists(output));
     }
 

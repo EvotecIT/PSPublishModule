@@ -316,11 +316,18 @@ public sealed class PowerShellBenchmarkRunner
                 continue;
             if (!string.Equals(comparison.Dimension, "Engine", StringComparison.OrdinalIgnoreCase))
                 continue;
-            if (workItems.Any(item => !item.IsSkipped && string.Equals(item.Engine, comparison.Baseline, StringComparison.OrdinalIgnoreCase)))
-                continue;
-            throw new InvalidOperationException($"Benchmark comparison baseline engine '{comparison.Baseline}' has no runnable work items in suite '{suite.Name}'. Check skip rules or choose a runnable baseline.");
+            foreach (var group in workItems.GroupBy(item => ComparisonGroupKey(suite.Name, item), StringComparer.OrdinalIgnoreCase))
+            {
+                if (group.Any(item => !item.IsSkipped && string.Equals(item.Engine, comparison.Baseline, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+                var first = group.First();
+                throw new InvalidOperationException($"Benchmark comparison baseline engine '{comparison.Baseline}' has no runnable work items for suite '{suite.Name}', scenario '{first.Scenario}', operation '{first.Operation}', host '{first.Host}', variables '{FormatVariables(ToVariables(first.Values))}'. Check skip rules or choose a runnable baseline.");
+            }
         }
     }
+
+    private static string ComparisonGroupKey(string suite, PowerShellBenchmarkWorkItem item)
+        => string.Join("\u001f", suite, item.Scenario, item.Operation, item.Host, GetOperatingSystemLabel(), FormatVariables(ToVariables(item.Values)));
 
     private static IEnumerable<PowerShellBenchmarkWorkItem> Rotate(IReadOnlyList<PowerShellBenchmarkWorkItem> items, int iteration)
     {
@@ -691,6 +698,13 @@ finally {
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+    private static string FormatVariables(IReadOnlyDictionary<string, string?> variables)
+        => string.Join(
+            "\u001e",
+            variables
+                .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(k => string.Concat(k.Key, "=", k.Value ?? string.Empty)));
 
     private static Dictionary<string, string?> ToVariables(IReadOnlyDictionary<string, object?> values)
         => values

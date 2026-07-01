@@ -211,8 +211,16 @@ public static class PowerShellBenchmarkDslRuntime
         var metricName = RequireName(name, "metric name");
         if (suite.Metrics.Any(metric => string.Equals(metric.Name, metricName, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException($"Benchmark suite '{suite.Name}' already defines metric '{metricName}'.");
+        if (IsReservedMetricName(metricName))
+            throw new InvalidOperationException($"Benchmark metric name '{metricName}' is reserved for primary timing statistics.");
         suite.Metrics.Add(new PowerShellBenchmarkMetric { Name = metricName, ScriptBlock = CaptureScriptBlock(scriptBlock) });
     }
+
+    private static bool IsReservedMetricName(string name)
+        => string.Equals(name, "MedianMs", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(name, "MeanMs", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(name, "MinMs", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(name, "MaxMs", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Adds a comparison definition.

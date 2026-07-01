@@ -12,7 +12,7 @@ namespace PSPublishModule;
 /// <summary>Run a benchmark spec</summary>
 /// <code>Invoke-BenchmarkSuite -Path .\Benchmarks\module.benchmark.ps1</code>
 /// </example>
-[Cmdlet(VerbsLifecycle.Invoke, "BenchmarkSuite", DefaultParameterSetName = ParameterSetPath)]
+[Cmdlet(VerbsLifecycle.Invoke, "BenchmarkSuite", DefaultParameterSetName = ParameterSetPath, SupportsShouldProcess = true)]
 [OutputType(typeof(BenchmarkRunResult))]
 [OutputType(typeof(PowerShellBenchmarkWorkItem))]
 public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
@@ -101,6 +101,9 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
                 WriteObject(runner.Plan(suite), enumerateCollection: true);
                 continue;
             }
+
+            if (!ShouldProcess(suite.OutputRoot, $"Run benchmark suite '{suite.Name}'"))
+                continue;
 
             WriteObject(runner.Run(suite));
         }

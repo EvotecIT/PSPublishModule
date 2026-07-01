@@ -492,18 +492,31 @@ public sealed class BenchmarkResultImporter
         if (!statistics.HasValue || statistics.Value.ValueKind != JsonValueKind.Object)
             return metrics;
 
-        foreach (var property in statistics.Value.EnumerateObject())
+        AddBenchmarkDotNetStatisticMetrics(statistics.Value, metrics);
+        var percentiles = TryGetObject(statistics.Value, "Percentiles");
+        if (percentiles.HasValue)
+            AddBenchmarkDotNetStatisticMetrics(percentiles.Value, metrics);
+
+        return metrics;
+    }
+
+    private static void AddBenchmarkDotNetStatisticMetrics(JsonElement statistics, IDictionary<string, double> metrics)
+    {
+        foreach (var property in statistics.EnumerateObject())
         {
             var metricName = BenchmarkDotNetStatisticMetricName(property.Name);
             if (metricName is null)
                 continue;
 
-            var value = GetDouble(statistics, property.Name);
-            if (value.HasValue)
-                metrics[metricName] = value.Value * BenchmarkDotNetJsonMetricFactor(property.Name);
-        }
+            var value = GetDoubleValue(property.Value);
+            if (!value.HasValue)
+                continue;
 
-        return metrics;
+            var scaled = value.Value * BenchmarkDotNetJsonMetricFactor(property.Name);
+            metrics[metricName] = scaled;
+            if (!string.Equals(metricName, property.Name, StringComparison.OrdinalIgnoreCase))
+                metrics[property.Name] = scaled;
+        }
     }
 
     private static void AddBenchmarkDotNetMemoryMetrics(JsonElement? memory, IDictionary<string, double> metrics)
@@ -585,6 +598,11 @@ public sealed class BenchmarkResultImporter
     {
         if (!node.HasValue || !BenchmarkJson.TryGetPropertyIgnoreCase(node.Value, propertyName, out var value))
             return null;
+        return GetDoubleValue(value);
+    }
+
+    private static double? GetDoubleValue(JsonElement value)
+    {
         if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number))
             return number;
         if (value.ValueKind == JsonValueKind.String && double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out number))
@@ -909,6 +927,8 @@ public sealed class BenchmarkResultImporter
         if (string.Equals(normalized, "Mean", StringComparison.OrdinalIgnoreCase)) return "MeanMs";
         if (string.Equals(normalized, "Min", StringComparison.OrdinalIgnoreCase)) return "MinMs";
         if (string.Equals(normalized, "Max", StringComparison.OrdinalIgnoreCase)) return "MaxMs";
+        if (string.Equals(normalized, "StandardError", StringComparison.OrdinalIgnoreCase)) return "StdErr";
+        if (string.Equals(normalized, "StandardDeviation", StringComparison.OrdinalIgnoreCase)) return "StdDev";
         return key;
     }
 
@@ -922,7 +942,7 @@ public sealed class BenchmarkResultImporter
     {
         "Mean", "Median", "Min", "Max", "Q1", "Q3",
         "P0", "P25", "P50", "P75", "P90", "P95", "P99", "P100",
-        "Error", "StdErr", "StdDev", "Ratio", "RatioSD",
+        "Error", "StdErr", "StdDev", "StandardError", "StandardDeviation", "Ratio", "RatioSD",
         "Gen0", "Gen1", "Gen2", "Allocated", "CodeSize", "OperationsPerSecond"
     };
 
@@ -935,7 +955,7 @@ public sealed class BenchmarkResultImporter
     {
         var normalized = RemoveBracketUnit(name).Replace(" ", string.Empty);
         return BenchmarkDotNetPrimaryDurationColumns.Contains(normalized)
-            || normalized is "Error" or "StdErr" or "StdDev" or "Q1" or "Q3"
+            || normalized is "Error" or "StdErr" or "StdDev" or "StandardError" or "StandardDeviation" or "Q1" or "Q3"
             || normalized.StartsWith("P", StringComparison.OrdinalIgnoreCase)
             ? 0.000001
             : 1.0;
