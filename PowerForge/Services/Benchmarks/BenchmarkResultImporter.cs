@@ -812,7 +812,9 @@ public sealed class BenchmarkResultImporter
     private static BenchmarkSampleStatus ParseSampleStatus(string? value, bool hasDuration)
     {
         if (!string.IsNullOrWhiteSpace(value) && Enum.TryParse<BenchmarkSampleStatus>(value, ignoreCase: true, out var status))
-            return status;
+            return status == BenchmarkSampleStatus.Succeeded && !hasDuration
+                ? BenchmarkSampleStatus.Failed
+                : status;
         return hasDuration ? BenchmarkSampleStatus.Succeeded : BenchmarkSampleStatus.Failed;
     }
 

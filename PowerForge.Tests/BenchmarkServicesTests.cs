@@ -99,6 +99,26 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void SummaryService_KeepsImportedVariablesNamedLikeAxesSeparate()
+    {
+        var samples = new[]
+        {
+            Sample("suite", "case", "Run", "Managed", 10, new Dictionary<string, string?> { ["Operation"] = "Read" }),
+            Sample("suite", "case", "Run", "Managed", 20, new Dictionary<string, string?> { ["Operation"] = "Write" }),
+            Sample("suite", "case", "Run", "Managed", 30, new Dictionary<string, string?> { ["Engine"] = "Local" }),
+            Sample("suite", "case", "Run", "Managed", 40, new Dictionary<string, string?> { ["Host"] = "Remote" })
+        };
+
+        var summary = new BenchmarkSummaryService().Summarize(samples);
+
+        Assert.Equal(4, summary.Length);
+        Assert.Contains(summary, row => row.Variables.TryGetValue("Operation", out var value) && value == "Read" && row.MedianMs == 10);
+        Assert.Contains(summary, row => row.Variables.TryGetValue("Operation", out var value) && value == "Write" && row.MedianMs == 20);
+        Assert.Contains(summary, row => row.Variables.TryGetValue("Engine", out var value) && value == "Local" && row.MedianMs == 30);
+        Assert.Contains(summary, row => row.Variables.TryGetValue("Host", out var value) && value == "Remote" && row.MedianMs == 40);
+    }
+
+    [Fact]
     public void SummaryService_KeepsOperatingSystemsSeparate()
     {
         var windows = Sample("suite", "case", "Run", "Managed", 10);
@@ -1067,6 +1087,24 @@ public sealed class BenchmarkServicesTests
         var result = new BenchmarkResultImporter().Import(csv, "demo");
 
         Assert.Equal(12.5, Assert.Single(result.Summary).MedianMs);
+    }
+
+    [Fact]
+    public void Importer_FailsSucceededCsvSamplesWithoutDuration()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(csv, "Scenario,Operation,Engine,Host,Status,DurationMs\nWrite,Run,Managed,Current,Succeeded,\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+        var sample = Assert.Single(result.Samples);
+        var row = Assert.Single(result.Summary);
+
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Equal("Failed", row.Status);
+        Assert.Equal(1, row.FailureCount);
+        Assert.Null(row.MedianMs);
+        Assert.Contains("Duration", sample.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -2204,6 +2242,26 @@ benchmark 'path-temp-user' -out 'out' {
         Assert.Contains(axisName, ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("Scenario")]
+    [InlineData("Operation")]
+    [InlineData("Engine")]
+    [InlineData("Host")]
+    [InlineData("Status")]
+    [InlineData("DurationMs")]
+    public void Runner_RejectsReservedCaseVariableNames(string variableName)
+    {
+        var suite = CreateRunnableSuite();
+        var benchmarkCase = new PowerShellBenchmarkCase { Name = "Lookup" };
+        benchmarkCase.Values[variableName] = "value";
+        suite.Cases.Add(benchmarkCase);
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Plan(suite));
+
+        Assert.Contains("reserved case variable", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(variableName, ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Runner_FailsMalformedSuitesWithNoWork()
     {
@@ -2271,7 +2329,7 @@ benchmark 'path-temp-user' -out 'out' {
         suite.Cases.Add(new PowerShellBenchmarkCase
         {
             Name = "Generated",
-            Values = { ["Name"] = "Generated", ["Rows"] = 10 }
+            Values = { ["Rows"] = 10 }
         });
 
         var result = new PowerShellBenchmarkRunner().Run(suite);

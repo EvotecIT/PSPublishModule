@@ -192,14 +192,8 @@ public sealed class BenchmarkSummaryService
         => string.Join(
             "\u001e",
             (variables ?? new Dictionary<string, string?>())
-                .Where(k => !IsBuiltInAxis(k.Key))
                 .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(k => string.Concat(k.Key, "=", k.Value ?? string.Empty)));
-
-    private static bool IsBuiltInAxis(string key)
-        => string.Equals(key, "Engine", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(key, "Operation", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(key, "Host", StringComparison.OrdinalIgnoreCase);
 
     private static Dictionary<string, string?> CopyVariables(IReadOnlyDictionary<string, string?> variables)
     {

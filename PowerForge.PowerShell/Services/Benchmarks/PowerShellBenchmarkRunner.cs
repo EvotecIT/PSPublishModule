@@ -47,6 +47,7 @@ public sealed class PowerShellBenchmarkRunner
         var cases = suite.Cases.Count == 0
             ? new[] { new PowerShellBenchmarkCase { Name = "Default" } }
             : suite.Cases.ToArray();
+        ValidateCaseVariables(suite, cases);
         var expanded = ExpandCases(cases, suite.Axes);
         var engineAxis = GetAxisValues(suite.Axes, "Engine") ?? suite.Engines.Select(e => (object?)e.Name).ToArray();
         var explicitOperationAxis = GetAxisValues(suite.Axes, "Operation");
@@ -311,6 +312,16 @@ public sealed class PowerShellBenchmarkRunner
         {
             if (ReservedMatrixAxisNames.Contains(axis.Name))
                 throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested reserved matrix axis '{axis.Name}'. Use a different matrix variable name.");
+        }
+    }
+
+    private static void ValidateCaseVariables(PowerShellBenchmarkSuite suite, IEnumerable<PowerShellBenchmarkCase> cases)
+    {
+        foreach (var benchmarkCase in cases)
+        foreach (var key in benchmarkCase.Values.Keys)
+        {
+            if (ReservedCaseVariableNames.Contains(key))
+                throw new NotSupportedException($"Benchmark suite '{suite.Name}' case '{benchmarkCase.Name}' uses reserved case variable '{key}'. Use a different case variable name.");
         }
     }
 
@@ -808,6 +819,22 @@ finally {
         "MinMs",
         "MaxMs"
     };
+
+    private static readonly HashSet<string> ReservedCaseVariableNames = CreateReservedCaseVariableNames();
+
+    private static HashSet<string> CreateReservedCaseVariableNames()
+    {
+        var names = new HashSet<string>(ReservedMatrixAxisNames, StringComparer.OrdinalIgnoreCase)
+        {
+            "Scenario",
+            "Engine",
+            "Operation",
+            "Host",
+            "OS",
+            "RunMode"
+        };
+        return names;
+    }
 
     private static string Number(double? value)
         => value.HasValue ? value.Value.ToString("G17", CultureInfo.InvariantCulture) : string.Empty;
