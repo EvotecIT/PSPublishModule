@@ -341,8 +341,11 @@ public sealed class BenchmarkGateService
         var map = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (var prop in node.EnumerateObject())
         {
-            if (prop.Value.ValueKind == JsonValueKind.Number && prop.Value.TryGetDouble(out var value))
-                map[prop.Name] = value;
+            if (prop.Value.ValueKind != JsonValueKind.Number)
+                continue;
+            if (!prop.Value.TryGetDouble(out var value) || !IsFinite(value))
+                throw new InvalidOperationException($"Benchmark baseline metric '{prop.Name}' is not a finite number: {path}");
+            map[prop.Name] = value;
         }
 
         return map;

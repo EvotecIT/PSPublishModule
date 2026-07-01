@@ -782,7 +782,10 @@ public sealed class BenchmarkResultImporter
                 continue;
             var numberText = text.Substring(0, text.Length - unit.Suffix.Length).Trim();
             if (double.TryParse(numberText, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
-                return value * unit.Factor;
+            {
+                var bytes = value * unit.Factor;
+                return IsFinite(bytes) ? bytes : null;
+            }
         }
 
         return null;
@@ -1010,15 +1013,14 @@ public sealed class BenchmarkResultImporter
     private static readonly HashSet<string> SampleMetadataColumns = new(StringComparer.OrdinalIgnoreCase)
     {
         "RunId", "Suite", "Scenario", "Method", "Benchmark", "Operation", "Engine", "Job", "Host", "OS", "RunMode",
-        "Iteration", "Status", "DurationMs", "MedianMs", "MeanMs", "Median", "Mean", "Median [ns]", "Median [us]", "Median [ms]", "Median [s]", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean [s]",
+        "Iteration", "Status", "DurationMs", "MedianMs", "MeanMs",
         "Reason", "AllocatedBytes", "WorkingSetDeltaBytes", "OutputMetric"
     };
 
     private static readonly HashSet<string> SummaryMetadataColumns = new(StringComparer.OrdinalIgnoreCase)
     {
         "Suite", "Scenario", "Method", "Benchmark", "Operation", "Engine", "Job", "Host", "OS", "SampleCount", "FailureCount",
-        "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs", "Median", "Mean", "Min", "Max", "Median [ns]", "Median [us]",
-        "Median [ms]", "Median [s]", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean [s]", "Min [ns]", "Min [us]", "Min [ms]", "Min [s]", "Max [ns]", "Max [us]", "Max [ms]", "Max [s]"
+        "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs"
     };
 
     private static HashSet<string> SampleMetadataColumnsFor(IReadOnlyDictionary<string, string> values, bool isBenchmarkDotNetCsv)

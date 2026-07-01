@@ -103,11 +103,11 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
                     identity.GrantDirectoryAccess(moduleDirectory!, "(OI)(CI)RX");
                 identity.GrantFileAccess(modulePath, "R");
             }
-            foreach (var readmePath in request.ReadmePaths.Where(path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var readmePath in GetReadmeGrantPaths(request))
                 identity.GrantFileAccess(readmePath, "M");
 
             File.WriteAllText(wrapperPath, ChildRunnerScript, new UTF8Encoding(false));
-            File.WriteAllLines(readmePathFile, request.ReadmePaths.Where(path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.OrdinalIgnoreCase), new UTF8Encoding(false));
+            File.WriteAllLines(readmePathFile, GetReadmePathsForChild(request), new UTF8Encoding(false));
             BenchmarkJson.Write(childRequestPath, new ChildRunnerRequest
             {
                 SpecPath = request.SpecPath,
@@ -247,6 +247,16 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
             return Array.Empty<string>();
         }
     }
+
+    internal static string[] GetReadmePathsForChild(PowerShellBenchmarkTemporaryUserRequest request)
+        => request.ReadmePaths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .ToArray();
+
+    private static string[] GetReadmeGrantPaths(PowerShellBenchmarkTemporaryUserRequest request)
+        => GetReadmePathsForChild(request)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
     private static bool ShouldKeep(PowerShellBenchmarkCleanupMode cleanup, bool failed)
         => cleanup == PowerShellBenchmarkCleanupMode.KeepAlways

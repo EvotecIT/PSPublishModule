@@ -440,6 +440,27 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void GateService_RejectsNonFiniteBaselineMetric()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        File.WriteAllText(baselinePath, """{"metrics":{"suite|case|Run|Managed|Current|||MedianMs":1e999}}""");
+        BenchmarkJson.Write(summaryPath, new[]
+        {
+            new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Run", Engine = "Managed", Host = "Current", MedianMs = 100 }
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new BenchmarkGateService().Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath
+        }));
+
+        Assert.Contains("finite", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void GateService_DefaultKeysIncludeOperatingSystem()
     {
         var root = CreateTempRoot();
@@ -1028,6 +1049,20 @@ public sealed class BenchmarkServicesTests
         Assert.Equal(0, sample.DurationMs);
         Assert.Contains("Duration", sample.Reason, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("Failed", Assert.Single(result.Summary).Status);
+    }
+
+    [Fact]
+    public void Importer_DropsNonFiniteByteSizeCsvMetrics()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(csv, "Suite,Scenario,Operation,Engine,Host,Iteration,Status,DurationMs,Reason,Allocated\nsuite,Write,Run,Managed,Current,0,Succeeded,12.5,,NaN KB\n");
+
+        var result = new BenchmarkResultImporter().Import(csv);
+        var sample = Assert.Single(result.Samples);
+
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status);
+        Assert.DoesNotContain("Allocated", sample.Metrics.Keys);
     }
 
     [Fact]
@@ -1885,6 +1920,25 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_PreservesRunnerVariablesNamedMeanAndMedian()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(csv, "Suite,Scenario,Operation,Engine,Host,Mean,Median,Iteration,Status,DurationMs,Reason\nsuite,CaseA,Run,Managed,Current,small,typical,0,Succeeded,12.5,\n");
+
+        var result = new BenchmarkResultImporter().Import(csv);
+        var sample = Assert.Single(result.Samples);
+        var row = Assert.Single(result.Summary);
+
+        Assert.Equal("small", sample.Variables["Mean"]);
+        Assert.Equal("typical", sample.Variables["Median"]);
+        Assert.Equal("small", row.Variables["Mean"]);
+        Assert.Equal("typical", row.Variables["Median"]);
+        Assert.DoesNotContain("Mean", sample.Metrics.Keys);
+        Assert.DoesNotContain("Median", sample.Metrics.Keys);
+    }
+
+    [Fact]
     public void Importer_HandlesQuotedMultilineCsvRecords()
     {
         var root = CreateTempRoot();
@@ -1961,6 +2015,20 @@ public sealed class BenchmarkServicesTests
         Assert.NotEqual(colon, question);
         Assert.Contains("%3A", colon, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("%3F", question, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("CON")]
+    [InlineData("PRN.txt")]
+    [InlineData("COM1")]
+    [InlineData("LPT9.log")]
+    [InlineData("case.")]
+    public void RunnerPathSegments_EscapeWindowsReservedSegments(string value)
+    {
+        var segment = PowerShellBenchmarkPathSegments.Value(value);
+
+        Assert.NotEqual(value, segment);
+        Assert.False(segment.EndsWith(".", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -2736,6 +2804,7 @@ benchmark 'path-temp-user' -out 'out' {
     }
 
     [Theory]
+    [InlineData("Scenario")]
     [InlineData("Name")]
     [InlineData("Suite")]
     [InlineData("RunId")]
@@ -3465,6 +3534,19 @@ benchmark 'path-temp-user' -out 'out' {
         {
             Runspace.DefaultRunspace = previousRunspace;
         }
+    }
+
+    [Fact]
+    public void TemporaryUserExecutor_KeepsReadmePathsPositionalForChild()
+    {
+        var request = new PowerShellBenchmarkTemporaryUserRequest
+        {
+            ReadmePaths = new[] { "README.md", "README.md", "docs.md", string.Empty }
+        };
+
+        var paths = PowerShellBenchmarkTemporaryUserExecutor.GetReadmePathsForChild(request);
+
+        Assert.Equal(new[] { "README.md", "README.md", "docs.md" }, paths);
     }
 
     [Fact]

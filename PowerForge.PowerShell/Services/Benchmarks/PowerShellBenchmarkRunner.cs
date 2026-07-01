@@ -833,6 +833,7 @@ finally {
     private static readonly HashSet<string> ReservedMatrixAxisNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "Name",
+        "Scenario",
         "Suite",
         "RunId",
         "Iteration",
