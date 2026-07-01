@@ -87,8 +87,10 @@ public sealed partial class ModulePipelineRunner
                 stagingResult,
                 state.MergeExecution,
                 state.ProjectManifestSyncMessage,
-                state.TypeAcceleratorSurfaceReport),
-            typeAcceleratorSurfaceReport: state.TypeAcceleratorSurfaceReport);
+                state.TypeAcceleratorSurfaceReport))
+        {
+            TypeAcceleratorSurfaceReport = state.TypeAcceleratorSurfaceReport
+        };
 
         if (diagnosticsPolicy?.PolicyViolated == true)
             throw new ModulePipelineDiagnosticsPolicyException(result, diagnosticsPolicy, diagnosticsPolicy.FailureReason);

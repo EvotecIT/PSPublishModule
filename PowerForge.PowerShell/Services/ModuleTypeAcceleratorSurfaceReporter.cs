@@ -34,7 +34,7 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
 
         var requestedTypes = Normalize(plan.BuildSpec.AssemblyTypeAccelerators);
         var requestedAssemblies = Normalize(plan.BuildSpec.AssemblyTypeAcceleratorAssemblies);
-        var libraryDirectory = ResolveCoreLibraryDirectory(buildResult.StagingPath);
+        var libraryDirectory = ResolveAssemblyLoadContextLibraryDirectory(buildResult.StagingPath);
 
         ModuleTypeAcceleratorSurfaceReport report;
         if (string.IsNullOrWhiteSpace(libraryDirectory) || !Directory.Exists(libraryDirectory))
@@ -44,7 +44,7 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
                 Path.GetFullPath(reportPath),
                 requestedTypes,
                 requestedAssemblies,
-                warnings: new[] { $"No Core library directory was found under '{Path.Combine(buildResult.StagingPath, "Lib")}'." });
+                warnings: new[] { $"No compatible AssemblyLoadContext library directory was found under '{Path.Combine(buildResult.StagingPath, "Lib")}'." });
         }
         else
         {
@@ -308,19 +308,13 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
         builder.AppendLine();
     }
 
-    private static string? ResolveCoreLibraryDirectory(string stagingPath)
+    private static string? ResolveAssemblyLoadContextLibraryDirectory(string stagingPath)
     {
         var libRoot = Path.Combine(stagingPath, "Lib");
-        var core = Path.Combine(libRoot, "Core");
-        if (Directory.Exists(core))
-            return core;
-
         if (!Directory.Exists(libRoot))
             return null;
 
-        return Directory.GetDirectories(libRoot)
-            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault();
+        return ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetDirectories(libRoot).FirstOrDefault();
     }
 
     private static string? ResolveAssemblyPath(string libraryDirectory, string? assemblyName)

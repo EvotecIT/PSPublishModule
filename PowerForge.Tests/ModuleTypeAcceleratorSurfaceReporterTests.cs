@@ -120,6 +120,64 @@ public sealed class ModuleTypeAcceleratorSurfaceReporterTests
     }
 
     [Fact]
+    public void WriteReport_UsesSameLibraryFolderPreferenceAsBootstrapper()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "DemoModule";
+            const string assemblyName = "DemoTypes";
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "project")).FullName;
+            var staging = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "staging")).FullName;
+            var libCore = Directory.CreateDirectory(Path.Combine(staging, "Lib", "Core")).FullName;
+            var libStandard = Directory.CreateDirectory(Path.Combine(staging, "Lib", "Standard")).FullName;
+            var coreAssembly = BuildTypeFixtureLibrary(tempRoot.FullName, assemblyName, projectFolderName: "CoreTypes", firstEnumName: "CoreOnlyMode");
+            var standardAssembly = BuildTypeFixtureLibrary(tempRoot.FullName, assemblyName, projectFolderName: "StandardTypes", firstEnumName: "StandardOnlyMode");
+            File.Copy(coreAssembly, Path.Combine(libCore, assemblyName + ".dll"), overwrite: true);
+            File.Copy(standardAssembly, Path.Combine(libStandard, assemblyName + ".dll"), overwrite: true);
+            WriteMinimalManifest(projectRoot, moduleName);
+            WriteMinimalManifest(staging, moduleName);
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = projectRoot,
+                    StagingPath = staging,
+                    Version = "1.0.0",
+                    AssemblyTypeAcceleratorMode = AssemblyTypeAcceleratorExportMode.Enums,
+                    AssemblyTypeAcceleratorAssemblies = new[] { assemblyName }
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            });
+            var buildResult = new ModuleBuildResult(
+                staging,
+                Path.Combine(staging, moduleName + ".psd1"),
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+            var reportPath = Path.Combine(projectRoot, "Artefacts", "Reports", "TypeAccelerators.Core.txt");
+
+            var report = new ModuleTypeAcceleratorSurfaceReporter(new NullLogger())
+                .WriteReport(plan, buildResult, reportPath);
+
+            Assert.NotNull(report);
+            Assert.Contains(Path.Combine("Lib", "Standard"), report!.Assemblies.Single().AssemblyPath, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("DemoTypes.StandardOnlyMode", report.Assemblies.Single().RegisteredTypes);
+            Assert.DoesNotContain("DemoTypes.CoreOnlyMode", report.Assemblies.Single().RegisteredTypes);
+
+            var text = File.ReadAllText(reportPath);
+            Assert.Contains(Path.Combine("Lib", "Standard"), text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("DemoTypes.StandardOnlyMode", text);
+            Assert.DoesNotContain("DemoTypes.CoreOnlyMode", text);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void BuildTypeAcceleratorSurfaceOwnerNote_WarnsWhenReportHasMissingExplicitTypes()
     {
         var report = new ModuleTypeAcceleratorSurfaceReport(
@@ -147,9 +205,13 @@ public sealed class ModuleTypeAcceleratorSurfaceReporterTests
         Assert.Contains(note.Details, detail => detail.Contains("1 explicit type(s) missing", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static string BuildTypeFixtureLibrary(string rootPath, string assemblyName)
+    private static string BuildTypeFixtureLibrary(
+        string rootPath,
+        string assemblyName,
+        string? projectFolderName = null,
+        string firstEnumName = "ColorMode")
     {
-        var projectRoot = Directory.CreateDirectory(Path.Combine(rootPath, assemblyName));
+        var projectRoot = Directory.CreateDirectory(Path.Combine(rootPath, projectFolderName ?? assemblyName));
         var projectPath = Path.Combine(projectRoot.FullName, assemblyName + ".csproj");
         var sourcePath = Path.Combine(projectRoot.FullName, "Types.cs");
 
@@ -164,10 +226,10 @@ public sealed class ModuleTypeAcceleratorSurfaceReporterTests
 </Project>
 """);
 
-        File.WriteAllText(sourcePath, """
+        File.WriteAllText(sourcePath, $$"""
 namespace DemoTypes;
 
-public enum ColorMode
+public enum {{firstEnumName}}
 {
     Rgb,
     Cmyk
