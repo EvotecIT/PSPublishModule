@@ -32,7 +32,9 @@ What the benchmark is trying to prove:
 - ModuleFast is a useful comparison, but it uses `pwsh.gallery`, a community
   NuGet v3 mirror used by ModuleFast rather than the normal PSGallery provider
   path. If that mirror is missing a dependency, mark the row as a source/index
-  miss instead of comparing elapsed time.
+  miss instead of comparing elapsed time. The matrix wrapper passes
+  `-ModuleFastSource https://pwsh.gallery/index.json` by default so the source
+  is explicit in both the command line and result CSV.
 - Native `Install-Module` and `Install-PSResource` rows are real
   `CurrentUser` installs against a temporary Windows user. The runner stages
   only the native provider modules for that account, runs the measured install
@@ -64,6 +66,20 @@ Run PowerShell 7:
 ```powershell
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -BenchmarkHost PowerShell7 -RepeatCount 1
 ```
+
+Run the focused Managed-vs-ModuleFast install comparison:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -ComparisonProfile ManagedVsModuleFast -BenchmarkHost PowerShell7 -RepeatCount 1 -OutputPath .\Ignore\Benchmarks\ManagedModules\managed-vs-modulefast.csv -OutputRoot .\Ignore\Benchmarks\ManagedModules\ManagedVsModuleFast
+```
+
+Use the focused profile while tuning install throughput. It skips
+PSResourceGet/PowerShellGet native install baselines and only runs the install
+rows where ModuleFast has an equivalent public command. To compare a local or
+development ModuleFast build, install that build into the benchmark host first
+or pass its supported source with `-ModuleFastSource`; the result CSV records
+`ModuleFastSource`, `EngineCommandPath`, and `EngineModuleVersion` for each
+row.
 
 Append Windows PowerShell 5.1 results:
 

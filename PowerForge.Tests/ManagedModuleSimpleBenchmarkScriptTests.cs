@@ -107,6 +107,36 @@ public sealed class ManagedModuleSimpleBenchmarkScriptTests
         Assert.Contains("LastManagedBenchmarkResult", script, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void BenchmarkMatrixScript_HasFocusedManagedModuleFastProfile()
+    {
+        var script = File.ReadAllText(Path.Combine(
+            RepoRootLocator.Find(),
+            "Benchmarks",
+            "ManagedModules",
+            "Invoke-ManagedModuleBenchmarkMatrix.ps1"));
+
+        Assert.Contains("ManagedVsModuleFast", script, StringComparison.Ordinal);
+        Assert.Contains("$Operation = @('Install')", script, StringComparison.Ordinal);
+        Assert.Contains("$Engine = @('Managed', 'ModuleFast')", script, StringComparison.Ordinal);
+        Assert.Contains("$ModuleFastSource = 'https://pwsh.gallery/index.json'", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MeasureScript_EmitsBenchmarkProvenanceColumns()
+    {
+        var script = File.ReadAllText(Path.Combine(
+            RepoRootLocator.Find(),
+            "Benchmarks",
+            "ManagedModules",
+            "Measure-ManagedModuleBenchmark.ps1"));
+
+        Assert.Contains("RepositoryUri = $RepositoryUri", script, StringComparison.Ordinal);
+        Assert.Contains("ModuleFastSource = if ($EngineName -eq 'ModuleFast')", script, StringComparison.Ordinal);
+        Assert.Contains("EngineCommandPath = $engineMetadata.CommandPath", script, StringComparison.Ordinal);
+        Assert.Contains("EngineModuleVersion = $engineMetadata.ModuleVersion", script, StringComparison.Ordinal);
+    }
+
     private static string BuildResultCsv()
         => string.Join(Environment.NewLine,
             "TimestampUtc,Host,Scenario,ScenarioLabel,ModuleName,Version,Operation,Engine,Iteration,Status,Milliseconds,Seconds,Reason",

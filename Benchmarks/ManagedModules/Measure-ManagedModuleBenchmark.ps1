@@ -131,6 +131,7 @@ function New-MeasurementResult {
     $roundedSeconds = [Math]::Round($Milliseconds / 1000, 3)
 
     $managedMetrics = New-ManagedBenchmarkMetrics -ManagedResult $ManagedResult
+    $engineMetadata = Get-BenchmarkEngineMetadata -EngineName $EngineName
     $row = [ordered]@{
         TimestampUtc = [DateTime]::UtcNow.ToString('o')
         Host = Get-CurrentHostLabel
@@ -145,6 +146,11 @@ function New-MeasurementResult {
         Milliseconds = $roundedMilliseconds.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture)
         Seconds = $roundedSeconds.ToString('0.###', [Globalization.CultureInfo]::InvariantCulture)
         Reason = $Reason
+        Repository = $Repository
+        RepositoryUri = $RepositoryUri
+        ModuleFastSource = if ($EngineName -eq 'ModuleFast') { $ModuleFastSource } else { '' }
+        EngineCommandPath = $engineMetadata.CommandPath
+        EngineModuleVersion = $engineMetadata.ModuleVersion
     }
 
     foreach ($metric in $managedMetrics.GetEnumerator()) {
@@ -152,6 +158,43 @@ function New-MeasurementResult {
     }
 
     [pscustomobject]$row
+}
+
+function Get-BenchmarkEngineMetadata {
+    param([string] $EngineName)
+
+    $commandName = switch ($EngineName) {
+        'Managed' { 'Install-ManagedModule' }
+        'ModuleFast' { 'Install-ModuleFast' }
+        'PSResourceGet' { 'Install-PSResource' }
+        'PowerShellGet' { 'Install-Module' }
+        default { '' }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($commandName)) {
+        return [pscustomobject]@{ CommandPath = ''; ModuleVersion = '' }
+    }
+
+    $command = Get-Command -Name $commandName -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -eq $command) {
+        return [pscustomobject]@{ CommandPath = ''; ModuleVersion = '' }
+    }
+
+    $moduleVersion = ''
+    if (-not [string]::IsNullOrWhiteSpace($command.ModuleName)) {
+        $module = Get-Module -Name $command.ModuleName -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
+        if ($null -eq $module) {
+            $module = Get-Module -ListAvailable -Name $command.ModuleName -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
+        }
+        if ($null -ne $module) {
+            $moduleVersion = [string]$module.Version
+        }
+    }
+
+    [pscustomobject]@{
+        CommandPath = [string]$command.Source
+        ModuleVersion = $moduleVersion
+    }
 }
 
 function Format-BenchmarkNumber {

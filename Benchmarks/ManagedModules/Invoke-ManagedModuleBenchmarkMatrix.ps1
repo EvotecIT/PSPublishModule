@@ -1,5 +1,8 @@
 #requires -Version 5.1
 param(
+    [ValidateSet('Full', 'ManagedVsModuleFast')]
+    [string] $ComparisonProfile = 'Full',
+
     [ValidateSet('SingleModule', 'GraphAuthentication', 'Graph', 'AzAccounts', 'Az')]
     [string[]] $ScenarioName = @('SingleModule', 'GraphAuthentication', 'Graph', 'AzAccounts', 'Az'),
 
@@ -19,7 +22,7 @@ param(
 
     [string] $RepositoryUri = 'https://www.powershellgallery.com/api/v2',
 
-    [string] $ModuleFastSource,
+    [string] $ModuleFastSource = 'https://pwsh.gallery/index.json',
 
     [string] $ManagedModuleBinary,
 
@@ -345,6 +348,14 @@ $script:BenchmarkHostExecutable = Resolve-BenchmarkHostExecutable
 $script:EffectiveOutputRoot = $OutputRoot
 if ([string]::IsNullOrWhiteSpace($script:EffectiveOutputRoot) -and $script:BenchmarkHostExecutable -notlike '*\WindowsPowerShell\*') {
     $script:EffectiveOutputRoot = Join-Path $PSScriptRoot '..\..\Ignore\Benchmarks\ManagedModules\Runs'
+}
+
+if ($ComparisonProfile -eq 'ManagedVsModuleFast') {
+    $Operation = @('Install')
+    $Engine = @('Managed', 'ModuleFast')
+    if ($BenchmarkHost -ne 'PowerShell7') {
+        Write-Warning "ManagedVsModuleFast compares ModuleFast on PowerShell 7; rerun with -BenchmarkHost PowerShell7 for a direct row."
+    }
 }
 
 $safeOperations = @($Operation | Where-Object { $_ -ne 'Install' })
