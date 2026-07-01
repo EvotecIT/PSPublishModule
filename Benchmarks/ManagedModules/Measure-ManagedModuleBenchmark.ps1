@@ -5,10 +5,10 @@ param(
     [string[]] $ScenarioName = @('SingleModule', 'GraphAuthentication', 'Graph', 'AzAccounts', 'Az'),
 
     [ValidateSet('Find', 'Install', 'Save')]
-    [string[]] $Operation = @('Find', 'Install', 'Save'),
+    [string[]] $Operation = @('Install'),
 
     [ValidateSet('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')]
-    [string[]] $Engine = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet'),
+    [string[]] $Engine = @('Managed', 'ModuleFast'),
 
     [int] $RepeatCount = 1,
 

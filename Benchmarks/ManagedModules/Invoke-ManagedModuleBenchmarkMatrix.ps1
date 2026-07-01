@@ -10,7 +10,7 @@ param(
     [string[]] $Operation = @('Find', 'Install', 'Save'),
 
     [ValidateSet('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')]
-    [string[]] $Engine = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet'),
+    [string[]] $Engine = @(),
 
     [int] $RepeatCount = 1,
 
@@ -403,10 +403,14 @@ if ([string]::IsNullOrWhiteSpace($script:EffectiveOutputRoot) -and $script:Bench
 
 if ($ComparisonProfile -eq 'ManagedVsModuleFast') {
     $Operation = @('Install')
-    $Engine = @('Managed', 'ModuleFast')
+    if (-not $PSBoundParameters.ContainsKey('Engine') -or $Engine.Count -eq 0) {
+        $Engine = @('Managed', 'ModuleFast')
+    }
     if ($BenchmarkHost -ne 'PowerShell7') {
         Write-Warning "ManagedVsModuleFast compares ModuleFast on PowerShell 7; rerun with -BenchmarkHost PowerShell7 for a direct row."
     }
+} elseif (-not $PSBoundParameters.ContainsKey('Engine') -or $Engine.Count -eq 0) {
+    $Engine = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
 }
 
 $safeOperations = @($Operation | Where-Object { $_ -ne 'Install' })

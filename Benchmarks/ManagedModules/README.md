@@ -61,12 +61,14 @@ larger than wall-clock time because dependency downloads and extraction run in
 parallel; the max and root elapsed columns are usually better indicators for
 the critical path.
 
-Run the default focused Managed-vs-ModuleFast install comparison. This is the
-normal tuning loop now; it skips PSResourceGet and PowerShellGet because those
-provider baselines are already much slower and make every iteration expensive:
+Run the focused Managed-vs-ModuleFast install comparison. This is the normal
+tuning loop now; it skips PSResourceGet and PowerShellGet because those provider
+baselines are already much slower and make every iteration expensive. For the
+fair current comparison, pass the refreshed C# ModuleFast branch through
+`-ModuleFastModulePath`:
 
 ```powershell
-pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -BenchmarkHost PowerShell7 -RepeatCount 1
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -BenchmarkHost PowerShell7 -RepeatCount 1 -ModuleFastModulePath .\Ignore\External\ModuleFast-csharp\ModuleFast.psd1
 ```
 
 `-BenchmarkHost PowerShell7` selects the highest available `pwsh` 7 executable
@@ -80,12 +82,13 @@ or release-baseline refreshes:
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -ComparisonProfile Full -BenchmarkHost PowerShell7 -RepeatCount 1
 ```
 
-Use the focused profile while tuning install throughput. By default it compares
-the development managed engine in this worktree with the `Install-ModuleFast`
-command visible in the benchmark PowerShell host, usually the installed
-PSGallery ModuleFast module from the user/module path. To compare against the
-refreshed development C# ModuleFast branch, pass that branch's manifest, script
-module, or module folder:
+If `-ModuleFastModulePath` is omitted, the focused profile still skips the
+native providers, but it compares the development managed engine in this
+worktree with whatever `Install-ModuleFast` command is visible in the benchmark
+PowerShell host, usually the installed PSGallery ModuleFast module from the
+user/module path. That is a smoke comparison, not the development C# ModuleFast
+race. To compare against the refreshed development C# ModuleFast branch, pass
+that branch's manifest, script module, or module folder:
 
 ```powershell
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -BenchmarkHost PowerShell7 -RepeatCount 1 -ModuleFastModulePath .\Ignore\External\ModuleFast-csharp\ModuleFast.psd1 -OutputPath .\Ignore\Benchmarks\ManagedModules\managed-vs-modulefast-dev.csv -OutputRoot .\Ignore\Benchmarks\ManagedModules\ManagedVsModuleFastDev

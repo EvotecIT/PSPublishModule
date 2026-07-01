@@ -387,13 +387,13 @@ dependency graph, ModuleFast can be very fast. When the mirror is missing a
 dependency that the official Gallery resolves, the ModuleFast row should be
 treated as a source/index miss rather than a managed engine failure.
 
-ModuleFast implementation provenance matters too. A normal benchmark run uses
-the `Install-ModuleFast` command visible in the benchmark host, which is usually
-the installed PSGallery/user-path ModuleFast module. To compare Justin Grote's
-development C# branch or another local build, pass `-ModuleFastModulePath` to
-the benchmark wrapper. The CSV records `ModuleFastSource`,
-`ModuleFastModulePath`, `EngineModuleBase`, and `EngineModuleVersion` so those
-runs stay separate.
+ModuleFast implementation provenance matters too. The current PR table compares
+against Justin Grote's refreshed development C# branch by passing
+`-ModuleFastModulePath` to the benchmark wrapper. If that parameter is omitted,
+the run uses whatever `Install-ModuleFast` command is visible in the benchmark
+host, usually the installed PSGallery/user-path ModuleFast module. The CSV
+records `ModuleFastSource`, `ModuleFastModulePath`, `EngineModuleBase`, and
+`EngineModuleVersion` so those runs stay separate.
 
 The comparison is therefore split into capability and timing:
 
