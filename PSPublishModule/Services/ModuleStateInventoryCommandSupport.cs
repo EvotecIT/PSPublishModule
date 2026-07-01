@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
+using System.Runtime.InteropServices;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -25,11 +26,7 @@ internal static class ModuleStateInventoryCommandSupport
         IEnumerable<string> modulePaths,
         IEnumerable<ModuleStateLoadedModuleEvidence>? loadedModules = null)
     {
-        var paths = modulePaths
-            .Where(static path => !string.IsNullOrWhiteSpace(path))
-            .Select(static path => Path.GetFullPath(path.Trim()))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var paths = NormalizeModulePaths(modulePaths);
         var request = new ModuleStateInventoryRequest(paths.Select(static path => new ModuleStateModulePath(
             path,
             InferPowerShellEdition(path),
@@ -37,6 +34,15 @@ internal static class ModuleStateInventoryCommandSupport
         var inventory = new ModuleStateInventoryService().Collect(request);
         inventory = IncludeLoadedModulesCore(inventory, loadedModules);
         return ModuleStateInventoryResultMapper.ToCmdletResult(inventory, "ModulePath", paths);
+    }
+
+    internal static string[] NormalizeModulePaths(IEnumerable<string> modulePaths)
+    {
+        return (modulePaths ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(static path => Path.GetFullPath(path.Trim()))
+            .Distinct(ResolveModulePathComparer())
+            .ToArray();
     }
 
     internal static ModuleStateInventoryResult IncludeLoadedModules(
@@ -103,9 +109,14 @@ internal static class ModuleStateInventoryCommandSupport
         return value.Split(Path.PathSeparator)
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(static path => path.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(ResolveModulePathComparer())
             .ToArray();
     }
+
+    private static StringComparer ResolveModulePathComparer()
+        => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
 
     private static string? InferPowerShellEdition(string path)
     {

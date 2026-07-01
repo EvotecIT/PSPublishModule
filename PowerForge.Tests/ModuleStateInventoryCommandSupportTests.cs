@@ -75,6 +75,19 @@ public sealed class ModuleStateInventoryCommandSupportTests
     }
 
     [Fact]
+    public void NormalizeModulePaths_UsesFilesystemAwarePathComparer()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var upper = Path.Combine(root, "Modules");
+        var lower = Path.Combine(root, "modules");
+
+        var paths = ModuleStateInventoryCommandSupport.NormalizeModulePaths(new[] { upper, lower });
+
+        var expectedCount = OperatingSystem.IsWindows() ? 1 : 2;
+        Assert.Equal(expectedCount, paths.Length);
+    }
+
+    [Fact]
     public void CreateInventoryResultFromFile_AddsLoadedOnlyModule()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

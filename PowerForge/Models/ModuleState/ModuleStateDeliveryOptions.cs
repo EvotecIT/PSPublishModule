@@ -14,7 +14,8 @@ internal sealed class ModuleStateDeliveryOptions
         bool allowErrorFindings = false,
         bool allowClobber = false,
         string? moduleRoot = null,
-        ModuleStateDeliveryTransport transport = ModuleStateDeliveryTransport.PrivateModule)
+        ModuleStateDeliveryTransport transport = ModuleStateDeliveryTransport.PrivateModule,
+        string? profileRepository = null)
     {
         ProfileName = NormalizeOptional(profileName);
         Repository = NormalizeOptional(repository);
@@ -26,11 +27,14 @@ internal sealed class ModuleStateDeliveryOptions
         AllowClobber = allowClobber;
         ModuleRoot = NormalizeOptional(moduleRoot);
         Transport = transport;
+        ProfileRepository = NormalizeOptional(profileRepository);
     }
 
     internal string? ProfileName { get; }
 
     internal string? Repository { get; }
+
+    internal string? ProfileRepository { get; }
 
     internal bool InstallPrerequisites { get; }
 

@@ -389,7 +389,8 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
             allowErrorFindings: AllowConflict.IsPresent,
             allowClobber: AllowClobber.IsPresent,
             moduleRoot: ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot),
-            transport: Transport);
+            transport: Transport,
+            profileRepository: ResolveProfileRepositoryName());
         var service = new ModuleStateApplyService();
         var corePlan = ModuleStatePlanResultMapper.ToCorePlan(plan);
         var result = service.Prepare(corePlan, deliveryOptions);
@@ -568,6 +569,11 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
             return ModuleRepositoryProfileCommandSupport.TryResolve(ProfileName)?.RepositoryName;
         return null;
     }
+
+    private string? ResolveProfileRepositoryName()
+        => string.IsNullOrWhiteSpace(ProfileName)
+            ? null
+            : ModuleRepositoryProfileCommandSupport.TryResolve(ProfileName)?.RepositoryName;
 
     private static ModuleStateCleanupMode ParseCleanupMode(string? cleanup)
         => string.Equals(cleanup, "OldVersions", StringComparison.OrdinalIgnoreCase)

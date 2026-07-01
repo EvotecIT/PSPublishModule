@@ -223,14 +223,19 @@ internal sealed class ModuleStateApplyService
             arguments.Add(action.TargetPath!);
         }
         else if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
+                 !string.IsNullOrWhiteSpace(action.TargetPath))
+        {
+            arguments.Add("-ModuleRoot");
+            arguments.Add(action.TargetPath!);
+        }
+        else if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
                  !string.IsNullOrWhiteSpace(deliveryOptions.ModuleRoot))
         {
             arguments.Add(action.Kind == ModuleStatePlanActionKind.Save ? "-Path" : "-ModuleRoot");
             arguments.Add(deliveryOptions.ModuleRoot!);
         }
 
-        if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
-            !string.IsNullOrWhiteSpace(deliveryOptions.ProfileName))
+        if (IsActionTargetCoveredByProfile(action, deliveryOptions))
         {
             arguments.Add("-ProfileName");
             arguments.Add(deliveryOptions.ProfileName!);
@@ -352,6 +357,12 @@ internal sealed class ModuleStateApplyService
     private static bool HasCommandDeliveryTarget(ModuleStateDeliveryCommand command)
         => command.Arguments.Contains("-ProfileName", StringComparer.OrdinalIgnoreCase) ||
            command.Arguments.Contains("-Repository", StringComparer.OrdinalIgnoreCase);
+
+    private static bool IsActionTargetCoveredByProfile(ModuleStatePlanAction action, ModuleStateDeliveryOptions deliveryOptions)
+        => !string.IsNullOrWhiteSpace(deliveryOptions.ProfileName) &&
+           !string.IsNullOrWhiteSpace(action.TargetRepository) &&
+           !string.IsNullOrWhiteSpace(deliveryOptions.ProfileRepository) &&
+           string.Equals(action.TargetRepository, deliveryOptions.ProfileRepository, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsDeliveryAction(ModuleStatePlanActionKind kind)
         => kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update or ModuleStatePlanActionKind.Save;

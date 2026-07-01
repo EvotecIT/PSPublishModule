@@ -338,11 +338,32 @@ public sealed partial class ModuleDependencyInstaller
                 }
                 else
                 {
-                    var updateStatus = RequiresScopedInstall(dep) && (!CanUseScopedDependencyProbe(dep) || !HasInstalledModuleSatisfyingDependency(dep))
-                        ? TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout)
-                        : HasVersionConstraint(dep)
-                        ? TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: true, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout)
-                        : TryUpdate(dep, installedBefore!, repository, credential, prerelease, preferPowerShellGet, perModuleTimeout);
+                    string? updateStatus;
+                    if (RequiresScopedInstall(dep) && (!CanUseScopedDependencyProbe(dep) || !HasInstalledModuleSatisfyingDependency(dep)))
+                    {
+                        updateStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
+                    }
+                    else if (HasVersionConstraint(dep))
+                    {
+                        if (CanUseScopedDependencyProbe(dep) && HasInstalledModuleSatisfyingDependency(dep))
+                        {
+                            actions.Add(new ActionItem(
+                                dep.Name,
+                                installedBefore,
+                                dep.RequiredVersion ?? dep.MinimumVersion,
+                                ModuleDependencyInstallStatus.Satisfied,
+                                installer: null,
+                                message: $"Version requirements already satisfied by an installed side-by-side copy (latest installed: {installedBefore})"));
+                            continue;
+                        }
+
+                        updateStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: true, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
+                    }
+                    else
+                    {
+                        updateStatus = TryUpdate(dep, installedBefore!, repository, credential, prerelease, preferPowerShellGet, perModuleTimeout);
+                    }
+
                     actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Updated, installer: updateStatus, message: "Update requested"));
                 }
             }

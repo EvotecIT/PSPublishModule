@@ -88,6 +88,88 @@ public sealed class ModuleStateApplyServiceTests
     }
 
     [Fact]
+    public void Prepare_UsesActionTargetPathAsManagedModuleRoot()
+    {
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(
+                    ModuleStatePlanActionKind.Update,
+                    "Company.Tools",
+                    "1.0.0",
+                    "=1.2.0",
+                    "repair",
+                    targetPath: @"C:\SelectedRoot",
+                    targetRepository: "CompanyModules")
+            },
+            Array.Empty<ModuleStateConflictFinding>());
+
+        var result = new ModuleStateApplyService().Prepare(
+            plan,
+            new ModuleStateDeliveryOptions(
+                profileName: "FallbackProfile",
+                moduleRoot: @"C:\FallbackRoot",
+                transport: ModuleStateDeliveryTransport.ManagedModule));
+
+        var command = Assert.Single(result.Receipt.Commands);
+        Assert.Equal("Update-ManagedModule", command.CommandName);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-RequiredVersion", "1.2.0", "-ModuleRoot", @"C:\SelectedRoot", "-Repository", "CompanyModules" }, command.Arguments);
+    }
+
+    [Fact]
+    public void Prepare_PreservesActionTargetRepositoryOverManagedProfile()
+    {
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(
+                    ModuleStatePlanActionKind.Install,
+                    "Company.Tools",
+                    null,
+                    ">=1.2.0",
+                    "repair",
+                    targetRepository: "ActionModules")
+            },
+            Array.Empty<ModuleStateConflictFinding>());
+
+        var result = new ModuleStateApplyService().Prepare(
+            plan,
+            new ModuleStateDeliveryOptions(
+                profileName: "ProfileModules",
+                transport: ModuleStateDeliveryTransport.ManagedModule));
+
+        var command = Assert.Single(result.Receipt.Commands);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-VersionPolicy", ">=1.2.0", "-Repository", "ActionModules" }, command.Arguments);
+    }
+
+    [Fact]
+    public void Prepare_UsesProfileNameWhenActionTargetIsCoveredByProfile()
+    {
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(
+                    ModuleStatePlanActionKind.Update,
+                    "Company.Tools",
+                    null,
+                    "*",
+                    "repair",
+                    targetRepository: "CompanyModules")
+            },
+            Array.Empty<ModuleStateConflictFinding>());
+
+        var result = new ModuleStateApplyService().Prepare(
+            plan,
+            new ModuleStateDeliveryOptions(
+                profileName: "Company",
+                transport: ModuleStateDeliveryTransport.ManagedModule,
+                profileRepository: "CompanyModules"));
+
+        var command = Assert.Single(result.Receipt.Commands);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-ProfileName", "Company" }, command.Arguments);
+    }
+
+    [Fact]
     public void Prepare_CreatesManagedSaveDeliveryCommand()
     {
         var plan = new ModuleStatePlan(
