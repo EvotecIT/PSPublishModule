@@ -27,4 +27,16 @@ public sealed class ModuleLocatorScriptTests
         Assert.Contains("$leftVersion.Revision.CompareTo($rightVersion.Revision)", script, StringComparison.Ordinal);
         Assert.DoesNotContain("Sort-Object Version -Descending", script, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void FindInstalledModule_UsesSemanticVersionsForPrereleaseAwareScopedProbes()
+    {
+        var script = PowerForgeScripts.Load("Scripts/ModuleLocator/Find-InstalledModule.ps1");
+
+        Assert.Contains("Get-SemanticModuleVersion", script, StringComparison.Ordinal);
+        Assert.Contains("Test-IsPrereleaseModule", script, StringComparison.Ordinal);
+        Assert.Contains("Compare-SemanticModuleVersion", script, StringComparison.Ordinal);
+        Assert.Contains("Select-LatestModule", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Sort-Object Version -Descending", script, StringComparison.Ordinal);
+    }
 }

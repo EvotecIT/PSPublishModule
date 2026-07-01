@@ -195,8 +195,9 @@ internal sealed class ModuleStatePlanner
 
         var normalizedModulePath = NormalizePath(modulePath!);
         var normalizedTargetPath = NormalizePath(targetPath);
-        return string.Equals(normalizedModulePath, normalizedTargetPath, StringComparison.OrdinalIgnoreCase) ||
-               normalizedModulePath.StartsWith(normalizedTargetPath + "/", StringComparison.OrdinalIgnoreCase);
+        var comparison = FrameworkCompatibility.GetPathStringComparison(targetPath);
+        return string.Equals(normalizedModulePath, normalizedTargetPath, comparison) ||
+               normalizedModulePath.StartsWith(normalizedTargetPath + "/", comparison);
     }
 
     private static string NormalizePath(string path)

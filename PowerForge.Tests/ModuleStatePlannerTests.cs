@@ -218,6 +218,27 @@ public sealed class ModuleStatePlannerTests
     }
 
     [Fact]
+    public void CreatePlan_DoesNotUseDifferentlyCasedTargetPathOnCaseSensitiveFileSystems()
+    {
+        if (FrameworkCompatibility.PathStringComparison() != StringComparison.Ordinal)
+            return;
+
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[]
+            {
+                new ModuleStateInstalledModule("Company.Tools", "1.4.0", path: "/opt/Modules/Company.Tools/1.4.0")
+            }),
+            new[] { new ModuleStateDesiredModule("Company.Tools", ">=1.2.0", targetPath: "/opt/modules") });
+
+        var action = Assert.Single(new ModuleStatePlanner().CreatePlan(request).Actions);
+
+        Assert.Equal(ModuleStatePlanActionKind.Save, action.Kind);
+        Assert.Null(action.InstalledVersion);
+        Assert.Equal("/opt/modules", action.TargetPath);
+        Assert.Equal("Module is not saved in desired target path.", action.Reason);
+    }
+
+    [Fact]
     public void CreatePlan_UsesDesiredScopeVersionForDecision()
     {
         var request = new ModuleStatePlanRequest(

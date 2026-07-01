@@ -43,6 +43,15 @@ public sealed class PSPublishModuleManifestContractTests
         "Update-ManagedModule"
     };
 
+    private static readonly string[] UnreleasedModuleStateCmdlets =
+    {
+        "Get-ModuleState",
+        "Get-ModuleStatePlan",
+        "Invoke-ModuleState",
+        "Invoke-ModuleStatePlan",
+        "Test-ModuleState"
+    };
+
     private static readonly string[] DocumentationCmdlets =
     {
         "Get-ModuleDocumentation",
@@ -146,6 +155,20 @@ public sealed class PSPublishModuleManifestContractTests
         {
             Assert.Contains($"'{cmdlet}'", manifestText, StringComparison.Ordinal);
             Assert.Contains($"'{cmdlet}'", bootstrapperText, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Module_does_not_export_unreleased_module_state_cmdlets()
+    {
+        var repoRoot = RepoRootLocator.Find();
+        var manifestText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psd1"));
+        var bootstrapperText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psm1"));
+
+        foreach (var cmdlet in UnreleasedModuleStateCmdlets)
+        {
+            Assert.DoesNotContain($"'{cmdlet}'", manifestText, StringComparison.Ordinal);
+            Assert.DoesNotContain($"'{cmdlet}'", bootstrapperText, StringComparison.Ordinal);
         }
     }
 

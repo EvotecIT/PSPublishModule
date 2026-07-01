@@ -1256,6 +1256,54 @@ public sealed partial class ManagedModuleInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_package_cache_uses_staged_promotion_when_target_directory_exists()
+    {
+        using var feed = new TemporaryDirectory();
+        using var cache = new TemporaryDirectory();
+        using var cacheWarmupRoot = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+        _ = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = cacheWarmupRoot.Path,
+            PackageCacheDirectory = cache.Path
+        });
+        var existingPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(existingPath);
+        File.WriteAllText(Path.Combine(existingPath, "marker.txt"), "existing");
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            PackageCacheDirectory = cache.Path,
+            TrustPolicy = new ManagedModuleTrustPolicy
+            {
+                AllowedAuthors = new[] { "Evotec" }
+            }
+        });
+
+        Assert.Equal(ManagedModuleInstallStatus.Installed, result.Status);
+        Assert.True(result.ExtractionFromCache);
+        Assert.False(result.PromotionMaterializedDirectly);
+        Assert.True(result.PromotionHadExistingTarget);
+        Assert.False(File.Exists(Path.Combine(existingPath, "marker.txt")));
+        Assert.True(File.Exists(Path.Combine(existingPath, "Company.Tools.psd1")));
+    }
+
+    [Fact]
     public async Task InstallAsync_clobber_preflight_runs_before_dependency_install()
     {
         using var feed = new TemporaryDirectory();

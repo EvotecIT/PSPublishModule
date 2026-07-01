@@ -512,6 +512,23 @@ public sealed partial class ManagedModuleInstallService
             var promotionHadExistingTarget = false;
             var promotionMaterializedDirectly = false;
             var promotionDirectMaterializationElapsed = TimeSpan.Zero;
+            void MaterializeStageFromPackageCache()
+            {
+                directPayloadLease?.Dispose();
+                directPayloadLease = null;
+                extraction = _extractedPackageCache.MaterializePackage(
+                    download.PackagePath,
+                    download.PackageSha256,
+                    cacheDirectory,
+                    stageModulePath,
+                    _extractor,
+                    cancellationToken);
+                if (request.AuthenticodeCheck)
+                    authenticode = _authenticodeVerifier.VerifyDirectory(stageModulePath);
+                if (!request.AllowClobber)
+                    ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), stageModulePath);
+            }
+
             using (AcquireInstallLock(moduleRoot, ".promotion", cancellationToken, out var promotionGateWaitElapsed))
             {
                 promotionLockWaitElapsed += promotionGateWaitElapsed;
@@ -539,7 +556,7 @@ public sealed partial class ManagedModuleInstallService
                             installLockWaitElapsed);
                     }
 
-                    if (directPayloadLease is not null)
+                    if (directPayloadLease is not null && !Directory.Exists(modulePath))
                     {
                         try
                         {
@@ -549,19 +566,7 @@ public sealed partial class ManagedModuleInstallService
                         }
                         catch (Exception ex) when (IsRecoverableCacheMaterializationException(ex))
                         {
-                            directPayloadLease.Dispose();
-                            directPayloadLease = null;
-                            extraction = _extractedPackageCache.MaterializePackage(
-                                download.PackagePath,
-                                download.PackageSha256,
-                                cacheDirectory,
-                                stageModulePath,
-                                _extractor,
-                                cancellationToken);
-                            if (request.AuthenticodeCheck)
-                                authenticode = _authenticodeVerifier.VerifyDirectory(stageModulePath);
-                            if (!request.AllowClobber)
-                                ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), stageModulePath);
+                            MaterializeStageFromPackageCache();
 
                             var promotionResult = PromoteStagedModule(stageModulePath, modulePath);
                             promotionMoveElapsed = promotionResult.Elapsed;
@@ -573,6 +578,9 @@ public sealed partial class ManagedModuleInstallService
                     }
                     else
                     {
+                        if (directPayloadLease is not null)
+                            MaterializeStageFromPackageCache();
+
                         var promotionResult = PromoteStagedModule(stageModulePath, modulePath);
                         promotionMoveElapsed = promotionResult.Elapsed;
                         promotionBackupMoveElapsed = promotionResult.BackupMoveElapsed;
