@@ -1,6 +1,8 @@
 using System;
 using System.Linq;
 using System.Management.Automation;
+using System.Threading;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -13,6 +15,12 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
         => _cmdlet = cmdlet ?? throw new ArgumentNullException(nameof(cmdlet));
 
     internal void Enrich(ModuleStatePlanResult plan, ModuleStateManagedDeliveryOptions options)
+        => EnrichAsync(plan, options).GetAwaiter().GetResult();
+
+    internal async Task EnrichAsync(
+        ModuleStatePlanResult plan,
+        ModuleStateManagedDeliveryOptions options,
+        CancellationToken cancellationToken = default)
     {
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
@@ -36,12 +44,12 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
                 var repository = ResolveRepository(action, options);
                 if (string.Equals(action.Kind, "Update", StringComparison.OrdinalIgnoreCase))
                 {
-                    var updatePlan = updateService.PlanUpdateAsync(CreateUpdateRequest(repository, action, options)).GetAwaiter().GetResult();
+                    var updatePlan = await updateService.PlanUpdateAsync(CreateUpdateRequest(repository, action, options), cancellationToken).ConfigureAwait(false);
                     ApplyLicense(action, updatePlan.License, updatePlan.LicenseAcceptanceRequired, updatePlan.LicenseAccepted);
                 }
                 else
                 {
-                    var installPlan = installService.PlanInstallAsync(CreateInstallRequest(repository, action, options)).GetAwaiter().GetResult();
+                    var installPlan = await installService.PlanInstallAsync(CreateInstallRequest(repository, action, options), cancellationToken).ConfigureAwait(false);
                     ApplyLicense(action, installPlan.License, installPlan.LicenseAcceptanceRequired, installPlan.LicenseAccepted);
                 }
             }

@@ -529,7 +529,7 @@ public sealed partial class ManagedModuleInstallService
                     ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), stageModulePath);
             }
 
-            using (AcquireInstallLock(moduleRoot, ".promotion", cancellationToken, out var promotionGateWaitElapsed))
+            using (AcquirePromotionLock(moduleRoot, request.AllowClobber, cancellationToken, out var promotionGateWaitElapsed))
             {
                 promotionLockWaitElapsed += promotionGateWaitElapsed;
                 installLockWaitElapsed += promotionGateWaitElapsed;

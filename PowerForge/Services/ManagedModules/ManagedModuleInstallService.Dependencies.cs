@@ -2,6 +2,8 @@ namespace PowerForge;
 
 public sealed partial class ManagedModuleInstallService
 {
+    private const int SeedDependencyBeforeFanoutThreshold = 16;
+
     private void StartDependencyVersionSelectionPrewarm(
         ManagedModuleInstallRequest request,
         ManagedModulePackageMetadata? metadata,
@@ -91,16 +93,30 @@ public sealed partial class ManagedModuleInstallService
             return new[] { singleResult };
         }
 
-        var results = new ManagedModuleInstallResult[dependencies.Length];
         var concurrencyLimit = ResolveDependencyInstallConcurrency(request);
-        var concurrency = Math.Min(dependencies.Length, concurrencyLimit);
+        var results = new ManagedModuleInstallResult[dependencies.Length];
+        var fanoutStart = 0;
+
+        if (dependencies.Length >= SeedDependencyBeforeFanoutThreshold && concurrencyLimit > 1)
+        {
+            results[0] = await InstallDependencyBranchAsync(
+                request,
+                dependencies[0],
+                cacheDirectory,
+                context.CreateBranch(),
+                cancellationToken).ConfigureAwait(false);
+            fanoutStart = 1;
+        }
+
+        var concurrency = Math.Min(dependencies.Length - fanoutStart, concurrencyLimit);
 
         using var gate = new SemaphoreSlim(concurrency, concurrency);
         var tasks = dependencies
+            .Skip(fanoutStart)
             .Select((dependency, offset) => InstallDependencyWithGateAsync(
                 request,
                 dependency,
-                offset,
+                fanoutStart + offset,
                 cacheDirectory,
                 context.CreateBranch(),
                 gate,

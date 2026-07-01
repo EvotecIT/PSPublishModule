@@ -1,5 +1,6 @@
 using System;
 using System.Management.Automation;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -23,7 +24,7 @@ namespace PSPublishModule;
 /// </example>
 [Cmdlet(VerbsLifecycle.Install, "ManagedModule", SupportsShouldProcess = true)]
 [OutputType(typeof(ManagedModuleInstallResult), typeof(ManagedModuleInstallPlan))]
-public sealed class InstallManagedModuleCommand : PSCmdlet
+public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
 {
     /// <summary>Module names to install.</summary>
     [Parameter(Mandatory = true, Position = 0, ValueFromPipelineByPropertyName = true)]
@@ -175,7 +176,7 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
     public SwitchParameter ShowSummary { get; set; }
 
     /// <summary>Installs the requested modules.</summary>
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         var moduleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot);
         var repository = ManagedModuleCommandSupport.CreateRepository(
@@ -219,7 +220,7 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
 
             if (Plan.IsPresent)
             {
-                var plan = service.PlanInstallAsync(request).GetAwaiter().GetResult();
+                var plan = await service.PlanInstallAsync(request, CancelToken).ConfigureAwait(false);
                 WriteObject(plan);
                 if (ShowSummary.IsPresent)
                     ManagedModuleSummaryWriter.Write(plan);
@@ -229,7 +230,7 @@ public sealed class InstallManagedModuleCommand : PSCmdlet
             if (!ShouldProcess(moduleName, $"Install managed module from repository '{repository.Name}'"))
                 continue;
 
-            var result = service.InstallAsync(request).GetAwaiter().GetResult();
+            var result = await service.InstallAsync(request, CancelToken).ConfigureAwait(false);
 
             WriteObject(result);
             if (ShowSummary.IsPresent)

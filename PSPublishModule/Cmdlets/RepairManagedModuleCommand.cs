@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -33,7 +34,7 @@ namespace PSPublishModule;
 /// </example>
 [Cmdlet(VerbsDiagnostic.Repair, "ManagedModule", SupportsShouldProcess = true)]
 [OutputType(typeof(ModuleStateWorkflowResult))]
-public sealed class RepairManagedModuleCommand : PSCmdlet
+public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
 {
     /// <summary>Optional module names to repair. When omitted, all installed modules in scope are considered.</summary>
     [Parameter(Position = 0, ValueFromPipelineByPropertyName = true)]
@@ -170,7 +171,7 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
     public string? CredentialSecretFilePath { get; set; }
 
     /// <summary>Repairs managed modules.</summary>
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         try
         {
@@ -192,10 +193,10 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
             ApplySelectedInventoryTargets(plan, selectedModules);
             ApplyLatestUpdateIntent(plan);
             ApplyForceRepairIntent(plan);
-            EnrichManagedLicenseMetadata(plan);
+            await EnrichManagedLicenseMetadataAsync(plan).ConfigureAwait(false);
 
             var test = ModuleStateTestResult.FromPlan(plan);
-            var applyResult = PrepareApply(plan, inventory);
+            var applyResult = await PrepareApplyAsync(plan, inventory).ConfigureAwait(false);
             var workflow = new ModuleStateWorkflowResult
             {
                 Inventory = inventory,
@@ -377,7 +378,7 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
             : "=" + selected.Version.Trim();
     }
 
-    private ModuleStateApplyResult PrepareApply(ModuleStatePlanResult plan, ModuleStateInventoryResult inventory)
+    private async Task<ModuleStateApplyResult> PrepareApplyAsync(ModuleStatePlanResult plan, ModuleStateInventoryResult inventory)
     {
         var deliveryOptions = new ModuleStateDeliveryOptions(
             ProfileName,
@@ -397,7 +398,7 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
         var executionResults = Array.Empty<ModuleStateDeliveryExecutionResult>();
 
         if (!Plan.IsPresent && result.Receipt.CanApply && ShouldProcess("managed module estate", "Repair managed modules"))
-            executionResults = ExecuteDelivery(result, inventory);
+            executionResults = await ExecuteDeliveryAsync(result, inventory).ConfigureAwait(false);
 
         return ModuleStateApplyResultMapper.ToCmdletResult(
             result,
@@ -408,13 +409,14 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
             postApplyInventory: null);
     }
 
-    private ModuleStateDeliveryExecutionResult[] ExecuteDelivery(PowerForge.ModuleStateApplyResult result, ModuleStateInventoryResult inventory)
+    private async Task<ModuleStateDeliveryExecutionResult[]> ExecuteDeliveryAsync(PowerForge.ModuleStateApplyResult result, ModuleStateInventoryResult inventory)
     {
         if (Transport == ModuleStateDeliveryTransport.ManagedModule)
         {
-            return new ModuleStateManagedDeliveryService(this).Execute(
+            return await new ModuleStateManagedDeliveryService(this).ExecuteAsync(
                 result,
-                CreateManagedDeliveryOptions(inventory));
+                CreateManagedDeliveryOptions(inventory),
+                CancelToken).ConfigureAwait(false);
         }
 
         return new ModuleStatePrivateDeliveryService(this).Execute(
@@ -438,14 +440,16 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
             });
     }
 
-    private void EnrichManagedLicenseMetadata(ModuleStatePlanResult plan)
+    private async Task EnrichManagedLicenseMetadataAsync(ModuleStatePlanResult plan)
     {
         if (Transport != ModuleStateDeliveryTransport.ManagedModule)
             return;
 
         try
         {
-            new ModuleStateManagedPlanLicenseEnricher(this).Enrich(plan, CreateManagedDeliveryOptions());
+            await new ModuleStateManagedPlanLicenseEnricher(this)
+                .EnrichAsync(plan, CreateManagedDeliveryOptions(), CancelToken)
+                .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or NotSupportedException or UriFormatException)
         {

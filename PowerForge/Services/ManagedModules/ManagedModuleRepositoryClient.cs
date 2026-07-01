@@ -43,7 +43,7 @@ public sealed partial class ManagedModuleRepositoryClient
     {
         _logger = logger ?? new NullLogger();
         _options = options ?? new ManagedModuleRepositoryClientOptions();
-        _httpClient = httpClient ?? new HttpClient(CreateDefaultHttpMessageHandler(_options));
+        _httpClient = httpClient ?? CreateDefaultHttpClient(_options);
         _packageReader = packageReader ?? new ManagedModulePackageReader();
     }
 

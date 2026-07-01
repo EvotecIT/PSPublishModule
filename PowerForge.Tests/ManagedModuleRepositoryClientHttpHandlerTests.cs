@@ -11,7 +11,7 @@ public sealed class ManagedModuleRepositoryClientHttpHandlerTests
     public void CreateDefaultHttpMessageHandler_applies_explicit_proxy_options()
     {
         var proxyAddress = new Uri("http://proxy.example.test:8080");
-        var handler = Assert.IsType<HttpClientHandler>(ManagedModuleRepositoryClient.CreateDefaultHttpMessageHandler(
+        var rawHandler = ManagedModuleRepositoryClient.CreateDefaultHttpMessageHandler(
             new ManagedModuleRepositoryClientOptions
             {
                 ProxyAddress = proxyAddress,
@@ -21,8 +21,13 @@ public sealed class ManagedModuleRepositoryClientHttpHandlerTests
                     UserName = "proxy-user",
                     Secret = "proxy-secret"
                 }
-            }));
+            });
 
+#if NET472
+        var handler = Assert.IsType<HttpClientHandler>(rawHandler);
+#else
+        var handler = Assert.IsType<SocketsHttpHandler>(rawHandler);
+#endif
         Assert.True(handler.UseProxy);
         Assert.NotNull(handler.Proxy);
         Assert.Equal(proxyAddress, handler.Proxy!.GetProxy(new Uri("https://example.test/v3/index.json")));
@@ -34,52 +39,92 @@ public sealed class ManagedModuleRepositoryClientHttpHandlerTests
     [Fact]
     public void CreateDefaultHttpMessageHandler_can_disable_proxy()
     {
-        var handler = Assert.IsType<HttpClientHandler>(ManagedModuleRepositoryClient.CreateDefaultHttpMessageHandler(
+        var rawHandler = ManagedModuleRepositoryClient.CreateDefaultHttpMessageHandler(
             new ManagedModuleRepositoryClientOptions
             {
                 UseProxy = false,
                 ProxyAddress = new Uri("http://proxy.example.test:8080")
-            }));
+            });
 
+#if NET472
+        var handler = Assert.IsType<HttpClientHandler>(rawHandler);
+#else
+        var handler = Assert.IsType<SocketsHttpHandler>(rawHandler);
+#endif
         Assert.False(handler.UseProxy);
     }
 
     [Fact]
     public void CreateDefaultHttpMessageHandler_applies_connection_limit_policy()
     {
-        var handler = Assert.IsType<HttpClientHandler>(ManagedModuleRepositoryClient.CreateDefaultHttpMessageHandler(
+        var rawHandler = ManagedModuleRepositoryClient.CreateDefaultHttpMessageHandler(
             new ManagedModuleRepositoryClientOptions
             {
                 MaxConnectionsPerServer = 48
-            }));
+            });
 
+#if NET472
+        var handler = Assert.IsType<HttpClientHandler>(rawHandler);
+#else
+        var handler = Assert.IsType<SocketsHttpHandler>(rawHandler);
+#endif
         Assert.Equal(48, handler.MaxConnectionsPerServer);
     }
 
     [Fact]
     public void CreateDefaultHttpMessageHandler_keeps_at_least_one_connection_per_server()
     {
-        var handler = Assert.IsType<HttpClientHandler>(ManagedModuleRepositoryClient.CreateDefaultHttpMessageHandler(
+        var rawHandler = ManagedModuleRepositoryClient.CreateDefaultHttpMessageHandler(
             new ManagedModuleRepositoryClientOptions
             {
                 MaxConnectionsPerServer = 0
-            }));
+            });
 
+#if NET472
+        var handler = Assert.IsType<HttpClientHandler>(rawHandler);
+#else
+        var handler = Assert.IsType<SocketsHttpHandler>(rawHandler);
+#endif
         Assert.Equal(1, handler.MaxConnectionsPerServer);
     }
 
     [Fact]
     public void CreateDefaultHttpMessageHandler_requests_compressed_repository_responses()
     {
-        var handler = Assert.IsType<HttpClientHandler>(ManagedModuleRepositoryClient.CreateDefaultHttpMessageHandler(
-            new ManagedModuleRepositoryClientOptions()));
+        var rawHandler = ManagedModuleRepositoryClient.CreateDefaultHttpMessageHandler(new ManagedModuleRepositoryClientOptions());
 
+#if NET472
+        var handler = Assert.IsType<HttpClientHandler>(rawHandler);
+#else
+        var handler = Assert.IsType<SocketsHttpHandler>(rawHandler);
+#endif
         Assert.True(handler.AutomaticDecompression.HasFlag(DecompressionMethods.GZip));
         Assert.True(handler.AutomaticDecompression.HasFlag(DecompressionMethods.Deflate));
 #if !NET472
         Assert.True(handler.AutomaticDecompression.HasFlag(DecompressionMethods.Brotli));
 #endif
     }
+
+#if !NET472
+    [Fact]
+    public void CreateDefaultHttpMessageHandler_enables_multiple_http2_connections_on_modern_runtime()
+    {
+        var handler = Assert.IsType<SocketsHttpHandler>(ManagedModuleRepositoryClient.CreateDefaultHttpMessageHandler(
+            new ManagedModuleRepositoryClientOptions()));
+
+        Assert.True(handler.EnableMultipleHttp2Connections);
+        Assert.Equal(16 * 1024 * 1024, handler.InitialHttp2StreamWindowSize);
+    }
+
+    [Fact]
+    public void CreateDefaultHttpClient_prefers_http2_or_higher_on_modern_runtime()
+    {
+        using var client = ManagedModuleRepositoryClient.CreateDefaultHttpClient(new ManagedModuleRepositoryClientOptions());
+
+        Assert.Equal(HttpVersion.Version20, client.DefaultRequestVersion);
+        Assert.Equal(HttpVersionPolicy.RequestVersionOrHigher, client.DefaultVersionPolicy);
+    }
+#endif
 
     [Fact]
     public void RedirectRequest_keeps_credentials_only_for_same_origin_redirects()
