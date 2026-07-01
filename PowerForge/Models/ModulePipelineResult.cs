@@ -146,6 +146,11 @@ public sealed class ModulePipelineResult
     public ModuleOwnerNote[] OwnerNotes { get; }
 
     /// <summary>
+    /// Type accelerator public-surface report when ALC type exposure was configured; otherwise null.
+    /// </summary>
+    public ModuleTypeAcceleratorSurfaceReport? TypeAcceleratorSurfaceReport { get; }
+
+    /// <summary>
     /// Creates a new result instance.
     /// </summary>
     public ModulePipelineResult(
@@ -176,7 +181,8 @@ public sealed class ModulePipelineResult
         ModulePipelineActionResult[]? actionResults = null,
         ProjectBuildHostExecutionResult[]? projectBuildResults = null,
         ModuleReleaseCoordinationResult? releaseCoordinationResult = null,
-        ModuleOwnerNote[]? ownerNotes = null)
+        ModuleOwnerNote[]? ownerNotes = null,
+        ModuleTypeAcceleratorSurfaceReport? typeAcceleratorSurfaceReport = null)
     {
         Plan = plan;
         BuildResult = buildResult;
@@ -206,5 +212,6 @@ public sealed class ModulePipelineResult
         ArtefactResults = artefactResults ?? Array.Empty<ArtefactBuildResult>();
         SigningResult = signingResult;
         OwnerNotes = ownerNotes ?? Array.Empty<ModuleOwnerNote>();
+        TypeAcceleratorSurfaceReport = typeAcceleratorSurfaceReport;
     }
 }
