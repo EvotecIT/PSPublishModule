@@ -576,6 +576,73 @@ public sealed class ExternalAssetPreparationServiceTests
     }
 
     [Fact]
+    public void Run_StagesExternalAssetsWithCaseVariantAbsoluteOutputPathOnCaseInsensitiveFilesystems()
+    {
+        var workspace = CreateTempDirectory();
+        string? stagingPath = null;
+        try
+        {
+            if (IsCaseSensitiveDirectory(workspace))
+                return;
+
+            var projectRoot = Path.Combine(workspace, "TestModule");
+            const string moduleName = "TestModule";
+            WriteMinimalModule(projectRoot, moduleName, "1.0.0");
+
+            var sourceRoot = Path.Combine(workspace, "Input");
+            Directory.CreateDirectory(sourceRoot);
+            var sourceFile = Path.Combine(sourceRoot, "tool.zip");
+            File.WriteAllText(sourceFile, "payload");
+
+            var caseVariantProjectRoot = projectRoot.ToUpperInvariant();
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = projectRoot,
+                    Version = "1.0.0",
+                    CsprojPath = null,
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationExternalAssetSegment
+                    {
+                        Configuration = new ExternalAssetConfiguration
+                        {
+                            Name = "VendorTool",
+                            OutputPath = Path.Combine(caseVariantProjectRoot, "Resources", "VendorTool"),
+                            ManifestPath = Path.Combine(caseVariantProjectRoot, "Resources", "VendorTool", "manifest.json"),
+                            Files = new[]
+                            {
+                                new ExternalAssetFileConfiguration
+                                {
+                                    Runtime = "win-x64",
+                                    FileName = "tool.zip",
+                                    Uri = sourceFile
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var result = new ModulePipelineRunner(new NullLogger()).Run(spec);
+            stagingPath = result.BuildResult.StagingPath;
+
+            Assert.True(File.Exists(Path.Combine(stagingPath, "Resources", "VendorTool", "tool.zip")));
+            Assert.True(File.Exists(Path.Combine(stagingPath, "Resources", "VendorTool", "manifest.json")));
+        }
+        finally
+        {
+            TryDelete(stagingPath);
+            TryDelete(workspace);
+        }
+    }
+
+    [Fact]
     public void Run_RejectsExternalAssetOutputCollisionsAcrossBundlesBeforeMaterializingFiles()
     {
         var workspace = CreateTempDirectory();

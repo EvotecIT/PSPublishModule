@@ -62,7 +62,7 @@ internal sealed class ExternalAssetPreparationService
         var fileResults = new List<ExternalAssetFilePreparationResult>();
         var manifestFiles = new List<ExternalAssetManifestFile>();
         var effectiveTimeout = timeout ?? TimeSpan.FromMinutes(5);
-        var outputPathComparison = GetPathStringComparison(outputRoot);
+        var outputPathComparison = FrameworkCompatibility.GetPathStringComparison(outputRoot);
         var preparedOutputPaths = new HashSet<string>(GetPathStringComparer(outputPathComparison));
 
         foreach (var file in files)
@@ -116,7 +116,7 @@ internal sealed class ExternalAssetPreparationService
             return;
 
         var projectFullPath = Path.GetFullPath(projectRoot);
-        var pathComparison = GetPathStringComparison(projectFullPath);
+        var pathComparison = FrameworkCompatibility.GetPathStringComparison(projectFullPath);
         var pathComparer = GetPathStringComparer(pathComparison);
         var occupiedPaths = new Dictionary<string, string>(pathComparer);
         var ownedOutputDirectories = new List<ExternalAssetOwnedDirectory>();
@@ -218,7 +218,7 @@ internal sealed class ExternalAssetPreparationService
         if (!File.Exists(sourcePath))
             throw new FileNotFoundException($"External asset source file was not found: {sourcePath}", sourcePath);
 
-        if (SamePath(sourcePath, targetPath, GetPathStringComparison(Path.GetDirectoryName(targetPath) ?? projectRoot)))
+        if (SamePath(sourcePath, targetPath, FrameworkCompatibility.GetPathStringComparison(Path.GetDirectoryName(targetPath) ?? projectRoot)))
             return;
 
         File.Copy(sourcePath, targetPath, overwrite: true);
@@ -325,13 +325,13 @@ internal sealed class ExternalAssetPreparationService
 
     private static void EnsureSameOrChildPath(string rootPath, string candidatePath, string label)
     {
-        if (!IsSameOrChildPath(rootPath, candidatePath, GetPathStringComparison(rootPath)))
+        if (!IsSameOrChildPath(rootPath, candidatePath, FrameworkCompatibility.GetPathStringComparison(rootPath)))
             throw new InvalidOperationException($"{label} must resolve inside project root '{rootPath}'.");
     }
 
     private static void EnsureChildPath(string rootPath, string candidatePath, string label)
     {
-        if (SamePath(rootPath, candidatePath, GetPathStringComparison(rootPath)))
+        if (SamePath(rootPath, candidatePath, FrameworkCompatibility.GetPathStringComparison(rootPath)))
             throw new InvalidOperationException($"{label} must resolve to a child path under project root '{rootPath}'.");
     }
 
@@ -400,53 +400,6 @@ internal sealed class ExternalAssetPreparationService
         }
 
         ownedDirectories.Add(new ExternalAssetOwnedDirectory(NormalizePathForComparison(outputDirectory), description, owner));
-    }
-
-    private static StringComparison GetPathStringComparison(string directory)
-    {
-        try
-        {
-            if (Directory.Exists(directory))
-                return IsCaseSensitiveDirectory(directory)
-                    ? StringComparison.Ordinal
-                    : StringComparison.OrdinalIgnoreCase;
-        }
-        catch
-        {
-            // fall back to the platform default below
-        }
-
-        return FrameworkCompatibility.PathStringComparison();
-    }
-
-    private static bool IsCaseSensitiveDirectory(string directory)
-    {
-        var probeName = "powerforge-case-" + Guid.NewGuid().ToString("N") + "a.tmp";
-        var probePath = Path.Combine(directory, probeName);
-        var alternatePath = Path.Combine(directory, probeName.ToUpperInvariant());
-        try
-        {
-            File.WriteAllText(probePath, string.Empty);
-            return !File.Exists(alternatePath);
-        }
-        finally
-        {
-            TryDeleteFile(probePath);
-            TryDeleteFile(alternatePath);
-        }
-    }
-
-    private static void TryDeleteFile(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-                File.Delete(path);
-        }
-        catch
-        {
-            // best effort cleanup
-        }
     }
 
     private static string DownloadFile(Uri uri, string targetPath, TimeSpan timeout)

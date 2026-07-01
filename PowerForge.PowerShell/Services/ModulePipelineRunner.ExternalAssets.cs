@@ -66,7 +66,7 @@ public sealed partial class ModulePipelineRunner
             string.Equals(
                 Path.GetFullPath(stagingRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
                 Path.GetFullPath(stagingOutputDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                FrameworkCompatibility.PathStringComparison()))
+                FrameworkCompatibility.GetPathStringComparison(stagingRoot)))
         {
             throw new InvalidOperationException($"External asset output path cannot resolve to the staging root: {sourceOutputDirectory}");
         }
@@ -92,7 +92,7 @@ public sealed partial class ModulePipelineRunner
     {
         var root = Path.GetFullPath(rootPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var candidate = Path.GetFullPath(candidatePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var comparison = FrameworkCompatibility.PathStringComparison();
+        var comparison = FrameworkCompatibility.GetPathStringComparison(root);
         if (string.Equals(root, candidate, comparison))
             return true;
 
