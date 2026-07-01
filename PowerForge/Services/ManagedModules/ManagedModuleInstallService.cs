@@ -379,6 +379,7 @@ public sealed partial class ManagedModuleInstallService
         string modulePath)
     {
         var ownsCache = string.IsNullOrWhiteSpace(request.PackageCacheDirectory);
+        var useExtractedPackageCache = !ownsCache && !request.PackageCacheDirectoryIsOperationLocal;
         var cacheDirectory = ownsCache
             ? Path.Combine(Path.GetTempPath(), "PFMM.C", NewShortId())
             : Path.GetFullPath(request.PackageCacheDirectory!.Trim().Trim('"'));
@@ -456,7 +457,7 @@ public sealed partial class ManagedModuleInstallService
             StartDependencyVersionSelectionPrewarm(request, download.Metadata, context, cancellationToken);
             var validationModulePath = stageModulePath;
             ManagedModuleArchiveExtractionResult? extraction = null;
-            if (!ownsCache && !request.Force && !RequiresVerifiedPackage(request))
+            if (useExtractedPackageCache && !request.Force && !RequiresVerifiedPackage(request))
             {
                 directPayloadLease = _extractedPackageCache.TryAcquirePayload(
                     download.PackageSha256,
@@ -478,7 +479,7 @@ public sealed partial class ManagedModuleInstallService
                 }
                 else
 #endif
-                extraction = ownsCache
+                extraction = !useExtractedPackageCache
                     ? _extractor.ExtractPackage(download.PackagePath, stageModulePath, download.Metadata?.Id)
                     : _extractedPackageCache.MaterializePackage(
                         download.PackagePath,

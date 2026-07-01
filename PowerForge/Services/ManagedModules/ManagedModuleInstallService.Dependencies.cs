@@ -235,6 +235,8 @@ public sealed partial class ManagedModuleInstallService
                 ShellEdition = request.ShellEdition,
                 ModuleRoot = request.ModuleRoot,
                 PackageCacheDirectory = cacheDirectory,
+                PackageCacheDirectoryIsOperationLocal = request.PackageCacheDirectoryIsOperationLocal ||
+                                                        string.IsNullOrWhiteSpace(request.PackageCacheDirectory),
                 ExpectedPackageSha256 = null,
                 TrustPolicy = dependencyTrustPolicy,
                 Credential = request.Credential,

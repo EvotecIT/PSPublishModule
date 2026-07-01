@@ -60,6 +60,8 @@ public sealed class ManagedModuleInstallRequest
     /// </summary>
     public string? PackageCacheDirectory { get; set; }
 
+    internal bool PackageCacheDirectoryIsOperationLocal { get; set; }
+
     /// <summary>
     /// Maximum number of dependency branches to install concurrently. A value of 0 uses the engine default.
     /// </summary>
