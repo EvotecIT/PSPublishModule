@@ -39,6 +39,22 @@ public sealed class ManagedModuleArchiveExtractorTests
         Assert.False(File.Exists(Path.Combine(destination, "Company.Tools.nuspec")));
     }
 
+    [Fact]
+    public void ExtractPackage_uses_known_package_id_to_flatten_without_reading_nuspec()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        var destination = Path.Combine(temp.Path, "out");
+        CreatePackageWithModuleRootFolderWithoutNuspec(packagePath);
+
+        var result = new ManagedModuleArchiveExtractor().ExtractPackage(packagePath, destination, "Company.Tools");
+
+        Assert.Equal(2, result.FileCount);
+        Assert.True(File.Exists(Path.Combine(destination, "Company.Tools.psd1")));
+        Assert.True(File.Exists(Path.Combine(destination, "Company.Tools.psm1")));
+        Assert.False(File.Exists(Path.Combine(destination, "Company.Tools", "Company.Tools.psd1")));
+    }
+
 #if !NET472
     [Fact]
     public async Task ExtractPackageAsync_preserves_module_package_directory()
@@ -75,6 +91,23 @@ public sealed class ManagedModuleArchiveExtractorTests
         Assert.False(File.Exists(Path.Combine(destination, "Company.Tools", "Company.Tools.psd1")));
         Assert.False(File.Exists(Path.Combine(destination, "Company.Tools.nuspec")));
     }
+
+    [Fact]
+    public async Task ExtractPackageAsync_uses_known_package_id_to_flatten_without_reading_nuspec()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        var destination = Path.Combine(temp.Path, "out");
+        CreatePackageWithModuleRootFolderWithoutNuspec(packagePath);
+
+        await using var stream = File.OpenRead(packagePath);
+        var result = await new ManagedModuleArchiveExtractor().ExtractPackageAsync(stream, destination, "Company.Tools", CancellationToken.None);
+
+        Assert.Equal(2, result.FileCount);
+        Assert.True(File.Exists(Path.Combine(destination, "Company.Tools.psd1")));
+        Assert.True(File.Exists(Path.Combine(destination, "Company.Tools.psm1")));
+        Assert.False(File.Exists(Path.Combine(destination, "Company.Tools", "Company.Tools.psd1")));
+    }
 #endif
 
     private static void CreatePackageWithPackageFolder(string packagePath)
@@ -94,6 +127,13 @@ public sealed class ManagedModuleArchiveExtractorTests
         AddEntry(archive, "Company.Tools/Company.Tools.psd1", "@{ ModuleVersion = '1.0.0' }");
         AddEntry(archive, "Company.Tools/Company.Tools.psm1", string.Empty);
         AddEntry(archive, "Company.Tools/Company.Tools.nuspec", TestPackageFactory.CreateNuspec("Company.Tools", "1.0.0"));
+    }
+
+    private static void CreatePackageWithModuleRootFolderWithoutNuspec(string packagePath)
+    {
+        using var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create);
+        AddEntry(archive, "Company.Tools/Company.Tools.psd1", "@{ ModuleVersion = '1.0.0' }");
+        AddEntry(archive, "Company.Tools/Company.Tools.psm1", string.Empty);
     }
 
     private static void AddEntry(ZipArchive archive, string name, string content)

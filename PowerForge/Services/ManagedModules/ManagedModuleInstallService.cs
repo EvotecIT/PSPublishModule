@@ -479,14 +479,15 @@ public sealed partial class ManagedModuleInstallService
                 else
 #endif
                 extraction = ownsCache
-                    ? _extractor.ExtractPackage(download.PackagePath, stageModulePath)
+                    ? _extractor.ExtractPackage(download.PackagePath, stageModulePath, download.Metadata?.Id)
                     : _extractedPackageCache.MaterializePackage(
                         download.PackagePath,
                         download.PackageSha256,
                         cacheDirectory,
                         stageModulePath,
                         _extractor,
-                        cancellationToken);
+                        cancellationToken,
+                        download.Metadata?.Id);
             }
 
             var authenticode = request.AuthenticodeCheck
@@ -522,7 +523,8 @@ public sealed partial class ManagedModuleInstallService
                     cacheDirectory,
                     stageModulePath,
                     _extractor,
-                    cancellationToken);
+                    cancellationToken,
+                    download.Metadata?.Id);
                 if (request.AuthenticodeCheck)
                     authenticode = _authenticodeVerifier.VerifyDirectory(stageModulePath);
                 if (!request.AllowClobber)

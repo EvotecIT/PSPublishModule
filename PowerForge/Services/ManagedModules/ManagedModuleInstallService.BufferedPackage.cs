@@ -24,6 +24,7 @@ public sealed partial class ManagedModuleInstallService
         return await _extractor.ExtractPackageAsync(
                 bufferedPackage.PackageStream,
                 stageModulePath,
+                bufferedPackage.Download.Metadata?.Id,
                 cancellationToken)
             .ConfigureAwait(false);
     }
