@@ -311,6 +311,46 @@ public sealed class RepairManagedModuleCommandTests
     }
 
     [Fact]
+    public void RepairManagedModule_ProfileNameAppliesUpdateToInventoriedRootWhenMultipleModulePathsAreScanned()
+    {
+        using var feed = new TemporaryDirectory();
+        using var selectedRoot = new TemporaryDirectory();
+        using var otherRoot = new TemporaryDirectory();
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        CreateInstalledModule(selectedRoot.Path, "Company.Tools", "1.0.0");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: CreateModuleFiles("Company.Tools", "1.1.0"));
+        new ModuleRepositoryProfileStore().SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "Company",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "CompanyModules",
+            RepositoryUri = feed.Path
+        });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { selectedRoot.Path, otherRoot.Path })
+            .AddParameter("Name", new[] { "Company.Tools" })
+            .AddParameter("Latest")
+            .AddParameter("ProfileName", "Company");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.True(result.Apply.ExecutionRequested);
+        var action = Assert.Single(result.Plan.Actions, static action =>
+            string.Equals(action.ModuleName, "Company.Tools", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(selectedRoot.Path, action.TargetPath);
+        Assert.True(File.Exists(Path.Combine(selectedRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
+        Assert.False(File.Exists(Path.Combine(otherRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
     public void RepairManagedModule_PlanReportsLicenseRequiredPackageAndBlocksApplyWithoutAcceptance()
     {
         using var feed = new TemporaryDirectory();

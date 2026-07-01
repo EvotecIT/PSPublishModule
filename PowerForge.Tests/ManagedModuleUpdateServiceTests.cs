@@ -611,6 +611,74 @@ public sealed class ManagedModuleUpdateServiceTests
     }
 
     [Fact]
+    public async Task UpdateAsync_blocks_family_update_before_writing_when_target_version_is_unlisted_for_member()
+    {
+        var requests = new List<string>();
+        using var moduleRoot = new TemporaryDirectory();
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Cloud.Users", "1.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Cloud.Groups", "1.5.0"));
+        using var client = new HttpClient(new FamilyUnlistedUpdateHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var service = new ManagedModuleUpdateService(new NullLogger(), repositoryClient);
+        var request = new ManagedModuleUpdateRequest
+        {
+            Repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json"),
+            Name = "Company.Cloud.Users",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            FamilyPolicy = new ManagedModuleFamilyPolicy
+            {
+                ModuleNamePrefix = "Company.Cloud."
+            }
+        };
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateAsync(request));
+
+        Assert.Contains("family update cannot be applied", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Company.Cloud.Groups", exception.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Cloud.Users", "2.0.0")));
+        Assert.Contains("https://example.test/registration/company.cloud.groups/index.json", requests);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_blocks_family_author_policy_before_writing_requested_module()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Cloud.Users.2.0.0.nupkg"),
+            "Company.Cloud.Users",
+            "2.0.0",
+            files: CreateModuleFiles("Company.Cloud.Users", "2.0.0"),
+            authors: "Evotec");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Cloud.Groups.2.0.0.nupkg"),
+            "Company.Cloud.Groups",
+            "2.0.0",
+            files: CreateModuleFiles("Company.Cloud.Groups", "2.0.0"),
+            authors: "OtherPublisher");
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Cloud.Users", "1.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Cloud.Groups", "1.5.0"));
+        var service = new ManagedModuleUpdateService(new NullLogger());
+        var request = CreateRequest(feed.Path, moduleRoot.Path, "Company.Cloud.Users");
+        request.TrustPolicy = new ManagedModuleTrustPolicy
+        {
+            AllowedAuthors = new[] { "Evotec" }
+        };
+        request.FamilyPolicy = new ManagedModuleFamilyPolicy
+        {
+            ModuleNamePrefix = "Company.Cloud."
+        };
+
+        var exception = await Assert.ThrowsAsync<ManagedModuleTrustException>(() => service.UpdateAsync(request));
+
+        Assert.Equal("PackageAuthorNotAllowed", exception.Reason);
+        Assert.Equal("Company.Cloud.Groups", exception.ModuleName);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Cloud.Users", "2.0.0")));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Cloud.Groups", "2.0.0")));
+    }
+
+    [Fact]
     public async Task UpdateAsync_blocks_family_license_acceptance_before_writing_requested_module()
     {
         using var feed = new TemporaryDirectory();
@@ -825,6 +893,50 @@ public sealed class ManagedModuleUpdateServiceTests
                 {
                     Content = new ByteArrayContent(TestPackageFactory.CreateBytes("Company.Tools", "1.5.0"))
                 });
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+
+        private static Task<HttpResponseMessage> Json(string content)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(content, System.Text.Encoding.UTF8, "application/json")
+            });
+    }
+
+    private sealed class FamilyUnlistedUpdateHandler : HttpMessageHandler
+    {
+        private readonly List<string> _requests;
+
+        internal FamilyUnlistedUpdateHandler(List<string> requests)
+            => _requests = requests;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
+            _requests.Add(uri);
+
+            if (uri == "https://example.test/v3/index.json")
+                return Json("{\"resources\":[" +
+                            "{\"@id\":\"https://example.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}," +
+                            "{\"@id\":\"https://example.test/registration/\",\"@type\":\"RegistrationsBaseUrl/3.6.0\"}" +
+                            "]}");
+
+            if (uri == "https://example.test/packages/company.cloud.users/index.json")
+                return Json("{\"versions\":[\"2.0.0\"]}");
+
+            if (uri == "https://example.test/packages/company.cloud.groups/index.json")
+                return Json("{\"versions\":[\"2.0.0\"]}");
+
+            if (uri == "https://example.test/registration/company.cloud.users/index.json")
+                return Json("{\"items\":[{\"items\":[" +
+                            "{\"catalogEntry\":{\"version\":\"2.0.0\",\"listed\":true}}" +
+                            "]}]}");
+
+            if (uri == "https://example.test/registration/company.cloud.groups/index.json")
+                return Json("{\"items\":[{\"items\":[" +
+                            "{\"catalogEntry\":{\"version\":\"2.0.0\",\"listed\":false}}" +
+                            "]}]}");
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         }

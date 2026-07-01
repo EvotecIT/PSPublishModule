@@ -181,13 +181,15 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
             ValidateVersionPolicy();
 
             var inventory = ResolveInventory();
+            var selectedModules = SelectBaselineModules(inventory).ToArray();
             var plan = ModuleStatePlanCommandSupport.CreatePlanResult(
                 inventory,
-                CreateDesiredState(inventory),
+                CreateDesiredState(selectedModules),
                 ResolveOptionalFilePaths(MaintenanceReceiptPath, nameof(MaintenanceReceiptPath)),
                 repair: true,
                 ParseCleanupMode(Cleanup),
                 Family);
+            ApplySelectedInventoryTargets(plan, selectedModules);
             ApplyLatestUpdateIntent(plan);
             ApplyForceRepairIntent(plan);
             EnrichManagedLicenseMetadata(plan);
@@ -239,9 +241,8 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
             loadedModules);
     }
 
-    private object CreateDesiredState(ModuleStateInventoryResult inventory)
+    private object CreateDesiredState(ModuleStateInstalledModuleResult[] selectedModules)
     {
-        var selectedModules = SelectBaselineModules(inventory).ToArray();
         var desiredRepository = ResolveRepositoryName();
         var modules = new ArrayList();
 
@@ -266,6 +267,57 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
         {
             ["Modules"] = modules
         };
+    }
+
+    private void ApplySelectedInventoryTargets(
+        ModuleStatePlanResult plan,
+        IReadOnlyList<ModuleStateInstalledModuleResult> selectedModules)
+    {
+        if (!string.IsNullOrWhiteSpace(ModuleRoot) || ModulePath is { Length: 1 } || plan.Actions is null)
+            return;
+
+        var selectedByActionKey = selectedModules
+            .GroupBy(static module => CreateSelectedActionKey(module.Name, module.Scope), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var selectedByName = selectedModules
+            .GroupBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
+            .Where(static group => group.Count() == 1)
+            .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
+        foreach (var action in plan.Actions)
+        {
+            if (!string.IsNullOrWhiteSpace(action.TargetPath))
+                continue;
+
+            var actionKey = CreateSelectedActionKey(action.ModuleName, action.TargetScope);
+            if (!selectedByActionKey.TryGetValue(actionKey, out var selected) &&
+                !selectedByName.TryGetValue(action.ModuleName, out selected))
+                continue;
+
+            var moduleRoot = ResolveSelectedModuleRoot(selected);
+            if (!string.IsNullOrWhiteSpace(moduleRoot))
+                action.TargetPath = moduleRoot;
+        }
+    }
+
+    private static string CreateSelectedActionKey(string moduleName, string? scope)
+        => string.Join("|", moduleName, scope ?? string.Empty);
+
+    private static string? ResolveSelectedModuleRoot(ModuleStateInstalledModuleResult selected)
+    {
+        if (string.IsNullOrWhiteSpace(selected.Path))
+            return null;
+
+        var selectedDirectory = new DirectoryInfo(selected.Path!);
+        if (string.Equals(selectedDirectory.Name, selected.Name, StringComparison.OrdinalIgnoreCase))
+            return selectedDirectory.Parent?.FullName;
+
+        var moduleDirectory = selectedDirectory.Parent;
+        if (moduleDirectory is null)
+            return null;
+
+        return string.Equals(moduleDirectory.Name, selected.Name, StringComparison.OrdinalIgnoreCase)
+            ? moduleDirectory.Parent?.FullName
+            : null;
     }
 
     private ModuleStateInstalledModuleResult[] SelectBaselineModules(ModuleStateInventoryResult inventory)

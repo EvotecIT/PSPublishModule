@@ -88,6 +88,26 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
     }
 
     [Fact]
+    public void ResolveActionForce_AppliesCommandForceToUpdateActions()
+    {
+        var action = new ModuleStatePlanAction(
+            ModuleStatePlanActionKind.Update,
+            "Company.Tools",
+            "1.0.0",
+            "*",
+            "latest requested");
+
+        var force = InvokeResolveActionForce(
+            action,
+            new ModuleStatePrivateDeliveryOptions
+            {
+                Force = true
+            });
+
+        Assert.True(force);
+    }
+
+    [Fact]
     public void CreateRequest_PreservesRequestedAutoTransport()
     {
         var request = InvokeCreateRequest(
@@ -183,8 +203,8 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
     public void DeliveryGroupKey_DistinguishesSameModuleAcrossScopes()
     {
         var comparer = DeliveryGroupKeyComparer.Instance;
-        var currentUser = new DeliveryGroupKey(ModuleStatePlanActionKind.Install, "Company", false, "Company.Tools", "CurrentUser");
-        var allUsers = new DeliveryGroupKey(ModuleStatePlanActionKind.Install, "Company", false, "Company.Tools", "AllUsers");
+        var currentUser = new DeliveryGroupKey(ModuleStatePlanActionKind.Install, "Company", false, "Company.Tools", "CurrentUser", null);
+        var allUsers = new DeliveryGroupKey(ModuleStatePlanActionKind.Install, "Company", false, "Company.Tools", "AllUsers", null);
 
         Assert.False(comparer.Equals(currentUser, allUsers));
     }
@@ -291,6 +311,16 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
         Assert.NotNull(method);
 
         return Assert.IsType<string?>(method!.Invoke(null, new object?[] { action, options }));
+    }
+
+    private static bool InvokeResolveActionForce(ModuleStatePlanAction action, ModuleStatePrivateDeliveryOptions options)
+    {
+        var method = typeof(ModuleStatePrivateDeliveryService).GetMethod(
+            "ResolveActionForce",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        return Assert.IsType<bool>(method!.Invoke(null, new object?[] { action, options }));
     }
 
     private static ManagedModuleUpdateRequest InvokeManagedCreateUpdateRequest(

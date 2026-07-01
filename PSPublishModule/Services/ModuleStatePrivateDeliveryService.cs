@@ -29,7 +29,8 @@ internal sealed class ModuleStatePrivateDeliveryService
                 ResolveActionRepository(action, options),
                 ResolveActionForce(action, options),
                 action.ModuleName,
-                action.TargetScope),
+                action.TargetScope,
+                action.TargetPath),
                 DeliveryGroupKeyComparer.Instance)
             .OrderBy(static group => group.Key.Kind == ModuleStatePlanActionKind.Update ? 0 : 1)
             .ToArray();
@@ -142,10 +143,18 @@ internal sealed class ModuleStatePrivateDeliveryService
     {
         request.ManagedAllowClobber = options.ManagedAllowClobber;
         request.ManagedAcceptLicense = options.ManagedAcceptLicense;
-        request.ManagedModuleRoot = options.ManagedModuleRoot;
+        request.ManagedModuleRoot = ResolveManagedModuleRoot(actions, options);
         request.ManagedScope = ResolveManagedScope(actions);
         request.ManagedLoadedModules = options.LoadedModules;
     }
+
+    private static string? ResolveManagedModuleRoot(
+        IReadOnlyList<ModuleStatePlanAction> actions,
+        ModuleStatePrivateDeliveryOptions options)
+        => actions
+            .Select(static action => action.TargetPath)
+            .FirstOrDefault(static path => !string.IsNullOrWhiteSpace(path))
+           ?? options.ManagedModuleRoot;
 
     private static ManagedModuleInstallScope ResolveManagedScope(IReadOnlyList<ModuleStatePlanAction> actions)
     {
@@ -209,7 +218,8 @@ internal sealed class ModuleStatePrivateDeliveryService
     }
 
     private static bool ResolveActionForce(ModuleStatePlanAction action, ModuleStatePrivateDeliveryOptions options)
-        => action.Force || (options.Force && action.Kind == ModuleStatePlanActionKind.Install);
+        => action.Force ||
+           (options.Force && action.Kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update);
 
     private static bool RequiresPrereleaseDelivery(IEnumerable<ModuleStatePlanAction> actions)
         => actions.Any(static action => ConstraintHasPrerelease(ParseVersionConstraint(action.ModuleName, action.VersionPolicy)));
@@ -356,13 +366,20 @@ internal readonly struct ModuleStateVersionConstraint
 
 internal readonly struct DeliveryGroupKey
 {
-    internal DeliveryGroupKey(ModuleStatePlanActionKind kind, string? repository, bool force, string moduleName, string? targetScope)
+    internal DeliveryGroupKey(
+        ModuleStatePlanActionKind kind,
+        string? repository,
+        bool force,
+        string moduleName,
+        string? targetScope,
+        string? targetPath)
     {
         Kind = kind;
         Repository = string.IsNullOrWhiteSpace(repository) ? null : repository!.Trim();
         Force = force;
         ModuleName = moduleName;
         TargetScope = string.IsNullOrWhiteSpace(targetScope) ? null : targetScope!.Trim();
+        TargetPath = string.IsNullOrWhiteSpace(targetPath) ? null : targetPath!.Trim();
     }
 
     internal ModuleStatePlanActionKind Kind { get; }
@@ -374,6 +391,8 @@ internal readonly struct DeliveryGroupKey
     internal string ModuleName { get; }
 
     internal string? TargetScope { get; }
+
+    internal string? TargetPath { get; }
 }
 
 internal sealed class DeliveryGroupKeyComparer : IEqualityComparer<DeliveryGroupKey>
@@ -382,10 +401,11 @@ internal sealed class DeliveryGroupKeyComparer : IEqualityComparer<DeliveryGroup
 
     public bool Equals(DeliveryGroupKey x, DeliveryGroupKey y)
         => x.Kind == y.Kind &&
-           x.Force == y.Force &&
-           string.Equals(x.Repository, y.Repository, StringComparison.OrdinalIgnoreCase) &&
-           string.Equals(x.ModuleName, y.ModuleName, StringComparison.OrdinalIgnoreCase) &&
-           string.Equals(x.TargetScope, y.TargetScope, StringComparison.OrdinalIgnoreCase);
+            x.Force == y.Force &&
+            string.Equals(x.Repository, y.Repository, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(x.ModuleName, y.ModuleName, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(x.TargetScope, y.TargetScope, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(x.TargetPath, y.TargetPath, StringComparison.OrdinalIgnoreCase);
 
     public int GetHashCode(DeliveryGroupKey obj)
     {
@@ -394,7 +414,8 @@ internal sealed class DeliveryGroupKeyComparer : IEqualityComparer<DeliveryGroup
             var hash = ((int)obj.Kind * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Repository ?? string.Empty);
             hash = (hash * 397) ^ obj.Force.GetHashCode();
             hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.ModuleName ?? string.Empty);
-            return (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.TargetScope ?? string.Empty);
+            hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.TargetScope ?? string.Empty);
+            return (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.TargetPath ?? string.Empty);
         }
     }
 }

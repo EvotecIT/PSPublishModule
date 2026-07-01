@@ -519,9 +519,9 @@ public sealed partial class ManagedModuleRepositoryClient
     {
         var searchService = await ResolveSearchQueryServiceAsync(repository, credential, cancellationToken).ConfigureAwait(false);
         var searchText = ManagedModuleSearchMatcher.ToSearchText(query);
-        var uri = new Uri(
-            new Uri(EnsureTrailingSlash(searchService)),
-            $"?q={Uri.EscapeDataString(searchText)}&prerelease={includePrerelease.ToString().ToLowerInvariant()}&take={Math.Max(1, take)}&semVerLevel=2.0.0");
+        var uri = BuildSearchQueryUri(
+            searchService,
+            $"q={Uri.EscapeDataString(searchText)}&prerelease={includePrerelease.ToString().ToLowerInvariant()}&take={Math.Max(1, take)}&semVerLevel=2.0.0");
         using var response = await SendWithPolicyAsync(
             () => CreateRequest(HttpMethod.Get, uri, credential, "application/json"),
             cancellationToken).ConfigureAwait(false);
@@ -762,7 +762,7 @@ public sealed partial class ManagedModuleRepositoryClient
         if (_packageBaseAddressCache.TryGetValue(repository.Source, out var cached))
             return cached;
 
-        if (!repository.Source.EndsWith("index.json", StringComparison.OrdinalIgnoreCase))
+        if (!TryNormalizeServiceIndexSource(repository.Source, out var serviceIndexSource))
         {
             var flat = EnsureTrailingSlash(repository.Source);
             _packageBaseAddressCache[repository.Source] = flat;
@@ -770,7 +770,7 @@ public sealed partial class ManagedModuleRepositoryClient
         }
 
         using var response = await SendWithPolicyAsync(
-            () => CreateRequest(HttpMethod.Get, new Uri(repository.Source), credential, "application/json"),
+            () => CreateRequest(HttpMethod.Get, new Uri(serviceIndexSource), credential, "application/json"),
             cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw CreateRepositoryHttpException(repository, "ServiceIndex", response.StatusCode, $"Unable to query NuGet service index '{repository.Source}'.");
@@ -796,7 +796,7 @@ public sealed partial class ManagedModuleRepositoryClient
                 packageBase = EnsureTrailingSlash(id!);
             else if (IsSearchQueryServiceResource(resource))
             {
-                var resolved = EnsureTrailingSlash(id!);
+                var resolved = NormalizeServiceResource(id!);
                 _searchQueryServiceCache[repository.Source] = resolved;
             }
             else if (IsRegistrationBaseResource(resource))
@@ -844,14 +844,14 @@ public sealed partial class ManagedModuleRepositoryClient
         if (_searchQueryServiceCache.TryGetValue(repository.Source, out var cached))
             return cached;
 
-        if (!repository.Source.EndsWith("index.json", StringComparison.OrdinalIgnoreCase))
+        if (!TryNormalizeServiceIndexSource(repository.Source, out var serviceIndexSource))
             throw CreateRepositoryContractException(
                 repository,
                 "SearchServiceDiscovery",
                 "Wildcard package search requires a NuGet v3 service index that exposes SearchQueryService; flat-container and package endpoints do not support search.");
 
         using var response = await SendWithPolicyAsync(
-            () => CreateRequest(HttpMethod.Get, new Uri(repository.Source), credential, "application/json"),
+            () => CreateRequest(HttpMethod.Get, new Uri(serviceIndexSource), credential, "application/json"),
             cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw CreateRepositoryHttpException(repository, "SearchServiceDiscovery", response.StatusCode, $"Unable to query NuGet service index '{repository.Source}'.");
@@ -874,7 +874,7 @@ public sealed partial class ManagedModuleRepositoryClient
                 continue;
 
             if (IsSearchQueryServiceResource(resource))
-                searchService = EnsureTrailingSlash(id!);
+                searchService = NormalizeServiceResource(id!);
             else if (IsPackageBaseAddressResource(resource))
             {
                 var resolved = EnsureTrailingSlash(id!);
@@ -907,11 +907,11 @@ public sealed partial class ManagedModuleRepositoryClient
         if (_registrationBaseAddressCache.TryGetValue(repository.Source, out var cached))
             return string.IsNullOrWhiteSpace(cached) ? null : cached;
 
-        if (!repository.Source.EndsWith("index.json", StringComparison.OrdinalIgnoreCase))
+        if (!TryNormalizeServiceIndexSource(repository.Source, out var serviceIndexSource))
             return null;
 
         using var response = await SendWithPolicyAsync(
-            () => CreateRequest(HttpMethod.Get, new Uri(repository.Source), credential, "application/json"),
+            () => CreateRequest(HttpMethod.Get, new Uri(serviceIndexSource), credential, "application/json"),
             cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw CreateRepositoryHttpException(repository, "RegistrationServiceDiscovery", response.StatusCode, $"Unable to query NuGet service index '{repository.Source}'.");
@@ -941,7 +941,7 @@ public sealed partial class ManagedModuleRepositoryClient
             }
             else if (IsSearchQueryServiceResource(resource))
             {
-                var resolved = EnsureTrailingSlash(id!);
+                var resolved = NormalizeServiceResource(id!);
                 _searchQueryServiceCache[repository.Source] = resolved;
             }
         }
@@ -1186,6 +1186,30 @@ public sealed partial class ManagedModuleRepositoryClient
 
     private static string EnsureTrailingSlash(string value)
         => value.EndsWith("/", StringComparison.Ordinal) ? value : value + "/";
+
+    private static string NormalizeServiceResource(string value)
+        => value.Trim();
+
+    private static bool TryNormalizeServiceIndexSource(string source, out string serviceIndexSource)
+    {
+        var trimmed = source.Trim();
+        var normalized = trimmed.TrimEnd('/');
+        if (normalized.EndsWith("index.json", StringComparison.OrdinalIgnoreCase))
+        {
+            serviceIndexSource = normalized;
+            return true;
+        }
+
+        serviceIndexSource = trimmed;
+        return false;
+    }
+
+    private static Uri BuildSearchQueryUri(string searchService, string query)
+    {
+        var trimmed = searchService.Trim();
+        var separator = trimmed.IndexOf("?", StringComparison.Ordinal) >= 0 ? "&" : "?";
+        return new Uri(trimmed + separator + query);
+    }
 
     private static ManagedModuleRepository CreatePowerShellGalleryV2Fallback(ManagedModuleRepository repository)
         => new(repository.Name, "https://www.powershellgallery.com/api/v2", ManagedModuleRepositoryKind.NuGetV2, repository.Trusted);

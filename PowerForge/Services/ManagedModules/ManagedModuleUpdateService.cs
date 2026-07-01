@@ -284,6 +284,7 @@ public sealed class ManagedModuleUpdateService
                 familyName,
                 targetVersion,
                 resolvePackageMetadata: false,
+                requireListed: true,
                 cancellationToken).ConfigureAwait(false);
             var repositoryVersionAvailable = repositoryVersion is not null;
             var action = ResolveFamilyPlanAction(currentVersion, targetVersion, request.Force, repositoryVersionAvailable);
@@ -291,11 +292,14 @@ public sealed class ManagedModuleUpdateService
                 repositoryVersion is not null &&
                 FamilyActionWritesFiles(action))
             {
-                repositoryVersion = await EnrichVersionInfoWithPackageMetadataAsync(
+                var metadata = await GetPackageMetadataAsync(
                     request.Repository,
                     repositoryVersion,
                     request.Credential,
                     cancellationToken).ConfigureAwait(false);
+                ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, metadata, request.TrustPolicy);
+                if (metadata is not null)
+                    repositoryVersion = CopyVersionInfoWithPackageMetadata(repositoryVersion, metadata);
             }
 
             var selectedPathVersion = action is ManagedModuleFamilyUpdatePlanAction.Update or ManagedModuleFamilyUpdatePlanAction.Reinstall
@@ -328,6 +332,7 @@ public sealed class ManagedModuleUpdateService
         string moduleName,
         string targetVersion,
         bool resolvePackageMetadata,
+        bool requireListed,
         CancellationToken cancellationToken)
     {
         IReadOnlyList<ManagedModuleVersionInfo> versions;
@@ -344,7 +349,9 @@ public sealed class ManagedModuleUpdateService
         {
             return null;
         }
-        var repositoryVersion = versions.FirstOrDefault(version => ManagedModuleVersionComparer.Instance.Compare(version.Version, targetVersion) == 0);
+        var repositoryVersion = versions.FirstOrDefault(version =>
+            (!requireListed || version.Listed) &&
+            ManagedModuleVersionComparer.Instance.Compare(version.Version, targetVersion) == 0);
         if (repositoryVersion is null)
             return null;
 
@@ -368,6 +375,7 @@ public sealed class ManagedModuleUpdateService
             moduleName,
             targetVersion,
             resolvePackageMetadata: false,
+            requireListed: false,
             cancellationToken).ConfigureAwait(false);
         return repositoryVersion is null
             ? null
@@ -492,7 +500,7 @@ public sealed class ManagedModuleUpdateService
         if (versionInfo.RequireLicenseAcceptance || !string.IsNullOrWhiteSpace(versionInfo.License))
             return versionInfo;
 
-        var metadata = await _repositoryClient.GetPackageMetadataAsync(
+        var metadata = await GetPackageMetadataAsync(
             repository,
             versionInfo.Name,
             versionInfo.Version,
@@ -503,6 +511,26 @@ public sealed class ManagedModuleUpdateService
             ? versionInfo
             : CopyVersionInfoWithPackageMetadata(versionInfo, metadata);
     }
+
+    private Task<ManagedModulePackageMetadata?> GetPackageMetadataAsync(
+        ManagedModuleRepository repository,
+        ManagedModuleVersionInfo versionInfo,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+        => GetPackageMetadataAsync(repository, versionInfo.Name, versionInfo.Version, credential, cancellationToken);
+
+    private Task<ManagedModulePackageMetadata?> GetPackageMetadataAsync(
+        ManagedModuleRepository repository,
+        string moduleName,
+        string version,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+        => _repositoryClient.GetPackageMetadataAsync(
+            repository,
+            moduleName,
+            version,
+            credential,
+            cancellationToken);
 
     private static ManagedModuleVersionInfo CopyVersionInfoWithPackageMetadata(
         ManagedModuleVersionInfo versionInfo,

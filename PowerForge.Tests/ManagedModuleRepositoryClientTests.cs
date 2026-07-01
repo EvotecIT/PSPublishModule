@@ -53,6 +53,22 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task GetVersionsAsync_treats_trailing_slash_service_index_as_v3_index()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json/");
+
+        var versions = await repositoryClient.GetVersionsAsync(repository, "Company.Tools", includePrerelease: false);
+
+        Assert.Equal(new[] { "1.0.0", "1.1.0" }, versions.Select(version => version.Version));
+        Assert.Contains(requests, request => request.Url == "https://example.test/v3/index.json");
+        Assert.Contains(requests, request => request.Url == "https://example.test/packages/company.tools/index.json");
+        Assert.DoesNotContain(requests, request => request.Url == "https://example.test/v3/index.json/company.tools/index.json");
+    }
+
+    [Fact]
     public async Task GetVersionsAsync_returns_empty_when_nuget_v3_package_is_absent()
     {
         var requests = new List<RecordedRequest>();
@@ -976,7 +992,7 @@ public sealed class ManagedModuleRepositoryClientTests
         var results = await repositoryClient.SearchPackagesAsync(repository, "Company.*");
 
         Assert.Equal(new[] { "Company.Core", "Company.Tools" }, results.Select(result => result.Name));
-        Assert.Contains(requests, request => request.Url == "https://example.test/search/?q=Company.&prerelease=false&take=100&semVerLevel=2.0.0");
+        Assert.Contains(requests, request => request.Url == "https://example.test/search?q=Company.&prerelease=false&take=100&semVerLevel=2.0.0");
     }
 
     [Fact]
@@ -1112,7 +1128,7 @@ public sealed class ManagedModuleRepositoryClientTests
                     : string.Empty;
                 return Json("{\"resources\":[" +
                             "{\"@id\":\"https://example.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}," +
-                            "{\"@id\":\"https://example.test/search/\",\"@type\":\"SearchQueryService/3.5.0\"}," +
+                            "{\"@id\":\"https://example.test/search\",\"@type\":\"SearchQueryService/3.5.0\"}," +
                             "{\"@id\":\"https://example.test/publish/\",\"@type\":\"PackagePublish/2.0.0\"}" +
                             registration +
                             "]}");
@@ -1351,17 +1367,17 @@ public sealed class ManagedModuleRepositoryClientTests
                 });
             }
 
-            if (uri.AbsoluteUri == "https://example.test/search/?q=Company.&prerelease=false&take=100&semVerLevel=2.0.0")
+            if (uri.AbsoluteUri == "https://example.test/search?q=Company.&prerelease=false&take=100&semVerLevel=2.0.0")
                 return Json("{\"data\":[" +
                             "{\"id\":\"Company.Tools\",\"version\":\"1.1.0\",\"listed\":true}," +
                             "{\"id\":\"Company.Core\",\"version\":\"2.0.0\",\"listed\":true}," +
                             "{\"id\":\"Other.Module\",\"version\":\"9.0.0\",\"listed\":true}" +
                             "]}");
 
-            if (uri.AbsoluteUri == "https://example.test/search/?q=Company.Tools&prerelease=false&take=20&semVerLevel=2.0.0")
+            if (uri.AbsoluteUri == "https://example.test/search?q=Company.Tools&prerelease=false&take=20&semVerLevel=2.0.0")
                 return Json("{\"data\":[{\"id\":\"Company.Tools\",\"version\":\"1.1.0\",\"listed\":true}]}");
 
-            if (uri.AbsoluteUri == "https://example.test/search/?q=Unlisted.Tools&prerelease=false&take=20&semVerLevel=2.0.0")
+            if (uri.AbsoluteUri == "https://example.test/search?q=Unlisted.Tools&prerelease=false&take=20&semVerLevel=2.0.0")
                 return Json("{\"data\":[{\"id\":\"Unlisted.Tools\",\"version\":\"1.5.0\",\"listed\":true}]}");
 
             if (uri.AbsoluteUri == "https://example.test/publish/" && request.Method == HttpMethod.Put)
