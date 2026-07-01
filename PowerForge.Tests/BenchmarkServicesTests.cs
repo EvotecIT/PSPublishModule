@@ -596,6 +596,33 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void ImportBenchmarkResultCommand_WhatIfSkipsNormalizedOutputWrite()
+    {
+        var root = CreateTempRoot();
+        var samplesPath = Path.Combine(root, "samples.json");
+        var outputPath = Path.Combine(root, "normalized.json");
+        BenchmarkJson.Write(samplesPath, new[]
+        {
+            Sample("suite", "case", "Run", "Managed", 100)
+        });
+        File.WriteAllText(outputPath, "old");
+        var initialSessionState = System.Management.Automation.Runspaces.InitialSessionState.CreateDefault();
+        initialSessionState.Commands.Add(new System.Management.Automation.Runspaces.SessionStateCmdletEntry("Import-BenchmarkResult", typeof(PSPublishModule.ImportBenchmarkResultCommand), helpFileName: null));
+        using var runspace = System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace(initialSessionState);
+        runspace.Open();
+        using var ps = System.Management.Automation.PowerShell.Create(runspace);
+        ps.AddCommand("Import-BenchmarkResult")
+            .AddParameter("Path", samplesPath)
+            .AddParameter("OutputPath", outputPath)
+            .AddParameter("WhatIf", true);
+
+        var result = Assert.IsType<BenchmarkRunResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        Assert.Equal("old", File.ReadAllText(outputPath));
+        Assert.DoesNotContain("normalized.json", result.Artifacts.Keys);
+    }
+
+    [Fact]
     public void GateService_ResolvesGroupedVariablesCaseInsensitively()
     {
         var root = CreateTempRoot();
@@ -883,6 +910,35 @@ public sealed class BenchmarkServicesTests
 
         Assert.Single(result.Samples);
         Assert.Equal("Write", Assert.Single(result.Summary).Scenario);
+    }
+
+    [Fact]
+    public void Importer_DirectoryUsesDirectorySuiteForBenchmarkDotNetJsonReports()
+    {
+        var root = CreateTempRoot();
+        var artifactRoot = Path.Combine(root, "DirectorySuite");
+        Directory.CreateDirectory(artifactRoot);
+        File.WriteAllText(Path.Combine(artifactRoot, "Demo-report-full.json"), """
+{
+  "Title": "json-title",
+  "Benchmarks": [
+    {
+      "Method": "Write",
+      "Statistics": {
+        "Median": 500
+      }
+    }
+  ]
+}
+""");
+
+        var result = new BenchmarkResultImporter().Import(artifactRoot);
+        var sample = Assert.Single(result.Samples);
+        var row = Assert.Single(result.Summary);
+
+        Assert.Equal("DirectorySuite", result.Suite);
+        Assert.Equal("DirectorySuite", sample.Suite);
+        Assert.Equal("DirectorySuite", row.Suite);
     }
 
     [Fact]
@@ -1589,6 +1645,24 @@ benchmark 'dup-operation' {
     }
 
     [Fact]
+    public void DslRuntime_RejectsDuplicateMetricNames()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'dup-metric' {
+    axis Operation Run
+    axis Engine Managed
+    metric RowsPerSecond { 1 }
+    metric rowspersecond { 2 }
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+
+        Assert.Contains("already defines metric", ex.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void DslRuntime_PreservesNearestCapturedScopeAndUserPathVariables()
     {
         var root = CreateTempRoot();
@@ -2109,6 +2183,25 @@ benchmark 'path' -out 'relative-out' {
     }
 
     [Fact]
+    public void Runner_RejectsSkippedComparisonBaselineBeforeMeasurement()
+    {
+        var suite = CreateRunnableSuite();
+        var output = Path.Combine(suite.OutputRoot, "skipped-baseline-side-effect.txt");
+        var other = new PowerShellBenchmarkEngine { Name = "Other" };
+        other.Operations["Run"] = ScriptBlock.Create($"[IO.File]::WriteAllText('{output.Replace("'", "''")}', 'executed')");
+        suite.Engines.Add(other);
+        suite.Axes.Single(axis => axis.Name == "Engine").Values.Add("Other");
+        suite.Skip = ScriptBlock.Create("param($case) $case.Engine -eq 'Managed'");
+        suite.Comparisons.Add(new PowerShellBenchmarkComparison { Dimension = "Engine", Baseline = "Managed" });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new PowerShellBenchmarkRunner().Run(suite));
+
+        Assert.Contains("Managed", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("no runnable work items", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(output));
+    }
+
+    [Fact]
     public void Runner_RejectsUnknownReadmeRenderers()
     {
         var suite = CreateRunnableSuite();
@@ -2126,6 +2219,27 @@ benchmark 'path' -out 'relative-out' {
         var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Run(suite));
 
         Assert.Contains("ComparsionTable", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(output));
+    }
+
+    [Fact]
+    public void Runner_PreflightsReadmeBlocksBeforeMeasurement()
+    {
+        var suite = CreateRunnableSuite();
+        var output = Path.Combine(suite.OutputRoot, "readme-marker-side-effect.txt");
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create($"[IO.File]::WriteAllText('{output.Replace("'", "''")}', 'executed')");
+        var readme = Path.Combine(CreateTempRoot(), "README.md");
+        File.WriteAllText(readme, "<!-- BENCHMARK:other:START -->\nold\n<!-- BENCHMARK:other:END -->\n");
+        suite.ReadmeBlocks.Add(new PowerShellBenchmarkReadmeBlock
+        {
+            Path = readme,
+            BlockId = "results",
+            Renderer = "SummaryTable"
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new PowerShellBenchmarkRunner().Run(suite));
+
+        Assert.Contains("results", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.False(File.Exists(output));
     }
 

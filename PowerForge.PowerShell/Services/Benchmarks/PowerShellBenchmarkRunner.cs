@@ -137,6 +137,7 @@ public sealed class PowerShellBenchmarkRunner
         var started = DateTimeOffset.UtcNow;
         var samples = new List<BenchmarkSample>();
         var workItems = Plan(suite);
+        ValidateComparisonWorkItems(suite, workItems);
         var runnable = new List<PowerShellBenchmarkWorkItem>();
         foreach (var item in workItems)
         {
@@ -295,11 +296,29 @@ public sealed class PowerShellBenchmarkRunner
 
     private static void ValidateReadmeBlocks(PowerShellBenchmarkSuite suite)
     {
+        var updater = new BenchmarkDocumentUpdater();
         foreach (var block in suite.ReadmeBlocks)
         {
             if (IsSupportedReadmeRenderer(block.Renderer))
+            {
+                updater.ValidateBlock(block.Path, block.BlockId);
                 continue;
+            }
             throw new NotSupportedException($"Benchmark README renderer '{block.Renderer}' is not supported.");
+        }
+    }
+
+    private static void ValidateComparisonWorkItems(PowerShellBenchmarkSuite suite, IReadOnlyList<PowerShellBenchmarkWorkItem> workItems)
+    {
+        foreach (var comparison in suite.Comparisons)
+        {
+            if (string.IsNullOrWhiteSpace(comparison.Baseline))
+                continue;
+            if (!string.Equals(comparison.Dimension, "Engine", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (workItems.Any(item => !item.IsSkipped && string.Equals(item.Engine, comparison.Baseline, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            throw new InvalidOperationException($"Benchmark comparison baseline engine '{comparison.Baseline}' has no runnable work items in suite '{suite.Name}'. Check skip rules or choose a runnable baseline.");
         }
     }
 

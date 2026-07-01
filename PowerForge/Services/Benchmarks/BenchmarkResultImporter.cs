@@ -61,7 +61,10 @@ public sealed class BenchmarkResultImporter
             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         if (benchmarkDotNetJsonFiles.Length > 0)
-            return BuildImportedResult(defaultSuite, benchmarkDotNetJsonFiles.SelectMany(file => ImportJson(file, suite).Samples).ToArray());
+        {
+            var benchmarkDotNetSamples = benchmarkDotNetJsonFiles.SelectMany(file => ImportJson(file, suite ?? defaultSuite).Samples).ToArray();
+            return BuildImportedResult(suite ?? defaultSuite, benchmarkDotNetSamples);
+        }
 
         var benchmarkDotNetFiles = Directory.GetFiles(path, "*-report.csv", SearchOption.AllDirectories)
             .Distinct(StringComparer.OrdinalIgnoreCase)

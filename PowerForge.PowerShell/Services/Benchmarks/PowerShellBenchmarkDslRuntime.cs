@@ -206,7 +206,13 @@ public static class PowerShellBenchmarkDslRuntime
     /// <param name="name">Metric name.</param>
     /// <param name="scriptBlock">Metric block.</param>
     public static void Metric(string name, ScriptBlock scriptBlock)
-        => RequireSuite().Metrics.Add(new PowerShellBenchmarkMetric { Name = RequireName(name, "metric name"), ScriptBlock = CaptureScriptBlock(scriptBlock) });
+    {
+        var suite = RequireSuite();
+        var metricName = RequireName(name, "metric name");
+        if (suite.Metrics.Any(metric => string.Equals(metric.Name, metricName, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException($"Benchmark suite '{suite.Name}' already defines metric '{metricName}'.");
+        suite.Metrics.Add(new PowerShellBenchmarkMetric { Name = metricName, ScriptBlock = CaptureScriptBlock(scriptBlock) });
+    }
 
     /// <summary>
     /// Adds a comparison definition.

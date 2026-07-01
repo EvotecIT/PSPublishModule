@@ -11,7 +11,7 @@ namespace PSPublishModule;
 /// <summary>Import BenchmarkDotNet artifacts</summary>
 /// <code>Import-BenchmarkResult -Path .\BenchmarkDotNet.Artifacts -OutputPath .\Build\Benchmarks\normalized.json</code>
 /// </example>
-[Cmdlet(VerbsData.Import, "BenchmarkResult")]
+[Cmdlet(VerbsData.Import, "BenchmarkResult", SupportsShouldProcess = true)]
 [OutputType(typeof(BenchmarkRunResult))]
 public sealed class ImportBenchmarkResultCommand : PSCmdlet
 {
@@ -44,8 +44,11 @@ public sealed class ImportBenchmarkResultCommand : PSCmdlet
         if (!string.IsNullOrWhiteSpace(OutputPath))
         {
             var output = SessionState.Path.GetUnresolvedProviderPathFromPSPath(OutputPath!);
-            BenchmarkJson.Write(output, result);
-            result.Artifacts["normalized.json"] = output;
+            if (ShouldProcess(output, "Write normalized benchmark result"))
+            {
+                BenchmarkJson.Write(output, result);
+                result.Artifacts["normalized.json"] = output;
+            }
         }
 
         WriteObject(result);
