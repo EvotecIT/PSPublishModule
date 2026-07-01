@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Management.Automation;
+using System.Management.Automation.Runspaces;
 using System.Text;
 
 namespace PowerForge;
@@ -93,6 +95,14 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
             identity.GrantFileAccess(request.SpecPath, "R");
             identity.GrantFileAccess(GetPowerForgeAssemblyPath(), "R");
             identity.GrantFileAccess(GetPowerForgePowerShellAssemblyPath(), "R");
+            var modulePaths = GetImportableCallerModulePaths();
+            foreach (var modulePath in modulePaths)
+            {
+                var moduleDirectory = Path.GetDirectoryName(modulePath);
+                if (!string.IsNullOrWhiteSpace(moduleDirectory))
+                    identity.GrantDirectoryAccess(moduleDirectory!, "(OI)(CI)RX");
+                identity.GrantFileAccess(modulePath, "R");
+            }
             foreach (var readmePath in request.ReadmePaths.Where(path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.OrdinalIgnoreCase))
                 identity.GrantFileAccess(readmePath, "M");
 
@@ -111,7 +121,8 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
                 WarmupCount = request.WarmupCount,
                 IterationCount = request.IterationCount,
                 RunMode = request.RunMode ?? string.Empty,
-                SuiteName = request.SuiteName ?? string.Empty
+                SuiteName = request.SuiteName ?? string.Empty,
+                ModulePaths = modulePaths
             });
             identity.GrantFileAccess(wrapperPath, "R");
             identity.GrantFileAccess(readmePathFile, "R");
@@ -216,6 +227,27 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
     private static string GetPowerForgePowerShellAssemblyPath()
         => typeof(PowerShellBenchmarkRunner).Assembly.Location;
 
+    internal static string[] GetImportableCallerModulePaths()
+    {
+        try
+        {
+            using var powerShell = PowerShell.Create();
+            if (Runspace.DefaultRunspace is not null)
+                powerShell.Runspace = Runspace.DefaultRunspace;
+            powerShell.AddCommand("Get-Module");
+            return powerShell.Invoke<PSModuleInfo>()
+                .Select(module => module.Path)
+                .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                .Select(Path.GetFullPath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
+    }
+
     private static bool ShouldKeep(PowerShellBenchmarkCleanupMode cleanup, bool failed)
         => cleanup == PowerShellBenchmarkCleanupMode.KeepAlways
            || (cleanup == PowerShellBenchmarkCleanupMode.KeepOnFailure && failed);
@@ -262,6 +294,7 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
         public int IterationCount { get; set; }
         public string RunMode { get; set; } = string.Empty;
         public string SuiteName { get; set; } = string.Empty;
+        public string[] ModulePaths { get; set; } = Array.Empty<string>();
     }
 
     private const string ChildRunnerScript = """
@@ -274,6 +307,11 @@ Set-Location -LiteralPath $request.WorkingDirectory
 [System.Environment]::CurrentDirectory = (Get-Location).ProviderPath
 Add-Type -Path $request.PowerForgeAssemblyPath
 Add-Type -Path $request.PowerForgePowerShellAssemblyPath
+foreach ($modulePath in @($request.ModulePaths)) {
+    if (-not [string]::IsNullOrWhiteSpace($modulePath) -and [System.IO.File]::Exists($modulePath)) {
+        Import-Module -Name $modulePath -Force -ErrorAction Stop
+    }
+}
 $scriptRoot = [System.IO.Path]::GetDirectoryName($request.SpecPath)
 $block = [scriptblock]::Create([System.IO.File]::ReadAllText($request.SpecPath))
 $suites = [PowerForge.PowerShellBenchmarkDslRuntime]::Evaluate($block, $scriptRoot)

@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using System.Management.Automation.Runspaces;
 using PowerForge;
 
 namespace PowerForge.Tests;
@@ -438,6 +439,49 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void GateService_DefaultKeysKeepConflictingVariableNames()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        BenchmarkJson.Write(summaryPath, new[]
+        {
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                MedianMs = 1,
+                Variables = new Dictionary<string, string?> { ["Engine"] = "A" }
+            },
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                MedianMs = 2,
+                Variables = new Dictionary<string, string?> { ["Engine"] = "B" }
+            }
+        });
+
+        var update = new BenchmarkGateService().Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            BaselineMode = BenchmarkBaselineMode.Update
+        });
+
+        Assert.True(update.Passed);
+        Assert.Equal(2, update.Metrics.Length);
+        Assert.Contains(update.Metrics, metric => metric.Key.Contains("Engine=A", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(update.Metrics, metric => metric.Key.Contains("Engine=B", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void GateService_NormalizesMetricNamesInKeys()
     {
         var root = CreateTempRoot();
@@ -822,6 +866,28 @@ public sealed class BenchmarkServicesTests
 
         Assert.Equal(1500, Assert.Single(result.Summary).MedianMs);
         Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
+    }
+
+    [Fact]
+    public void Importer_PreservesBenchmarkDotNetParametersNamedLikeMetadata()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "Demo-report.csv");
+        File.WriteAllText(csv, "Method,Job,Engine,Operation,Host,Mean\nWrite,JobA,ParamEngine,ParamOperation,ParamHost,1.500 ms\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+
+        var sample = Assert.Single(result.Samples);
+        var row = Assert.Single(result.Summary);
+        Assert.Equal("Write", sample.Scenario);
+        Assert.Equal("JobA", sample.Engine);
+        Assert.Equal("Run", sample.Operation);
+        Assert.Equal(string.Empty, sample.Host);
+        Assert.Equal("ParamEngine", sample.Variables["Engine"]);
+        Assert.Equal("ParamOperation", sample.Variables["Operation"]);
+        Assert.Equal("ParamHost", sample.Variables["Host"]);
+        Assert.Equal("JobA", row.Engine);
+        Assert.Equal("ParamEngine", row.Variables["Engine"]);
     }
 
     [Fact]
@@ -1975,6 +2041,24 @@ benchmark 'reserved-metric' {
     }
 
     [Fact]
+    public void DslRuntime_RejectsReservedArtifactMetricNames()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'reserved-artifact-metric' {
+    axis Operation Run
+    axis Engine Managed
+    metric Status { 'custom' }
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+
+        Assert.Contains("reserved", ex.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Status", ex.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void DslRuntime_ParsesTemporaryLocalUserProfileAndCleanup()
     {
         var script = ScriptBlock.Create(@"
@@ -2379,6 +2463,23 @@ benchmark 'path-temp-user' -out 'out' {
     }
 
     [Fact]
+    public void Runner_RejectsMatrixAxesThatShadowCaseVariables()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows", Values = { 20 } });
+        suite.Cases.Add(new PowerShellBenchmarkCase
+        {
+            Name = "Lookup",
+            Values = { ["Rows"] = 10 }
+        });
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Plan(suite));
+
+        Assert.Contains("conflicts", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Rows", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Runner_FailsMalformedSuitesWithNoWork()
     {
         var suite = new PowerShellBenchmarkSuite { Name = "empty" };
@@ -2631,6 +2732,24 @@ benchmark 'path-temp-user' -out 'out' {
         Assert.Contains(",0.00042", samplesCsv);
         Assert.Contains("Suite,Scenario,Operation,Engine,Host,OS,Rows,SampleCount,FailureCount,Status,MedianMs,MeanMs,MinMs,MaxMs,TinyMetric", summaryCsv);
         Assert.Contains(",0.00042", summaryCsv);
+    }
+
+    [Fact]
+    public void Runner_EscapesCsvArtifactHeaders()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Artifacts = BenchmarkArtifactKind.Csv;
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows,Size", Values = { 10 } });
+        suite.Metrics.Add(new PowerShellBenchmarkMetric { Name = "Metric,Name", ScriptBlock = ScriptBlock.Create("1") });
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        var samplesHeader = File.ReadLines(result.Artifacts["samples.csv"]).First();
+        var summaryHeader = File.ReadLines(result.Artifacts["summary.csv"]).First();
+        Assert.Contains("\"Rows,Size\"", samplesHeader, StringComparison.Ordinal);
+        Assert.Contains("\"Metric,Name\"", samplesHeader, StringComparison.Ordinal);
+        Assert.Contains("\"Rows,Size\"", summaryHeader, StringComparison.Ordinal);
+        Assert.Contains("\"Metric,Name\"", summaryHeader, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2900,6 +3019,32 @@ benchmark 'path-temp-user' -out 'out' {
 
         Assert.Contains("results", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.False(File.Exists(output));
+    }
+
+    [Fact]
+    public void TemporaryUserExecutor_CapturesFileBackedCallerModules()
+    {
+        var modulePath = typeof(PSPublishModule.TestBenchmarkGateCommand).Assembly.Location;
+        var previousRunspace = Runspace.DefaultRunspace;
+        using var runspace = RunspaceFactory.CreateRunspace();
+        runspace.Open();
+        Runspace.DefaultRunspace = runspace;
+        try
+        {
+            using var powerShell = PowerShell.Create();
+            powerShell.Runspace = runspace;
+            powerShell.AddCommand("Import-Module").AddArgument(modulePath).AddParameter("Force");
+            powerShell.Invoke();
+            Assert.False(powerShell.HadErrors);
+
+            var modulePaths = PowerShellBenchmarkTemporaryUserExecutor.GetImportableCallerModulePaths();
+
+            Assert.Contains(modulePaths, path => string.Equals(path, Path.GetFullPath(modulePath), StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            Runspace.DefaultRunspace = previousRunspace;
+        }
     }
 
     private static BenchmarkSample Sample(

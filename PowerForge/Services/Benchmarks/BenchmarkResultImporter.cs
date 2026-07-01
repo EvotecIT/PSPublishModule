@@ -230,9 +230,9 @@ public sealed class BenchmarkResultImporter
                 RunId = "import",
                 Suite = suiteOverride ?? Get(map, "Suite") ?? defaultSuite,
                 Scenario = method,
-                Operation = Get(map, "Operation") ?? "Run",
-                Engine = Get(map, "Engine") ?? Get(map, "Job") ?? "BenchmarkDotNet",
-                Host = Get(map, "Host") ?? string.Empty,
+                Operation = GetCsvOperation(map, isBenchmarkDotNetCsv),
+                Engine = GetCsvEngine(map, isBenchmarkDotNetCsv),
+                Host = GetCsvHost(map, isBenchmarkDotNetCsv),
                 Os = Get(map, "OS") ?? string.Empty,
                 RunMode = "import",
                 Iteration = ParseInt(Get(map, "Iteration")) ?? 0,
@@ -272,9 +272,9 @@ public sealed class BenchmarkResultImporter
             {
                 Suite = suiteOverride ?? Get(map, "Suite") ?? defaultSuite,
                 Scenario = GetCsvScenarioName(map, isBenchmarkDotNetCsv) ?? Path.GetFileNameWithoutExtension(path),
-                Operation = Get(map, "Operation") ?? "Run",
-                Engine = Get(map, "Engine") ?? Get(map, "Job") ?? "BenchmarkDotNet",
-                Host = Get(map, "Host") ?? string.Empty,
+                Operation = GetCsvOperation(map, isBenchmarkDotNetCsv),
+                Engine = GetCsvEngine(map, isBenchmarkDotNetCsv),
+                Host = GetCsvHost(map, isBenchmarkDotNetCsv),
                 Os = Get(map, "OS") ?? string.Empty,
                 Variables = ExtractVariables(map, metadataColumns, metricHeaders, isBenchmarkDotNetCsv),
                 SampleCount = ParseInt(Get(map, "SampleCount")) ?? 0,
@@ -584,6 +584,15 @@ public sealed class BenchmarkResultImporter
         => isBenchmarkDotNetCsv
             ? Get(values, "Method", "Benchmark")
             : Get(values, "Scenario", "Method", "Benchmark");
+
+    private static string GetCsvOperation(IReadOnlyDictionary<string, string> values, bool isBenchmarkDotNetCsv)
+        => isBenchmarkDotNetCsv ? "Run" : Get(values, "Operation") ?? "Run";
+
+    private static string GetCsvEngine(IReadOnlyDictionary<string, string> values, bool isBenchmarkDotNetCsv)
+        => isBenchmarkDotNetCsv ? Get(values, "Job") ?? "BenchmarkDotNet" : Get(values, "Engine") ?? Get(values, "Job") ?? "BenchmarkDotNet";
+
+    private static string GetCsvHost(IReadOnlyDictionary<string, string> values, bool isBenchmarkDotNetCsv)
+        => isBenchmarkDotNetCsv ? string.Empty : Get(values, "Host") ?? string.Empty;
 
     private static string? GetWithHeader(IReadOnlyDictionary<string, string> values, out string? matchedHeader, params string[] names)
     {
@@ -906,6 +915,9 @@ public sealed class BenchmarkResultImporter
         if (isBenchmarkDotNetCsv)
         {
             columns.Remove("Scenario");
+            columns.Remove("Operation");
+            columns.Remove("Engine");
+            columns.Remove("Host");
             return columns;
         }
 
@@ -924,6 +936,9 @@ public sealed class BenchmarkResultImporter
         if (isBenchmarkDotNetCsv)
         {
             columns.Remove("Scenario");
+            columns.Remove("Operation");
+            columns.Remove("Engine");
+            columns.Remove("Host");
             return columns;
         }
 

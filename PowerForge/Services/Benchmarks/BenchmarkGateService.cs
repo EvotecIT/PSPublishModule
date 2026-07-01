@@ -270,9 +270,6 @@ public sealed class BenchmarkGateService
         => string.Join(
             ";",
             (variables ?? new Dictionary<string, string?>())
-                .Where(k => !string.Equals(k.Key, "Engine", StringComparison.OrdinalIgnoreCase)
-                            && !string.Equals(k.Key, "Operation", StringComparison.OrdinalIgnoreCase)
-                            && !string.Equals(k.Key, "Host", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(k => string.Concat(EscapeKeyComponent(k.Key), "=", EscapeKeyComponent(k.Value ?? string.Empty))));
 

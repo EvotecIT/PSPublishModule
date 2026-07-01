@@ -48,6 +48,7 @@ public sealed class PowerShellBenchmarkRunner
             ? new[] { new PowerShellBenchmarkCase { Name = "Default" } }
             : suite.Cases.ToArray();
         ValidateCaseVariables(suite, cases);
+        ValidateAxisCaseValueCollisions(suite, cases);
         var expanded = ExpandCases(cases, suite.Axes);
         var engineAxis = GetAxisValues(suite.Axes, "Engine") ?? suite.Engines.Select(e => (object?)e.Name).ToArray();
         var explicitOperationAxis = GetAxisValues(suite.Axes, "Operation");
@@ -322,6 +323,24 @@ public sealed class PowerShellBenchmarkRunner
         {
             if (ReservedCaseVariableNames.Contains(key))
                 throw new NotSupportedException($"Benchmark suite '{suite.Name}' case '{benchmarkCase.Name}' uses reserved case variable '{key}'. Use a different case variable name.");
+        }
+    }
+
+    private static void ValidateAxisCaseValueCollisions(PowerShellBenchmarkSuite suite, IEnumerable<PowerShellBenchmarkCase> cases)
+    {
+        var matrixAxes = suite.Axes
+            .Where(axis => !IsBuiltInPathValue(axis.Name))
+            .Select(axis => axis.Name)
+            .ToArray();
+        if (matrixAxes.Length == 0)
+            return;
+
+        var axisNames = new HashSet<string>(matrixAxes, StringComparer.OrdinalIgnoreCase);
+        foreach (var benchmarkCase in cases)
+        foreach (var key in benchmarkCase.Values.Keys)
+        {
+            if (axisNames.Contains(key))
+                throw new NotSupportedException($"Benchmark suite '{suite.Name}' matrix axis '{key}' conflicts with case '{benchmarkCase.Name}' variable '{key}'. Use either a case variable or a matrix axis for that value, not both.");
         }
     }
 
@@ -650,7 +669,7 @@ public sealed class PowerShellBenchmarkRunner
         var variableHeaders = GetVariableHeaders(rows.Select(row => row.Variables));
         var metricHeaders = GetMetricHeaders(rows.Select(row => row.Metrics));
         var builder = new StringBuilder();
-        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS" }.Concat(variableHeaders).Concat(new[] { "Iteration", "Status", "DurationMs", "Reason" }).Concat(metricHeaders)));
+        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS" }.Concat(variableHeaders).Concat(new[] { "Iteration", "Status", "DurationMs", "Reason" }).Concat(metricHeaders).Select(Cell)));
         foreach (var sample in rows)
         {
             var cells = new List<string>
@@ -680,7 +699,7 @@ public sealed class PowerShellBenchmarkRunner
         var variableHeaders = GetVariableHeaders(summaryRows.Select(row => row.Variables));
         var metricHeaders = GetMetricHeaders(summaryRows.Select(row => row.Metrics));
         var builder = new StringBuilder();
-        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS" }.Concat(variableHeaders).Concat(new[] { "SampleCount", "FailureCount", "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs" }).Concat(metricHeaders)));
+        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS" }.Concat(variableHeaders).Concat(new[] { "SampleCount", "FailureCount", "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs" }).Concat(metricHeaders).Select(Cell)));
         foreach (var row in summaryRows)
         {
             var cells = new List<string>

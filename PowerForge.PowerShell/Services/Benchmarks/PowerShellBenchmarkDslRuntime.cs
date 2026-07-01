@@ -257,15 +257,38 @@ public static class PowerShellBenchmarkDslRuntime
         if (suite.Metrics.Any(metric => string.Equals(metric.Name, metricName, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException($"Benchmark suite '{suite.Name}' already defines metric '{metricName}'.");
         if (IsReservedMetricName(metricName))
-            throw new InvalidOperationException($"Benchmark metric name '{metricName}' is reserved for primary timing statistics.");
+            throw new InvalidOperationException($"Benchmark metric name '{metricName}' is reserved for built-in benchmark artifact columns.");
         suite.Metrics.Add(new PowerShellBenchmarkMetric { Name = metricName, ScriptBlock = CaptureScriptBlock(scriptBlock) });
     }
 
     private static bool IsReservedMetricName(string name)
-        => string.Equals(name, "MedianMs", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(name, "MeanMs", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(name, "MinMs", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(name, "MaxMs", StringComparison.OrdinalIgnoreCase);
+        => ReservedMetricNames.Contains(name);
+
+    private static readonly HashSet<string> ReservedMetricNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Name",
+        "Suite",
+        "Scenario",
+        "Operation",
+        "Engine",
+        "Host",
+        "OS",
+        "RunId",
+        "RunMode",
+        "Iteration",
+        "Status",
+        "DurationMs",
+        "Reason",
+        "AllocatedBytes",
+        "WorkingSetDeltaBytes",
+        "OutputMetric",
+        "SampleCount",
+        "FailureCount",
+        "MedianMs",
+        "MeanMs",
+        "MinMs",
+        "MaxMs"
+    };
 
     /// <summary>
     /// Adds a comparison definition.
