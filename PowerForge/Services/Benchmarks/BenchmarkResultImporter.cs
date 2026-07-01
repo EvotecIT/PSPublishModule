@@ -751,8 +751,13 @@ public sealed class BenchmarkResultImporter
             records.Add(values.ToArray());
         }
 
+        if (records.Count > 0)
+            records[0] = records[0].Select(NormalizeCsvHeader).ToArray();
         return records.ToArray();
     }
+
+    private static string NormalizeCsvHeader(string header)
+        => (header ?? string.Empty).Trim().TrimStart('\uFEFF');
 
     private static string RemoveUnitSuffix(string text)
     {

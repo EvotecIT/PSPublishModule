@@ -217,9 +217,9 @@ public sealed class PowerShellBenchmarkRunner
         var outputDirectory = Path.Combine(
             suite.OutputRoot,
             runId,
-            SafePathSegment(item.Scenario),
-            SafePathSegment(item.Engine),
-            SafePathSegment(item.Operation),
+            PowerShellBenchmarkPathSegments.Value(item.Scenario),
+            PowerShellBenchmarkPathSegments.Value(item.Engine),
+            PowerShellBenchmarkPathSegments.Value(item.Operation),
             MatrixPathSegment(item.Values),
             iteration.ToString(CultureInfo.InvariantCulture));
         var runObject = ToPsObject(new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
@@ -605,32 +605,8 @@ public sealed class PowerShellBenchmarkRunner
         return string.IsNullOrWhiteSpace(version) ? edition! : string.Concat(edition, "-", version);
     }
 
-    private static string SafePathSegment(string value)
-    {
-        var invalid = Path.GetInvalidFileNameChars();
-        var text = string.IsNullOrWhiteSpace(value) ? "_" : value;
-        var builder = new StringBuilder(text.Length);
-        foreach (var ch in text)
-            builder.Append(invalid.Contains(ch) ? '_' : ch);
-        return builder.ToString();
-    }
-
     private static string MatrixPathSegment(IReadOnlyDictionary<string, object?> values)
-    {
-        var text = string.Join(
-            "_",
-            values
-                .Where(k => !IsBuiltInPathValue(k.Key))
-                .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
-                .Select(k => string.Concat(EscapeMatrixPathPart(k.Key), "=", EscapeMatrixPathPart(Convert.ToString(k.Value, CultureInfo.InvariantCulture) ?? string.Empty))));
-        return SafePathSegment(string.IsNullOrWhiteSpace(text) ? "matrix" : text);
-    }
-
-    private static string EscapeMatrixPathPart(string value)
-    {
-        var escaped = Uri.EscapeDataString(value ?? string.Empty);
-        return escaped.Replace("_", "%5F");
-    }
+        => PowerShellBenchmarkPathSegments.Matrix(values, IsBuiltInPathValue);
 
     private static string GetOperatingSystemLabel()
     {

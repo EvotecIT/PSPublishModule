@@ -547,6 +547,40 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void GateService_FailsWhenMetricValueIsNotFinite()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        File.WriteAllText(summaryPath, """
+[
+  {
+    "suite": "suite",
+    "scenario": "case",
+    "operation": "Run",
+    "engine": "Managed",
+    "host": "Current",
+    "status": "Succeeded",
+    "metrics": { "RowsPerSecond": 1e999 }
+  }
+]
+""");
+
+        var update = new BenchmarkGateService().Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            Metric = "RowsPerSecond",
+            BaselineMode = BenchmarkBaselineMode.Update
+        });
+
+        Assert.False(update.Passed);
+        Assert.False(update.BaselineUpdated);
+        Assert.DoesNotContain(update.Metrics, metric => string.Equals(metric.Key, "RowsPerSecond", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(update.Messages, message => message.Contains("RowsPerSecond", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void GateService_IgnoresSkippedRowsWhenMetricIsMissing()
     {
         var root = CreateTempRoot();
@@ -1508,6 +1542,20 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_NormalizesBomCsvHeaders()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "benchmark-report.csv");
+        File.WriteAllText(csv, "\uFEFFMethod,Mean [ms]\nFast,12.5\n");
+
+        var sample = Assert.Single(new BenchmarkResultImporter().Import(csv, "demo").Samples);
+
+        Assert.Equal("Fast", sample.Scenario);
+        Assert.Equal(12.5, sample.DurationMs);
+        Assert.DoesNotContain(sample.Variables.Keys, key => key.Contains("Method", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Importer_KeepsRunnerVariablesNamedLikeBenchmarkDotNetStatistics()
     {
         var root = CreateTempRoot();
@@ -1592,6 +1640,17 @@ public sealed class BenchmarkServicesTests
 
         Assert.Equal("actual", result.Suite);
         Assert.Equal("actual", Assert.Single(result.Summary).Suite);
+    }
+
+    [Fact]
+    public void RunnerPathSegments_EscapeInvalidCharactersWithoutCollisions()
+    {
+        var colon = PowerShellBenchmarkPathSegments.Value("Case:A");
+        var question = PowerShellBenchmarkPathSegments.Value("Case?A");
+
+        Assert.NotEqual(colon, question);
+        Assert.Contains("%3A", colon, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("%3F", question, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1990,6 +2049,42 @@ benchmark 'closure' {
     }
 
     [Fact]
+    public void DslRuntime_RewritesScriptRootInCapturedHelperFunctions()
+    {
+        var root = CreateTempRoot();
+        File.WriteAllText(Path.Combine(root, "helper.txt"), "from-helper");
+        var script = ScriptBlock.Create(@"
+function Get-BenchmarkFixturePath {
+    Join-Path $PSScriptRoot 'helper.txt'
+}
+
+benchmark 'helper-root' {
+    axis Operation Run
+    axis Engine Managed
+    setup {
+        param($case, $run)
+        $run.FixtureText = Get-Content -LiteralPath (Get-BenchmarkFixturePath) -Raw
+    }
+    engine Managed {
+        operation Run {
+            param($case, $run)
+            if ($run.FixtureText -ne 'from-helper') {
+                throw 'helper root was not rewritten'
+            }
+        }
+    }
+}
+");
+
+        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script, root));
+        suite.WarmupCount = 0;
+        suite.IterationCount = 1;
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
+    }
+
+    [Fact]
     public void DslRuntime_HandlesOrderedDictionaryCaseSources()
     {
         var script = ScriptBlock.Create(@"
@@ -2006,6 +2101,27 @@ benchmark 'ordered' {
 
         Assert.Equal("A", benchmarkCase.Name);
         Assert.Equal(10, benchmarkCase.Values["Rows"]);
+        Assert.DoesNotContain("Name", benchmarkCase.Values.Keys);
+    }
+
+    [Fact]
+    public void DslRuntime_StripsGeneratedScenarioCaseMetadata()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'scenario-case' {
+    cases { Add-BenchmarkCaseSource { [pscustomobject]@{ Scenario = 'Generated'; Rows = 20 } } }
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var benchmarkCase = Assert.Single(suite.Cases);
+
+        Assert.Equal("Generated", benchmarkCase.Name);
+        Assert.Equal(20, benchmarkCase.Values["Rows"]);
+        Assert.DoesNotContain("Scenario", benchmarkCase.Values.Keys);
     }
 
     [Fact]

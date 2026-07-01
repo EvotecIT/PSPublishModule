@@ -371,7 +371,7 @@ foreach ($function in Get-Command -CommandType Function -ErrorAction SilentlyCon
         ($function.Options -band [System.Management.Automation.ScopedItemOptions]::ReadOnly)) { continue }
     if ([string]::IsNullOrWhiteSpace($function.Definition)) { continue }
     if (-not $capturedFunctions.ContainsKey($function.Name)) {
-        $capturedFunctions[$function.Name] = $function.Definition
+        $capturedFunctions[$function.Name] = [PowerForge.PowerShellBenchmarkDslRuntime]::CaptureScriptText([scriptblock]::Create([string] $function.Definition), $scriptRoot)
     }
 }
 
@@ -463,9 +463,19 @@ $scriptText = [PowerForge.PowerShellBenchmarkDslRuntime]::CaptureScriptText($Scr
                 item.Values[property.Name] = property.Value;
         }
 
-        item.Name = item.Values.TryGetValue("Name", out var name) || item.Values.TryGetValue("Scenario", out name)
-            ? Convert.ToString(name, CultureInfo.InvariantCulture) ?? "Case"
-            : "Case";
+        var hasName = item.Values.TryGetValue("Name", out var name);
+        var hasScenario = item.Values.TryGetValue("Scenario", out var scenario);
+        var nameText = Convert.ToString(name, CultureInfo.InvariantCulture);
+        var scenarioText = Convert.ToString(scenario, CultureInfo.InvariantCulture);
+        item.Name = hasName && !string.IsNullOrWhiteSpace(nameText)
+            ? nameText!
+            : hasScenario && !string.IsNullOrWhiteSpace(scenarioText)
+                ? scenarioText!
+                : "Case";
+        if (hasName)
+            item.Values.Remove("Name");
+        if (hasScenario)
+            item.Values.Remove("Scenario");
         return item;
     }
 

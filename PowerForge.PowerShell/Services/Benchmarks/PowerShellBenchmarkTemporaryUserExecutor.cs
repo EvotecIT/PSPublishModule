@@ -1,8 +1,4 @@
 using System.Diagnostics;
-using System.Management.Automation;
-using System.Runtime.InteropServices;
-using System.Security;
-using System.Security.Principal;
 using System.Text;
 
 namespace PowerForge;
@@ -60,36 +56,45 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
         ValidateRequest(request);
-        ValidateWindowsAdministrator();
 
-        var userName = CreateUserName(request.UserNamePrefix);
-        var password = CreatePassword();
-        using var securePassword = ToSecureString(password);
-        var accountName = string.Concat(Environment.MachineName, "\\", userName);
-        var scratchRoot = Path.Combine(Path.GetTempPath(), "pf-benchmark-user-" + userName);
-        var resultPath = Path.Combine(scratchRoot, "result.json");
-        var stdoutPath = Path.Combine(scratchRoot, "stdout.txt");
-        var stderrPath = Path.Combine(scratchRoot, "stderr.txt");
-        var wrapperPath = Path.Combine(scratchRoot, "run-benchmark.ps1");
-        var readmePathFile = Path.Combine(scratchRoot, "readme-paths.txt");
-        var childRequestPath = Path.Combine(scratchRoot, "child-request.json");
-        var grantedAccessPaths = new List<string>();
+        WindowsTemporaryIdentityLease? identity = null;
+        var scratchRoot = string.Empty;
+        var resultPath = string.Empty;
+        var stdoutPath = string.Empty;
+        var stderrPath = string.Empty;
+        var wrapperPath = string.Empty;
+        var readmePathFile = string.Empty;
+        var childRequestPath = string.Empty;
         var failed = true;
         BenchmarkRunResult? result = null;
 
-        Directory.CreateDirectory(scratchRoot);
         try
         {
-            CreateLocalUser(userName, securePassword);
-            GrantDirectoryAccess(scratchRoot, accountName, "(OI)(CI)F", grantedAccessPaths);
-            GrantDirectoryAccess(request.OutputRoot, accountName, "(OI)(CI)F", grantedAccessPaths);
-            GrantDirectoryAccess(request.WorkingDirectory, accountName, "(OI)(CI)RX", grantedAccessPaths);
-            GrantDirectoryAccess(Path.GetDirectoryName(request.SpecPath) ?? request.WorkingDirectory, accountName, "(OI)(CI)RX", grantedAccessPaths);
-            GrantFileAccess(request.SpecPath, accountName, "R", grantedAccessPaths);
-            GrantFileAccess(GetPowerForgeAssemblyPath(), accountName, "R", grantedAccessPaths);
-            GrantFileAccess(GetPowerForgePowerShellAssemblyPath(), accountName, "R", grantedAccessPaths);
+            identity = WindowsTemporaryIdentityLease.Create(new WindowsTemporaryIdentityOptions
+            {
+                UserNamePrefix = request.UserNamePrefix,
+                ScratchRootPrefix = "pf-benchmark-user-",
+                Description = "Temporary PowerForge benchmark user",
+                CapabilityName = "Benchmark profile 'TemporaryLocalUser'"
+            });
+
+            scratchRoot = identity.ScratchRoot;
+            resultPath = Path.Combine(scratchRoot, "result.json");
+            stdoutPath = Path.Combine(scratchRoot, "stdout.txt");
+            stderrPath = Path.Combine(scratchRoot, "stderr.txt");
+            wrapperPath = Path.Combine(scratchRoot, "run-benchmark.ps1");
+            readmePathFile = Path.Combine(scratchRoot, "readme-paths.txt");
+            childRequestPath = Path.Combine(scratchRoot, "child-request.json");
+
+            identity.GrantDirectoryAccess(scratchRoot, "(OI)(CI)F");
+            identity.GrantDirectoryAccess(request.OutputRoot, "(OI)(CI)F");
+            identity.GrantDirectoryAccess(request.WorkingDirectory, "(OI)(CI)RX");
+            identity.GrantDirectoryAccess(Path.GetDirectoryName(request.SpecPath) ?? request.WorkingDirectory, "(OI)(CI)RX");
+            identity.GrantFileAccess(request.SpecPath, "R");
+            identity.GrantFileAccess(GetPowerForgeAssemblyPath(), "R");
+            identity.GrantFileAccess(GetPowerForgePowerShellAssemblyPath(), "R");
             foreach (var readmePath in request.ReadmePaths.Where(path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.OrdinalIgnoreCase))
-                GrantFileAccess(readmePath, accountName, "M", grantedAccessPaths);
+                identity.GrantFileAccess(readmePath, "M");
 
             File.WriteAllText(wrapperPath, ChildRunnerScript, new UTF8Encoding(false));
             File.WriteAllLines(readmePathFile, request.ReadmePaths.Where(path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.OrdinalIgnoreCase), new UTF8Encoding(false));
@@ -108,11 +113,23 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
                 RunMode = request.RunMode ?? string.Empty,
                 SuiteName = request.SuiteName ?? string.Empty
             });
-            GrantFileAccess(wrapperPath, accountName, "R", grantedAccessPaths);
-            GrantFileAccess(readmePathFile, accountName, "R", grantedAccessPaths);
-            GrantFileAccess(childRequestPath, accountName, "R", grantedAccessPaths);
+            identity.GrantFileAccess(wrapperPath, "R");
+            identity.GrantFileAccess(readmePathFile, "R");
+            identity.GrantFileAccess(childRequestPath, "R");
 
-            var processResult = RunChildProcess(request, userName, securePassword, wrapperPath, childRequestPath, stdoutPath, stderrPath);
+            var processResult = identity.RunProcess(
+                GetPowerShellExecutable(),
+                Path.GetDirectoryName(wrapperPath) ?? request.WorkingDirectory,
+                stdoutPath,
+                stderrPath,
+                "-NoLogo",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                wrapperPath,
+                "-RequestPath",
+                childRequestPath);
             if (processResult.ExitCode != 0)
                 throw new InvalidOperationException($"Temporary benchmark user process failed with exit code {processResult.ExitCode}. STDOUT: {processResult.Stdout} STDERR: {processResult.Stderr} Scratch: {scratchRoot}");
 
@@ -121,18 +138,17 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
 
             result = BenchmarkJson.Read<BenchmarkRunResult>(resultPath);
             failed = result.Samples.Any(sample => sample.Status == BenchmarkSampleStatus.Failed);
-            EnrichResult(result, request, userName, scratchRoot, ShouldKeep(request.Cleanup, failed));
+            EnrichResult(result, request, identity.UserName, scratchRoot, ShouldKeep(request.Cleanup, failed));
             RewriteRunReport(result);
             return result;
         }
         finally
         {
-            RevokeGrantedAccess(grantedAccessPaths, accountName);
-            RemoveLocalUser(userName);
-            if (!ShouldKeep(request.Cleanup, failed))
+            if (identity is not null)
             {
-                RemoveUserProfile(userName);
-                TryDeleteDirectory(scratchRoot);
+                if (ShouldKeep(request.Cleanup, failed))
+                    identity.RetainProfileAndScratch();
+                identity.Dispose();
             }
         }
     }
@@ -151,253 +167,6 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
             throw new InvalidOperationException("TemporaryLocalUser benchmark profile requires an output root.");
         Directory.CreateDirectory(request.OutputRoot);
     }
-
-    private static void ValidateWindowsAdministrator()
-    {
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            throw new PlatformNotSupportedException("Benchmark profile 'TemporaryLocalUser' is supported only on Windows.");
-
-        using var identity = WindowsIdentity.GetCurrent();
-        var principal = new WindowsPrincipal(identity);
-        if (!principal.IsInRole(WindowsBuiltInRole.Administrator))
-            throw new UnauthorizedAccessException("Benchmark profile 'TemporaryLocalUser' requires an elevated administrator PowerShell session so a temporary local user can be created and removed.");
-    }
-
-    private static string CreateUserName(string? prefix)
-    {
-        var safePrefix = new string((prefix ?? "PFBench").Where(char.IsLetterOrDigit).ToArray());
-        if (string.IsNullOrWhiteSpace(safePrefix))
-            safePrefix = "PFBench";
-        if (safePrefix.Length > 10)
-            safePrefix = safePrefix.Substring(0, 10);
-        return safePrefix + Guid.NewGuid().ToString("N").Substring(0, 8);
-    }
-
-    private static string CreatePassword()
-        => "PFb!" + Guid.NewGuid().ToString("N") + "9a";
-
-    private static SecureString ToSecureString(string value)
-    {
-        var secure = new SecureString();
-        foreach (var ch in value)
-            secure.AppendChar(ch);
-        secure.MakeReadOnly();
-        return secure;
-    }
-
-    private static void CreateLocalUser(string userName, SecureString password)
-    {
-        using var ps = PowerShell.Create();
-        ps.AddCommand("New-LocalUser")
-            .AddParameter("Name", userName)
-            .AddParameter("Password", password)
-            .AddParameter("Description", "Temporary PowerForge benchmark user")
-            .AddParameter("AccountNeverExpires")
-            .AddParameter("PasswordNeverExpires");
-        InvokePowerShell(ps, $"create temporary benchmark user '{userName}'");
-    }
-
-    private static void RemoveLocalUser(string userName)
-    {
-        using var ps = PowerShell.Create();
-        ps.AddCommand("Remove-LocalUser")
-            .AddParameter("Name", userName)
-            .AddParameter("ErrorAction", ActionPreference.SilentlyContinue);
-        _ = ps.Invoke();
-    }
-
-    private static void RemoveUserProfile(string userName)
-    {
-        using var ps = PowerShell.Create();
-        ps.AddScript("""
-param([string] $UserName)
-Get-CimInstance Win32_UserProfile |
-    Where-Object { $_.LocalPath -like "*\$UserName" } |
-    Remove-CimInstance -ErrorAction SilentlyContinue
-""").AddArgument(userName);
-        _ = ps.Invoke();
-    }
-
-    private static void InvokePowerShell(PowerShell ps, string action)
-    {
-        _ = ps.Invoke();
-        if (!ps.HadErrors)
-            return;
-
-        var errors = string.Join(Environment.NewLine, ps.Streams.Error.Select(error => error.ToString()));
-        throw new InvalidOperationException($"Failed to {action}. {errors}");
-    }
-
-    private static ChildProcessResult RunChildProcess(
-        PowerShellBenchmarkTemporaryUserRequest request,
-        string userName,
-        SecureString password,
-        string wrapperPath,
-        string childRequestPath,
-        string stdoutPath,
-        string stderrPath)
-    {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = GetPowerShellExecutable(),
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            WorkingDirectory = Path.GetDirectoryName(wrapperPath) ?? request.WorkingDirectory,
-            CreateNoWindow = true
-        };
-#pragma warning disable CA1416
-        startInfo.Domain = Environment.MachineName;
-        startInfo.UserName = userName;
-        startInfo.Password = password;
-        startInfo.LoadUserProfile = true;
-#pragma warning restore CA1416
-        ProcessStartInfoEncoding.TryApplyUtf8(startInfo);
-        AddArguments(
-            startInfo,
-            "-NoLogo",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            wrapperPath,
-            "-RequestPath",
-            childRequestPath);
-
-        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start temporary benchmark user process.");
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
-        process.WaitForExit();
-        var stdout = stdoutTask.GetAwaiter().GetResult();
-        var stderr = stderrTask.GetAwaiter().GetResult();
-        File.WriteAllText(stdoutPath, stdout, new UTF8Encoding(false));
-        File.WriteAllText(stderrPath, stderr, new UTF8Encoding(false));
-        return new ChildProcessResult(process.ExitCode, stdout, stderr);
-    }
-
-    private static void GrantDirectoryAccess(string path, string accountName, string rights, ICollection<string> grantedAccessPaths)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-            return;
-        Directory.CreateDirectory(path);
-        RunIcacls(path, accountName, rights);
-        grantedAccessPaths.Add(path);
-    }
-
-    private static void GrantFileAccess(string path, string accountName, string rights, ICollection<string> grantedAccessPaths)
-    {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-            return;
-        RunIcacls(path, accountName, rights);
-        grantedAccessPaths.Add(path);
-    }
-
-    private static void RunIcacls(string path, string accountName, string rights)
-    {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "icacls.exe",
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
-        ProcessStartInfoEncoding.TryApplyUtf8(startInfo);
-        AddArguments(startInfo, path, "/grant", string.Concat(accountName, ":", rights));
-
-        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start icacls.exe.");
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        if (process.ExitCode != 0)
-            throw new InvalidOperationException($"Failed to grant benchmark temporary user access to '{path}' (icacls exit {process.ExitCode}). STDOUT: {stdout} STDERR: {stderr}");
-    }
-
-    private static void RevokeGrantedAccess(IEnumerable<string> paths, string accountName)
-    {
-        foreach (var path in paths.Where(path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            if (!Directory.Exists(path) && !File.Exists(path))
-                continue;
-
-            try
-            {
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = "icacls.exe",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                };
-                ProcessStartInfoEncoding.TryApplyUtf8(startInfo);
-                AddArguments(startInfo, path, "/remove:g", accountName);
-                using var process = Process.Start(startInfo);
-                process?.WaitForExit();
-            }
-            catch
-            {
-                // Best-effort ACL cleanup; the user account cleanup still runs below.
-            }
-        }
-    }
-
-    private static void AddArguments(ProcessStartInfo startInfo, params string[] arguments)
-    {
-#if NET472
-        startInfo.Arguments = string.Join(" ", arguments.Select(EscapeWindowsArgument));
-#else
-        foreach (var argument in arguments)
-            startInfo.ArgumentList.Add(argument);
-#endif
-    }
-
-#if NET472
-    private static string EscapeWindowsArgument(string argument)
-    {
-        if (string.IsNullOrEmpty(argument))
-            return "\"\"";
-
-        var needsQuotes = argument.Any(ch => char.IsWhiteSpace(ch) || ch == '"');
-        if (!needsQuotes)
-            return argument;
-
-        var builder = new StringBuilder();
-        builder.Append('"');
-
-        var backslashCount = 0;
-        foreach (var ch in argument)
-        {
-            if (ch == '\\')
-            {
-                backslashCount++;
-                continue;
-            }
-
-            if (ch == '"')
-            {
-                builder.Append('\\', backslashCount * 2 + 1);
-                builder.Append('"');
-                backslashCount = 0;
-                continue;
-            }
-
-            if (backslashCount > 0)
-            {
-                builder.Append('\\', backslashCount);
-                backslashCount = 0;
-            }
-
-            builder.Append(ch);
-        }
-
-        if (backslashCount > 0)
-            builder.Append('\\', backslashCount * 2);
-
-        builder.Append('"');
-        return builder.ToString();
-    }
-#endif
 
     private static string GetPowerShellExecutable()
     {
@@ -534,20 +303,4 @@ for ($index = 0; $index -lt $suite.ReadmeBlocks.Count -and $index -lt $readmePat
 $result = [PowerForge.PowerShellBenchmarkRunner]::new().Run($suite)
 [PowerForge.BenchmarkJson]::Write($request.ResultPath, $result)
 """;
-
-    private sealed class ChildProcessResult
-    {
-        internal ChildProcessResult(int exitCode, string stdout, string stderr)
-        {
-            ExitCode = exitCode;
-            Stdout = stdout;
-            Stderr = stderr;
-        }
-
-        internal int ExitCode { get; }
-
-        internal string Stdout { get; }
-
-        internal string Stderr { get; }
-    }
 }

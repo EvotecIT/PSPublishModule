@@ -137,7 +137,7 @@ public sealed class BenchmarkGateService
                 continue;
             var metric = NormalizeMetricName(request.Metric);
             var value = BenchmarkSummaryService.GetMetricValue(row, metric);
-            if (!value.HasValue) continue;
+            if (!value.HasValue || !IsFinite(value.Value)) continue;
             var key = BuildKey(row, request.GroupBy, metric);
             if (map.ContainsKey(key))
             {
@@ -169,11 +169,15 @@ public sealed class BenchmarkGateService
         {
             if (IsFailedRow(row) || IsSkippedRow(row))
                 continue;
-            if (BenchmarkSummaryService.GetMetricValue(row, metric).HasValue)
+            var value = BenchmarkSummaryService.GetMetricValue(row, metric);
+            if (value.HasValue && IsFinite(value.Value))
                 continue;
             yield return $"Benchmark row '{BuildKey(row, request.GroupBy, metric)}' has no value for metric '{metric}'.";
         }
     }
+
+    private static bool IsFinite(double value)
+        => !double.IsNaN(value) && !double.IsInfinity(value);
 
     private static bool IsFailedRow(BenchmarkSummaryRow row)
         => row.FailureCount > 0 || string.Equals(row.Status, "Failed", StringComparison.OrdinalIgnoreCase);
