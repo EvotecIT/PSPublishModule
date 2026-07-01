@@ -90,6 +90,23 @@ public sealed class ManagedModuleSimpleBenchmarkScriptTests
         Assert.DoesNotContain("PFBenchmarkBackup", script, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void MeasureScript_EmitsManagedPhaseColumnsForProfilerTriage()
+    {
+        var script = File.ReadAllText(Path.Combine(
+            RepoRootLocator.Find(),
+            "Benchmarks",
+            "ManagedModules",
+            "Measure-ManagedModuleBenchmark.ps1"));
+
+        Assert.Contains("ManagedPackageCount", script, StringComparison.Ordinal);
+        Assert.Contains("ManagedDownloadMillisecondsSum", script, StringComparison.Ordinal);
+        Assert.Contains("ManagedExtractionMillisecondsSum", script, StringComparison.Ordinal);
+        Assert.Contains("ManagedDependencyMillisecondsRoot", script, StringComparison.Ordinal);
+        Assert.Contains("ManagedPromotionMillisecondsSum", script, StringComparison.Ordinal);
+        Assert.Contains("LastManagedBenchmarkResult", script, StringComparison.Ordinal);
+    }
+
     private static string BuildResultCsv()
         => string.Join(Environment.NewLine,
             "TimestampUtc,Host,Scenario,ScenarioLabel,ModuleName,Version,Operation,Engine,Iteration,Status,Milliseconds,Seconds,Reason",

@@ -123,13 +123,15 @@ function New-MeasurementResult {
         [int] $Iteration,
         [string] $Status,
         [double] $Milliseconds,
-        [string] $Reason
+        [string] $Reason,
+        [object] $ManagedResult = $null
     )
 
     $roundedMilliseconds = [Math]::Round($Milliseconds, 2)
     $roundedSeconds = [Math]::Round($Milliseconds / 1000, 3)
 
-    [pscustomobject]@{
+    $managedMetrics = New-ManagedBenchmarkMetrics -ManagedResult $ManagedResult
+    $row = [ordered]@{
         TimestampUtc = [DateTime]::UtcNow.ToString('o')
         Host = Get-CurrentHostLabel
         Scenario = $Scenario.Name
@@ -143,6 +145,201 @@ function New-MeasurementResult {
         Milliseconds = $roundedMilliseconds.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture)
         Seconds = $roundedSeconds.ToString('0.###', [Globalization.CultureInfo]::InvariantCulture)
         Reason = $Reason
+    }
+
+    foreach ($metric in $managedMetrics.GetEnumerator()) {
+        $row[$metric.Key] = $metric.Value
+    }
+
+    [pscustomobject]$row
+}
+
+function Format-BenchmarkNumber {
+    param([double] $Value)
+
+    [Math]::Round($Value, 2).ToString('0.##', [Globalization.CultureInfo]::InvariantCulture)
+}
+
+function ConvertTo-BenchmarkMilliseconds {
+    param([object] $Value)
+
+    if ($null -eq $Value) {
+        return 0
+    }
+
+    if ($Value -is [TimeSpan]) {
+        return $Value.TotalMilliseconds
+    }
+
+    if ($Value.PSObject.Properties['TotalMilliseconds']) {
+        return [double]$Value.TotalMilliseconds
+    }
+
+    0
+}
+
+function Add-ManagedInstallResultNode {
+    param(
+        [object] $Node,
+        [System.Collections.Generic.List[object]] $Nodes
+    )
+
+    if ($null -eq $Node) {
+        return
+    }
+
+    $Nodes.Add($Node) | Out-Null
+    if ($Node.PSObject.Properties['DependencyResults'] -and $null -ne $Node.DependencyResults) {
+        foreach ($dependency in @($Node.DependencyResults)) {
+            Add-ManagedInstallResultNode -Node $dependency -Nodes $Nodes
+        }
+    }
+}
+
+function New-ManagedBenchmarkMetrics {
+    param([object] $ManagedResult)
+
+    $empty = [ordered]@{
+        ManagedPackageCount = ''
+        ManagedInstalledCount = ''
+        ManagedAlreadyInstalledCount = ''
+        ManagedFileCount = ''
+        ManagedDownloadedBytes = ''
+        ManagedExtractedBytes = ''
+        ManagedPackageRepositoryRequests = ''
+        ManagedPackageRepositoryRedirects = ''
+        ManagedVersionResolutionMillisecondsSum = ''
+        ManagedVersionSelectionWaitMillisecondsSum = ''
+        ManagedDownloadMillisecondsSum = ''
+        ManagedDownloadMillisecondsMax = ''
+        ManagedExtractionMillisecondsSum = ''
+        ManagedExtractionMillisecondsMax = ''
+        ManagedExtractionCacheLockWaitMillisecondsSum = ''
+        ManagedDependencyMillisecondsRoot = ''
+        ManagedDependencyQueueWaitMillisecondsSum = ''
+        ManagedDependencyBranchMillisecondsMax = ''
+        ManagedPromotionMillisecondsSum = ''
+        ManagedPromotionMillisecondsMax = ''
+        ManagedPromotionLockWaitMillisecondsSum = ''
+        ManagedInstallLockWaitMillisecondsSum = ''
+        ManagedCoalescedWaitMillisecondsSum = ''
+        ManagedAuthenticodeCheckedFiles = ''
+        ManagedAuthenticodeCatalogFiles = ''
+    }
+
+    if ($null -eq $ManagedResult -or -not $ManagedResult.PSObject.Properties['DependencyResults']) {
+        return $empty
+    }
+
+    $nodes = [System.Collections.Generic.List[object]]::new()
+    Add-ManagedInstallResultNode -Node $ManagedResult -Nodes $nodes
+
+    $installedCount = 0
+    $alreadyInstalledCount = 0
+    $fileCount = 0
+    [long] $downloadedBytes = 0
+    [long] $extractedBytes = 0
+    [long] $packageRepositoryRequests = 0
+    [long] $packageRepositoryRedirects = 0
+    [double] $versionResolutionMillisecondsSum = 0
+    [double] $versionSelectionWaitMillisecondsSum = 0
+    [double] $downloadMillisecondsSum = 0
+    [double] $downloadMillisecondsMax = 0
+    [double] $extractionMillisecondsSum = 0
+    [double] $extractionMillisecondsMax = 0
+    [double] $extractionCacheLockWaitMillisecondsSum = 0
+    [double] $dependencyQueueWaitMillisecondsSum = 0
+    [double] $dependencyBranchMillisecondsMax = 0
+    [double] $promotionMillisecondsSum = 0
+    [double] $promotionMillisecondsMax = 0
+    [double] $promotionLockWaitMillisecondsSum = 0
+    [double] $installLockWaitMillisecondsSum = 0
+    [double] $coalescedWaitMillisecondsSum = 0
+    $authenticodeCheckedFiles = 0
+    $authenticodeCatalogFiles = 0
+
+    foreach ($node in $nodes) {
+        $status = [string]$node.Status
+        if ($status.Equals('Installed', [StringComparison]::OrdinalIgnoreCase)) {
+            $installedCount++
+        } elseif ($status.Equals('AlreadyInstalled', [StringComparison]::OrdinalIgnoreCase)) {
+            $alreadyInstalledCount++
+        }
+
+        $fileCount += [int]$node.FileCount
+        $extractedBytes += [long]$node.ExtractedBytes
+        $packageRepositoryRequests += [long]$node.PackageRepositoryRequestCount
+        $packageRepositoryRedirects += [long]$node.PackageRepositoryRedirectCount
+
+        if ($null -ne $node.Download) {
+            $downloadedBytes += [long]$node.Download.BytesWritten
+        }
+
+        $versionResolutionMillisecondsSum += ConvertTo-BenchmarkMilliseconds $node.VersionResolutionElapsed
+        $versionSelectionWaitMillisecondsSum += ConvertTo-BenchmarkMilliseconds $node.VersionSelectionWaitElapsed
+
+        $downloadMilliseconds = ConvertTo-BenchmarkMilliseconds $node.DownloadElapsed
+        $downloadMillisecondsSum += $downloadMilliseconds
+        if ($downloadMilliseconds -gt $downloadMillisecondsMax) {
+            $downloadMillisecondsMax = $downloadMilliseconds
+        }
+
+        $extractionMilliseconds = ConvertTo-BenchmarkMilliseconds $node.ExtractionElapsed
+        $extractionMillisecondsSum += $extractionMilliseconds
+        if ($extractionMilliseconds -gt $extractionMillisecondsMax) {
+            $extractionMillisecondsMax = $extractionMilliseconds
+        }
+
+        $extractionCacheLockWaitMillisecondsSum += ConvertTo-BenchmarkMilliseconds $node.ExtractionCacheLockWaitElapsed
+        $dependencyQueueWaitMillisecondsSum += ConvertTo-BenchmarkMilliseconds $node.DependencyQueueWaitElapsed
+
+        $dependencyBranchMilliseconds = ConvertTo-BenchmarkMilliseconds $node.DependencyBranchElapsed
+        if ($dependencyBranchMilliseconds -gt $dependencyBranchMillisecondsMax) {
+            $dependencyBranchMillisecondsMax = $dependencyBranchMilliseconds
+        }
+
+        $promotionMilliseconds = ConvertTo-BenchmarkMilliseconds $node.PromotionElapsed
+        $promotionMillisecondsSum += $promotionMilliseconds
+        if ($promotionMilliseconds -gt $promotionMillisecondsMax) {
+            $promotionMillisecondsMax = $promotionMilliseconds
+        }
+
+        $promotionLockWaitMillisecondsSum += ConvertTo-BenchmarkMilliseconds $node.PromotionLockWaitElapsed
+        $installLockWaitMillisecondsSum += ConvertTo-BenchmarkMilliseconds $node.InstallLockWaitElapsed
+        $coalescedWaitMillisecondsSum += ConvertTo-BenchmarkMilliseconds $node.CoalescedWaitElapsed
+
+        if ($null -ne $node.AuthenticodeVerification) {
+            $authenticodeCheckedFiles += [int]$node.AuthenticodeVerification.CheckedFiles
+            $authenticodeCatalogFiles += [int]$node.AuthenticodeVerification.CatalogFiles
+        }
+    }
+
+    [ordered]@{
+        ManagedPackageCount = $nodes.Count.ToString([Globalization.CultureInfo]::InvariantCulture)
+        ManagedInstalledCount = $installedCount.ToString([Globalization.CultureInfo]::InvariantCulture)
+        ManagedAlreadyInstalledCount = $alreadyInstalledCount.ToString([Globalization.CultureInfo]::InvariantCulture)
+        ManagedFileCount = $fileCount.ToString([Globalization.CultureInfo]::InvariantCulture)
+        ManagedDownloadedBytes = $downloadedBytes.ToString([Globalization.CultureInfo]::InvariantCulture)
+        ManagedExtractedBytes = $extractedBytes.ToString([Globalization.CultureInfo]::InvariantCulture)
+        ManagedPackageRepositoryRequests = $packageRepositoryRequests.ToString([Globalization.CultureInfo]::InvariantCulture)
+        ManagedPackageRepositoryRedirects = $packageRepositoryRedirects.ToString([Globalization.CultureInfo]::InvariantCulture)
+        ManagedVersionResolutionMillisecondsSum = Format-BenchmarkNumber $versionResolutionMillisecondsSum
+        ManagedVersionSelectionWaitMillisecondsSum = Format-BenchmarkNumber $versionSelectionWaitMillisecondsSum
+        ManagedDownloadMillisecondsSum = Format-BenchmarkNumber $downloadMillisecondsSum
+        ManagedDownloadMillisecondsMax = Format-BenchmarkNumber $downloadMillisecondsMax
+        ManagedExtractionMillisecondsSum = Format-BenchmarkNumber $extractionMillisecondsSum
+        ManagedExtractionMillisecondsMax = Format-BenchmarkNumber $extractionMillisecondsMax
+        ManagedExtractionCacheLockWaitMillisecondsSum = Format-BenchmarkNumber $extractionCacheLockWaitMillisecondsSum
+        ManagedDependencyMillisecondsRoot = Format-BenchmarkNumber (ConvertTo-BenchmarkMilliseconds $ManagedResult.DependencyElapsed)
+        ManagedDependencyQueueWaitMillisecondsSum = Format-BenchmarkNumber $dependencyQueueWaitMillisecondsSum
+        ManagedDependencyBranchMillisecondsMax = Format-BenchmarkNumber $dependencyBranchMillisecondsMax
+        ManagedPromotionMillisecondsSum = Format-BenchmarkNumber $promotionMillisecondsSum
+        ManagedPromotionMillisecondsMax = Format-BenchmarkNumber $promotionMillisecondsMax
+        ManagedPromotionLockWaitMillisecondsSum = Format-BenchmarkNumber $promotionLockWaitMillisecondsSum
+        ManagedInstallLockWaitMillisecondsSum = Format-BenchmarkNumber $installLockWaitMillisecondsSum
+        ManagedCoalescedWaitMillisecondsSum = Format-BenchmarkNumber $coalescedWaitMillisecondsSum
+        ManagedAuthenticodeCheckedFiles = $authenticodeCheckedFiles.ToString([Globalization.CultureInfo]::InvariantCulture)
+        ManagedAuthenticodeCatalogFiles = $authenticodeCatalogFiles.ToString([Globalization.CultureInfo]::InvariantCulture)
     }
 }
 
@@ -240,7 +437,7 @@ function Invoke-BenchmarkCommand {
                     }
                     if (-not [string]::IsNullOrWhiteSpace($version)) { $parameters.Version = $version }
                     if ($acceptLicense) { $parameters.AcceptLicense = $true }
-                    Install-ManagedModule @parameters | Out-Null
+                    $script:LastManagedBenchmarkResult = Install-ManagedModule @parameters
                 }
                 'Save' {
                     $parameters = @{
@@ -252,7 +449,7 @@ function Invoke-BenchmarkCommand {
                     }
                     if (-not [string]::IsNullOrWhiteSpace($version)) { $parameters.Version = $version }
                     if ($acceptLicense) { $parameters.AcceptLicense = $true }
-                    Save-ManagedModule @parameters | Out-Null
+                    $script:LastManagedBenchmarkResult = Save-ManagedModule @parameters
                 }
             }
         }
@@ -380,6 +577,7 @@ if ($PSVersionTable.PSEdition -eq 'Desktop') {
 }
 
 $results = [System.Collections.Generic.List[object]]::new()
+$script:LastManagedBenchmarkResult = $null
 foreach ($scenario in $selectedScenarios) {
     foreach ($operationName in $Operation) {
         foreach ($engineName in $Engine) {
@@ -390,10 +588,11 @@ foreach ($scenario in $selectedScenarios) {
                 New-Item -ItemType Directory -Path $installRoot, $saveRoot -Force | Out-Null
 
                 try {
+                    $script:LastManagedBenchmarkResult = $null
                     $elapsed = Invoke-MeasuredBlock {
                         Invoke-BenchmarkCommand -Scenario $scenario -OperationName $operationName -EngineName $engineName -InstallRoot $installRoot -SaveRoot $saveRoot
                     }
-                    Write-MeasurementResult -Result (New-MeasurementResult -Scenario $scenario -OperationName $operationName -EngineName $engineName -Iteration $iteration -Status 'Succeeded' -Milliseconds $elapsed -Reason '')
+                    Write-MeasurementResult -Result (New-MeasurementResult -Scenario $scenario -OperationName $operationName -EngineName $engineName -Iteration $iteration -Status 'Succeeded' -Milliseconds $elapsed -Reason '' -ManagedResult $script:LastManagedBenchmarkResult)
                 } catch {
                     $message = $_.Exception.Message
                     $status = if ($message.StartsWith('NotEquivalent:', [StringComparison]::OrdinalIgnoreCase)) {

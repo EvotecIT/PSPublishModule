@@ -49,6 +49,16 @@ provider path inside a temporary Windows user. Use
 `-SkipTemporaryUserNativeInstall` only when a machine cannot create a temporary
 local benchmark account.
 
+Managed `Install` and `Save` rows also include phase columns that make
+performance triage less speculative. The wall-clock `Seconds` column stays the
+scoreboard value; `ManagedDownloadMillisecondsSum`,
+`ManagedExtractionMillisecondsSum`, `ManagedDependencyMillisecondsRoot`,
+`ManagedPromotionMillisecondsSum`, request counts, byte counts, and matching
+max/wait columns show where the managed engine spent time. Sum columns can be
+larger than wall-clock time because dependency downloads and extraction run in
+parallel; the max and root elapsed columns are usually better indicators for
+the critical path.
+
 Run PowerShell 7:
 
 ```powershell
