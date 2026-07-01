@@ -117,6 +117,15 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     public string ModuleName { get; set; } = string.Empty;
 
     /// <summary>
+    /// High-level module build lane. Manifest refreshes PSD1 metadata only, Build runs local build/package lanes,
+    /// and Publish enables configured publish destinations.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    [Alias("ConfigurationGateMode")]
+    public ConfigurationGateMode? RunMode { get; set; }
+
+    /// <summary>
     /// Folder name containing functions to export. Default: <c>Public</c>.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
@@ -387,6 +396,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             Configuration = Configuration,
             ConfigPath = ConfigPath,
             ModuleName = ModuleName,
+            RunMode = RunMode,
             InputPath = Path,
             StagingPath = StagingPath,
             CsprojPath = CsprojPath,

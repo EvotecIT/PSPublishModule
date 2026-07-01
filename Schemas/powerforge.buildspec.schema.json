@@ -35,7 +35,7 @@
     "DevelopmentBinariesEnvironmentVariable": { "type": ["string", "null"] },
     "DevelopmentConfigurationEnvironmentVariable": { "type": ["string", "null"] },
     "DevelopmentSourceBootstrapperMode": { "type": "string", "enum": ["PreserveSingleFile", "ReplaceSingleFile"] },
-    "AssemblyTypeAcceleratorMode": { "type": ["string", "null"], "enum": ["None", "AllowList", "Assembly", null] },
+    "AssemblyTypeAcceleratorMode": { "type": ["string", "null"], "enum": ["None", "AllowList", "Assembly", "Enums", null] },
     "AssemblyTypeAccelerators": { "type": "array", "items": { "type": "string" } },
     "AssemblyTypeAcceleratorAssemblies": { "type": "array", "items": { "type": "string" } },
     "KeepStaging": { "type": "boolean" }

@@ -49,6 +49,7 @@ internal sealed class ModuleBuildPreparationService
                 ? LegacySegmentAdapter.CollectFromLegacyConfiguration(request.Configuration)
                 : CollectSettingsFromWorkspace(request.Settings, projectRoot))
             : Array.Empty<IConfigurationSegment>();
+        segments = AddRunModeSegment(segments, request.RunMode);
         ResolveWorkspaceRelativeSegmentPaths(segments, workspaceRoot, projectRoot);
 
         var frameworks = useLegacy && !request.DotNetFrameworkWasBound
@@ -123,6 +124,7 @@ internal sealed class ModuleBuildPreparationService
 
         var spec = ReadPipelineSpecJson(configFullPath);
         ResolvePipelineSpecPaths(spec, configFullPath);
+        spec.Segments = AddRunModeSegment(spec.Segments ?? Array.Empty<IConfigurationSegment>(), request.RunMode);
 
         if (spec.Build is null)
             throw new InvalidOperationException("Module build config requires a Build section.");
@@ -145,6 +147,24 @@ internal sealed class ModuleBuildPreparationService
             ConfigLabel = "json",
             ConfigFilePath = configFullPath
         };
+    }
+
+    private static IConfigurationSegment[] AddRunModeSegment(
+        IReadOnlyList<IConfigurationSegment>? segments,
+        ConfigurationGateMode? runMode)
+    {
+        if (runMode is null)
+            return (segments ?? Array.Empty<IConfigurationSegment>()).ToArray();
+
+        var output = new List<IConfigurationSegment>(segments ?? Array.Empty<IConfigurationSegment>())
+        {
+            new ConfigurationGateSegment
+            {
+                Configuration = new GateConfiguration { Mode = runMode.Value }
+            }
+        };
+
+        return output.ToArray();
     }
 
     public void WritePipelineSpecJson(ModulePipelineSpec spec, string jsonFullPath)

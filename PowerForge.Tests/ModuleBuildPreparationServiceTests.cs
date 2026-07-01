@@ -10,6 +10,34 @@ namespace PowerForge.Tests;
 public sealed class ModuleBuildPreparationServiceTests
 {
     [Fact]
+    public void Prepare_from_modern_request_appends_run_mode_gate_segment()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-runmode-" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var prepared = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
+            {
+                ParameterSetName = "Modern",
+                ModuleName = "SampleModule",
+                RunMode = ConfigurationGateMode.Manifest,
+                CurrentPath = root.FullName,
+                ResolvePath = path => path,
+                DotNetFramework = Array.Empty<string>(),
+                ExcludeDirectories = Array.Empty<string>(),
+                ExcludeFiles = Array.Empty<string>()
+            });
+
+            var gate = Assert.IsType<ConfigurationGateSegment>(Assert.Single(prepared.PipelineSpec.Segments));
+            Assert.Equal(ConfigurationGateMode.Manifest, gate.Configuration.Mode);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Prepare_from_modern_request_builds_project_paths_and_spec()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-modern-" + Guid.NewGuid().ToString("N")));
