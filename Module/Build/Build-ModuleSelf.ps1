@@ -103,6 +103,7 @@ try {
         JsonOnly       = $true
         JsonPath       = $configPath
         Configuration  = $Configuration
+        Framework      = $Framework
         NoDotnetBuild  = $true
     }
 

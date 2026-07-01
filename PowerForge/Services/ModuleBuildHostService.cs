@@ -84,11 +84,11 @@ public sealed class ModuleBuildHostService
             "Remove-Item -LiteralPath Alias:Invoke-ModuleBuilder -Force -ErrorAction SilentlyContinue",
             $"$buildScriptPath = (Get-Item -LiteralPath {QuoteLiteral(scriptPath)} -ErrorAction Stop).FullName",
             "$buildScriptCommand = Get-Command -Name $buildScriptPath -CommandType ExternalScript -ErrorAction Stop",
-            "$buildScriptArguments = @()",
+            "$buildScriptArguments = @{}",
             "if ($buildScriptCommand.Parameters.ContainsKey('RunMode')) {",
-            "  $buildScriptArguments += @('-RunMode', 'Build')",
+            "  $buildScriptArguments['RunMode'] = 'Build'",
             "} elseif ($buildScriptCommand.Parameters.ContainsKey('ConfigurationGateMode')) {",
-            "  $buildScriptArguments += @('-ConfigurationGateMode', 'Build')",
+            "  $buildScriptArguments['ConfigurationGateMode'] = 'Build'",
             "}",
             "function Invoke-ModuleBuild {",
             "  [CmdletBinding(PositionalBinding = $false)]",
@@ -175,35 +175,35 @@ public sealed class ModuleBuildHostService
         {
             $"$buildScriptPath = (Get-Item -LiteralPath {QuoteLiteral(scriptPath)} -ErrorAction Stop).FullName",
             "$buildScriptCommand = Get-Command -Name $buildScriptPath -CommandType ExternalScript -ErrorAction Stop",
-            "$buildScriptArguments = @()"
+            "$buildScriptArguments = @{}"
         };
 
         if (!string.IsNullOrWhiteSpace(request.Configuration))
         {
-            arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('Configuration')) {{ $buildScriptArguments += @('-Configuration', {QuoteLiteral(request.Configuration!)}) }}");
+            arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('Configuration')) {{ $buildScriptArguments['Configuration'] = {QuoteLiteral(request.Configuration!)} }}");
         }
 
         if (request.NoDotnetBuild)
         {
-            arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('NoDotnetBuild')) { $buildScriptArguments += '-NoDotnetBuild' }");
+            arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('NoDotnetBuild')) { $buildScriptArguments['NoDotnetBuild'] = $true }");
         }
 
         if (!string.IsNullOrWhiteSpace(request.ModuleVersion))
         {
-            arguments.Add($"$buildScriptArguments += @('-ModuleVersion', {QuoteLiteral(request.ModuleVersion!)})");
+            arguments.Add($"$buildScriptArguments['ModuleVersion'] = {QuoteLiteral(request.ModuleVersion!)}");
         }
 
         if (!string.IsNullOrWhiteSpace(request.PreReleaseTag))
         {
-            arguments.Add($"$buildScriptArguments += @('-PreReleaseTag', {QuoteLiteral(request.PreReleaseTag!)})");
+            arguments.Add($"$buildScriptArguments['PreReleaseTag'] = {QuoteLiteral(request.PreReleaseTag!)}");
         }
 
         if (request.NoSign)
-            arguments.Add("$buildScriptArguments += '-NoSign'");
+            arguments.Add("$buildScriptArguments['NoSign'] = $true");
 
         if (request.SignModule)
         {
-            arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('SignModule')) { $buildScriptArguments += '-SignModule:$true' }");
+            arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('SignModule')) { $buildScriptArguments['SignModule'] = $true }");
         }
 
         arguments.Add(". $buildScriptPath @buildScriptArguments");

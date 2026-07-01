@@ -62,6 +62,19 @@ public sealed class PSPublishModuleManifestContractTests
     }
 
     [Fact]
+    public void Self_build_forwards_selected_framework_to_json_export()
+    {
+        var repoRoot = RepoRootLocator.Find();
+        var selfBuildScript = File.ReadAllText(Path.Combine(repoRoot, "Module", "Build", "Build-ModuleSelf.ps1"));
+        var buildScript = File.ReadAllText(Path.Combine(repoRoot, "Module", "Build", "Build-Module.ps1"));
+
+        Assert.Contains("Framework      = $Framework", selfBuildScript, StringComparison.Ordinal);
+        Assert.Contains("[ValidateSet('auto', 'net10.0', 'net8.0')][string] $Framework = 'auto'", buildScript, StringComparison.Ordinal);
+        Assert.Contains("$tfm = if ($Framework -ne 'auto')", buildScript, StringComparison.Ordinal);
+        Assert.Contains("\"PSPublishModule/bin/{0}/{1}/PSPublishModule.dll\" -f $Configuration, $tfm", buildScript, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Module_exports_embedded_dependency_cmdlets()
     {
         var repoRoot = RepoRootLocator.Find();

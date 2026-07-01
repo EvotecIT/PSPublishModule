@@ -6,6 +6,7 @@
     [switch] $JsonOnly,
     [string] $JsonPath = (Join-Path $PSScriptRoot '../../powerforge.json'),
     [ValidateSet('Release', 'Debug')][string] $Configuration = 'Release',
+    [ValidateSet('auto', 'net10.0', 'net8.0')][string] $Framework = 'auto',
     [switch] $NoDotnetBuild,
     [string] $ModuleVersion = '3.0.X',
     [string] $PreReleaseTag,
@@ -29,8 +30,12 @@ $artefactsRoot = Join-Path $moduleRoot 'Artefacts'
 $csproj = Join-Path -Path $repoRoot -ChildPath 'PSPublishModule/PSPublishModule.csproj'
 $sourceManifest = Join-Path -Path $moduleRoot -ChildPath 'PSPublishModule.psd1'
 $sourceLibRoot = Join-Path -Path $moduleRoot -ChildPath 'Lib'
-$runtimesText = (dotnet --list-runtimes 2>$null) -join "`n"
-$tfm = if ($runtimesText -match '(?m)^Microsoft\.NETCore\.App\s+10\.') { 'net10.0' } else { 'net8.0' }
+$tfm = if ($Framework -ne 'auto') {
+    $Framework
+} else {
+    $runtimesText = (dotnet --list-runtimes 2>$null) -join "`n"
+    if ($runtimesText -match '(?m)^Microsoft\.NETCore\.App\s+10\.') { 'net10.0' } else { 'net8.0' }
+}
 $binaryModule = Join-Path -Path $repoRoot -ChildPath ("PSPublishModule/bin/{0}/{1}/PSPublishModule.dll" -f $Configuration, $tfm)
 
 function Invoke-LocalPSPublishModuleBuild {
