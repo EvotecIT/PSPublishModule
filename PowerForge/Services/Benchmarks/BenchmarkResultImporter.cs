@@ -929,7 +929,7 @@ public sealed class BenchmarkResultImporter
         if (string.Equals(normalized, "Max", StringComparison.OrdinalIgnoreCase)) return "MaxMs";
         if (string.Equals(normalized, "StandardError", StringComparison.OrdinalIgnoreCase)) return "StdErr";
         if (string.Equals(normalized, "StandardDeviation", StringComparison.OrdinalIgnoreCase)) return "StdDev";
-        return key;
+        return normalized;
     }
 
     private static string RemoveBracketUnit(string key)

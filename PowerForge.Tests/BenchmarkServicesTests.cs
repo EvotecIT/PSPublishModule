@@ -1061,7 +1061,7 @@ public sealed class BenchmarkServicesTests
     {
         var root = CreateTempRoot();
         var csv = Path.Combine(root, "Demo-report.csv");
-        File.WriteAllText(csv, "Method,Rows,Median [us],Mean [us],Min [us],Max [us],Error,StdDev,Allocated\nWrite,10,1500,9000,1000,12000,1.2,3.4,8 KB\n");
+        File.WriteAllText(csv, "Method,Rows,Median [us],Mean [us],Min [us],Max [us],P95 [ns],Error,StdDev [us],Allocated\nWrite,10,1500,9000,1000,12000,950,1.2,3400,8 KB\n");
 
         var result = new BenchmarkResultImporter().Import(csv, "demo");
         var sample = Assert.Single(result.Samples);
@@ -1072,13 +1072,15 @@ public sealed class BenchmarkServicesTests
         Assert.DoesNotContain("Mean [us]", sample.Variables.Keys);
         Assert.DoesNotContain("Min [us]", sample.Variables.Keys);
         Assert.DoesNotContain("Max [us]", sample.Variables.Keys);
+        Assert.DoesNotContain("P95 [ns]", sample.Variables.Keys);
         Assert.DoesNotContain("Error", sample.Variables.Keys);
-        Assert.DoesNotContain("StdDev", sample.Variables.Keys);
+        Assert.DoesNotContain("StdDev [us]", sample.Variables.Keys);
         Assert.DoesNotContain("Allocated", sample.Variables.Keys);
         Assert.Equal(1.5, sample.Metrics["MedianMs"]);
         Assert.Equal(9, sample.Metrics["MeanMs"]);
         Assert.Equal(1, sample.Metrics["MinMs"]);
         Assert.Equal(12, sample.Metrics["MaxMs"]);
+        Assert.InRange(sample.Metrics["P95"], 0.000949, 0.000951);
         Assert.Equal(1.2, sample.Metrics["Error"]);
         Assert.Equal(3.4, sample.Metrics["StdDev"]);
         Assert.Equal(8192, sample.Metrics["Allocated"]);
@@ -1581,6 +1583,29 @@ benchmark 'closure' {
     }
 
     [Fact]
+    public void DslRuntime_PreservesPSScriptRootInExpandableStrings()
+    {
+        var root = CreateTempRoot();
+        var fixture = Path.Combine(root, "fixture.txt");
+        File.WriteAllText(fixture, "ok");
+        var script = ScriptBlock.Create(@"
+benchmark 'expandable-root' {
+    axis Operation Run
+    axis Engine Managed
+    setup { param($case, $run) $run.FixtureText = Get-Content -LiteralPath ""$PSScriptRoot/fixture.txt"" -Raw }
+    engine Managed { operation Run { param($case, $run) if ($run.FixtureText -ne 'ok') { throw 'expandable root missing' } } }
+}
+");
+
+        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script, root));
+        suite.WarmupCount = 0;
+        suite.IterationCount = 1;
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
+    }
+
+    [Fact]
     public void DslRuntime_PreservesSpecLocalHelperFunctionsInCapturedBlocks()
     {
         var root = CreateTempRoot();
@@ -2028,6 +2053,17 @@ benchmark 'path-temp-user' -out 'out' {
     }
 
     [Fact]
+    public void Runner_RejectsUnsupportedOsAxis()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "OS", Values = { "Windows", "Linux" } });
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Plan(suite));
+
+        Assert.Contains("OS axis", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Runner_FailsMalformedSuitesWithNoWork()
     {
         var suite = new PowerShellBenchmarkSuite { Name = "empty" };
@@ -2309,6 +2345,17 @@ benchmark 'path-temp-user' -out 'out' {
     }
 
     [Fact]
+    public void Runner_RethrowsPipelineStoppedExceptions()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create("param($case, $run) throw [System.Management.Automation.PipelineStoppedException]::new()");
+
+        var ex = Assert.ThrowsAny<Exception>(() => new PowerShellBenchmarkRunner().Run(suite));
+
+        Assert.Contains("PipelineStopped", ex.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Runner_TreatsDesktopNativeExitCodesAsFailures()
     {
         var suite = CreateRunnableSuite();
@@ -2364,6 +2411,31 @@ benchmark 'path-temp-user' -out 'out' {
         Assert.Contains("summary.md", report.Artifacts.Keys);
         Assert.Contains("comparison.md", report.Artifacts.Keys);
         Assert.True(File.Exists(result.Artifacts["metadata.json"]));
+    }
+
+    [Fact]
+    public void Runner_WritesFailureArtifactsBeforeComparisonErrors()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Artifacts = BenchmarkArtifactKind.Json;
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create("param($case, $run) throw 'baseline failed'");
+        var other = new PowerShellBenchmarkEngine { Name = "Other" };
+        other.Operations["Run"] = ScriptBlock.Create("param($case, $run)");
+        suite.Engines.Add(other);
+        suite.Axes.Single(axis => axis.Name == "Engine").Values.Add("Other");
+        suite.Comparisons.Add(new PowerShellBenchmarkComparison { Dimension = "Engine", Baseline = "Managed" });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new PowerShellBenchmarkRunner().Run(suite));
+        var samplesPath = Assert.Single(Directory.GetFiles(suite.OutputRoot, "samples.json", SearchOption.AllDirectories));
+        var summaryPath = Assert.Single(Directory.GetFiles(suite.OutputRoot, "summary.json", SearchOption.AllDirectories));
+        var reportPath = Assert.Single(Directory.GetFiles(suite.OutputRoot, "run-report.json", SearchOption.AllDirectories));
+        var samples = BenchmarkJson.Read<BenchmarkSample[]>(samplesPath);
+
+        Assert.Contains("Managed", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("MedianMs", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(samples, sample => sample.Engine == "Managed" && sample.Status == BenchmarkSampleStatus.Failed);
+        Assert.True(File.Exists(summaryPath));
+        Assert.True(File.Exists(reportPath));
     }
 
     [Fact]

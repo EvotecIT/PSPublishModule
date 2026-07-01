@@ -119,6 +119,29 @@ public static class PowerShellBenchmarkDslRuntime
     }
 
     /// <summary>
+    /// Gets benchmark script text with file-root variables rewritten for later invocation.
+    /// </summary>
+    /// <param name="scriptBlock">Script block to capture.</param>
+    /// <returns>Captured script text.</returns>
+    public static string CaptureScriptText(ScriptBlock scriptBlock)
+        => CaptureScriptText(scriptBlock, Current.Value?.ScriptRoot);
+
+    /// <summary>
+    /// Gets benchmark script text with a supplied file root rewritten for later invocation.
+    /// </summary>
+    /// <param name="scriptBlock">Script block to capture.</param>
+    /// <param name="scriptRoot">Script root used for <c>$PSScriptRoot</c>.</param>
+    /// <returns>Captured script text.</returns>
+    public static string CaptureScriptText(ScriptBlock scriptBlock, string? scriptRoot)
+    {
+        if (scriptBlock is null) throw new ArgumentNullException(nameof(scriptBlock));
+        var scriptText = scriptBlock.ToString();
+        return string.IsNullOrWhiteSpace(scriptRoot)
+            ? scriptText
+            : ReplaceScriptRootVariables(scriptText, scriptRoot!);
+    }
+
+    /// <summary>
     /// Adds an axis.
     /// </summary>
     /// <param name="name">Axis name.</param>
@@ -304,15 +327,16 @@ public static class PowerShellBenchmarkDslRuntime
         => InvokeWithScriptRoot(scriptBlock, functionsToDefine: null);
 
     private static Hashtable CreateFunctions()
-        => new()
-        {
-            ["__PowerForgeCloseBenchmarkBlock"] = ScriptBlock.Create("""
+    {
+        var scriptRootLiteral = ToPowerShellLiteral(Current.Value?.ScriptRoot ?? string.Empty);
+        var closeBenchmarkBlock = """
 param([scriptblock] $ScriptBlock)
+$scriptRoot = __POWERFORGE_SCRIPT_ROOT__
 $captured = @{}
 $capturedFunctions = @{}
 $skipNames = @(
     'args', 'input', 'this', 'PSItem', '_', 'Error',
-    'captured', 'capturedFunctions', 'scriptText'
+    'captured', 'capturedFunctions', 'scriptText', 'scriptRoot'
 )
 $skipFunctions = @(
     '__PowerForgeCloseBenchmarkBlock',
@@ -351,7 +375,7 @@ foreach ($function in Get-Command -CommandType Function -ErrorAction SilentlyCon
     }
 }
 
-$scriptText = $ScriptBlock.ToString()
+$scriptText = [PowerForge.PowerShellBenchmarkDslRuntime]::CaptureScriptText($ScriptBlock, $scriptRoot)
 {
     $previousFunctions = @{}
     $missingFunctions = @{}
@@ -382,7 +406,11 @@ $scriptText = $ScriptBlock.ToString()
         }
     }
 }.GetNewClosure()
-"""),
+""".Replace("__POWERFORGE_SCRIPT_ROOT__", scriptRootLiteral);
+
+        return new()
+        {
+            ["__PowerForgeCloseBenchmarkBlock"] = ScriptBlock.Create(closeBenchmarkBlock),
             ["benchmark"] = ScriptBlock.Create("param([Parameter(Position=0)] [string] $Name, [Alias('out')] [string] $OutputRoot, [Parameter(Position=1)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Benchmark($Name, $OutputRoot, $ScriptBlock)"),
             ["cases"] = ScriptBlock.Create("param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Cases($ScriptBlock)"),
             ["case"] = ScriptBlock.Create("param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [hashtable] $Values) [PowerForge.PowerShellBenchmarkDslRuntime]::Case($Name, $Values)"),
@@ -418,6 +446,7 @@ $scriptText = $ScriptBlock.ToString()
             ["Add-BenchmarkReadmeBlock"] = ScriptBlock.Create("param([Parameter(Position=0)] [string] $Path, [string] $Block, [string] $Renderer) [PowerForge.PowerShellBenchmarkDslRuntime]::Readme($Path, $Block, $Renderer)"),
             ["Set-BenchmarkArtifacts"] = ScriptBlock.Create("param([Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) [PowerForge.PowerShellBenchmarkDslRuntime]::Artifacts($Values)")
         };
+    }
 
     private static PowerShellBenchmarkCase ConvertToCase(PSObject value)
     {
@@ -505,11 +534,7 @@ finally {
 
     private static ScriptBlock PrepareRootScriptBlock(ScriptBlock scriptBlock)
     {
-        var scriptRoot = Current.Value?.ScriptRoot;
-        if (string.IsNullOrWhiteSpace(scriptRoot))
-            return scriptBlock;
-
-        var source = ReplaceScriptRootVariables(scriptBlock.ToString(), scriptRoot!);
+        var source = CaptureScriptText(scriptBlock);
         return string.Equals(source, scriptBlock.ToString(), StringComparison.Ordinal)
             ? scriptBlock
             : ScriptBlock.Create(source);
@@ -517,32 +542,44 @@ finally {
 
     private static string ReplaceScriptRootVariables(string script, string scriptRoot)
     {
-        System.Management.Automation.Language.Parser.ParseInput(script, out var tokens, out _);
-        var replacements = tokens
-            .Where(token => token.Kind == System.Management.Automation.Language.TokenKind.Variable
-                            && IsPSScriptRootToken(token.Text))
-            .OrderByDescending(token => token.Extent.StartOffset)
+        var ast = System.Management.Automation.Language.Parser.ParseInput(script, out _, out _);
+        var expandableStrings = ast.FindAll(node => node is System.Management.Automation.Language.ExpandableStringExpressionAst, searchNestedScriptBlocks: true)
+            .Select(node => node.Extent)
+            .ToArray();
+        var replacements = ast.FindAll(node => node is System.Management.Automation.Language.VariableExpressionAst variable
+                                             && IsPSScriptRootVariable(variable), searchNestedScriptBlocks: true)
+            .Cast<System.Management.Automation.Language.VariableExpressionAst>()
+            .OrderByDescending(variable => variable.Extent.StartOffset)
             .ToArray();
         if (replacements.Length == 0)
             return script;
 
         var rooted = script;
-        var literal = ToPowerShellLiteral(scriptRoot);
-        foreach (var token in replacements)
+        foreach (var variable in replacements)
         {
-            rooted = rooted.Remove(token.Extent.StartOffset, token.Extent.EndOffset - token.Extent.StartOffset)
-                .Insert(token.Extent.StartOffset, literal);
+            var literal = IsInsideAnyExtent(variable.Extent, expandableStrings)
+                ? ToPowerShellExpandableStringText(scriptRoot)
+                : ToPowerShellLiteral(scriptRoot);
+            rooted = rooted.Remove(variable.Extent.StartOffset, variable.Extent.EndOffset - variable.Extent.StartOffset)
+                .Insert(variable.Extent.StartOffset, literal);
         }
 
         return rooted;
     }
 
-    private static bool IsPSScriptRootToken(string text)
-        => string.Equals(text, "$PSScriptRoot", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(text, "${PSScriptRoot}", StringComparison.OrdinalIgnoreCase);
+    private static bool IsInsideAnyExtent(System.Management.Automation.Language.IScriptExtent extent, System.Management.Automation.Language.IScriptExtent[] containers)
+        => containers.Any(container => extent.StartOffset >= container.StartOffset && extent.EndOffset <= container.EndOffset);
+
+    private static bool IsPSScriptRootVariable(System.Management.Automation.Language.VariableExpressionAst variable)
+        => string.Equals(variable.VariablePath.UserPath, "PSScriptRoot", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(variable.Extent.Text, "$PSScriptRoot", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(variable.Extent.Text, "${PSScriptRoot}", StringComparison.OrdinalIgnoreCase);
 
     private static string ToPowerShellLiteral(string value)
         => "'" + value.Replace("'", "''") + "'";
+
+    private static string ToPowerShellExpandableStringText(string value)
+        => value.Replace("`", "``").Replace("$", "`$").Replace("\"", "`\"");
 
     private static List<PSVariable> CreateInvocationVariables()
     {

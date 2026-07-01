@@ -43,6 +43,7 @@ public sealed class PowerShellBenchmarkRunner
     private PowerShellBenchmarkWorkItem[] PlanInCurrentRunspace(PowerShellBenchmarkSuite suite)
     {
         if (suite is null) throw new ArgumentNullException(nameof(suite));
+        ValidateSupportedAxes(suite);
         var cases = suite.Cases.Count == 0
             ? new[] { new PowerShellBenchmarkCase { Name = "Default" } }
             : suite.Cases.ToArray();
@@ -174,11 +175,6 @@ public sealed class PowerShellBenchmarkRunner
 
         var summarizer = new BenchmarkSummaryService();
         var summary = summarizer.Summarize(samples);
-        var comparisons = suite.Comparisons
-            .Where(c => !string.IsNullOrWhiteSpace(c.Baseline))
-            .SelectMany(c => c.Metrics.SelectMany(m => summarizer.Compare(summary, c.Baseline, m)))
-            .ToArray();
-
         var result = new BenchmarkRunResult
         {
             RunId = runId,
@@ -187,9 +183,22 @@ public sealed class PowerShellBenchmarkRunner
             FinishedUtc = DateTimeOffset.UtcNow,
             Samples = samples.ToArray(),
             Summary = summary,
-            Comparison = comparisons,
+            Comparison = Array.Empty<BenchmarkComparisonRow>(),
             Metadata = BuildMetadata(suite)
         };
+
+        try
+        {
+            result.Comparison = suite.Comparisons
+                .Where(c => !string.IsNullOrWhiteSpace(c.Baseline))
+                .SelectMany(c => c.Metrics.SelectMany(m => summarizer.Compare(summary, c.Baseline, m)))
+                .ToArray();
+        }
+        catch
+        {
+            WriteArtifacts(suite, result);
+            throw;
+        }
 
         WriteArtifacts(suite, result);
         UpdateReadmeBlocks(suite, result);
@@ -242,7 +251,7 @@ public sealed class PowerShellBenchmarkRunner
             var metrics = CaptureMetrics(suite, caseObject, runObject);
             return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Succeeded, durationMs, string.Empty, metrics);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (!IsPowerShellStopRequest(ex))
         {
             return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Failed, durationMs, ex.InnerException?.Message ?? ex.Message, null);
         }
@@ -279,6 +288,23 @@ public sealed class PowerShellBenchmarkRunner
     {
         if (skip is null) return false;
         return InvokeStrict(skip, caseObject).Any(value => LanguagePrimitives.IsTrue(value));
+    }
+
+    private static bool IsPowerShellStopRequest(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is PipelineStoppedException or OperationCanceledException)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static void ValidateSupportedAxes(PowerShellBenchmarkSuite suite)
+    {
+        if (GetAxisValues(suite.Axes, "OS") is not null)
+            throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested an OS axis, but this runner only supports the current operating system. Run the suite on each target OS and compare imported results instead.");
     }
 
     private static void ValidateComparisons(PowerShellBenchmarkSuite suite)
