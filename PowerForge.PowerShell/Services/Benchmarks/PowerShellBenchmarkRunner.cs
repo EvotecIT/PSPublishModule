@@ -26,42 +26,49 @@ public sealed class PowerShellBenchmarkRunner
             : suite.Cases.ToArray();
         var expanded = ExpandCases(cases, suite.Axes);
         var engineAxis = GetAxisValues(suite.Axes, "Engine") ?? suite.Engines.Select(e => (object?)e.Name).ToArray();
-        var operationAxis = GetAxisValues(suite.Axes, "Operation") ?? suite.Engines.SelectMany(e => e.Operations.Keys).Distinct(StringComparer.OrdinalIgnoreCase).Cast<object?>().ToArray();
+        var explicitOperationAxis = GetAxisValues(suite.Axes, "Operation");
         var currentHostLabel = GetCurrentHostLabel();
         var hostAxis = GetAxisValues(suite.Axes, "Host") ?? new object?[] { currentHostLabel };
         if (expanded.Count == 0) throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define any runnable cases.");
         if (engineAxis.Length == 0) throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define any engine values.");
-        if (operationAxis.Length == 0) throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define any operation values.");
         if (hostAxis.Length == 0) throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define any host values.");
         var items = new List<PowerShellBenchmarkWorkItem>();
 
         foreach (var values in expanded)
         foreach (var engineValue in engineAxis)
-        foreach (var operationValue in operationAxis)
-        foreach (var hostValue in hostAxis)
         {
             var engineName = Convert.ToString(engineValue, CultureInfo.InvariantCulture) ?? string.Empty;
-            var operationName = Convert.ToString(operationValue, CultureInfo.InvariantCulture) ?? string.Empty;
-            var requestedHostName = Convert.ToString(hostValue, CultureInfo.InvariantCulture) ?? "Current";
-            if (!IsCurrentHost(requestedHostName, currentHostLabel))
-                throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested host '{requestedHostName}', but this runner only supports the current PowerShell host. Use 'Current' or run the suite from the target host.");
-            var hostName = NormalizeCurrentHost(requestedHostName, currentHostLabel);
             var engine = suite.Engines.FirstOrDefault(e => string.Equals(e.Name, engineName, StringComparison.OrdinalIgnoreCase));
-            if (engine is null || !engine.Operations.TryGetValue(operationName, out var handler))
-                throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define handler for engine '{engineName}' operation '{operationName}'.");
+            if (engine is null)
+                throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define engine '{engineName}'.");
+            var operationAxis = explicitOperationAxis ?? engine.Operations.Keys.Cast<object?>().ToArray();
+            if (operationAxis.Length == 0)
+                throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define any operation values for engine '{engineName}'.");
 
-            values["Engine"] = engineName;
-            values["Operation"] = operationName;
-            values["Host"] = hostName;
-            items.Add(new PowerShellBenchmarkWorkItem
+            foreach (var operationValue in operationAxis)
+            foreach (var hostValue in hostAxis)
             {
-                Values = new Dictionary<string, object?>(values, StringComparer.OrdinalIgnoreCase),
-                Scenario = GetScenarioName(values),
-                Engine = engineName,
-                Operation = operationName,
-                Host = hostName,
-                Handler = handler
-            });
+                var operationName = Convert.ToString(operationValue, CultureInfo.InvariantCulture) ?? string.Empty;
+                var requestedHostName = Convert.ToString(hostValue, CultureInfo.InvariantCulture) ?? "Current";
+                if (!IsCurrentHost(requestedHostName, currentHostLabel))
+                    throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested host '{requestedHostName}', but this runner only supports the current PowerShell host. Use 'Current' or run the suite from the target host.");
+                var hostName = NormalizeCurrentHost(requestedHostName, currentHostLabel);
+                if (!engine.Operations.TryGetValue(operationName, out var handler))
+                    throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define handler for engine '{engineName}' operation '{operationName}'.");
+
+                values["Engine"] = engineName;
+                values["Operation"] = operationName;
+                values["Host"] = hostName;
+                items.Add(new PowerShellBenchmarkWorkItem
+                {
+                    Values = new Dictionary<string, object?>(values, StringComparer.OrdinalIgnoreCase),
+                    Scenario = GetScenarioName(values),
+                    Engine = engineName,
+                    Operation = operationName,
+                    Host = hostName,
+                    Handler = handler
+                });
+            }
         }
 
         return items.Count == 0
@@ -184,6 +191,7 @@ public sealed class PowerShellBenchmarkRunner
             ["OutputDirectory"] = outputDirectory,
             ["OutputPath"] = Path.Combine(outputDirectory, "output")
         });
+        var durationMs = 0d;
 
         try
         {
@@ -195,14 +203,16 @@ public sealed class PowerShellBenchmarkRunner
             var stopwatch = Stopwatch.StartNew();
             InvokeStrict(item.Handler, caseObject, runObject);
             stopwatch.Stop();
+            durationMs = stopwatch.Elapsed.TotalMilliseconds;
+            SetProperty(runObject, "DurationMs", durationMs);
 
             InvokeOptional(suite.Validate, caseObject, runObject);
             var metrics = CaptureMetrics(suite, caseObject, runObject);
-            return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Succeeded, stopwatch.Elapsed.TotalMilliseconds, string.Empty, metrics);
+            return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Succeeded, durationMs, string.Empty, metrics);
         }
         catch (Exception ex)
         {
-            return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Failed, 0, ex.InnerException?.Message ?? ex.Message, null);
+            return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Failed, durationMs, ex.InnerException?.Message ?? ex.Message, null);
         }
     }
 

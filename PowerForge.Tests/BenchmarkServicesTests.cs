@@ -267,6 +267,88 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void GateService_HonorsHigherIsBetterMetrics()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        BenchmarkJson.Write(baselinePath, new
+        {
+            metrics = new Dictionary<string, double>
+            {
+                ["suite|case|Run|Managed|Current|||RowsPerSecond"] = 100
+            }
+        });
+        BenchmarkJson.Write(summaryPath, new[]
+        {
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                Metrics = new Dictionary<string, double> { ["RowsPerSecond"] = 80 }
+            }
+        });
+
+        var verify = new BenchmarkGateService().Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            Metric = "RowsPerSecond",
+            RelativeTolerance = 0.10
+        });
+
+        Assert.False(verify.Passed);
+        Assert.Contains(verify.Metrics, metric => metric.Regressed);
+        Assert.Contains(verify.Messages, message => message.Contains("HigherIsBetter", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void GateService_EscapesVariableDelimitersInKeys()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        BenchmarkJson.Write(summaryPath, new[]
+        {
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                MedianMs = 1,
+                Variables = new Dictionary<string, string?> { ["A"] = "1;B=2" }
+            },
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                MedianMs = 2,
+                Variables = new Dictionary<string, string?> { ["A"] = "1", ["B"] = "2" }
+            }
+        });
+
+        var update = new BenchmarkGateService().Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            BaselineMode = BenchmarkBaselineMode.Update
+        });
+
+        Assert.True(update.Passed);
+        Assert.Equal(2, update.Metrics.Length);
+        Assert.Equal(2, update.Metrics.Select(metric => metric.Key).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Contains(update.Metrics, metric => metric.Key.Contains(@"A=1\;B\=2", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void GateService_NormalizesMetricNamesInKeys()
     {
         var root = CreateTempRoot();
@@ -763,6 +845,45 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_DirectoryDeduplicatesBenchmarkDotNetJsonVariants()
+    {
+        var root = CreateTempRoot();
+        File.WriteAllText(Path.Combine(root, "Demo-report.json"), """
+{
+  "Title": "demo",
+  "Benchmarks": [
+    {
+      "Method": "Write",
+      "Statistics": {
+        "Median": 100
+      }
+    }
+  ]
+}
+""");
+        File.WriteAllText(Path.Combine(root, "Demo-report-full.json"), """
+{
+  "Title": "demo",
+  "Benchmarks": [
+    {
+      "FullName": "Demo.Bench.Write()",
+      "Method": "Write",
+      "Statistics": {
+        "Median": 200
+      }
+    }
+  ]
+}
+""");
+
+        var result = new BenchmarkResultImporter().Import(root);
+        var row = Assert.Single(result.Summary);
+
+        Assert.InRange(row.MedianMs.GetValueOrDefault(), 0.000199, 0.000201);
+        Assert.Equal("Demo.Bench", row.Variables["Type"]);
+    }
+
+    [Fact]
     public void Importer_PreservesNormalizedCsvStatusSuiteAndVariables()
     {
         var root = CreateTempRoot();
@@ -1187,6 +1308,52 @@ benchmark 'path' -out 'relative-out' {
 
         Assert.Equal(new[] { "1", "2", "3" }, firstIteration);
         Assert.Equal(new[] { "2", "3", "1" }, secondIteration);
+    }
+
+    [Fact]
+    public void Runner_PairsImplicitOperationsWithTheirEngines()
+    {
+        var first = new PowerShellBenchmarkEngine { Name = "First" };
+        first.Operations["FirstRun"] = ScriptBlock.Create("param($case, $run)");
+        var second = new PowerShellBenchmarkEngine { Name = "Second" };
+        second.Operations["SecondRun"] = ScriptBlock.Create("param($case, $run)");
+        var suite = new PowerShellBenchmarkSuite
+        {
+            Name = "suite",
+            OutputRoot = CreateTempRoot(),
+            WarmupCount = 0,
+            IterationCount = 1,
+            Artifacts = BenchmarkArtifactKind.None
+        };
+        suite.Engines.Add(first);
+        suite.Engines.Add(second);
+
+        var plan = new PowerShellBenchmarkRunner().Plan(suite);
+
+        Assert.Equal(2, plan.Length);
+        Assert.Contains(plan, item => item.Engine == "First" && item.Operation == "FirstRun");
+        Assert.Contains(plan, item => item.Engine == "Second" && item.Operation == "SecondRun");
+        Assert.DoesNotContain(plan, item => item.Engine == "First" && item.Operation == "SecondRun");
+        Assert.DoesNotContain(plan, item => item.Engine == "Second" && item.Operation == "FirstRun");
+    }
+
+    [Fact]
+    public void Runner_SetsDurationMsBeforeCapturingMetrics()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create("param($case, $run) Start-Sleep -Milliseconds 10");
+        suite.Metrics.Add(new PowerShellBenchmarkMetric
+        {
+            Name = "RowsPerSecond",
+            ScriptBlock = ScriptBlock.Create("param($case, $run) if ($run.DurationMs -le 0) { throw 'missing duration' }; 1000 / [double]$run.DurationMs")
+        });
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+        var sample = Assert.Single(result.Samples);
+
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status);
+        Assert.True(sample.DurationMs > 0);
+        Assert.True(sample.Metrics["RowsPerSecond"] > 0);
     }
 
     [Fact]

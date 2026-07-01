@@ -50,6 +50,21 @@ public enum BenchmarkBaselineMode
 }
 
 /// <summary>
+/// Direction used when deciding whether a benchmark metric regressed.
+/// </summary>
+public enum BenchmarkMetricDirection
+{
+    /// <summary>Infer direction from the metric name.</summary>
+    Auto,
+
+    /// <summary>Lower values are better, such as elapsed time or allocated bytes.</summary>
+    LowerIsBetter,
+
+    /// <summary>Higher values are better, such as throughput or operations per second.</summary>
+    HigherIsBetter
+}
+
+/// <summary>
 /// One raw measurement emitted by a benchmark run.
 /// </summary>
 public sealed class BenchmarkSample
@@ -275,6 +290,9 @@ public sealed class BenchmarkGateRequest
 
     /// <summary>Absolute tolerance in milliseconds used to compute the allowed cap.</summary>
     public double AbsoluteToleranceMs { get; set; }
+
+    /// <summary>Metric direction used when evaluating regressions.</summary>
+    public BenchmarkMetricDirection MetricDirection { get; set; } = BenchmarkMetricDirection.Auto;
 }
 
 /// <summary>
@@ -312,7 +330,7 @@ public sealed class BenchmarkGateMetricResult
     /// <summary>Baseline metric value.</summary>
     public double? Baseline { get; set; }
 
-    /// <summary>Computed allowed cap.</summary>
+    /// <summary>Computed allowed cap or floor, depending on metric direction.</summary>
     public double? Allowed { get; set; }
 
     /// <summary>True when the metric is new compared to the baseline.</summary>

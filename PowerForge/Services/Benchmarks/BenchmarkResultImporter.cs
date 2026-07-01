@@ -57,6 +57,11 @@ public sealed class BenchmarkResultImporter
 
         var benchmarkDotNetJsonFiles = Directory.GetFiles(path, "*-report*.json", SearchOption.AllDirectories)
             .Distinct(StringComparer.OrdinalIgnoreCase)
+            .GroupBy(BenchmarkDotNetJsonReportFamily, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group
+                .OrderByDescending(BenchmarkDotNetJsonReportPreference)
+                .ThenBy(p => p, StringComparer.OrdinalIgnoreCase)
+                .First())
             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         if (benchmarkDotNetJsonFiles.Length > 0)
@@ -336,6 +341,25 @@ public sealed class BenchmarkResultImporter
 
         result = BuildImportedResult(suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path), samples);
         return true;
+    }
+
+    private static string BenchmarkDotNetJsonReportFamily(string path)
+    {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(path)) ?? string.Empty;
+        var name = Path.GetFileNameWithoutExtension(path);
+        var reportIndex = name.IndexOf("-report", StringComparison.OrdinalIgnoreCase);
+        return reportIndex < 0
+            ? Path.Combine(directory, name)
+            : Path.Combine(directory, name.Substring(0, reportIndex) + "-report");
+    }
+
+    private static int BenchmarkDotNetJsonReportPreference(string path)
+    {
+        var name = Path.GetFileName(path);
+        if (name.IndexOf("full-compressed", StringComparison.OrdinalIgnoreCase) >= 0) return 30;
+        if (name.IndexOf("full", StringComparison.OrdinalIgnoreCase) >= 0) return 20;
+        if (name.EndsWith("-report.json", StringComparison.OrdinalIgnoreCase)) return 10;
+        return 0;
     }
 
     private static string GetBenchmarkDotNetEngine(JsonElement benchmark)

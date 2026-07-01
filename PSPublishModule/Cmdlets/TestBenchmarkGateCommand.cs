@@ -66,6 +66,12 @@ public sealed class TestBenchmarkGateCommand : PSCmdlet
     public double AbsoluteToleranceMs { get; set; }
 
     /// <summary>
+    /// Metric direction for regression checks.
+    /// </summary>
+    [Parameter]
+    public BenchmarkMetricDirection MetricDirection { get; set; } = BenchmarkMetricDirection.Auto;
+
+    /// <summary>
     /// Emits gate result and writes an error when verification fails.
     /// </summary>
     protected override void ProcessRecord()
@@ -79,7 +85,8 @@ public sealed class TestBenchmarkGateCommand : PSCmdlet
             BaselineMode = Update ? BenchmarkBaselineMode.Update : BenchmarkBaselineMode.Verify,
             FailOnNew = !AllowNew,
             RelativeTolerance = Math.Max(0, RelativeTolerance),
-            AbsoluteToleranceMs = Math.Max(0, AbsoluteToleranceMs)
+            AbsoluteToleranceMs = Math.Max(0, AbsoluteToleranceMs),
+            MetricDirection = MetricDirection
         };
 
         var result = new BenchmarkGateService().Evaluate(request);

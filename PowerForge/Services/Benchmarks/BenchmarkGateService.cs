@@ -76,17 +76,20 @@ public sealed class BenchmarkGateService
             }
             else
             {
-                var allowed = Math.Max(
-                    baselineValue * (1.0 + Math.Max(0, request.RelativeTolerance)),
-                    baselineValue + Math.Max(0, request.AbsoluteToleranceMs));
+                var direction = ResolveMetricDirection(request);
+                var allowed = GetAllowedLimit(
+                    baselineValue,
+                    request.RelativeTolerance,
+                    request.AbsoluteToleranceMs,
+                    direction);
                 result.Baseline = baselineValue;
                 result.Allowed = allowed;
-                result.Regressed = entry.Value > allowed;
+                result.Regressed = IsRegressed(entry.Value, allowed, direction);
                 if (result.Regressed)
                 {
                     failed = true;
                     messages.Add(
-                        $"Benchmark metric '{entry.Key}' regressed: actual={entry.Value.ToString("0.###", CultureInfo.InvariantCulture)}, allowed={allowed.ToString("0.###", CultureInfo.InvariantCulture)}, baseline={baselineValue.ToString("0.###", CultureInfo.InvariantCulture)}.");
+                        $"Benchmark metric '{entry.Key}' regressed: actual={entry.Value.ToString("0.###", CultureInfo.InvariantCulture)}, allowed={allowed.ToString("0.###", CultureInfo.InvariantCulture)}, baseline={baselineValue.ToString("0.###", CultureInfo.InvariantCulture)}, direction={direction}.");
                 }
             }
 
@@ -152,11 +155,12 @@ public sealed class BenchmarkGateService
         var values = new List<string>();
         foreach (var field in groupBy.Count == 0 ? new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS", "Variables" } : groupBy)
         {
-            values.Add(GetField(row, field));
+            var value = GetField(row, field);
+            values.Add(IsVariablesField(field) ? value : EscapeKeyComponent(value));
         }
 
-        values.Add(NormalizeMetricName(metric));
-        return string.Join("|", values.Select(v => v.Replace("|", "\\|")));
+        values.Add(EscapeKeyComponent(NormalizeMetricName(metric)));
+        return string.Join("|", values);
     }
 
     private static string GetField(BenchmarkSummaryRow row, string field)
@@ -175,6 +179,9 @@ public sealed class BenchmarkGateService
             return value ?? string.Empty;
         return string.Empty;
     }
+
+    private static bool IsVariablesField(string field)
+        => string.Equals(field, "Variables", StringComparison.OrdinalIgnoreCase);
 
     private static bool TryGetVariable(IReadOnlyDictionary<string, string?> variables, string name, out string? value)
     {
@@ -201,7 +208,17 @@ public sealed class BenchmarkGateService
                             && !string.Equals(k.Key, "Operation", StringComparison.OrdinalIgnoreCase)
                             && !string.Equals(k.Key, "Host", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
-                .Select(k => string.Concat(k.Key, "=", k.Value ?? string.Empty)));
+                .Select(k => string.Concat(EscapeKeyComponent(k.Key), "=", EscapeKeyComponent(k.Value ?? string.Empty))));
+
+    private static string EscapeKeyComponent(string? value)
+    {
+        var text = value ?? string.Empty;
+        return text
+            .Replace("\\", "\\\\")
+            .Replace("|", "\\|")
+            .Replace(";", "\\;")
+            .Replace("=", "\\=");
+    }
 
     private static string NormalizeMetricName(string? metric)
     {
@@ -212,6 +229,40 @@ public sealed class BenchmarkGateService
         if (string.Equals(name, "MaxMs", StringComparison.OrdinalIgnoreCase)) return "MaxMs";
         return name;
     }
+
+    private static BenchmarkMetricDirection ResolveMetricDirection(BenchmarkGateRequest request)
+    {
+        if (request.MetricDirection != BenchmarkMetricDirection.Auto)
+            return request.MetricDirection;
+
+        var metric = NormalizeMetricName(request.Metric);
+        if (metric.EndsWith("PerSecond", StringComparison.OrdinalIgnoreCase)
+            || metric.EndsWith("PerSec", StringComparison.OrdinalIgnoreCase)
+            || metric.IndexOf("/s", StringComparison.OrdinalIgnoreCase) >= 0
+            || metric.IndexOf("Throughput", StringComparison.OrdinalIgnoreCase) >= 0
+            || metric.IndexOf("Ops", StringComparison.OrdinalIgnoreCase) >= 0)
+            return BenchmarkMetricDirection.HigherIsBetter;
+
+        return BenchmarkMetricDirection.LowerIsBetter;
+    }
+
+    private static double GetAllowedLimit(
+        double baselineValue,
+        double relativeTolerance,
+        double absoluteTolerance,
+        BenchmarkMetricDirection direction)
+    {
+        var relative = Math.Max(0, relativeTolerance);
+        var absolute = Math.Max(0, absoluteTolerance);
+        return direction == BenchmarkMetricDirection.HigherIsBetter
+            ? Math.Min(baselineValue * (1.0 - relative), baselineValue - absolute)
+            : Math.Max(baselineValue * (1.0 + relative), baselineValue + absolute);
+    }
+
+    private static bool IsRegressed(double actual, double allowed, BenchmarkMetricDirection direction)
+        => direction == BenchmarkMetricDirection.HigherIsBetter
+            ? actual < allowed
+            : actual > allowed;
 
     private static Dictionary<string, double> ReadBaseline(string path)
     {
