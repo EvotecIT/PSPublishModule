@@ -400,17 +400,6 @@ public sealed partial class ManagedModuleInstallService
 
         try
         {
-            StartDependencyVersionSelectionPrewarm(
-                request,
-                CreateRepositoryDependencyHintMetadata(versionInfo),
-                context,
-                cancellationToken);
-            StartDependencyPackagePrefetch(
-                request,
-                CreateRepositoryDependencyHintMetadata(versionInfo),
-                context,
-                cancellationToken);
-
             using (AcquireInstallLock(moduleRoot, request.Name, cancellationToken, out var resolvedLockWaitElapsed))
             {
                 installLockWaitElapsed += resolvedLockWaitElapsed;
@@ -431,6 +420,18 @@ public sealed partial class ManagedModuleInstallService
                         installLockWaitElapsed);
                 }
             }
+
+            var repositoryDependencyHintMetadata = CreateRepositoryDependencyHintMetadata(versionInfo);
+            StartDependencyVersionSelectionPrewarm(
+                request,
+                repositoryDependencyHintMetadata,
+                context,
+                cancellationToken);
+            StartDependencyPackagePrefetch(
+                request,
+                repositoryDependencyHintMetadata,
+                context,
+                cancellationToken);
 
             var downloadStopwatch = System.Diagnostics.Stopwatch.StartNew();
             ManagedModuleDownloadResult download;

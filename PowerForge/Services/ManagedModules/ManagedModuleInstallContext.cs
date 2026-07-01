@@ -15,6 +15,7 @@ internal sealed class ManagedModuleInstallContext : IDisposable
 #if !NET472
     private readonly ConcurrentDictionary<string, Lazy<Task<ManagedModuleBufferedPackage>>> _bufferedPackagePrefetches;
     private readonly SemaphoreSlim _bufferedPackagePrefetchGate;
+    private readonly CancellationTokenSource _bufferedPackagePrefetchCancellation;
     private bool _disposed;
 #endif
 
@@ -29,7 +30,8 @@ internal sealed class ManagedModuleInstallContext : IDisposable
 #if !NET472
             ,
             new ConcurrentDictionary<string, Lazy<Task<ManagedModuleBufferedPackage>>>(StringComparer.OrdinalIgnoreCase),
-            new SemaphoreSlim(8, 8)
+            new SemaphoreSlim(8, 8),
+            new CancellationTokenSource()
 #endif
             )
     {
@@ -45,7 +47,8 @@ internal sealed class ManagedModuleInstallContext : IDisposable
 #if !NET472
         ,
         ConcurrentDictionary<string, Lazy<Task<ManagedModuleBufferedPackage>>> bufferedPackagePrefetches,
-        SemaphoreSlim bufferedPackagePrefetchGate
+        SemaphoreSlim bufferedPackagePrefetchGate,
+        CancellationTokenSource bufferedPackagePrefetchCancellation
 #endif
         )
     {
@@ -58,6 +61,7 @@ internal sealed class ManagedModuleInstallContext : IDisposable
 #if !NET472
         _bufferedPackagePrefetches = bufferedPackagePrefetches;
         _bufferedPackagePrefetchGate = bufferedPackagePrefetchGate;
+        _bufferedPackagePrefetchCancellation = bufferedPackagePrefetchCancellation;
 #endif
     }
 
@@ -72,7 +76,8 @@ internal sealed class ManagedModuleInstallContext : IDisposable
 #if !NET472
             ,
             _bufferedPackagePrefetches,
-            _bufferedPackagePrefetchGate
+            _bufferedPackagePrefetchGate,
+            _bufferedPackagePrefetchCancellation
 #endif
             );
 
@@ -224,10 +229,14 @@ internal sealed class ManagedModuleInstallContext : IDisposable
         var newLazy = new Lazy<Task<ManagedModuleBufferedPackage>>(
             async () =>
             {
-                await _bufferedPackagePrefetchGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    _bufferedPackagePrefetchCancellation.Token);
+                var prefetchCancellationToken = linkedCancellation.Token;
+                await _bufferedPackagePrefetchGate.WaitAsync(prefetchCancellationToken).ConfigureAwait(false);
                 try
                 {
-                    return await factory(cancellationToken).ConfigureAwait(false);
+                    return await factory(prefetchCancellationToken).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -278,6 +287,7 @@ internal sealed class ManagedModuleInstallContext : IDisposable
             return;
 
         _disposed = true;
+        _bufferedPackagePrefetchCancellation.Cancel();
         foreach (var item in _bufferedPackagePrefetches.ToArray())
         {
             if (!_bufferedPackagePrefetches.TryRemove(item.Key, out var lazy) || !lazy.IsValueCreated)

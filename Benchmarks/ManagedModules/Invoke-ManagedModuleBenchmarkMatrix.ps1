@@ -316,6 +316,96 @@ function Join-BenchmarkOutputRoot {
     Join-Path $script:EffectiveOutputRoot $Leaf
 }
 
+function Get-CsvHeaderColumns {
+    param([string] $Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return @()
+    }
+
+    $reader = [System.IO.StreamReader]::new($Path)
+    try {
+        $headerLine = $reader.ReadLine()
+    } finally {
+        $reader.Dispose()
+    }
+
+    if ([string]::IsNullOrWhiteSpace($headerLine)) {
+        return @()
+    }
+
+    @($headerLine -split ',' | ForEach-Object {
+        $_.Trim().Trim('"').Replace('""', '"')
+    })
+}
+
+function Get-CsvRowColumns {
+    param([object[]] $Rows)
+
+    $columns = New-Object System.Collections.Generic.List[string]
+    foreach ($row in $Rows) {
+        foreach ($property in $row.PSObject.Properties) {
+            if (-not $columns.Contains($property.Name)) {
+                $columns.Add($property.Name)
+            }
+        }
+    }
+
+    $columns.ToArray()
+}
+
+function Join-CsvColumns {
+    param(
+        [string[]] $ExistingColumns,
+        [string[]] $NewColumns
+    )
+
+    $columns = New-Object System.Collections.Generic.List[string]
+    foreach ($column in @($ExistingColumns + $NewColumns)) {
+        if (-not [string]::IsNullOrWhiteSpace($column) -and -not $columns.Contains($column)) {
+            $columns.Add($column)
+        }
+    }
+
+    $columns.ToArray()
+}
+
+function Test-CsvColumnsEqual {
+    param(
+        [string[]] $Left,
+        [string[]] $Right
+    )
+
+    if ($Left.Count -ne $Right.Count) {
+        return $false
+    }
+
+    for ($index = 0; $index -lt $Left.Count; $index++) {
+        if (-not [string]::Equals($Left[$index], $Right[$index], [StringComparison]::Ordinal)) {
+            return $false
+        }
+    }
+
+    return $true
+}
+
+function ConvertTo-CsvRowsWithColumns {
+    param(
+        [object[]] $Rows,
+        [string[]] $Columns
+    )
+
+    foreach ($row in $Rows) {
+        $ordered = [ordered]@{}
+        foreach ($column in $Columns) {
+            $property = $row.PSObject.Properties[$column]
+            $ordered[$column] = if ($property) { $property.Value } else { $null }
+        }
+
+        [pscustomobject]$ordered
+    }
+}
+
 function Add-ResultCsv {
     param([string] $Path)
 
@@ -328,7 +418,22 @@ function Add-ResultCsv {
         return
     }
 
-    if ($Append.IsPresent -or (Test-Path -LiteralPath $OutputPath)) {
+    $outputExists = Test-Path -LiteralPath $OutputPath
+    if ($Append.IsPresent -or $outputExists) {
+        if ($outputExists) {
+            $existingColumns = Get-CsvHeaderColumns -Path $OutputPath
+            $newColumns = Get-CsvRowColumns -Rows $rows
+            if ($existingColumns.Count -gt 0 -and -not (Test-CsvColumnsEqual -Left $existingColumns -Right $newColumns)) {
+                $columns = Join-CsvColumns -ExistingColumns $existingColumns -NewColumns $newColumns
+                $existingRows = @(Import-Csv -LiteralPath $OutputPath)
+                @(
+                    ConvertTo-CsvRowsWithColumns -Rows $existingRows -Columns $columns
+                    ConvertTo-CsvRowsWithColumns -Rows $rows -Columns $columns
+                ) | Export-Csv -LiteralPath $OutputPath -NoTypeInformation
+                return
+            }
+        }
+
         $rows | Export-Csv -LiteralPath $OutputPath -NoTypeInformation -Append
     } else {
         $rows | Export-Csv -LiteralPath $OutputPath -NoTypeInformation

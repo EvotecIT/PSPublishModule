@@ -141,6 +141,59 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
         Assert.Equal(1, handler.CorePackageDownloadCount);
         Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Core")));
     }
+
+    [Fact]
+    public async Task InstallAsync_cancels_dependency_prefetch_when_root_package_fails()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var handler = new RepositoryDependencyHintHandler
+        {
+            DelayRootPackageUntilCorePackageRequested = true,
+            DelayCorePackageCompletionUntilCanceled = true,
+            RootPackageHasUnsafeEntry = true
+        };
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), new HttpClient(handler));
+        var service = new ManagedModuleInstallService(new NullLogger(), repositoryClient);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Feed", "https://example.test/api/v2"),
+            Name = "Company.Root",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            AllowClobber = true
+        }));
+
+        Assert.Contains("unsafe path", exception.Message, StringComparison.OrdinalIgnoreCase);
+        await WaitForConditionAsync(() => handler.CorePackageCancellationObserved, TimeSpan.FromSeconds(2));
+        Assert.Equal(1, handler.CorePackageDownloadCount);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Core")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_does_not_prefetch_dependencies_when_selected_root_is_already_installed()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        WriteInstalledModule(moduleRoot.Path, "Company.Root", "1.0.0");
+        var handler = new RepositoryDependencyHintHandler();
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), new HttpClient(handler));
+        var service = new ManagedModuleInstallService(new NullLogger(), repositoryClient);
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Feed", "https://example.test/api/v2"),
+            Name = "Company.Root",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            AllowClobber = true
+        });
+
+        Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, result.Status);
+        Assert.Equal(0, handler.CorePackageDownloadCount);
+        Assert.DoesNotContain(handler.Requests, static request => request.Contains("id='Company.Core'", StringComparison.Ordinal));
+        Assert.DoesNotContain(handler.Requests, static request => request.EndsWith("/package/Company.Core/1.0.0", StringComparison.OrdinalIgnoreCase));
+    }
 #endif
 
     private static IReadOnlyDictionary<string, string> CreateModuleFiles(string moduleName, string version)
@@ -149,11 +202,35 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
             [moduleName + ".psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
 
+    private static void WriteInstalledModule(string moduleRoot, string moduleName, string version)
+    {
+        var modulePath = Path.Combine(moduleRoot, moduleName, version);
+        Directory.CreateDirectory(modulePath);
+        File.WriteAllText(
+            Path.Combine(modulePath, moduleName + ".psd1"),
+            "@{ ModuleVersion = '" + version + "' }");
+    }
+
+    private static async Task WaitForConditionAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var stopAt = DateTimeOffset.UtcNow.Add(timeout);
+        while (DateTimeOffset.UtcNow < stopAt)
+        {
+            if (condition())
+                return;
+
+            await Task.Delay(TimeSpan.FromMilliseconds(15));
+        }
+
+        Assert.True(condition(), "The expected asynchronous condition was not observed before the timeout.");
+    }
+
     private sealed class RepositoryDependencyHintHandler : HttpMessageHandler
     {
         private readonly object _syncRoot = new();
         private readonly List<string> _requests = new();
         private readonly TaskCompletionSource<bool> _corePackageRequested = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private volatile bool _corePackageCancellationObserved;
 
         public bool CoreLatestRequestedBeforeRootDownload { get; private set; }
 
@@ -161,7 +238,11 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
 
         public bool RootPackageHasUnsafeEntry { get; init; }
 
+        public bool DelayCorePackageCompletionUntilCanceled { get; init; }
+
         public bool CorePackageRequestedBeforeRootPackageCompleted { get; private set; }
+
+        public bool CorePackageCancellationObserved => _corePackageCancellationObserved;
 
         public int CorePackageDownloadCount { get; private set; }
 
@@ -237,6 +318,19 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
                 }
 
                 _corePackageRequested.TrySetResult(true);
+                if (DelayCorePackageCompletionUntilCanceled)
+                {
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        _corePackageCancellationObserved = true;
+                        throw;
+                    }
+                }
+
                 var bytes = TestPackageFactory.CreateBytes(
                     "Company.Core",
                     "1.0.0",
