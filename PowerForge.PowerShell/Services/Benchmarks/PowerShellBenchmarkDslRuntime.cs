@@ -359,7 +359,7 @@ $captured = @{}
 $capturedFunctions = @{}
 $skipNames = @(
     'args', 'input', 'this', 'PSItem', '_', 'Error',
-    'captured', 'capturedFunctions', 'scriptText', 'scriptRoot'
+    'PWD', 'captured', 'capturedFunctions', 'scriptText', 'scriptRoot'
 )
 $skipFunctions = @(
     '__PowerForgeCloseBenchmarkBlock',

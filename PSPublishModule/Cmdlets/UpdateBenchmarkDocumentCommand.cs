@@ -32,7 +32,7 @@ public sealed class UpdateBenchmarkDocumentCommand : PSCmdlet
     /// <summary>
     /// Summary JSON path.
     /// </summary>
-    [Parameter(Mandatory = true)]
+    [Parameter]
     [ValidateNotNullOrEmpty]
     public string SummaryPath { get; set; } = string.Empty;
 
@@ -54,12 +54,10 @@ public sealed class UpdateBenchmarkDocumentCommand : PSCmdlet
     protected override void ProcessRecord()
     {
         var documentPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path);
-        var summaryPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(SummaryPath);
-        var summary = BenchmarkJson.ReadSummary(summaryPath);
         var renderer = new BenchmarkMarkdownRenderer();
         var markdown = Renderer switch
         {
-            var value when string.Equals(value, "SummaryTable", System.StringComparison.OrdinalIgnoreCase) => renderer.RenderSummaryTable(summary),
+            var value when string.Equals(value, "SummaryTable", System.StringComparison.OrdinalIgnoreCase) => renderer.RenderSummaryTable(ReadSummary()),
             var value when string.Equals(value, "ComparisonTable", System.StringComparison.OrdinalIgnoreCase) => renderer.RenderComparisonTable(ReadComparison()),
             _ => throw new PSArgumentException($"Benchmark document renderer '{Renderer}' is not supported. Use SummaryTable or ComparisonTable.")
         };
@@ -68,6 +66,14 @@ public sealed class UpdateBenchmarkDocumentCommand : PSCmdlet
             return;
 
         WriteObject(new BenchmarkDocumentUpdater().UpdateBlock(documentPath, BlockId, markdown));
+
+        BenchmarkSummaryRow[] ReadSummary()
+        {
+            var summaryPath = string.IsNullOrWhiteSpace(SummaryPath)
+                ? throw new PSArgumentException("SummaryPath is required when Renderer is SummaryTable.")
+                : SessionState.Path.GetUnresolvedProviderPathFromPSPath(SummaryPath);
+            return BenchmarkJson.ReadSummary(summaryPath);
+        }
 
         BenchmarkComparisonRow[] ReadComparison()
         {

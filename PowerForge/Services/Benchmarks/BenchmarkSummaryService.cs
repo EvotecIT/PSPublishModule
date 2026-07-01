@@ -13,7 +13,7 @@ public sealed class BenchmarkSummaryService
     public BenchmarkSummaryRow[] Summarize(IEnumerable<BenchmarkSample> samples)
     {
         return (samples ?? Array.Empty<BenchmarkSample>())
-            .GroupBy(s => MakeKey(s.Suite, s.Scenario, s.Operation, s.Engine, s.Host, s.Os, s.Variables), StringComparer.OrdinalIgnoreCase)
+            .GroupBy(s => MakeKey(s.Suite, s.Scenario, s.Operation, s.Engine, s.Host, s.Os, s.Variables), StringComparer.Ordinal)
             .Select(group =>
             {
                 var first = group.First();
@@ -40,7 +40,7 @@ public sealed class BenchmarkSummaryService
     {
         var rows = (summary ?? Array.Empty<BenchmarkSummaryRow>()).ToArray();
         var result = new List<BenchmarkComparisonRow>();
-        foreach (var group in rows.GroupBy(r => MakeKey(r.Suite, r.Scenario, r.Operation, string.Empty, r.Host, r.Os, r.Variables), StringComparer.OrdinalIgnoreCase))
+        foreach (var group in rows.GroupBy(r => MakeKey(r.Suite, r.Scenario, r.Operation, string.Empty, r.Host, r.Os, r.Variables), StringComparer.Ordinal))
         {
             if (group.All(r => string.Equals(r.Status, "Skipped", StringComparison.OrdinalIgnoreCase)))
                 continue;

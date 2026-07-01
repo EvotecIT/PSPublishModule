@@ -100,6 +100,22 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void SummaryService_KeepsCaseSensitiveVariableValuesSeparate()
+    {
+        var samples = new[]
+        {
+            Sample("suite", "case", "Run", "Managed", 10, new Dictionary<string, string?> { ["Input"] = "abc" }),
+            Sample("suite", "case", "Run", "Managed", 20, new Dictionary<string, string?> { ["Input"] = "ABC" })
+        };
+
+        var summary = new BenchmarkSummaryService().Summarize(samples);
+
+        Assert.Equal(2, summary.Length);
+        Assert.Contains(summary, row => row.Variables["Input"] == "abc" && row.MedianMs == 10);
+        Assert.Contains(summary, row => row.Variables["Input"] == "ABC" && row.MedianMs == 20);
+    }
+
+    [Fact]
     public void SummaryService_KeepsImportedVariablesNamedLikeAxesSeparate()
     {
         var samples = new[]
@@ -216,6 +232,49 @@ public sealed class BenchmarkServicesTests
 
         Assert.Contains("ComparsionTable", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("old", File.ReadAllText(readme), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void UpdateBenchmarkDocumentCommand_AllowsComparisonRendererWithoutSummaryPath()
+    {
+        var root = CreateTempRoot();
+        var readme = Path.Combine(root, "README.md");
+        var comparisonPath = Path.Combine(root, "comparison.json");
+        File.WriteAllText(readme, "<!-- BENCHMARK:results:START -->\nold\n<!-- BENCHMARK:results:END -->\n");
+        BenchmarkJson.Write(comparisonPath, new[]
+        {
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Actual = 20,
+                Baseline = 10,
+                Ratio = 2
+            }
+        });
+
+        var initialSessionState = InitialSessionState.CreateDefault();
+        initialSessionState.Commands.Add(new SessionStateCmdletEntry("Update-BenchmarkDocument", typeof(PSPublishModule.UpdateBenchmarkDocumentCommand), helpFileName: null));
+        using var runspace = RunspaceFactory.CreateRunspace(initialSessionState);
+        runspace.Open();
+        using var ps = PowerShell.Create(runspace);
+        ps.AddCommand("Update-BenchmarkDocument")
+            .AddParameter("Path", readme)
+            .AddParameter("BlockId", "results")
+            .AddParameter("ComparisonPath", comparisonPath)
+            .AddParameter("Renderer", "ComparisonTable");
+
+        var output = ps.Invoke();
+
+        Assert.False(ps.HadErrors);
+        Assert.Single(output);
+        var text = File.ReadAllText(readme);
+        Assert.Contains("Other", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("old", text, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1374,6 +1433,33 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_ParsesQuotedBenchmarkDotNetJsonParameters()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "Demo-report-full.json");
+        File.WriteAllText(path, """
+{
+  "Title": "demo",
+  "Benchmarks": [
+    {
+      "FullName": "Demo.Bench.Write()",
+      "Method": "Write",
+      "Parameters": "Name=\"A,B\"; Mode='C;D'",
+      "Statistics": {
+        "Median": 500
+      }
+    }
+  ]
+}
+""");
+
+        var sample = Assert.Single(new BenchmarkResultImporter().Import(path).Samples);
+
+        Assert.Equal("A,B", sample.Variables["Name"]);
+        Assert.Equal("C;D", sample.Variables["Mode"]);
+    }
+
+    [Fact]
     public void Importer_DirectoryDeduplicatesBenchmarkDotNetJsonVariants()
     {
         var root = CreateTempRoot();
@@ -1410,6 +1496,31 @@ public sealed class BenchmarkServicesTests
 
         Assert.InRange(row.MedianMs.GetValueOrDefault(), 0.000199, 0.000201);
         Assert.Equal("Demo.Bench", row.Variables["Type"]);
+    }
+
+    [Fact]
+    public void Importer_DirectorySkipsUnrelatedBenchmarkDotNetReportJson()
+    {
+        var root = CreateTempRoot();
+        File.WriteAllText(Path.Combine(root, "coverage-report.json"), """{"coverage": 100}""");
+        File.WriteAllText(Path.Combine(root, "Demo-report.json"), """
+{
+  "Title": "demo",
+  "Benchmarks": [
+    {
+      "Method": "Write",
+      "Statistics": {
+        "Median": 500
+      }
+    }
+  ]
+}
+""");
+
+        var row = Assert.Single(new BenchmarkResultImporter().Import(root).Summary);
+
+        Assert.Equal("Write", row.Scenario);
+        Assert.Equal(0.0005, row.MedianMs);
     }
 
     [Fact]
@@ -1775,6 +1886,40 @@ New-BenchmarkSuite 'long' {
         Assert.Equal(2, suites.Length);
         Assert.Single(runner.Plan(suites[0]));
         Assert.Single(runner.Plan(suites[1]));
+    }
+
+    [Fact]
+    public void DslRuntime_DoesNotCaptureAutomaticPwdVariable()
+    {
+        var root = CreateTempRoot();
+        var child = Directory.CreateDirectory(Path.Combine(root, "child")).FullName.Replace("'", "''");
+        var script = ScriptBlock.Create($@"
+benchmark 'pwd' {{
+    cases {{ case A @{{}} }}
+    axis Operation Run
+    axis Engine Managed
+    engine Managed {{
+        operation Run {{
+            param($case, $run)
+            Push-Location -LiteralPath '{child}'
+            try {{
+                if ($PWD.ProviderPath -ne (Get-Location).ProviderPath) {{
+                    throw ""PWD was captured instead of following the current location.""
+                }}
+            }} finally {{
+                Pop-Location
+            }}
+        }}
+    }}
+}}
+");
+
+        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script, root));
+        suite.WarmupCount = 0;
+        suite.IterationCount = 1;
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
     }
 
     [Fact]
@@ -2715,6 +2860,21 @@ benchmark 'path-temp-user' -out 'out' {
         Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status);
         Assert.True(sample.DurationMs > 0);
         Assert.True(sample.Metrics["RowsPerSecond"] > 0);
+    }
+
+    [Fact]
+    public void Runner_DoesNotRecordNonFiniteCustomMetrics()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Metrics.Add(new PowerShellBenchmarkMetric { Name = "NotANumber", ScriptBlock = ScriptBlock.Create("[double]::NaN") });
+        suite.Metrics.Add(new PowerShellBenchmarkMetric { Name = "Infinite", ScriptBlock = ScriptBlock.Create("[double]::PositiveInfinity") });
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+        var sample = Assert.Single(result.Samples);
+
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status);
+        Assert.DoesNotContain("NotANumber", sample.Metrics.Keys);
+        Assert.DoesNotContain("Infinite", sample.Metrics.Keys);
     }
 
     [Fact]

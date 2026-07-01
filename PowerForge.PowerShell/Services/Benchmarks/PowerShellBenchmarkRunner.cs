@@ -490,14 +490,18 @@ public sealed class PowerShellBenchmarkRunner
     {
         number = 0;
         if (value is null) return false;
-        if (value is double d) { number = d; return true; }
-        if (value is float f) { number = f; return true; }
+        if (value is double d) { number = d; return IsFinite(number); }
+        if (value is float f) { number = f; return IsFinite(number); }
         if (value is decimal m) { number = (double)m; return true; }
         if (value is int i) { number = i; return true; }
         if (value is long l) { number = l; return true; }
         var text = Convert.ToString(value, CultureInfo.InvariantCulture);
-        return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out number);
+        return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out number)
+               && IsFinite(number);
     }
+
+    private static bool IsFinite(double value)
+        => !double.IsNaN(value) && !double.IsInfinity(value);
 
     private static Dictionary<string, string> BuildMetadata(PowerShellBenchmarkSuite suite)
         => new(StringComparer.OrdinalIgnoreCase)

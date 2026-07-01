@@ -53,6 +53,7 @@ public sealed class BenchmarkResultImporter
 
         var benchmarkDotNetJsonFiles = Directory.GetFiles(path, "*-report*.json", SearchOption.AllDirectories)
             .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(IsBenchmarkDotNetJsonReport)
             .GroupBy(BenchmarkDotNetJsonReportFamily, StringComparer.OrdinalIgnoreCase)
             .Select(group => group
                 .OrderByDescending(BenchmarkDotNetJsonReportPreference)
@@ -380,6 +381,26 @@ public sealed class BenchmarkResultImporter
         return 0;
     }
 
+    private static bool IsBenchmarkDotNetJsonReport(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            using var doc = JsonDocument.Parse(stream);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                   && BenchmarkJson.TryGetPropertyIgnoreCase(doc.RootElement, "Benchmarks", out var benchmarks)
+                   && benchmarks.ValueKind == JsonValueKind.Array;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
     private static string GetBenchmarkDotNetEngine(JsonElement benchmark)
     {
         var job = GetString(benchmark, "Job")
@@ -439,16 +460,14 @@ public sealed class BenchmarkResultImporter
         if (string.IsNullOrWhiteSpace(parameterText))
             return variables;
 
-        foreach (var segment in parameterText!.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+        foreach (var segment in SplitBenchmarkDotNetParameterSegments(parameterText!))
         {
             var trimmed = segment.Trim();
-            var separator = trimmed.IndexOf('=');
-            if (separator < 0)
-                separator = trimmed.IndexOf(':');
+            var separator = FindBenchmarkDotNetParameterSeparator(trimmed);
             if (separator <= 0 || separator >= trimmed.Length - 1)
                 continue;
-            var name = trimmed.Substring(0, separator).Trim().Trim('"', '\'');
-            var value = trimmed.Substring(separator + 1).Trim().Trim('"', '\'');
+            var name = TrimBenchmarkDotNetParameterToken(trimmed.Substring(0, separator));
+            var value = TrimBenchmarkDotNetParameterToken(trimmed.Substring(separator + 1));
             if (!string.IsNullOrWhiteSpace(name))
                 variables[name] = value;
         }
@@ -456,6 +475,89 @@ public sealed class BenchmarkResultImporter
         if (variables.Count == 0)
             variables["Parameters"] = parameterText;
         return variables;
+    }
+
+    private static IEnumerable<string> SplitBenchmarkDotNetParameterSegments(string text)
+    {
+        var start = 0;
+        char? quote = null;
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (quote.HasValue)
+            {
+                if (c == '\\' && i + 1 < text.Length)
+                {
+                    i++;
+                    continue;
+                }
+
+                if (c == quote.Value)
+                    quote = null;
+                continue;
+            }
+
+            if (c is '"' or '\'')
+            {
+                quote = c;
+                continue;
+            }
+
+            if (c is not (',' or ';'))
+                continue;
+
+            if (i > start)
+                yield return text.Substring(start, i - start);
+            start = i + 1;
+        }
+
+        if (start < text.Length)
+            yield return text.Substring(start);
+    }
+
+    private static int FindBenchmarkDotNetParameterSeparator(string text)
+    {
+        char? quote = null;
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (quote.HasValue)
+            {
+                if (c == '\\' && i + 1 < text.Length)
+                {
+                    i++;
+                    continue;
+                }
+
+                if (c == quote.Value)
+                    quote = null;
+                continue;
+            }
+
+            if (c is '"' or '\'')
+            {
+                quote = c;
+                continue;
+            }
+
+            if (c is '=' or ':')
+                return i;
+        }
+
+        return -1;
+    }
+
+    private static string TrimBenchmarkDotNetParameterToken(string value)
+    {
+        var trimmed = value.Trim();
+        if (trimmed.Length >= 2 &&
+            ((trimmed[0] == '"' && trimmed[trimmed.Length - 1] == '"') ||
+             (trimmed[0] == '\'' && trimmed[trimmed.Length - 1] == '\'')))
+        {
+            return trimmed.Substring(1, trimmed.Length - 2);
+        }
+
+        return trimmed;
     }
 
     private static void AddBenchmarkDotNetIdentityVariables(
