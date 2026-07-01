@@ -6,6 +6,7 @@
     [switch] $JsonOnly,
     [string] $JsonPath = (Join-Path $PSScriptRoot '../../powerforge.json'),
     [ValidateSet('Release', 'Debug')][string] $Configuration = 'Release',
+    [ValidateSet('auto', 'net10.0', 'net8.0')][string] $Framework = 'auto',
     [switch] $NoDotnetBuild,
     [string] $ModuleVersion = '3.0.X',
     [string] $PreReleaseTag,
@@ -29,22 +30,30 @@ $artefactsRoot = Join-Path $moduleRoot 'Artefacts'
 $csproj = Join-Path -Path $repoRoot -ChildPath 'PSPublishModule/PSPublishModule.csproj'
 $sourceManifest = Join-Path -Path $moduleRoot -ChildPath 'PSPublishModule.psd1'
 $sourceLibRoot = Join-Path -Path $moduleRoot -ChildPath 'Lib'
-$runtimesText = (dotnet --list-runtimes 2>$null) -join "`n"
-$tfm = if ($runtimesText -match '(?m)^Microsoft\\.NETCore\\.App\\s+10\\.') { 'net10.0' } else { 'net8.0' }
+$tfm = if ($Framework -ne 'auto') {
+    $Framework
+} else {
+    $runtimesText = (dotnet --list-runtimes 2>$null) -join "`n"
+    if ($runtimesText -match '(?m)^Microsoft\.NETCore\.App\s+10\.') { 'net10.0' } else { 'net8.0' }
+}
 $binaryModule = Join-Path -Path $repoRoot -ChildPath ("PSPublishModule/bin/{0}/{1}/PSPublishModule.dll" -f $Configuration, $tfm)
 
-if (-not $JsonOnly -and -not $NoDotnetBuild) {
-    if (Test-Path -LiteralPath $csproj) {
-        $i = [char]0x2139 # ℹ
-        Write-Host "$i Building PSPublishModule ($Configuration)" -ForegroundColor DarkGray
-        $buildOutput = & dotnet build $csproj -c $Configuration --nologo --verbosity quiet 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            $buildOutput | Out-Host
-            $x = [char]0x274C # ❌
-            Write-Host "$x dotnet build failed (exit $LASTEXITCODE). Stopping." -ForegroundColor Red
-            return
-        }
+function Invoke-LocalPSPublishModuleBuild {
+    if (-not (Test-Path -LiteralPath $csproj)) {
+        return
     }
+
+    $i = [char]0x2139 # ℹ
+    Write-Host "$i Building PSPublishModule ($Configuration)" -ForegroundColor DarkGray
+    $buildOutput = & dotnet build $csproj -c $Configuration --nologo --verbosity quiet 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        $buildOutput | Out-Host
+        throw "dotnet build failed (exit $LASTEXITCODE)."
+    }
+}
+
+if (-not $JsonOnly -and -not $NoDotnetBuild) {
+    Invoke-LocalPSPublishModuleBuild
 }
 
 # Always reload PSPublishModule from this repo for self-builds. Otherwise an older
@@ -57,20 +66,8 @@ if (-not $JsonOnly) {
     Remove-Item -Path (Join-Path $PSScriptRoot '../Lib') -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-$importPath = $null
-
-# Prefer the freshly built binary module for all PSPublishModule self-builds. Falling back to
-# the source manifest is only a last resort when the binary output is unavailable.
-if (-not (Test-Path -LiteralPath $binaryModule)) {
-    if (Test-Path -LiteralPath $csproj) {
-        $i = [char]0x2139 # ℹ
-        Write-Host "$i Building PSPublishModule ($Configuration)" -ForegroundColor DarkGray
-        $buildOutput = & dotnet build $csproj -c $Configuration --nologo --verbosity quiet 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            $buildOutput | Out-Host
-            throw "dotnet build failed (exit $LASTEXITCODE)."
-        }
-    }
+if (-not (Test-Path -LiteralPath $binaryModule) -and -not $NoDotnetBuild) {
+    Invoke-LocalPSPublishModuleBuild
 }
 
 if (Test-Path -LiteralPath $binaryModule) {
@@ -78,22 +75,6 @@ if (Test-Path -LiteralPath $binaryModule) {
 } elseif (Test-Path -LiteralPath $sourceLibRoot) {
     Write-Warning "Falling back to source manifest import because the compiled PSPublishModule binary was not found: $binaryModule"
     $importPath = $sourceManifest
-} else {
-    if (-not (Test-Path -LiteralPath $binaryModule)) {
-        if (Test-Path -LiteralPath $csproj) {
-            $i = [char]0x2139 # ℹ
-            Write-Host "$i Building PSPublishModule ($Configuration)" -ForegroundColor DarkGray
-            $buildOutput = & dotnet build $csproj -c $Configuration --nologo --verbosity quiet 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                $buildOutput | Out-Host
-                throw "dotnet build failed (exit $LASTEXITCODE)."
-            }
-        }
-    }
-
-    if (Test-Path -LiteralPath $binaryModule) {
-        $importPath = $binaryModule
-    }
 }
 
 if (-not $importPath) {
@@ -133,13 +114,11 @@ Invoke-ModuleBuild @buildParams -Settings {
         Copyright              = "(c) 2011 - $((Get-Date).Year) Przemyslaw Klys @ Evotec. All rights reserved."
         Description            = 'Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery'
         PowerShellVersion      = '5.1'
+        Prerelease             = $PreReleaseTag
         Tags                   = @('Windows', 'MacOS', 'Linux', 'Build', 'Module')
         IconUri                = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
         ProjectUri             = 'https://github.com/EvotecIT/PSPublishModule'
         DotNetFrameworkVersion = '4.5.2'
-    }
-    if (-not [string]::IsNullOrWhiteSpace($PreReleaseTag)) {
-        $Manifest.PreReleaseTag = $PreReleaseTag
     }
     New-ConfigurationManifest @Manifest
 
@@ -169,111 +148,23 @@ Invoke-ModuleBuild @buildParams -Settings {
         'New-FileCatalog'
     )
 
-    $ConfigurationFormat = [ordered] @{
-        RemoveComments                              = $true
-        RemoveEmptyLines                            = $true
-
-        PlaceOpenBraceEnable                        = $true
-        PlaceOpenBraceOnSameLine                    = $true
-        PlaceOpenBraceNewLineAfter                  = $true
-        PlaceOpenBraceIgnoreOneLineBlock            = $false
-
-        PlaceCloseBraceEnable                       = $true
-        PlaceCloseBraceNewLineAfter                 = $true
-        PlaceCloseBraceIgnoreOneLineBlock           = $false
-        PlaceCloseBraceNoEmptyLineBefore            = $true
-
-        UseConsistentIndentationEnable              = $true
-        UseConsistentIndentationKind                = 'space'
-        UseConsistentIndentationPipelineIndentation = 'IncreaseIndentationAfterEveryPipeline'
-        UseConsistentIndentationIndentationSize     = 4
-
-        UseConsistentWhitespaceEnable               = $true
-        UseConsistentWhitespaceCheckInnerBrace      = $true
-        UseConsistentWhitespaceCheckOpenBrace       = $true
-        UseConsistentWhitespaceCheckOpenParen       = $true
-        UseConsistentWhitespaceCheckOperator        = $true
-        UseConsistentWhitespaceCheckPipe            = $true
-        UseConsistentWhitespaceCheckSeparator       = $true
-
-        AlignAssignmentStatementEnable              = $true
-        AlignAssignmentStatementCheckHashtable      = $true
-
-        UseCorrectCasingEnable                      = $true
-    }
-    # format PSD1 and PSM1 files when merging into a single file
-    # enable formatting is not required as Configuration is provided
-    New-ConfigurationFormat -ApplyTo 'OnMergePSM1', 'OnMergePSD1' -Sort None @ConfigurationFormat
-    # format PSD1 and PSM1 files within the module
-    # enable formatting is required to make sure that formatting is applied (with default settings)
-    New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'DefaultPSM1' -EnableFormatting -Sort None
-    # when creating PSD1 use special style without comments and with only required parameters
-    New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'OnMergePSD1' -PSD1Style 'Minimal'
-
-    # configuration for documentation, at the same time it enables documentation processing
-    New-ConfigurationDocumentation -Enable:$true -SyncExternalHelpToProjectRoot -PathReadme 'Docs\Readme.md' -Path 'Docs' -AboutTopicsSourcePath 'Help\About'
-
-    # quality checks (non-blocking by default; add -FailOn* switches to hard-fail)
-    $newConfigurationValidationSplat = @{
-        Enable                               = $true
-        StructureSeverity                    = 'Warning'
-        DocumentationSeverity                = 'Warning'
-        EnableScriptAnalyzer                 = $true
-        ScriptAnalyzerSeverity               = 'Warning'
-        FileIntegritySeverity                = 'Warning'
-        FileIntegrityCheckTrailingWhitespace = $true
-        FileIntegrityCheckSyntax             = $true
-    }
-
-    New-ConfigurationValidation @newConfigurationValidationSplat
-
-    $newConfigurationFileConsistencySplat = @{
-        Enable                   = $true
-        RequiredEncoding         = 'UTF8BOM'
-        RequiredLineEnding       = 'CRLF'
-        ExcludeDirectories       = 'Build', 'Docs', 'Documentation', 'Examples', 'Tests'
-        ExportReport             = $true
-        CheckMixedLineEndings    = $true
-        CheckMissingFinalNewline = $true
-        Scope                    = 'StagingAndProject'
-        EncodingOverrides        = @{ '*.xml' = 'UTF8' }
-    }
-
-    New-ConfigurationFileConsistency @newConfigurationFileConsistencySplat
-
-    $newConfigurationCompatibilitySplat = @{
-        Enable                         = $true
-        RequireCrossCompatibility      = $true
-        MinimumCompatibilityPercentage = 95
-        ExportReport                   = $true
-    }
-
-    New-ConfigurationCompatibility @newConfigurationCompatibilitySplat
-
-    New-ConfigurationImportModule -ImportSelf
-
     $signEnabled = if ($NoSign.IsPresent) { $false } elseif ($SignModule.IsPresent) { $true } else { $Env:COMPUTERNAME -eq 'EVOMAGIC' }
-    $newConfigurationBuildSplat = @{
-        Enable                         = $true
-        SignModule                     = $signEnabled
-        # DeleteTargetModuleBeforeBuild     = $true
-        MergeModuleOnBuild             = $true
-        CertificateThumbprint          = $CertificateThumbprint
-        #CertificatePFXBase64           = $BasePfx
-        #CertificatePFXPassword         = "zGT"
-        DoNotAttemptToFixRelativePaths = $false
-        SkipBuiltinReplacements        = $true
-
-        # required for Cmdlet/Alias functionality
-        NETProjectPath                 = (Join-Path $repoRoot 'PSPublishModule')
-        ResolveBinaryConflicts         = $true
-        ResolveBinaryConflictsName     = 'PSPublishModule'
-        NETProjectName                 = 'PSPublishModule'
-        NETConfiguration               = 'Release'
-        NETFramework                   = 'net8.0', 'net472'
-        NETHandleAssemblyWithSameName  = $true
-        NETAssemblyLoadContext         = $true
-        NETAssemblyTypeAccelerators    = @(
+    $newConfigurationProfileSplat = @{
+        Profile                       = 'Binary'
+        SignModule                    = $signEnabled
+        CertificateThumbprint         = $CertificateThumbprint
+        SkipBuiltinReplacements       = $true
+        DotSourceLibraries            = $true
+        DotSourceClasses              = $true
+        NETProjectPath                = (Join-Path $repoRoot 'PSPublishModule')
+        NETProjectName                = 'PSPublishModule'
+        NETConfiguration              = $Configuration
+        NETFramework                  = 'net8.0', 'net472'
+        NETHandleAssemblyWithSameName = $true
+        NETAssemblyLoadContext        = $true
+        ResolveBinaryConflicts        = $true
+        ResolveBinaryConflictsName    = 'PSPublishModule'
+        NETAssemblyTypeAccelerators   = @(
             'PowerForge.ModuleTestFailureAnalysis',
             'PowerForge.ModuleTestSuiteResult',
             'PowerForge.ModuleRepositoryProfileScope',
@@ -282,28 +173,21 @@ Invoke-ModuleBuild @buildParams -Settings {
             'PowerForge.PublishTool',
             'PowerForge.RepositoryRegistrationTool'
         )
-        #NETDocumentation                  = $true
-        DotSourceLibraries             = $true
-        DotSourceClasses               = $true
-
-        VersionedInstallStrategy       = 'AutoRevision'   # or 'Exact'
-        VersionedInstallKeep           = 3                # how many versions to retain
-        InstallMissingModules          = $true
-        KillLockersBeforeInstall       = $true
-        KillLockersForce               = $true
+        KillLockersBeforeInstall      = $true
+        KillLockersForce              = $true
     }
 
     if ($PSBoundParameters.ContainsKey('SignIncludeBinaries')) {
-        $newConfigurationBuildSplat.SignIncludeBinaries = $SignIncludeBinaries.IsPresent
+        $newConfigurationProfileSplat.SignIncludeBinaries = $SignIncludeBinaries.IsPresent
     }
     if ($PSBoundParameters.ContainsKey('SignIncludeInternals')) {
-        $newConfigurationBuildSplat.SignIncludeInternals = $SignIncludeInternals.IsPresent
+        $newConfigurationProfileSplat.SignIncludeInternals = $SignIncludeInternals.IsPresent
     }
     if ($PSBoundParameters.ContainsKey('SignIncludeExe')) {
-        $newConfigurationBuildSplat.SignIncludeExe = $SignIncludeExe.IsPresent
+        $newConfigurationProfileSplat.SignIncludeExe = $SignIncludeExe.IsPresent
     }
 
-    New-ConfigurationBuild @newConfigurationBuildSplat
+    New-ConfigurationModuleBuildProfile @newConfigurationProfileSplat
 
     New-ConfigurationArtefact -Type Unpacked -Enable -Path (Join-Path $artefactsRoot 'Unpacked/<TagModuleVersionWithPreRelease>') -RequiredModulesPath (Join-Path $artefactsRoot 'Unpacked/<TagModuleVersionWithPreRelease>/Modules') -AddRequiredModules -CopyFiles @{
         "Examples\Step01.CreateModuleProject.ps1" = "Examples\Step01.CreateModuleProject.ps1"

@@ -35,6 +35,7 @@ public sealed partial class ModulePipelineRunner
         public List<ArtefactBuildResult> ArtefactResults { get; } = new();
         public List<ModulePublishResult> PublishResults { get; } = new();
         public List<ProjectBuildHostExecutionResult> ProjectBuildResults { get; } = new();
+        public List<ExternalAssetPreparationResult> ExternalAssetResults { get; } = new();
         public List<ReleaseVersionCandidate> ReleaseVersionCandidates { get; } = new();
         public ModuleReleaseCoordinationResult? ReleaseCoordinationResult { get; set; }
         public List<ModulePipelineActionResult> ActionResults { get; } = new();

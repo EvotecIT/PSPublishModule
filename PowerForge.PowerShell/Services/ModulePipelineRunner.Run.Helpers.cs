@@ -83,6 +83,7 @@ public sealed partial class ModulePipelineRunner
                 state.DocumentationResult,
                 state.DependencyInstallResults,
                 state.ProjectBuildResults.ToArray(),
+                state.ExternalAssetResults.ToArray(),
                 state.ReleaseCoordinationResult,
                 stagingResult,
                 state.MergeExecution,
@@ -100,6 +101,7 @@ public sealed partial class ModulePipelineRunner
         DocumentationBuildResult? documentationResult,
         ModuleDependencyInstallResult[]? dependencyInstallResults,
         ProjectBuildHostExecutionResult[]? projectBuildResults,
+        ExternalAssetPreparationResult[]? externalAssetResults,
         ModuleReleaseCoordinationResult? releaseCoordinationResult,
         ModuleBuildPipeline.StagingResult? stagingResult,
         MergeExecutionResult? mergeExecution,
@@ -149,6 +151,31 @@ public sealed partial class ModulePipelineRunner
                 {
                     $"{successful} succeeded, {failed} failed.",
                     configured.Length == 0 ? "No package build config paths were reported." : $"Configs: {string.Join(", ", configured)}"
+                }));
+        }
+
+        if (externalAssetResults is { Length: > 0 })
+        {
+            var names = externalAssetResults
+                .Select(static result => result.Name)
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var fileCount = externalAssetResults.Sum(static result => result.Files.Length);
+            var manifests = externalAssetResults
+                .Select(static result => result.ManifestPath)
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            notes.Add(new ModuleOwnerNote(
+                "External Assets",
+                ModuleOwnerNoteSeverity.Info,
+                summary: $"Prepared {externalAssetResults.Length} external asset bundle(s) with {fileCount} file(s).",
+                details: new[]
+                {
+                    names.Length == 0 ? "No bundle names were reported." : $"Bundles: {string.Join(", ", names)}",
+                    manifests.Length == 0 ? "No manifests were reported." : $"Manifests: {string.Join(", ", manifests)}"
                 }));
         }
 

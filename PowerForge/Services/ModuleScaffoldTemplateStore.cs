@@ -17,7 +17,8 @@ internal static class ModuleScaffoldTemplateStore
         "Example-LicenseMIT.txt",
         "Example-ModuleBuilder.txt",
         "Example-ModulePSM1.txt",
-        "Example-ModulePSD1.txt"
+        "Example-ModulePSD1.txt",
+        "Example-ModuleTests.txt"
     };
 
     private static readonly ConcurrentDictionary<string, string> Cache =

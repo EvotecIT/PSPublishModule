@@ -26,7 +26,19 @@ public sealed class ModuleBuildHostServiceTests
         Assert.Equal(@"C:\repo", captured.WorkingDirectory);
         Assert.Contains("JsonOnly = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("JsonPath = $targetJson", captured.CommandText!, StringComparison.Ordinal);
-        Assert.Contains(@". 'C:\repo\Build\Build-Module.ps1'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("Remove-Item -LiteralPath Alias:Build-Module -Force -ErrorAction SilentlyContinue", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("Remove-Item -LiteralPath Alias:Invoke-ModuleBuilder -Force -ErrorAction SilentlyContinue", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("Set-Alias -Name Invoke-ModuleBuilder -Value Invoke-ModuleBuild -Scope Local", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('RunMode')", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments = @{}", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['RunMode'] = 'Build'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['ConfigurationGateMode'] = 'Build'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.DoesNotContain("$buildScriptArguments += @('-RunMode', 'Build')", captured.CommandText!, StringComparison.Ordinal);
+        Assert.DoesNotContain("'-RunMode', 'Publish'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.DoesNotContain("'-ConfigurationGateMode', 'Publish'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("function Import-Module", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("& $cmd @args", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains(". $buildScriptPath @buildScriptArguments", captured.CommandText!, StringComparison.Ordinal);
         Assert.True(result.Succeeded);
     }
 
@@ -49,9 +61,36 @@ public sealed class ModuleBuildHostServiceTests
 
         Assert.NotNull(captured);
         Assert.Equal(PowerShellInvocationMode.Command, captured!.InvocationMode);
-        Assert.Contains(@". 'C:\repo\Build\Build-Module.ps1'", captured.CommandText!, StringComparison.Ordinal);
-        Assert.Contains("-NoSign", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains(". $buildScriptPath @buildScriptArguments", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['NoSign'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.DoesNotContain("function New-ConfigurationBuild", captured.CommandText!, StringComparison.Ordinal);
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task ExecuteBuildAsync_ForwardsOptionalFlagsOnlyWhenScriptSupportsThem()
+    {
+        PowerShellRunRequest? captured = null;
+        var runner = new StubPowerShellRunner(request => {
+            captured = request;
+            return new PowerShellRunResult(0, "ok", string.Empty, "pwsh");
+        });
+        var service = new ModuleBuildHostService(runner);
+
+        var result = await service.ExecuteBuildAsync(new ModuleBuildHostBuildRequest {
+            RepositoryRoot = @"C:\repo",
+            ScriptPath = @"C:\repo\Build\Build-Module.ps1",
+            ModulePath = @"C:\repo\Module\PSPublishModule.psd1",
+            NoDotnetBuild = true,
+            SignModule = true
+        });
+
+        Assert.NotNull(captured);
+        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('NoDotnetBuild')", captured!.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['NoDotnetBuild'] = $true", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('SignModule')", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['SignModule'] = $true", captured.CommandText!, StringComparison.Ordinal);
+        Assert.DoesNotContain("$buildScriptArguments += '-SignModule'", captured.CommandText!, StringComparison.Ordinal);
         Assert.True(result.Succeeded);
     }
 
@@ -74,6 +113,32 @@ public sealed class ModuleBuildHostServiceTests
         Assert.NotNull(captured);
         Assert.DoesNotContain("-NoSign", captured!.CommandText!, StringComparison.Ordinal);
         Assert.DoesNotContain("-SignModule", captured.CommandText!, StringComparison.Ordinal);
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task ExecuteBuildAsync_ForwardsConfigurationOnlyWhenScriptSupportsParameter()
+    {
+        PowerShellRunRequest? captured = null;
+        var runner = new StubPowerShellRunner(request => {
+            captured = request;
+            return new PowerShellRunResult(0, "ok", string.Empty, "pwsh");
+        });
+        var service = new ModuleBuildHostService(runner);
+
+        var result = await service.ExecuteBuildAsync(new ModuleBuildHostBuildRequest {
+            RepositoryRoot = @"C:\repo",
+            ScriptPath = @"C:\repo\Build\Build-Module.ps1",
+            ModulePath = @"C:\repo\Module\PSPublishModule.psd1",
+            Configuration = "Release"
+        });
+
+        Assert.NotNull(captured);
+        Assert.Contains("$buildScriptPath = (Get-Item -LiteralPath", captured!.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptCommand = Get-Command -Name $buildScriptPath -CommandType ExternalScript", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('Configuration')", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['Configuration'] = 'Release'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.DoesNotContain("$buildScriptArguments += @('-Configuration', 'Release')", captured.CommandText!, StringComparison.Ordinal);
         Assert.True(result.Succeeded);
     }
 

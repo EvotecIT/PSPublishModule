@@ -22,6 +22,7 @@ public sealed class PSPublishModuleManifestContractTests
     {
         "Get-ConfigurationBoolean",
         "New-ConfigurationGate",
+        "New-ConfigurationModuleBuildProfile",
         "New-ConfigurationPackageBuild",
         "New-ConfigurationProjectBuild",
         "New-ConfigurationRelease"
@@ -58,6 +59,19 @@ public sealed class PSPublishModuleManifestContractTests
             var pattern = $@"(?im)^\s*New-ConfigurationModule\b[^\r\n]*\b-Type\s+RequiredModule\b[^\r\n]*\b-Name\s+['""]?{Regex.Escape(optionalModule)}['""]?";
             Assert.DoesNotMatch(pattern, buildScript);
         }
+    }
+
+    [Fact]
+    public void Self_build_forwards_selected_framework_to_json_export()
+    {
+        var repoRoot = RepoRootLocator.Find();
+        var selfBuildScript = File.ReadAllText(Path.Combine(repoRoot, "Module", "Build", "Build-ModuleSelf.ps1"));
+        var buildScript = File.ReadAllText(Path.Combine(repoRoot, "Module", "Build", "Build-Module.ps1"));
+
+        Assert.Contains("Framework      = $Framework", selfBuildScript, StringComparison.Ordinal);
+        Assert.Contains("[ValidateSet('auto', 'net10.0', 'net8.0')][string] $Framework = 'auto'", buildScript, StringComparison.Ordinal);
+        Assert.Contains("$tfm = if ($Framework -ne 'auto')", buildScript, StringComparison.Ordinal);
+        Assert.Contains("\"PSPublishModule/bin/{0}/{1}/PSPublishModule.dll\" -f $Configuration, $tfm", buildScript, StringComparison.Ordinal);
     }
 
     [Fact]
