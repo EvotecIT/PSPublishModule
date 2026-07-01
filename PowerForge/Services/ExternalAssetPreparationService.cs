@@ -58,22 +58,17 @@ internal sealed class ExternalAssetPreparationService
         if (files.Length == 0)
             throw new InvalidOperationException($"External asset '{name}' must declare at least one file.");
 
-        Directory.CreateDirectory(outputRoot);
-        Directory.CreateDirectory(manifestDirectory);
-
         var fileResults = new List<ExternalAssetFilePreparationResult>();
         var manifestFiles = new List<ExternalAssetManifestFile>();
         var effectiveTimeout = timeout ?? TimeSpan.FromMinutes(5);
         var outputPathComparison = FrameworkCompatibility.GetPathStringComparison(outputRoot);
-        var preparedOutputPaths = new HashSet<string>(GetPathStringComparer(outputPathComparison));
+        var resolvedFiles = ResolveFiles(outputRoot, manifestPath, outputPathComparison, files, $"external asset '{name}'");
 
-        foreach (var file in files)
+        Directory.CreateDirectory(outputRoot);
+        Directory.CreateDirectory(manifestDirectory);
+
+        foreach (var resolvedFile in resolvedFiles)
         {
-            var resolvedFile = ResolveFile(outputRoot, manifestPath, outputPathComparison, file);
-            var comparableOutputPath = NormalizePathForComparison(resolvedFile.TargetPath);
-            if (!preparedOutputPaths.Add(comparableOutputPath))
-                throw new InvalidOperationException($"External asset file '{resolvedFile.OutputRelativePath}' resolves to an output path already used by another file entry.");
-
             var result = PrepareFile(projectRoot, manifestDirectory, configuration.SkipDownload, resolvedFile, effectiveTimeout);
             fileResults.Add(result);
             manifestFiles.Add(new ExternalAssetManifestFile
@@ -147,9 +142,9 @@ internal sealed class ExternalAssetPreparationService
             EnsureManifestDoesNotOverwriteProjectFile(outputRoot, manifestPath, $"{description} ManifestPath", pathComparison);
             AddOccupiedPath(occupiedPaths, ownedOutputDirectories, manifestPath, $"{description} manifest", owner, pathComparison);
 
-            foreach (var file in configuration.Files ?? Array.Empty<ExternalAssetFileConfiguration>())
+            var resolvedFiles = ResolveFiles(outputRoot, manifestPath, pathComparison, configuration.Files ?? Array.Empty<ExternalAssetFileConfiguration>(), description);
+            foreach (var resolvedFile in resolvedFiles)
             {
-                var resolvedFile = ResolveFile(outputRoot, manifestPath, pathComparison, file);
                 AddOccupiedPath(occupiedPaths, ownedOutputDirectories, resolvedFile.TargetPath, $"{description} file '{resolvedFile.OutputRelativePath}'", owner, pathComparison);
             }
         }
@@ -190,7 +185,8 @@ internal sealed class ExternalAssetPreparationService
         string outputRoot,
         string generatedManifestPath,
         StringComparison pathComparison,
-        ExternalAssetFileConfiguration? file)
+        ExternalAssetFileConfiguration? file,
+        string assetDescription)
     {
         if (file is null)
             throw new InvalidOperationException("External asset file configuration is required.");
@@ -200,8 +196,7 @@ internal sealed class ExternalAssetPreparationService
         var source = RequireValue(file.Uri, $"External asset file '{fileName}' requires Uri.");
         var outputRelativePath = NormalizeOutputRelativePath(file.Path, fileName);
         var targetPath = ResolveOutputPath(outputRoot, outputRelativePath, pathComparison);
-        if (SamePath(targetPath, generatedManifestPath, pathComparison))
-            throw new InvalidOperationException($"External asset file '{outputRelativePath}' cannot use the generated manifest path '{generatedManifestPath}'.");
+        EnsureAssetFilePathDoesNotOverlapManifest(outputRelativePath, targetPath, generatedManifestPath, assetDescription, pathComparison);
 
         return new ResolvedExternalAssetFile(
             runtime,
@@ -210,6 +205,39 @@ internal sealed class ExternalAssetPreparationService
             outputRelativePath,
             targetPath,
             file.Sha256);
+    }
+
+    private static ResolvedExternalAssetFile[] ResolveFiles(
+        string outputRoot,
+        string generatedManifestPath,
+        StringComparison pathComparison,
+        ExternalAssetFileConfiguration[] files,
+        string assetDescription)
+    {
+        var resolvedFiles = files
+            .Select(file => ResolveFile(outputRoot, generatedManifestPath, pathComparison, file, assetDescription))
+            .ToArray();
+
+        for (var i = 0; i < resolvedFiles.Length; i++)
+        {
+            for (var j = i + 1; j < resolvedFiles.Length; j++)
+            {
+                var first = resolvedFiles[i];
+                var second = resolvedFiles[j];
+                if (SamePath(first.TargetPath, second.TargetPath, pathComparison))
+                {
+                    throw new InvalidOperationException($"External asset file '{second.OutputRelativePath}' resolves to an output path already used by another file entry.");
+                }
+
+                if (IsSameOrChildPath(first.TargetPath, second.TargetPath, pathComparison) ||
+                    IsSameOrChildPath(second.TargetPath, first.TargetPath, pathComparison))
+                {
+                    throw new InvalidOperationException($"External asset file '{second.OutputRelativePath}' resolves to a path that overlaps '{first.OutputRelativePath}'. File entries must not contain each other.");
+                }
+            }
+        }
+
+        return resolvedFiles;
     }
 
     private void MaterializeSource(string projectRoot, string source, string targetPath, TimeSpan timeout)
@@ -405,6 +433,23 @@ internal sealed class ExternalAssetPreparationService
         if (File.Exists(manifestPath))
         {
             throw new InvalidOperationException($"{label} resolves to existing project file '{manifestPath}' outside external asset output '{outputRoot}'.");
+        }
+    }
+
+    private static void EnsureAssetFilePathDoesNotOverlapManifest(
+        string outputRelativePath,
+        string targetPath,
+        string manifestPath,
+        string assetDescription,
+        StringComparison pathComparison)
+    {
+        if (SamePath(targetPath, manifestPath, pathComparison))
+            throw new InvalidOperationException($"External asset file '{outputRelativePath}' cannot use the generated manifest path '{manifestPath}'.");
+
+        if (IsSameOrChildPath(targetPath, manifestPath, pathComparison) ||
+            IsSameOrChildPath(manifestPath, targetPath, pathComparison))
+        {
+            throw new InvalidOperationException($"External asset file '{outputRelativePath}' for {assetDescription} overlaps the generated manifest path '{manifestPath}'.");
         }
     }
 

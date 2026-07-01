@@ -140,6 +140,48 @@ public sealed class ExternalAssetPreparationServiceTests
     }
 
     [Fact]
+    public void Prepare_RejectsFilePathNestedUnderGeneratedManifestBeforeMaterializingFiles()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var sourceRoot = Path.Combine(root, "Source");
+            Directory.CreateDirectory(sourceRoot);
+            var sourceFile = Path.Combine(sourceRoot, "tool.zip");
+            File.WriteAllText(sourceFile, "payload");
+
+            var service = new ExternalAssetPreparationService(new NullLogger());
+            var segment = new ConfigurationExternalAssetSegment
+            {
+                Configuration = new ExternalAssetConfiguration
+                {
+                    Name = "VendorTool",
+                    OutputPath = "Artefacts/VendorTool",
+                    Files = new[]
+                    {
+                        new ExternalAssetFileConfiguration
+                        {
+                            Runtime = "win-x64",
+                            FileName = "tool.zip",
+                            Path = "manifest.json/tool.zip",
+                            Uri = sourceFile
+                        }
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => service.Prepare(root, segment));
+
+            Assert.Contains("overlaps the generated manifest path", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(Path.Combine(root, "Artefacts", "VendorTool")));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Prepare_RejectsDuplicateOutputPathsWithoutOverwritingFirstFile()
     {
         var root = CreateTempDirectory();
@@ -179,7 +221,58 @@ public sealed class ExternalAssetPreparationServiceTests
 
             var ex = Assert.Throws<InvalidOperationException>(() => service.Prepare(root, segment));
             Assert.Contains("already used", ex.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.Equal("first payload", File.ReadAllText(Path.Combine(root, "Artefacts", "VendorTool", "tool.zip")));
+            Assert.False(File.Exists(Path.Combine(root, "Artefacts", "VendorTool", "tool.zip")));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Prepare_RejectsFileDirectoryCollisionsBeforeMaterializingFiles()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var sourceRoot = Path.Combine(root, "Source");
+            Directory.CreateDirectory(sourceRoot);
+            var firstSource = Path.Combine(sourceRoot, "first.zip");
+            var secondSource = Path.Combine(sourceRoot, "second.zip");
+            File.WriteAllText(firstSource, "first payload");
+            File.WriteAllText(secondSource, "second payload");
+
+            var service = new ExternalAssetPreparationService(new NullLogger());
+            var segment = new ConfigurationExternalAssetSegment
+            {
+                Configuration = new ExternalAssetConfiguration
+                {
+                    Name = "VendorTool",
+                    OutputPath = "Artefacts/VendorTool",
+                    Files = new[]
+                    {
+                        new ExternalAssetFileConfiguration
+                        {
+                            Runtime = "win-x64",
+                            FileName = "tool",
+                            Uri = firstSource
+                        },
+                        new ExternalAssetFileConfiguration
+                        {
+                            Runtime = "win-arm64",
+                            FileName = "child.zip",
+                            Path = "tool/child.zip",
+                            Uri = secondSource
+                        }
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => service.Prepare(root, segment));
+
+            Assert.Contains("overlaps", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(Path.Combine(root, "Artefacts", "VendorTool", "tool")));
+            Assert.False(File.Exists(Path.Combine(root, "Artefacts", "VendorTool", "tool", "child.zip")));
         }
         finally
         {
@@ -1119,7 +1212,7 @@ public sealed class ExternalAssetPreparationServiceTests
     }
 
     [Fact]
-    public void Schema_IncludesExternalAssetSegment()
+    public void Schema_IncludesExternalAssetAndGateSegments()
     {
         var schemaPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Schemas", "powerforge.segments.schema.json"));
         using var schema = JsonDocument.Parse(File.ReadAllText(schemaPath));
@@ -1131,6 +1224,9 @@ public sealed class ExternalAssetPreparationServiceTests
         Assert.True(definitions.TryGetProperty("ExternalAssetFileConfiguration", out var fileConfiguration));
         Assert.True(fileConfiguration.GetProperty("properties").TryGetProperty("Sha256", out _));
         Assert.True(definitions.TryGetProperty("ExternalAssetSegment", out _));
+        Assert.True(definitions.TryGetProperty("GateConfiguration", out var gateConfiguration));
+        Assert.True(gateConfiguration.GetProperty("properties").TryGetProperty("Mode", out _));
+        Assert.True(definitions.TryGetProperty("GateSegment", out _));
 
         var oneOf = definitions
             .GetProperty("ConfigurationSegment")
@@ -1139,6 +1235,8 @@ public sealed class ExternalAssetPreparationServiceTests
 
         Assert.Contains(oneOf, item =>
             string.Equals(item.GetProperty("$ref").GetString(), "#/$defs/ExternalAssetSegment", StringComparison.Ordinal));
+        Assert.Contains(oneOf, item =>
+            string.Equals(item.GetProperty("$ref").GetString(), "#/$defs/GateSegment", StringComparison.Ordinal));
     }
 
     private static string ComputeSha256(string path)
