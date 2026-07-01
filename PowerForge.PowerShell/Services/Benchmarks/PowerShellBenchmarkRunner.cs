@@ -221,7 +221,7 @@ public sealed class PowerShellBenchmarkRunner
             Status = status,
             DurationMs = durationMs,
             Reason = reason,
-            Variables = item.Values.ToDictionary(k => k.Key, k => (string?)Convert.ToString(k.Value, CultureInfo.InvariantCulture), StringComparer.OrdinalIgnoreCase),
+            Variables = ToVariables(item.Values),
             Metrics = metrics ?? new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
         };
 
@@ -288,14 +288,17 @@ public sealed class PowerShellBenchmarkRunner
             var samplesPath = Path.Combine(outputRoot, "samples.json");
             var summaryPath = Path.Combine(outputRoot, "summary.json");
             var comparisonPath = Path.Combine(outputRoot, "comparison.json");
+            var metadataPath = Path.Combine(outputRoot, "metadata.json");
             var runReportPath = Path.Combine(outputRoot, "run-report.json");
             result.Artifacts["samples.json"] = samplesPath;
             result.Artifacts["summary.json"] = summaryPath;
             result.Artifacts["comparison.json"] = comparisonPath;
+            result.Artifacts["metadata.json"] = metadataPath;
             result.Artifacts["run-report.json"] = runReportPath;
             BenchmarkJson.Write(samplesPath, result.Samples);
             BenchmarkJson.Write(summaryPath, result.Summary);
             BenchmarkJson.Write(comparisonPath, result.Comparison);
+            BenchmarkJson.Write(metadataPath, result.Metadata);
             BenchmarkJson.Write(runReportPath, result);
         }
 
@@ -437,8 +440,9 @@ public sealed class PowerShellBenchmarkRunner
     {
         var rows = samples.ToArray();
         var variableHeaders = GetVariableHeaders(rows.Select(row => row.Variables));
+        var metricHeaders = GetMetricHeaders(rows.Select(row => row.Metrics));
         var builder = new StringBuilder();
-        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host" }.Concat(variableHeaders).Concat(new[] { "Iteration", "Status", "DurationMs", "Reason" })));
+        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host" }.Concat(variableHeaders).Concat(new[] { "Iteration", "Status", "DurationMs", "Reason" }).Concat(metricHeaders)));
         foreach (var sample in rows)
         {
             var cells = new List<string>
@@ -454,6 +458,7 @@ public sealed class PowerShellBenchmarkRunner
             cells.Add(sample.Status.ToString());
             cells.Add(sample.DurationMs.ToString("0.###", CultureInfo.InvariantCulture));
             cells.Add(Cell(sample.Reason));
+            cells.AddRange(metricHeaders.Select(header => sample.Metrics.TryGetValue(header, out var value) ? Number(value) : string.Empty));
             builder.AppendLine(string.Join(",", cells));
         }
 
@@ -464,8 +469,9 @@ public sealed class PowerShellBenchmarkRunner
     {
         var summaryRows = rows.ToArray();
         var variableHeaders = GetVariableHeaders(summaryRows.Select(row => row.Variables));
+        var metricHeaders = GetMetricHeaders(summaryRows.Select(row => row.Metrics));
         var builder = new StringBuilder();
-        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host" }.Concat(variableHeaders).Concat(new[] { "SampleCount", "FailureCount", "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs" })));
+        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host" }.Concat(variableHeaders).Concat(new[] { "SampleCount", "FailureCount", "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs" }).Concat(metricHeaders)));
         foreach (var row in summaryRows)
         {
             var cells = new List<string>
@@ -484,6 +490,7 @@ public sealed class PowerShellBenchmarkRunner
             cells.Add(Number(row.MeanMs));
             cells.Add(Number(row.MinMs));
             cells.Add(Number(row.MaxMs));
+            cells.AddRange(metricHeaders.Select(header => row.Metrics.TryGetValue(header, out var value) ? Number(value) : string.Empty));
             builder.AppendLine(string.Join(",", cells));
         }
 
@@ -506,6 +513,18 @@ public sealed class PowerShellBenchmarkRunner
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+    private static string[] GetMetricHeaders(IEnumerable<Dictionary<string, double>> metrics)
+        => metrics
+            .SelectMany(row => row.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static Dictionary<string, string?> ToVariables(IReadOnlyDictionary<string, object?> values)
+        => values
+            .Where(k => !IsBenchmarkColumn(k.Key))
+            .ToDictionary(k => k.Key, k => (string?)Convert.ToString(k.Value, CultureInfo.InvariantCulture), StringComparer.OrdinalIgnoreCase);
 
     private static bool IsBenchmarkColumn(string key)
         => IsBuiltInPathValue(key)

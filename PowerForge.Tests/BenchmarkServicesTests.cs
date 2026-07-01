@@ -152,6 +152,7 @@ public sealed class BenchmarkServicesTests
 
         Assert.False(verify.Passed);
         Assert.Contains(verify.Metrics, m => m.MissingInCurrent);
+        Assert.Contains(verify.Messages, m => m.Contains("failed samples", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -239,6 +240,40 @@ public sealed class BenchmarkServicesTests
         Assert.Equal("new", result.Suite);
         Assert.Equal("new", Assert.Single(result.Samples).Suite);
         Assert.Equal("new", Assert.Single(result.Summary).Suite);
+    }
+
+    [Fact]
+    public void Importer_ReadsSamplesJsonArrayAsSamples()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "samples.json");
+        BenchmarkJson.Write(path, new[] { Sample("suite", "case", "Run", "Managed", 2) });
+
+        var result = new BenchmarkResultImporter().Import(path);
+
+        Assert.Single(result.Samples);
+        Assert.Equal(2, Assert.Single(result.Summary).MedianMs);
+    }
+
+    [Fact]
+    public void Importer_DirectoryUsesLatestRunReport()
+    {
+        var root = CreateTempRoot();
+        var older = Path.Combine(root, "20260101-000000-old");
+        var newer = Path.Combine(root, "20260102-000000-new");
+        Directory.CreateDirectory(older);
+        Directory.CreateDirectory(newer);
+        var olderReport = Path.Combine(older, "run-report.json");
+        var newerReport = Path.Combine(newer, "run-report.json");
+        BenchmarkJson.Write(olderReport, new BenchmarkRunResult { Suite = "old", Samples = new[] { Sample("old", "case", "Run", "Managed", 1) } });
+        BenchmarkJson.Write(newerReport, new BenchmarkRunResult { Suite = "new", Samples = new[] { Sample("new", "case", "Run", "Managed", 2) } });
+        File.SetLastWriteTimeUtc(olderReport, DateTime.UtcNow.AddMinutes(-5));
+        File.SetLastWriteTimeUtc(newerReport, DateTime.UtcNow);
+
+        var result = new BenchmarkResultImporter().Import(root);
+
+        Assert.Equal("new", result.Suite);
+        Assert.Single(result.Samples);
     }
 
     [Fact]
@@ -365,6 +400,40 @@ New-BenchmarkSuite 'long' {
     }
 
     [Fact]
+    public void DslRuntime_StopsCaseSourceErrors()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'bad' {
+    cases { Add-BenchmarkCaseSource { Write-Error 'case boom' } }
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+
+        Assert.Contains("case boom", ex.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void DslRuntime_HonorsArtifactsNone()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'none' {
+    artifacts None
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+
+        Assert.Equal(BenchmarkArtifactKind.None, suite.Artifacts);
+    }
+
+    [Fact]
     public void InvokeBenchmarkSuiteCommand_ExposesSuiteOverrideParameter()
     {
         var property = typeof(PSPublishModule.InvokeBenchmarkSuiteCommand).GetProperty("Suite");
@@ -416,6 +485,7 @@ New-BenchmarkSuite 'long' {
 
         Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
         Assert.True(File.Exists(Path.Combine(suite.OutputRoot, result.RunId, "Default", "Managed", "Run", "matrix", "0", "output")));
+        Assert.DoesNotContain("Scenario", Assert.Single(result.Samples).Variables.Keys);
     }
 
     [Fact]
@@ -438,14 +508,15 @@ New-BenchmarkSuite 'long' {
         var suite = CreateRunnableSuite();
         suite.Artifacts = BenchmarkArtifactKind.Csv;
         suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows", Values = { 10 } });
+        suite.Metrics.Add(new PowerShellBenchmarkMetric { Name = "RowsPerSecond", ScriptBlock = ScriptBlock.Create("42") });
 
         var result = new PowerShellBenchmarkRunner().Run(suite);
 
         var samplesCsv = File.ReadAllText(result.Artifacts["samples.csv"]);
         var summaryCsv = File.ReadAllText(result.Artifacts["summary.csv"]);
-        Assert.Contains("Suite,Scenario,Operation,Engine,Host,Rows,Iteration,Status,DurationMs,Reason", samplesCsv);
+        Assert.Contains("Suite,Scenario,Operation,Engine,Host,Rows,Iteration,Status,DurationMs,Reason,RowsPerSecond", samplesCsv);
         Assert.Contains("suite,Default,Run,Managed,Current,10,0,Succeeded", samplesCsv);
-        Assert.Contains("Suite,Scenario,Operation,Engine,Host,Rows,SampleCount,FailureCount,Status,MedianMs,MeanMs,MinMs,MaxMs", summaryCsv);
+        Assert.Contains("Suite,Scenario,Operation,Engine,Host,Rows,SampleCount,FailureCount,Status,MedianMs,MeanMs,MinMs,MaxMs,RowsPerSecond", summaryCsv);
     }
 
     [Fact]
@@ -486,6 +557,8 @@ New-BenchmarkSuite 'long' {
 
         Assert.Contains("run-report.json", report.Artifacts.Keys);
         Assert.Contains("samples.json", report.Artifacts.Keys);
+        Assert.Contains("metadata.json", report.Artifacts.Keys);
+        Assert.True(File.Exists(result.Artifacts["metadata.json"]));
     }
 
     private static BenchmarkSample Sample(

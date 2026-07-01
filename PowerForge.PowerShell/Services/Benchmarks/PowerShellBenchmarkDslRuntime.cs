@@ -110,7 +110,7 @@ public static class PowerShellBenchmarkDslRuntime
     public static void From(ScriptBlock scriptBlock)
     {
         var suite = RequireSuite();
-        foreach (var value in scriptBlock.Invoke())
+        foreach (var value in InvokeStrict(scriptBlock))
         {
             var item = ConvertToCase(value);
             suite.Cases.Add(item);
@@ -238,7 +238,16 @@ public static class PowerShellBenchmarkDslRuntime
                 kinds |= kind;
         }
 
-        RequireSuite().Artifacts = kinds == BenchmarkArtifactKind.None ? BenchmarkArtifactKind.Default : kinds;
+        RequireSuite().Artifacts = kinds;
+    }
+
+    private static IEnumerable<PSObject> InvokeStrict(ScriptBlock scriptBlock)
+    {
+        var variables = new List<PSVariable>
+        {
+            new("ErrorActionPreference", ActionPreference.Stop)
+        };
+        return scriptBlock.InvokeWithContext(functionsToDefine: null, variablesToDefine: variables, args: Array.Empty<object>());
     }
 
     private static Hashtable CreateFunctions()

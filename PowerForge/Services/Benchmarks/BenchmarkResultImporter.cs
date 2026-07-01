@@ -35,6 +35,12 @@ public sealed class BenchmarkResultImporter
     private BenchmarkRunResult ImportDirectory(string path, string? suite)
     {
         var defaultSuite = suite ?? new DirectoryInfo(path).Name;
+        var runReport = Directory.GetFiles(path, "run-report.json", SearchOption.AllDirectories)
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+        if (runReport is not null)
+            return ImportJson(runReport, suite);
+
         var sampleFiles = Directory.GetFiles(path, "samples.csv", SearchOption.AllDirectories)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
@@ -87,6 +93,18 @@ public sealed class BenchmarkResultImporter
             else if (result.Summary.Length == 0)
                 result.Summary = new BenchmarkSummaryService().Summarize(result.Samples);
             return result;
+        }
+
+        if (root.ValueKind == JsonValueKind.Array && LooksLikeSampleArray(root))
+        {
+            var samples = BenchmarkJson.Read<BenchmarkSample[]>(path);
+            if (!string.IsNullOrWhiteSpace(suite))
+            {
+                foreach (var sample in samples)
+                    sample.Suite = suite!;
+            }
+
+            return BuildImportedResult(suite ?? samples.FirstOrDefault()?.Suite ?? Path.GetFileNameWithoutExtension(path), samples);
         }
 
         if (root.ValueKind == JsonValueKind.Array || (root.ValueKind == JsonValueKind.Object && BenchmarkJson.TryGetPropertyIgnoreCase(root, "summary", out _)))
@@ -443,6 +461,15 @@ public sealed class BenchmarkResultImporter
         return (headers.Contains("SampleCount") || headers.Contains("FailureCount") || headers.Contains("MedianMs"))
                && !headers.Contains("Iteration")
                && !headers.Contains("DurationMs");
+    }
+
+    private static bool LooksLikeSampleArray(JsonElement root)
+    {
+        var first = root.EnumerateArray().FirstOrDefault();
+        return first.ValueKind == JsonValueKind.Object
+               && (BenchmarkJson.TryGetPropertyIgnoreCase(first, "durationMs", out _)
+                   || BenchmarkJson.TryGetPropertyIgnoreCase(first, "iteration", out _)
+                   || BenchmarkJson.TryGetPropertyIgnoreCase(first, "runId", out _));
     }
 
     private static BenchmarkSampleStatus ParseSampleStatus(string? value, bool hasDuration)

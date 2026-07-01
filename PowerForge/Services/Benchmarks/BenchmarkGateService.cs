@@ -19,8 +19,20 @@ public sealed class BenchmarkGateService
         if (request is null) throw new ArgumentNullException(nameof(request));
         var rows = BenchmarkJson.ReadSummary(request.SummaryPath);
         var actual = BuildMetricMap(rows, request);
+        var failedRowMessages = BuildFailedRowMessages(rows, request).ToArray();
         if (request.BaselineMode == BenchmarkBaselineMode.Update)
         {
+            if (failedRowMessages.Length > 0)
+            {
+                return new BenchmarkGateResult
+                {
+                    Passed = false,
+                    BaselineUpdated = false,
+                    BaselinePath = Path.GetFullPath(request.BaselinePath),
+                    Messages = failedRowMessages
+                };
+            }
+
             WriteBaseline(request.BaselinePath, actual);
             return new BenchmarkGateResult
             {
@@ -39,7 +51,8 @@ public sealed class BenchmarkGateService
         var baseline = ReadBaseline(request.BaselinePath);
         var metrics = new List<BenchmarkGateMetricResult>();
         var messages = new List<string>();
-        var failed = false;
+        var failed = failedRowMessages.Length > 0;
+        messages.AddRange(failedRowMessages);
         foreach (var entry in actual.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
         {
             var result = new BenchmarkGateMetricResult
@@ -112,6 +125,20 @@ public sealed class BenchmarkGateService
 
         return map;
     }
+
+    private static IEnumerable<string> BuildFailedRowMessages(IEnumerable<BenchmarkSummaryRow> rows, BenchmarkGateRequest request)
+    {
+        var metric = NormalizeMetricName(request.Metric);
+        foreach (var row in rows ?? Array.Empty<BenchmarkSummaryRow>())
+        {
+            if (!IsFailedRow(row))
+                continue;
+            yield return $"Benchmark row '{BuildKey(row, request.GroupBy, metric)}' has failed samples.";
+        }
+    }
+
+    private static bool IsFailedRow(BenchmarkSummaryRow row)
+        => row.FailureCount > 0 || string.Equals(row.Status, "Failed", StringComparison.OrdinalIgnoreCase);
 
     private static string BuildKey(BenchmarkSummaryRow row, IReadOnlyList<string> groupBy, string metric)
     {
