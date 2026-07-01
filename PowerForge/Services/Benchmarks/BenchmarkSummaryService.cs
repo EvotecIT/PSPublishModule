@@ -13,17 +13,18 @@ public sealed class BenchmarkSummaryService
     public BenchmarkSummaryRow[] Summarize(IEnumerable<BenchmarkSample> samples)
     {
         return (samples ?? Array.Empty<BenchmarkSample>())
-            .GroupBy(s => MakeKey(s.Suite, s.Scenario, s.Operation, s.Engine, s.Host, s.Variables), StringComparer.OrdinalIgnoreCase)
+            .GroupBy(s => MakeKey(s.Suite, s.Scenario, s.Operation, s.Engine, s.Host, s.Os, s.Variables), StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
                 var first = group.First();
-                return BuildSummaryRow(first.Suite, first.Scenario, first.Operation, first.Engine, first.Host, first.Variables, group);
+                return BuildSummaryRow(first.Suite, first.Scenario, first.Operation, first.Engine, first.Host, first.Os, first.Variables, group);
             })
             .OrderBy(r => r.Suite, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.Scenario, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.Operation, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.Engine, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.Host, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(r => r.Os, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => FormatVariables(r.Variables), StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
@@ -39,7 +40,7 @@ public sealed class BenchmarkSummaryService
     {
         var rows = (summary ?? Array.Empty<BenchmarkSummaryRow>()).ToArray();
         var result = new List<BenchmarkComparisonRow>();
-        foreach (var group in rows.GroupBy(r => MakeKey(r.Suite, r.Scenario, r.Operation, string.Empty, r.Host, r.Variables), StringComparer.OrdinalIgnoreCase))
+        foreach (var group in rows.GroupBy(r => MakeKey(r.Suite, r.Scenario, r.Operation, string.Empty, r.Host, r.Os, r.Variables), StringComparer.OrdinalIgnoreCase))
         {
             var baseline = group.FirstOrDefault(r => string.Equals(r.Engine, baselineEngine, StringComparison.OrdinalIgnoreCase));
             if (baseline is null)
@@ -56,6 +57,7 @@ public sealed class BenchmarkSummaryService
                     Scenario = row.Scenario,
                     Operation = row.Operation,
                     Host = row.Host,
+                    Os = row.Os,
                     Variables = CopyVariables(row.Variables),
                     Engine = row.Engine,
                     BaselineEngine = baselineEngine,
@@ -96,6 +98,7 @@ public sealed class BenchmarkSummaryService
         string operation,
         string engine,
         string host,
+        string os,
         IReadOnlyDictionary<string, string?> variables,
         IEnumerable<BenchmarkSample> samples)
     {
@@ -113,6 +116,7 @@ public sealed class BenchmarkSummaryService
             Operation = operation,
             Engine = engine,
             Host = host,
+            Os = os,
             Variables = CopyVariables(variables),
             SampleCount = successful.Length,
             FailureCount = all.Count(s => s.Status == BenchmarkSampleStatus.Failed),
@@ -154,11 +158,12 @@ public sealed class BenchmarkSummaryService
         string? operation,
         string? engine,
         string? host,
+        string? os,
         IReadOnlyDictionary<string, string?> variables)
-        => string.Join("\u001f", suite ?? string.Empty, scenario ?? string.Empty, operation ?? string.Empty, engine ?? string.Empty, host ?? string.Empty, FormatVariables(variables));
+        => string.Join("\u001f", suite ?? string.Empty, scenario ?? string.Empty, operation ?? string.Empty, engine ?? string.Empty, host ?? string.Empty, os ?? string.Empty, FormatVariables(variables));
 
     private static string DescribeGroup(BenchmarkSummaryRow row)
-        => $"suite '{row.Suite}', scenario '{row.Scenario}', operation '{row.Operation}', host '{row.Host}', variables '{FormatVariables(row.Variables)}'";
+        => $"suite '{row.Suite}', scenario '{row.Scenario}', operation '{row.Operation}', host '{row.Host}', os '{row.Os}', variables '{FormatVariables(row.Variables)}'";
 
     private static string FormatVariables(IReadOnlyDictionary<string, string?> variables)
         => string.Join(

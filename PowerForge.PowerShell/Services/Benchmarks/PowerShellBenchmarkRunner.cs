@@ -27,7 +27,8 @@ public sealed class PowerShellBenchmarkRunner
         var expanded = ExpandCases(cases, suite.Axes);
         var engineAxis = GetAxisValues(suite.Axes, "Engine") ?? suite.Engines.Select(e => (object?)e.Name).ToArray();
         var operationAxis = GetAxisValues(suite.Axes, "Operation") ?? suite.Engines.SelectMany(e => e.Operations.Keys).Distinct(StringComparer.OrdinalIgnoreCase).Cast<object?>().ToArray();
-        var hostAxis = GetAxisValues(suite.Axes, "Host") ?? new object?[] { "Current" };
+        var currentHostLabel = GetCurrentHostLabel();
+        var hostAxis = GetAxisValues(suite.Axes, "Host") ?? new object?[] { currentHostLabel };
         if (expanded.Count == 0) throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define any runnable cases.");
         if (engineAxis.Length == 0) throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define any engine values.");
         if (operationAxis.Length == 0) throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define any operation values.");
@@ -41,9 +42,10 @@ public sealed class PowerShellBenchmarkRunner
         {
             var engineName = Convert.ToString(engineValue, CultureInfo.InvariantCulture) ?? string.Empty;
             var operationName = Convert.ToString(operationValue, CultureInfo.InvariantCulture) ?? string.Empty;
-            var hostName = Convert.ToString(hostValue, CultureInfo.InvariantCulture) ?? "Current";
-            if (!IsCurrentHost(hostName))
-                throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested host '{hostName}', but this runner only supports the current PowerShell host. Use 'Current' or run the suite from the target host.");
+            var requestedHostName = Convert.ToString(hostValue, CultureInfo.InvariantCulture) ?? "Current";
+            if (!IsCurrentHost(requestedHostName, currentHostLabel))
+                throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested host '{requestedHostName}', but this runner only supports the current PowerShell host. Use 'Current' or run the suite from the target host.");
+            var hostName = NormalizeCurrentHost(requestedHostName, currentHostLabel);
             var engine = suite.Engines.FirstOrDefault(e => string.Equals(e.Name, engineName, StringComparison.OrdinalIgnoreCase));
             if (engine is null || !engine.Operations.TryGetValue(operationName, out var handler))
                 throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define handler for engine '{engineName}' operation '{operationName}'.");
@@ -305,6 +307,12 @@ public sealed class PowerShellBenchmarkRunner
     private static string PSVersionInfo()
         => Convert.ToString(PSObject.AsPSObject(typeof(PSObject).Assembly.GetName().Version).BaseObject, CultureInfo.InvariantCulture) ?? string.Empty;
 
+    private static object? PSVersionInfoValue(string name)
+    {
+        using var ps = PowerShell.Create();
+        return ps.AddScript($"$PSVersionTable.{name}").Invoke().FirstOrDefault()?.BaseObject;
+    }
+
     private static void WriteArtifacts(PowerShellBenchmarkSuite suite, BenchmarkRunResult result)
     {
         var outputRoot = Path.Combine(suite.OutputRoot, result.RunId);
@@ -415,10 +423,27 @@ public sealed class PowerShellBenchmarkRunner
         return "Scenario";
     }
 
-    private static bool IsCurrentHost(string host)
+    private static bool IsCurrentHost(string host, string currentHostLabel)
         => string.IsNullOrWhiteSpace(host)
            || string.Equals(host, "Current", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(host, "CurrentHost", StringComparison.OrdinalIgnoreCase);
+           || string.Equals(host, "CurrentHost", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(host, currentHostLabel, StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeCurrentHost(string host, string currentHostLabel)
+        => string.IsNullOrWhiteSpace(host)
+           || string.Equals(host, "Current", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(host, "CurrentHost", StringComparison.OrdinalIgnoreCase)
+            ? currentHostLabel
+            : host;
+
+    private static string GetCurrentHostLabel()
+    {
+        var edition = Convert.ToString(PSVersionInfoValue("PSEdition"), CultureInfo.InvariantCulture);
+        var version = Convert.ToString(PSVersionInfoValue("PSVersion"), CultureInfo.InvariantCulture);
+        if (string.IsNullOrWhiteSpace(edition))
+            edition = "PowerShell";
+        return string.IsNullOrWhiteSpace(version) ? edition! : string.Concat(edition, "-", version);
+    }
 
     private static string SafePathSegment(string value)
     {
@@ -475,7 +500,7 @@ public sealed class PowerShellBenchmarkRunner
         var variableHeaders = GetVariableHeaders(rows.Select(row => row.Variables));
         var metricHeaders = GetMetricHeaders(rows.Select(row => row.Metrics));
         var builder = new StringBuilder();
-        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host" }.Concat(variableHeaders).Concat(new[] { "Iteration", "Status", "DurationMs", "Reason" }).Concat(metricHeaders)));
+        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS" }.Concat(variableHeaders).Concat(new[] { "Iteration", "Status", "DurationMs", "Reason" }).Concat(metricHeaders)));
         foreach (var sample in rows)
         {
             var cells = new List<string>
@@ -484,7 +509,8 @@ public sealed class PowerShellBenchmarkRunner
                 Cell(sample.Scenario),
                 Cell(sample.Operation),
                 Cell(sample.Engine),
-                Cell(sample.Host)
+                Cell(sample.Host),
+                Cell(sample.Os)
             };
             cells.AddRange(variableHeaders.Select(header => Cell(sample.Variables.TryGetValue(header, out var value) ? value : null)));
             cells.Add(sample.Iteration.ToString(CultureInfo.InvariantCulture));
@@ -504,7 +530,7 @@ public sealed class PowerShellBenchmarkRunner
         var variableHeaders = GetVariableHeaders(summaryRows.Select(row => row.Variables));
         var metricHeaders = GetMetricHeaders(summaryRows.Select(row => row.Metrics));
         var builder = new StringBuilder();
-        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host" }.Concat(variableHeaders).Concat(new[] { "SampleCount", "FailureCount", "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs" }).Concat(metricHeaders)));
+        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS" }.Concat(variableHeaders).Concat(new[] { "SampleCount", "FailureCount", "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs" }).Concat(metricHeaders)));
         foreach (var row in summaryRows)
         {
             var cells = new List<string>
@@ -513,7 +539,8 @@ public sealed class PowerShellBenchmarkRunner
                 Cell(row.Scenario),
                 Cell(row.Operation),
                 Cell(row.Engine),
-                Cell(row.Host)
+                Cell(row.Host),
+                Cell(row.Os)
             };
             cells.AddRange(variableHeaders.Select(header => Cell(row.Variables.TryGetValue(header, out var value) ? value : null)));
             cells.Add(row.SampleCount.ToString(CultureInfo.InvariantCulture));

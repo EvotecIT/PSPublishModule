@@ -23,7 +23,10 @@ public static class PowerShellBenchmarkDslRuntime
     {
         if (scriptBlock is null) throw new ArgumentNullException(nameof(scriptBlock));
         var previous = Current.Value;
-        var context = new PowerShellBenchmarkDslContext();
+        var context = new PowerShellBenchmarkDslContext
+        {
+            ScriptRoot = scriptRoot
+        };
         Current.Value = context;
         Runspace? createdRunspace = null;
         var previousRunspace = Runspace.DefaultRunspace;
@@ -38,14 +41,7 @@ public static class PowerShellBenchmarkDslRuntime
             }
 
             compareAlias = RemoveAlias("compare");
-            var variables = new List<PSVariable>
-            {
-                new("ErrorActionPreference", ActionPreference.Stop),
-                new("PSNativeCommandUseErrorActionPreference", true)
-            };
-            if (!string.IsNullOrWhiteSpace(scriptRoot))
-                variables.Add(new PSVariable("PSScriptRoot", scriptRoot));
-            scriptBlock.InvokeWithContext(CreateFunctions(), variables, Array.Empty<object>());
+            InvokeWithScriptRoot(scriptBlock, CreateFunctions());
             return context.Suites.ToArray();
         }
         finally
@@ -138,25 +134,25 @@ public static class PowerShellBenchmarkDslRuntime
     /// Sets suite setup block.
     /// </summary>
     /// <param name="scriptBlock">Setup block.</param>
-    public static void Setup(ScriptBlock scriptBlock) => RequireSuite().Setup = scriptBlock;
+    public static void Setup(ScriptBlock scriptBlock) => RequireSuite().Setup = CaptureScriptBlock(scriptBlock);
 
     /// <summary>
     /// Sets suite data block.
     /// </summary>
     /// <param name="scriptBlock">Data block.</param>
-    public static void Data(ScriptBlock scriptBlock) => RequireSuite().Data = scriptBlock;
+    public static void Data(ScriptBlock scriptBlock) => RequireSuite().Data = CaptureScriptBlock(scriptBlock);
 
     /// <summary>
     /// Sets suite skip block.
     /// </summary>
     /// <param name="scriptBlock">Skip block.</param>
-    public static void Skip(ScriptBlock scriptBlock) => RequireSuite().Skip = scriptBlock;
+    public static void Skip(ScriptBlock scriptBlock) => RequireSuite().Skip = CaptureScriptBlock(scriptBlock);
 
     /// <summary>
     /// Sets suite validation block.
     /// </summary>
     /// <param name="scriptBlock">Validation block.</param>
-    public static void Validate(ScriptBlock scriptBlock) => RequireSuite().Validate = scriptBlock;
+    public static void Validate(ScriptBlock scriptBlock) => RequireSuite().Validate = CaptureScriptBlock(scriptBlock);
 
     /// <summary>
     /// Adds an engine.
@@ -190,7 +186,7 @@ public static class PowerShellBenchmarkDslRuntime
         var context = RequireContext();
         if (context.EngineStack.Count == 0)
             throw new InvalidOperationException("operation can only be used inside engine.");
-        context.EngineStack.Peek().Operations[RequireName(name, "operation name")] = scriptBlock;
+        context.EngineStack.Peek().Operations[RequireName(name, "operation name")] = CaptureScriptBlock(scriptBlock);
     }
 
     /// <summary>
@@ -199,7 +195,7 @@ public static class PowerShellBenchmarkDslRuntime
     /// <param name="name">Metric name.</param>
     /// <param name="scriptBlock">Metric block.</param>
     public static void Metric(string name, ScriptBlock scriptBlock)
-        => RequireSuite().Metrics.Add(new PowerShellBenchmarkMetric { Name = RequireName(name, "metric name"), ScriptBlock = scriptBlock });
+        => RequireSuite().Metrics.Add(new PowerShellBenchmarkMetric { Name = RequireName(name, "metric name"), ScriptBlock = CaptureScriptBlock(scriptBlock) });
 
     /// <summary>
     /// Adds a comparison definition.
@@ -250,14 +246,7 @@ public static class PowerShellBenchmarkDslRuntime
     }
 
     private static IEnumerable<PSObject> InvokeStrict(ScriptBlock scriptBlock)
-    {
-        var variables = new List<PSVariable>
-        {
-            new("ErrorActionPreference", ActionPreference.Stop),
-            new("PSNativeCommandUseErrorActionPreference", true)
-        };
-        return scriptBlock.InvokeWithContext(functionsToDefine: null, variablesToDefine: variables, args: Array.Empty<object>());
-    }
+        => InvokeWithScriptRoot(scriptBlock, functionsToDefine: null);
 
     private static Hashtable CreateFunctions()
         => new()
@@ -341,7 +330,64 @@ public static class PowerShellBenchmarkDslRuntime
         => Current.Value ?? throw new InvalidOperationException("Benchmark DSL helpers can only be used while evaluating a benchmark spec.");
 
     private static void InvokeDslBlock(ScriptBlock scriptBlock)
-        => scriptBlock.InvokeWithContext(CreateFunctions(), new List<PSVariable>(), Array.Empty<object>());
+        => InvokeWithScriptRoot(scriptBlock, CreateFunctions());
+
+    private static IEnumerable<PSObject> InvokeWithScriptRoot(ScriptBlock scriptBlock, Hashtable? functionsToDefine)
+    {
+        var block = CaptureScriptBlock(scriptBlock);
+        return block.InvokeWithContext(functionsToDefine, CreateInvocationVariables(), Array.Empty<object>());
+    }
+
+    private static ScriptBlock CaptureScriptBlock(ScriptBlock scriptBlock)
+    {
+        var scriptRoot = Current.Value?.ScriptRoot;
+        if (string.IsNullOrWhiteSpace(scriptRoot))
+            return scriptBlock;
+
+        return ScriptBlock.Create(ReplaceScriptRootVariables(scriptBlock.ToString(), scriptRoot!));
+    }
+
+    private static string ReplaceScriptRootVariables(string script, string scriptRoot)
+    {
+        System.Management.Automation.Language.Parser.ParseInput(script, out var tokens, out _);
+        var replacements = tokens
+            .Where(token => token.Kind == System.Management.Automation.Language.TokenKind.Variable
+                            && IsPSScriptRootToken(token.Text))
+            .OrderByDescending(token => token.Extent.StartOffset)
+            .ToArray();
+        if (replacements.Length == 0)
+            return script;
+
+        var rooted = script;
+        var literal = ToPowerShellLiteral(scriptRoot);
+        foreach (var token in replacements)
+        {
+            rooted = rooted.Remove(token.Extent.StartOffset, token.Extent.EndOffset - token.Extent.StartOffset)
+                .Insert(token.Extent.StartOffset, literal);
+        }
+
+        return rooted;
+    }
+
+    private static bool IsPSScriptRootToken(string text)
+        => string.Equals(text, "$PSScriptRoot", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(text, "${PSScriptRoot}", StringComparison.OrdinalIgnoreCase);
+
+    private static string ToPowerShellLiteral(string value)
+        => "'" + value.Replace("'", "''") + "'";
+
+    private static List<PSVariable> CreateInvocationVariables()
+    {
+        var variables = new List<PSVariable>
+        {
+            new("ErrorActionPreference", ActionPreference.Stop),
+            new("PSNativeCommandUseErrorActionPreference", true)
+        };
+        var scriptRoot = Current.Value?.ScriptRoot;
+        if (!string.IsNullOrWhiteSpace(scriptRoot))
+            variables.Add(new PSVariable("PSScriptRoot", scriptRoot));
+        return variables;
+    }
 
     private static AliasSnapshot? RemoveAlias(string name)
     {
@@ -394,6 +440,7 @@ public static class PowerShellBenchmarkDslRuntime
         internal List<PowerShellBenchmarkSuite> Suites { get; } = new();
         internal Stack<PowerShellBenchmarkSuite> SuiteStack { get; } = new();
         internal Stack<PowerShellBenchmarkEngine> EngineStack { get; } = new();
+        internal string? ScriptRoot { get; set; }
     }
 
     private sealed class AliasSnapshot

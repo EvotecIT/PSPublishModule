@@ -253,6 +253,7 @@ public sealed class BenchmarkResultImporter
                 Operation = Get(map, "Operation") ?? "Run",
                 Engine = Get(map, "Engine") ?? Get(map, "Job") ?? "BenchmarkDotNet",
                 Host = Get(map, "Host") ?? string.Empty,
+                Os = Get(map, "OS") ?? string.Empty,
                 Variables = ExtractVariables(map, metadataColumns, metricHeaders),
                 SampleCount = ParseInt(Get(map, "SampleCount")) ?? 0,
                 FailureCount = failureCount,
@@ -651,7 +652,7 @@ public sealed class BenchmarkResultImporter
 
     private static readonly HashSet<string> SummaryMetadataColumns = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Suite", "Scenario", "Method", "Benchmark", "Operation", "Engine", "Job", "Host", "SampleCount", "FailureCount",
+        "Suite", "Scenario", "Method", "Benchmark", "Operation", "Engine", "Job", "Host", "OS", "SampleCount", "FailureCount",
         "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs", "Median", "Mean", "Min", "Max", "Median [ns]", "Median [us]",
         "Median [ms]", "Mean [ns]", "Mean [us]", "Mean [ms]", "Min [ns]", "Min [us]", "Min [ms]", "Max [ns]", "Max [us]", "Max [ms]"
     };
@@ -660,7 +661,11 @@ public sealed class BenchmarkResultImporter
     {
         var columns = new HashSet<string>(SampleMetadataColumns, StringComparer.OrdinalIgnoreCase);
         if (HasText(values, "Scenario"))
+        {
             columns.Remove("Method");
+            columns.Remove("Benchmark");
+            columns.Remove("Job");
+        }
         return columns;
     }
 
@@ -668,7 +673,11 @@ public sealed class BenchmarkResultImporter
     {
         var columns = new HashSet<string>(SummaryMetadataColumns, StringComparer.OrdinalIgnoreCase);
         if (HasText(values, "Scenario"))
+        {
             columns.Remove("Method");
+            columns.Remove("Benchmark");
+            columns.Remove("Job");
+        }
         return columns;
     }
 

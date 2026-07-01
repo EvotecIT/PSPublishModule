@@ -126,6 +126,9 @@ public sealed class BenchmarkSummaryRow
     /// <summary>PowerShell host or runtime label.</summary>
     public string Host { get; set; } = string.Empty;
 
+    /// <summary>Operating-system label captured for report grouping.</summary>
+    public string Os { get; set; } = string.Empty;
+
     /// <summary>Case and matrix variables represented by this summary row.</summary>
     public Dictionary<string, string?> Variables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -170,6 +173,9 @@ public sealed class BenchmarkComparisonRow
 
     /// <summary>PowerShell host or runtime label.</summary>
     public string Host { get; set; } = string.Empty;
+
+    /// <summary>Operating-system label represented by this comparison row.</summary>
+    public string Os { get; set; } = string.Empty;
 
     /// <summary>Case and matrix variables represented by this comparison row.</summary>
     public Dictionary<string, string?> Variables { get; set; } = new(StringComparer.OrdinalIgnoreCase);

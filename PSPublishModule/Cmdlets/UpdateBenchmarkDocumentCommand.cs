@@ -57,23 +57,24 @@ public sealed class UpdateBenchmarkDocumentCommand : PSCmdlet
         var summaryPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(SummaryPath);
         var summary = BenchmarkJson.ReadSummary(summaryPath);
         var renderer = new BenchmarkMarkdownRenderer();
-        string markdown;
-        if (string.Equals(Renderer, "ComparisonTable", System.StringComparison.OrdinalIgnoreCase))
+        var markdown = Renderer switch
         {
-            var comparisonPath = string.IsNullOrWhiteSpace(ComparisonPath)
-                ? throw new PSArgumentException("ComparisonPath is required when Renderer is ComparisonTable.")
-                : SessionState.Path.GetUnresolvedProviderPathFromPSPath(ComparisonPath!);
-            var comparison = BenchmarkJson.Read<BenchmarkComparisonRow[]>(comparisonPath);
-            markdown = renderer.RenderComparisonTable(comparison);
-        }
-        else
-        {
-            markdown = renderer.RenderSummaryTable(summary);
-        }
+            var value when string.Equals(value, "SummaryTable", System.StringComparison.OrdinalIgnoreCase) => renderer.RenderSummaryTable(summary),
+            var value when string.Equals(value, "ComparisonTable", System.StringComparison.OrdinalIgnoreCase) => renderer.RenderComparisonTable(ReadComparison()),
+            _ => throw new PSArgumentException($"Benchmark document renderer '{Renderer}' is not supported. Use SummaryTable or ComparisonTable.")
+        };
 
         if (!ShouldProcess(documentPath, $"Update benchmark block '{BlockId}'"))
             return;
 
         WriteObject(new BenchmarkDocumentUpdater().UpdateBlock(documentPath, BlockId, markdown));
+
+        BenchmarkComparisonRow[] ReadComparison()
+        {
+            var comparisonPath = string.IsNullOrWhiteSpace(ComparisonPath)
+                ? throw new PSArgumentException("ComparisonPath is required when Renderer is ComparisonTable.")
+                : SessionState.Path.GetUnresolvedProviderPathFromPSPath(ComparisonPath!);
+            return BenchmarkJson.Read<BenchmarkComparisonRow[]>(comparisonPath);
+        }
     }
 }

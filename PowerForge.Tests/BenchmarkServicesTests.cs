@@ -99,6 +99,21 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void SummaryService_KeepsOperatingSystemsSeparate()
+    {
+        var windows = Sample("suite", "case", "Run", "Managed", 10);
+        windows.Os = "Windows";
+        var linux = Sample("suite", "case", "Run", "Managed", 30);
+        linux.Os = "Linux";
+
+        var summary = new BenchmarkSummaryService().Summarize(new[] { windows, linux });
+
+        Assert.Equal(2, summary.Length);
+        Assert.Contains(summary, row => row.Os == "Windows" && row.MedianMs == 10);
+        Assert.Contains(summary, row => row.Os == "Linux" && row.MedianMs == 30);
+    }
+
+    [Fact]
     public void DocumentUpdater_ReplacesMarkerBlock()
     {
         var root = CreateTempRoot();
@@ -130,8 +145,34 @@ public sealed class BenchmarkServicesTests
             }
         });
 
-        Assert.Contains("| Scenario | Variables |", markdown);
+        Assert.Contains("| Scenario | Variables | Operation | Host | OS |", markdown);
         Assert.Contains("Rows=100", markdown);
+    }
+
+    [Fact]
+    public void UpdateBenchmarkDocumentCommand_RejectsUnknownRenderers()
+    {
+        var root = CreateTempRoot();
+        var readme = Path.Combine(root, "README.md");
+        var summaryPath = Path.Combine(root, "summary.json");
+        File.WriteAllText(readme, "<!-- BENCHMARK:results:START -->\nold\n<!-- BENCHMARK:results:END -->\n");
+        BenchmarkJson.Write(summaryPath, new[] { new BenchmarkSummaryRow { Scenario = "case", Operation = "Run", Engine = "Managed" } });
+
+        var initialSessionState = System.Management.Automation.Runspaces.InitialSessionState.CreateDefault();
+        initialSessionState.Commands.Add(new System.Management.Automation.Runspaces.SessionStateCmdletEntry("Update-BenchmarkDocument", typeof(PSPublishModule.UpdateBenchmarkDocumentCommand), helpFileName: null));
+        using var runspace = System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace(initialSessionState);
+        runspace.Open();
+        using var ps = System.Management.Automation.PowerShell.Create(runspace);
+        ps.AddCommand("Update-BenchmarkDocument")
+            .AddParameter("Path", readme)
+            .AddParameter("BlockId", "results")
+            .AddParameter("SummaryPath", summaryPath)
+            .AddParameter("Renderer", "ComparsionTable");
+
+        var ex = Assert.Throws<System.Management.Automation.CmdletInvocationException>(() => ps.Invoke());
+
+        Assert.Contains("ComparsionTable", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("old", File.ReadAllText(readme), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -707,6 +748,22 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_PreservesRunnerBenchmarkAndJobVariables()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(csv, "Suite,Scenario,Operation,Engine,Host,Benchmark,Job,Iteration,Status,DurationMs,Reason\nsuite,CaseA,Run,Managed,Current,FastBench,Net10,0,Succeeded,12.5,\n");
+
+        var result = new BenchmarkResultImporter().Import(csv);
+        var sample = Assert.Single(result.Samples);
+
+        Assert.Equal("CaseA", sample.Scenario);
+        Assert.Equal("FastBench", sample.Variables["Benchmark"]);
+        Assert.Equal("Net10", sample.Variables["Job"]);
+        Assert.Equal("FastBench", Assert.Single(result.Summary).Variables["Benchmark"]);
+    }
+
+    [Fact]
     public void Importer_HandlesQuotedMultilineCsvRecords()
     {
         var root = CreateTempRoot();
@@ -836,6 +893,25 @@ benchmark 'bad' {
     }
 
     [Fact]
+    public void DslRuntime_PreservesScriptRootInNestedBlocks()
+    {
+        var root = CreateTempRoot();
+        var script = ScriptBlock.Create(@"
+benchmark 'rooted' {
+    cases { case A @{ Root = $PSScriptRoot } }
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script, root));
+        var benchmarkCase = Assert.Single(suite.Cases);
+
+        Assert.Equal(root, benchmarkCase.Values["Root"]);
+    }
+
+    [Fact]
     public void DslRuntime_HonorsArtifactsNone()
     {
         var script = ScriptBlock.Create(@"
@@ -941,6 +1017,19 @@ benchmark 'path' -out 'relative-out' {
     }
 
     [Fact]
+    public void Runner_LabelsCurrentHostWithRuntime()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Host", Values = { "Current" } });
+
+        var item = Assert.Single(new PowerShellBenchmarkRunner().Plan(suite));
+
+        Assert.NotEqual("Current", item.Host, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("-", item.Host, StringComparison.Ordinal);
+        Assert.Equal(item.Host, item.Values["Host"]);
+    }
+
+    [Fact]
     public void Runner_PreservesMultipleDataBlockItems()
     {
         var suite = CreateRunnableSuite();
@@ -1038,10 +1127,10 @@ benchmark 'path' -out 'relative-out' {
 
         var samplesCsv = File.ReadAllText(result.Artifacts["samples.csv"]);
         var summaryCsv = File.ReadAllText(result.Artifacts["summary.csv"]);
-        Assert.Contains("Suite,Scenario,Operation,Engine,Host,Rows,Iteration,Status,DurationMs,Reason,TinyMetric", samplesCsv);
-        Assert.Contains("suite,Default,Run,Managed,Current,10,0,Succeeded", samplesCsv);
+        Assert.Contains("Suite,Scenario,Operation,Engine,Host,OS,Rows,Iteration,Status,DurationMs,Reason,TinyMetric", samplesCsv);
+        Assert.Contains($",Managed,{result.Samples[0].Host},{result.Samples[0].Os},10,0,Succeeded", samplesCsv);
         Assert.Contains(",0.00042", samplesCsv);
-        Assert.Contains("Suite,Scenario,Operation,Engine,Host,Rows,SampleCount,FailureCount,Status,MedianMs,MeanMs,MinMs,MaxMs,TinyMetric", summaryCsv);
+        Assert.Contains("Suite,Scenario,Operation,Engine,Host,OS,Rows,SampleCount,FailureCount,Status,MedianMs,MeanMs,MinMs,MaxMs,TinyMetric", summaryCsv);
         Assert.Contains(",0.00042", summaryCsv);
     }
 
