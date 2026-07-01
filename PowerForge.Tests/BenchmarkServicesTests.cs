@@ -2109,6 +2109,17 @@ benchmark 'path-temp-user' -out 'out' {
     }
 
     [Fact]
+    public void Runner_RejectsRunModeAxis()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "RunMode", Values = { "quick", "publish" } });
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Plan(suite));
+
+        Assert.Contains("RunMode axis", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Runner_FailsMalformedSuitesWithNoWork()
     {
         var suite = new PowerShellBenchmarkSuite { Name = "empty" };
@@ -2494,6 +2505,26 @@ benchmark 'path-temp-user' -out 'out' {
         var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Run(suite));
 
         Assert.Contains("Operation", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(output));
+    }
+
+    [Fact]
+    public void Runner_RejectsUnsupportedComparisonMetricsBeforeMeasurement()
+    {
+        var suite = CreateRunnableSuite();
+        var output = Path.Combine(suite.OutputRoot, "comparison-metric-side-effect.txt");
+        suite.Metrics.Add(new PowerShellBenchmarkMetric { Name = "RowsPerSecond", ScriptBlock = ScriptBlock.Create("42") });
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create($"[IO.File]::WriteAllText('{output.Replace("'", "''")}', 'executed')");
+        suite.Comparisons.Add(new PowerShellBenchmarkComparison
+        {
+            Dimension = "Engine",
+            Baseline = "Managed",
+            Metrics = new[] { "RowsPerSecondd" }
+        });
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Run(suite));
+
+        Assert.Contains("RowsPerSecondd", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.False(File.Exists(output));
     }
 

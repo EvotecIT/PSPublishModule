@@ -305,11 +305,17 @@ public sealed class PowerShellBenchmarkRunner
     {
         if (GetAxisValues(suite.Axes, "OS") is not null)
             throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested an OS axis, but this runner only supports the current operating system. Run the suite on each target OS and compare imported results instead.");
+        if (GetAxisValues(suite.Axes, "RunMode") is not null)
+            throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested a RunMode axis, but RunMode is suite metadata. Set suite RunMode once, or use a different matrix variable name.");
     }
 
     private static void ValidateComparisons(PowerShellBenchmarkSuite suite)
     {
         var engineValues = GetAxisValues(suite.Axes, "Engine") ?? suite.Engines.Select(e => (object?)e.Name).ToArray();
+        var customMetrics = suite.Metrics
+            .Select(metric => metric.Name)
+            .Where(metric => !string.IsNullOrWhiteSpace(metric))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var comparison in suite.Comparisons)
         {
             if (string.IsNullOrWhiteSpace(comparison.Baseline))
@@ -318,6 +324,13 @@ public sealed class PowerShellBenchmarkRunner
                 throw new NotSupportedException($"Benchmark comparison dimension '{comparison.Dimension}' is not supported. Only Engine comparisons are supported.");
             if (!engineValues.Any(value => string.Equals(Convert.ToString(value, CultureInfo.InvariantCulture), comparison.Baseline, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException($"Benchmark comparison baseline engine '{comparison.Baseline}' is not declared by suite '{suite.Name}'.");
+            foreach (var metric in GetComparisonMetrics(comparison))
+            {
+                var normalized = string.IsNullOrWhiteSpace(metric) ? "MedianMs" : metric.Trim();
+                if (IsPrimaryComparisonMetric(normalized) || customMetrics.Contains(normalized))
+                    continue;
+                throw new NotSupportedException($"Benchmark comparison metric '{metric}' is not supported by suite '{suite.Name}'. Use MedianMs, MeanMs, MinMs, MaxMs, or a declared custom metric.");
+            }
         }
     }
 
@@ -340,6 +353,17 @@ public sealed class PowerShellBenchmarkRunner
         if (suite.Profile == PowerShellBenchmarkProfileKind.TemporaryLocalUser)
             throw new InvalidOperationException("Benchmark profile 'TemporaryLocalUser' requires a file-backed Invoke-BenchmarkSuite run so the benchmark spec can be re-evaluated inside the temporary Windows user profile.");
     }
+
+    private static IEnumerable<string> GetComparisonMetrics(PowerShellBenchmarkComparison comparison)
+        => comparison.Metrics is null || comparison.Metrics.Length == 0
+            ? new[] { "MedianMs" }
+            : comparison.Metrics;
+
+    private static bool IsPrimaryComparisonMetric(string metric)
+        => string.Equals(metric, "MedianMs", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(metric, "MeanMs", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(metric, "MinMs", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(metric, "MaxMs", StringComparison.OrdinalIgnoreCase);
 
     private static void ValidateComparisonWorkItems(PowerShellBenchmarkSuite suite, IReadOnlyList<PowerShellBenchmarkWorkItem> workItems)
     {

@@ -403,22 +403,43 @@ Get-CimInstance Win32_UserProfile |
     {
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         var programFilesPwsh = Path.Combine(programFiles, "PowerShell", "7", "pwsh.exe");
-        if (File.Exists(programFilesPwsh))
-            return programFilesPwsh;
-
         try
         {
             var current = Process.GetCurrentProcess().MainModule?.FileName;
-            if (!string.IsNullOrWhiteSpace(current) && File.Exists(current))
+            if (IsPowerShellExecutable(current) && !IsWindowsAppsPath(current))
+                return current!;
+            if (IsPwshExecutable(current) && File.Exists(programFilesPwsh))
+                return programFilesPwsh;
+            if (IsPowerShellExecutable(current))
                 return current!;
         }
         catch
         {
-            // Fall back to PATH lookup below.
+            // Fall back to the installed PowerShell locations below.
         }
+
+        if (File.Exists(programFilesPwsh))
+            return programFilesPwsh;
 
         return "pwsh.exe";
     }
+
+    private static bool IsPowerShellExecutable(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return false;
+        var fileName = Path.GetFileName(path);
+        return string.Equals(fileName, "pwsh.exe", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(fileName, "powershell.exe", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsPwshExecutable(string? path)
+        => !string.IsNullOrWhiteSpace(path)
+           && string.Equals(Path.GetFileName(path), "pwsh.exe", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsWindowsAppsPath(string? path)
+        => !string.IsNullOrWhiteSpace(path)
+           && path.Contains(@"\WindowsApps\", StringComparison.OrdinalIgnoreCase);
 
     private static string GetPowerForgeAssemblyPath()
         => typeof(BenchmarkRunResult).Assembly.Location;
