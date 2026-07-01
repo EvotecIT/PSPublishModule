@@ -49,7 +49,7 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.Contains(requests, request => request.Url == "https://example.test/v3/index.json");
         Assert.Contains(requests, request => request.Url == "https://example.test/packages/company.tools/index.json");
         Assert.All(requests, request => Assert.Contains("PowerForge-ManagedModule/1.0", request.UserAgent, StringComparison.Ordinal));
-        Assert.Equal(4, repositoryClient.RequestCount);
+        Assert.Equal(2, repositoryClient.RequestCount);
     }
 
     [Fact]
@@ -138,6 +138,21 @@ public sealed class ManagedModuleRepositoryClientTests
         });
         Assert.Contains(requests, request => request.Url == "https://example.test/api/v2/FindPackagesById()?id='Company.Tools'&semVerLevel=2.0.0");
         Assert.All(requests, request => Assert.Contains("PowerForge-ManagedModule/1.0", request.UserAgent, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetVersionsAsync_preserves_nuget_v2_unlisted_metadata()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/api/v2");
+
+        var versions = await repositoryClient.GetVersionsAsync(repository, "V2.Unlisted", includePrerelease: false);
+
+        Assert.Equal(new[] { "1.0.0", "1.1.0" }, versions.Select(version => version.Version));
+        Assert.True(versions.Single(version => version.Version == "1.0.0").Listed);
+        Assert.False(versions.Single(version => version.Version == "1.1.0").Listed);
     }
 
     [Fact]
@@ -399,10 +414,10 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
-    public async Task GetLatestVersionAsync_ignores_unlisted_flat_container_versions()
+    public async Task GetLatestVersionAsync_uses_registration_metadata_for_unlisted_versions()
     {
         var requests = new List<RecordedRequest>();
-        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        using var client = new HttpClient(new ManagedModuleHandler(requests, includeRegistrationBase: true));
         var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
         var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
 
@@ -410,9 +425,11 @@ public sealed class ManagedModuleRepositoryClientTests
         var versions = await repositoryClient.GetVersionsAsync(repository, "Unlisted.Tools");
 
         Assert.NotNull(version);
-        Assert.Equal("1.5.0", version!.Version);
-        Assert.False(versions.Single(item => item.Version == "2.0.0").Listed);
-        Assert.Contains(requests, request => request.Url == "https://example.test/search/?q=Unlisted.Tools&prerelease=false&take=20&semVerLevel=2.0.0");
+        Assert.Equal("2.0.0", version!.Version);
+        Assert.False(versions.Single(item => item.Version == "1.5.0").Listed);
+        Assert.True(versions.Single(item => item.Version == "2.0.0").Listed);
+        Assert.False(versions.Single(item => item.Version == "3.0.0").Listed);
+        Assert.Contains(requests, request => request.Url == "https://example.test/registration/unlisted.tools/index.json");
     }
 
     [Fact]
@@ -452,8 +469,8 @@ public sealed class ManagedModuleRepositoryClientTests
         var versions = await repositoryClient.GetVersionsAsync(repository, "Company.Tools");
 
         Assert.Equal(new[] { "1.0.0", "1.1.0" }, versions.Select(version => version.Version));
-        Assert.Equal(3, requests.Count(request => request.Url == "https://example.test/v3/index.json"));
-        Assert.Equal(5, repositoryClient.RequestCount);
+        Assert.Equal(2, requests.Count(request => request.Url == "https://example.test/v3/index.json"));
+        Assert.Equal(3, repositoryClient.RequestCount);
     }
 
     [Fact]
@@ -1053,6 +1070,7 @@ public sealed class ManagedModuleRepositoryClientTests
         private readonly HttpStatusCode? _powerShellGalleryV3StatusCode;
         private readonly HttpStatusCode? _powerShellGalleryCdnStatusCode;
         private readonly long? _companyToolsPackageContentLength;
+        private readonly bool _includeRegistrationBase;
         private int _serviceIndexFailures;
 
         public ManagedModuleHandler(
@@ -1061,7 +1079,8 @@ public sealed class ManagedModuleRepositoryClientTests
             int serviceIndexFailures = 0,
             HttpStatusCode? powerShellGalleryV3StatusCode = null,
             HttpStatusCode? powerShellGalleryCdnStatusCode = null,
-            long? companyToolsPackageContentLength = null)
+            long? companyToolsPackageContentLength = null,
+            bool includeRegistrationBase = false)
         {
             _requests = requests;
             _conflictPublishes = conflictPublishes;
@@ -1069,6 +1088,7 @@ public sealed class ManagedModuleRepositoryClientTests
             _powerShellGalleryV3StatusCode = powerShellGalleryV3StatusCode;
             _powerShellGalleryCdnStatusCode = powerShellGalleryCdnStatusCode;
             _companyToolsPackageContentLength = companyToolsPackageContentLength;
+            _includeRegistrationBase = includeRegistrationBase;
         }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -1087,10 +1107,14 @@ public sealed class ManagedModuleRepositoryClientTests
                     return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
                 }
 
+                var registration = _includeRegistrationBase
+                    ? ",{\"@id\":\"https://example.test/registration/\",\"@type\":\"RegistrationsBaseUrl/3.6.0\"}"
+                    : string.Empty;
                 return Json("{\"resources\":[" +
                             "{\"@id\":\"https://example.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}," +
                             "{\"@id\":\"https://example.test/search/\",\"@type\":\"SearchQueryService/3.5.0\"}," +
                             "{\"@id\":\"https://example.test/publish/\",\"@type\":\"PackagePublish/2.0.0\"}" +
+                            registration +
                             "]}");
             }
 
@@ -1110,10 +1134,23 @@ public sealed class ManagedModuleRepositoryClientTests
                 return Json("{\"versions\":[\"1.0.0\",\"1.1.0-beta1\",\"1.1.0\"]}");
 
             if (uri.AbsoluteUri == "https://example.test/packages/unlisted.tools/index.json")
-                return Json("{\"versions\":[\"1.0.0\",\"1.5.0\",\"2.0.0\"]}");
+                return Json("{\"versions\":[\"1.0.0\",\"1.5.0\",\"2.0.0\",\"3.0.0\"]}");
+
+            if (uri.AbsoluteUri == "https://example.test/registration/unlisted.tools/index.json")
+                return Json("{\"items\":[{\"items\":[" +
+                            "{\"catalogEntry\":{\"version\":\"1.0.0\",\"listed\":true}}," +
+                            "{\"catalogEntry\":{\"version\":\"1.5.0\",\"listed\":false}}," +
+                            "{\"catalogEntry\":{\"version\":\"2.0.0\",\"listed\":true}}," +
+                            "{\"catalogEntry\":{\"version\":\"3.0.0\",\"listed\":false}}" +
+                            "]}]}");
 
             if (uri.AbsoluteUri == "https://example.test/packages/company.core/index.json")
                 return Json("{\"versions\":[\"2.0.0\"]}");
+
+            if (uri.AbsoluteUri == "https://example.test/registration/company.core/index.json")
+                return Json("{\"items\":[{\"items\":[" +
+                            "{\"catalogEntry\":{\"version\":\"2.0.0\",\"listed\":false}}" +
+                            "]}]}");
 
             if (uri.AbsoluteUri == "https://psgallery.test/packages/pester/index.json")
                 return Json("{\"versions\":[\"5.6.1\",\"5.7.0-preview1\",\"5.7.0\"]}");
@@ -1132,6 +1169,14 @@ public sealed class ManagedModuleRepositoryClientTests
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
                     "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\">" +
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.0.0</d:Version></m:properties></content></entry>" +
+                    "</feed>");
+
+            if (uri.AbsoluteUri == "https://example.test/api/v2/FindPackagesById()?id='V2.Unlisted'&semVerLevel=2.0.0")
+                return Xml(
+                    "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                    "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\">" +
+                    "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.0.0</d:Version><d:Listed>true</d:Listed></m:properties></content></entry>" +
+                    "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.1.0</d:Version><d:Listed>false</d:Listed></m:properties></content></entry>" +
                     "</feed>");
 
             if (uri.AbsoluteUri == "https://push.example.test/api/v2/FindPackagesById()?id='Company.Core'&semVerLevel=2.0.0")

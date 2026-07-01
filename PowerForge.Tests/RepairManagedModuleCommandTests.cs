@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using System.Text.Json;
 using PSPublishModule;
 
 namespace PowerForge.Tests;
@@ -438,6 +439,32 @@ public sealed class RepairManagedModuleCommandTests
     }
 
     [Fact]
+    public void RepairManagedModule_PathRepositoryPlansAgainstResolvedRepositoryName()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var installedPath = CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        WriteManagedReceipt(installedPath, "Local", feed.Path);
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("Name", new[] { "Company.Tools" })
+            .AddParameter("Version", "1.0.0")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions);
+        Assert.Equal("NoAction", action.Kind);
+        Assert.Equal("Local", action.TargetRepository);
+        Assert.DoesNotContain(result.Plan.Findings, finding =>
+            string.Equals(finding.Code, "ModuleState.SourcePreferenceMismatch", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void RepairManagedModule_ForceDoesNotApproveExplicitDowngradePolicy()
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -473,6 +500,19 @@ public sealed class RepairManagedModuleCommandTests
             "@{ RootModule = '" + name + ".psm1'; ModuleVersion = '" + version + "' }");
         File.WriteAllText(Path.Combine(modulePath, name + ".psm1"), string.Empty);
         return modulePath;
+    }
+
+    private static void WriteManagedReceipt(string modulePath, string repositoryName, string repositorySource)
+    {
+        var receiptDirectory = Path.Combine(modulePath, ".powerforge");
+        Directory.CreateDirectory(receiptDirectory);
+        File.WriteAllText(
+            Path.Combine(receiptDirectory, "managed-module-receipt.json"),
+            JsonSerializer.Serialize(new
+            {
+                RepositoryName = repositoryName,
+                RepositorySource = repositorySource
+            }));
     }
 
     private static IReadOnlyDictionary<string, string> CreateModuleFiles(string name, string version)

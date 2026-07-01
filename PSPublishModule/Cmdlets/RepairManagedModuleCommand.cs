@@ -380,7 +380,8 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
                 PromptForCredential = false,
                 ManagedModuleRoot = ResolveManagedDeliveryModuleRoot(),
                 ManagedAllowClobber = AllowClobber.IsPresent,
-                ManagedAcceptLicense = AcceptLicense.IsPresent
+                ManagedAcceptLicense = AcceptLicense.IsPresent,
+                LoadedModules = ResolveLoadedModules(inventory)
             });
     }
 
@@ -510,7 +511,7 @@ public sealed class RepairManagedModuleCommand : PSCmdlet
     private string? ResolveRepositoryName()
     {
         if (!string.IsNullOrWhiteSpace(Repository))
-            return Repository;
+            return ModuleStateManagedRepositoryResolver.ResolveRepositoryIdentity(this, Repository);
         if (!string.IsNullOrWhiteSpace(ProfileName))
             return ModuleRepositoryProfileCommandSupport.TryResolve(ProfileName)?.RepositoryName;
         return null;

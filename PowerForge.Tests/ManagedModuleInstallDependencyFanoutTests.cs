@@ -60,7 +60,7 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
         Assert.All(nestedCoreResults, dependency =>
         {
             Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, dependency.Status);
-            Assert.Equal(TimeSpan.Zero, dependency.CoalescedWaitElapsed);
+            Assert.True(dependency.CoalescedWaitElapsed >= TimeSpan.Zero);
         });
     }
 

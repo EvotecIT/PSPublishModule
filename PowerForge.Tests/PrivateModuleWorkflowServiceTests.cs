@@ -189,6 +189,52 @@ public sealed class PrivateModuleWorkflowServiceTests
     }
 
     [Fact]
+    public void Execute_AutoTransportWithRepositorySource_CarriesLoadedModulesToManagedUpdate()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var installedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(installedPath);
+        File.WriteAllText(Path.Combine(installedPath, "Company.Tools.psd1"), "@{ ModuleVersion = '1.0.0' }");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: CreateModuleFiles("1.1.0"));
+        var host = new FakePrivateGalleryHost();
+        var service = new PrivateModuleWorkflowService(
+            host,
+            new PrivateGalleryService(host),
+            new NullLogger(),
+            _ => throw new InvalidOperationException("Compatibility executor should not run."));
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Execute(
+            new PrivateModuleWorkflowRequest
+            {
+                Operation = PrivateModuleWorkflowOperation.Update,
+                ModuleNames = new[] { "Company.Tools" },
+                UseAzureArtifacts = false,
+                RepositoryName = "Local",
+                DeliveryTransport = ModuleStateDeliveryTransport.Auto,
+                ManagedRepositorySource = feed.Path,
+                ManagedModuleRoot = moduleRoot.Path,
+                ManagedLoadedModules = new[]
+                {
+                    new ManagedModuleLoadedModule
+                    {
+                        Name = "Company.Tools",
+                        Version = "1.0.0",
+                        ModuleBase = installedPath
+                    }
+                }
+            },
+            (_, _) => true));
+
+        Assert.Contains("AllowLoadedModuleUpdate", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(host.VerboseMessages, message => message.Contains("using ManagedModule", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Execute_AutoTransportWithSupportedPrivateProvider_ReportsManagedSupportReason()
     {
         var host = new FakePrivateGalleryHost();

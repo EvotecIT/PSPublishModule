@@ -437,7 +437,8 @@ internal sealed class PrivateModuleWorkflowService
             AcceptLicense = workflow.ManagedAcceptLicense,
             SkipDependencyCheck = workflow.ManagedSkipDependencyCheck,
             SourcePolicy = workflow.ManagedRequireSourceMatch ? new ManagedModuleSourcePolicy() : null,
-            AllowLoadedModuleUpdate = workflow.ManagedAllowLoadedModuleUpdate
+            AllowLoadedModuleUpdate = workflow.ManagedAllowLoadedModuleUpdate,
+            LoadedModules = workflow.ManagedLoadedModules
         }).GetAwaiter().GetResult();
 
         return MapUpdateResult(result);

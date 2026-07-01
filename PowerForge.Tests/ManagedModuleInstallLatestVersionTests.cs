@@ -133,7 +133,7 @@ public sealed class ManagedModuleInstallLatestVersionTests
 
     private sealed class LatestPackageHandler : HttpMessageHandler
     {
-        public const string LatestStableUrl = "https://example.test/api/v2/FindPackagesById()?id='Company.Tools'&$filter=IsLatestVersion&$top=1";
+        public const string LatestStableUrl = "https://example.test/api/v2/FindPackagesById()?id='Company.Tools'&$filter=IsLatestVersion&$top=1&semVerLevel=2.0.0";
         public const string PackageUrl = "https://example.test/api/v2/package/Company.Tools/1.1.0";
 
         private readonly List<RecordedRequest> _requests;

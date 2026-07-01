@@ -56,6 +56,7 @@ internal sealed class PrivateModuleWorkflowRequest
     internal bool ManagedSkipDependencyCheck { get; set; }
     internal bool ManagedRequireSourceMatch { get; set; }
     internal bool ManagedAllowLoadedModuleUpdate { get; set; }
+    internal IReadOnlyList<ManagedModuleLoadedModule> ManagedLoadedModules { get; set; } = System.Array.Empty<ManagedModuleLoadedModule>();
 }
 
 internal sealed class PrivateModuleWorkflowResult

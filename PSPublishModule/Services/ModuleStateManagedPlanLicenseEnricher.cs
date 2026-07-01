@@ -131,10 +131,16 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
         }
 
         if (!string.IsNullOrWhiteSpace(action.TargetRepository))
+        {
+            var optionsRepository = ModuleStateManagedRepositoryResolver.TryResolveOptionsRepositoryForActionTarget(_cmdlet, action.TargetRepository, options);
+            if (optionsRepository is not null)
+                return optionsRepository;
+
             return ManagedModuleCommandSupport.CreateRepository(
                 _cmdlet,
                 ManagedModuleCommandSupport.DefaultRepositoryName,
                 action.TargetRepository!);
+        }
 
         if (!string.IsNullOrWhiteSpace(options.ProfileName))
             return ManagedModuleCommandSupport.CreateRepository(

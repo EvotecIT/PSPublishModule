@@ -185,7 +185,7 @@ public sealed class ManagedModulePlanCommandTests
 
         AssertNoPowerShellErrors(ps);
         var plan = Assert.IsType<ManagedModuleUpdatePlan>(Assert.Single(results).BaseObject);
-        Assert.Equal(ManagedModuleUpdatePlanAction.SkipUpToDate, plan.Action);
+        Assert.Equal(ManagedModuleUpdatePlanAction.DowngradeBlocked, plan.Action);
         Assert.Equal("1.0.0", plan.TargetVersion);
         Assert.Equal("1.1.0", plan.PreviousVersion);
         Assert.False(plan.WouldWriteFiles);

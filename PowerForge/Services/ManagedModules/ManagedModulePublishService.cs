@@ -165,7 +165,11 @@ public sealed class ManagedModulePublishService
                 request.Credential,
                 cancellationToken).ConfigureAwait(false);
 
-            return versions.Any(version => range.IsSatisfiedBy(version.Version));
+            var matches = versions.Where(version => range.IsSatisfiedBy(version.Version));
+            if (range.ExactVersion is null)
+                matches = matches.Where(static version => version.Listed);
+
+            return matches.Any();
         }
         catch (OperationCanceledException)
         {

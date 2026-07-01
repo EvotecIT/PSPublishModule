@@ -265,6 +265,7 @@ public sealed partial class ManagedModuleRepositoryClient
             RepositorySource = repository.Source,
             PackageSource = BuildNuGetV2PackageUri(repository.Source, trimmedId, trimmedVersion).ToString(),
             IsPrerelease = ManagedModuleVersionComparer.IsPrerelease(trimmedVersion),
+            Listed = ReadNuGetV2Listed(entry, data),
             License = license,
             RequireLicenseAcceptance = ReadNuGetV2Boolean(entry, data, "RequireLicenseAcceptance")
         };
@@ -277,6 +278,12 @@ public sealed partial class ManagedModuleRepositoryClient
     {
         var value = ReadNuGetV2String(entry, data, name);
         return bool.TryParse(value, out var parsed) && parsed;
+    }
+
+    private static bool ReadNuGetV2Listed(XElement entry, XNamespace data)
+    {
+        var value = ReadNuGetV2String(entry, data, "Listed");
+        return !bool.TryParse(value, out var parsed) || parsed;
     }
 
     private static Uri BuildNuGetV2PackageUri(string source, string packageId, string version)

@@ -21,6 +21,7 @@ public sealed partial class ManagedModuleRepositoryClient
     private readonly ConcurrentDictionary<string, string> _packageBaseAddressCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _searchQueryServiceCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _packagePublishAddressCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _registrationBaseAddressCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _packageDownloadLocks = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<ManagedModuleVersionInfo>>>> _versionQueryTasks = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Lazy<Task<ManagedModuleVersionInfo?>>> _latestVersionQueryTasks = new(StringComparer.OrdinalIgnoreCase);
@@ -418,7 +419,7 @@ public sealed partial class ManagedModuleRepositoryClient
         if (!document.RootElement.TryGetProperty("versions", out var versions) || versions.ValueKind != JsonValueKind.Array)
             throw CreateRepositoryContractException(repository, "VersionQuery", $"Repository response did not include a versions array for package '{packageId}'.");
 
-        var latestListedVersion = await TryResolveLatestListedVersionAsync(repository, packageId, includePrerelease, credential, cancellationToken).ConfigureAwait(false);
+        var listedByVersion = await TryResolveVersionListingMapAsync(repository, packageId, credential, cancellationToken).ConfigureAwait(false);
         return versions.EnumerateArray()
             .Select(static version => version.GetString())
             .Where(version => !string.IsNullOrWhiteSpace(version))
@@ -428,7 +429,7 @@ public sealed partial class ManagedModuleRepositoryClient
             .Select(version => new
             {
                 Version = version,
-                Listed = IsVersionListedBySearch(latestListedVersion, version)
+                Listed = !listedByVersion.TryGetValue(version, out var listed) || listed
             })
             .Select(version => new ManagedModuleVersionInfo
             {
@@ -545,32 +546,115 @@ public sealed partial class ManagedModuleRepositoryClient
             .ToArray();
     }
 
-    private async Task<string?> TryResolveLatestListedVersionAsync(
+    private async Task<IReadOnlyDictionary<string, bool>> TryResolveVersionListingMapAsync(
         ManagedModuleRepository repository,
         string packageId,
-        bool includePrerelease,
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
         try
         {
-            var results = await SearchNuGetPackagesAsync(repository, packageId, includePrerelease, credential, take: 20, cancellationToken).ConfigureAwait(false);
-            return results
-                .Where(version => version.Listed && version.Name.Equals(packageId, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(version => version.Version, ManagedModuleVersionComparer.Instance)
-                .LastOrDefault()
-                ?.Version;
+            var registrationBase = await TryResolveRegistrationBaseAddressAsync(repository, credential, cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(registrationBase))
+                return EmptyVersionListingMap;
+
+            var lowerId = packageId.Trim().ToLowerInvariant();
+            var indexUri = new Uri(new Uri(EnsureTrailingSlash(registrationBase!)), $"{Uri.EscapeDataString(lowerId)}/index.json");
+            var versions = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            await ReadRegistrationListingPageAsync(repository, indexUri, credential, versions, depth: 0, cancellationToken).ConfigureAwait(false);
+            return versions;
         }
         catch (Exception ex) when (ex is ManagedModuleRepositoryException or InvalidOperationException or JsonException)
         {
             _logger.Verbose($"Managed module listed-version metadata lookup skipped for '{packageId}': {ex.Message}");
-            return null;
+            return EmptyVersionListingMap;
         }
     }
 
-    private static bool IsVersionListedBySearch(string? latestListedVersion, string version)
-        => string.IsNullOrWhiteSpace(latestListedVersion) ||
-           ManagedModuleVersionComparer.Instance.Compare(version, latestListedVersion!) <= 0;
+    private static readonly IReadOnlyDictionary<string, bool> EmptyVersionListingMap =
+        new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+    private async Task ReadRegistrationListingPageAsync(
+        ManagedModuleRepository repository,
+        Uri uri,
+        RepositoryCredential? credential,
+        IDictionary<string, bool> versions,
+        int depth,
+        CancellationToken cancellationToken)
+    {
+        if (depth > 32)
+            throw CreateRepositoryContractException(repository, "RegistrationMetadata", $"Managed module registration query for '{uri}' exceeded the page limit.");
+
+        using var response = await SendWithPolicyAsync(
+            () => CreateRequest(HttpMethod.Get, uri, credential, "application/json"),
+            cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return;
+        if (!response.IsSuccessStatusCode)
+            throw CreateRepositoryHttpException(repository, "RegistrationMetadata", response.StatusCode, $"Unable to query registration metadata '{uri}'.");
+
+        using var document = await ReadJsonDocumentAsync(
+            response.Content,
+            repository,
+            "RegistrationMetadata",
+            $"Managed module registration metadata for '{uri}' returned malformed JSON.",
+            cancellationToken).ConfigureAwait(false);
+        await ReadRegistrationListingItemsAsync(repository, document.RootElement, credential, versions, depth, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ReadRegistrationListingItemsAsync(
+        ManagedModuleRepository repository,
+        JsonElement element,
+        RepositoryCredential? credential,
+        IDictionary<string, bool> versions,
+        int depth,
+        CancellationToken cancellationToken)
+    {
+        if (!element.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+            return;
+
+        foreach (var item in items.EnumerateArray())
+        {
+            if (TryReadRegistrationCatalogEntry(item, versions))
+                continue;
+
+            if (item.TryGetProperty("items", out var nestedItems) && nestedItems.ValueKind == JsonValueKind.Array)
+            {
+                await ReadRegistrationListingItemsAsync(repository, item, credential, versions, depth + 1, cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+
+            var page = ReadOptionalString(item, "@id");
+            if (Uri.TryCreate(page, UriKind.Absolute, out var pageUri))
+                await ReadRegistrationListingPageAsync(repository, pageUri, credential, versions, depth + 1, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static bool TryReadRegistrationCatalogEntry(JsonElement item, IDictionary<string, bool> versions)
+    {
+        if (!item.TryGetProperty("catalogEntry", out var catalogEntry) || catalogEntry.ValueKind != JsonValueKind.Object)
+            return false;
+
+        var version = ReadOptionalString(catalogEntry, "version");
+        if (string.IsNullOrWhiteSpace(version))
+            return false;
+
+        versions[version!] = ReadListedFlag(catalogEntry);
+        return true;
+    }
+
+    private static bool ReadListedFlag(JsonElement item)
+    {
+        if (!item.TryGetProperty("listed", out var listed))
+            return true;
+
+        return listed.ValueKind switch
+        {
+            JsonValueKind.False => false,
+            JsonValueKind.String when bool.TryParse(listed.GetString(), out var value) => value,
+            _ => true
+        };
+    }
 
     private async Task<ManagedModuleDownloadResult> DownloadNuGetPackageAsync(
         ManagedModuleRepository repository,
@@ -700,18 +784,35 @@ public sealed partial class ManagedModuleRepositoryClient
         if (!document.RootElement.TryGetProperty("resources", out var resources) || resources.ValueKind != JsonValueKind.Array)
             throw CreateRepositoryContractException(repository, "ServiceIndex", "NuGet service index did not include a resources array.");
 
+        string? packageBase = null;
+        var registrationBaseDiscovered = false;
         foreach (var resource in resources.EnumerateArray())
         {
-            if (!IsPackageBaseAddressResource(resource))
+            var id = resource.TryGetProperty("@id", out var idElement) ? idElement.GetString() : null;
+            if (string.IsNullOrWhiteSpace(id))
                 continue;
 
-            var id = resource.TryGetProperty("@id", out var idElement) ? idElement.GetString() : null;
-            if (!string.IsNullOrWhiteSpace(id))
+            if (IsPackageBaseAddressResource(resource))
+                packageBase = EnsureTrailingSlash(id!);
+            else if (IsSearchQueryServiceResource(resource))
             {
                 var resolved = EnsureTrailingSlash(id!);
-                _packageBaseAddressCache[repository.Source] = resolved;
-                return resolved;
+                _searchQueryServiceCache[repository.Source] = resolved;
             }
+            else if (IsRegistrationBaseResource(resource))
+            {
+                var resolved = EnsureTrailingSlash(id!);
+                _registrationBaseAddressCache[repository.Source] = resolved;
+                registrationBaseDiscovered = true;
+            }
+        }
+
+        if (!registrationBaseDiscovered)
+            _registrationBaseAddressCache.TryAdd(repository.Source, string.Empty);
+        if (!string.IsNullOrWhiteSpace(packageBase))
+        {
+            _packageBaseAddressCache[repository.Source] = packageBase!;
+            return packageBase!;
         }
 
         throw CreateRepositoryContractException(repository, "ServiceIndex", "NuGet service index did not expose PackageBaseAddress.");
@@ -764,21 +865,89 @@ public sealed partial class ManagedModuleRepositoryClient
         if (!document.RootElement.TryGetProperty("resources", out var resources) || resources.ValueKind != JsonValueKind.Array)
             throw CreateRepositoryContractException(repository, "SearchServiceDiscovery", "NuGet service index did not include a resources array.");
 
+        string? searchService = null;
+        var registrationBaseDiscovered = false;
         foreach (var resource in resources.EnumerateArray())
         {
-            if (!IsSearchQueryServiceResource(resource))
+            var id = resource.TryGetProperty("@id", out var idElement) ? idElement.GetString() : null;
+            if (string.IsNullOrWhiteSpace(id))
                 continue;
 
-            var id = resource.TryGetProperty("@id", out var idElement) ? idElement.GetString() : null;
-            if (!string.IsNullOrWhiteSpace(id))
+            if (IsSearchQueryServiceResource(resource))
+                searchService = EnsureTrailingSlash(id!);
+            else if (IsPackageBaseAddressResource(resource))
             {
                 var resolved = EnsureTrailingSlash(id!);
-                _searchQueryServiceCache[repository.Source] = resolved;
-                return resolved;
+                _packageBaseAddressCache[repository.Source] = resolved;
+            }
+            else if (IsRegistrationBaseResource(resource))
+            {
+                var resolved = EnsureTrailingSlash(id!);
+                _registrationBaseAddressCache[repository.Source] = resolved;
+                registrationBaseDiscovered = true;
             }
         }
 
+        if (!registrationBaseDiscovered)
+            _registrationBaseAddressCache.TryAdd(repository.Source, string.Empty);
+        if (!string.IsNullOrWhiteSpace(searchService))
+        {
+            _searchQueryServiceCache[repository.Source] = searchService!;
+            return searchService!;
+        }
+
         throw CreateRepositoryContractException(repository, "SearchServiceDiscovery", "NuGet service index did not expose SearchQueryService.");
+    }
+
+    private async Task<string?> TryResolveRegistrationBaseAddressAsync(
+        ManagedModuleRepository repository,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        if (_registrationBaseAddressCache.TryGetValue(repository.Source, out var cached))
+            return string.IsNullOrWhiteSpace(cached) ? null : cached;
+
+        if (!repository.Source.EndsWith("index.json", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        using var response = await SendWithPolicyAsync(
+            () => CreateRequest(HttpMethod.Get, new Uri(repository.Source), credential, "application/json"),
+            cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+            throw CreateRepositoryHttpException(repository, "RegistrationServiceDiscovery", response.StatusCode, $"Unable to query NuGet service index '{repository.Source}'.");
+
+        using var document = await ReadJsonDocumentAsync(
+            response.Content,
+            repository,
+            "RegistrationServiceDiscovery",
+            "NuGet registration service discovery returned malformed JSON.",
+            cancellationToken).ConfigureAwait(false);
+        if (!document.RootElement.TryGetProperty("resources", out var resources) || resources.ValueKind != JsonValueKind.Array)
+            throw CreateRepositoryContractException(repository, "RegistrationServiceDiscovery", "NuGet service index did not include a resources array.");
+
+        string? registrationBase = null;
+        foreach (var resource in resources.EnumerateArray())
+        {
+            var id = resource.TryGetProperty("@id", out var idElement) ? idElement.GetString() : null;
+            if (string.IsNullOrWhiteSpace(id))
+                continue;
+
+            if (IsRegistrationBaseResource(resource))
+                registrationBase = EnsureTrailingSlash(id!);
+            else if (IsPackageBaseAddressResource(resource))
+            {
+                var resolved = EnsureTrailingSlash(id!);
+                _packageBaseAddressCache[repository.Source] = resolved;
+            }
+            else if (IsSearchQueryServiceResource(resource))
+            {
+                var resolved = EnsureTrailingSlash(id!);
+                _searchQueryServiceCache[repository.Source] = resolved;
+            }
+        }
+
+        _registrationBaseAddressCache[repository.Source] = registrationBase ?? string.Empty;
+        return registrationBase;
     }
 
     private static HttpRequestMessage CreateRequest(HttpMethod method, Uri uri, RepositoryCredential? credential, string accept)
@@ -844,6 +1013,26 @@ public sealed partial class ManagedModuleRepositoryClient
             return false;
 
         return type!.IndexOf("SearchQueryService", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool IsRegistrationBaseResource(JsonElement resource)
+    {
+        if (!resource.TryGetProperty("@type", out var typeElement))
+            return false;
+
+        if (typeElement.ValueKind == JsonValueKind.String)
+            return IsRegistrationBaseType(typeElement.GetString());
+
+        return typeElement.ValueKind == JsonValueKind.Array &&
+               typeElement.EnumerateArray().Any(type => type.ValueKind == JsonValueKind.String && IsRegistrationBaseType(type.GetString()));
+    }
+
+    private static bool IsRegistrationBaseType(string? type)
+    {
+        if (string.IsNullOrWhiteSpace(type))
+            return false;
+
+        return type!.IndexOf("RegistrationsBaseUrl", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private ManagedModuleVersionInfo? ReadSearchResult(ManagedModuleRepository repository, JsonElement item)

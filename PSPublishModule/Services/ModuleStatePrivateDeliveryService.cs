@@ -144,6 +144,7 @@ internal sealed class ModuleStatePrivateDeliveryService
         request.ManagedAcceptLicense = options.ManagedAcceptLicense;
         request.ManagedModuleRoot = options.ManagedModuleRoot;
         request.ManagedScope = ResolveManagedScope(actions);
+        request.ManagedLoadedModules = options.LoadedModules;
     }
 
     private static ManagedModuleInstallScope ResolveManagedScope(IReadOnlyList<ModuleStatePlanAction> actions)
@@ -425,4 +426,6 @@ internal sealed class ModuleStatePrivateDeliveryOptions
     internal bool ManagedAllowClobber { get; set; }
 
     internal bool ManagedAcceptLicense { get; set; }
+
+    internal IReadOnlyList<ManagedModuleLoadedModule> LoadedModules { get; set; } = Array.Empty<ManagedModuleLoadedModule>();
 }

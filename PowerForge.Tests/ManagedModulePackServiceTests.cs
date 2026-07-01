@@ -646,6 +646,32 @@ public sealed class ManagedModulePackServiceTests
     }
 
     [Fact]
+    public async Task Publish_rejects_dependency_range_satisfied_only_by_unlisted_version()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var requests = new List<ManagedModuleRepositoryClientTests.RecordedRequest>();
+        using var httpClient = new HttpClient(new ManagedModuleRepositoryClientTests.ManagedModuleHandler(requests, includeRegistrationBase: true));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), httpClient);
+        var service = new ManagedModulePublishService(new NullLogger(), repositoryClient);
+        CreateModule(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            prerelease: null,
+            requiredModules: "    RequiredModules = @(@{ ModuleName = 'Company.Core'; ModuleVersion = '2.0.0'; MaximumVersion = '3.0.0' })");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PublishAsync(new ManagedModulePublishRequest
+        {
+            ModulePath = moduleRoot.Path,
+            Repository = new ManagedModuleRepository("Company", "https://example.test/v3/index.json")
+        }));
+
+        Assert.Contains("Required module dependency check failed", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(requests, request => request.Url == "https://example.test/registration/company.core/index.json");
+        Assert.DoesNotContain(requests, request => request.Url == "https://example.test/publish/" && request.Method == HttpMethod.Put);
+    }
+
+    [Fact]
     public async Task Publish_uses_v2_feed_root_for_dependency_checks_when_upload_source_is_package_endpoint()
     {
         using var moduleRoot = new TemporaryDirectory();

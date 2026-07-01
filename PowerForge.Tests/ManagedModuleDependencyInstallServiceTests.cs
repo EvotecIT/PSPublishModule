@@ -162,9 +162,9 @@ public sealed class ManagedModuleDependencyInstallServiceTests
             ModuleRoot = moduleRoot.Path
         });
 
-        Assert.Equal(8, result.RepositoryRequestCount);
+        Assert.Equal(6, result.RepositoryRequestCount);
         Assert.Equal(2, result.PackageRepositoryRequestCount);
-        Assert.Equal(8, repositoryClient.RequestCount);
+        Assert.Equal(6, repositoryClient.RequestCount);
         var dependencies = result.DependencyResults.OrderBy(dependency => dependency.Name, StringComparer.OrdinalIgnoreCase).ToArray();
         Assert.Equal(new[] { "Company.CoreA", "Company.CoreB" }, dependencies.Select(dependency => dependency.Name));
         Assert.All(dependencies, dependency => Assert.Equal(1, dependency.RepositoryRequestCount));
@@ -310,7 +310,8 @@ public sealed class ManagedModuleDependencyInstallServiceTests
             {
                 return Task.FromResult(Json("{\"resources\":[" +
                                             "{\"@id\":\"https://example.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}," +
-                                            "{\"@id\":\"https://example.test/search/\",\"@type\":\"SearchQueryService/3.5.0\"}" +
+                                            "{\"@id\":\"https://example.test/search/\",\"@type\":\"SearchQueryService/3.5.0\"}," +
+                                            "{\"@id\":\"https://example.test/registration/\",\"@type\":\"RegistrationsBaseUrl/3.6.0\"}" +
                                             "]}"));
             }
 
@@ -325,8 +326,11 @@ public sealed class ManagedModuleDependencyInstallServiceTests
             if (uri == "https://example.test/packages/company.core/index.json")
                 return Task.FromResult(Json("{\"versions\":[\"1.8.0\",\"1.9.0\"]}"));
 
-            if (uri == "https://example.test/search/?q=Company.Core&prerelease=false&take=20&semVerLevel=2.0.0")
-                return Task.FromResult(Json("{\"data\":[{\"id\":\"Company.Core\",\"version\":\"1.8.0\",\"listed\":true}]}"));
+            if (uri == "https://example.test/registration/company.core/index.json")
+                return Task.FromResult(Json("{\"items\":[{\"items\":[" +
+                                            "{\"catalogEntry\":{\"version\":\"1.8.0\",\"listed\":true}}," +
+                                            "{\"catalogEntry\":{\"version\":\"1.9.0\",\"listed\":false}}" +
+                                            "]}]}"));
 
             if (uri == "https://example.test/packages/company.core/1.8.0/company.core.1.8.0.nupkg")
                 return Task.FromResult(Package("Company.Core", "1.8.0", dependencies: null));

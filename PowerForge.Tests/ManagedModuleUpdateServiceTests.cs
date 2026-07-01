@@ -82,7 +82,7 @@ public sealed class ManagedModuleUpdateServiceTests
 
         Assert.Equal("1.5.0", plan.TargetVersion);
         Assert.DoesNotContain("2.0.0", plan.TargetVersion);
-        Assert.Contains(requests, request => request == "https://example.test/search/?q=Company.Tools&prerelease=false&take=20&semVerLevel=2.0.0");
+        Assert.Contains(requests, request => request == "https://example.test/registration/company.tools/index.json");
     }
 
     [Fact]
@@ -806,14 +806,19 @@ public sealed class ManagedModuleUpdateServiceTests
             if (uri == "https://example.test/v3/index.json")
                 return Json("{\"resources\":[" +
                             "{\"@id\":\"https://example.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}," +
-                            "{\"@id\":\"https://example.test/search/\",\"@type\":\"SearchQueryService/3.5.0\"}" +
+                            "{\"@id\":\"https://example.test/search/\",\"@type\":\"SearchQueryService/3.5.0\"}," +
+                            "{\"@id\":\"https://example.test/registration/\",\"@type\":\"RegistrationsBaseUrl/3.6.0\"}" +
                             "]}");
 
             if (uri == "https://example.test/packages/company.tools/index.json")
                 return Json("{\"versions\":[\"1.0.0\",\"1.5.0\",\"2.0.0\"]}");
 
-            if (uri == "https://example.test/search/?q=Company.Tools&prerelease=false&take=20&semVerLevel=2.0.0")
-                return Json("{\"data\":[{\"id\":\"Company.Tools\",\"version\":\"1.5.0\",\"listed\":true}]}");
+            if (uri == "https://example.test/registration/company.tools/index.json")
+                return Json("{\"items\":[{\"items\":[" +
+                            "{\"catalogEntry\":{\"version\":\"1.0.0\",\"listed\":true}}," +
+                            "{\"catalogEntry\":{\"version\":\"1.5.0\",\"listed\":true}}," +
+                            "{\"catalogEntry\":{\"version\":\"2.0.0\",\"listed\":false}}" +
+                            "]}]}");
 
             if (uri == "https://example.test/packages/company.tools/1.5.0/company.tools.1.5.0.nupkg")
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
