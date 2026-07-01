@@ -2,7 +2,7 @@ namespace PowerForge;
 
 internal static class ManagedModuleConcurrencyDefaults
 {
-    internal const int MaximumDefaultConcurrency = 128;
+    internal const int MaximumDefaultConcurrency = 96;
     private const int MinimumDefaultConcurrency = 16;
     private const int ConnectionsPerProcessor = 8;
 
