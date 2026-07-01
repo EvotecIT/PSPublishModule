@@ -201,7 +201,13 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             ApplySelectedInventoryTargets(plan, selectedModules);
             ApplyLatestUpdateIntent(plan);
             ApplyForceRepairIntent(plan);
-            await EnrichManagedLicenseMetadataAsync(plan, deliveryModuleRoot, repositoryCredential).ConfigureAwait(false);
+            var managedDeliveryOptions = CreateManagedDeliveryOptions(inventory, deliveryModuleRoot, repositoryCredential);
+            var repositoriesResolved = PreResolveManagedDeliveryRepositories(
+                plan,
+                managedDeliveryOptions,
+                required: !Plan.IsPresent);
+            if (repositoriesResolved)
+                await EnrichManagedLicenseMetadataAsync(plan, managedDeliveryOptions).ConfigureAwait(false);
 
             var test = ModuleStateTestResult.FromPlan(plan);
             var applyResult = await PrepareApplyAsync(
@@ -209,7 +215,7 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
                 inventory,
                 deliveryModuleRoot,
                 credentialSecretFilePath,
-                repositoryCredential).ConfigureAwait(false);
+                managedDeliveryOptions).ConfigureAwait(false);
             var workflow = new ModuleStateWorkflowResult
             {
                 Inventory = inventory,
@@ -396,7 +402,7 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
         ModuleStateInventoryResult inventory,
         string? deliveryModuleRoot,
         string? credentialSecretFilePath,
-        RepositoryCredential? repositoryCredential)
+        ModuleStateManagedDeliveryOptions managedDeliveryOptions)
     {
         var deliveryOptions = new ModuleStateDeliveryOptions(
             ProfileName,
@@ -421,7 +427,7 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
                 inventory,
                 deliveryModuleRoot,
                 credentialSecretFilePath,
-                repositoryCredential).ConfigureAwait(false);
+                managedDeliveryOptions).ConfigureAwait(false);
 
         return ModuleStateApplyResultMapper.ToCmdletResult(
             result,
@@ -437,13 +443,13 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
         ModuleStateInventoryResult inventory,
         string? deliveryModuleRoot,
         string? credentialSecretFilePath,
-        RepositoryCredential? repositoryCredential)
+        ModuleStateManagedDeliveryOptions managedDeliveryOptions)
     {
         if (Transport == ModuleStateDeliveryTransport.ManagedModule)
         {
             return await new ModuleStateManagedDeliveryService(this).ExecuteAsync(
                 result,
-                CreateManagedDeliveryOptions(inventory, deliveryModuleRoot, repositoryCredential),
+                managedDeliveryOptions,
                 CancelToken).ConfigureAwait(false);
         }
 
@@ -470,8 +476,7 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
 
     private async Task EnrichManagedLicenseMetadataAsync(
         ModuleStatePlanResult plan,
-        string? deliveryModuleRoot,
-        RepositoryCredential? repositoryCredential)
+        ModuleStateManagedDeliveryOptions managedDeliveryOptions)
     {
         if (Transport != ModuleStateDeliveryTransport.ManagedModule)
             return;
@@ -479,12 +484,58 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
         try
         {
             await new ModuleStateManagedPlanLicenseEnricher(this)
-                .EnrichAsync(plan, CreateManagedDeliveryOptions(moduleRoot: deliveryModuleRoot, credential: repositoryCredential), CancelToken)
+                .EnrichAsync(plan, managedDeliveryOptions, CancelToken)
                 .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or NotSupportedException or UriFormatException)
         {
             WriteVerbose("Managed module license preflight skipped: " + ex.Message);
+        }
+    }
+
+    private bool PreResolveManagedDeliveryRepositories(
+        ModuleStatePlanResult plan,
+        ModuleStateManagedDeliveryOptions options,
+        bool required)
+    {
+        if (Transport != ModuleStateDeliveryTransport.ManagedModule)
+            return true;
+
+        var actions = (plan.Actions ?? Array.Empty<ModuleStatePlanActionResult>())
+            .Where(static action => action.Kind is "Install" or "Update" or "Save")
+            .ToArray();
+        if (actions.Length == 0)
+            return true;
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            foreach (var action in actions)
+            {
+                var key = ModuleStateManagedRepositoryResolver.CreateRepositoryKey(action.TargetRepository);
+                if (!seen.Add(key))
+                    continue;
+                if (key.Length == 0 &&
+                    string.IsNullOrWhiteSpace(options.Repository) &&
+                    string.IsNullOrWhiteSpace(options.ProfileName))
+                {
+                    continue;
+                }
+
+                options.ResolvedRepositories[key] = ModuleStateManagedRepositoryResolver.ResolveRepositoryForAction(
+                    this,
+                    action.TargetRepository,
+                    options,
+                    "Managed module delivery requires Repository, ProfileName, or action target repository.");
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (!required &&
+                                   (ex is InvalidOperationException or ArgumentException or NotSupportedException or UriFormatException))
+        {
+            WriteVerbose("Managed module license preflight skipped: " + ex.Message);
+            return false;
         }
     }
 

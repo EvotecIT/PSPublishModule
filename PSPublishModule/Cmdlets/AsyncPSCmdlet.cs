@@ -204,8 +204,61 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
             _currentOutPipe = null;
             _currentReplyPipe = null;
             _pipelineThreadId = 0;
-            outPipe.CompleteAdding();
-            replyPipe.CompleteAdding();
+            CompleteAddingIfNeeded(outPipe);
+            CompleteAddingIfNeeded(replyPipe);
+        }
+
+        static void CompleteAddingIfNeeded<T>(BlockingCollection<T> pipe)
+        {
+            if (!pipe.IsAddingCompleted)
+                pipe.CompleteAdding();
+        }
+
+        void PumpItem((object? Value, PipelineType Type) item)
+        {
+            switch (item.Type)
+            {
+                case PipelineType.Output:
+                    base.WriteObject(item.Value);
+                    break;
+                case PipelineType.OutputEnumerate:
+                    base.WriteObject(item.Value, enumerateCollection: true);
+                    break;
+                case PipelineType.Error:
+                    base.WriteError((ErrorRecord)item.Value!);
+                    break;
+                case PipelineType.Warning:
+                    base.WriteWarning((string)item.Value!);
+                    break;
+                case PipelineType.Verbose:
+                    base.WriteVerbose((string)item.Value!);
+                    break;
+                case PipelineType.Debug:
+                    base.WriteDebug((string)item.Value!);
+                    break;
+                case PipelineType.Information:
+                    base.WriteInformation((InformationRecord)item.Value!);
+                    break;
+                case PipelineType.Progress:
+                    base.WriteProgress((ProgressRecord)item.Value!);
+                    break;
+                case PipelineType.ShouldProcess:
+                    var should = ((string Target, string Action))item.Value!;
+                    replyPipe.Add(base.ShouldProcess(should.Target, should.Action), CancelToken);
+                    break;
+                case PipelineType.PromptForCredential:
+                    var prompt = ((string Caption, string Message, string UserName, string TargetName))item.Value!;
+                    replyPipe.Add(
+                        Host.UI.PromptForCredential(prompt.Caption, prompt.Message, prompt.UserName, prompt.TargetName),
+                        CancelToken);
+                    break;
+            }
+        }
+
+        void PumpQueuedItems()
+        {
+            while (outPipe.TryTake(out var item))
+                PumpItem(item);
         }
 
         _pipelineThreadId = Environment.CurrentManagedThreadId;
@@ -224,6 +277,8 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
 
         if (blockTask.IsCompleted)
         {
+            CompleteAddingIfNeeded(outPipe);
+            PumpQueuedItems();
             ClearPipes();
             blockTask.GetAwaiter().GetResult();
             return;
@@ -239,49 +294,13 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
         {
             foreach (var item in outPipe.GetConsumingEnumerable(CancelToken))
             {
-                switch (item.Type)
-                {
-                    case PipelineType.Output:
-                        base.WriteObject(item.Value);
-                        break;
-                    case PipelineType.OutputEnumerate:
-                        base.WriteObject(item.Value, enumerateCollection: true);
-                        break;
-                    case PipelineType.Error:
-                        base.WriteError((ErrorRecord)item.Value!);
-                        break;
-                    case PipelineType.Warning:
-                        base.WriteWarning((string)item.Value!);
-                        break;
-                    case PipelineType.Verbose:
-                        base.WriteVerbose((string)item.Value!);
-                        break;
-                    case PipelineType.Debug:
-                        base.WriteDebug((string)item.Value!);
-                        break;
-                    case PipelineType.Information:
-                        base.WriteInformation((InformationRecord)item.Value!);
-                        break;
-                    case PipelineType.Progress:
-                        base.WriteProgress((ProgressRecord)item.Value!);
-                        break;
-                    case PipelineType.ShouldProcess:
-                        var should = ((string Target, string Action))item.Value!;
-                        replyPipe.Add(base.ShouldProcess(should.Target, should.Action), CancelToken);
-                        break;
-                    case PipelineType.PromptForCredential:
-                        var prompt = ((string Caption, string Message, string UserName, string TargetName))item.Value!;
-                        replyPipe.Add(
-                            Host.UI.PromptForCredential(prompt.Caption, prompt.Message, prompt.UserName, prompt.TargetName),
-                            CancelToken);
-                        break;
-                }
+                PumpItem(item);
             }
         }
         catch
         {
             _cancelSource.Cancel();
-            outPipe.CompleteAdding();
+            CompleteAddingIfNeeded(outPipe);
             try
             {
                 blockTask.GetAwaiter().GetResult();

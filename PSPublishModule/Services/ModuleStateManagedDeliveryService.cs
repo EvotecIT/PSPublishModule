@@ -244,51 +244,11 @@ internal sealed class ModuleStateManagedDeliveryService
     private ManagedModuleRepository ResolveRepository(
         ModuleStatePlanAction action,
         ModuleStateManagedDeliveryOptions options)
-    {
-        if (!string.IsNullOrWhiteSpace(options.ProfileName))
-        {
-            var profile = ModuleRepositoryProfileCommandSupport.TryResolve(options.ProfileName);
-            if (profile is not null &&
-                (string.IsNullOrWhiteSpace(action.TargetRepository) ||
-                 string.Equals(action.TargetRepository, profile.RepositoryName, StringComparison.OrdinalIgnoreCase)))
-            {
-                return ManagedModuleCommandSupport.CreateRepository(
-                    _cmdlet,
-                    ManagedModuleCommandSupport.DefaultRepositoryName,
-                    ManagedModuleCommandSupport.DefaultRepositorySource,
-                    options.ProfileName,
-                    repositoryWasBound: false);
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(action.TargetRepository))
-        {
-            var optionsRepository = ModuleStateManagedRepositoryResolver.TryResolveOptionsRepositoryForActionTarget(_cmdlet, action.TargetRepository, options);
-            if (optionsRepository is not null)
-                return optionsRepository;
-
-            return ManagedModuleCommandSupport.CreateRepository(
-                _cmdlet,
-                ManagedModuleCommandSupport.DefaultRepositoryName,
-                action.TargetRepository!);
-        }
-
-        if (!string.IsNullOrWhiteSpace(options.Repository))
-            return ManagedModuleCommandSupport.CreateRepository(
-                _cmdlet,
-                ManagedModuleCommandSupport.DefaultRepositoryName,
-                options.Repository!);
-
-        if (!string.IsNullOrWhiteSpace(options.ProfileName))
-            return ManagedModuleCommandSupport.CreateRepository(
-                _cmdlet,
-                ManagedModuleCommandSupport.DefaultRepositoryName,
-                ManagedModuleCommandSupport.DefaultRepositorySource,
-                options.ProfileName,
-                repositoryWasBound: false);
-
-        throw new InvalidOperationException("Managed module delivery requires Repository, ProfileName, or action target repository.");
-    }
+        => ModuleStateManagedRepositoryResolver.ResolveRepositoryForAction(
+            _cmdlet,
+            action.TargetRepository,
+            options,
+            "Managed module delivery requires Repository, ProfileName, or action target repository.");
 
     private static string? ResolveModuleRoot(ModuleStatePlanAction action, ModuleStateManagedDeliveryOptions options)
         => string.IsNullOrWhiteSpace(action.TargetPath) ? options.ModuleRoot : action.TargetPath;
@@ -365,6 +325,8 @@ internal sealed class ModuleStateManagedDeliveryOptions
     internal RepositoryCredential? Credential { get; set; }
 
     internal IReadOnlyList<ManagedModuleLoadedModule> LoadedModules { get; set; } = Array.Empty<ManagedModuleLoadedModule>();
+
+    internal Dictionary<string, ManagedModuleRepository> ResolvedRepositories { get; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 internal readonly struct ModuleStateManagedVersionPolicy
