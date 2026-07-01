@@ -190,6 +190,7 @@ public sealed partial class ManagedModuleRepositoryClient
                     source,
                     _options.MaxPackageBytes,
                     MaximumBufferedPackageBytes,
+                    contentLength,
                     packageId,
                     version,
                     cancellationToken)
@@ -216,13 +217,14 @@ public sealed partial class ManagedModuleRepositoryClient
         Stream source,
         long maxPackageBytes,
         long maxBufferedBytes,
+        long? expectedBytes,
         string packageId,
         string version,
         CancellationToken cancellationToken)
     {
         using var sha256 = SHA256.Create();
         var buffer = new byte[PackageCopyBufferSize];
-        var destination = new MemoryStream();
+        var destination = CreateBufferedPackageStream(expectedBytes, maxPackageBytes, maxBufferedBytes);
         long bytesWritten = 0;
 
         try
@@ -270,6 +272,23 @@ public sealed partial class ManagedModuleRepositoryClient
         {
             // Best effort cleanup after refusing an oversized package payload.
         }
+    }
+
+    private static MemoryStream CreateBufferedPackageStream(
+        long? expectedBytes,
+        long maxPackageBytes,
+        long maxBufferedBytes)
+    {
+        if (!expectedBytes.HasValue || expectedBytes.Value <= 0)
+            return new MemoryStream();
+        if (maxPackageBytes > 0 && expectedBytes.Value > maxPackageBytes)
+            return new MemoryStream();
+        if (maxBufferedBytes > 0 && expectedBytes.Value > maxBufferedBytes)
+            return new MemoryStream();
+        if (expectedBytes.Value > int.MaxValue)
+            return new MemoryStream();
+
+        return new MemoryStream((int)expectedBytes.Value);
     }
 
     private static string FormatSha256(byte[]? hash)

@@ -68,11 +68,12 @@ internal sealed class ManagedModuleExtractedPackageCache
         string packageCacheDirectory,
         string destinationPath,
         ManagedModuleArchiveExtractor extractor,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? packageId = null)
     {
         var normalizedSha256 = ManagedModulePackageIntegrity.NormalizeSha256(packageSha256);
         if (normalizedSha256 is null)
-            return extractor.ExtractPackage(packagePath, destinationPath);
+            return extractor.ExtractPackage(packagePath, destinationPath, packageId);
 
         var cacheRoot = GetCacheRoot(packageCacheDirectory, normalizedSha256);
         var payloadPath = Path.Combine(cacheRoot, PayloadDirectoryName);
@@ -110,7 +111,7 @@ internal sealed class ManagedModuleExtractedPackageCache
             DeleteDirectoryQuietly(cacheRoot);
         }
 
-        var extraction = extractor.ExtractPackage(packagePath, destinationPath);
+        var extraction = extractor.ExtractPackage(packagePath, destinationPath, packageId);
         TryPopulateCache(destinationPath, cacheRoot, normalizedSha256, extraction, cancellationToken);
         stopwatch.Stop();
         return new ManagedModuleArchiveExtractionResult(extraction.FileCount, extraction.BytesWritten, stopwatch.Elapsed, fromCache: false, cacheLockWaitElapsed);

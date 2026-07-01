@@ -39,7 +39,10 @@ public sealed partial class ManagedModuleInstallService
     public async Task<ManagedModuleInstallResult> InstallAsync(
         ManagedModuleInstallRequest request,
         CancellationToken cancellationToken = default)
-        => await InstallAsync(request, new ManagedModuleInstallContext(), cancellationToken).ConfigureAwait(false);
+    {
+        using var context = new ManagedModuleInstallContext();
+        return await InstallAsync(request, context, cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Creates a non-mutating install plan for the requested module.
@@ -232,6 +235,7 @@ public sealed partial class ManagedModuleInstallService
             {
                 var result = await InstallResolvedAsync(
                     request,
+                    versionInfo,
                     context,
                     cancellationToken,
                     stopwatch,
@@ -278,6 +282,7 @@ public sealed partial class ManagedModuleInstallService
                         {
                             var result = await InstallResolvedAsync(
                                 request,
+                                versionInfo,
                                 context,
                                 cancellationToken,
                                 stopwatch,
@@ -302,6 +307,7 @@ public sealed partial class ManagedModuleInstallService
 
             return await InstallResolvedAsync(
                 request,
+                versionInfo,
                 context,
                 cancellationToken,
                 stopwatch,
@@ -368,6 +374,7 @@ public sealed partial class ManagedModuleInstallService
 
     private async Task<ManagedModuleInstallResult> InstallResolvedAsync(
         ManagedModuleInstallRequest request,
+        ManagedModuleVersionInfo versionInfo,
         ManagedModuleInstallContext context,
         CancellationToken cancellationToken,
         System.Diagnostics.Stopwatch stopwatch,
@@ -379,6 +386,7 @@ public sealed partial class ManagedModuleInstallService
         string modulePath)
     {
         var ownsCache = string.IsNullOrWhiteSpace(request.PackageCacheDirectory);
+        var useExtractedPackageCache = !ownsCache && !request.PackageCacheDirectoryIsOperationLocal;
         var cacheDirectory = ownsCache
             ? Path.Combine(Path.GetTempPath(), "PFMM.C", NewShortId())
             : Path.GetFullPath(request.PackageCacheDirectory!.Trim().Trim('"'));
@@ -413,6 +421,18 @@ public sealed partial class ManagedModuleInstallService
                 }
             }
 
+            var repositoryDependencyHintMetadata = CreateRepositoryDependencyHintMetadata(versionInfo);
+            StartDependencyVersionSelectionPrewarm(
+                request,
+                repositoryDependencyHintMetadata,
+                context,
+                cancellationToken);
+            StartDependencyPackagePrefetch(
+                request,
+                repositoryDependencyHintMetadata,
+                context,
+                cancellationToken);
+
             var downloadStopwatch = System.Diagnostics.Stopwatch.StartNew();
             ManagedModuleDownloadResult download;
             long packageRepositoryRequestCount;
@@ -424,7 +444,7 @@ public sealed partial class ManagedModuleInstallService
                 {
                     try
                     {
-                        bufferedPackage = await DownloadBufferedPackageForInstallAsync(request, version, cancellationToken).ConfigureAwait(false);
+                        bufferedPackage = await DownloadBufferedPackageForInstallAsync(request, version, context, cancellationToken).ConfigureAwait(false);
                     }
                     catch (ManagedModuleBufferedPackageTooLargeException ex)
                     {
@@ -447,6 +467,14 @@ public sealed partial class ManagedModuleInstallService
                     cancellationToken).ConfigureAwait(false);
                 packageRepositoryRequestCount = packageRequestScope.Count;
                 packageRepositoryRedirectCount = packageRequestScope.RedirectCount;
+#if !NET472
+                if (packageRepositoryRequestCount == 0 && bufferedPackage is not null)
+                    packageRepositoryRequestCount = bufferedPackage.Download.RequestCount;
+                if (packageRepositoryRequestCount == 0 && bufferedPackage is not null && !bufferedPackage.Download.FromCache)
+                    packageRepositoryRequestCount = 1;
+                if (packageRepositoryRedirectCount == 0 && bufferedPackage is not null)
+                    packageRepositoryRedirectCount = bufferedPackage.Download.RedirectCount;
+#endif
             }
 
             downloadStopwatch.Stop();
@@ -454,9 +482,11 @@ public sealed partial class ManagedModuleInstallService
             ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, download.Metadata, request.TrustPolicy);
             ThrowIfLicenseAcceptanceRequired(download.Metadata, request);
             StartDependencyVersionSelectionPrewarm(request, download.Metadata, context, cancellationToken);
+            StartDependencyPackagePrefetch(request, download.Metadata, context, cancellationToken);
+
             var validationModulePath = stageModulePath;
             ManagedModuleArchiveExtractionResult? extraction = null;
-            if (!ownsCache && !request.Force && !RequiresVerifiedPackage(request))
+            if (useExtractedPackageCache && !request.Force && !RequiresVerifiedPackage(request))
             {
                 directPayloadLease = _extractedPackageCache.TryAcquirePayload(
                     download.PackageSha256,
@@ -478,15 +508,16 @@ public sealed partial class ManagedModuleInstallService
                 }
                 else
 #endif
-                extraction = ownsCache
-                    ? _extractor.ExtractPackage(download.PackagePath, stageModulePath)
+                extraction = !useExtractedPackageCache
+                    ? _extractor.ExtractPackage(download.PackagePath, stageModulePath, download.Metadata?.Id)
                     : _extractedPackageCache.MaterializePackage(
                         download.PackagePath,
                         download.PackageSha256,
                         cacheDirectory,
                         stageModulePath,
                         _extractor,
-                        cancellationToken);
+                        cancellationToken,
+                        download.Metadata?.Id);
             }
 
             var authenticode = request.AuthenticodeCheck
@@ -497,10 +528,19 @@ public sealed partial class ManagedModuleInstallService
             if (!request.AllowClobber)
                 ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), validationModulePath);
 
-            var dependencyStopwatch = System.Diagnostics.Stopwatch.StartNew();
-            var dependencyResults = request.SkipDependencyCheck
-                ? Array.Empty<ManagedModuleInstallResult>()
-                : await InstallDependenciesAsync(request, download.Metadata, cacheDirectory, context, cancellationToken).ConfigureAwait(false);
+            System.Diagnostics.Stopwatch dependencyStopwatch;
+            IReadOnlyList<ManagedModuleInstallResult> dependencyResults;
+            if (request.SkipDependencyCheck)
+            {
+                dependencyStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                dependencyResults = Array.Empty<ManagedModuleInstallResult>();
+            }
+            else
+            {
+                dependencyStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                dependencyResults = await InstallDependenciesAsync(request, download.Metadata, cacheDirectory, context, cancellationToken).ConfigureAwait(false);
+            }
+
             dependencyStopwatch.Stop();
 
             var promotionStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -522,14 +562,15 @@ public sealed partial class ManagedModuleInstallService
                     cacheDirectory,
                     stageModulePath,
                     _extractor,
-                    cancellationToken);
+                    cancellationToken,
+                    download.Metadata?.Id);
                 if (request.AuthenticodeCheck)
                     authenticode = _authenticodeVerifier.VerifyDirectory(stageModulePath);
                 if (!request.AllowClobber)
                     ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), stageModulePath);
             }
 
-            using (AcquireInstallLock(moduleRoot, ".promotion", cancellationToken, out var promotionGateWaitElapsed))
+            using (AcquirePromotionLock(moduleRoot, cancellationToken, out var promotionGateWaitElapsed))
             {
                 promotionLockWaitElapsed += promotionGateWaitElapsed;
                 installLockWaitElapsed += promotionGateWaitElapsed;
@@ -632,7 +673,7 @@ public sealed partial class ManagedModuleInstallService
                 PromotionBackupCleanupElapsed = promotionBackupCleanupElapsed,
                 PromotionMaterializedDirectly = promotionMaterializedDirectly,
                 PromotionDirectMaterializationElapsed = promotionDirectMaterializationElapsed,
-                RepositoryRequestCount = requestScope.Count,
+                RepositoryRequestCount = Math.Max(requestScope.Count, packageRepositoryRequestCount),
                 PackageRepositoryRequestCount = packageRepositoryRequestCount,
                 PackageRepositoryRedirectCount = packageRepositoryRedirectCount,
                 DependencyResults = dependencyResults
@@ -784,8 +825,19 @@ public sealed partial class ManagedModuleInstallService
             IsPrerelease = versionInfo.IsPrerelease,
             Listed = versionInfo.Listed,
             License = metadata.License,
-            RequireLicenseAcceptance = metadata.RequireLicenseAcceptance
+            RequireLicenseAcceptance = metadata.RequireLicenseAcceptance,
+            Dependencies = metadata.Dependencies
         };
+
+    private static ManagedModulePackageMetadata? CreateRepositoryDependencyHintMetadata(ManagedModuleVersionInfo versionInfo)
+        => versionInfo.Dependencies is not { Count: > 0 }
+            ? null
+            : new ManagedModulePackageMetadata
+            {
+                Id = versionInfo.Name,
+                Version = versionInfo.Version,
+                Dependencies = versionInfo.Dependencies
+            };
 
     private static bool RequiresExactVersionNormalization(string version)
     {

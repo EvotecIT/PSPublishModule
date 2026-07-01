@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
+using System.Threading;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -16,6 +18,12 @@ internal sealed class ModuleStateManagedDeliveryService
     internal ModuleStateDeliveryExecutionResult[] Execute(
         PowerForge.ModuleStateApplyResult applyResult,
         ModuleStateManagedDeliveryOptions options)
+        => ExecuteAsync(applyResult, options).GetAwaiter().GetResult();
+
+    internal async Task<ModuleStateDeliveryExecutionResult[]> ExecuteAsync(
+        PowerForge.ModuleStateApplyResult applyResult,
+        ModuleStateManagedDeliveryOptions options,
+        CancellationToken cancellationToken = default)
     {
         if (applyResult is null)
             throw new ArgumentNullException(nameof(applyResult));
@@ -36,28 +44,29 @@ internal sealed class ModuleStateManagedDeliveryService
         foreach (var action in actions)
         {
             var repository = ResolveRepository(action, options);
-            results.Add(action.Kind switch
+            results.Add(await (action.Kind switch
             {
-                ModuleStatePlanActionKind.Update => ExecuteUpdate(updateService, repository, action, options),
-                ModuleStatePlanActionKind.Save => ExecuteSave(installService, repository, action, options),
-                _ => ExecuteInstall(installService, repository, action, options)
-            });
+                ModuleStatePlanActionKind.Update => ExecuteUpdateAsync(updateService, repository, action, options, cancellationToken),
+                ModuleStatePlanActionKind.Save => ExecuteSaveAsync(installService, repository, action, options, cancellationToken),
+                _ => ExecuteInstallAsync(installService, repository, action, options, cancellationToken)
+            }).ConfigureAwait(false));
         }
 
         return results.ToArray();
     }
 
-    private ModuleStateDeliveryExecutionResult ExecuteInstall(
+    private async Task<ModuleStateDeliveryExecutionResult> ExecuteInstallAsync(
         ManagedModuleInstallService service,
         ManagedModuleRepository repository,
         ModuleStatePlanAction action,
-        ModuleStateManagedDeliveryOptions options)
+        ModuleStateManagedDeliveryOptions options,
+        CancellationToken cancellationToken)
     {
         var request = CreateInstallRequest(repository, action, options);
-        if (!_cmdlet.ShouldProcess(action.ModuleName, $"Install managed module from repository '{repository.Name}'"))
+        if (!ShouldProcess(action.ModuleName, $"Install managed module from repository '{repository.Name}'"))
             return CreateSkippedResult("Install", repository.Name, action);
 
-        var result = service.InstallAsync(request).GetAwaiter().GetResult();
+        var result = await service.InstallAsync(request, cancellationToken).ConfigureAwait(false);
         return new ModuleStateDeliveryExecutionResult
         {
             Operation = "Install",
@@ -82,17 +91,18 @@ internal sealed class ModuleStateManagedDeliveryService
         };
     }
 
-    private ModuleStateDeliveryExecutionResult ExecuteUpdate(
+    private async Task<ModuleStateDeliveryExecutionResult> ExecuteUpdateAsync(
         ManagedModuleUpdateService service,
         ManagedModuleRepository repository,
         ModuleStatePlanAction action,
-        ModuleStateManagedDeliveryOptions options)
+        ModuleStateManagedDeliveryOptions options,
+        CancellationToken cancellationToken)
     {
         var request = CreateUpdateRequest(repository, action, options);
-        if (!_cmdlet.ShouldProcess(action.ModuleName, $"Update managed module from repository '{repository.Name}'"))
+        if (!ShouldProcess(action.ModuleName, $"Update managed module from repository '{repository.Name}'"))
             return CreateSkippedResult("Update", repository.Name, action);
 
-        var result = service.UpdateAsync(request).GetAwaiter().GetResult();
+        var result = await service.UpdateAsync(request, cancellationToken).ConfigureAwait(false);
         return new ModuleStateDeliveryExecutionResult
         {
             Operation = "Update",
@@ -117,17 +127,18 @@ internal sealed class ModuleStateManagedDeliveryService
         };
     }
 
-    private ModuleStateDeliveryExecutionResult ExecuteSave(
+    private async Task<ModuleStateDeliveryExecutionResult> ExecuteSaveAsync(
         ManagedModuleInstallService service,
         ManagedModuleRepository repository,
         ModuleStatePlanAction action,
-        ModuleStateManagedDeliveryOptions options)
+        ModuleStateManagedDeliveryOptions options,
+        CancellationToken cancellationToken)
     {
         var request = CreateSaveRequest(repository, action, options);
-        if (!_cmdlet.ShouldProcess(action.ModuleName, $"Save managed module from repository '{repository.Name}'"))
+        if (!ShouldProcess(action.ModuleName, $"Save managed module from repository '{repository.Name}'"))
             return CreateSkippedResult("Save", repository.Name, action);
 
-        var result = service.InstallAsync(request).GetAwaiter().GetResult();
+        var result = await service.InstallAsync(request, cancellationToken).ConfigureAwait(false);
         return new ModuleStateDeliveryExecutionResult
         {
             Operation = "Save",
@@ -151,6 +162,11 @@ internal sealed class ModuleStateManagedDeliveryService
             }
         };
     }
+
+    private bool ShouldProcess(string target, string action)
+        => _cmdlet is AsyncPSCmdlet asyncCmdlet
+            ? asyncCmdlet.ShouldProcess(target, action)
+            : _cmdlet.ShouldProcess(target, action);
 
     private ManagedModuleInstallRequest CreateInstallRequest(
         ManagedModuleRepository repository,
@@ -228,51 +244,11 @@ internal sealed class ModuleStateManagedDeliveryService
     private ManagedModuleRepository ResolveRepository(
         ModuleStatePlanAction action,
         ModuleStateManagedDeliveryOptions options)
-    {
-        if (!string.IsNullOrWhiteSpace(options.ProfileName))
-        {
-            var profile = ModuleRepositoryProfileCommandSupport.TryResolve(options.ProfileName);
-            if (profile is not null &&
-                (string.IsNullOrWhiteSpace(action.TargetRepository) ||
-                 string.Equals(action.TargetRepository, profile.RepositoryName, StringComparison.OrdinalIgnoreCase)))
-            {
-                return ManagedModuleCommandSupport.CreateRepository(
-                    _cmdlet,
-                    ManagedModuleCommandSupport.DefaultRepositoryName,
-                    ManagedModuleCommandSupport.DefaultRepositorySource,
-                    options.ProfileName,
-                    repositoryWasBound: false);
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(action.TargetRepository))
-        {
-            var optionsRepository = ModuleStateManagedRepositoryResolver.TryResolveOptionsRepositoryForActionTarget(_cmdlet, action.TargetRepository, options);
-            if (optionsRepository is not null)
-                return optionsRepository;
-
-            return ManagedModuleCommandSupport.CreateRepository(
-                _cmdlet,
-                ManagedModuleCommandSupport.DefaultRepositoryName,
-                action.TargetRepository!);
-        }
-
-        if (!string.IsNullOrWhiteSpace(options.Repository))
-            return ManagedModuleCommandSupport.CreateRepository(
-                _cmdlet,
-                ManagedModuleCommandSupport.DefaultRepositoryName,
-                options.Repository!);
-
-        if (!string.IsNullOrWhiteSpace(options.ProfileName))
-            return ManagedModuleCommandSupport.CreateRepository(
-                _cmdlet,
-                ManagedModuleCommandSupport.DefaultRepositoryName,
-                ManagedModuleCommandSupport.DefaultRepositorySource,
-                options.ProfileName,
-                repositoryWasBound: false);
-
-        throw new InvalidOperationException("Managed module delivery requires Repository, ProfileName, or action target repository.");
-    }
+        => ModuleStateManagedRepositoryResolver.ResolveRepositoryForAction(
+            _cmdlet,
+            action.TargetRepository,
+            options,
+            "Managed module delivery requires Repository, ProfileName, or action target repository.");
 
     private static string? ResolveModuleRoot(ModuleStatePlanAction action, ModuleStateManagedDeliveryOptions options)
         => string.IsNullOrWhiteSpace(action.TargetPath) ? options.ModuleRoot : action.TargetPath;
@@ -349,6 +325,8 @@ internal sealed class ModuleStateManagedDeliveryOptions
     internal RepositoryCredential? Credential { get; set; }
 
     internal IReadOnlyList<ManagedModuleLoadedModule> LoadedModules { get; set; } = Array.Empty<ManagedModuleLoadedModule>();
+
+    internal Dictionary<string, ManagedModuleRepository> ResolvedRepositories { get; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 internal readonly struct ModuleStateManagedVersionPolicy

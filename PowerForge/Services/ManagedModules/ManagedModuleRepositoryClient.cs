@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -43,7 +44,7 @@ public sealed partial class ManagedModuleRepositoryClient
     {
         _logger = logger ?? new NullLogger();
         _options = options ?? new ManagedModuleRepositoryClientOptions();
-        _httpClient = httpClient ?? new HttpClient(CreateDefaultHttpMessageHandler(_options));
+        _httpClient = httpClient ?? CreateDefaultHttpClient(_options);
         _packageReader = packageReader ?? new ManagedModulePackageReader();
     }
 
@@ -82,14 +83,14 @@ public sealed partial class ManagedModuleRepositoryClient
                 includePrerelease,
                 credential,
                 cancellationToken,
-                () => GetNuGetVersionsWithPowerShellGalleryReadApiAsync(repository, packageId, includePrerelease, credential, cancellationToken)).ConfigureAwait(false),
+                token => GetNuGetVersionsWithPowerShellGalleryReadApiAsync(repository, packageId, includePrerelease, credential, token)).ConfigureAwait(false),
             ManagedModuleRepositoryKind.NuGetV2 => await ExecuteCoalescedVersionQueryAsync(
                 repository,
                 packageId,
                 includePrerelease,
                 credential,
                 cancellationToken,
-                () => GetNuGetV2VersionsAsync(repository, packageId, includePrerelease, credential, cancellationToken)).ConfigureAwait(false),
+                token => GetNuGetV2VersionsAsync(repository, packageId, includePrerelease, credential, token)).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
     }
@@ -124,14 +125,14 @@ public sealed partial class ManagedModuleRepositoryClient
                 includePrerelease,
                 credential,
                 cancellationToken,
-                () => GetLatestNuGetVersionWithPowerShellGalleryReadApiAsync(repository, packageId, includePrerelease, credential, cancellationToken)).ConfigureAwait(false),
+                token => GetLatestNuGetVersionWithPowerShellGalleryReadApiAsync(repository, packageId, includePrerelease, credential, token)).ConfigureAwait(false),
             ManagedModuleRepositoryKind.NuGetV2 => await ExecuteCoalescedLatestVersionQueryAsync(
                 repository,
                 packageId,
                 includePrerelease,
                 credential,
                 cancellationToken,
-                () => GetLatestNuGetV2VersionAsync(repository, packageId, includePrerelease, credential, cancellationToken)).ConfigureAwait(false),
+                token => GetLatestNuGetV2VersionAsync(repository, packageId, includePrerelease, credential, token)).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
     }
@@ -169,7 +170,7 @@ public sealed partial class ManagedModuleRepositoryClient
                 take,
                 credential,
                 cancellationToken,
-                () => SearchNuGetPackagesWithPowerShellGalleryReadApiAsync(repository, query, includePrerelease, credential, take, cancellationToken)).ConfigureAwait(false),
+                token => SearchNuGetPackagesWithPowerShellGalleryReadApiAsync(repository, query, includePrerelease, credential, take, token)).ConfigureAwait(false),
             ManagedModuleRepositoryKind.NuGetV2 => await ExecuteCoalescedSearchQueryAsync(
                 repository,
                 query,
@@ -177,7 +178,7 @@ public sealed partial class ManagedModuleRepositoryClient
                 take,
                 credential,
                 cancellationToken,
-                () => SearchNuGetV2PackagesAsync(repository, query, includePrerelease, credential, take, cancellationToken)).ConfigureAwait(false),
+                token => SearchNuGetV2PackagesAsync(repository, query, includePrerelease, credential, take, token)).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
     }
@@ -229,6 +230,7 @@ public sealed partial class ManagedModuleRepositoryClient
                 ManagedModuleRepositoryKind.NuGetV2 => await DownloadNuGetV2PackageAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false),
                 _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
             };
+            result.RequestCount = downloadRequestScope.Count;
             result.RedirectCount = downloadRequestScope.RedirectCount;
             return result;
         }
@@ -481,7 +483,8 @@ public sealed partial class ManagedModuleRepositoryClient
                 PackageSource = file,
                 IsPrerelease = metadata.IsPrerelease,
                 License = metadata.License,
-                RequireLicenseAcceptance = metadata.RequireLicenseAcceptance
+                RequireLicenseAcceptance = metadata.RequireLicenseAcceptance,
+                Dependencies = metadata.Dependencies
             });
         }
 
@@ -974,6 +977,10 @@ public sealed partial class ManagedModuleRepositoryClient
     private static HttpRequestMessage CreateRequest(HttpMethod method, Uri uri, RepositoryCredential? credential, string accept)
     {
         var request = new HttpRequestMessage(method, uri);
+#if !NET472
+        request.Version = HttpVersion.Version20;
+        request.VersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+#endif
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(accept));
         request.Headers.UserAgent.ParseAdd("PowerForge-ManagedModule/1.0");
         ApplyCredential(request, credential);
@@ -1076,8 +1083,42 @@ public sealed partial class ManagedModuleRepositoryClient
             Listed = !item.TryGetProperty("listed", out var listedElement) || listedElement.ValueKind != JsonValueKind.False,
             License = ReadOptionalString(item, "licenseExpression") ??
                       ReadOptionalString(item, "licenseUrl"),
-            RequireLicenseAcceptance = ReadOptionalBoolean(item, "requireLicenseAcceptance")
+            RequireLicenseAcceptance = ReadOptionalBoolean(item, "requireLicenseAcceptance"),
+            Dependencies = ReadSearchDependencies(item)
         };
+    }
+
+    private static IReadOnlyList<ManagedModuleDependencyInfo> ReadSearchDependencies(JsonElement item)
+    {
+        if (!item.TryGetProperty("dependencyGroups", out var groups) || groups.ValueKind != JsonValueKind.Array)
+            return Array.Empty<ManagedModuleDependencyInfo>();
+
+        var dependencies = new List<ManagedModuleDependencyInfo>();
+        foreach (var group in groups.EnumerateArray())
+        {
+            var targetFramework = ReadOptionalString(group, "targetFramework");
+            if (!group.TryGetProperty("dependencies", out var dependencyItems) ||
+                dependencyItems.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var dependency in dependencyItems.EnumerateArray())
+            {
+                var id = ReadOptionalString(dependency, "id");
+                if (string.IsNullOrWhiteSpace(id))
+                    continue;
+
+                dependencies.Add(new ManagedModuleDependencyInfo
+                {
+                    Id = id!,
+                    VersionRange = ReadOptionalString(dependency, "range"),
+                    TargetFramework = targetFramework
+                });
+            }
+        }
+
+        return dependencies.Count == 0 ? Array.Empty<ManagedModuleDependencyInfo>() : dependencies;
     }
 
     private static string? ReadSearchVersion(JsonElement item)

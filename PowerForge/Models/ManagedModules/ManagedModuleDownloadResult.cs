@@ -36,6 +36,11 @@ public sealed class ManagedModuleDownloadResult
     public long BytesWritten { get; set; }
 
     /// <summary>
+    /// Number of repository HTTP request attempts used while delivering this package.
+    /// </summary>
+    public long RequestCount { get; set; }
+
+    /// <summary>
     /// Number of HTTP redirects followed while delivering this package.
     /// </summary>
     public long RedirectCount { get; set; }

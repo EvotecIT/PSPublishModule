@@ -109,6 +109,12 @@ public sealed partial class ManagedModuleInstallService
         }
     }
 
+    private static IDisposable AcquirePromotionLock(
+        string moduleRoot,
+        CancellationToken cancellationToken,
+        out TimeSpan waitElapsed)
+        => AcquireInstallLock(moduleRoot, ".promotion", cancellationToken, out waitElapsed);
+
     private static void RestoreBackup(string modulePath, string? backupPath)
     {
         if (backupPath is null || !Directory.Exists(backupPath))

@@ -145,6 +145,36 @@ public sealed class ManagedModuleDependencyInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_falls_back_to_version_list_when_latest_dependency_lookup_is_empty()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var handler = new EmptyLatestDependencyFeedHandler();
+        using var httpClient = new HttpClient(handler);
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), httpClient);
+        var service = new ManagedModuleInstallService(new NullLogger(), repositoryClient);
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository(
+                "Gallery",
+                "https://example.test/api/v2",
+                ManagedModuleRepositoryKind.NuGetV2),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.Equal("Company.Core", dependency.Name);
+        Assert.Equal("1.2.0", dependency.Version);
+        Assert.Equal("1.0.0", dependency.DependencyVersionRange);
+        Assert.True(handler.LatestQueryCount >= 1);
+        Assert.True(handler.VersionQueryCount >= 1);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "1.2.0", "Company.Core.psd1")));
+    }
+
+    [Fact]
     public async Task InstallAsync_keeps_parallel_dependency_request_counts_scoped()
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -212,6 +242,7 @@ public sealed class ManagedModuleDependencyInstallServiceTests
         using var moduleRoot = new TemporaryDirectory();
         using var handler = new RootDependencyPrewarmFeedHandler();
         using var httpClient = new HttpClient(handler);
+        using var cancellation = new CancellationTokenSource();
         var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), httpClient);
         var service = new ManagedModuleInstallService(new NullLogger(), repositoryClient);
 
@@ -222,7 +253,7 @@ public sealed class ManagedModuleDependencyInstallServiceTests
             Version = "1.0.0",
             Scope = ManagedModuleInstallScope.Custom,
             ModuleRoot = moduleRoot.Path
-        });
+        }, cancellation.Token);
 
         var dependency = Assert.Single(result.DependencyResults);
         Assert.Equal("Company.Core", dependency.Name);
@@ -346,6 +377,81 @@ public sealed class ManagedModuleDependencyInstallServiceTests
             {
                 Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
             };
+
+        private static HttpResponseMessage Package(string id, string version, IReadOnlyList<TestDependency>? dependencies)
+            => new(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(CreatePackageBytes(id, version, dependencies))
+            };
+
+        private static byte[] CreatePackageBytes(string id, string version, IReadOnlyList<TestDependency>? dependencies)
+        {
+            using var directory = new TemporaryDirectory();
+            var packagePath = Path.Combine(directory.Path, id + "." + version + ".nupkg");
+            TestPackageFactory.Create(
+                packagePath,
+                id,
+                version,
+                dependencies,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [id + ".psd1"] = "@{ ModuleVersion = '" + version + "' }"
+                });
+            return File.ReadAllBytes(packagePath);
+        }
+    }
+
+    private sealed class EmptyLatestDependencyFeedHandler : HttpMessageHandler
+    {
+        private int _latestQueryCount;
+        private int _versionQueryCount;
+
+        public int LatestQueryCount => System.Threading.Volatile.Read(ref _latestQueryCount);
+
+        public int VersionQueryCount => System.Threading.Volatile.Read(ref _versionQueryCount);
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
+            if (uri.Contains("/FindPackagesById()", StringComparison.OrdinalIgnoreCase) &&
+                uri.Contains("Company.Core", StringComparison.OrdinalIgnoreCase) &&
+                uri.Contains("$filter=IsLatestVersion", StringComparison.OrdinalIgnoreCase))
+            {
+                System.Threading.Interlocked.Increment(ref _latestQueryCount);
+                return Task.FromResult(XmlFeed());
+            }
+
+            if (uri.Contains("/FindPackagesById()", StringComparison.OrdinalIgnoreCase) &&
+                uri.Contains("Company.Core", StringComparison.OrdinalIgnoreCase))
+            {
+                System.Threading.Interlocked.Increment(ref _versionQueryCount);
+                return Task.FromResult(XmlFeed(
+                    XmlEntry("Company.Core", "1.0.0"),
+                    XmlEntry("Company.Core", "1.2.0")));
+            }
+
+            if (uri == "https://example.test/api/v2/package/Company.Tools/1.0.0")
+                return Task.FromResult(Package("Company.Tools", "1.0.0", new[] { new TestDependency("Company.Core", "1.0.0", null) }));
+
+            if (uri == "https://example.test/api/v2/package/Company.Core/1.2.0")
+                return Task.FromResult(Package("Company.Core", "1.2.0", dependencies: null));
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+
+        private static HttpResponseMessage XmlFeed(params string[] entries)
+            => new(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\">" +
+                    string.Concat(entries) +
+                    "</feed>",
+                    System.Text.Encoding.UTF8,
+                    "application/xml")
+            };
+
+        private static string XmlEntry(string id, string version)
+            => "<entry><d:Id>" + id + "</d:Id><d:Version>" + version + "</d:Version><d:Listed>true</d:Listed></entry>";
 
         private static HttpResponseMessage Package(string id, string version, IReadOnlyList<TestDependency>? dependencies)
             => new(HttpStatusCode.OK)

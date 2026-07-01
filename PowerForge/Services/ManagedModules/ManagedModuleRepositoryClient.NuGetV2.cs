@@ -257,6 +257,7 @@ public sealed partial class ManagedModuleRepositoryClient
         var trimmedVersion = version!.Trim();
         var license = ReadNuGetV2String(entry, data, "LicenseExpression") ??
                       ReadNuGetV2String(entry, data, "LicenseUrl");
+        var dependencies = ReadNuGetV2Dependencies(entry, data);
         return new ManagedModuleVersionInfo
         {
             Name = trimmedId,
@@ -267,7 +268,8 @@ public sealed partial class ManagedModuleRepositoryClient
             IsPrerelease = ManagedModuleVersionComparer.IsPrerelease(trimmedVersion),
             Listed = ReadNuGetV2Listed(entry, data),
             License = license,
-            RequireLicenseAcceptance = ReadNuGetV2Boolean(entry, data, "RequireLicenseAcceptance")
+            RequireLicenseAcceptance = ReadNuGetV2Boolean(entry, data, "RequireLicenseAcceptance"),
+            Dependencies = dependencies
         };
     }
 
@@ -284,6 +286,30 @@ public sealed partial class ManagedModuleRepositoryClient
     {
         var value = ReadNuGetV2String(entry, data, "Listed");
         return !bool.TryParse(value, out var parsed) || parsed;
+    }
+
+    private static IReadOnlyList<ManagedModuleDependencyInfo> ReadNuGetV2Dependencies(XElement entry, XNamespace data)
+    {
+        var value = ReadNuGetV2String(entry, data, "Dependencies");
+        if (string.IsNullOrWhiteSpace(value))
+            return Array.Empty<ManagedModuleDependencyInfo>();
+
+        var dependencies = new List<ManagedModuleDependencyInfo>();
+        foreach (var dependencyText in value!.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = dependencyText.Split(new[] { ':' }, 3);
+            if (parts.Length == 0 || string.IsNullOrWhiteSpace(parts[0]))
+                continue;
+
+            dependencies.Add(new ManagedModuleDependencyInfo
+            {
+                Id = parts[0].Trim(),
+                VersionRange = parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]) ? parts[1].Trim() : null,
+                TargetFramework = parts.Length > 2 && !string.IsNullOrWhiteSpace(parts[2]) ? parts[2].Trim() : null
+            });
+        }
+
+        return dependencies.Count == 0 ? Array.Empty<ManagedModuleDependencyInfo>() : dependencies;
     }
 
     private static Uri BuildNuGetV2PackageUri(string source, string packageId, string version)

@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -25,7 +26,7 @@ namespace PSPublishModule;
 /// </example>
 [Cmdlet(VerbsData.Update, "ManagedModule", SupportsShouldProcess = true)]
 [OutputType(typeof(ManagedModuleUpdateResult), typeof(ManagedModuleUpdatePlan))]
-public sealed class UpdateManagedModuleCommand : PSCmdlet
+public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
 {
     /// <summary>Module names to update.</summary>
     [Parameter(Position = 0, ValueFromPipelineByPropertyName = true)]
@@ -212,9 +213,10 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
     public SwitchParameter ShowSummary { get; set; }
 
     /// <summary>Updates requested modules.</summary>
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         var moduleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot);
+        var packageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory);
         var repository = ManagedModuleCommandSupport.CreateRepository(
             this,
             RepositoryName,
@@ -253,7 +255,7 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
                     Scope = targetScope,
                     ShellEdition = ShellEdition,
                     ModuleRoot = moduleRoot,
-                    PackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
+                    PackageCacheDirectory = packageCacheDirectory,
                     DependencyConcurrency = DependencyConcurrency,
                     ExpectedPackageSha256 = ExpectedPackageSha256,
                     TrustPolicy = trustPolicy,
@@ -271,7 +273,7 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
 
                 if (Plan.IsPresent)
                 {
-                    var plan = service.PlanUpdateAsync(request).GetAwaiter().GetResult();
+                    var plan = await service.PlanUpdateAsync(request, CancelToken).ConfigureAwait(false);
                     WriteObject(plan);
                     if (ShowSummary.IsPresent)
                         ManagedModuleSummaryWriter.Write(plan);
@@ -281,7 +283,7 @@ public sealed class UpdateManagedModuleCommand : PSCmdlet
                 if (!ShouldProcess(moduleName, $"Update managed module from repository '{repository.Name}'"))
                     continue;
 
-                var result = service.UpdateAsync(request).GetAwaiter().GetResult();
+                var result = await service.UpdateAsync(request, CancelToken).ConfigureAwait(false);
 
                 WriteObject(result);
                 if (ShowSummary.IsPresent)

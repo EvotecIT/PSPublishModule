@@ -11,12 +11,13 @@ public sealed class ManagedModuleRepositoryClientCoalescingTests
     {
         using var handler = new CoalescingHandler();
         using var client = new HttpClient(handler);
+        using var cancellation = new CancellationTokenSource();
         var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
         var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
 
-        var first = repositoryClient.GetVersionsAsync(repository, "Company.Tools");
+        var first = repositoryClient.GetVersionsAsync(repository, "Company.Tools", cancellationToken: cancellation.Token);
         await handler.WaitForVersionRequestAsync();
-        var second = repositoryClient.GetVersionsAsync(repository, "Company.Tools");
+        var second = repositoryClient.GetVersionsAsync(repository, "Company.Tools", cancellationToken: cancellation.Token);
         handler.ReleaseVersionRequest();
         await Task.WhenAll(first, second);
         var firstResult = await first;
@@ -26,6 +27,47 @@ public sealed class ManagedModuleRepositoryClientCoalescingTests
         Assert.Equal(new[] { "1.0.0", "1.1.0" }, secondResult.Select(version => version.Version));
         Assert.Equal(1, handler.Count("https://example.test/v3/index.json"));
         Assert.Equal(1, handler.Count("https://example.test/packages/company.tools/index.json"));
+    }
+
+    [Fact]
+    public async Task GetVersionsAsync_does_not_cancel_shared_query_when_first_waiter_cancels()
+    {
+        using var handler = new CoalescingHandler();
+        using var client = new HttpClient(handler);
+        using var firstCancellation = new CancellationTokenSource();
+        using var secondCancellation = new CancellationTokenSource();
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        var first = repositoryClient.GetVersionsAsync(repository, "Company.Tools", cancellationToken: firstCancellation.Token);
+        await handler.WaitForVersionRequestAsync();
+        var second = repositoryClient.GetVersionsAsync(repository, "Company.Tools", cancellationToken: secondCancellation.Token);
+        firstCancellation.Cancel();
+        handler.ReleaseVersionRequest();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => first);
+        var secondResult = await second;
+
+        Assert.Equal(new[] { "1.0.0", "1.1.0" }, secondResult.Select(version => version.Version));
+        Assert.Equal(1, handler.Count("https://example.test/v3/index.json"));
+        Assert.Equal(1, handler.Count("https://example.test/packages/company.tools/index.json"));
+    }
+
+    [Fact]
+    public async Task GetVersionsAsync_does_not_start_query_for_already_canceled_waiter()
+    {
+        using var handler = new CoalescingHandler();
+        using var client = new HttpClient(handler);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            repositoryClient.GetVersionsAsync(repository, "Company.Tools", cancellationToken: cancellation.Token));
+
+        Assert.Equal(0, handler.Count("https://example.test/v3/index.json"));
+        Assert.Equal(0, handler.Count("https://example.test/packages/company.tools/index.json"));
     }
 
     [Fact]

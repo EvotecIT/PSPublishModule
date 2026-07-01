@@ -10,7 +10,10 @@ internal sealed class ManagedModuleArchiveExtractor
     private static readonly string[] PackageMetadataPrefixes = { "_rels/", "package/services/metadata/" };
     private static readonly string[] PackageMetadataFiles = { "[Content_Types].xml", ".signature.p7s" };
 
-    public ManagedModuleArchiveExtractionResult ExtractPackage(string packagePath, string destinationPath)
+    public ManagedModuleArchiveExtractionResult ExtractPackage(
+        string packagePath,
+        string destinationPath,
+        string? packageId = null)
     {
         if (string.IsNullOrWhiteSpace(packagePath))
             throw new ArgumentException("Package path is required.", nameof(packagePath));
@@ -28,7 +31,7 @@ internal sealed class ManagedModuleArchiveExtractor
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         using var archive = ZipFile.OpenRead(packagePath);
-        var packageRoot = ResolvePackageRootFolder(archive);
+        var packageRoot = ResolvePackageRootFolder(archive, packageId);
         foreach (var entry in archive.Entries)
         {
             var normalized = Normalize(entry.FullName);
@@ -64,9 +67,16 @@ internal sealed class ManagedModuleArchiveExtractor
     }
 
 #if !NET472
+    public Task<ManagedModuleArchiveExtractionResult> ExtractPackageAsync(
+        Stream packageStream,
+        string destinationPath,
+        CancellationToken cancellationToken)
+        => ExtractPackageAsync(packageStream, destinationPath, packageId: null, cancellationToken);
+
     public async Task<ManagedModuleArchiveExtractionResult> ExtractPackageAsync(
         Stream packageStream,
         string destinationPath,
+        string? packageId,
         CancellationToken cancellationToken)
     {
         if (packageStream is null)
@@ -85,7 +95,7 @@ internal sealed class ManagedModuleArchiveExtractor
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read, leaveOpen: true);
-        var packageRoot = ResolvePackageRootFolder(archive);
+        var packageRoot = ResolvePackageRootFolder(archive, packageId);
         foreach (var entry in archive.Entries)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -131,9 +141,9 @@ internal sealed class ManagedModuleArchiveExtractor
     private static string Normalize(string path)
         => path.Replace('\\', '/').Trim('/');
 
-    private static string? ResolvePackageRootFolder(ZipArchive archive)
+    private static string? ResolvePackageRootFolder(ZipArchive archive, string? packageId)
     {
-        var packageId = ReadPackageId(archive);
+        packageId = string.IsNullOrWhiteSpace(packageId) ? ReadPackageId(archive) : packageId!.Trim();
         if (string.IsNullOrWhiteSpace(packageId))
             return null;
 

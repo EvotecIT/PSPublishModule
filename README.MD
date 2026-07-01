@@ -334,13 +334,16 @@ Repair-ManagedModule -Latest -Repository PSGallery -ShowSummary
 ### Benchmarks
 
 The managed module benchmark answers a narrow question: how long does each
-tool take to run the public command a user would normally run? The script in
-[Benchmarks/ManagedModules](Benchmarks/ManagedModules) measures `Find`,
-`Install`, and `Save` for PSScriptAnalyzer, Microsoft.Graph.Authentication,
-Microsoft.Graph, Az.Accounts, and Az against Managed, ModuleFast,
-PSResourceGet, and PowerShellGet where an equivalent command exists. Repair is
-not included because the other tools do not expose an equivalent module-estate
-repair command.
+tool take to run the public command a user would normally run? The default
+script profile in [Benchmarks/ManagedModules](Benchmarks/ManagedModules) now
+focuses on Managed versus ModuleFast install rows because those are the useful
+throughput race while tuning the engine. The older `Full` profile still
+measures `Find`, `Install`, and `Save` for PSScriptAnalyzer,
+Microsoft.Graph.Authentication, Microsoft.Graph, Az.Accounts, and Az against
+Managed, ModuleFast, PSResourceGet, and PowerShellGet where an equivalent
+command exists, but it is an explicit baseline run rather than the normal fast
+loop. Repair is not included because the other tools do not expose an
+equivalent module-estate repair command.
 
 Managed is the `1.00x` baseline for each completed row. Other values show how
 many times slower that tool was for the same scenario, with measured time in
@@ -384,6 +387,14 @@ dependency graph, ModuleFast can be very fast. When the mirror is missing a
 dependency that the official Gallery resolves, the ModuleFast row should be
 treated as a source/index miss rather than a managed engine failure.
 
+ModuleFast implementation provenance matters too. The current PR table compares
+against Justin Grote's refreshed development C# branch by passing
+`-ModuleFastModulePath` to the benchmark wrapper. If that parameter is omitted,
+the run uses whatever `Install-ModuleFast` command is visible in the benchmark
+host, usually the installed PSGallery/user-path ModuleFast module. The CSV
+records `ModuleFastSource`, `ModuleFastModulePath`, `EngineModuleBase`, and
+`EngineModuleVersion` so those runs stay separate.
+
 The comparison is therefore split into capability and timing:
 
 | Tool | Source path used here | Equivalent rows | Integrity and safety posture |
@@ -404,53 +415,32 @@ importing the small CSV result, and deleting the account/profile afterward. Use
 `-SkipTemporaryUserNativeInstall` only when a machine cannot create a temporary
 local benchmark account.
 
-The full table below was refreshed on June 30, 2026 from one complete matrix
-run on PowerShell 7 and Windows PowerShell 5.1. The PowerShell 7
-PSScriptAnalyzer find row also includes three extra Managed repeats after one
-transient first-result outlier; when repeated rows exist, the README updater
-writes the median timing for that scenario/tool row.
+The focused table below was refreshed on July 1, 2026 from the active
+development comparison: the managed C# engine from this worktree against the
+refreshed C# ModuleFast branch at commit `fa2f2d0`. Managed uses the official
+PowerShell Gallery package path, while ModuleFast is passed
+`https://pwsh.gallery/index.json`. That makes this the current install
+throughput race, not a PSResourceGet/PowerShellGet provider baseline.
+Provider-backed rows are intentionally omitted from the normal tuning loop now
+because those 10x/30x cases are already understood and make iteration much
+slower. Re-run the `Full` profile only when a fresh compatibility baseline is
+needed.
 
 <!-- managed-module-benchmark-table:start -->
-| Scenario | Host | Operation | Managed | ModuleFast | PSResourceGet | PowerShellGet | Result |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Az.Accounts | PowerShell 7 | Find | 1.00x (0.19s) | NotEquivalent | 1.67x (0.32s) | 2.91x (0.55s) | Managed fastest |
-| Az.Accounts | PowerShell 7 | Install | 1.00x (0.43s) | 1.80x (0.77s) | 4.05x (1.73s) | 10.23x (4.37s) | Managed fastest |
-| Az.Accounts | PowerShell 7 | Save | 1.00x (0.59s) | NotEquivalent | 4.59x (2.70s) | 8.32x (4.90s) | Managed fastest |
-| Az.Accounts | Windows PowerShell 5.1 | Find | 1.00x (0.18s) | NotEquivalent | 1.64x (0.29s) | 5.19x (0.92s) | Managed fastest |
-| Az.Accounts | Windows PowerShell 5.1 | Install | 1.00x (0.63s) | NotAvailable | 2.47x (1.55s) | 5.85x (3.66s) | Managed fastest |
-| Az.Accounts | Windows PowerShell 5.1 | Save | 1.00x (0.75s) | NotEquivalent | 2.24x (1.68s) | 12.13x (9.07s) | Managed fastest |
-| Az | PowerShell 7 | Find | 1.00x (0.18s) | NotEquivalent | 1.89x (0.33s) | 3.11x (0.55s) | Managed fastest |
-| Az | PowerShell 7 | Install | 1.00x (16.06s) | Failed | 9.92x (159.21s) | 7.75x (124.51s) | Managed fastest |
-| Az | PowerShell 7 | Save | 1.00x (7.82s) | NotEquivalent | 20.66x (161.60s) | 18.83x (147.31s) | Managed fastest |
-| Az | Windows PowerShell 5.1 | Find | 1.00x (0.27s) | NotEquivalent | 1.55x (0.42s) | 4.14x (1.11s) | Managed fastest |
-| Az | Windows PowerShell 5.1 | Install | 1.00x (8.29s) | NotAvailable | 16.74x (138.79s) | 18.04x (149.54s) | Managed fastest |
-| Az | Windows PowerShell 5.1 | Save | 1.00x (19.26s) | NotEquivalent | 7.06x (136.04s) | 6.76x (130.28s) | Managed fastest |
-| Graph.Authentication | PowerShell 7 | Find | 1.00x (0.20s) | NotEquivalent | 6.06x (1.19s) | 2.83x (0.55s) | Managed fastest |
-| Graph.Authentication | PowerShell 7 | Install | 1.00x (0.51s) | 1.79x (0.91s) | 2.66x (1.34s) | 8.46x (4.28s) | Managed fastest |
-| Graph.Authentication | PowerShell 7 | Save | 1.00x (0.61s) | NotEquivalent | 12.77x (7.85s) | 24.43x (15.02s) | Managed fastest |
-| Graph.Authentication | Windows PowerShell 5.1 | Find | 1.00x (0.27s) | NotEquivalent | 1.72x (0.46s) | 2.90x (0.78s) | Managed fastest |
-| Graph.Authentication | Windows PowerShell 5.1 | Install | 1.00x (0.71s) | NotAvailable | 2.87x (2.05s) | 4.61x (3.30s) | Managed fastest |
-| Graph.Authentication | Windows PowerShell 5.1 | Save | 1.00x (0.68s) | NotEquivalent | 3.02x (2.06s) | 5.10x (3.48s) | Managed fastest |
-| Graph | PowerShell 7 | Find | 1.00x (0.24s) | NotEquivalent | 4.59x (1.10s) | 2.49x (0.59s) | Managed fastest |
-| Graph | PowerShell 7 | Install | 1.00x (6.60s) | 0.88x (5.81s) | 8.10x (53.46s) | 11.19x (73.84s) | Managed slower than ModuleFast |
-| Graph | PowerShell 7 | Save | 1.00x (3.55s) | NotEquivalent | 92.31x (327.79s) | 53.15x (188.73s) | Managed fastest |
-| Graph | Windows PowerShell 5.1 | Find | 1.00x (0.31s) | NotEquivalent | 2.56x (0.80s) | 3.69x (1.16s) | Managed fastest |
-| Graph | Windows PowerShell 5.1 | Install | 1.00x (11.54s) | NotAvailable | 4.93x (56.87s) | 6.88x (79.40s) | Managed fastest |
-| Graph | Windows PowerShell 5.1 | Save | 1.00x (4.65s) | NotEquivalent | 15.22x (70.76s) | 21.69x (100.80s) | Managed fastest |
-| PSScriptAnalyzer | PowerShell 7 | Find | 1.00x (0.65s) | NotEquivalent | 1.30x (0.84s) | 7.14x (4.62s) | Managed fastest |
-| PSScriptAnalyzer | PowerShell 7 | Install | 1.00x (0.82s) | 2.71x (2.23s) | 2.70x (2.23s) | 14.42x (11.90s) | Managed fastest |
-| PSScriptAnalyzer | PowerShell 7 | Save | 1.00x (1.24s) | NotEquivalent | 5.94x (7.35s) | 8.87x (10.97s) | Managed fastest |
-| PSScriptAnalyzer | Windows PowerShell 5.1 | Find | 1.00x (0.89s) | NotEquivalent | 1.56x (1.39s) | 3.50x (3.12s) | Managed fastest |
-| PSScriptAnalyzer | Windows PowerShell 5.1 | Install | 1.00x (1.58s) | NotAvailable | 2.71x (4.27s) | 4.51x (7.12s) | Managed fastest |
-| PSScriptAnalyzer | Windows PowerShell 5.1 | Save | 1.00x (1.25s) | NotEquivalent | 2.93x (3.67s) | 3.21x (4.02s) | Managed fastest |
+| Scenario | Host | Operation | Managed | ModuleFast | Result |
+| --- | --- | --- | --- | --- | --- |
+| Az.Accounts | PowerShell 7 | Install | 1.00x (0.83s) | 1.12x (0.93s) | Managed fastest |
+| Az | PowerShell 7 | Install | 1.00x (5.19s) | Failed | Managed only successful |
+| Graph.Authentication | PowerShell 7 | Install | 1.00x (2.48s) | 0.41x (1.01s) | Managed slower than ModuleFast |
+| Graph | PowerShell 7 | Install | 1.00x (6.58s) | 0.84x (5.55s) | Managed slower than ModuleFast |
+| PSScriptAnalyzer | PowerShell 7 | Install | 1.00x (2.15s) | 0.92x (1.97s) | Managed slower than ModuleFast |
 <!-- managed-module-benchmark-table:end -->
 
 Refresh the table with:
 
 ```powershell
-pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -BenchmarkHost PowerShell7 -RepeatCount 1
-pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -BenchmarkHost WindowsPowerShell -RepeatCount 1 -Append
-pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Update-ManagedModuleBenchmarkReadme.ps1 -ResultPath .\Ignore\Benchmarks\ManagedModules\managed-module-benchmark.csv
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -BenchmarkHost PowerShell7 -RepeatCount 1 -ModuleFastModulePath .\Ignore\External\ModuleFast-csharp\ModuleFast.psd1 -OutputPath .\Ignore\Benchmarks\ManagedModules\managed-vs-modulefast-dev.csv -OutputRoot .\Ignore\Benchmarks\ManagedModules\ManagedVsModuleFastDev
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Update-ManagedModuleBenchmarkReadme.ps1 -ResultPath .\Ignore\Benchmarks\ManagedModules\managed-vs-modulefast-dev.csv
 ```
 
 Native `Install-Module` and `Install-PSResource` install into the user module

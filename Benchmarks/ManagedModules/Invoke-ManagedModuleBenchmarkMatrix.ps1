@@ -1,5 +1,8 @@
 #requires -Version 5.1
 param(
+    [ValidateSet('Full', 'ManagedVsModuleFast')]
+    [string] $ComparisonProfile = 'ManagedVsModuleFast',
+
     [ValidateSet('SingleModule', 'GraphAuthentication', 'Graph', 'AzAccounts', 'Az')]
     [string[]] $ScenarioName = @('SingleModule', 'GraphAuthentication', 'Graph', 'AzAccounts', 'Az'),
 
@@ -7,7 +10,7 @@ param(
     [string[]] $Operation = @('Find', 'Install', 'Save'),
 
     [ValidateSet('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')]
-    [string[]] $Engine = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet'),
+    [string[]] $Engine = @(),
 
     [int] $RepeatCount = 1,
 
@@ -19,7 +22,9 @@ param(
 
     [string] $RepositoryUri = 'https://www.powershellgallery.com/api/v2',
 
-    [string] $ModuleFastSource,
+    [string] $ModuleFastSource = 'https://pwsh.gallery/index.json',
+
+    [string] $ModuleFastModulePath = '',
 
     [string] $ManagedModuleBinary,
 
@@ -43,28 +48,73 @@ function Test-IsWindowsAdministrator {
     $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+function Get-PowerShellExecutableVersion {
+    param([string] $Path)
+
+    try {
+        $versionText = & $Path -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>$null |
+            Select-Object -First 1
+        if ([string]::IsNullOrWhiteSpace($versionText)) {
+            return $null
+        }
+
+        return [version]$versionText
+    } catch {
+        return $null
+    }
+}
+
+function Resolve-PowerShell7Executable {
+    $candidatePaths = New-Object System.Collections.Generic.List[string]
+    foreach ($command in @(Get-Command pwsh -All -ErrorAction SilentlyContinue)) {
+        if (-not [string]::IsNullOrWhiteSpace($command.Source)) {
+            $candidatePaths.Add($command.Source)
+        }
+    }
+
+    if (Test-Path -LiteralPath 'C:\Program Files\PowerShell\7\pwsh.exe') {
+        $candidatePaths.Add('C:\Program Files\PowerShell\7\pwsh.exe')
+    }
+
+    $candidates = @($candidatePaths |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        Select-Object -Unique |
+        ForEach-Object {
+            $version = Get-PowerShellExecutableVersion -Path $_
+            if ($version -and $version.Major -ge 7) {
+                [pscustomobject]@{
+                    Path = $_
+                    Version = $version
+                }
+            }
+        })
+
+    if ($candidates.Count -gt 0) {
+        return ($candidates | Sort-Object Version -Descending | Select-Object -First 1).Path
+    }
+
+    return (Get-Command pwsh -ErrorAction Stop).Source
+}
+
 function Resolve-BenchmarkHostExecutable {
     switch ($BenchmarkHost) {
         'WindowsPowerShell' {
             return "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"
         }
         'PowerShell7' {
-            if (Test-Path -LiteralPath 'C:\Program Files\PowerShell\7\pwsh.exe') {
-                return 'C:\Program Files\PowerShell\7\pwsh.exe'
-            }
-
-            return (Get-Command pwsh -ErrorAction Stop).Source
+            return Resolve-PowerShell7Executable
         }
         default {
             if ($PSVersionTable.PSEdition -eq 'Desktop') {
                 return (Join-Path $PSHOME 'powershell.exe')
             }
 
-            if (Test-Path -LiteralPath 'C:\Program Files\PowerShell\7\pwsh.exe') {
-                return 'C:\Program Files\PowerShell\7\pwsh.exe'
+            $currentPwsh = Join-Path $PSHOME 'pwsh.exe'
+            if (Test-Path -LiteralPath $currentPwsh) {
+                return $currentPwsh
             }
 
-            return (Get-Command pwsh -ErrorAction Stop).Source
+            return Resolve-PowerShell7Executable
         }
     }
 }
@@ -130,6 +180,7 @@ function New-MeasureCommand {
     $outputPathLiteral = ConvertTo-SingleQuotedLiteral $SelectedOutputPath
     $outputRootLiteral = ConvertTo-SingleQuotedLiteral $SelectedOutputRoot
     $moduleFastSourceLiteral = ConvertTo-SingleQuotedLiteral $ModuleFastSource
+    $moduleFastModulePathLiteral = ConvertTo-SingleQuotedLiteral $ModuleFastModulePath
     $managedModuleBinaryLiteral = ConvertTo-SingleQuotedLiteral $ManagedModuleBinary
     $appendSwitch = if ($AppendOutput.IsPresent) { ' -Append' } else { '' }
     $skipSwitch = if ($SkipNativeCurrentUserInstall.IsPresent) { ' -SkipNativeCurrentUserInstall' } else { '' }
@@ -143,6 +194,9 @@ function New-MeasureCommand {
     $command = "`$ErrorActionPreference = 'Stop'; $prefix& $measureLiteral -ScenarioName $scenarioLiteral -Operation $operationLiteral -Engine $engineLiteral -RepeatCount $RepeatCount -OutputPath $outputPathLiteral -OutputRoot $outputRootLiteral -Repository $repositoryLiteral -RepositoryUri $repositoryUriLiteral$appendSwitch$skipSwitch"
     if (-not [string]::IsNullOrWhiteSpace($ModuleFastSource)) {
         $command += " -ModuleFastSource $moduleFastSourceLiteral"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ModuleFastModulePath)) {
+        $command += " -ModuleFastModulePath $moduleFastModulePathLiteral"
     }
     if (-not [string]::IsNullOrWhiteSpace($ManagedModuleBinary)) {
         $command += " -ManagedModuleBinary $managedModuleBinaryLiteral"
@@ -262,6 +316,96 @@ function Join-BenchmarkOutputRoot {
     Join-Path $script:EffectiveOutputRoot $Leaf
 }
 
+function Get-CsvHeaderColumns {
+    param([string] $Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return @()
+    }
+
+    $reader = [System.IO.StreamReader]::new($Path)
+    try {
+        $headerLine = $reader.ReadLine()
+    } finally {
+        $reader.Dispose()
+    }
+
+    if ([string]::IsNullOrWhiteSpace($headerLine)) {
+        return @()
+    }
+
+    @($headerLine -split ',' | ForEach-Object {
+        $_.Trim().Trim('"').Replace('""', '"')
+    })
+}
+
+function Get-CsvRowColumns {
+    param([object[]] $Rows)
+
+    $columns = New-Object System.Collections.Generic.List[string]
+    foreach ($row in $Rows) {
+        foreach ($property in $row.PSObject.Properties) {
+            if (-not $columns.Contains($property.Name)) {
+                $columns.Add($property.Name)
+            }
+        }
+    }
+
+    $columns.ToArray()
+}
+
+function Join-CsvColumns {
+    param(
+        [string[]] $ExistingColumns,
+        [string[]] $NewColumns
+    )
+
+    $columns = New-Object System.Collections.Generic.List[string]
+    foreach ($column in @($ExistingColumns + $NewColumns)) {
+        if (-not [string]::IsNullOrWhiteSpace($column) -and -not $columns.Contains($column)) {
+            $columns.Add($column)
+        }
+    }
+
+    $columns.ToArray()
+}
+
+function Test-CsvColumnsEqual {
+    param(
+        [string[]] $Left,
+        [string[]] $Right
+    )
+
+    if ($Left.Count -ne $Right.Count) {
+        return $false
+    }
+
+    for ($index = 0; $index -lt $Left.Count; $index++) {
+        if (-not [string]::Equals($Left[$index], $Right[$index], [StringComparison]::Ordinal)) {
+            return $false
+        }
+    }
+
+    return $true
+}
+
+function ConvertTo-CsvRowsWithColumns {
+    param(
+        [object[]] $Rows,
+        [string[]] $Columns
+    )
+
+    foreach ($row in $Rows) {
+        $ordered = [ordered]@{}
+        foreach ($column in $Columns) {
+            $property = $row.PSObject.Properties[$column]
+            $ordered[$column] = if ($property) { $property.Value } else { $null }
+        }
+
+        [pscustomobject]$ordered
+    }
+}
+
 function Add-ResultCsv {
     param([string] $Path)
 
@@ -274,7 +418,22 @@ function Add-ResultCsv {
         return
     }
 
-    if ($Append.IsPresent -or (Test-Path -LiteralPath $OutputPath)) {
+    $outputExists = Test-Path -LiteralPath $OutputPath
+    if ($Append.IsPresent -or $outputExists) {
+        if ($outputExists) {
+            $existingColumns = Get-CsvHeaderColumns -Path $OutputPath
+            $newColumns = Get-CsvRowColumns -Rows $rows
+            if ($existingColumns.Count -gt 0 -and -not (Test-CsvColumnsEqual -Left $existingColumns -Right $newColumns)) {
+                $columns = Join-CsvColumns -ExistingColumns $existingColumns -NewColumns $newColumns
+                $existingRows = @(Import-Csv -LiteralPath $OutputPath)
+                @(
+                    ConvertTo-CsvRowsWithColumns -Rows $existingRows -Columns $columns
+                    ConvertTo-CsvRowsWithColumns -Rows $rows -Columns $columns
+                ) | Export-Csv -LiteralPath $OutputPath -NoTypeInformation
+                return
+            }
+        }
+
         $rows | Export-Csv -LiteralPath $OutputPath -NoTypeInformation -Append
     } else {
         $rows | Export-Csv -LiteralPath $OutputPath -NoTypeInformation
@@ -345,6 +504,18 @@ $script:BenchmarkHostExecutable = Resolve-BenchmarkHostExecutable
 $script:EffectiveOutputRoot = $OutputRoot
 if ([string]::IsNullOrWhiteSpace($script:EffectiveOutputRoot) -and $script:BenchmarkHostExecutable -notlike '*\WindowsPowerShell\*') {
     $script:EffectiveOutputRoot = Join-Path $PSScriptRoot '..\..\Ignore\Benchmarks\ManagedModules\Runs'
+}
+
+if ($ComparisonProfile -eq 'ManagedVsModuleFast') {
+    $Operation = @('Install')
+    if (-not $PSBoundParameters.ContainsKey('Engine') -or $Engine.Count -eq 0) {
+        $Engine = @('Managed', 'ModuleFast')
+    }
+    if ($BenchmarkHost -ne 'PowerShell7') {
+        Write-Warning "ManagedVsModuleFast compares ModuleFast on PowerShell 7; rerun with -BenchmarkHost PowerShell7 for a direct row."
+    }
+} elseif (-not $PSBoundParameters.ContainsKey('Engine') -or $Engine.Count -eq 0) {
+    $Engine = @('Managed', 'ModuleFast', 'PSResourceGet', 'PowerShellGet')
 }
 
 $safeOperations = @($Operation | Where-Object { $_ -ne 'Install' })

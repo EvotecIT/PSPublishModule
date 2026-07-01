@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Management.Automation;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -24,7 +25,7 @@ namespace PSPublishModule;
 /// </example>
 [Cmdlet(VerbsData.Save, "ManagedModule", SupportsShouldProcess = true)]
 [OutputType(typeof(ManagedModuleInstallResult), typeof(ManagedModuleInstallPlan))]
-public sealed class SaveManagedModuleCommand : PSCmdlet
+public sealed class SaveManagedModuleCommand : AsyncPSCmdlet
 {
     private readonly List<ManagedModuleInstallResult> _results = new();
 
@@ -175,9 +176,10 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
     public SwitchParameter ShowSummary { get; set; }
 
     /// <summary>Saves requested modules.</summary>
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         var moduleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, Path)!;
+        var packageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory);
         var repository = ManagedModuleCommandSupport.CreateRepository(
             this,
             RepositoryName,
@@ -204,7 +206,7 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
                 IncludePrerelease = Prerelease.IsPresent,
                 Scope = ManagedModuleInstallScope.Custom,
                 ModuleRoot = moduleRoot,
-                PackageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory),
+                PackageCacheDirectory = packageCacheDirectory,
                 DependencyConcurrency = DependencyConcurrency,
                 ExpectedPackageSha256 = ExpectedPackageSha256,
                 TrustPolicy = trustPolicy,
@@ -218,7 +220,7 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
 
             if (Plan.IsPresent)
             {
-                var plan = service.PlanInstallAsync(request).GetAwaiter().GetResult();
+                var plan = await service.PlanInstallAsync(request, CancelToken).ConfigureAwait(false);
                 WriteObject(plan);
                 if (ShowSummary.IsPresent)
                     ManagedModuleSummaryWriter.Write(plan);
@@ -228,7 +230,7 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
             if (!ShouldProcess(moduleName, $"Save managed module to '{moduleRoot}'"))
                 continue;
 
-            var result = service.InstallAsync(request).GetAwaiter().GetResult();
+            var result = await service.InstallAsync(request, CancelToken).ConfigureAwait(false);
             _results.Add(result);
 
             WriteObject(result);
@@ -238,15 +240,16 @@ public sealed class SaveManagedModuleCommand : PSCmdlet
     }
 
     /// <summary>Writes optional offline bundle metadata after all save results are available.</summary>
-    protected override void EndProcessing()
+    protected override Task EndProcessingAsync()
     {
         if (Plan.IsPresent || string.IsNullOrWhiteSpace(BundleMetadataPath) || _results.Count == 0)
-            return;
+            return Task.CompletedTask;
 
         var metadataPath = ManagedModuleCommandSupport.ResolveProviderPath(this, BundleMetadataPath);
         if (!ShouldProcess(metadataPath, "Write managed module bundle metadata"))
-            return;
+            return Task.CompletedTask;
 
         new ManagedModuleBundleMetadataWriter().Write(metadataPath!, _results);
+        return Task.CompletedTask;
     }
 }

@@ -9,6 +9,7 @@ public sealed class ManagedModuleDependencyConcurrencyTests
     [Fact]
     public void Managed_module_default_concurrency_scales_with_host_without_exceeding_benchmark_cap()
     {
+        Assert.Equal(96, ManagedModuleConcurrencyDefaults.MaximumDefaultConcurrency);
         var expected = Math.Min(
             ManagedModuleConcurrencyDefaults.MaximumDefaultConcurrency,
             Math.Max(16, Environment.ProcessorCount * 8));

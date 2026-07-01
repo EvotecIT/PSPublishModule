@@ -16,18 +16,18 @@ internal sealed class CmdletLogger : ILogger
         IsVerbose = isVerbose;
     }
 
-    public void Info(string message) => _cmdlet.WriteVerbose(message);
-    public void Success(string message) => _cmdlet.WriteVerbose(message);
+    public void Info(string message) => WriteVerbose(message);
+    public void Success(string message) => WriteVerbose(message);
     public void Warn(string message)
     {
-        if (_warningsAsVerbose) _cmdlet.WriteVerbose(message);
-        else _cmdlet.WriteWarning(message);
+        if (_warningsAsVerbose) WriteVerbose(message);
+        else WriteWarning(message);
     }
     public void Error(string message)
     {
         try
         {
-            _cmdlet.WriteError(new ErrorRecord(
+            WriteError(new ErrorRecord(
                 exception: new InvalidOperationException(message),
                 errorId: "PowerForgeError",
                 errorCategory: ErrorCategory.NotSpecified,
@@ -36,14 +36,38 @@ internal sealed class CmdletLogger : ILogger
         catch
         {
             // Best effort fallbacks; never throw from logging.
-            try { _cmdlet.WriteWarning(message); } catch { }
+            try { WriteWarning(message); } catch { }
         }
     }
     public void Verbose(string message)
     {
         if (!IsVerbose) return;
-        _cmdlet.WriteVerbose(message);
+        WriteVerbose(message);
     }
 
     public bool IsVerbose { get; }
+
+    private void WriteVerbose(string message)
+    {
+        if (_cmdlet is AsyncPSCmdlet asyncCmdlet)
+            asyncCmdlet.WriteVerbose(message);
+        else
+            _cmdlet.WriteVerbose(message);
+    }
+
+    private void WriteWarning(string message)
+    {
+        if (_cmdlet is AsyncPSCmdlet asyncCmdlet)
+            asyncCmdlet.WriteWarning(message);
+        else
+            _cmdlet.WriteWarning(message);
+    }
+
+    private void WriteError(ErrorRecord errorRecord)
+    {
+        if (_cmdlet is AsyncPSCmdlet asyncCmdlet)
+            asyncCmdlet.WriteError(errorRecord);
+        else
+            _cmdlet.WriteError(errorRecord);
+    }
 }

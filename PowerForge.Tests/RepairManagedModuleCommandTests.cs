@@ -479,6 +479,34 @@ public sealed class RepairManagedModuleCommandTests
     }
 
     [Fact]
+    public void RepairManagedModule_PrivatePlanDoesNotResolveMissingCredentialSecretFile()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var missingSecretPath = Path.Combine(moduleRoot.Path, "missing-feed-secret.txt");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("Name", new[] { "Company.Tools" })
+            .AddParameter("Version", "1.1.0")
+            .AddParameter("Repository", "CompanyModules")
+            .AddParameter("Transport", ModuleStateDeliveryTransport.PrivateModule)
+            .AddParameter("CredentialUserName", "build")
+            .AddParameter("CredentialSecretFilePath", missingSecretPath)
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.False(result.Apply.ExecutionRequested);
+        Assert.Empty(result.Apply.ExecutionResults);
+        Assert.Contains(result.Apply.Commands, command =>
+            string.Equals(command.CommandName, "Repair-ManagedModule", StringComparison.OrdinalIgnoreCase) &&
+            command.Arguments.Contains("-Transport"));
+    }
+
+    [Fact]
     public void RepairManagedModule_PathRepositoryPlansAgainstResolvedRepositoryName()
     {
         using var feed = new TemporaryDirectory();

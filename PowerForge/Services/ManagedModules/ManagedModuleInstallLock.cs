@@ -3,7 +3,7 @@ namespace PowerForge;
 internal sealed class ManagedModuleInstallLock : IDisposable
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(15);
 
     private readonly FileStream _stream;
 

@@ -2,6 +2,8 @@ namespace PowerForge;
 
 public sealed partial class ManagedModuleInstallService
 {
+    private const int SeedDependencyBeforeFanoutThreshold = 16;
+
     private void StartDependencyVersionSelectionPrewarm(
         ManagedModuleInstallRequest request,
         ManagedModulePackageMetadata? metadata,
@@ -10,8 +12,7 @@ public sealed partial class ManagedModuleInstallService
     {
         if (request.SkipDependencyCheck ||
             request.AuthenticodeCheck ||
-            request.Credential is not null ||
-            cancellationToken.CanBeCanceled)
+            request.Credential is not null)
         {
             return;
         }
@@ -91,16 +92,30 @@ public sealed partial class ManagedModuleInstallService
             return new[] { singleResult };
         }
 
-        var results = new ManagedModuleInstallResult[dependencies.Length];
         var concurrencyLimit = ResolveDependencyInstallConcurrency(request);
-        var concurrency = Math.Min(dependencies.Length, concurrencyLimit);
+        var results = new ManagedModuleInstallResult[dependencies.Length];
+        var fanoutStart = 0;
+
+        if (dependencies.Length >= SeedDependencyBeforeFanoutThreshold && concurrencyLimit > 1)
+        {
+            results[0] = await InstallDependencyBranchAsync(
+                request,
+                dependencies[0],
+                cacheDirectory,
+                context.CreateBranch(),
+                cancellationToken).ConfigureAwait(false);
+            fanoutStart = 1;
+        }
+
+        var concurrency = Math.Min(dependencies.Length - fanoutStart, concurrencyLimit);
 
         using var gate = new SemaphoreSlim(concurrency, concurrency);
         var tasks = dependencies
+            .Skip(fanoutStart)
             .Select((dependency, offset) => InstallDependencyWithGateAsync(
                 request,
                 dependency,
-                offset,
+                fanoutStart + offset,
                 cacheDirectory,
                 context.CreateBranch(),
                 gate,
@@ -220,6 +235,8 @@ public sealed partial class ManagedModuleInstallService
                 ShellEdition = request.ShellEdition,
                 ModuleRoot = request.ModuleRoot,
                 PackageCacheDirectory = cacheDirectory,
+                PackageCacheDirectoryIsOperationLocal = request.PackageCacheDirectoryIsOperationLocal ||
+                                                        string.IsNullOrWhiteSpace(request.PackageCacheDirectory),
                 ExpectedPackageSha256 = null,
                 TrustPolicy = dependencyTrustPolicy,
                 Credential = request.Credential,
@@ -332,15 +349,30 @@ public sealed partial class ManagedModuleInstallService
                 cancellationToken);
             if (latestCacheKey is not null)
             {
-                var latest = await context.GetOrAddDependencyVersionSelection(
+                var latest = await context.GetOrAddOptionalDependencyVersionSelection(
                     latestCacheKey,
-                    () => ResolveLatestDependencyVersionAsync(
+                    () => ResolveLatestDependencyVersionOrNullAsync(
                         request,
                         dependencyName,
                         includePrerelease,
                         cancellationToken)).ConfigureAwait(false);
-                if (range.IsSatisfiedBy(latest.Version))
-                    return latest;
+                if (latest.HasValue && range.IsSatisfiedBy(latest.Value.Version))
+                    return latest.Value;
+            }
+            else
+            {
+                var latestVersion = await _repositoryClient.GetLatestVersionAsync(
+                    request.Repository,
+                    dependencyName,
+                    includePrerelease,
+                    request.Credential,
+                    cancellationToken).ConfigureAwait(false);
+                if (latestVersion is not null)
+                {
+                    var latest = new ManagedModuleDependencyVersionSelection(latestVersion.Version, shared: false);
+                    if (range.IsSatisfiedBy(latest.Version))
+                        return latest;
+                }
             }
         }
 
@@ -371,7 +403,7 @@ public sealed partial class ManagedModuleInstallService
         return new ManagedModuleDependencyVersionSelection(version, shared: false);
     }
 
-    private async Task<string> ResolveLatestDependencyVersionAsync(
+    private async Task<string?> ResolveLatestDependencyVersionOrNullAsync(
         ManagedModuleInstallRequest request,
         string dependencyName,
         bool includePrerelease,
@@ -383,10 +415,8 @@ public sealed partial class ManagedModuleInstallService
             includePrerelease,
             request.Credential,
             cancellationToken).ConfigureAwait(false);
-        if (latestVersion is null)
-            throw new InvalidOperationException($"No dependency versions of '{dependencyName}' were found in repository '{request.Repository.Name}'.");
 
-        return latestVersion.Version;
+        return latestVersion?.Version;
     }
 
     private async Task<string> ResolveDependencyVersionUncachedAsync(
@@ -433,7 +463,7 @@ public sealed partial class ManagedModuleInstallService
         bool includePrerelease,
         CancellationToken cancellationToken)
     {
-        if (request.Credential is not null || cancellationToken.CanBeCanceled)
+        if (request.Credential is not null)
             return null;
 
         return string.Join(
@@ -452,7 +482,7 @@ public sealed partial class ManagedModuleInstallService
         bool includePrerelease,
         CancellationToken cancellationToken)
     {
-        if (request.Credential is not null || cancellationToken.CanBeCanceled)
+        if (request.Credential is not null)
             return null;
 
         return string.Join(

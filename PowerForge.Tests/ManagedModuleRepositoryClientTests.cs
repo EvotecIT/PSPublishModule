@@ -169,6 +169,10 @@ public sealed class ManagedModuleRepositoryClientTests
         var latest = Assert.Single(versions, version => version.Version == "1.1.0");
         Assert.True(latest.RequireLicenseAcceptance);
         Assert.Equal("https://licenses.example.test/company-tools", latest.License);
+        var dependency = Assert.Single(latest.Dependencies);
+        Assert.Equal("Company.Core", dependency.Id);
+        Assert.Equal("[2.0.0, )", dependency.VersionRange);
+        Assert.Equal("net8.0", dependency.TargetFramework);
         Assert.All(versions, version =>
         {
             Assert.Equal("Gallery", version.RepositoryName);
@@ -608,6 +612,21 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.True(result.PackageStream.CanSeek);
         Assert.Equal(0, result.PackageStream.Position);
         Assert.Contains(requests, request => request.Url == "https://example.test/packages/company.tools/1.1.0/company.tools.1.1.0.nupkg");
+    }
+
+    [Fact]
+    public async Task DownloadPackageToMemoryAsync_uses_known_content_length_as_initial_capacity()
+    {
+        const int expectedCapacity = 1024 * 1024 + 123;
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests, companyToolsPackageContentLength: expectedCapacity));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        using var result = await repositoryClient.DownloadPackageToMemoryAsync(repository, "Company.Tools", "1.1.0");
+
+        Assert.Equal(expectedCapacity, result.PackageStream.Capacity);
+        Assert.True(result.PackageStream.Length < expectedCapacity);
     }
 
     [Fact]
@@ -1264,7 +1283,7 @@ public sealed class ManagedModuleRepositoryClientTests
                     "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\">" +
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.0.0</d:Version></m:properties></content></entry>" +
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.1.0-beta1</d:Version></m:properties></content></entry>" +
-                    "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.1.0</d:Version><d:RequireLicenseAcceptance>true</d:RequireLicenseAcceptance><d:LicenseUrl>https://licenses.example.test/company-tools</d:LicenseUrl></m:properties></content></entry>" +
+                    "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>1.1.0</d:Version><d:RequireLicenseAcceptance>true</d:RequireLicenseAcceptance><d:LicenseUrl>https://licenses.example.test/company-tools</d:LicenseUrl><d:Dependencies>Company.Core:[2.0.0, ):net8.0</d:Dependencies></m:properties></content></entry>" +
                     "</feed>");
 
             if (uri.AbsoluteUri == "https://example.test/api/v2/FindPackagesById()?id='SameHost.Tools'&semVerLevel=2.0.0")

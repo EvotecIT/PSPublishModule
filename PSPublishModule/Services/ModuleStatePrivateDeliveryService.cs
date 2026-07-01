@@ -46,7 +46,7 @@ internal sealed class ModuleStatePrivateDeliveryService
         {
             var groupActions = group.ToArray();
             var request = CreateRequest(group.Key.Kind, group.Key.Repository, group.Key.Force, groupActions, options);
-            var workflowResult = service.Execute(request, (target, action) => _cmdlet.ShouldProcess(target, action));
+            var workflowResult = service.Execute(request, ShouldProcess);
             results.Add(new ModuleStateDeliveryExecutionResult
             {
                 Operation = group.Key.Kind.ToString(),
@@ -70,6 +70,11 @@ internal sealed class ModuleStatePrivateDeliveryService
 
         return results.ToArray();
     }
+
+    private bool ShouldProcess(string target, string action)
+        => _cmdlet is AsyncPSCmdlet asyncCmdlet
+            ? asyncCmdlet.ShouldProcess(target, action)
+            : _cmdlet.ShouldProcess(target, action);
 
     private static PrivateModuleWorkflowRequest CreateRequest(
         ModuleStatePlanActionKind actionKind,

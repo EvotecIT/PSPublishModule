@@ -1,6 +1,8 @@
 using System;
 using System.Linq;
 using System.Management.Automation;
+using System.Threading;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -13,6 +15,12 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
         => _cmdlet = cmdlet ?? throw new ArgumentNullException(nameof(cmdlet));
 
     internal void Enrich(ModuleStatePlanResult plan, ModuleStateManagedDeliveryOptions options)
+        => EnrichAsync(plan, options).GetAwaiter().GetResult();
+
+    internal async Task EnrichAsync(
+        ModuleStatePlanResult plan,
+        ModuleStateManagedDeliveryOptions options,
+        CancellationToken cancellationToken = default)
     {
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
@@ -36,12 +44,12 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
                 var repository = ResolveRepository(action, options);
                 if (string.Equals(action.Kind, "Update", StringComparison.OrdinalIgnoreCase))
                 {
-                    var updatePlan = updateService.PlanUpdateAsync(CreateUpdateRequest(repository, action, options)).GetAwaiter().GetResult();
+                    var updatePlan = await updateService.PlanUpdateAsync(CreateUpdateRequest(repository, action, options), cancellationToken).ConfigureAwait(false);
                     ApplyLicense(action, updatePlan.License, updatePlan.LicenseAcceptanceRequired, updatePlan.LicenseAccepted);
                 }
                 else
                 {
-                    var installPlan = installService.PlanInstallAsync(CreateInstallRequest(repository, action, options)).GetAwaiter().GetResult();
+                    var installPlan = await installService.PlanInstallAsync(CreateInstallRequest(repository, action, options), cancellationToken).ConfigureAwait(false);
                     ApplyLicense(action, installPlan.License, installPlan.LicenseAcceptanceRequired, installPlan.LicenseAccepted);
                 }
             }
@@ -113,51 +121,11 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
     private ManagedModuleRepository ResolveRepository(
         ModuleStatePlanActionResult action,
         ModuleStateManagedDeliveryOptions options)
-    {
-        if (!string.IsNullOrWhiteSpace(options.ProfileName))
-        {
-            var profile = ModuleRepositoryProfileCommandSupport.TryResolve(options.ProfileName);
-            if (profile is not null &&
-                (string.IsNullOrWhiteSpace(action.TargetRepository) ||
-                 string.Equals(action.TargetRepository, profile.RepositoryName, StringComparison.OrdinalIgnoreCase)))
-            {
-                return ManagedModuleCommandSupport.CreateRepository(
-                    _cmdlet,
-                    ManagedModuleCommandSupport.DefaultRepositoryName,
-                    ManagedModuleCommandSupport.DefaultRepositorySource,
-                    options.ProfileName,
-                    repositoryWasBound: false);
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(action.TargetRepository))
-        {
-            var optionsRepository = ModuleStateManagedRepositoryResolver.TryResolveOptionsRepositoryForActionTarget(_cmdlet, action.TargetRepository, options);
-            if (optionsRepository is not null)
-                return optionsRepository;
-
-            return ManagedModuleCommandSupport.CreateRepository(
-                _cmdlet,
-                ManagedModuleCommandSupport.DefaultRepositoryName,
-                action.TargetRepository!);
-        }
-
-        if (!string.IsNullOrWhiteSpace(options.ProfileName))
-            return ManagedModuleCommandSupport.CreateRepository(
-                _cmdlet,
-                ManagedModuleCommandSupport.DefaultRepositoryName,
-                ManagedModuleCommandSupport.DefaultRepositorySource,
-                options.ProfileName,
-                repositoryWasBound: false);
-
-        if (!string.IsNullOrWhiteSpace(options.Repository))
-            return ManagedModuleCommandSupport.CreateRepository(
-                _cmdlet,
-                ManagedModuleCommandSupport.DefaultRepositoryName,
-                options.Repository!);
-
-        throw new InvalidOperationException("Managed module license preflight requires Repository, ProfileName, or action target repository.");
-    }
+        => ModuleStateManagedRepositoryResolver.ResolveRepositoryForAction(
+            _cmdlet,
+            action.TargetRepository,
+            options,
+            "Managed module license preflight requires Repository, ProfileName, or action target repository.");
 
     private static string? ResolveModuleRoot(ModuleStatePlanActionResult action, ModuleStateManagedDeliveryOptions options)
         => string.IsNullOrWhiteSpace(action.TargetPath) ? options.ModuleRoot : action.TargetPath;

@@ -49,4 +49,9 @@ public sealed class ManagedModuleVersionInfo
     /// True when repository metadata indicates this package version requires explicit license acceptance.
     /// </summary>
     public bool RequireLicenseAcceptance { get; set; }
+
+    /// <summary>
+    /// Dependencies exposed by repository metadata when available.
+    /// </summary>
+    public IReadOnlyList<ManagedModuleDependencyInfo> Dependencies { get; set; } = Array.Empty<ManagedModuleDependencyInfo>();
 }

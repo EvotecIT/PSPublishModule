@@ -5,6 +5,41 @@ namespace PowerForge.Tests;
 public sealed partial class ManagedModuleInstallServiceTests
 {
     [Fact]
+    public async Task InstallAsync_skips_extracted_package_cache_for_operation_local_dependency_cache()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            files: CreateDependencyFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[1.0.0]", null) },
+            files: CreateModuleFiles("1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.Equal("Company.Core", dependency.Name);
+        Assert.False(dependency.ExtractionFromCache);
+        Assert.False(dependency.PromotionMaterializedDirectly);
+        Assert.Equal(TimeSpan.Zero, dependency.ExtractionCacheLockWaitElapsed);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "1.0.0", "Company.Core.psd1")));
+    }
+
+    [Fact]
     public async Task InstallAsync_reuses_extracted_package_cache_when_package_cache_is_persistent()
     {
         using var feed = new TemporaryDirectory();

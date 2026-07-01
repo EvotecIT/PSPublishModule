@@ -5,12 +5,52 @@ namespace PowerForge;
 
 public sealed partial class ManagedModuleRepositoryClient
 {
+    internal static HttpClient CreateDefaultHttpClient(ManagedModuleRepositoryClientOptions options)
+    {
+        var client = new HttpClient(CreateDefaultHttpMessageHandler(options));
+#if !NET472
+        client.DefaultRequestVersion = HttpVersion.Version20;
+        client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+#endif
+        return client;
+    }
+
     internal static HttpMessageHandler CreateDefaultHttpMessageHandler(ManagedModuleRepositoryClientOptions options)
     {
         var decompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
 #if !NET472
         decompression |= DecompressionMethods.Brotli;
+        return CreateSocketsHttpMessageHandler(options, decompression);
+#else
+        return CreateLegacyHttpMessageHandler(options, decompression);
 #endif
+    }
+
+#if !NET472
+    private static HttpMessageHandler CreateSocketsHttpMessageHandler(
+        ManagedModuleRepositoryClientOptions options,
+        DecompressionMethods decompression)
+    {
+        AppContext.SetSwitch("System.Net.SocketsHttpHandler.Http3Support", true);
+        var handler = new SocketsHttpHandler
+        {
+            UseProxy = options.UseProxy,
+            AllowAutoRedirect = false,
+            AutomaticDecompression = decompression,
+            MaxConnectionsPerServer = Math.Max(1, options.MaxConnectionsPerServer),
+            EnableMultipleHttp2Connections = true,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+            InitialHttp2StreamWindowSize = 16 * 1024 * 1024
+        };
+        ConfigureProxy(handler, options);
+        return handler;
+    }
+#endif
+
+    private static HttpMessageHandler CreateLegacyHttpMessageHandler(
+        ManagedModuleRepositoryClientOptions options,
+        DecompressionMethods decompression)
+    {
         var handler = new HttpClientHandler
         {
             UseProxy = options.UseProxy,
@@ -18,15 +58,40 @@ public sealed partial class ManagedModuleRepositoryClient
             AutomaticDecompression = decompression,
             MaxConnectionsPerServer = Math.Max(1, options.MaxConnectionsPerServer)
         };
+        ConfigureProxy(handler, options);
+        return handler;
+    }
+
+    private static WebProxy? CreateProxy(ManagedModuleRepositoryClientOptions options)
+    {
         if (!options.UseProxy || options.ProxyAddress is null)
-            return handler;
+            return null;
 
         var proxy = new WebProxy(options.ProxyAddress, options.BypassProxyOnLocal);
         if (options.ProxyCredential is not null)
             proxy.Credentials = ToNetworkCredential(options.ProxyCredential);
 
+        return proxy;
+    }
+
+#if !NET472
+    private static void ConfigureProxy(SocketsHttpHandler handler, ManagedModuleRepositoryClientOptions options)
+    {
+        var proxy = CreateProxy(options);
+        if (proxy is null)
+            return;
+
         handler.Proxy = proxy;
-        return handler;
+    }
+#endif
+
+    private static void ConfigureProxy(HttpClientHandler handler, ManagedModuleRepositoryClientOptions options)
+    {
+        var proxy = CreateProxy(options);
+        if (proxy is null)
+            return;
+
+        handler.Proxy = proxy;
     }
 
     private async Task<HttpResponseMessage> SendWithPolicyAsync(
@@ -111,7 +176,13 @@ public sealed partial class ManagedModuleRepositoryClient
 
     private static HttpRequestMessage CreateRedirectRequest(HttpRequestMessage source, Uri redirectUri)
     {
-        var request = new HttpRequestMessage(source.Method, redirectUri);
+        var request = new HttpRequestMessage(source.Method, redirectUri)
+        {
+            Version = source.Version
+        };
+#if !NET472
+        request.VersionPolicy = source.VersionPolicy;
+#endif
         foreach (var header in source.Headers.Accept)
             request.Headers.Accept.Add(header);
         foreach (var header in source.Headers.UserAgent)
