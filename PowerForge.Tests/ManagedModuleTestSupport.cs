@@ -70,7 +70,8 @@ internal static class TestPackageFactory
         string id,
         string version,
         bool requireLicenseAcceptance = false,
-        IReadOnlyDictionary<string, string>? files = null)
+        IReadOnlyDictionary<string, string>? files = null,
+        IReadOnlyList<TestDependency>? dependencies = null)
     {
         using var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
@@ -78,7 +79,7 @@ internal static class TestPackageFactory
             var nuspec = archive.CreateEntry(id + ".nuspec");
             using (var writer = new StreamWriter(nuspec.Open()))
             {
-                writer.Write(CreateNuspec(id, version, requireLicenseAcceptance: requireLicenseAcceptance));
+                writer.Write(CreateNuspec(id, version, dependencies, requireLicenseAcceptance));
             }
 
             if (files is not null)

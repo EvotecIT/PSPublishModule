@@ -6,14 +6,28 @@ public sealed partial class ManagedModuleInstallService
     private async Task<ManagedModuleBufferedPackage> DownloadBufferedPackageForInstallAsync(
         ManagedModuleInstallRequest request,
         string version,
+        ManagedModuleInstallContext context,
         CancellationToken cancellationToken)
-        => await _repositoryClient.DownloadPackageToMemoryAsync(
+    {
+        var prefetchKey = TryCreateBufferedPackagePrefetchKey(request, version);
+        if (prefetchKey is not null)
+        {
+            var prefetched = await context.TryTakeBufferedPackagePrefetchAsync(
+                    prefetchKey,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (prefetched is not null)
+                return prefetched;
+        }
+
+        return await _repositoryClient.DownloadPackageToMemoryAsync(
                 request.Repository,
                 request.Name,
                 version,
                 request.Credential,
                 cancellationToken)
             .ConfigureAwait(false);
+    }
 
     private async Task<ManagedModuleArchiveExtractionResult> ExtractBufferedPackageForInstallAsync(
         ManagedModuleBufferedPackage bufferedPackage,
@@ -30,7 +44,7 @@ public sealed partial class ManagedModuleInstallService
     }
 
     private static bool ShouldUseBufferedPackageExtraction(ManagedModuleInstallRequest request, bool ownsCache)
-        => ownsCache &&
+        => (ownsCache || request.PackageCacheDirectoryIsOperationLocal) &&
            request.Repository.Kind is ManagedModuleRepositoryKind.NuGetV2 or ManagedModuleRepositoryKind.NuGetV3;
 #endif
 }

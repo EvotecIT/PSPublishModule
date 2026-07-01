@@ -230,6 +230,7 @@ public sealed partial class ManagedModuleRepositoryClient
                 ManagedModuleRepositoryKind.NuGetV2 => await DownloadNuGetV2PackageAsync(repository, packageId, version, destinationDirectory, credential, cancellationToken).ConfigureAwait(false),
                 _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
             };
+            result.RequestCount = downloadRequestScope.Count;
             result.RedirectCount = downloadRequestScope.RedirectCount;
             return result;
         }

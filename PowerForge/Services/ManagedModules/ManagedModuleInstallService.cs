@@ -39,7 +39,10 @@ public sealed partial class ManagedModuleInstallService
     public async Task<ManagedModuleInstallResult> InstallAsync(
         ManagedModuleInstallRequest request,
         CancellationToken cancellationToken = default)
-        => await InstallAsync(request, new ManagedModuleInstallContext(), cancellationToken).ConfigureAwait(false);
+    {
+        using var context = new ManagedModuleInstallContext();
+        return await InstallAsync(request, context, cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Creates a non-mutating install plan for the requested module.
@@ -402,6 +405,11 @@ public sealed partial class ManagedModuleInstallService
                 CreateRepositoryDependencyHintMetadata(versionInfo),
                 context,
                 cancellationToken);
+            StartDependencyPackagePrefetch(
+                request,
+                CreateRepositoryDependencyHintMetadata(versionInfo),
+                context,
+                cancellationToken);
 
             using (AcquireInstallLock(moduleRoot, request.Name, cancellationToken, out var resolvedLockWaitElapsed))
             {
@@ -435,7 +443,7 @@ public sealed partial class ManagedModuleInstallService
                 {
                     try
                     {
-                        bufferedPackage = await DownloadBufferedPackageForInstallAsync(request, version, cancellationToken).ConfigureAwait(false);
+                        bufferedPackage = await DownloadBufferedPackageForInstallAsync(request, version, context, cancellationToken).ConfigureAwait(false);
                     }
                     catch (ManagedModuleBufferedPackageTooLargeException ex)
                     {
@@ -458,6 +466,14 @@ public sealed partial class ManagedModuleInstallService
                     cancellationToken).ConfigureAwait(false);
                 packageRepositoryRequestCount = packageRequestScope.Count;
                 packageRepositoryRedirectCount = packageRequestScope.RedirectCount;
+#if !NET472
+                if (packageRepositoryRequestCount == 0 && bufferedPackage is not null)
+                    packageRepositoryRequestCount = bufferedPackage.Download.RequestCount;
+                if (packageRepositoryRequestCount == 0 && bufferedPackage is not null && !bufferedPackage.Download.FromCache)
+                    packageRepositoryRequestCount = 1;
+                if (packageRepositoryRedirectCount == 0 && bufferedPackage is not null)
+                    packageRepositoryRedirectCount = bufferedPackage.Download.RedirectCount;
+#endif
             }
 
             downloadStopwatch.Stop();
@@ -465,6 +481,7 @@ public sealed partial class ManagedModuleInstallService
             ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, download.Metadata, request.TrustPolicy);
             ThrowIfLicenseAcceptanceRequired(download.Metadata, request);
             StartDependencyVersionSelectionPrewarm(request, download.Metadata, context, cancellationToken);
+            StartDependencyPackagePrefetch(request, download.Metadata, context, cancellationToken);
 
             var validationModulePath = stageModulePath;
             ManagedModuleArchiveExtractionResult? extraction = null;
@@ -655,7 +672,7 @@ public sealed partial class ManagedModuleInstallService
                 PromotionBackupCleanupElapsed = promotionBackupCleanupElapsed,
                 PromotionMaterializedDirectly = promotionMaterializedDirectly,
                 PromotionDirectMaterializationElapsed = promotionDirectMaterializationElapsed,
-                RepositoryRequestCount = requestScope.Count,
+                RepositoryRequestCount = Math.Max(requestScope.Count, packageRepositoryRequestCount),
                 PackageRepositoryRequestCount = packageRepositoryRequestCount,
                 PackageRepositoryRedirectCount = packageRepositoryRedirectCount,
                 DependencyResults = dependencyResults

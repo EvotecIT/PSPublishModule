@@ -1,4 +1,5 @@
 using PowerForge;
+using System.IO.Compression;
 using System.Net;
 
 namespace PowerForge.Tests;
@@ -87,6 +88,61 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
         Assert.Contains(handler.Requests, static request => request.EndsWith("id='Company.Core'&$filter=IsLatestVersion&$top=1&semVerLevel=2.0.0", StringComparison.Ordinal));
     }
 
+#if !NET472
+    [Fact]
+    public async Task InstallAsync_prefetches_dependency_package_before_root_download_completes()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var handler = new RepositoryDependencyHintHandler
+        {
+            DelayRootPackageUntilCorePackageRequested = true
+        };
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), new HttpClient(handler));
+        var service = new ManagedModuleInstallService(new NullLogger(), repositoryClient);
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Feed", "https://example.test/api/v2"),
+            Name = "Company.Root",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            AllowClobber = true
+        });
+
+        Assert.Equal(ManagedModuleInstallStatus.Installed, result.Status);
+        Assert.True(handler.CorePackageRequestedBeforeRootPackageCompleted);
+        Assert.Equal(1, handler.CorePackageDownloadCount);
+        Assert.Equal(ManagedModuleInstallStatus.Installed, Assert.Single(result.DependencyResults).Status);
+    }
+
+    [Fact]
+    public async Task InstallAsync_prefetch_does_not_install_dependency_when_root_package_fails()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var handler = new RepositoryDependencyHintHandler
+        {
+            DelayRootPackageUntilCorePackageRequested = true,
+            RootPackageHasUnsafeEntry = true
+        };
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), new HttpClient(handler));
+        var service = new ManagedModuleInstallService(new NullLogger(), repositoryClient);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Feed", "https://example.test/api/v2"),
+            Name = "Company.Root",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            AllowClobber = true
+        }));
+
+        Assert.Contains("unsafe path", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(handler.CorePackageRequestedBeforeRootPackageCompleted);
+        Assert.Equal(1, handler.CorePackageDownloadCount);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Core")));
+    }
+#endif
+
     private static IReadOnlyDictionary<string, string> CreateModuleFiles(string moduleName, string version)
         => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -97,8 +153,17 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
     {
         private readonly object _syncRoot = new();
         private readonly List<string> _requests = new();
+        private readonly TaskCompletionSource<bool> _corePackageRequested = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public bool CoreLatestRequestedBeforeRootDownload { get; private set; }
+
+        public bool DelayRootPackageUntilCorePackageRequested { get; init; }
+
+        public bool RootPackageHasUnsafeEntry { get; init; }
+
+        public bool CorePackageRequestedBeforeRootPackageCompleted { get; private set; }
+
+        public int CorePackageDownloadCount { get; private set; }
 
         public IReadOnlyList<string> Requests
         {
@@ -111,7 +176,7 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
             }
         }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var url = request.RequestUri!.AbsoluteUri;
             lock (_syncRoot)
@@ -124,7 +189,7 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
 
             if (url.Equals("https://example.test/api/v2/FindPackagesById()?id='Company.Root'&$filter=IsLatestVersion&$top=1&semVerLevel=2.0.0", StringComparison.OrdinalIgnoreCase))
             {
-                return Xml(
+                return CreateXmlResponse(
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
                     "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\">" +
                     "<entry><content><m:properties><d:Id>Company.Root</d:Id><d:Version>1.0.0</d:Version><d:Dependencies>Company.Core:[1.0.0, ):</d:Dependencies></m:properties></content></entry>" +
@@ -133,7 +198,7 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
 
             if (url.Equals("https://example.test/api/v2/FindPackagesById()?id='Company.Core'&$filter=IsLatestVersion&$top=1&semVerLevel=2.0.0", StringComparison.OrdinalIgnoreCase))
             {
-                return Xml(
+                return CreateXmlResponse(
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
                     "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\">" +
                     "<entry><content><m:properties><d:Id>Company.Core</d:Id><d:Version>1.0.0</d:Version></m:properties></content></entry>" +
@@ -142,35 +207,73 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
 
             if (url.Equals("https://example.test/api/v2/package/Company.Root/1.0.0", StringComparison.OrdinalIgnoreCase))
             {
-                var bytes = TestPackageFactory.CreateBytes(
-                    "Company.Root",
-                    "1.0.0",
-                    files: CreateModuleFiles("Company.Root", "1.0.0"));
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                if (DelayRootPackageUntilCorePackageRequested)
+                {
+                    var completed = await Task.WhenAny(
+                            _corePackageRequested.Task,
+                            Task.Delay(TimeSpan.FromSeconds(5), cancellationToken))
+                        .ConfigureAwait(false);
+                    CorePackageRequestedBeforeRootPackageCompleted = ReferenceEquals(completed, _corePackageRequested.Task);
+                }
+
+                var bytes = RootPackageHasUnsafeEntry
+                    ? CreateUnsafeRootPackageBytes()
+                    : TestPackageFactory.CreateBytes(
+                        "Company.Root",
+                        "1.0.0",
+                        files: CreateModuleFiles("Company.Root", "1.0.0"),
+                        dependencies: new[] { new TestDependency("Company.Core", "[1.0.0, )", null) });
+                return new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new ByteArrayContent(bytes)
-                });
+                };
             }
 
             if (url.Equals("https://example.test/api/v2/package/Company.Core/1.0.0", StringComparison.OrdinalIgnoreCase))
             {
+                lock (_syncRoot)
+                {
+                    CorePackageDownloadCount++;
+                }
+
+                _corePackageRequested.TrySetResult(true);
                 var bytes = TestPackageFactory.CreateBytes(
                     "Company.Core",
                     "1.0.0",
                     files: CreateModuleFiles("Company.Core", "1.0.0"));
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                return new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new ByteArrayContent(bytes)
-                });
+                };
             }
 
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
         }
 
-        private static Task<HttpResponseMessage> Xml(string xml)
-            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        private static HttpResponseMessage CreateXmlResponse(string xml)
+            => new(HttpStatusCode.OK)
             {
                 Content = new StringContent(xml, System.Text.Encoding.UTF8, "application/xml")
-            });
+            };
+
+        private static byte[] CreateUnsafeRootPackageBytes()
+        {
+            using var stream = new MemoryStream();
+            using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                var nuspec = archive.CreateEntry("Company.Root.nuspec");
+                using (var writer = new StreamWriter(nuspec.Open()))
+                {
+                    writer.Write(TestPackageFactory.CreateNuspec(
+                        "Company.Root",
+                        "1.0.0",
+                        new[] { new TestDependency("Company.Core", "[1.0.0, )", null) }));
+                }
+
+                archive.CreateEntry("../escape.ps1");
+            }
+
+            return stream.ToArray();
+        }
     }
 }

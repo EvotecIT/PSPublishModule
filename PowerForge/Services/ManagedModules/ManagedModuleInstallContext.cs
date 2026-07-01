@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 
 namespace PowerForge;
 
-internal sealed class ManagedModuleInstallContext
+internal sealed class ManagedModuleInstallContext : IDisposable
 {
     private const string MissingDependencyVersionSelection = "\0";
 
@@ -12,6 +12,11 @@ internal sealed class ManagedModuleInstallContext
     private readonly ConcurrentDictionary<string, ManagedModuleInstallResult> _completedInstalls;
     private readonly ConcurrentDictionary<string, string[]> _installedVersions;
     private readonly ConcurrentDictionary<string, Lazy<Task<string>>> _dependencyVersionSelections;
+#if !NET472
+    private readonly ConcurrentDictionary<string, Lazy<Task<ManagedModuleBufferedPackage>>> _bufferedPackagePrefetches;
+    private readonly SemaphoreSlim _bufferedPackagePrefetchGate;
+    private bool _disposed;
+#endif
 
     public ManagedModuleInstallContext()
         : this(
@@ -20,7 +25,13 @@ internal sealed class ManagedModuleInstallContext
             new ConcurrentDictionary<string, ManagedModuleInstallPending>(StringComparer.OrdinalIgnoreCase),
             new ConcurrentDictionary<string, ManagedModuleInstallResult>(StringComparer.OrdinalIgnoreCase),
             new ConcurrentDictionary<string, string[]>(StringComparer.OrdinalIgnoreCase),
-            new ConcurrentDictionary<string, Lazy<Task<string>>>(StringComparer.OrdinalIgnoreCase))
+            new ConcurrentDictionary<string, Lazy<Task<string>>>(StringComparer.OrdinalIgnoreCase)
+#if !NET472
+            ,
+            new ConcurrentDictionary<string, Lazy<Task<ManagedModuleBufferedPackage>>>(StringComparer.OrdinalIgnoreCase),
+            new SemaphoreSlim(8, 8)
+#endif
+            )
     {
     }
 
@@ -30,7 +41,13 @@ internal sealed class ManagedModuleInstallContext
         ConcurrentDictionary<string, ManagedModuleInstallPending> inFlightInstalls,
         ConcurrentDictionary<string, ManagedModuleInstallResult> completedInstalls,
         ConcurrentDictionary<string, string[]> installedVersions,
-        ConcurrentDictionary<string, Lazy<Task<string>>> dependencyVersionSelections)
+        ConcurrentDictionary<string, Lazy<Task<string>>> dependencyVersionSelections
+#if !NET472
+        ,
+        ConcurrentDictionary<string, Lazy<Task<ManagedModuleBufferedPackage>>> bufferedPackagePrefetches,
+        SemaphoreSlim bufferedPackagePrefetchGate
+#endif
+        )
     {
         _active = active;
         _ownedInstallKeys = ownedInstallKeys;
@@ -38,6 +55,10 @@ internal sealed class ManagedModuleInstallContext
         _completedInstalls = completedInstalls;
         _installedVersions = installedVersions;
         _dependencyVersionSelections = dependencyVersionSelections;
+#if !NET472
+        _bufferedPackagePrefetches = bufferedPackagePrefetches;
+        _bufferedPackagePrefetchGate = bufferedPackagePrefetchGate;
+#endif
     }
 
     public ManagedModuleInstallContext CreateBranch()
@@ -47,7 +68,13 @@ internal sealed class ManagedModuleInstallContext
             _inFlightInstalls,
             _completedInstalls,
             _installedVersions,
-            _dependencyVersionSelections);
+            _dependencyVersionSelections
+#if !NET472
+            ,
+            _bufferedPackagePrefetches,
+            _bufferedPackagePrefetchGate
+#endif
+            );
 
     public IDisposable Enter(string moduleName)
     {
@@ -180,6 +207,126 @@ internal sealed class ManagedModuleInstallContext
             ? null
             : selection;
     }
+
+#if !NET472
+    public void StartBufferedPackagePrefetch(
+        string key,
+        Func<CancellationToken, Task<ManagedModuleBufferedPackage>> factory,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Buffered package prefetch key is required.", nameof(key));
+        if (factory is null)
+            throw new ArgumentNullException(nameof(factory));
+        if (_disposed || cancellationToken.IsCancellationRequested)
+            return;
+
+        var newLazy = new Lazy<Task<ManagedModuleBufferedPackage>>(
+            async () =>
+            {
+                await _bufferedPackagePrefetchGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    return await factory(cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _bufferedPackagePrefetchGate.Release();
+                }
+            },
+            LazyThreadSafetyMode.ExecutionAndPublication);
+        var lazy = _bufferedPackagePrefetches.GetOrAdd(key, _ => newLazy);
+        if (!ReferenceEquals(lazy, newLazy))
+            return;
+
+        _ = CompleteBufferedPackagePrefetchAsync(key, lazy);
+    }
+
+    public async Task<ManagedModuleBufferedPackage?> TryTakeBufferedPackagePrefetchAsync(
+        string key,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return null;
+
+        if (!_bufferedPackagePrefetches.TryRemove(key, out var lazy))
+            return null;
+
+        try
+        {
+            return await lazy.Value.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+        catch (ManagedModuleBufferedPackageTooLargeException)
+        {
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+#endif
+
+    public void Dispose()
+    {
+#if !NET472
+        if (_disposed)
+            return;
+
+        _disposed = true;
+        foreach (var item in _bufferedPackagePrefetches.ToArray())
+        {
+            if (!_bufferedPackagePrefetches.TryRemove(item.Key, out var lazy) || !lazy.IsValueCreated)
+                continue;
+
+            DisposeBufferedPackageWhenComplete(lazy.Value);
+        }
+#endif
+    }
+
+#if !NET472
+    private async Task CompleteBufferedPackagePrefetchAsync(
+        string key,
+        Lazy<Task<ManagedModuleBufferedPackage>> lazy)
+    {
+        try
+        {
+            var package = await lazy.Value.ConfigureAwait(false);
+            if (_disposed)
+            {
+                package.Dispose();
+            }
+        }
+        catch
+        {
+            ((ICollection<KeyValuePair<string, Lazy<Task<ManagedModuleBufferedPackage>>>>)_bufferedPackagePrefetches)
+                .Remove(new KeyValuePair<string, Lazy<Task<ManagedModuleBufferedPackage>>>(key, lazy));
+        }
+    }
+
+    private static void DisposeBufferedPackageWhenComplete(Task<ManagedModuleBufferedPackage> task)
+    {
+        if (task.IsCompletedSuccessfully)
+        {
+            task.Result.Dispose();
+            return;
+        }
+
+        _ = task.ContinueWith(
+            static completed =>
+            {
+                if (completed.Status == TaskStatus.RanToCompletion)
+                    completed.Result.Dispose();
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+#endif
 
     private static string CreateInstalledVersionKey(string moduleRoot, string moduleName)
         => string.Join("|", NormalizePath(moduleRoot), moduleName.Trim());

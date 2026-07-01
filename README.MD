@@ -429,11 +429,11 @@ needed.
 <!-- managed-module-benchmark-table:start -->
 | Scenario | Host | Operation | Managed | ModuleFast | Result |
 | --- | --- | --- | --- | --- | --- |
-| Az.Accounts | PowerShell 7 | Install | 1.00x (0.61s) | 1.24x (0.75s) | Managed fastest |
-| Az | PowerShell 7 | Install | 1.00x (6.21s) | Failed | Managed only successful |
-| Graph.Authentication | PowerShell 7 | Install | 1.00x (0.58s) | 1.03x (0.59s) | Managed fastest |
-| Graph | PowerShell 7 | Install | 1.00x (14.53s) | 0.26x (3.84s) | Managed slower than ModuleFast |
-| PSScriptAnalyzer | PowerShell 7 | Install | 1.00x (1.10s) | 1.13x (1.24s) | Managed fastest |
+| Az.Accounts | PowerShell 7 | Install | 1.00x (0.83s) | 1.12x (0.93s) | Managed fastest |
+| Az | PowerShell 7 | Install | 1.00x (5.19s) | Failed | Managed only successful |
+| Graph.Authentication | PowerShell 7 | Install | 1.00x (2.48s) | 0.41x (1.01s) | Managed slower than ModuleFast |
+| Graph | PowerShell 7 | Install | 1.00x (6.58s) | 0.84x (5.55s) | Managed slower than ModuleFast |
+| PSScriptAnalyzer | PowerShell 7 | Install | 1.00x (2.15s) | 0.92x (1.97s) | Managed slower than ModuleFast |
 <!-- managed-module-benchmark-table:end -->
 
 Refresh the table with:
