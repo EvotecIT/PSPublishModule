@@ -22,6 +22,7 @@ public sealed class PSPublishModuleManifestContractTests
     {
         "Get-ConfigurationBoolean",
         "New-ConfigurationGate",
+        "New-ConfigurationModuleBuildProfile",
         "New-ConfigurationPackageBuild",
         "New-ConfigurationProjectBuild",
         "New-ConfigurationRelease"

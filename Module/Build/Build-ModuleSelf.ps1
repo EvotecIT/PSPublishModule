@@ -57,7 +57,7 @@ if (-not (Test-Path -LiteralPath $moduleProject)) { throw "PSPublishModule proje
 
 if ($Framework -eq 'auto') {
     $runtimesText = (dotnet --list-runtimes 2>$null) -join "`n"
-    $Framework = if ($runtimesText -match '(?m)^Microsoft\\.NETCore\\.App\\s+10\\.') { 'net10.0' } else { 'net8.0' }
+    $Framework = if ($runtimesText -match '(?m)^Microsoft\.NETCore\.App\s+10\.') { 'net10.0' } else { 'net8.0' }
 }
 
 if (-not $NoBuild) {
@@ -105,19 +105,26 @@ try {
         Configuration  = $Configuration
         NoDotnetBuild  = $true
     }
-    if ($PSBoundParameters.ContainsKey('ModuleVersion')) { $buildArgs.ModuleVersion = $ModuleVersion }
-    if ($PSBoundParameters.ContainsKey('PreReleaseTag')) { $buildArgs.PreReleaseTag = $PreReleaseTag }
-    if ($PSBoundParameters.ContainsKey('NoSign')) { $buildArgs.NoSign = $NoSign.IsPresent }
-    if ($PSBoundParameters.ContainsKey('SignModule')) { $buildArgs.SignModule = $SignModule.IsPresent }
-    if ($PSBoundParameters.ContainsKey('CertificateThumbprint')) { $buildArgs.CertificateThumbprint = $CertificateThumbprint }
-    if ($PSBoundParameters.ContainsKey('SignIncludeBinaries')) { $buildArgs.SignIncludeBinaries = $SignIncludeBinaries.IsPresent }
-    if ($PSBoundParameters.ContainsKey('SignIncludeInternals')) { $buildArgs.SignIncludeInternals = $SignIncludeInternals.IsPresent }
-    if ($PSBoundParameters.ContainsKey('SignIncludeExe')) { $buildArgs.SignIncludeExe = $SignIncludeExe.IsPresent }
-    if ($PSBoundParameters.ContainsKey('DiagnosticsBaselinePath')) { $buildArgs.DiagnosticsBaselinePath = $DiagnosticsBaselinePath }
-    if ($PSBoundParameters.ContainsKey('GenerateDiagnosticsBaseline')) { $buildArgs.GenerateDiagnosticsBaseline = $GenerateDiagnosticsBaseline.IsPresent }
-    if ($PSBoundParameters.ContainsKey('UpdateDiagnosticsBaseline')) { $buildArgs.UpdateDiagnosticsBaseline = $UpdateDiagnosticsBaseline.IsPresent }
-    if ($PSBoundParameters.ContainsKey('FailOnNewDiagnostics')) { $buildArgs.FailOnNewDiagnostics = $FailOnNewDiagnostics.IsPresent }
-    if ($PSBoundParameters.ContainsKey('FailOnDiagnosticsSeverity')) { $buildArgs.FailOnDiagnosticsSeverity = $FailOnDiagnosticsSeverity }
+
+    foreach ($parameterName in @(
+            'ModuleVersion',
+            'PreReleaseTag',
+            'NoSign',
+            'SignModule',
+            'CertificateThumbprint',
+            'SignIncludeBinaries',
+            'SignIncludeInternals',
+            'SignIncludeExe',
+            'DiagnosticsBaselinePath',
+            'GenerateDiagnosticsBaseline',
+            'UpdateDiagnosticsBaseline',
+            'FailOnNewDiagnostics',
+            'FailOnDiagnosticsSeverity'
+        )) {
+        if ($PSBoundParameters.ContainsKey($parameterName)) {
+            $buildArgs[$parameterName] = $PSBoundParameters[$parameterName]
+        }
+    }
 
     & $buildScript @buildArgs
     if (-not (Test-Path -LiteralPath $configPath)) {
