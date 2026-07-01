@@ -18,6 +18,8 @@ param(
 
     [string] $ModuleFastSource = 'https://pwsh.gallery/index.json',
 
+    [string] $ModuleFastModulePath = '',
+
     [string] $OutputPath = '',
 
     [string] $OutputRoot = '',
@@ -149,7 +151,9 @@ function New-MeasurementResult {
         Repository = $Repository
         RepositoryUri = $RepositoryUri
         ModuleFastSource = if ($EngineName -eq 'ModuleFast') { $ModuleFastSource } else { '' }
+        ModuleFastModulePath = if ($EngineName -eq 'ModuleFast') { $ModuleFastModulePath } else { '' }
         EngineCommandPath = $engineMetadata.CommandPath
+        EngineModuleBase = $engineMetadata.ModuleBase
         EngineModuleVersion = $engineMetadata.ModuleVersion
     }
 
@@ -172,14 +176,15 @@ function Get-BenchmarkEngineMetadata {
     }
 
     if ([string]::IsNullOrWhiteSpace($commandName)) {
-        return [pscustomobject]@{ CommandPath = ''; ModuleVersion = '' }
+        return [pscustomobject]@{ CommandPath = ''; ModuleBase = ''; ModuleVersion = '' }
     }
 
     $command = Get-Command -Name $commandName -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($null -eq $command) {
-        return [pscustomobject]@{ CommandPath = ''; ModuleVersion = '' }
+        return [pscustomobject]@{ CommandPath = ''; ModuleBase = ''; ModuleVersion = '' }
     }
 
+    $moduleBase = ''
     $moduleVersion = ''
     if (-not [string]::IsNullOrWhiteSpace($command.ModuleName)) {
         $module = Get-Module -Name $command.ModuleName -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
@@ -187,14 +192,41 @@ function Get-BenchmarkEngineMetadata {
             $module = Get-Module -ListAvailable -Name $command.ModuleName -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
         }
         if ($null -ne $module) {
+            $moduleBase = [string]$module.ModuleBase
             $moduleVersion = [string]$module.Version
         }
     }
 
     [pscustomobject]@{
         CommandPath = [string]$command.Source
+        ModuleBase = $moduleBase
         ModuleVersion = $moduleVersion
     }
+}
+
+function Resolve-ModuleFastImportPath {
+    param([string] $Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return ''
+    }
+
+    $resolved = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).Path
+    if (-not (Test-Path -LiteralPath $resolved -PathType Container)) {
+        return $resolved
+    }
+
+    $manifest = Join-Path $resolved 'ModuleFast.psd1'
+    if (Test-Path -LiteralPath $manifest -PathType Leaf) {
+        return $manifest
+    }
+
+    $scriptModule = Join-Path $resolved 'ModuleFast.psm1'
+    if (Test-Path -LiteralPath $scriptModule -PathType Leaf) {
+        return $scriptModule
+    }
+
+    return $resolved
 }
 
 function Format-BenchmarkNumber {
@@ -504,7 +536,11 @@ function Invoke-BenchmarkCommand {
                 throw 'NotAvailable: ModuleFast requires PowerShell 7.2 or newer.'
             }
 
-            Import-ProviderCommand -CommandName 'Install-ModuleFast' -ModuleName 'ModuleFast'
+            if (-not [string]::IsNullOrWhiteSpace($ModuleFastModulePath)) {
+                Import-Module -Name (Resolve-ModuleFastImportPath -Path $ModuleFastModulePath) -Force -ErrorAction Stop
+            } else {
+                Import-ProviderCommand -CommandName 'Install-ModuleFast' -ModuleName 'ModuleFast'
+            }
             $specification = if ([string]::IsNullOrWhiteSpace($version)) { $name } else { '{0}={1}' -f $name, $version }
             $parameters = @{
                 Specification = $specification

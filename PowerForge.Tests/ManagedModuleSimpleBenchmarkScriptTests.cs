@@ -120,6 +120,8 @@ public sealed class ManagedModuleSimpleBenchmarkScriptTests
         Assert.Contains("$Operation = @('Install')", script, StringComparison.Ordinal);
         Assert.Contains("$Engine = @('Managed', 'ModuleFast')", script, StringComparison.Ordinal);
         Assert.Contains("$ModuleFastSource = 'https://pwsh.gallery/index.json'", script, StringComparison.Ordinal);
+        Assert.Contains("[string] $ComparisonProfile = 'ManagedVsModuleFast'", script, StringComparison.Ordinal);
+        Assert.Contains("ModuleFastModulePath", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -133,7 +135,9 @@ public sealed class ManagedModuleSimpleBenchmarkScriptTests
 
         Assert.Contains("RepositoryUri = $RepositoryUri", script, StringComparison.Ordinal);
         Assert.Contains("ModuleFastSource = if ($EngineName -eq 'ModuleFast')", script, StringComparison.Ordinal);
+        Assert.Contains("ModuleFastModulePath = if ($EngineName -eq 'ModuleFast')", script, StringComparison.Ordinal);
         Assert.Contains("EngineCommandPath = $engineMetadata.CommandPath", script, StringComparison.Ordinal);
+        Assert.Contains("EngineModuleBase = $engineMetadata.ModuleBase", script, StringComparison.Ordinal);
         Assert.Contains("EngineModuleVersion = $engineMetadata.ModuleVersion", script, StringComparison.Ordinal);
     }
 

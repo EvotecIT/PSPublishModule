@@ -334,13 +334,16 @@ Repair-ManagedModule -Latest -Repository PSGallery -ShowSummary
 ### Benchmarks
 
 The managed module benchmark answers a narrow question: how long does each
-tool take to run the public command a user would normally run? The script in
-[Benchmarks/ManagedModules](Benchmarks/ManagedModules) measures `Find`,
-`Install`, and `Save` for PSScriptAnalyzer, Microsoft.Graph.Authentication,
-Microsoft.Graph, Az.Accounts, and Az against Managed, ModuleFast,
-PSResourceGet, and PowerShellGet where an equivalent command exists. Repair is
-not included because the other tools do not expose an equivalent module-estate
-repair command.
+tool take to run the public command a user would normally run? The default
+script profile in [Benchmarks/ManagedModules](Benchmarks/ManagedModules) now
+focuses on Managed versus ModuleFast install rows because those are the useful
+throughput race while tuning the engine. The older `Full` profile still
+measures `Find`, `Install`, and `Save` for PSScriptAnalyzer,
+Microsoft.Graph.Authentication, Microsoft.Graph, Az.Accounts, and Az against
+Managed, ModuleFast, PSResourceGet, and PowerShellGet where an equivalent
+command exists, but it is an explicit baseline run rather than the normal fast
+loop. Repair is not included because the other tools do not expose an
+equivalent module-estate repair command.
 
 Managed is the `1.00x` baseline for each completed row. Other values show how
 many times slower that tool was for the same scenario, with measured time in
@@ -384,6 +387,14 @@ dependency graph, ModuleFast can be very fast. When the mirror is missing a
 dependency that the official Gallery resolves, the ModuleFast row should be
 treated as a source/index miss rather than a managed engine failure.
 
+ModuleFast implementation provenance matters too. A normal benchmark run uses
+the `Install-ModuleFast` command visible in the benchmark host, which is usually
+the installed PSGallery/user-path ModuleFast module. To compare Justin Grote's
+development C# branch or another local build, pass `-ModuleFastModulePath` to
+the benchmark wrapper. The CSV records `ModuleFastSource`,
+`ModuleFastModulePath`, `EngineModuleBase`, and `EngineModuleVersion` so those
+runs stay separate.
+
 The comparison is therefore split into capability and timing:
 
 | Tool | Source path used here | Equivalent rows | Integrity and safety posture |
@@ -409,7 +420,9 @@ PowerShell Gallery matrix run on PowerShell 7 and Windows PowerShell 5.1.
 Managed is fastest in 24 of 30 scenario/host/operation groups. Provider-backed
 rows can still be noisy because they use the live public gallery path; when
 repeated rows exist, the README updater writes the median timing for that
-scenario/tool row.
+scenario/tool row. While optimizing install throughput, prefer refreshing the
+focused Managed-vs-ModuleFast rows instead of re-running the native-provider
+10x/30x cases unless a fresh compatibility baseline is needed.
 
 <!-- managed-module-benchmark-table:start -->
 | Scenario | Host | Operation | Managed | ModuleFast | PSResourceGet | PowerShellGet | Result |

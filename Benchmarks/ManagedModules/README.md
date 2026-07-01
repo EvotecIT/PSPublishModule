@@ -61,25 +61,36 @@ larger than wall-clock time because dependency downloads and extraction run in
 parallel; the max and root elapsed columns are usually better indicators for
 the critical path.
 
-Run PowerShell 7:
+Run the default focused Managed-vs-ModuleFast install comparison:
 
 ```powershell
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -BenchmarkHost PowerShell7 -RepeatCount 1
 ```
 
-Run the focused Managed-vs-ModuleFast install comparison:
+That default profile skips PSResourceGet/PowerShellGet native install baselines
+and only runs the install rows where ModuleFast has an equivalent public
+command. The full native-provider matrix is still available when you need a
+fresh baseline:
 
 ```powershell
-pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -ComparisonProfile ManagedVsModuleFast -BenchmarkHost PowerShell7 -RepeatCount 1 -OutputPath .\Ignore\Benchmarks\ManagedModules\managed-vs-modulefast.csv -OutputRoot .\Ignore\Benchmarks\ManagedModules\ManagedVsModuleFast
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -ComparisonProfile Full -BenchmarkHost PowerShell7 -RepeatCount 1
 ```
 
-Use the focused profile while tuning install throughput. It skips
-PSResourceGet/PowerShellGet native install baselines and only runs the install
-rows where ModuleFast has an equivalent public command. To compare a local or
-development ModuleFast build, install that build into the benchmark host first
-or pass its supported source with `-ModuleFastSource`; the result CSV records
-`ModuleFastSource`, `EngineCommandPath`, and `EngineModuleVersion` for each
-row.
+Use the focused profile while tuning install throughput. By default it compares
+the managed engine with the `Install-ModuleFast` command visible in the
+benchmark PowerShell host, usually the installed ModuleFast module from the
+user/module path. To compare a local or development ModuleFast build, pass its
+manifest, script module, or module folder:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -BenchmarkHost PowerShell7 -RepeatCount 1 -ModuleFastModulePath .\Ignore\External\ModuleFast-csharp\ModuleFast.psd1 -OutputPath .\Ignore\Benchmarks\ManagedModules\managed-vs-modulefast-dev.csv -OutputRoot .\Ignore\Benchmarks\ManagedModules\ManagedVsModuleFastDev
+```
+
+`-ModuleFastSource` only changes the package source passed to ModuleFast; it
+does not select a different ModuleFast implementation. The result CSV records
+`ModuleFastSource`, `ModuleFastModulePath`, `EngineCommandPath`,
+`EngineModuleBase`, and `EngineModuleVersion` for each row so installed-gallery
+and development-branch comparisons stay separate.
 
 Append Windows PowerShell 5.1 results:
 

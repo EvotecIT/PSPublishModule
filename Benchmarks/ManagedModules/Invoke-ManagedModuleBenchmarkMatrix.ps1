@@ -1,7 +1,7 @@
 #requires -Version 5.1
 param(
     [ValidateSet('Full', 'ManagedVsModuleFast')]
-    [string] $ComparisonProfile = 'Full',
+    [string] $ComparisonProfile = 'ManagedVsModuleFast',
 
     [ValidateSet('SingleModule', 'GraphAuthentication', 'Graph', 'AzAccounts', 'Az')]
     [string[]] $ScenarioName = @('SingleModule', 'GraphAuthentication', 'Graph', 'AzAccounts', 'Az'),
@@ -23,6 +23,8 @@ param(
     [string] $RepositoryUri = 'https://www.powershellgallery.com/api/v2',
 
     [string] $ModuleFastSource = 'https://pwsh.gallery/index.json',
+
+    [string] $ModuleFastModulePath = '',
 
     [string] $ManagedModuleBinary,
 
@@ -133,6 +135,7 @@ function New-MeasureCommand {
     $outputPathLiteral = ConvertTo-SingleQuotedLiteral $SelectedOutputPath
     $outputRootLiteral = ConvertTo-SingleQuotedLiteral $SelectedOutputRoot
     $moduleFastSourceLiteral = ConvertTo-SingleQuotedLiteral $ModuleFastSource
+    $moduleFastModulePathLiteral = ConvertTo-SingleQuotedLiteral $ModuleFastModulePath
     $managedModuleBinaryLiteral = ConvertTo-SingleQuotedLiteral $ManagedModuleBinary
     $appendSwitch = if ($AppendOutput.IsPresent) { ' -Append' } else { '' }
     $skipSwitch = if ($SkipNativeCurrentUserInstall.IsPresent) { ' -SkipNativeCurrentUserInstall' } else { '' }
@@ -146,6 +149,9 @@ function New-MeasureCommand {
     $command = "`$ErrorActionPreference = 'Stop'; $prefix& $measureLiteral -ScenarioName $scenarioLiteral -Operation $operationLiteral -Engine $engineLiteral -RepeatCount $RepeatCount -OutputPath $outputPathLiteral -OutputRoot $outputRootLiteral -Repository $repositoryLiteral -RepositoryUri $repositoryUriLiteral$appendSwitch$skipSwitch"
     if (-not [string]::IsNullOrWhiteSpace($ModuleFastSource)) {
         $command += " -ModuleFastSource $moduleFastSourceLiteral"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ModuleFastModulePath)) {
+        $command += " -ModuleFastModulePath $moduleFastModulePathLiteral"
     }
     if (-not [string]::IsNullOrWhiteSpace($ManagedModuleBinary)) {
         $command += " -ManagedModuleBinary $managedModuleBinaryLiteral"
