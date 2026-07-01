@@ -4,11 +4,27 @@ using System.Management.Automation.Runspaces;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PowerForge;
+using PSPublishModule;
 
 namespace PowerForge.Tests;
 
 public sealed class ModuleBuildPreparationServiceTests
 {
+    [Fact]
+    public void InvokeModuleBuild_RunMode_AllowsLegacyConfigurationParameterSet()
+    {
+        var runMode = typeof(InvokeModuleBuildCommand).GetProperty(nameof(InvokeModuleBuildCommand.RunMode));
+        Assert.NotNull(runMode);
+
+        var parameterSets = runMode!
+            .GetCustomAttributes(typeof(ParameterAttribute), inherit: false)
+            .Cast<ParameterAttribute>()
+            .Select(static attribute => attribute.ParameterSetName)
+            .ToArray();
+
+        Assert.Contains("Configuration", parameterSets);
+    }
+
     [Fact]
     public void Prepare_from_modern_request_appends_run_mode_gate_segment()
     {

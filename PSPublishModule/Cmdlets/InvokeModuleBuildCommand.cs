@@ -121,6 +121,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     /// and Publish enables configured publish destinations.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration)]
     [Parameter(ParameterSetName = ParameterSetConfig)]
     [Alias("ConfigurationGateMode")]
     public ConfigurationGateMode? RunMode { get; set; }

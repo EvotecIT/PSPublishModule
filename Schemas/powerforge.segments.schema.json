@@ -115,6 +115,14 @@
       }
     },
 
+    "GateConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Mode": { "type": "string", "enum": ["Manifest", "Build", "Publish"] }
+      }
+    },
+
     "DocumentationConfiguration": {
       "type": "object",
       "additionalProperties": false,
@@ -779,6 +787,16 @@
       "required": ["Type"]
     },
 
+    "GateSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Gate" },
+        "Configuration": { "$ref": "#/$defs/GateConfiguration" }
+      },
+      "required": ["Type"]
+    },
+
     "InformationSegment": {
       "type": "object",
       "additionalProperties": false,
@@ -986,6 +1004,7 @@
         { "$ref": "#/$defs/ManifestSegment" },
         { "$ref": "#/$defs/BuildSegment" },
         { "$ref": "#/$defs/BuildLibrariesSegment" },
+        { "$ref": "#/$defs/GateSegment" },
         { "$ref": "#/$defs/InformationSegment" },
         { "$ref": "#/$defs/OptionsSegment" },
         { "$ref": "#/$defs/FormattingSegment" },
