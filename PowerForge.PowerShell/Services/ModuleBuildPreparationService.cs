@@ -49,6 +49,7 @@ internal sealed class ModuleBuildPreparationService
                 ? LegacySegmentAdapter.CollectFromLegacyConfiguration(request.Configuration)
                 : CollectSettingsFromWorkspace(request.Settings, projectRoot))
             : Array.Empty<IConfigurationSegment>();
+        segments = AddRunModeSegment(segments, request.RunMode);
         ResolveWorkspaceRelativeSegmentPaths(segments, workspaceRoot, projectRoot);
 
         var frameworks = useLegacy && !request.DotNetFrameworkWasBound
@@ -123,6 +124,7 @@ internal sealed class ModuleBuildPreparationService
 
         var spec = ReadPipelineSpecJson(configFullPath);
         ResolvePipelineSpecPaths(spec, configFullPath);
+        spec.Segments = AddRunModeSegment(spec.Segments ?? Array.Empty<IConfigurationSegment>(), request.RunMode);
 
         if (spec.Build is null)
             throw new InvalidOperationException("Module build config requires a Build section.");
@@ -145,6 +147,24 @@ internal sealed class ModuleBuildPreparationService
             ConfigLabel = "json",
             ConfigFilePath = configFullPath
         };
+    }
+
+    private static IConfigurationSegment[] AddRunModeSegment(
+        IReadOnlyList<IConfigurationSegment>? segments,
+        ConfigurationGateMode? runMode)
+    {
+        if (runMode is null)
+            return (segments ?? Array.Empty<IConfigurationSegment>()).ToArray();
+
+        var output = new List<IConfigurationSegment>(segments ?? Array.Empty<IConfigurationSegment>())
+        {
+            new ConfigurationGateSegment
+            {
+                Configuration = new GateConfiguration { Mode = runMode.Value }
+            }
+        };
+
+        return output.ToArray();
     }
 
     public void WritePipelineSpecJson(ModulePipelineSpec spec, string jsonFullPath)
@@ -311,6 +331,14 @@ internal sealed class ModuleBuildPreparationService
             cfg.WorkingDirectory = ResolveConfigPathNullable(projectRoot, cfg.WorkingDirectory);
         }
 
+        foreach (var segment in spec.Segments?.OfType<ConfigurationExternalAssetSegment>() ?? Enumerable.Empty<ConfigurationExternalAssetSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null) continue;
+            cfg.OutputPath = ResolveConfigPathNullable(projectRoot, cfg.OutputPath);
+            cfg.ManifestPath = ResolveConfigPathNullable(projectRoot, cfg.ManifestPath);
+        }
+
         foreach (var segment in spec.Segments?.OfType<ConfigurationArtefactSegment>() ?? Enumerable.Empty<ConfigurationArtefactSegment>())
         {
             var cfg = segment.Configuration;
@@ -462,6 +490,10 @@ internal sealed class ModuleBuildPreparationService
                 case ConfigurationActionSegment action:
                     action.Configuration.FilePath = ResolveSegmentPath(segmentRoot, projectRoot, action.Configuration.FilePath, preserveProjectRelativeSegmentPaths);
                     action.Configuration.WorkingDirectory = ResolveSegmentPath(segmentRoot, projectRoot, action.Configuration.WorkingDirectory, preserveProjectRelativeSegmentPaths);
+                    break;
+                case ConfigurationExternalAssetSegment externalAsset:
+                    externalAsset.Configuration.OutputPath = ResolveSegmentPath(segmentRoot, projectRoot, externalAsset.Configuration.OutputPath, preserveProjectRelativeSegmentPaths);
+                    externalAsset.Configuration.ManifestPath = ResolveSegmentPath(segmentRoot, projectRoot, externalAsset.Configuration.ManifestPath, preserveProjectRelativeSegmentPaths);
                     break;
                 case ConfigurationAppleAppSegment appleApp:
                     appleApp.Configuration.ProjectPath = ResolveWorkspaceQualifiedPath(segmentRoot, projectRoot, appleApp.Configuration.ProjectPath) ?? string.Empty;
@@ -907,6 +939,14 @@ internal sealed class ModuleBuildPreparationService
             if (cfg is null) continue;
             cfg.FilePath = MakeRelativeForProjectRoot(projectRoot, cfg.FilePath, preserveExternalRooted: true, workspaceRoot);
             cfg.WorkingDirectory = MakeRelativeForProjectRoot(projectRoot, cfg.WorkingDirectory, preserveExternalRooted: true, workspaceRoot);
+        }
+
+        foreach (var segment in spec.Segments?.OfType<ConfigurationExternalAssetSegment>() ?? Enumerable.Empty<ConfigurationExternalAssetSegment>())
+        {
+            var cfg = segment.Configuration;
+            if (cfg is null) continue;
+            cfg.OutputPath = MakeRelativeForProjectRoot(projectRoot, cfg.OutputPath, preserveExternalRooted: true, workspaceRoot);
+            cfg.ManifestPath = MakeRelativeForProjectRoot(projectRoot, cfg.ManifestPath, preserveExternalRooted: true, workspaceRoot);
         }
 
         foreach (var segment in spec.Segments?.OfType<ConfigurationArtefactSegment>() ?? Enumerable.Empty<ConfigurationArtefactSegment>())

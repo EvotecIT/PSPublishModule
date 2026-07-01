@@ -6,6 +6,36 @@ namespace PowerForge.Tests;
 public sealed class ConfigurationSegmentJsonConverterTests
 {
     [Fact]
+    public void SegmentsSchema_IncludesGateSegment()
+    {
+        using var schema = JsonDocument.Parse(File.ReadAllText(SchemaPath("powerforge.segments.schema.json")));
+        var defs = schema.RootElement.GetProperty("$defs");
+
+        Assert.True(defs.TryGetProperty("GateConfiguration", out var gateConfiguration));
+        Assert.True(defs.TryGetProperty("GateSegment", out var gateSegment));
+        var modes = gateConfiguration
+            .GetProperty("properties")
+            .GetProperty("Mode")
+            .GetProperty("enum")
+            .EnumerateArray()
+            .Select(static item => item.GetString())
+            .ToArray();
+        Assert.Contains("Manifest", modes);
+        Assert.Contains("Build", modes);
+        Assert.Contains("Publish", modes);
+        Assert.Contains("Mode", gateConfiguration.GetProperty("required").EnumerateArray().Select(static item => item.GetString()));
+        Assert.Contains("Configuration", gateSegment.GetProperty("required").EnumerateArray().Select(static item => item.GetString()));
+
+        var segmentRefs = defs
+            .GetProperty("ConfigurationSegment")
+            .GetProperty("oneOf")
+            .EnumerateArray()
+            .Select(static item => item.GetProperty("$ref").GetString())
+            .ToArray();
+        Assert.Contains("#/$defs/GateSegment", segmentRefs);
+    }
+
+    [Fact]
     public void Deserialize_ReadsGateSegment()
     {
         const string json = """
@@ -87,6 +117,60 @@ public sealed class ConfigurationSegmentJsonConverterTests
         Assert.Equal("true", segment.Configuration.Environment?["POWERFORGE_SAMPLE"]);
         Assert.Equal(30, segment.Configuration.TimeoutSeconds);
         Assert.True(segment.Configuration.ContinueOnError);
+    }
+
+    [Fact]
+    public void Deserialize_ReadsExternalAssetSegment()
+    {
+        const string json = """
+            {
+              "Build": {
+                "Name": "PSPublishModule.Artefacts",
+                "SourcePath": ".",
+                "Version": "1.0.0"
+              },
+              "Install": {
+                "Enabled": false
+              },
+              "Segments": [
+                {
+                  "Type": "ExternalAsset",
+                  "Configuration": {
+                    "Name": "AzureArtifactsCredentialProvider",
+                    "Version": "2.0.2",
+                    "OutputPath": "Artefacts/AzureArtifactsCredentialProvider",
+                    "Source": "https://github.com/microsoft/artifacts-credprovider/releases/tag/v2.0.2",
+                    "License": "MIT",
+                    "SkipDownload": true,
+                    "Files": [
+                      {
+                        "Runtime": "netcore",
+                        "Architecture": "x64",
+                        "FileName": "Microsoft.win-x64.NuGet.CredentialProvider.zip",
+                        "Uri": "https://example.test/Microsoft.win-x64.NuGet.CredentialProvider.zip"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+            """;
+
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        options.Converters.Add(new ConfigurationSegmentJsonConverter());
+
+        var spec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, options);
+
+        Assert.NotNull(spec);
+        var segment = Assert.IsType<ConfigurationExternalAssetSegment>(Assert.Single(spec!.Segments));
+        Assert.Equal("AzureArtifactsCredentialProvider", segment.Configuration.Name);
+        Assert.Equal("2.0.2", segment.Configuration.Version);
+        Assert.Equal("Artefacts/AzureArtifactsCredentialProvider", segment.Configuration.OutputPath);
+        Assert.True(segment.Configuration.SkipDownload);
+        var file = Assert.Single(segment.Configuration.Files);
+        Assert.Equal("netcore", file.Runtime);
+        Assert.Equal("x64", file.Architecture);
     }
 
     [Fact]
@@ -289,4 +373,7 @@ public sealed class ConfigurationSegmentJsonConverterTests
         Assert.Equal("DEMO_CONFIGURATION", segment.BuildLibraries.NETDevelopmentConfigurationEnvironmentVariable);
         Assert.Equal(ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile, segment.BuildLibraries.NETDevelopmentSourceBootstrapperMode);
     }
+
+    private static string SchemaPath(string fileName)
+        => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Schemas", fileName));
 }

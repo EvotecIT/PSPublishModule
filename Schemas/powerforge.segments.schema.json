@@ -105,14 +105,23 @@
         "NETDevelopmentConfigurationEnvironmentVariable": { "type": ["string", "null"] },
         "DevelopmentSourceBootstrapperMode": { "type": ["string", "null"], "enum": ["PreserveSingleFile", "ReplaceSingleFile", null] },
         "NETDevelopmentSourceBootstrapperMode": { "type": ["string", "null"], "enum": ["PreserveSingleFile", "ReplaceSingleFile", null] },
-        "AssemblyTypeAcceleratorMode": { "type": ["string", "null"], "enum": ["None", "AllowList", "Assembly", null] },
-        "NETAssemblyTypeAcceleratorMode": { "type": ["string", "null"], "enum": ["None", "AllowList", "Assembly", null] },
+        "AssemblyTypeAcceleratorMode": { "type": ["string", "null"], "enum": ["None", "AllowList", "Assembly", "Enums", null] },
+        "NETAssemblyTypeAcceleratorMode": { "type": ["string", "null"], "enum": ["None", "AllowList", "Assembly", "Enums", null] },
         "AssemblyTypeAccelerators": { "type": ["array", "null"], "items": { "type": "string" } },
         "NETAssemblyTypeAccelerators": { "type": ["array", "null"], "items": { "type": "string" } },
         "AssemblyTypeAcceleratorAssemblies": { "type": ["array", "null"], "items": { "type": "string" } },
         "NETAssemblyTypeAcceleratorAssemblies": { "type": ["array", "null"], "items": { "type": "string" } },
         "NETDoNotCopyLibrariesRecursively": { "type": ["boolean", "null"] }
       }
+    },
+
+    "GateConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Mode": { "type": "string", "enum": ["Manifest", "Build", "Publish"] }
+      },
+      "required": ["Mode"]
     },
 
     "DocumentationConfiguration": {
@@ -204,6 +213,46 @@
         "ContinueOnError": { "type": "boolean" },
         "PreferWindowsPowerShell": { "type": "boolean" }
       }
+    },
+
+    "ExternalAssetFileConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Runtime": { "type": "string", "minLength": 1 },
+        "Architecture": { "type": ["string", "null"] },
+        "FileName": { "type": "string", "minLength": 1 },
+        "Uri": { "type": "string", "minLength": 1 },
+        "Path": { "type": ["string", "null"] },
+        "Sha256": { "type": ["string", "null"] }
+      },
+      "required": ["Runtime", "FileName", "Uri"]
+    },
+
+    "ExternalAssetConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Name": { "type": "string", "minLength": 1 },
+        "Version": { "type": ["string", "null"] },
+        "OutputPath": { "type": "string", "minLength": 1 },
+        "Source": { "type": ["string", "null"] },
+        "License": { "type": ["string", "null"] },
+        "ManifestPath": { "type": ["string", "null"] },
+        "SkipDownload": { "type": "boolean" },
+        "Files": { "type": "array", "items": { "$ref": "#/$defs/ExternalAssetFileConfiguration" }, "minItems": 1 }
+      },
+      "required": ["Name", "OutputPath", "Files"]
+    },
+
+    "GateConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Mode": { "type": "string", "enum": ["Manifest", "Build", "Publish"] }
+      },
+      "required": ["Mode"]
     },
 
     "XcodeProjectVersionConfiguration": {
@@ -779,6 +828,16 @@
       "required": ["Type"]
     },
 
+    "GateSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Gate" },
+        "Configuration": { "$ref": "#/$defs/GateConfiguration" }
+      },
+      "required": ["Type", "Configuration"]
+    },
+
     "InformationSegment": {
       "type": "object",
       "additionalProperties": false,
@@ -949,6 +1008,16 @@
       "required": ["Type"]
     },
 
+    "ExternalAssetSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "ExternalAsset" },
+        "Configuration": { "$ref": "#/$defs/ExternalAssetConfiguration" }
+      },
+      "required": ["Type"]
+    },
+
     "PublishSegment": {
       "type": "object",
       "additionalProperties": false,
@@ -986,6 +1055,7 @@
         { "$ref": "#/$defs/ManifestSegment" },
         { "$ref": "#/$defs/BuildSegment" },
         { "$ref": "#/$defs/BuildLibrariesSegment" },
+        { "$ref": "#/$defs/GateSegment" },
         { "$ref": "#/$defs/InformationSegment" },
         { "$ref": "#/$defs/OptionsSegment" },
         { "$ref": "#/$defs/FormattingSegment" },
@@ -995,6 +1065,7 @@
         { "$ref": "#/$defs/ModuleSkipSegment" },
         { "$ref": "#/$defs/CommandSegment" },
         { "$ref": "#/$defs/ExecuteSegment" },
+        { "$ref": "#/$defs/ExternalAssetSegment" },
         { "$ref": "#/$defs/XcodeProjectVersionSegment" },
         { "$ref": "#/$defs/AppleAppSegment" },
         { "$ref": "#/$defs/PlaceHolderSegment" },

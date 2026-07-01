@@ -31,10 +31,12 @@ public sealed partial class ModulePipelineRunner
         public ProjectConversionResult? ProjectFileConsistencyLineEndingFix { get; set; }
         public PowerShellCompatibilityReport? CompatibilityReport { get; set; }
         public ModuleValidationReport? ValidationReport { get; set; }
+        public ModuleTypeAcceleratorSurfaceReport? TypeAcceleratorSurfaceReport { get; set; }
         public BuildDiagnostic[] AutomaticBinaryConflictDiagnostics { get; set; } = Array.Empty<BuildDiagnostic>();
         public List<ArtefactBuildResult> ArtefactResults { get; } = new();
         public List<ModulePublishResult> PublishResults { get; } = new();
         public List<ProjectBuildHostExecutionResult> ProjectBuildResults { get; } = new();
+        public List<ExternalAssetPreparationResult> ExternalAssetResults { get; } = new();
         public List<ReleaseVersionCandidate> ReleaseVersionCandidates { get; } = new();
         public ModuleReleaseCoordinationResult? ReleaseCoordinationResult { get; set; }
         public List<ModulePipelineActionResult> ActionResults { get; } = new();

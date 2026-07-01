@@ -11,17 +11,17 @@ Creates/updates a module structure and triggers the build pipeline (legacy DSL c
 ## SYNTAX
 ### Modern (Default)
 ```powershell
-Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <string>] [-FunctionsToExportFolder <string>] [-AliasesToExportFolder <string>] [-ExcludeFromPackage <string[]>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-IncludeRoot <string[]>] [-IncludePS1 <string[]>] [-IncludeAll <string[]>] [-IncludeCustomCode <scriptblock>] [-IncludeToArray <IDictionary>] [-LibrariesCore <string>] [-LibrariesDefault <string>] [-LibrariesStandard <string>] [-Legacy] [-NoInteractive] [-StagingPath <string>] [-CsprojPath <string>] [-DotNetConfiguration <string>] [-DotNetFramework <string[]>] [-SkipInstall] [-InstallStrategy <InstallationStrategy>] [-KeepVersions <int>] [-InstallRoots <string[]>] [-LegacyFlatHandling <LegacyFlatModuleHandling>] [-PreserveInstallVersions <string[]>] [-KeepStaging] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <string>] [-RunMode <ConfigurationGateMode>] [-FunctionsToExportFolder <string>] [-AliasesToExportFolder <string>] [-ExcludeFromPackage <string[]>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-IncludeRoot <string[]>] [-IncludePS1 <string[]>] [-IncludeAll <string[]>] [-IncludeCustomCode <scriptblock>] [-IncludeToArray <IDictionary>] [-LibrariesCore <string>] [-LibrariesDefault <string>] [-LibrariesStandard <string>] [-Legacy] [-NoInteractive] [-StagingPath <string>] [-CsprojPath <string>] [-DotNetConfiguration <string>] [-DotNetFramework <string[]>] [-SkipInstall] [-InstallStrategy <InstallationStrategy>] [-KeepVersions <int>] [-InstallRoots <string[]>] [-LegacyFlatHandling <LegacyFlatModuleHandling>] [-PreserveInstallVersions <string[]>] [-KeepStaging] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Config
 ```powershell
-Invoke-ModuleBuild -ConfigPath <string> [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild -ConfigPath <string> [-RunMode <ConfigurationGateMode>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Configuration
 ```powershell
-Invoke-ModuleBuild -Configuration <IDictionary> [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild -Configuration <IDictionary> [-RunMode <ConfigurationGateMode>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -663,6 +663,23 @@ Version folders to preserve when pruning installed versions.
 Type: String[]
 Parameter Sets: Modern
 Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RunMode
+High-level module build lane. Manifest refreshes PSD1 metadata only, Build runs local build/package lanes,
+and Publish enables configured publish destinations.
+
+```yaml
+Type: Nullable`1
+Parameter Sets: Modern, Config, Configuration
+Aliases: ConfigurationGateMode
 Possible values:
 
 Required: False

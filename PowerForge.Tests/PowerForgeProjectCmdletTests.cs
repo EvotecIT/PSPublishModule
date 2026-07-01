@@ -239,6 +239,119 @@ public sealed class PowerForgeProjectCmdletTests
     }
 
     [Fact]
+    public void NewConfigurationExternalAsset_EmitsSegment()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddScript("""
+            $file = New-ConfigurationExternalAssetFile -Runtime netcore -Architecture x64 -FileName tool.zip -Uri 'https://example.test/tool.zip'
+            New-ConfigurationExternalAsset -Name VendorTool -Version '1.2.3' -OutputPath 'Artefacts\VendorTool' -Source 'https://example.test/vendor-tool' -License 'MIT' -SkipDownload -Files @($file)
+            """);
+
+        var results = ps.Invoke();
+
+        Assert.False(ps.HadErrors);
+        var segment = Assert.IsType<ConfigurationExternalAssetSegment>(Assert.Single(results).BaseObject);
+        Assert.Equal("VendorTool", segment.Configuration.Name);
+        Assert.Equal("1.2.3", segment.Configuration.Version);
+        Assert.Equal("Artefacts\\VendorTool", segment.Configuration.OutputPath);
+        Assert.True(segment.Configuration.SkipDownload);
+        var file = Assert.Single(segment.Configuration.Files);
+        Assert.Equal("netcore", file.Runtime);
+        Assert.Equal("x64", file.Architecture);
+        Assert.Equal("tool.zip", file.FileName);
+        Assert.Equal("https://example.test/tool.zip", file.Uri);
+    }
+
+    [Fact]
+    public void NewConfigurationModuleBuildProfile_EmitsReusableStandardSegments()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ConfigurationModuleBuildProfile")
+            .AddParameter("Documentation", false)
+            .AddParameter("SignModule", false);
+
+        var results = ps.Invoke();
+
+        Assert.False(ps.HadErrors);
+        var segments = results.Select(static result => result.BaseObject).OfType<IConfigurationSegment>().ToArray();
+        Assert.Contains(segments, static segment => segment is ConfigurationFormattingSegment);
+        Assert.Contains(segments, static segment => segment is ConfigurationValidationSegment);
+        Assert.Contains(segments, static segment => segment is ConfigurationFileConsistencySegment);
+        Assert.Contains(segments, static segment => segment is ConfigurationCompatibilitySegment);
+        Assert.Contains(segments, static segment => segment is ConfigurationImportModulesSegment);
+        Assert.Contains(segments, static segment => segment is ConfigurationBuildSegment);
+        Assert.DoesNotContain(segments, static segment => segment is ConfigurationDocumentationSegment);
+
+        var build = segments.OfType<ConfigurationBuildSegment>().Single().BuildModule;
+        Assert.True(build.Enable);
+        Assert.True(build.Merge);
+        Assert.Null(build.MergeMissing);
+        Assert.False(build.SignMerged);
+        Assert.True(build.InstallMissingModules);
+        Assert.Equal(InstallationStrategy.AutoRevision, build.VersionedInstallStrategy);
+        Assert.Equal(3, build.VersionedInstallKeep);
+    }
+
+    [Fact]
+    public void NewConfigurationModuleBuildProfile_EmitsApprovedModuleMergeOnlyWhenRequested()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ConfigurationModuleBuildProfile")
+            .AddParameter("Documentation", false)
+            .AddParameter("MergeFunctionsFromApprovedModules", true);
+
+        var results = ps.Invoke();
+
+        Assert.False(ps.HadErrors);
+        var build = results
+            .Select(static result => result.BaseObject)
+            .OfType<ConfigurationBuildSegment>()
+            .Single()
+            .BuildModule;
+        Assert.True(build.MergeMissing);
+    }
+
+    [Fact]
+    public void NewConfigurationModuleBuildProfile_BinaryRequiresProjectIdentity()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ConfigurationModuleBuildProfile")
+            .AddParameter("Profile", ModuleBuildProfileKind.Binary);
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("NETProjectPath and NETProjectName are required", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void NewConfigurationModuleBuildProfile_EmitsBinaryBuildLibraries()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ConfigurationModuleBuildProfile")
+            .AddParameter("Profile", ModuleBuildProfileKind.Binary)
+            .AddParameter("Documentation", false)
+            .AddParameter("NETProjectName", "DemoModule")
+            .AddParameter("NETProjectPath", "Sources\\DemoModule")
+            .AddParameter("NETFramework", new[] { "net8.0", "net472" })
+            .AddParameter("ResolveBinaryConflicts")
+            .AddParameter("ResolveBinaryConflictsName", "DemoModule")
+            .AddParameter("NETAssemblyLoadContext");
+
+        var results = ps.Invoke();
+
+        Assert.False(ps.HadErrors);
+        var segments = results.Select(static result => result.BaseObject).OfType<IConfigurationSegment>().ToArray();
+        var libraries = segments.OfType<ConfigurationBuildLibrariesSegment>().Single().BuildLibraries;
+        Assert.True(libraries.Enable);
+        Assert.Equal("DemoModule", libraries.ProjectName);
+        Assert.Equal("Sources\\DemoModule", libraries.NETProjectPath);
+        Assert.Equal(new[] { "net8.0", "net472" }, libraries.Framework);
+        Assert.True(libraries.UseAssemblyLoadContext);
+
+        var build = segments.OfType<ConfigurationBuildSegment>().Single().BuildModule;
+        Assert.Equal("DemoModule", build.ResolveBinaryConflicts?.ProjectName);
+    }
+
+    [Fact]
     public void GetConfigurationBoolean_UsesEnvironmentValueOrDefault()
     {
         var name = "POWERFORGE_TEST_BOOL_" + Guid.NewGuid().ToString("N");

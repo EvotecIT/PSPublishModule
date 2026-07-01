@@ -14694,6 +14694,19 @@ Defaults to powerforge.json in the project root.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="ConfigurationGateMode">
+          <maml:name>RunMode</maml:name>
+          <maml:description>
+            <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Build runs local build/package lanes,&#xD;
+and Publish enables configured publish destinations.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>Settings</maml:name>
           <maml:description>
@@ -14908,6 +14921,19 @@ Defaults to powerforge.json in the project root.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="ConfigurationGateMode">
+          <maml:name>RunMode</maml:name>
+          <maml:description>
+            <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Build runs local build/package lanes,&#xD;
+and Publish enables configured publish destinations.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>UpdateDiagnosticsBaseline</maml:name>
           <maml:description>
@@ -15082,6 +15108,19 @@ Defaults to powerforge.json in the project root.</maml:para>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="ConfigurationGateMode">
+          <maml:name>RunMode</maml:name>
+          <maml:description>
+            <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Build runs local build/package lanes,&#xD;
+and Publish enables configured publish destinations.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -15550,6 +15589,19 @@ Defaults to powerforge.json in the project root.</maml:para>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
         <dev:type>
           <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="ConfigurationGateMode">
+        <maml:name>RunMode</maml:name>
+        <maml:description>
+          <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Build runs local build/package lanes,&#xD;
+and Publish enables configured publish destinations.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <dev:type>
+          <maml:name>Nullable`1</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -32133,6 +32185,469 @@ execution order; the At value does.</maml:para>
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>New-ConfigurationExternalAsset</command:name>
+      <command:verb>New</command:verb>
+      <command:noun>ConfigurationExternalAsset</command:noun>
+      <maml:description>
+        <maml:para>Adds an external asset bundle that is prepared before module staging.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>External asset bundles are for files that should be carried inside a module package but are not authored as normal&#xD;
+source files, such as offline installers, tooling archives, generated payloads, or mirrored third-party packages.&#xD;
+PowerForge downloads or copies the declared files before staging, computes SHA256 values, and writes a manifest&#xD;
+alongside the bundle.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>New-ConfigurationExternalAsset</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Disabled</maml:name>
+          <maml:description>
+            <maml:para>When set, disables the bundle while keeping it in configuration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Files</maml:name>
+          <maml:description>
+            <maml:para>Files that make up the external asset bundle.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">ExternalAssetFileConfiguration[]</command:parameterValue>
+          <dev:type>
+            <maml:name>ExternalAssetFileConfiguration[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>License</maml:name>
+          <maml:description>
+            <maml:para>Optional license expression or label written to the generated manifest.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ManifestPath</maml:name>
+          <maml:description>
+            <maml:para>Optional manifest path. Relative paths resolve from the project root; when omitted, manifest.json is written under OutputPath.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Friendly bundle name written to the generated manifest.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OutputPath</maml:name>
+          <maml:description>
+            <maml:para>Output directory for the downloaded or copied files. Relative paths resolve from the project root.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipDownload</maml:name>
+          <maml:description>
+            <maml:para>When set, existing files are used and missing files fail the build instead of downloading or copying sources.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Source</maml:name>
+          <maml:description>
+            <maml:para>Optional source URI or project URL written to the generated manifest.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Version</maml:name>
+          <maml:description>
+            <maml:para>Optional bundle version written to the generated manifest.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Disabled</maml:name>
+        <maml:description>
+          <maml:para>When set, disables the bundle while keeping it in configuration.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Files</maml:name>
+        <maml:description>
+          <maml:para>Files that make up the external asset bundle.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">ExternalAssetFileConfiguration[]</command:parameterValue>
+        <dev:type>
+          <maml:name>ExternalAssetFileConfiguration[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>License</maml:name>
+        <maml:description>
+          <maml:para>Optional license expression or label written to the generated manifest.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ManifestPath</maml:name>
+        <maml:description>
+          <maml:para>Optional manifest path. Relative paths resolve from the project root; when omitted, manifest.json is written under OutputPath.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Name</maml:name>
+        <maml:description>
+          <maml:para>Friendly bundle name written to the generated manifest.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OutputPath</maml:name>
+        <maml:description>
+          <maml:para>Output directory for the downloaded or copied files. Relative paths resolve from the project root.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SkipDownload</maml:name>
+        <maml:description>
+          <maml:para>When set, existing files are used and missing files fail the build instead of downloading or copying sources.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Source</maml:name>
+        <maml:description>
+          <maml:para>Optional source URI or project URL written to the generated manifest.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Version</maml:name>
+        <maml:description>
+          <maml:para>Optional bundle version written to the generated manifest.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.ConfigurationExternalAssetSegment</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Prepare an offline payload before staging</maml:title>
+        <dev:code>New-ConfigurationExternalAsset -Name VendorTool -OutputPath 'Artefacts\VendorTool' -Files @(New-ConfigurationExternalAssetFile -Runtime win-x64 -FileName tool.zip -Uri 'https://example.test/tool.zip')</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>New-ConfigurationExternalAssetFile</command:name>
+      <command:verb>New</command:verb>
+      <command:noun>ConfigurationExternalAssetFile</command:noun>
+      <maml:description>
+        <maml:para>Creates a file entry for an external asset bundle.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>File entries are passed to New-ConfigurationExternalAsset. Each entry declares where the build pipeline&#xD;
+obtains a file from, where it lands inside the output folder, and which runtime or architecture metadata should be&#xD;
+written to the generated manifest.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>New-ConfigurationExternalAssetFile</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Architecture</maml:name>
+          <maml:description>
+            <maml:para>Optional architecture metadata written to the generated manifest.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>FileName</maml:name>
+          <maml:description>
+            <maml:para>Destination file name when Path is not specified.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Destination path relative to the bundle output directory. Defaults to FileName.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Runtime</maml:name>
+          <maml:description>
+            <maml:para>Runtime or payload group, such as netcore, netfx, linux-x64, or win-x64.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Sha256</maml:name>
+          <maml:description>
+            <maml:para>Optional expected SHA256. When provided, mismatches fail the build.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Url">
+          <maml:name>Uri</maml:name>
+          <maml:description>
+            <maml:para>HTTP(S) URI, file URI, rooted local path, or project-relative local path for this file.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Architecture</maml:name>
+        <maml:description>
+          <maml:para>Optional architecture metadata written to the generated manifest.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>FileName</maml:name>
+        <maml:description>
+          <maml:para>Destination file name when Path is not specified.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Path</maml:name>
+        <maml:description>
+          <maml:para>Destination path relative to the bundle output directory. Defaults to FileName.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Runtime</maml:name>
+        <maml:description>
+          <maml:para>Runtime or payload group, such as netcore, netfx, linux-x64, or win-x64.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Sha256</maml:name>
+        <maml:description>
+          <maml:para>Optional expected SHA256. When provided, mismatches fail the build.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Url">
+        <maml:name>Uri</maml:name>
+        <maml:description>
+          <maml:para>HTTP(S) URI, file URI, rooted local path, or project-relative local path for this file.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.ExternalAssetFileConfiguration</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Create a web-download file entry</maml:title>
+        <dev:code>New-ConfigurationExternalAssetFile -Runtime netcore -Architecture x64 -FileName tool.zip -Uri 'https://example.test/tool.zip'</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>New-ConfigurationFileConsistency</command:name>
       <command:verb>New</command:verb>
       <command:noun>ConfigurationFileConsistency</command:noun>
@@ -35030,6 +35545,1173 @@ is merge-only.</maml:para>
         <dev:code>New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'</dev:code>
         <dev:remarks>
           <maml:para>Pairs well with New-ConfigurationBuild -ResolveMissingModulesOnline when the module is not installed locally.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>New-ConfigurationModuleBuildProfile</command:name>
+      <command:verb>New</command:verb>
+      <command:noun>ConfigurationModuleBuildProfile</command:noun>
+      <maml:description>
+        <maml:para>Emits a reusable module build profile for common PowerForge module builds.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>This cmdlet emits the same configuration segment types as the lower-level&#xD;
+New-ConfigurationFormat, New-ConfigurationDocumentation,&#xD;
+New-ConfigurationValidation, New-ConfigurationFileConsistency,&#xD;
+New-ConfigurationCompatibility, New-ConfigurationImportModule, and&#xD;
+New-ConfigurationBuild commands. Use it when a module wrapper should stay thin&#xD;
+and only declare project-specific values.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>New-ConfigurationModuleBuildProfile</maml:name>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AboutTopicsSourcePath</maml:name>
+          <maml:description>
+            <maml:para>Source paths for about-topic files.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>CertificateThumbprint</maml:name>
+          <maml:description>
+            <maml:para>Code-signing certificate thumbprint.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Compatibility</maml:name>
+          <maml:description>
+            <maml:para>Enable cross-version PowerShell compatibility defaults.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Documentation</maml:name>
+          <maml:description>
+            <maml:para>Enable documentation generation defaults.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DocumentationPath</maml:name>
+          <maml:description>
+            <maml:para>Generated documentation path.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DocumentationReadmePath</maml:name>
+          <maml:description>
+            <maml:para>Readme path used by generated documentation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DoNotAttemptToFixRelativePaths</maml:name>
+          <maml:description>
+            <maml:para>Do not attempt to fix relative paths during merge.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DotSourceClasses</maml:name>
+          <maml:description>
+            <maml:para>Keep classes dot-sourced.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DotSourceLibraries</maml:name>
+          <maml:description>
+            <maml:para>Keep library-loading code dot-sourced.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>EnableScriptAnalyzer</maml:name>
+          <maml:description>
+            <maml:para>Enable PSScriptAnalyzer as part of validation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>EncodingOverrides</maml:name>
+          <maml:description>
+            <maml:para>Per-pattern encoding overrides for file consistency checks.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>FileConsistency</maml:name>
+          <maml:description>
+            <maml:para>Enable file consistency defaults.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>FileConsistencyExcludeDirectories</maml:name>
+          <maml:description>
+            <maml:para>Directory names excluded from file consistency checks.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ImportRequiredModules</maml:name>
+          <maml:description>
+            <maml:para>Import RequiredModules before validation/test steps that need them.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ImportSelf</maml:name>
+          <maml:description>
+            <maml:para>Import the module under build before validation/test steps that need it.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>InstallMissingModules</maml:name>
+          <maml:description>
+            <maml:para>Install missing module dependencies on the build host.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>KillLockersBeforeInstall</maml:name>
+          <maml:description>
+            <maml:para>Kill locking processes before install.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>KillLockersForce</maml:name>
+          <maml:description>
+            <maml:para>Force killing locking processes before install.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MergeFunctionsFromApprovedModules</maml:name>
+          <maml:description>
+            <maml:para>Merge referenced functions from approved modules.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MergeModuleOnBuild</maml:name>
+          <maml:description>
+            <maml:para>Merge module source files during build.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MinimumCompatibilityPercentage</maml:name>
+          <maml:description>
+            <maml:para>Minimum percentage of cross-compatible files.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NETAssemblyLoadContext</maml:name>
+          <maml:description>
+            <maml:para>Load binary module dependencies through an AssemblyLoadContext on PowerShell Core.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NETAssemblyTypeAcceleratorAssemblies</maml:name>
+          <maml:description>
+            <maml:para>Assembly names whose public types may be exposed as PowerShell type accelerators.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NETAssemblyTypeAcceleratorMode</maml:name>
+          <maml:description>
+            <maml:para>Controls type accelerator exposure for binary-module dependencies.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NETAssemblyTypeAccelerators</maml:name>
+          <maml:description>
+            <maml:para>Fully-qualified type names to expose as PowerShell type accelerators.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NETConfiguration</maml:name>
+          <maml:description>
+            <maml:para>.NET build configuration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Release</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Debug</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NETFramework</maml:name>
+          <maml:description>
+            <maml:para>.NET target frameworks to build.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NETHandleAssemblyWithSameName</maml:name>
+          <maml:description>
+            <maml:para>Handle assemblies with the same name during import.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NETProjectName</maml:name>
+          <maml:description>
+            <maml:para>Project name for binary-module builds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NETProjectPath</maml:name>
+          <maml:description>
+            <maml:para>Path to the owned .NET project for binary-module builds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Profile</maml:name>
+          <maml:description>
+            <maml:para>Named profile to emit.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModuleBuildProfileKind</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Standard</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Binary</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModuleBuildProfileKind</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredEncoding</maml:name>
+          <maml:description>
+            <maml:para>Required encoding for file consistency checks.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">FileConsistencyEncoding</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">ASCII</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">UTF8</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">UTF8BOM</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Unicode</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BigEndianUnicode</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">UTF7</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">UTF32</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>FileConsistencyEncoding</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredLineEnding</maml:name>
+          <maml:description>
+            <maml:para>Required line endings for file consistency checks.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">FileConsistencyLineEnding</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">CRLF</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">LF</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>FileConsistencyLineEnding</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ResolveBinaryConflicts</maml:name>
+          <maml:description>
+            <maml:para>Resolve binary dependency conflicts.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ResolveBinaryConflictsName</maml:name>
+          <maml:description>
+            <maml:para>Project name used when resolving binary dependency conflicts.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignIncludeBinaries</maml:name>
+          <maml:description>
+            <maml:para>When signing is enabled, include binary files.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignIncludeExe</maml:name>
+          <maml:description>
+            <maml:para>When signing is enabled, include executable files.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignIncludeInternals</maml:name>
+          <maml:description>
+            <maml:para>When signing is enabled, include internal scripts.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignModule</maml:name>
+          <maml:description>
+            <maml:para>Enable signing for the built module.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipBuiltinReplacements</maml:name>
+          <maml:description>
+            <maml:para>Skip built-in placeholder replacements during build.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SyncExternalHelpToProjectRoot</maml:name>
+          <maml:description>
+            <maml:para>Sync generated external help back to the project root.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Validation</maml:name>
+          <maml:description>
+            <maml:para>Enable module validation defaults.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>VersionedInstallKeep</maml:name>
+          <maml:description>
+            <maml:para>Number of installed versions to keep.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>VersionedInstallStrategy</maml:name>
+          <maml:description>
+            <maml:para>Versioned install strategy.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">InstallationStrategy</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Exact</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AutoRevision</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>InstallationStrategy</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>AboutTopicsSourcePath</maml:name>
+        <maml:description>
+          <maml:para>Source paths for about-topic files.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>CertificateThumbprint</maml:name>
+        <maml:description>
+          <maml:para>Code-signing certificate thumbprint.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Compatibility</maml:name>
+        <maml:description>
+          <maml:para>Enable cross-version PowerShell compatibility defaults.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Documentation</maml:name>
+        <maml:description>
+          <maml:para>Enable documentation generation defaults.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>DocumentationPath</maml:name>
+        <maml:description>
+          <maml:para>Generated documentation path.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>DocumentationReadmePath</maml:name>
+        <maml:description>
+          <maml:para>Readme path used by generated documentation.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>DoNotAttemptToFixRelativePaths</maml:name>
+        <maml:description>
+          <maml:para>Do not attempt to fix relative paths during merge.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>DotSourceClasses</maml:name>
+        <maml:description>
+          <maml:para>Keep classes dot-sourced.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>DotSourceLibraries</maml:name>
+        <maml:description>
+          <maml:para>Keep library-loading code dot-sourced.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>EnableScriptAnalyzer</maml:name>
+        <maml:description>
+          <maml:para>Enable PSScriptAnalyzer as part of validation.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>EncodingOverrides</maml:name>
+        <maml:description>
+          <maml:para>Per-pattern encoding overrides for file consistency checks.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+        <dev:type>
+          <maml:name>Hashtable</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>FileConsistency</maml:name>
+        <maml:description>
+          <maml:para>Enable file consistency defaults.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>FileConsistencyExcludeDirectories</maml:name>
+        <maml:description>
+          <maml:para>Directory names excluded from file consistency checks.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ImportRequiredModules</maml:name>
+        <maml:description>
+          <maml:para>Import RequiredModules before validation/test steps that need them.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ImportSelf</maml:name>
+        <maml:description>
+          <maml:para>Import the module under build before validation/test steps that need it.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>InstallMissingModules</maml:name>
+        <maml:description>
+          <maml:para>Install missing module dependencies on the build host.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>KillLockersBeforeInstall</maml:name>
+        <maml:description>
+          <maml:para>Kill locking processes before install.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>KillLockersForce</maml:name>
+        <maml:description>
+          <maml:para>Force killing locking processes before install.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MergeFunctionsFromApprovedModules</maml:name>
+        <maml:description>
+          <maml:para>Merge referenced functions from approved modules.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MergeModuleOnBuild</maml:name>
+        <maml:description>
+          <maml:para>Merge module source files during build.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MinimumCompatibilityPercentage</maml:name>
+        <maml:description>
+          <maml:para>Minimum percentage of cross-compatible files.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NETAssemblyLoadContext</maml:name>
+        <maml:description>
+          <maml:para>Load binary module dependencies through an AssemblyLoadContext on PowerShell Core.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NETAssemblyTypeAcceleratorAssemblies</maml:name>
+        <maml:description>
+          <maml:para>Assembly names whose public types may be exposed as PowerShell type accelerators.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NETAssemblyTypeAcceleratorMode</maml:name>
+        <maml:description>
+          <maml:para>Controls type accelerator exposure for binary-module dependencies.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <dev:type>
+          <maml:name>Nullable`1</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NETAssemblyTypeAccelerators</maml:name>
+        <maml:description>
+          <maml:para>Fully-qualified type names to expose as PowerShell type accelerators.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NETConfiguration</maml:name>
+        <maml:description>
+          <maml:para>.NET build configuration.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Release</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Debug</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NETFramework</maml:name>
+        <maml:description>
+          <maml:para>.NET target frameworks to build.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NETHandleAssemblyWithSameName</maml:name>
+        <maml:description>
+          <maml:para>Handle assemblies with the same name during import.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NETProjectName</maml:name>
+        <maml:description>
+          <maml:para>Project name for binary-module builds.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NETProjectPath</maml:name>
+        <maml:description>
+          <maml:para>Path to the owned .NET project for binary-module builds.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Profile</maml:name>
+        <maml:description>
+          <maml:para>Named profile to emit.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ModuleBuildProfileKind</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Standard</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Binary</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ModuleBuildProfileKind</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequiredEncoding</maml:name>
+        <maml:description>
+          <maml:para>Required encoding for file consistency checks.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">FileConsistencyEncoding</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">ASCII</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">UTF8</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">UTF8BOM</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Unicode</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BigEndianUnicode</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">UTF7</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">UTF32</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>FileConsistencyEncoding</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequiredLineEnding</maml:name>
+        <maml:description>
+          <maml:para>Required line endings for file consistency checks.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">FileConsistencyLineEnding</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">CRLF</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">LF</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>FileConsistencyLineEnding</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ResolveBinaryConflicts</maml:name>
+        <maml:description>
+          <maml:para>Resolve binary dependency conflicts.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ResolveBinaryConflictsName</maml:name>
+        <maml:description>
+          <maml:para>Project name used when resolving binary dependency conflicts.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignIncludeBinaries</maml:name>
+        <maml:description>
+          <maml:para>When signing is enabled, include binary files.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignIncludeExe</maml:name>
+        <maml:description>
+          <maml:para>When signing is enabled, include executable files.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignIncludeInternals</maml:name>
+        <maml:description>
+          <maml:para>When signing is enabled, include internal scripts.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignModule</maml:name>
+        <maml:description>
+          <maml:para>Enable signing for the built module.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SkipBuiltinReplacements</maml:name>
+        <maml:description>
+          <maml:para>Skip built-in placeholder replacements during build.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SyncExternalHelpToProjectRoot</maml:name>
+        <maml:description>
+          <maml:para>Sync generated external help back to the project root.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Validation</maml:name>
+        <maml:description>
+          <maml:para>Enable module validation defaults.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>VersionedInstallKeep</maml:name>
+        <maml:description>
+          <maml:para>Number of installed versions to keep.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>VersionedInstallStrategy</maml:name>
+        <maml:description>
+          <maml:para>Versioned install strategy.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">InstallationStrategy</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Exact</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AutoRevision</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>InstallationStrategy</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.Object</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Use standard script-module defaults</maml:title>
+        <dev:code>New-ConfigurationModuleBuildProfile</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Use binary-module defaults with an owned .NET project</maml:title>
+        <dev:code>New-ConfigurationModuleBuildProfile -Profile Binary -NETProjectName MyModule -NETProjectPath Sources\MyModule</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>

@@ -1167,13 +1167,13 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
         return
     }}
 
-    if ($Mode -eq 'Assembly' -and $RequestedAssemblies.Count -eq 0) {{
+    if (($Mode -eq 'Assembly' -or $Mode -eq 'Enums') -and $RequestedAssemblies.Count -eq 0) {{
         if ($RequestedTypes.Count -eq 0) {{
-            Write-Warning -Message 'Assembly type accelerator mode was configured without assembly names or type names. No ALC dependency type accelerators will be registered.'
+            Write-Warning -Message ""$Mode type accelerator mode was configured without assembly names or type names. No ALC dependency type accelerators will be registered.""
             return
         }}
 
-        Write-Warning -Message 'Assembly type accelerator mode was configured without assembly names. Only explicitly configured type names will be registered.'
+        Write-Warning -Message ""$Mode type accelerator mode was configured without assembly names. Only explicitly configured type names will be registered.""
     }}
 
     $TypeAccelerators = [psobject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
@@ -1288,7 +1288,7 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
         $script:PowerForgeRegisteredAssemblyTypeAccelerators[$Name] = $Type
     }}
 
-    if ($Mode -eq 'Assembly') {{
+    if ($Mode -eq 'Assembly' -or $Mode -eq 'Enums') {{
         foreach ($AssemblyName in $RequestedAssemblies) {{
             $Assembly = & $ImportPowerForgeAlcAssembly -AssemblyName $AssemblyName
             if ($null -eq $Assembly) {{
@@ -1304,6 +1304,10 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
             }}
 
             foreach ($Type in $ExportedTypes) {{
+                if ($Mode -eq 'Enums' -and -not $Type.IsEnum) {{
+                    continue
+                }}
+
                 & $AddPowerForgeTypeAccelerator -Type $Type
             }}
         }}

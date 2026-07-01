@@ -77,6 +77,7 @@ public sealed class ConfigurationSegmentJsonConverter : JsonConverter<IConfigura
         if (discriminator.Equals("Execute", StringComparison.OrdinalIgnoreCase) ||
             discriminator.Equals("Action", StringComparison.OrdinalIgnoreCase))
             return typeof(ConfigurationActionSegment);
+        if (discriminator.Equals("ExternalAsset", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationExternalAssetSegment);
         if (discriminator.Equals("PlaceHolder", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationPlaceHolderSegment);
         if (discriminator.Equals("PlaceHolderOption", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationPlaceHolderOptionSegment);
         if (discriminator.Equals("Compatibility", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationCompatibilitySegment);

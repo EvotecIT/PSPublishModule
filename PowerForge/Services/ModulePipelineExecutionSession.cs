@@ -14,6 +14,7 @@ internal sealed class ModulePipelineExecutionSession
     private readonly Dictionary<ConfigurationXcodeProjectVersionSegment, ModulePipelineStep> _xcodeProjectVersionSteps;
     private readonly Dictionary<ConfigurationProjectBuildSegment, ModulePipelineStep> _projectBuildSteps;
     private readonly Dictionary<ConfigurationPackageBuildSegment, ModulePipelineStep> _packageBuildSteps;
+    private readonly Dictionary<ConfigurationExternalAssetSegment, ModulePipelineStep> _externalAssetSteps;
     private readonly Dictionary<ConfigurationActionSegment, ModulePipelineStep> _actionSteps;
 
     private ModulePipelineExecutionSession(ModulePipelineStep[] steps, IModulePipelineProgressReporter reporter)
@@ -43,6 +44,9 @@ internal sealed class ModulePipelineExecutionSession
         _packageBuildSteps = Steps
             .Where(static step => step.PackageBuildSegment is not null)
             .ToDictionary(static step => step.PackageBuildSegment!, static step => step);
+        _externalAssetSteps = Steps
+            .Where(static step => step.ExternalAssetSegment is not null)
+            .ToDictionary(static step => step.ExternalAssetSegment!, static step => step);
         _actionSteps = Steps
             .Where(static step => step.ActionSegment is not null)
             .ToDictionary(static step => step.ActionSegment!, static step => step);
@@ -120,6 +124,12 @@ internal sealed class ModulePipelineExecutionSession
     {
         if (packageBuild is null) return null;
         return _packageBuildSteps.TryGetValue(packageBuild, out var step) ? step : null;
+    }
+
+    internal ModulePipelineStep? GetExternalAssetStep(ConfigurationExternalAssetSegment externalAsset)
+    {
+        if (externalAsset is null) return null;
+        return _externalAssetSteps.TryGetValue(externalAsset, out var step) ? step : null;
     }
 
     internal ModulePipelineStep? GetActionStep(ConfigurationActionSegment action)

@@ -486,6 +486,21 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void Generate_WithAssemblyLoadContextEnumTypeAccelerators_WritesEnumModeFilter()
+    {
+        var block = ModuleBootstrapperGenerator.BuildTypeAcceleratorBlock(
+            AssemblyTypeAcceleratorExportMode.Enums,
+            new[] { "Dependency.Widget" },
+            new[] { "Dependency" });
+
+        Assert.Contains("$Mode = 'Enums'", block);
+        Assert.Contains("$RequestedTypes = @('Dependency.Widget')", block);
+        Assert.Contains("$RequestedAssemblies = @('Dependency')", block);
+        Assert.Contains("if ($Mode -eq 'Enums' -and -not $Type.IsEnum)", block);
+        Assert.Contains("foreach ($TypeName in $RequestedTypes)", block);
+    }
+
+    [Fact]
     public void Generate_WithAssemblyLoadContextAssemblyOnlyTypeAccelerators_WritesEmptyAllowList()
     {
         var block = ModuleBootstrapperGenerator.BuildTypeAcceleratorBlock(

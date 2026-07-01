@@ -100,6 +100,7 @@ public sealed partial class ModulePipelineRunner
         var commandDependencies = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         var testsAfterMerge = new List<TestConfiguration>();
         var actions = new List<ConfigurationActionSegment>();
+        var externalAssets = new List<ConfigurationExternalAssetSegment>();
         var artefacts = new List<ConfigurationArtefactSegment>();
         var publishes = new List<ConfigurationPublishSegment>();
         var appleApps = new List<ConfigurationAppleAppSegment>();
@@ -496,6 +497,12 @@ public sealed partial class ModulePipelineRunner
                     }
                     break;
                 }
+                case ConfigurationExternalAssetSegment externalAsset:
+                {
+                    externalAsset.Configuration ??= new ExternalAssetConfiguration();
+                    externalAssets.Add(externalAsset);
+                    break;
+                }
                 case ConfigurationPublishSegment publish:
                 {
                     publishes.Add(publish);
@@ -808,6 +815,9 @@ public sealed partial class ModulePipelineRunner
         var enabledArtefacts = artefacts
             .Where(a => a is not null && a.Configuration?.Enabled == true)      
             .ToArray();
+        var enabledExternalAssets = externalAssets
+            .Where(static asset => asset is not null && asset.Configuration?.Enabled != false)
+            .ToArray();
 
         if (formatting is not null &&
             formatting.Options is not null &&
@@ -835,6 +845,7 @@ public sealed partial class ModulePipelineRunner
             validationSettings = null;
             importModules = null;
             testsAfterMerge.Clear();
+            enabledExternalAssets = Array.Empty<ConfigurationExternalAssetSegment>();
             enabledArtefacts = Array.Empty<ConfigurationArtefactSegment>();
             enabledPublishes = Array.Empty<ConfigurationPublishSegment>();
             projectBuilds.Clear();
@@ -902,6 +913,7 @@ public sealed partial class ModulePipelineRunner
             actions: refreshPsd1Only
                 ? Array.Empty<ConfigurationActionSegment>()
                 : actions.ToArray(),
+            externalAssets: enabledExternalAssets,
             appleApps: refreshPsd1Only
                 ? Array.Empty<ConfigurationAppleAppSegment>()
                 : appleApps

@@ -80,6 +80,16 @@ public sealed class ModuleBuildHostService
             $"Set-Location -LiteralPath {QuoteLiteral(moduleRoot)}",
             BuildModuleImportClause(modulePath),
             $"$targetJson = {QuoteLiteral(outputPath)}",
+            "Remove-Item -LiteralPath Alias:Build-Module -Force -ErrorAction SilentlyContinue",
+            "Remove-Item -LiteralPath Alias:Invoke-ModuleBuilder -Force -ErrorAction SilentlyContinue",
+            $"$buildScriptPath = (Get-Item -LiteralPath {QuoteLiteral(scriptPath)} -ErrorAction Stop).FullName",
+            "$buildScriptCommand = Get-Command -Name $buildScriptPath -CommandType ExternalScript -ErrorAction Stop",
+            "$buildScriptArguments = @{}",
+            "if ($buildScriptCommand.Parameters.ContainsKey('RunMode')) {",
+            "  $buildScriptArguments['RunMode'] = 'Build'",
+            "} elseif ($buildScriptCommand.Parameters.ContainsKey('ConfigurationGateMode')) {",
+            "  $buildScriptArguments['ConfigurationGateMode'] = 'Build'",
+            "}",
             "function Invoke-ModuleBuild {",
             "  [CmdletBinding(PositionalBinding = $false)]",
             "  param(",
@@ -135,8 +145,15 @@ public sealed class ModuleBuildHostService
             "    Invoke-ModuleBuild @forwardArgs",
             "  }",
             "}",
+            "function Import-Module {",
+            "  $cmd = Get-Command -Name Import-Module -CommandType Cmdlet -Module Microsoft.PowerShell.Core",
+            "  & $cmd @args",
+            "  Remove-Item -LiteralPath Alias:Build-Module -Force -ErrorAction SilentlyContinue",
+            "  Remove-Item -LiteralPath Alias:Invoke-ModuleBuilder -Force -ErrorAction SilentlyContinue",
+            "  Set-Alias -Name Invoke-ModuleBuilder -Value Invoke-ModuleBuild -Scope Local",
+            "}",
             "Set-Alias -Name Invoke-ModuleBuilder -Value Invoke-ModuleBuild -Scope Local",
-            $". {QuoteLiteral(scriptPath)}"
+            ". $buildScriptPath @buildScriptArguments"
         });
     }
 
@@ -156,38 +173,42 @@ public sealed class ModuleBuildHostService
     {
         var arguments = new List<string>
         {
-            ".",
-            QuoteLiteral(scriptPath)
+            $"$buildScriptPath = (Get-Item -LiteralPath {QuoteLiteral(scriptPath)} -ErrorAction Stop).FullName",
+            "$buildScriptCommand = Get-Command -Name $buildScriptPath -CommandType ExternalScript -ErrorAction Stop",
+            "$buildScriptArguments = @{}"
         };
 
         if (!string.IsNullOrWhiteSpace(request.Configuration))
         {
-            arguments.Add("-Configuration");
-            arguments.Add(QuoteLiteral(request.Configuration!));
+            arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('Configuration')) {{ $buildScriptArguments['Configuration'] = {QuoteLiteral(request.Configuration!)} }}");
         }
 
         if (request.NoDotnetBuild)
-            arguments.Add("-NoDotnetBuild");
+        {
+            arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('NoDotnetBuild')) { $buildScriptArguments['NoDotnetBuild'] = $true }");
+        }
 
         if (!string.IsNullOrWhiteSpace(request.ModuleVersion))
         {
-            arguments.Add("-ModuleVersion");
-            arguments.Add(QuoteLiteral(request.ModuleVersion!));
+            arguments.Add($"$buildScriptArguments['ModuleVersion'] = {QuoteLiteral(request.ModuleVersion!)}");
         }
 
         if (!string.IsNullOrWhiteSpace(request.PreReleaseTag))
         {
-            arguments.Add("-PreReleaseTag");
-            arguments.Add(QuoteLiteral(request.PreReleaseTag!));
+            arguments.Add($"$buildScriptArguments['PreReleaseTag'] = {QuoteLiteral(request.PreReleaseTag!)}");
         }
 
         if (request.NoSign)
-            arguments.Add("-NoSign");
+            arguments.Add("$buildScriptArguments['NoSign'] = $true");
 
         if (request.SignModule)
-            arguments.Add("-SignModule");
+        {
+            arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('SignModule')) { $buildScriptArguments['SignModule'] = $true }");
+        }
 
-        return string.Join(" ", arguments);
+        arguments.Add(". $buildScriptPath @buildScriptArguments");
+
+        return string.Join(Environment.NewLine, arguments);
     }
 
     private static string BuildModuleImportClause(string modulePath)

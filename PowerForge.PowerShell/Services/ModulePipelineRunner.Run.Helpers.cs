@@ -83,10 +83,15 @@ public sealed partial class ModulePipelineRunner
                 state.DocumentationResult,
                 state.DependencyInstallResults,
                 state.ProjectBuildResults.ToArray(),
+                state.ExternalAssetResults.ToArray(),
                 state.ReleaseCoordinationResult,
                 stagingResult,
                 state.MergeExecution,
-                state.ProjectManifestSyncMessage));
+                state.ProjectManifestSyncMessage,
+                state.TypeAcceleratorSurfaceReport))
+        {
+            TypeAcceleratorSurfaceReport = state.TypeAcceleratorSurfaceReport
+        };
 
         if (diagnosticsPolicy?.PolicyViolated == true)
             throw new ModulePipelineDiagnosticsPolicyException(result, diagnosticsPolicy, diagnosticsPolicy.FailureReason);
@@ -100,10 +105,12 @@ public sealed partial class ModulePipelineRunner
         DocumentationBuildResult? documentationResult,
         ModuleDependencyInstallResult[]? dependencyInstallResults,
         ProjectBuildHostExecutionResult[]? projectBuildResults,
+        ExternalAssetPreparationResult[]? externalAssetResults,
         ModuleReleaseCoordinationResult? releaseCoordinationResult,
         ModuleBuildPipeline.StagingResult? stagingResult,
         MergeExecutionResult? mergeExecution,
-        string? projectManifestSyncMessage)
+        string? projectManifestSyncMessage,
+        ModuleTypeAcceleratorSurfaceReport? typeAcceleratorSurfaceReport)
     {
         var notes = new List<ModuleOwnerNote>();
 
@@ -152,6 +159,31 @@ public sealed partial class ModulePipelineRunner
                 }));
         }
 
+        if (externalAssetResults is { Length: > 0 })
+        {
+            var names = externalAssetResults
+                .Select(static result => result.Name)
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var fileCount = externalAssetResults.Sum(static result => result.Files.Length);
+            var manifests = externalAssetResults
+                .Select(static result => result.ManifestPath)
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            notes.Add(new ModuleOwnerNote(
+                "External Assets",
+                ModuleOwnerNoteSeverity.Info,
+                summary: $"Prepared {externalAssetResults.Length} external asset bundle(s) with {fileCount} file(s).",
+                details: new[]
+                {
+                    names.Length == 0 ? "No bundle names were reported." : $"Bundles: {string.Join(", ", names)}",
+                    manifests.Length == 0 ? "No manifests were reported." : $"Manifests: {string.Join(", ", manifests)}"
+                }));
+        }
+
         if (releaseCoordinationResult is not null)
         {
             notes.Add(new ModuleOwnerNote(
@@ -192,6 +224,9 @@ public sealed partial class ModulePipelineRunner
 
         if (buildResult.BuildNotes is { Length: > 0 })
             notes.AddRange(buildResult.BuildNotes);
+
+        if (typeAcceleratorSurfaceReport is not null)
+            notes.Add(BuildTypeAcceleratorSurfaceOwnerNote(typeAcceleratorSurfaceReport));
 
         if (mergeExecution is not null &&
             (mergeExecution.RequiredModules.Length > 0 ||
@@ -250,6 +285,51 @@ public sealed partial class ModulePipelineRunner
         }
 
         return notes.ToArray();
+    }
+
+    internal static ModuleOwnerNote BuildTypeAcceleratorSurfaceOwnerNote(ModuleTypeAcceleratorSurfaceReport report)
+    {
+        var assemblyErrors = report.Assemblies.Count(static assembly => !string.IsNullOrWhiteSpace(assembly.Error));
+        var hasWarnings =
+            report.Warnings.Length > 0 ||
+            report.ExplicitTypesMissing.Length > 0 ||
+            assemblyErrors > 0;
+        var details = new List<string>
+        {
+            $"Report: {report.ReportPath}",
+            $"Requested assemblies: {FormatCompactList(report.RequestedAssemblies)}",
+            $"Requested explicit types: {FormatCompactList(report.RequestedTypes)}",
+            $"{report.AssemblyRegisteredTypeCount} assembly-contributed type(s), {report.ExplicitTypesFound.Length} explicit type(s) found, {report.ExplicitTypesMissing.Length} explicit type(s) missing."
+        };
+
+        if (report.Mode == AssemblyTypeAcceleratorExportMode.Enums)
+            details.Add($"{report.SkippedNonEnumTypeCount} public non-enum type(s) skipped by enum-only mode.");
+        if (assemblyErrors > 0)
+            details.Add($"{assemblyErrors} requested assembl{(assemblyErrors == 1 ? "y" : "ies")} could not be inspected.");
+        if (report.Warnings.Length > 0)
+            details.Add($"Warnings: {string.Join("; ", report.Warnings.Take(3))}");
+
+        return new ModuleOwnerNote(
+            "Type Accelerators",
+            hasWarnings ? ModuleOwnerNoteSeverity.Warning : ModuleOwnerNoteSeverity.Info,
+            summary: $"ALC type accelerator surface: {report.Mode} mode exposes {report.TotalRegisteredTypeCount} type name(s).",
+            whyItMatters: "PowerShell type accelerators are process-wide, so the module should expose only the intentional public surface.",
+            nextStep: hasWarnings
+                ? "Review the report before publishing to confirm missing assemblies or types are expected."
+                : string.Empty,
+            details: details.ToArray());
+    }
+
+    private static string FormatCompactList(IReadOnlyList<string>? values)
+    {
+        var normalized = (values ?? Array.Empty<string>())
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return normalized.Length == 0 ? "(none)" : string.Join(", ", normalized);
     }
 
     internal static string[] BuildMergeExecutionOwnerDetails(

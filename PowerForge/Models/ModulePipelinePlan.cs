@@ -148,6 +148,11 @@ public sealed class ModulePipelinePlan
     public ConfigurationActionSegment[] Actions { get; }
 
     /// <summary>
+    /// External asset bundles prepared before source staging.
+    /// </summary>
+    public ConfigurationExternalAssetSegment[] ExternalAssets { get; }
+
+    /// <summary>
     /// Apple app release targets to prepare before staging the build.
     /// </summary>
     public ConfigurationAppleAppSegment[] AppleApps { get; }
@@ -576,7 +581,8 @@ public sealed class ModulePipelinePlan
         bool stagingWasGenerated,
         bool deleteGeneratedStagingAfterRun,
         RequiredModuleReference[]? embeddedModules = null,
-        ConfigurationGateMode? gateMode = null)
+        ConfigurationGateMode? gateMode = null,
+        ConfigurationExternalAssetSegment[]? externalAssets = null)
     {
         ModuleName = moduleName;
         ProjectRoot = projectRoot;
@@ -606,6 +612,7 @@ public sealed class ModulePipelinePlan
         CommandModuleDependencies = commandModuleDependencies ?? new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         TestsAfterMerge = testsAfterMerge ?? Array.Empty<TestConfiguration>();
         Actions = actions ?? Array.Empty<ConfigurationActionSegment>();
+        ExternalAssets = externalAssets ?? Array.Empty<ConfigurationExternalAssetSegment>();
         AppleApps = appleApps ?? Array.Empty<ConfigurationAppleAppSegment>();
         XcodeProjectVersions = xcodeProjectVersions ?? Array.Empty<ConfigurationXcodeProjectVersionSegment>();
         ProjectBuilds = projectBuilds ?? Array.Empty<ConfigurationProjectBuildSegment>();

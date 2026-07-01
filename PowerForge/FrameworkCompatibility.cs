@@ -31,6 +31,28 @@ internal static class FrameworkCompatibility
 #endif
     }
 
+    public static StringComparison PathStringComparison()
+        => IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+    public static StringComparison GetPathStringComparison(string directory)
+    {
+        try
+        {
+            if (Directory.Exists(directory))
+                return IsCaseSensitiveDirectory(directory)
+                    ? StringComparison.Ordinal
+                    : StringComparison.OrdinalIgnoreCase;
+        }
+        catch
+        {
+            // fall back to the platform default below
+        }
+
+        return PathStringComparison();
+    }
+
     public static string GetRelativePath(string relativeTo, string path)
     {
 #if NET472
@@ -45,6 +67,36 @@ internal static class FrameworkCompatibility
 #else
         return Path.GetRelativePath(relativeTo, path);
 #endif
+    }
+
+    private static bool IsCaseSensitiveDirectory(string directory)
+    {
+        var probeName = "powerforge-case-" + Guid.NewGuid().ToString("N") + "a.tmp";
+        var probePath = Path.Combine(directory, probeName);
+        var alternatePath = Path.Combine(directory, probeName.ToUpperInvariant());
+        try
+        {
+            File.WriteAllText(probePath, string.Empty);
+            return !File.Exists(alternatePath);
+        }
+        finally
+        {
+            TryDeleteFile(probePath);
+            TryDeleteFile(alternatePath);
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch
+        {
+            // best effort cleanup
+        }
     }
 
     public static string GetSha256Hex(X509Certificate2 certificate)
