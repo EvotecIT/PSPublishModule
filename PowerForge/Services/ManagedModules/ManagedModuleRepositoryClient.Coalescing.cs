@@ -11,12 +11,12 @@ public sealed partial class ManagedModuleRepositoryClient
         bool includePrerelease,
         RepositoryCredential? credential,
         CancellationToken cancellationToken,
-        Func<Task<IReadOnlyList<ManagedModuleVersionInfo>>> factory)
+        Func<CancellationToken, Task<IReadOnlyList<ManagedModuleVersionInfo>>> factory)
     {
         var key = BuildCoalescedQueryKey("versions", repository, packageId, includePrerelease, take: null, credential, cancellationToken);
         return key is null
-            ? factory()
-            : ExecuteCoalescedAsync(_versionQueryTasks, key, factory);
+            ? factory(cancellationToken)
+            : ExecuteCoalescedAsync(_versionQueryTasks, key, cancellationToken, factory);
     }
 
     private Task<ManagedModuleVersionInfo?> ExecuteCoalescedLatestVersionQueryAsync(
@@ -25,12 +25,12 @@ public sealed partial class ManagedModuleRepositoryClient
         bool includePrerelease,
         RepositoryCredential? credential,
         CancellationToken cancellationToken,
-        Func<Task<ManagedModuleVersionInfo?>> factory)
+        Func<CancellationToken, Task<ManagedModuleVersionInfo?>> factory)
     {
         var key = BuildCoalescedQueryKey("latest", repository, packageId, includePrerelease, take: null, credential, cancellationToken);
         return key is null
-            ? factory()
-            : ExecuteCoalescedAsync(_latestVersionQueryTasks, key, factory);
+            ? factory(cancellationToken)
+            : ExecuteCoalescedAsync(_latestVersionQueryTasks, key, cancellationToken, factory);
     }
 
     private Task<IReadOnlyList<ManagedModuleVersionInfo>> ExecuteCoalescedSearchQueryAsync(
@@ -40,31 +40,50 @@ public sealed partial class ManagedModuleRepositoryClient
         int take,
         RepositoryCredential? credential,
         CancellationToken cancellationToken,
-        Func<Task<IReadOnlyList<ManagedModuleVersionInfo>>> factory)
+        Func<CancellationToken, Task<IReadOnlyList<ManagedModuleVersionInfo>>> factory)
     {
         var key = BuildCoalescedQueryKey("search", repository, query, includePrerelease, take, credential, cancellationToken);
         return key is null
-            ? factory()
-            : ExecuteCoalescedAsync(_searchQueryTasks, key, factory);
+            ? factory(cancellationToken)
+            : ExecuteCoalescedAsync(_searchQueryTasks, key, cancellationToken, factory);
     }
 
     private static async Task<T> ExecuteCoalescedAsync<T>(
         ConcurrentDictionary<string, Lazy<Task<T>>> tasks,
         string key,
-        Func<Task<T>> factory)
+        CancellationToken cancellationToken,
+        Func<CancellationToken, Task<T>> factory)
     {
         var lazy = tasks.GetOrAdd(
             key,
-            _ => new Lazy<Task<T>>(factory, LazyThreadSafetyMode.ExecutionAndPublication));
-        try
-        {
-            return await lazy.Value.ConfigureAwait(false);
-        }
-        finally
-        {
-            ((ICollection<KeyValuePair<string, Lazy<Task<T>>>>)tasks)
-                .Remove(new KeyValuePair<string, Lazy<Task<T>>>(key, lazy));
-        }
+            _ => new Lazy<Task<T>>(
+                () => factory(CancellationToken.None),
+                LazyThreadSafetyMode.ExecutionAndPublication));
+        var sharedTask = lazy.Value;
+        _ = sharedTask.ContinueWith(
+            _ => ((ICollection<KeyValuePair<string, Lazy<Task<T>>>>)tasks)
+                .Remove(new KeyValuePair<string, Lazy<Task<T>>>(key, lazy)),
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+        return await WaitForSharedTaskAsync(sharedTask, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<T> WaitForSharedTaskAsync<T>(Task<T> task, CancellationToken cancellationToken)
+    {
+        if (!cancellationToken.CanBeCanceled)
+            return await task.ConfigureAwait(false);
+
+        var canceled = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = cancellationToken.Register(
+            static state => ((TaskCompletionSource<object?>)state!).TrySetResult(null),
+            canceled);
+        var completed = await Task.WhenAny(task, canceled.Task).ConfigureAwait(false);
+        if (!ReferenceEquals(completed, task))
+            throw new OperationCanceledException(cancellationToken);
+
+        return await task.ConfigureAwait(false);
     }
 
     private static string? BuildCoalescedQueryKey(

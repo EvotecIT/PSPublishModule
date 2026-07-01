@@ -235,45 +235,62 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
 
-        foreach (var item in outPipe.GetConsumingEnumerable(CancelToken))
+        try
         {
-            switch (item.Type)
+            foreach (var item in outPipe.GetConsumingEnumerable(CancelToken))
             {
-                case PipelineType.Output:
-                    base.WriteObject(item.Value);
-                    break;
-                case PipelineType.OutputEnumerate:
-                    base.WriteObject(item.Value, enumerateCollection: true);
-                    break;
-                case PipelineType.Error:
-                    base.WriteError((ErrorRecord)item.Value!);
-                    break;
-                case PipelineType.Warning:
-                    base.WriteWarning((string)item.Value!);
-                    break;
-                case PipelineType.Verbose:
-                    base.WriteVerbose((string)item.Value!);
-                    break;
-                case PipelineType.Debug:
-                    base.WriteDebug((string)item.Value!);
-                    break;
-                case PipelineType.Information:
-                    base.WriteInformation((InformationRecord)item.Value!);
-                    break;
-                case PipelineType.Progress:
-                    base.WriteProgress((ProgressRecord)item.Value!);
-                    break;
-                case PipelineType.ShouldProcess:
-                    var should = ((string Target, string Action))item.Value!;
-                    replyPipe.Add(base.ShouldProcess(should.Target, should.Action), CancelToken);
-                    break;
-                case PipelineType.PromptForCredential:
-                    var prompt = ((string Caption, string Message, string UserName, string TargetName))item.Value!;
-                    replyPipe.Add(
-                        Host.UI.PromptForCredential(prompt.Caption, prompt.Message, prompt.UserName, prompt.TargetName),
-                        CancelToken);
-                    break;
+                switch (item.Type)
+                {
+                    case PipelineType.Output:
+                        base.WriteObject(item.Value);
+                        break;
+                    case PipelineType.OutputEnumerate:
+                        base.WriteObject(item.Value, enumerateCollection: true);
+                        break;
+                    case PipelineType.Error:
+                        base.WriteError((ErrorRecord)item.Value!);
+                        break;
+                    case PipelineType.Warning:
+                        base.WriteWarning((string)item.Value!);
+                        break;
+                    case PipelineType.Verbose:
+                        base.WriteVerbose((string)item.Value!);
+                        break;
+                    case PipelineType.Debug:
+                        base.WriteDebug((string)item.Value!);
+                        break;
+                    case PipelineType.Information:
+                        base.WriteInformation((InformationRecord)item.Value!);
+                        break;
+                    case PipelineType.Progress:
+                        base.WriteProgress((ProgressRecord)item.Value!);
+                        break;
+                    case PipelineType.ShouldProcess:
+                        var should = ((string Target, string Action))item.Value!;
+                        replyPipe.Add(base.ShouldProcess(should.Target, should.Action), CancelToken);
+                        break;
+                    case PipelineType.PromptForCredential:
+                        var prompt = ((string Caption, string Message, string UserName, string TargetName))item.Value!;
+                        replyPipe.Add(
+                            Host.UI.PromptForCredential(prompt.Caption, prompt.Message, prompt.UserName, prompt.TargetName),
+                            CancelToken);
+                        break;
+                }
             }
+        }
+        catch
+        {
+            _cancelSource.Cancel();
+            outPipe.CompleteAdding();
+            try
+            {
+                blockTask.GetAwaiter().GetResult();
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or PipelineStoppedException)
+            {
+            }
+
+            throw;
         }
 
         blockTask.GetAwaiter().GetResult();

@@ -180,6 +180,14 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             if (!string.IsNullOrWhiteSpace(InventoryPath) && Inventory is not null)
                 throw new InvalidOperationException("Specify either Inventory or InventoryPath, not both.");
             ValidateVersionPolicy();
+            var deliveryModuleRoot = ResolveManagedDeliveryModuleRoot();
+            var credentialSecretFilePath = ResolveCredentialSecretFilePath();
+            var repositoryCredential = ManagedModuleCommandSupport.ResolveCredential(
+                this,
+                Credential,
+                CredentialUserName,
+                CredentialSecret,
+                credentialSecretFilePath);
 
             var inventory = ResolveInventory();
             var selectedModules = SelectBaselineModules(inventory).ToArray();
@@ -193,10 +201,15 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             ApplySelectedInventoryTargets(plan, selectedModules);
             ApplyLatestUpdateIntent(plan);
             ApplyForceRepairIntent(plan);
-            await EnrichManagedLicenseMetadataAsync(plan).ConfigureAwait(false);
+            await EnrichManagedLicenseMetadataAsync(plan, deliveryModuleRoot, repositoryCredential).ConfigureAwait(false);
 
             var test = ModuleStateTestResult.FromPlan(plan);
-            var applyResult = await PrepareApplyAsync(plan, inventory).ConfigureAwait(false);
+            var applyResult = await PrepareApplyAsync(
+                plan,
+                inventory,
+                deliveryModuleRoot,
+                credentialSecretFilePath,
+                repositoryCredential).ConfigureAwait(false);
             var workflow = new ModuleStateWorkflowResult
             {
                 Inventory = inventory,
@@ -378,7 +391,12 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             : "=" + selected.Version.Trim();
     }
 
-    private async Task<ModuleStateApplyResult> PrepareApplyAsync(ModuleStatePlanResult plan, ModuleStateInventoryResult inventory)
+    private async Task<ModuleStateApplyResult> PrepareApplyAsync(
+        ModuleStatePlanResult plan,
+        ModuleStateInventoryResult inventory,
+        string? deliveryModuleRoot,
+        string? credentialSecretFilePath,
+        RepositoryCredential? repositoryCredential)
     {
         var deliveryOptions = new ModuleStateDeliveryOptions(
             ProfileName,
@@ -389,7 +407,7 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             acceptLicense: AcceptLicense.IsPresent,
             allowErrorFindings: AllowConflict.IsPresent,
             allowClobber: AllowClobber.IsPresent,
-            moduleRoot: ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot),
+            moduleRoot: deliveryModuleRoot,
             transport: Transport,
             profileRepository: ResolveProfileRepositoryName());
         var service = new ModuleStateApplyService();
@@ -398,7 +416,12 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
         var executionResults = Array.Empty<ModuleStateDeliveryExecutionResult>();
 
         if (!Plan.IsPresent && result.Receipt.CanApply && ShouldProcess("managed module estate", "Repair managed modules"))
-            executionResults = await ExecuteDeliveryAsync(result, inventory).ConfigureAwait(false);
+            executionResults = await ExecuteDeliveryAsync(
+                result,
+                inventory,
+                deliveryModuleRoot,
+                credentialSecretFilePath,
+                repositoryCredential).ConfigureAwait(false);
 
         return ModuleStateApplyResultMapper.ToCmdletResult(
             result,
@@ -409,13 +432,18 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             postApplyInventory: null);
     }
 
-    private async Task<ModuleStateDeliveryExecutionResult[]> ExecuteDeliveryAsync(PowerForge.ModuleStateApplyResult result, ModuleStateInventoryResult inventory)
+    private async Task<ModuleStateDeliveryExecutionResult[]> ExecuteDeliveryAsync(
+        PowerForge.ModuleStateApplyResult result,
+        ModuleStateInventoryResult inventory,
+        string? deliveryModuleRoot,
+        string? credentialSecretFilePath,
+        RepositoryCredential? repositoryCredential)
     {
         if (Transport == ModuleStateDeliveryTransport.ManagedModule)
         {
             return await new ModuleStateManagedDeliveryService(this).ExecuteAsync(
                 result,
-                CreateManagedDeliveryOptions(inventory),
+                CreateManagedDeliveryOptions(inventory, deliveryModuleRoot, repositoryCredential),
                 CancelToken).ConfigureAwait(false);
         }
 
@@ -431,16 +459,19 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
                 DeliveryTransport = Transport,
                 CredentialUserName = Credential?.UserName ?? CredentialUserName,
                 CredentialSecret = Credential?.GetNetworkCredential().Password ?? CredentialSecret,
-                CredentialSecretFilePath = CredentialSecretFilePath,
+                CredentialSecretFilePath = credentialSecretFilePath,
                 PromptForCredential = false,
-                ManagedModuleRoot = ResolveManagedDeliveryModuleRoot(),
+                ManagedModuleRoot = deliveryModuleRoot,
                 ManagedAllowClobber = AllowClobber.IsPresent,
                 ManagedAcceptLicense = AcceptLicense.IsPresent,
                 LoadedModules = ResolveLoadedModules(inventory)
             });
     }
 
-    private async Task EnrichManagedLicenseMetadataAsync(ModuleStatePlanResult plan)
+    private async Task EnrichManagedLicenseMetadataAsync(
+        ModuleStatePlanResult plan,
+        string? deliveryModuleRoot,
+        RepositoryCredential? repositoryCredential)
     {
         if (Transport != ModuleStateDeliveryTransport.ManagedModule)
             return;
@@ -448,7 +479,7 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
         try
         {
             await new ModuleStateManagedPlanLicenseEnricher(this)
-                .EnrichAsync(plan, CreateManagedDeliveryOptions(), CancelToken)
+                .EnrichAsync(plan, CreateManagedDeliveryOptions(moduleRoot: deliveryModuleRoot, credential: repositoryCredential), CancelToken)
                 .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or NotSupportedException or UriFormatException)
@@ -457,7 +488,10 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
         }
     }
 
-    private ModuleStateManagedDeliveryOptions CreateManagedDeliveryOptions(ModuleStateInventoryResult? inventory = null)
+    private ModuleStateManagedDeliveryOptions CreateManagedDeliveryOptions(
+        ModuleStateInventoryResult? inventory = null,
+        string? moduleRoot = null,
+        RepositoryCredential? credential = null)
         => new()
         {
             ProfileName = ProfileName,
@@ -466,15 +500,13 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             Force = Force.IsPresent,
             AllowClobber = AllowClobber.IsPresent,
             AcceptLicense = AcceptLicense.IsPresent,
-            ModuleRoot = ResolveManagedDeliveryModuleRoot(),
-            Credential = ManagedModuleCommandSupport.ResolveCredential(
-                this,
-                Credential,
-                CredentialUserName,
-                CredentialSecret,
-                CredentialSecretFilePath),
+            ModuleRoot = moduleRoot,
+            Credential = credential,
             LoadedModules = ResolveLoadedModules(inventory)
         };
+
+    private string? ResolveCredentialSecretFilePath()
+        => ManagedModuleCommandSupport.ResolveProviderPath(this, CredentialSecretFilePath);
 
     private string? ResolveManagedDeliveryModuleRoot()
     {
