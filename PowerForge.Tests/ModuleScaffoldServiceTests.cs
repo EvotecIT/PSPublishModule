@@ -22,6 +22,7 @@ public class ModuleScaffoldServiceTests
             File.WriteAllText(Path.Combine(templateRoot, "Example-ModuleBuilder.txt"), "Build-Module -ModuleName '$ModuleName' { $Manifest = @{ GUID = '$guid'; Description = 'Simple project $ModuleName'; Namespace = '$ModuleNamespace'; GuidSuffix = '$GuidSuffix' } }");
             File.WriteAllText(Path.Combine(templateRoot, "Example-ModulePSM1.txt"), "Export-ModuleMember -Function *");
             File.WriteAllText(Path.Combine(templateRoot, "Example-ModulePSD1.txt"), "@{ GUID = '$Guid'; RootModule = '$ModuleName.psm1'; PrivateData = @{ Namespace = '$ModuleNamespace'; GuidSuffix = '$GUIDSuffix' } }");
+            File.WriteAllText(Path.Combine(templateRoot, "Example-ModuleTests.txt"), "Invoke-ModuleTestSuite -ProjectPath $PSScriptRoot");
 
             var service = new ModuleScaffoldService(new NullLogger());
             var result = service.EnsureScaffold(new ModuleScaffoldSpec
@@ -35,6 +36,8 @@ public class ModuleScaffoldServiceTests
 
             var aboutDir = Path.Combine(projectRoot, "Help", "About");
             Assert.True(Directory.Exists(aboutDir));
+            Assert.True(Directory.Exists(Path.Combine(projectRoot, "Tests")));
+            Assert.True(File.Exists(Path.Combine(projectRoot, "Tests", "Invoke-ModuleTests.ps1")));
 
             var aboutSeed = Path.Combine(aboutDir, "about_DemoModule_Overview.help.txt");
             Assert.True(File.Exists(aboutSeed));
@@ -85,7 +88,7 @@ public class ModuleScaffoldServiceTests
             var readmePath = Path.Combine(projectRoot, "README.MD");
             Assert.True(File.Exists(readmePath));
             var readme = File.ReadAllText(readmePath);
-            Assert.Contains("Documentation Workflow", readme);
+            Assert.Contains("## Documentation", readme);
             Assert.Contains("Help\\About\\about_*.help.txt", readme);
             Assert.Contains("New-ModuleAboutTopic", readme);
 
@@ -101,6 +104,19 @@ public class ModuleScaffoldServiceTests
             Assert.DoesNotContain("$GUID", buildScript, StringComparison.Ordinal);
             Assert.DoesNotContain("$ModuleName", buildScript, StringComparison.Ordinal);
             Assert.Contains("DocsModule", buildScript, StringComparison.Ordinal);
+            Assert.Contains("Import-Module PSPublishModule -Force -ErrorAction Stop", buildScript, StringComparison.Ordinal);
+            Assert.Contains("New-ConfigurationModuleBuildProfile", buildScript, StringComparison.Ordinal);
+            Assert.Contains("New-ConfigurationGate -Mode $ConfigurationGateMode", buildScript, StringComparison.Ordinal);
+            Assert.DoesNotContain("SkipPublisherCheck", buildScript, StringComparison.Ordinal);
+
+            var moduleLoader = File.ReadAllText(Path.Combine(projectRoot, "DocsModule.psm1"));
+            Assert.Contains("Export-ModuleMember -Function $ExportedFunctions", moduleLoader, StringComparison.Ordinal);
+            Assert.DoesNotContain("Export-ModuleMember -Function '*'", moduleLoader, StringComparison.Ordinal);
+            Assert.DoesNotContain("Add-Type", moduleLoader, StringComparison.Ordinal);
+
+            var testRunner = File.ReadAllText(Path.Combine(projectRoot, "Tests", "Invoke-ModuleTests.ps1"));
+            Assert.Contains("Invoke-ModuleTestSuite", testRunner, StringComparison.Ordinal);
+            Assert.DoesNotContain("SkipPublisherCheck", testRunner, StringComparison.Ordinal);
         }
         finally
         {

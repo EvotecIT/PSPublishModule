@@ -47,11 +47,11 @@ public sealed class ModuleScaffoldService
         _logger.Info($"Preparing module structure for {moduleName} in {basePath}");
 
         Directory.CreateDirectory(projectRoot);
-        foreach (var folder in new[] { "Private", "Public", "Examples", "Ignore", "Build", Path.Combine("Help", "About") })
+        foreach (var folder in new[] { "Private", "Public", "Examples", "Ignore", "Build", "Tests", Path.Combine("Help", "About") })
             Directory.CreateDirectory(Path.Combine(projectRoot, folder));
 
         var guid = Guid.NewGuid().ToString();
-        var filesToCopy = new (string Source, string Dest, bool Patch)[]
+        var filesToCopy = new List<(string Source, string Dest, bool Patch)>
         {
             (useEmbeddedTemplates ? "Example-Gitignore.txt" : Path.Combine(templateRoot!, "Example-Gitignore.txt"), Path.Combine(projectRoot, ".gitignore"), false),
             (useEmbeddedTemplates ? "Example-CHANGELOG.MD" : Path.Combine(templateRoot!, "Example-CHANGELOG.MD"), Path.Combine(projectRoot, "CHANGELOG.MD"), false),
@@ -61,6 +61,10 @@ public sealed class ModuleScaffoldService
             (useEmbeddedTemplates ? "Example-ModulePSM1.txt" : Path.Combine(templateRoot!, "Example-ModulePSM1.txt"), Path.Combine(projectRoot, $"{moduleName}.psm1"), false),
             (useEmbeddedTemplates ? "Example-ModulePSD1.txt" : Path.Combine(templateRoot!, "Example-ModulePSD1.txt"), Path.Combine(projectRoot, $"{moduleName}.psd1"), true),
         };
+        if (TemplateExists(useEmbeddedTemplates, embeddedTemplates, templateRoot, "Example-ModuleTests.txt"))
+        {
+            filesToCopy.Add((useEmbeddedTemplates ? "Example-ModuleTests.txt" : Path.Combine(templateRoot!, "Example-ModuleTests.txt"), Path.Combine(projectRoot, "Tests", "Invoke-ModuleTests.ps1"), false));
+        }
 
         foreach (var f in filesToCopy)
         {
@@ -177,4 +181,13 @@ public sealed class ModuleScaffoldService
                File.Exists(Path.Combine(path, "Example-ModulePSD1.txt")) &&
                File.Exists(Path.Combine(path, "Example-ModulePSM1.txt"));
     }
+
+    private static bool TemplateExists(
+        bool useEmbeddedTemplates,
+        IReadOnlyDictionary<string, string>? embeddedTemplates,
+        string? templateRoot,
+        string fileName)
+        => useEmbeddedTemplates
+            ? embeddedTemplates?.ContainsKey(fileName) == true
+            : !string.IsNullOrWhiteSpace(templateRoot) && File.Exists(Path.Combine(templateRoot!, fileName));
 }
