@@ -361,6 +361,56 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void GateService_PreservesCaseSensitiveLaneKeys()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        BenchmarkJson.Write(summaryPath, new[]
+        {
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                MedianMs = 10,
+                Variables = new Dictionary<string, string?> { ["Input"] = "abc" }
+            },
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                MedianMs = 20,
+                Variables = new Dictionary<string, string?> { ["Input"] = "ABC" }
+            }
+        });
+
+        var update = new BenchmarkGateService().Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            BaselineMode = BenchmarkBaselineMode.Update
+        });
+        var verify = new BenchmarkGateService().Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath
+        });
+
+        Assert.True(update.Passed);
+        Assert.True(update.BaselineUpdated);
+        Assert.Equal(2, update.Metrics.Length);
+        Assert.Equal(2, update.Metrics.Select(metric => metric.Key).Distinct(StringComparer.Ordinal).Count());
+        Assert.True(verify.Passed);
+        Assert.DoesNotContain(verify.Metrics, metric => metric.MissingInBaseline || metric.MissingInCurrent);
+    }
+
+    [Fact]
     public void GateService_FailsWhenBaselineMetricDisappears()
     {
         var root = CreateTempRoot();
@@ -1360,6 +1410,29 @@ public sealed class BenchmarkServicesTests
         Assert.Equal(1, row.MinMs);
         Assert.Equal(12, row.MaxMs);
         Assert.Equal(8192, row.Metrics["Allocated"]);
+    }
+
+    [Fact]
+    public void Importer_PreservesUnparseableBenchmarkDotNetStatisticNamedParameters()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "Demo-report.csv");
+        File.WriteAllText(csv, "Method,Allocated,Ratio,Gen0,Mean [ms]\nWrite,LargeObject,baseline,GroupA,12\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+        var sample = Assert.Single(result.Samples);
+        var row = Assert.Single(result.Summary);
+
+        Assert.Equal("LargeObject", sample.Variables["Allocated"]);
+        Assert.Equal("baseline", sample.Variables["Ratio"]);
+        Assert.Equal("GroupA", sample.Variables["Gen0"]);
+        Assert.DoesNotContain("Allocated", sample.Metrics.Keys);
+        Assert.DoesNotContain("Ratio", sample.Metrics.Keys);
+        Assert.DoesNotContain("Gen0", sample.Metrics.Keys);
+        Assert.Equal("LargeObject", row.Variables["Allocated"]);
+        Assert.Equal("baseline", row.Variables["Ratio"]);
+        Assert.Equal("GroupA", row.Variables["Gen0"]);
+        Assert.Equal(12, row.MeanMs);
     }
 
     [Fact]
@@ -2466,6 +2539,39 @@ benchmark 'path' -out 'relative-out' {
         {
             Environment.CurrentDirectory = previousCurrentDirectory;
         }
+    }
+
+    [Fact]
+    public void InvokeBenchmarkSuiteCommand_PreservesInlineSettingsClosureWhenScriptRootIsUsed()
+    {
+        var shellRoot = CreateTempRoot();
+        var initialSessionState = InitialSessionState.CreateDefault();
+        initialSessionState.Commands.Add(new SessionStateCmdletEntry("Invoke-BenchmarkSuite", typeof(PSPublishModule.InvokeBenchmarkSuiteCommand), helpFileName: null));
+        using var runspace = RunspaceFactory.CreateRunspace(initialSessionState);
+        runspace.Open();
+        using var ps = PowerShell.Create(runspace);
+        ps.AddCommand("Set-Location").AddParameter("Path", shellRoot);
+        ps.Invoke();
+        ps.Commands.Clear();
+        ps.AddScript("""
+$moduleName = 'FromClosure'
+Invoke-BenchmarkSuite -Settings {
+    $rootProbe = $PSScriptRoot
+    benchmark 'inline-closure' {
+        cases { case A @{ ModuleName = $moduleName; Root = $PSScriptRoot } }
+        axis Operation Run
+        axis Engine Managed
+        engine Managed { operation Run { param($case, $run) } }
+    }
+} -Plan
+""");
+
+        var plan = ps.Invoke();
+
+        Assert.Empty(ps.Streams.Error);
+        var item = Assert.IsType<PowerShellBenchmarkWorkItem>(Assert.Single(plan).BaseObject);
+        Assert.Equal("FromClosure", item.Values["ModuleName"]);
+        Assert.Equal(shellRoot, item.Values["Root"]);
     }
 
     [Fact]

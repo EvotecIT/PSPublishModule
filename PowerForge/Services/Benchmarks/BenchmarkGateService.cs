@@ -130,7 +130,7 @@ public sealed class BenchmarkGateService
 
     private static Dictionary<string, double> BuildMetricMap(IEnumerable<BenchmarkSummaryRow> rows, BenchmarkGateRequest request)
     {
-        var map = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        var map = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (var row in rows ?? Array.Empty<BenchmarkSummaryRow>())
         {
             if (IsSkippedRow(row))
@@ -338,7 +338,7 @@ public sealed class BenchmarkGateService
         var node = BenchmarkJson.TryGetPropertyIgnoreCase(root, "metrics", out var metrics) && metrics.ValueKind == JsonValueKind.Object
             ? metrics
             : root;
-        var map = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        var map = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (var prop in node.EnumerateObject())
         {
             if (prop.Value.ValueKind == JsonValueKind.Number && prop.Value.TryGetDouble(out var value))
@@ -351,8 +351,8 @@ public sealed class BenchmarkGateService
     private static void WriteBaseline(string path, IReadOnlyDictionary<string, double> metrics)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-        var ordered = metrics.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(k => k.Key, k => k.Value, StringComparer.OrdinalIgnoreCase);
+        var ordered = metrics.OrderBy(k => k.Key, StringComparer.Ordinal)
+            .ToDictionary(k => k.Key, k => k.Value, StringComparer.Ordinal);
         var payload = new
         {
             schemaVersion = 1,

@@ -954,9 +954,9 @@ public sealed class BenchmarkResultImporter
         IReadOnlyDictionary<string, string> values,
         HashSet<string> excludedColumns,
         HashSet<string>? metricColumns = null,
-        bool excludeBenchmarkDotNetStatisticColumns = false)
+        bool isBenchmarkDotNetCsv = false)
         => values
-            .Where(k => !IsExcludedVariableColumn(k.Key, excludedColumns, excludeBenchmarkDotNetStatisticColumns) && (metricColumns is null || !metricColumns.Contains(k.Key)))
+            .Where(k => !IsExcludedVariableColumn(k.Key, k.Value, excludedColumns, metricColumns, isBenchmarkDotNetCsv))
             .ToDictionary(k => k.Key, k => (string?)k.Value, StringComparer.OrdinalIgnoreCase);
 
     private static Dictionary<string, double> ExtractMetrics(IReadOnlyDictionary<string, string> values, HashSet<string> metricColumns, bool normalizeBenchmarkDotNetMetrics)
@@ -1066,9 +1066,21 @@ public sealed class BenchmarkResultImporter
     private static bool HasText(IReadOnlyDictionary<string, string> values, string key)
         => values.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value);
 
-    private static bool IsExcludedVariableColumn(string key, HashSet<string> excludedColumns, bool excludeBenchmarkDotNetStatisticColumns)
-        => excludedColumns.Contains(key)
-           || (excludeBenchmarkDotNetStatisticColumns && IsBenchmarkDotNetStatisticColumn(key));
+    private static bool IsExcludedVariableColumn(
+        string key,
+        string value,
+        HashSet<string> excludedColumns,
+        HashSet<string>? metricColumns,
+        bool isBenchmarkDotNetCsv)
+    {
+        if (excludedColumns.Contains(key))
+            return true;
+
+        if (metricColumns is null || !metricColumns.Contains(key))
+            return false;
+
+        return !isBenchmarkDotNetCsv || ParseNumericMetric(value, key).HasValue;
+    }
 
     private static bool LooksLikeBenchmarkDotNetCsv(string[] headers)
     {

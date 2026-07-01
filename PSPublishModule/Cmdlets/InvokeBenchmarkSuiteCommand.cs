@@ -88,7 +88,7 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
         }
         else
         {
-            block = Settings;
+            block = Settings.GetNewClosure();
         }
 
         var suites = PowerShellBenchmarkDslRuntime.Evaluate(block, scriptRoot);
