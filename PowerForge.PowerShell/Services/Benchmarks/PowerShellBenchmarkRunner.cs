@@ -195,7 +195,7 @@ public sealed class PowerShellBenchmarkRunner
         {
             result.Comparison = suite.Comparisons
                 .Where(c => !string.IsNullOrWhiteSpace(c.Baseline))
-                .SelectMany(c => c.Metrics.SelectMany(m => summarizer.Compare(summary, c.Baseline, m)))
+                .SelectMany(c => GetComparisonMetrics(c).SelectMany(m => summarizer.Compare(summary, c.Baseline, m)))
                 .ToArray();
         }
         catch
@@ -439,7 +439,7 @@ public sealed class PowerShellBenchmarkRunner
                 continue;
             if (!string.Equals(comparison.Dimension, "Engine", StringComparison.OrdinalIgnoreCase))
                 continue;
-            foreach (var group in workItems.GroupBy(item => ComparisonGroupKey(suite.Name, item), StringComparer.OrdinalIgnoreCase))
+            foreach (var group in workItems.GroupBy(item => ComparisonGroupKey(suite.Name, item), StringComparer.Ordinal))
             {
                 if (group.All(item => item.IsSkipped))
                     continue;

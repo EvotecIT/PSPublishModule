@@ -1533,6 +1533,35 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_RejectsNonFiniteBenchmarkDotNetJsonStatistics()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "Demo-report-full.json");
+        File.WriteAllText(path, """
+{
+  "Title": "demo",
+  "Benchmarks": [
+    {
+      "Method": "Write",
+      "Statistics": {
+        "Median": "NaN",
+        "Mean": "Infinity"
+      }
+    }
+  ]
+}
+""");
+
+        var sample = Assert.Single(new BenchmarkResultImporter().Import(path).Samples);
+
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Equal(0, sample.DurationMs);
+        Assert.Contains("duration", sample.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("MedianMs", sample.Metrics.Keys);
+        Assert.DoesNotContain("MeanMs", sample.Metrics.Keys);
+    }
+
+    [Fact]
     public void Importer_DirectoryDeduplicatesBenchmarkDotNetJsonVariants()
     {
         var root = CreateTempRoot();
@@ -3223,6 +3252,27 @@ benchmark 'path-temp-user' -out 'out' {
     }
 
     [Fact]
+    public void Runner_UsesDefaultComparisonMetricDuringExecution()
+    {
+        var suite = CreateRunnableSuite();
+        var other = new PowerShellBenchmarkEngine { Name = "Other" };
+        other.Operations["Run"] = ScriptBlock.Create("param($case, $run)");
+        suite.Engines.Add(other);
+        suite.Axes.Single(axis => axis.Name == "Engine").Values.Add("Other");
+        suite.Comparisons.Add(new PowerShellBenchmarkComparison
+        {
+            Dimension = "Engine",
+            Baseline = "Managed",
+            Metrics = Array.Empty<string>()
+        });
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        var row = Assert.Single(result.Comparison, row => row.Engine == "Other");
+        Assert.Equal("MedianMs", row.Metric);
+    }
+
+    [Fact]
     public void Runner_RejectsUnsupportedComparisonDimensions()
     {
         var suite = CreateRunnableSuite();
@@ -3307,6 +3357,26 @@ benchmark 'path-temp-user' -out 'out' {
 
         Assert.Contains("Managed", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Rows=2", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(output));
+    }
+
+    [Fact]
+    public void Runner_RejectsSkippedComparisonBaselineForCaseSensitiveLaneBeforeMeasurement()
+    {
+        var suite = CreateRunnableSuite();
+        var output = Path.Combine(suite.OutputRoot, "case-sensitive-lane-side-effect.txt");
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Input", Values = { "abc", "ABC" } });
+        var other = new PowerShellBenchmarkEngine { Name = "Other" };
+        other.Operations["Run"] = ScriptBlock.Create($"[IO.File]::WriteAllText('{output.Replace("'", "''")}', 'executed')");
+        suite.Engines.Add(other);
+        suite.Axes.Single(axis => axis.Name == "Engine").Values.Add("Other");
+        suite.Skip = ScriptBlock.Create("param($case) $case.Engine -eq 'Managed' -and $case.Input -ceq 'ABC'");
+        suite.Comparisons.Add(new PowerShellBenchmarkComparison { Dimension = "Engine", Baseline = "Managed" });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new PowerShellBenchmarkRunner().Run(suite));
+
+        Assert.Contains("Managed", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Input=ABC", ex.Message, StringComparison.Ordinal);
         Assert.False(File.Exists(output));
     }
 

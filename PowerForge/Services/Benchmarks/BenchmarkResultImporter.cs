@@ -744,9 +744,9 @@ public sealed class BenchmarkResultImporter
     private static double? GetDoubleValue(JsonElement value)
     {
         if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number))
-            return number;
+            return IsFinite(number) ? number : null;
         if (value.ValueKind == JsonValueKind.String && double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out number))
-            return number;
+            return IsFinite(number) ? number : null;
         return null;
     }
 
