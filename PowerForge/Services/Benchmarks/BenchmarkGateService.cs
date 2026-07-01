@@ -18,6 +18,7 @@ public sealed class BenchmarkGateService
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
         var rows = BenchmarkJson.ReadSummary(request.SummaryPath);
+        ValidateGroupBy(request.GroupBy);
         var actual = BuildMetricMap(rows, request);
         var failedRowMessages = BuildFailedRowMessages(rows, request).ToArray();
         var missingMetricMessage = actual.Count == 0
@@ -178,6 +179,34 @@ public sealed class BenchmarkGateService
             && TryGetVariable(row.Variables, field.Substring(variablePrefix.Length), out var value))
             return value ?? string.Empty;
         return string.Empty;
+    }
+
+    private static void ValidateGroupBy(IReadOnlyList<string> groupBy)
+    {
+        foreach (var rawField in groupBy ?? Array.Empty<string>())
+        {
+            var field = rawField?.Trim();
+            if (string.IsNullOrWhiteSpace(field))
+                throw new NotSupportedException("Benchmark gate group field is required.");
+            if (IsSupportedGroupByField(field!))
+                continue;
+            throw new NotSupportedException($"Benchmark gate group field '{field}' is not supported. Use Suite, Scenario, Operation, Engine, Host, OS, Status, Variables, or Variables.<name>.");
+        }
+    }
+
+    private static bool IsSupportedGroupByField(string field)
+    {
+        if (field.StartsWith("Variables.", StringComparison.OrdinalIgnoreCase))
+            return field.Length > "Variables.".Length;
+        return string.Equals(field, "Suite", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(field, "Scenario", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(field, "Operation", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(field, "Engine", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(field, "Host", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(field, "OS", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(field, "Os", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(field, "Status", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(field, "Variables", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsVariablesField(string field)

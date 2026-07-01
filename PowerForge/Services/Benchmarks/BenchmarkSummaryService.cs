@@ -141,7 +141,24 @@ public sealed class BenchmarkSummaryService
             row.Metrics[metric.Key] = metric.Average(k => k.Value);
         }
 
+        row.MedianMs = GetPrimaryTimingOverride(row.Metrics, "MedianMs") ?? row.MedianMs;
+        row.MeanMs = GetPrimaryTimingOverride(row.Metrics, "MeanMs") ?? row.MeanMs;
+        row.MinMs = GetPrimaryTimingOverride(row.Metrics, "MinMs") ?? row.MinMs;
+        row.MaxMs = GetPrimaryTimingOverride(row.Metrics, "MaxMs") ?? row.MaxMs;
         return row;
+    }
+
+    private static double? GetPrimaryTimingOverride(IReadOnlyDictionary<string, double> metrics, string name)
+    {
+        if (metrics.TryGetValue(name, out var value))
+            return value;
+        foreach (var entry in metrics)
+        {
+            if (string.Equals(entry.Key, name, StringComparison.OrdinalIgnoreCase))
+                return entry.Value;
+        }
+
+        return null;
     }
 
     private static double? Median(IReadOnlyList<double> values)

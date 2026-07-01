@@ -20,6 +20,27 @@ public sealed class PowerShellBenchmarkRunner
     /// <returns>Resolved work items.</returns>
     public PowerShellBenchmarkWorkItem[] Plan(PowerShellBenchmarkSuite suite)
     {
+        var previousRunspace = Runspace.DefaultRunspace;
+        using var runspace = previousRunspace is null ? RunspaceFactory.CreateRunspace() : null;
+        if (runspace is not null)
+        {
+            runspace.Open();
+            Runspace.DefaultRunspace = runspace;
+        }
+
+        try
+        {
+            return PlanInCurrentRunspace(suite);
+        }
+        finally
+        {
+            if (runspace is not null)
+                Runspace.DefaultRunspace = previousRunspace;
+        }
+    }
+
+    private PowerShellBenchmarkWorkItem[] PlanInCurrentRunspace(PowerShellBenchmarkSuite suite)
+    {
         if (suite is null) throw new ArgumentNullException(nameof(suite));
         var cases = suite.Cases.Count == 0
             ? new[] { new PowerShellBenchmarkCase { Name = "Default" } }
@@ -53,20 +74,24 @@ public sealed class PowerShellBenchmarkRunner
                 if (!IsCurrentHost(requestedHostName, currentHostLabel))
                     throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested host '{requestedHostName}', but this runner only supports the current PowerShell host. Use 'Current' or run the suite from the target host.");
                 var hostName = NormalizeCurrentHost(requestedHostName, currentHostLabel);
-                if (!engine.Operations.TryGetValue(operationName, out var handler))
-                    throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define handler for engine '{engineName}' operation '{operationName}'.");
-
                 values["Engine"] = engineName;
                 values["Operation"] = operationName;
                 values["Host"] = hostName;
+                var itemValues = new Dictionary<string, object?>(values, StringComparer.OrdinalIgnoreCase);
+                var isSkipped = ShouldSkip(suite.Skip, ToPsObject(itemValues));
+                ScriptBlock? handler = null;
+                if (!isSkipped && !engine.Operations.TryGetValue(operationName, out handler))
+                    throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define handler for engine '{engineName}' operation '{operationName}'.");
+
                 items.Add(new PowerShellBenchmarkWorkItem
                 {
-                    Values = new Dictionary<string, object?>(values, StringComparer.OrdinalIgnoreCase),
+                    Values = itemValues,
                     Scenario = GetScenarioName(values),
                     Engine = engineName,
                     Operation = operationName,
                     Host = hostName,
-                    Handler = handler
+                    Handler = isSkipped ? ScriptBlock.Create(string.Empty) : handler!,
+                    IsSkipped = isSkipped
                 });
             }
         }
@@ -112,7 +137,7 @@ public sealed class PowerShellBenchmarkRunner
         var runnable = new List<PowerShellBenchmarkWorkItem>();
         foreach (var item in workItems)
         {
-            if (ShouldSkip(suite.Skip, ToPsObject(item.Values)))
+            if (item.IsSkipped || ShouldSkip(suite.Skip, ToPsObject(item.Values)))
             {
                 samples.Add(CreateSample(runId, suite, item, 0, BenchmarkSampleStatus.Skipped, 0, "Skipped by benchmark rule.", null));
                 continue;

@@ -234,6 +234,28 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void GateService_RejectsUnknownGroupByFields()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        BenchmarkJson.Write(summaryPath, new[]
+        {
+            new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Run", Engine = "Managed", Host = "Current", MedianMs = 100 }
+        });
+
+        var ex = Assert.Throws<NotSupportedException>(() => new BenchmarkGateService().Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            BaselineMode = BenchmarkBaselineMode.Update,
+            GroupBy = new[] { "Suite", "Engne" }
+        }));
+
+        Assert.Contains("Engne", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void GateService_FailsWhenBaselineMetricDisappears()
     {
         var root = CreateTempRoot();
@@ -942,6 +964,40 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_PreservesBenchmarkDotNetJsonPrimaryStatistics()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "Demo-report-full.json");
+        File.WriteAllText(path, """
+{
+  "Title": "demo",
+  "Benchmarks": [
+    {
+      "FullName": "Demo.Bench.Write()",
+      "Method": "Write",
+      "Statistics": {
+        "Median": 200,
+        "Mean": 300,
+        "Min": 100,
+        "Max": 400,
+        "Error": 50
+      }
+    }
+  ]
+}
+""");
+
+        var result = new BenchmarkResultImporter().Import(path);
+        var row = Assert.Single(result.Summary);
+
+        Assert.InRange(row.MedianMs.GetValueOrDefault(), 0.000199, 0.000201);
+        Assert.InRange(row.MeanMs.GetValueOrDefault(), 0.000299, 0.000301);
+        Assert.InRange(row.MinMs.GetValueOrDefault(), 0.000099, 0.000101);
+        Assert.InRange(row.MaxMs.GetValueOrDefault(), 0.000399, 0.000401);
+        Assert.InRange(row.Metrics["Error"], 0.000049, 0.000051);
+    }
+
+    [Fact]
     public void Importer_PreservesNormalizedCsvStatusSuiteAndVariables()
     {
         var root = CreateTempRoot();
@@ -1004,6 +1060,25 @@ public sealed class BenchmarkServicesTests
         Assert.Equal("FastBench", sample.Variables["Benchmark"]);
         Assert.Equal("Net10", sample.Variables["Job"]);
         Assert.Equal("FastBench", Assert.Single(result.Summary).Variables["Benchmark"]);
+    }
+
+    [Fact]
+    public void Importer_KeepsRunnerVariablesNamedLikeBenchmarkDotNetStatistics()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(csv, "Suite,Scenario,Operation,Engine,Host,Ratio,Allocated,Gen0,Iteration,Status,DurationMs,Reason\nsuite,CaseA,Run,Managed,Current,baseline,small,lane0,0,Succeeded,12.5,\n");
+
+        var result = new BenchmarkResultImporter().Import(csv);
+        var sample = Assert.Single(result.Samples);
+        var row = Assert.Single(result.Summary);
+
+        Assert.Equal("baseline", sample.Variables["Ratio"]);
+        Assert.Equal("small", sample.Variables["Allocated"]);
+        Assert.Equal("lane0", sample.Variables["Gen0"]);
+        Assert.Equal("baseline", row.Variables["Ratio"]);
+        Assert.DoesNotContain("Ratio", sample.Metrics.Keys);
+        Assert.DoesNotContain("Allocated", sample.Metrics.Keys);
     }
 
     [Fact]
@@ -1167,6 +1242,34 @@ benchmark 'closure' {
     axis Engine Managed
     setup { param($case, $run) $run.FixtureText = Get-Content -LiteralPath $fixture -Raw }
     engine Managed { operation Run { param($case, $run) if ($run.FixtureText -ne 'ok') { throw 'closure missing' } } }
+}
+");
+
+        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script, root));
+        suite.WarmupCount = 0;
+        suite.IterationCount = 1;
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
+    }
+
+    [Fact]
+    public void DslRuntime_PreservesSpecLocalHelperFunctionsInCapturedBlocks()
+    {
+        var root = CreateTempRoot();
+        var fixture = Path.Combine(root, "fixture.txt");
+        File.WriteAllText(fixture, "ok");
+        var script = ScriptBlock.Create(@"
+function Read-FixtureText {
+    param([string] $Path)
+    Get-Content -LiteralPath $Path -Raw
+}
+$fixture = Join-Path $PSScriptRoot 'fixture.txt'
+benchmark 'helpers' {
+    axis Operation Run
+    axis Engine Managed
+    setup { param($case, $run) $run.FixtureText = Read-FixtureText -Path $fixture }
+    engine Managed { operation Run { param($case, $run) if ($run.FixtureText -ne 'ok') { throw 'helper missing' } } }
 }
 ");
 
@@ -1450,6 +1553,37 @@ benchmark 'path' -out 'relative-out' {
         Assert.Contains(plan, item => item.Engine == "Second" && item.Operation == "SecondRun");
         Assert.DoesNotContain(plan, item => item.Engine == "First" && item.Operation == "SecondRun");
         Assert.DoesNotContain(plan, item => item.Engine == "Second" && item.Operation == "FirstRun");
+    }
+
+    [Fact]
+    public void Runner_AppliesSkipBeforeRequiringOperationHandlers()
+    {
+        var first = new PowerShellBenchmarkEngine { Name = "First" };
+        first.Operations["Read"] = ScriptBlock.Create("param($case, $run)");
+        var second = new PowerShellBenchmarkEngine { Name = "Second" };
+        second.Operations["Write"] = ScriptBlock.Create("param($case, $run)");
+        var suite = new PowerShellBenchmarkSuite
+        {
+            Name = "suite",
+            OutputRoot = CreateTempRoot(),
+            WarmupCount = 0,
+            IterationCount = 1,
+            Artifacts = BenchmarkArtifactKind.None,
+            Skip = ScriptBlock.Create("param($case) ($case.Engine -eq 'First' -and $case.Operation -eq 'Write') -or ($case.Engine -eq 'Second' -and $case.Operation -eq 'Read')")
+        };
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Engine", Values = { "First", "Second" } });
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Operation", Values = { "Read", "Write" } });
+        suite.Engines.Add(first);
+        suite.Engines.Add(second);
+
+        var runner = new PowerShellBenchmarkRunner();
+        var plan = runner.Plan(suite);
+        var result = runner.Run(suite);
+
+        Assert.Equal(4, plan.Length);
+        Assert.Equal(2, plan.Count(item => item.IsSkipped));
+        Assert.Equal(2, result.Samples.Count(sample => sample.Status == BenchmarkSampleStatus.Succeeded));
+        Assert.Equal(2, result.Samples.Count(sample => sample.Status == BenchmarkSampleStatus.Skipped));
     }
 
     [Fact]

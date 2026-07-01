@@ -207,7 +207,8 @@ public sealed class BenchmarkResultImporter
             for (var h = 0; h < headers.Length && h < values.Length; h++)
                 map[headers[h]] = values[h];
 
-            var metricHeaders = SampleMetricColumnsFor(headers);
+            var isBenchmarkDotNetCsv = LooksLikeBenchmarkDotNetCsv(headers);
+            var metricHeaders = SampleMetricColumnsFor(headers, isBenchmarkDotNetCsv);
             var metadataColumns = SampleMetadataColumnsFor(map);
             var method = Get(map, "Scenario", "Method", "Benchmark") ?? Path.GetFileNameWithoutExtension(path);
             var mean = ParseDuration(GetWithHeader(map, out var durationHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median", "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean", "DurationMs"), durationHeader);
@@ -226,7 +227,7 @@ public sealed class BenchmarkResultImporter
                 Status = status,
                 DurationMs = mean ?? 0,
                 Reason = Get(map, "Reason") ?? (mean.HasValue ? string.Empty : "Duration column could not be parsed."),
-                Variables = ExtractVariables(map, metadataColumns, metricHeaders),
+                Variables = ExtractVariables(map, metadataColumns, metricHeaders, isBenchmarkDotNetCsv),
                 Metrics = ExtractMetrics(map, metricHeaders)
             });
         }
@@ -248,7 +249,8 @@ public sealed class BenchmarkResultImporter
             for (var h = 0; h < headers.Length && h < values.Length; h++)
                 map[headers[h]] = values[h];
 
-            var metricHeaders = SummaryMetricColumnsFor(headers);
+            var isBenchmarkDotNetCsv = LooksLikeBenchmarkDotNetCsv(headers);
+            var metricHeaders = SummaryMetricColumnsFor(headers, isBenchmarkDotNetCsv);
             var metadataColumns = SummaryMetadataColumnsFor(map);
             var failureCount = ParseInt(Get(map, "FailureCount")) ?? 0;
             rows.Add(new BenchmarkSummaryRow
@@ -259,7 +261,7 @@ public sealed class BenchmarkResultImporter
                 Engine = Get(map, "Engine") ?? Get(map, "Job") ?? "BenchmarkDotNet",
                 Host = Get(map, "Host") ?? string.Empty,
                 Os = Get(map, "OS") ?? string.Empty,
-                Variables = ExtractVariables(map, metadataColumns, metricHeaders),
+                Variables = ExtractVariables(map, metadataColumns, metricHeaders, isBenchmarkDotNetCsv),
                 SampleCount = ParseInt(Get(map, "SampleCount")) ?? 0,
                 FailureCount = failureCount,
                 Status = Get(map, "Status") ?? (failureCount > 0 ? "Failed" : "Succeeded"),
@@ -483,12 +485,13 @@ public sealed class BenchmarkResultImporter
 
         foreach (var property in statistics.Value.EnumerateObject())
         {
-            if (!IsBenchmarkDotNetMetricColumn(property.Name))
+            var metricName = BenchmarkDotNetStatisticMetricName(property.Name);
+            if (metricName is null)
                 continue;
 
             var value = GetDouble(statistics, property.Name);
             if (value.HasValue)
-                metrics[property.Name] = value.Value * BenchmarkDotNetJsonMetricFactor(property.Name);
+                metrics[metricName] = value.Value * BenchmarkDotNetJsonMetricFactor(property.Name);
         }
 
         return metrics;
@@ -754,9 +757,13 @@ public sealed class BenchmarkResultImporter
     private static int? ParseInt(string? value)
         => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
 
-    private static Dictionary<string, string?> ExtractVariables(IReadOnlyDictionary<string, string> values, HashSet<string> excludedColumns, HashSet<string>? metricColumns = null)
+    private static Dictionary<string, string?> ExtractVariables(
+        IReadOnlyDictionary<string, string> values,
+        HashSet<string> excludedColumns,
+        HashSet<string>? metricColumns = null,
+        bool excludeBenchmarkDotNetStatisticColumns = false)
         => values
-            .Where(k => !IsExcludedVariableColumn(k.Key, excludedColumns) && (metricColumns is null || !metricColumns.Contains(k.Key)))
+            .Where(k => !IsExcludedVariableColumn(k.Key, excludedColumns, excludeBenchmarkDotNetStatisticColumns) && (metricColumns is null || !metricColumns.Contains(k.Key)))
             .ToDictionary(k => k.Key, k => (string?)k.Value, StringComparer.OrdinalIgnoreCase);
 
     private static Dictionary<string, double> ExtractMetrics(IReadOnlyDictionary<string, string> values, HashSet<string> metricColumns)
@@ -766,19 +773,25 @@ public sealed class BenchmarkResultImporter
             .Where(item => item.value.HasValue)
             .ToDictionary(item => item.name, item => item.value!.Value, StringComparer.OrdinalIgnoreCase);
 
-    private static HashSet<string> SampleMetricColumnsFor(string[] headers)
+    private static HashSet<string> SampleMetricColumnsFor(string[] headers, bool includeBenchmarkDotNetStatisticColumns)
     {
         var metrics = HeadersAfter(headers, "Reason");
-        foreach (var header in headers.Where(IsBenchmarkDotNetMetricColumn))
-            metrics.Add(header);
+        if (includeBenchmarkDotNetStatisticColumns)
+        {
+            foreach (var header in headers.Where(IsBenchmarkDotNetMetricColumn))
+                metrics.Add(header);
+        }
         return metrics;
     }
 
-    private static HashSet<string> SummaryMetricColumnsFor(string[] headers)
+    private static HashSet<string> SummaryMetricColumnsFor(string[] headers, bool includeBenchmarkDotNetStatisticColumns)
     {
         var metrics = HeadersAfter(headers, "MaxMs");
-        foreach (var header in headers.Where(IsBenchmarkDotNetMetricColumn))
-            metrics.Add(header);
+        if (includeBenchmarkDotNetStatisticColumns)
+        {
+            foreach (var header in headers.Where(IsBenchmarkDotNetMetricColumn))
+                metrics.Add(header);
+        }
         return metrics;
     }
 
@@ -831,8 +844,18 @@ public sealed class BenchmarkResultImporter
     private static bool HasText(IReadOnlyDictionary<string, string> values, string key)
         => values.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value);
 
-    private static bool IsExcludedVariableColumn(string key, HashSet<string> excludedColumns)
-        => excludedColumns.Contains(key) || IsBenchmarkDotNetStatisticColumn(key);
+    private static bool IsExcludedVariableColumn(string key, HashSet<string> excludedColumns, bool excludeBenchmarkDotNetStatisticColumns)
+        => excludedColumns.Contains(key)
+           || (excludeBenchmarkDotNetStatisticColumns && IsBenchmarkDotNetStatisticColumn(key));
+
+    private static bool LooksLikeBenchmarkDotNetCsv(string[] headers)
+    {
+        var names = new HashSet<string>(headers, StringComparer.OrdinalIgnoreCase);
+        return !names.Contains("Iteration")
+               && !names.Contains("DurationMs")
+               && (names.Contains("Method") || names.Contains("Benchmark"))
+               && headers.Any(IsBenchmarkDotNetStatisticColumn);
+    }
 
     private static bool IsBenchmarkDotNetStatisticColumn(string key)
     {
@@ -845,6 +868,18 @@ public sealed class BenchmarkResultImporter
         var normalized = RemoveBracketUnit(key).Replace(" ", string.Empty);
         return BenchmarkDotNetStatisticColumns.Contains(normalized)
                && !BenchmarkDotNetPrimaryDurationColumns.Contains(normalized);
+    }
+
+    private static string? BenchmarkDotNetStatisticMetricName(string key)
+    {
+        var normalized = RemoveBracketUnit(key).Replace(" ", string.Empty);
+        if (!BenchmarkDotNetStatisticColumns.Contains(normalized))
+            return null;
+        if (string.Equals(normalized, "Median", StringComparison.OrdinalIgnoreCase)) return "MedianMs";
+        if (string.Equals(normalized, "Mean", StringComparison.OrdinalIgnoreCase)) return "MeanMs";
+        if (string.Equals(normalized, "Min", StringComparison.OrdinalIgnoreCase)) return "MinMs";
+        if (string.Equals(normalized, "Max", StringComparison.OrdinalIgnoreCase)) return "MaxMs";
+        return key;
     }
 
     private static string RemoveBracketUnit(string key)
@@ -869,7 +904,8 @@ public sealed class BenchmarkResultImporter
     private static double BenchmarkDotNetJsonMetricFactor(string name)
     {
         var normalized = RemoveBracketUnit(name).Replace(" ", string.Empty);
-        return normalized is "Error" or "StdErr" or "StdDev" or "Q1" or "Q3"
+        return BenchmarkDotNetPrimaryDurationColumns.Contains(normalized)
+            || normalized is "Error" or "StdErr" or "StdDev" or "Q1" or "Q3"
             || normalized.StartsWith("P", StringComparison.OrdinalIgnoreCase)
             ? 0.000001
             : 1.0;

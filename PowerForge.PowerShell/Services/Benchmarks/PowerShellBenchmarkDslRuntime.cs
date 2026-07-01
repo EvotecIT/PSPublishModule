@@ -254,9 +254,18 @@ public static class PowerShellBenchmarkDslRuntime
             ["__PowerForgeCloseBenchmarkBlock"] = ScriptBlock.Create("""
 param([scriptblock] $ScriptBlock)
 $captured = @{}
+$capturedFunctions = @{}
 $skipNames = @(
     'args', 'input', 'this', 'PSItem', '_', 'Error',
-    'captured', 'scriptText'
+    'captured', 'capturedFunctions', 'scriptText'
+)
+$skipFunctions = @(
+    '__PowerForgeCloseBenchmarkBlock',
+    'benchmark', 'cases', 'case', 'from', 'axis', 'setup', 'data', 'skip', 'validate', 'engine', 'operation', 'metric', 'compare', 'readme', 'artifacts',
+    'New-BenchmarkSuite', 'Add-BenchmarkCases', 'Add-BenchmarkCase', 'Add-BenchmarkCaseSource', 'Add-BenchmarkAxis',
+    'Set-BenchmarkSetup', 'Set-BenchmarkDataFactory', 'Add-BenchmarkEngine', 'Add-BenchmarkOperation',
+    'Add-BenchmarkSkipRule', 'Add-BenchmarkValidation', 'Add-BenchmarkMetric', 'Add-BenchmarkComparison',
+    'Add-BenchmarkReadmeBlock', 'Set-BenchmarkArtifacts'
 )
 for ($scope = 2; $scope -lt 20; $scope++) {
     try {
@@ -274,8 +283,24 @@ for ($scope = 2; $scope -lt 20; $scope++) {
     }
 }
 
+foreach ($function in Get-Command -CommandType Function -ErrorAction SilentlyContinue) {
+    if ($skipFunctions -contains $function.Name) { continue }
+    if ($function.Name -like '*:*') { continue }
+    if (-not [string]::IsNullOrWhiteSpace($function.Source)) { continue }
+    if (-not [string]::IsNullOrWhiteSpace($function.ModuleName)) { continue }
+    if (($function.Options -band [System.Management.Automation.ScopedItemOptions]::Constant) -or
+        ($function.Options -band [System.Management.Automation.ScopedItemOptions]::ReadOnly)) { continue }
+    if ([string]::IsNullOrWhiteSpace($function.Definition)) { continue }
+    if (-not $capturedFunctions.ContainsKey($function.Name)) {
+        $capturedFunctions[$function.Name] = $function.Definition
+    }
+}
+
 $scriptText = $ScriptBlock.ToString()
 {
+    foreach ($entry in $capturedFunctions.GetEnumerator()) {
+        Set-Item -Path "Function:\$($entry.Key)" -Value ([scriptblock]::Create([string] $entry.Value)) -ErrorAction Stop
+    }
     foreach ($entry in $captured.GetEnumerator()) {
         Set-Variable -Name $entry.Key -Value $entry.Value -Scope Local
     }

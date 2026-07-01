@@ -156,4 +156,7 @@ public sealed class PowerShellBenchmarkWorkItem
 
     /// <summary>Selected handler.</summary>
     public ScriptBlock Handler { get; set; } = ScriptBlock.Create(string.Empty);
+
+    /// <summary>Whether the work item was filtered by a skip rule during planning.</summary>
+    public bool IsSkipped { get; set; }
 }
