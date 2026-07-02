@@ -3,6 +3,8 @@ param(
     [object[]] $Arguments = @()
 )
 
+$previousGlobalLastExitCode = $global:LASTEXITCODE
+$global:LASTEXITCODE = 0
 $nativeExitTracker = [PowerForge.PowerShellNativeExitCodeTracker]::Install($ExecutionContext.SessionState)
 try {
     & $Block @Arguments
@@ -16,4 +18,5 @@ try {
 }
 finally {
     $nativeExitTracker.Dispose()
+    $global:LASTEXITCODE = $previousGlobalLastExitCode
 }

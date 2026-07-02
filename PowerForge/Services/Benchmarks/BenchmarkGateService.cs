@@ -9,7 +9,7 @@ namespace PowerForge;
 /// </summary>
 public sealed class BenchmarkGateService
 {
-    private static readonly string[] DefaultGroupBy = { "Suite", "Scenario", "Operation", "Engine", "Host", "OS", "Variables" };
+    private static readonly string[] DefaultGroupBy = { "Suite", "Scenario", "Operation", "Engine", "Host", "OS", "RunMode", "Variables" };
 
     /// <summary>
     /// Evaluates or updates a benchmark baseline.
@@ -219,6 +219,7 @@ public sealed class BenchmarkGateService
         if (string.Equals(field, "Engine", StringComparison.OrdinalIgnoreCase)) return row.Engine;
         if (string.Equals(field, "Host", StringComparison.OrdinalIgnoreCase)) return row.Host;
         if (string.Equals(field, "OS", StringComparison.OrdinalIgnoreCase) || string.Equals(field, "Os", StringComparison.OrdinalIgnoreCase)) return row.Os;
+        if (string.Equals(field, "RunMode", StringComparison.OrdinalIgnoreCase)) return row.RunMode;
         if (string.Equals(field, "Status", StringComparison.OrdinalIgnoreCase)) return row.Status;
         if (string.Equals(field, "Variables", StringComparison.OrdinalIgnoreCase)) return FormatVariables(row.Variables);
         const string variablePrefix = "Variables.";
@@ -237,7 +238,7 @@ public sealed class BenchmarkGateService
                 throw new NotSupportedException("Benchmark gate group field is required.");
             if (IsSupportedGroupByField(field!))
                 continue;
-            throw new NotSupportedException($"Benchmark gate group field '{field}' is not supported. Use Suite, Scenario, Operation, Engine, Host, OS, Status, Variables, or Variables.<name>.");
+            throw new NotSupportedException($"Benchmark gate group field '{field}' is not supported. Use Suite, Scenario, Operation, Engine, Host, OS, RunMode, Status, Variables, or Variables.<name>.");
         }
     }
 
@@ -252,6 +253,7 @@ public sealed class BenchmarkGateService
                || string.Equals(field, "Host", StringComparison.OrdinalIgnoreCase)
                || string.Equals(field, "OS", StringComparison.OrdinalIgnoreCase)
                || string.Equals(field, "Os", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(field, "RunMode", StringComparison.OrdinalIgnoreCase)
                || string.Equals(field, "Status", StringComparison.OrdinalIgnoreCase)
                || string.Equals(field, "Variables", StringComparison.OrdinalIgnoreCase);
     }
@@ -352,7 +354,7 @@ public sealed class BenchmarkGateService
         foreach (var prop in node.EnumerateObject())
         {
             if (prop.Value.ValueKind != JsonValueKind.Number)
-                continue;
+                throw new InvalidOperationException($"Benchmark baseline metric '{prop.Name}' must be a finite number: {path}");
             if (!prop.Value.TryGetDouble(out var value) || !IsFinite(value))
                 throw new InvalidOperationException($"Benchmark baseline metric '{prop.Name}' is not a finite number: {path}");
             map[prop.Name] = value;

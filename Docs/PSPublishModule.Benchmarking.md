@@ -164,7 +164,7 @@ Cleanup modes:
 | --- | --- |
 | `Always` | Remove the temporary user, profile, and scratch folder after the run. |
 | `KeepOnFailure` | Keep the temporary profile and scratch folder when the run fails. |
-| `Never` | Keep temporary state for inspection. |
+| `KeepAlways` | Keep temporary state for inspection. |
 
 Example:
 

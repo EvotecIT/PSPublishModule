@@ -17,17 +17,18 @@ public sealed class BenchmarkMarkdownRenderer
     {
         var rows = (summary ?? Array.Empty<BenchmarkSummaryRow>()).ToArray();
         var markdown = new StringBuilder();
-        markdown.AppendLine("| Scenario | Variables | Operation | Host | OS | Engine | Samples | Median | Mean | Status |");
-        markdown.AppendLine("| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | --- |");
+        markdown.AppendLine("| Scenario | Variables | Operation | Host | OS | RunMode | Engine | Samples | Median | Mean | Status |");
+        markdown.AppendLine("| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | --- |");
         foreach (var row in rows.OrderBy(r => r.Scenario, StringComparer.OrdinalIgnoreCase)
                      .ThenBy(r => FormatVariables(r.Variables), StringComparer.OrdinalIgnoreCase)
                       .ThenBy(r => r.Operation, StringComparer.OrdinalIgnoreCase)
                       .ThenBy(r => r.Host, StringComparer.OrdinalIgnoreCase)
                       .ThenBy(r => r.Os, StringComparer.OrdinalIgnoreCase)
+                      .ThenBy(r => r.RunMode, StringComparer.OrdinalIgnoreCase)
                       .ThenBy(r => r.Engine, StringComparer.OrdinalIgnoreCase))
         {
             markdown.AppendLine(
-                $"| {Cell(row.Scenario)} | {Cell(FormatVariables(row.Variables))} | {Cell(row.Operation)} | {Cell(row.Host)} | {Cell(row.Os)} | {Cell(row.Engine)} | {row.SampleCount} | {Number(row.MedianMs)} | {Number(row.MeanMs)} | {Cell(row.Status)} |");
+                $"| {Cell(row.Scenario)} | {Cell(FormatVariables(row.Variables))} | {Cell(row.Operation)} | {Cell(row.Host)} | {Cell(row.Os)} | {Cell(row.RunMode)} | {Cell(row.Engine)} | {row.SampleCount} | {Number(row.MedianMs)} | {Number(row.MeanMs)} | {Cell(row.Status)} |");
         }
 
         return markdown.ToString().TrimEnd() + Environment.NewLine;
@@ -42,17 +43,18 @@ public sealed class BenchmarkMarkdownRenderer
     {
         var rows = (comparison ?? Array.Empty<BenchmarkComparisonRow>()).ToArray();
         var markdown = new StringBuilder();
-        markdown.AppendLine("| Scenario | Variables | Operation | Host | OS | Engine | Metric | Actual | Baseline | Ratio |");
-        markdown.AppendLine("| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: |");
+        markdown.AppendLine("| Scenario | Variables | Operation | Host | OS | RunMode | Engine | Metric | Actual | Baseline | Ratio |");
+        markdown.AppendLine("| --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: |");
         foreach (var row in rows.OrderBy(r => r.Scenario, StringComparer.OrdinalIgnoreCase)
                      .ThenBy(r => FormatVariables(r.Variables), StringComparer.OrdinalIgnoreCase)
                       .ThenBy(r => r.Operation, StringComparer.OrdinalIgnoreCase)
                       .ThenBy(r => r.Host, StringComparer.OrdinalIgnoreCase)
                       .ThenBy(r => r.Os, StringComparer.OrdinalIgnoreCase)
+                      .ThenBy(r => r.RunMode, StringComparer.OrdinalIgnoreCase)
                       .ThenBy(r => r.Engine, StringComparer.OrdinalIgnoreCase))
         {
             markdown.AppendLine(
-                $"| {Cell(row.Scenario)} | {Cell(FormatVariables(row.Variables))} | {Cell(row.Operation)} | {Cell(row.Host)} | {Cell(row.Os)} | {Cell(row.Engine)} | {Cell(row.Metric)} | {Number(row.Actual)} | {Number(row.Baseline)} | {Number(row.Ratio)} |");
+                $"| {Cell(row.Scenario)} | {Cell(FormatVariables(row.Variables))} | {Cell(row.Operation)} | {Cell(row.Host)} | {Cell(row.Os)} | {Cell(row.RunMode)} | {Cell(row.Engine)} | {Cell(row.Metric)} | {Number(row.Actual)} | {Number(row.Baseline)} | {Number(row.Ratio)} |");
         }
 
         return markdown.ToString().TrimEnd() + Environment.NewLine;

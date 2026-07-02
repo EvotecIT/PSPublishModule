@@ -341,6 +341,18 @@ public sealed class PowerShellBenchmarkRunner
                 throw new InvalidOperationException($"Benchmark suite '{suite.Name}' defines a matrix axis without a name.");
             if (!names.Add(axis.Name))
                 throw new NotSupportedException($"Benchmark suite '{suite.Name}' defines duplicate matrix axis '{axis.Name}'. Axis names must be unique ignoring case.");
+            ValidateAxisValues(suite, axis);
+        }
+    }
+
+    private static void ValidateAxisValues(PowerShellBenchmarkSuite suite, PowerShellBenchmarkAxis axis)
+    {
+        var values = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var value in axis.Values)
+        {
+            var key = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
+            if (!values.Add(key))
+                throw new NotSupportedException($"Benchmark suite '{suite.Name}' matrix axis '{axis.Name}' contains duplicate value '{key}'. Axis values must be unique.");
         }
     }
 
@@ -733,7 +745,7 @@ public sealed class PowerShellBenchmarkRunner
         var variableHeaders = GetVariableHeaders(rows.Select(row => row.Variables));
         var metricHeaders = GetMetricHeaders(rows.Select(row => row.Metrics));
         var builder = new StringBuilder();
-        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS" }.Concat(variableHeaders).Concat(new[] { "Iteration", "Status", "DurationMs", "Reason" }).Concat(metricHeaders).Select(Cell)));
+        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS", "RunMode" }.Concat(variableHeaders).Concat(new[] { "Iteration", "Status", "DurationMs", "Reason" }).Concat(metricHeaders).Select(Cell)));
         foreach (var sample in rows)
         {
             var cells = new List<string>
@@ -743,7 +755,8 @@ public sealed class PowerShellBenchmarkRunner
                 Cell(sample.Operation),
                 Cell(sample.Engine),
                 Cell(sample.Host),
-                Cell(sample.Os)
+                Cell(sample.Os),
+                Cell(sample.RunMode)
             };
             cells.AddRange(variableHeaders.Select(header => Cell(sample.Variables.TryGetValue(header, out var value) ? value : null)));
             cells.Add(sample.Iteration.ToString(CultureInfo.InvariantCulture));
@@ -763,7 +776,7 @@ public sealed class PowerShellBenchmarkRunner
         var variableHeaders = GetVariableHeaders(summaryRows.Select(row => row.Variables));
         var metricHeaders = GetMetricHeaders(summaryRows.Select(row => row.Metrics));
         var builder = new StringBuilder();
-        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS" }.Concat(variableHeaders).Concat(new[] { "SampleCount", "FailureCount", "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs" }).Concat(metricHeaders).Select(Cell)));
+        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS", "RunMode" }.Concat(variableHeaders).Concat(new[] { "SampleCount", "FailureCount", "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs" }).Concat(metricHeaders).Select(Cell)));
         foreach (var row in summaryRows)
         {
             var cells = new List<string>
@@ -773,7 +786,8 @@ public sealed class PowerShellBenchmarkRunner
                 Cell(row.Operation),
                 Cell(row.Engine),
                 Cell(row.Host),
-                Cell(row.Os)
+                Cell(row.Os),
+                Cell(row.RunMode)
             };
             cells.AddRange(variableHeaders.Select(header => Cell(row.Variables.TryGetValue(header, out var value) ? value : null)));
             cells.Add(row.SampleCount.ToString(CultureInfo.InvariantCulture));

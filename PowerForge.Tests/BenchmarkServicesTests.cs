@@ -27,6 +27,29 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void SummaryService_KeepsRunModesSeparate()
+    {
+        var quickManaged = Sample("suite", "case", "Run", "Managed", 10);
+        quickManaged.RunMode = "quick";
+        var publishManaged = Sample("suite", "case", "Run", "Managed", 30);
+        publishManaged.RunMode = "publish";
+        var quickOther = Sample("suite", "case", "Run", "Other", 20);
+        quickOther.RunMode = "quick";
+        var publishOther = Sample("suite", "case", "Run", "Other", 60);
+        publishOther.RunMode = "publish";
+
+        var service = new BenchmarkSummaryService();
+        var summary = service.Summarize(new[] { quickManaged, publishManaged, quickOther, publishOther });
+        var comparison = service.Compare(summary, "Managed");
+
+        Assert.Equal(4, summary.Length);
+        Assert.Contains(summary, row => row.Engine == "Managed" && row.RunMode == "quick" && row.MedianMs == 10);
+        Assert.Contains(summary, row => row.Engine == "Managed" && row.RunMode == "publish" && row.MedianMs == 30);
+        Assert.Contains(comparison, row => row.Engine == "Other" && row.RunMode == "quick" && row.Ratio == 2);
+        Assert.Contains(comparison, row => row.Engine == "Other" && row.RunMode == "publish" && row.Ratio == 2);
+    }
+
+    [Fact]
     public void SummaryService_RejectsMissingComparisonBaseline()
     {
         var summary = new BenchmarkSummaryService().Summarize(new[]
@@ -509,7 +532,7 @@ public sealed class BenchmarkServicesTests
         {
             metrics = new Dictionary<string, double>
             {
-                ["suite|case|Run|Managed|Current|||MedianMs"] = 100
+                ["suite|case|Run|Managed|Current||||MedianMs"] = 100
             }
         });
         BenchmarkJson.Write(summaryPath, new[]
@@ -534,7 +557,7 @@ public sealed class BenchmarkServicesTests
         var root = CreateTempRoot();
         var summaryPath = Path.Combine(root, "summary.json");
         var baselinePath = Path.Combine(root, "baseline.json");
-        File.WriteAllText(baselinePath, """{"metrics":{"suite|case|Run|Managed|Current|||MedianMs":1e999}}""");
+        File.WriteAllText(baselinePath, """{"metrics":{"suite|case|Run|Managed|Current||||MedianMs":1e999}}""");
         BenchmarkJson.Write(summaryPath, new[]
         {
             new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Run", Engine = "Managed", Host = "Current", MedianMs = 100 }
@@ -547,6 +570,28 @@ public sealed class BenchmarkServicesTests
         }));
 
         Assert.Contains("finite", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void GateService_RejectsNonNumericBaselineMetric()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        File.WriteAllText(baselinePath, """{"metrics":{"suite|case|Run|Managed|Current||||MedianMs":"100"}}""");
+        BenchmarkJson.Write(summaryPath, new[]
+        {
+            new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Run", Engine = "Managed", Host = "Current", MedianMs = 100 }
+        });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new BenchmarkGateService().Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            FailOnNew = false
+        }));
+
+        Assert.Contains("finite number", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -585,7 +630,7 @@ public sealed class BenchmarkServicesTests
         {
             metrics = new Dictionary<string, double>
             {
-                ["suite|case|Run|Managed|Current|||RowsPerSecond"] = 100
+                ["suite|case|Run|Managed|Current||||RowsPerSecond"] = 100
             }
         });
         BenchmarkJson.Write(summaryPath, new[]
@@ -3021,6 +3066,18 @@ benchmark 'path-temp-user' -out 'out' {
         Assert.Contains("RunMode axis", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Runner_RejectsDuplicateMatrixAxisValues()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows", Values = { 10, 10 } });
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Plan(suite));
+
+        Assert.Contains("duplicate value", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Rows", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData("Scenario")]
     [InlineData("Name")]
@@ -3136,6 +3193,42 @@ benchmark 'path-temp-user' -out 'out' {
         var result = new PowerShellBenchmarkRunner().Run(suite);
 
         Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
+    }
+
+    [Fact]
+    public void Runner_IgnoresStaleGlobalLastExitCodeWhenNoNativeCommandRuns()
+    {
+        var previousRunspace = Runspace.DefaultRunspace;
+        using var runspace = RunspaceFactory.CreateRunspace();
+        runspace.Open();
+        Runspace.DefaultRunspace = runspace;
+        using (var ps = PowerShell.Create(runspace))
+        {
+            ps.AddScript("$global:LASTEXITCODE = 42");
+            ps.Invoke();
+        }
+        var script = ScriptBlock.Create(@"
+benchmark 'stale-native-exit' {
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) $run.Seen = 'ok' } }
+}
+");
+
+        try
+        {
+            var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+            suite.WarmupCount = 0;
+            suite.IterationCount = 1;
+            var result = new PowerShellBenchmarkRunner().Run(suite);
+
+            var sample = Assert.Single(result.Samples);
+            Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status);
+        }
+        finally
+        {
+            Runspace.DefaultRunspace = previousRunspace;
+        }
     }
 
     [Fact]
@@ -3376,11 +3469,11 @@ benchmark 'path-temp-user' -out 'out' {
 
         var samplesCsv = File.ReadAllText(result.Artifacts["samples.csv"]);
         var summaryCsv = File.ReadAllText(result.Artifacts["summary.csv"]);
-        Assert.Contains("Suite,Scenario,Operation,Engine,Host,OS,Rows,Iteration,Status,DurationMs,Reason,TinyMetric", samplesCsv);
-        Assert.Contains($",Managed,{result.Samples[0].Host},{result.Samples[0].Os},10,0,Succeeded", samplesCsv);
+        Assert.Contains("Suite,Scenario,Operation,Engine,Host,OS,RunMode,Rows,Iteration,Status,DurationMs,Reason,TinyMetric", samplesCsv);
+        Assert.Contains($",Managed,{result.Samples[0].Host},{result.Samples[0].Os},{result.Samples[0].RunMode},10,0,Succeeded", samplesCsv);
         Assert.Contains(result.Samples[0].DurationMs.ToString("G17", System.Globalization.CultureInfo.InvariantCulture), samplesCsv);
         Assert.Contains(",0.00042", samplesCsv);
-        Assert.Contains("Suite,Scenario,Operation,Engine,Host,OS,Rows,SampleCount,FailureCount,Status,MedianMs,MeanMs,MinMs,MaxMs,TinyMetric", summaryCsv);
+        Assert.Contains("Suite,Scenario,Operation,Engine,Host,OS,RunMode,Rows,SampleCount,FailureCount,Status,MedianMs,MeanMs,MinMs,MaxMs,TinyMetric", summaryCsv);
         Assert.Contains(",0.00042", summaryCsv);
     }
 

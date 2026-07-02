@@ -277,6 +277,7 @@ public sealed class BenchmarkResultImporter
                 Engine = GetCsvEngine(map, isBenchmarkDotNetCsv),
                 Host = GetCsvHost(map, isBenchmarkDotNetCsv),
                 Os = Get(map, "OS") ?? string.Empty,
+                RunMode = Get(map, "RunMode") ?? string.Empty,
                 Variables = ExtractVariables(map, metadataColumns, metricHeaders, isBenchmarkDotNetCsv),
                 SampleCount = ParseInt(Get(map, "SampleCount")) ?? 0,
                 FailureCount = failureCount,
@@ -1021,7 +1022,7 @@ public sealed class BenchmarkResultImporter
 
     private static readonly HashSet<string> SummaryMetadataColumns = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Suite", "Scenario", "Method", "Benchmark", "Operation", "Engine", "Job", "Host", "OS", "SampleCount", "FailureCount",
+        "Suite", "Scenario", "Method", "Benchmark", "Operation", "Engine", "Job", "Host", "OS", "RunMode", "SampleCount", "FailureCount",
         "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs"
     };
 

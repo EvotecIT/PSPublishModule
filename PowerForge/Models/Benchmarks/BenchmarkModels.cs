@@ -144,6 +144,9 @@ public sealed class BenchmarkSummaryRow
     /// <summary>Operating-system label captured for report grouping.</summary>
     public string Os { get; set; } = string.Empty;
 
+    /// <summary>Run mode such as quick, standard, or publish.</summary>
+    public string RunMode { get; set; } = string.Empty;
+
     /// <summary>Case and matrix variables represented by this summary row.</summary>
     public Dictionary<string, string?> Variables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -191,6 +194,9 @@ public sealed class BenchmarkComparisonRow
 
     /// <summary>Operating-system label represented by this comparison row.</summary>
     public string Os { get; set; } = string.Empty;
+
+    /// <summary>Run mode represented by this comparison row.</summary>
+    public string RunMode { get; set; } = string.Empty;
 
     /// <summary>Case and matrix variables represented by this comparison row.</summary>
     public Dictionary<string, string?> Variables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
@@ -277,7 +283,7 @@ public sealed class BenchmarkGateRequest
     public string Metric { get; set; } = "MedianMs";
 
     /// <summary>Fields used to construct stable metric keys.</summary>
-    public string[] GroupBy { get; set; } = { "Suite", "Scenario", "Operation", "Engine", "Host", "OS", "Variables" };
+    public string[] GroupBy { get; set; } = { "Suite", "Scenario", "Operation", "Engine", "Host", "OS", "RunMode", "Variables" };
 
     /// <summary>Baseline behavior mode.</summary>
     public BenchmarkBaselineMode BaselineMode { get; set; } = BenchmarkBaselineMode.Verify;
