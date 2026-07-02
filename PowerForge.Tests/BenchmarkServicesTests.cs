@@ -314,7 +314,18 @@ public sealed class BenchmarkServicesTests
         Assert.Single(output);
         var text = File.ReadAllText(readme);
         Assert.Contains("Other", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Managed", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("old", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TestBenchmarkGateCommand_DefaultGroupByIncludesRunMode()
+    {
+        var groupBy = typeof(PSPublishModule.TestBenchmarkGateCommand)
+            .GetProperty(nameof(PSPublishModule.TestBenchmarkGateCommand.GroupBy))!
+            .GetValue(new PSPublishModule.TestBenchmarkGateCommand()) as string[];
+
+        Assert.Contains("RunMode", groupBy!);
     }
 
     [Fact]
@@ -776,6 +787,44 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void GateService_CanonicalizesCustomMetricNamesInKeys()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        BenchmarkJson.Write(summaryPath, new[]
+        {
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                Metrics = new Dictionary<string, double> { ["RowsPerSecond"] = 100 }
+            }
+        });
+
+        var service = new BenchmarkGateService();
+        service.Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            Metric = "RowsPerSecond",
+            BaselineMode = BenchmarkBaselineMode.Update
+        });
+        var verify = service.Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            Metric = "rowspersecond"
+        });
+
+        Assert.True(verify.Passed);
+        Assert.DoesNotContain(verify.Metrics, m => m.MissingInCurrent || m.MissingInBaseline);
+    }
+
+    [Fact]
     public void GateService_FailsWhenNoMetricValuesAreProduced()
     {
         var root = CreateTempRoot();
@@ -1204,6 +1253,21 @@ public sealed class BenchmarkServicesTests
         Assert.Equal(12, sample.DurationMs);
         Assert.Equal(999, sample.Metrics["Mean"]);
         Assert.Equal(12, Assert.Single(result.Summary).MedianMs);
+    }
+
+    [Fact]
+    public void Importer_PreservesRunModeFromNormalizedSampleCsv()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "samples.csv");
+        File.WriteAllText(csv, "Suite,Scenario,Operation,Engine,Host,OS,RunMode,Iteration,Status,DurationMs,Reason\nsuite,case,Run,Managed,Current,Windows,publish,0,Succeeded,12,\n");
+
+        var result = new BenchmarkResultImporter().Import(csv);
+        var sample = Assert.Single(result.Samples);
+        var row = Assert.Single(result.Summary);
+
+        Assert.Equal("publish", sample.RunMode);
+        Assert.Equal("publish", row.RunMode);
     }
 
     [Fact]
@@ -3078,6 +3142,18 @@ benchmark 'path-temp-user' -out 'out' {
         Assert.Contains("Rows", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Runner_RejectsCaseOnlyMatrixAxisValues()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows", Values = { "abc", "ABC" } });
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Plan(suite));
+
+        Assert.Contains("duplicate value", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ABC", ex.Message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("Scenario")]
     [InlineData("Name")]
@@ -3767,22 +3843,22 @@ benchmark 'stale-native-exit' {
     }
 
     [Fact]
-    public void Runner_RejectsSkippedComparisonBaselineForCaseSensitiveLaneBeforeMeasurement()
+    public void Runner_RejectsSkippedComparisonBaselineForStringLaneBeforeMeasurement()
     {
         var suite = CreateRunnableSuite();
-        var output = Path.Combine(suite.OutputRoot, "case-sensitive-lane-side-effect.txt");
-        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Input", Values = { "abc", "ABC" } });
+        var output = Path.Combine(suite.OutputRoot, "string-lane-side-effect.txt");
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Input", Values = { "alpha", "beta" } });
         var other = new PowerShellBenchmarkEngine { Name = "Other" };
         other.Operations["Run"] = ScriptBlock.Create($"[IO.File]::WriteAllText('{output.Replace("'", "''")}', 'executed')");
         suite.Engines.Add(other);
         suite.Axes.Single(axis => axis.Name == "Engine").Values.Add("Other");
-        suite.Skip = ScriptBlock.Create("param($case) $case.Engine -eq 'Managed' -and $case.Input -ceq 'ABC'");
+        suite.Skip = ScriptBlock.Create("param($case) $case.Engine -eq 'Managed' -and $case.Input -eq 'beta'");
         suite.Comparisons.Add(new PowerShellBenchmarkComparison { Dimension = "Engine", Baseline = "Managed" });
 
         var ex = Assert.Throws<InvalidOperationException>(() => new PowerShellBenchmarkRunner().Run(suite));
 
         Assert.Contains("Managed", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Input=ABC", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("Input=beta", ex.Message, StringComparison.Ordinal);
         Assert.False(File.Exists(output));
     }
 

@@ -347,12 +347,12 @@ public sealed class PowerShellBenchmarkRunner
 
     private static void ValidateAxisValues(PowerShellBenchmarkSuite suite, PowerShellBenchmarkAxis axis)
     {
-        var values = new HashSet<string>(StringComparer.Ordinal);
+        var values = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var value in axis.Values)
         {
             var key = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
             if (!values.Add(key))
-                throw new NotSupportedException($"Benchmark suite '{suite.Name}' matrix axis '{axis.Name}' contains duplicate value '{key}'. Axis values must be unique.");
+                throw new NotSupportedException($"Benchmark suite '{suite.Name}' matrix axis '{axis.Name}' contains duplicate value '{key}'. Axis values must be unique ignoring case so path-backed lanes cannot collide.");
         }
     }
 

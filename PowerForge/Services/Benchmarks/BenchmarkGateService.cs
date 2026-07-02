@@ -137,7 +137,7 @@ public sealed class BenchmarkGateService
         {
             if (IsSkippedRow(row))
                 continue;
-            var metric = NormalizeMetricName(request.Metric);
+            var metric = ResolveMetricName(row, NormalizeMetricName(request.Metric));
             var value = BenchmarkSummaryService.GetMetricValue(row, metric);
             if (!value.HasValue || !IsFinite(value.Value)) continue;
             var key = BuildKey(row, request.GroupBy, metric);
@@ -155,9 +155,9 @@ public sealed class BenchmarkGateService
 
     private static IEnumerable<string> BuildFailedRowMessages(IEnumerable<BenchmarkSummaryRow> rows, BenchmarkGateRequest request)
     {
-        var metric = NormalizeMetricName(request.Metric);
         foreach (var row in rows ?? Array.Empty<BenchmarkSummaryRow>())
         {
+            var metric = ResolveMetricName(row, NormalizeMetricName(request.Metric));
             if (!IsFailedRow(row))
                 continue;
             yield return $"Benchmark row '{BuildKey(row, request.GroupBy, metric)}' has failed samples.";
@@ -166,9 +166,9 @@ public sealed class BenchmarkGateService
 
     private static IEnumerable<string> BuildMissingMetricMessages(IEnumerable<BenchmarkSummaryRow> rows, BenchmarkGateRequest request)
     {
-        var metric = NormalizeMetricName(request.Metric);
         foreach (var row in rows ?? Array.Empty<BenchmarkSummaryRow>())
         {
+            var metric = ResolveMetricName(row, NormalizeMetricName(request.Metric));
             if (IsFailedRow(row) || IsSkippedRow(row))
                 continue;
             var value = BenchmarkSummaryService.GetMetricValue(row, metric);
@@ -303,6 +303,24 @@ public sealed class BenchmarkGateService
         if (string.Equals(name, "MinMs", StringComparison.OrdinalIgnoreCase)) return "MinMs";
         if (string.Equals(name, "MaxMs", StringComparison.OrdinalIgnoreCase)) return "MaxMs";
         return name;
+    }
+
+    private static string ResolveMetricName(BenchmarkSummaryRow row, string metric)
+    {
+        var normalized = NormalizeMetricName(metric);
+        if (string.Equals(normalized, "MedianMs", StringComparison.OrdinalIgnoreCase)) return "MedianMs";
+        if (string.Equals(normalized, "MeanMs", StringComparison.OrdinalIgnoreCase)) return "MeanMs";
+        if (string.Equals(normalized, "MinMs", StringComparison.OrdinalIgnoreCase)) return "MinMs";
+        if (string.Equals(normalized, "MaxMs", StringComparison.OrdinalIgnoreCase)) return "MaxMs";
+        if (row.Metrics.ContainsKey(normalized))
+            return normalized;
+        foreach (var entry in row.Metrics)
+        {
+            if (string.Equals(entry.Key, normalized, StringComparison.OrdinalIgnoreCase))
+                return entry.Key;
+        }
+
+        return normalized;
     }
 
     private static BenchmarkMetricDirection ResolveMetricDirection(BenchmarkGateRequest request)

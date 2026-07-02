@@ -235,7 +235,7 @@ public sealed class BenchmarkResultImporter
                 Engine = GetCsvEngine(map, isBenchmarkDotNetCsv),
                 Host = GetCsvHost(map, isBenchmarkDotNetCsv),
                 Os = Get(map, "OS") ?? string.Empty,
-                RunMode = "import",
+                RunMode = Get(map, "RunMode") ?? "import",
                 Iteration = ParseInt(Get(map, "Iteration")) ?? 0,
                 Status = status,
                 DurationMs = mean ?? 0,

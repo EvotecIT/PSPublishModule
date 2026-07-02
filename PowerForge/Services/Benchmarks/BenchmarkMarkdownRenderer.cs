@@ -43,8 +43,8 @@ public sealed class BenchmarkMarkdownRenderer
     {
         var rows = (comparison ?? Array.Empty<BenchmarkComparisonRow>()).ToArray();
         var markdown = new StringBuilder();
-        markdown.AppendLine("| Scenario | Variables | Operation | Host | OS | RunMode | Engine | Metric | Actual | Baseline | Ratio |");
-        markdown.AppendLine("| --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: |");
+        markdown.AppendLine("| Scenario | Variables | Operation | Host | OS | RunMode | Engine | Baseline | Metric | Actual | Baseline Value | Ratio |");
+        markdown.AppendLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: |");
         foreach (var row in rows.OrderBy(r => r.Scenario, StringComparer.OrdinalIgnoreCase)
                      .ThenBy(r => FormatVariables(r.Variables), StringComparer.OrdinalIgnoreCase)
                       .ThenBy(r => r.Operation, StringComparer.OrdinalIgnoreCase)
@@ -54,7 +54,7 @@ public sealed class BenchmarkMarkdownRenderer
                       .ThenBy(r => r.Engine, StringComparer.OrdinalIgnoreCase))
         {
             markdown.AppendLine(
-                $"| {Cell(row.Scenario)} | {Cell(FormatVariables(row.Variables))} | {Cell(row.Operation)} | {Cell(row.Host)} | {Cell(row.Os)} | {Cell(row.RunMode)} | {Cell(row.Engine)} | {Cell(row.Metric)} | {Number(row.Actual)} | {Number(row.Baseline)} | {Number(row.Ratio)} |");
+                $"| {Cell(row.Scenario)} | {Cell(FormatVariables(row.Variables))} | {Cell(row.Operation)} | {Cell(row.Host)} | {Cell(row.Os)} | {Cell(row.RunMode)} | {Cell(row.Engine)} | {Cell(row.BaselineEngine)} | {Cell(row.Metric)} | {Number(row.Actual)} | {Number(row.Baseline)} | {Number(row.Ratio)} |");
         }
 
         return markdown.ToString().TrimEnd() + Environment.NewLine;
