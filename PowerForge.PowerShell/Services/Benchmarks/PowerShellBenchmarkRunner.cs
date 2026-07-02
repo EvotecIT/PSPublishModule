@@ -83,6 +83,7 @@ public sealed class PowerShellBenchmarkRunner
                 if (!IsCurrentHost(requestedHostName, currentHostLabel))
                     throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested host '{requestedHostName}', but this runner only supports the current PowerShell host. Use 'Current' or run the suite from the target host.");
                 var hostName = NormalizeCurrentHost(requestedHostName, currentHostLabel);
+                values["Profile"] = suite.Profile.ToString();
                 values["Engine"] = engineName;
                 values["Operation"] = operationName;
                 values["Host"] = hostName;
@@ -739,7 +740,8 @@ public sealed class PowerShellBenchmarkRunner
         => string.Equals(key, "Scenario", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "Engine", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "Operation", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(key, "Host", StringComparison.OrdinalIgnoreCase);
+           || string.Equals(key, "Host", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "Profile", StringComparison.OrdinalIgnoreCase);
 
     private static PSObject ToPsObject(IReadOnlyDictionary<string, object?> values)
     {
@@ -879,6 +881,7 @@ public sealed class PowerShellBenchmarkRunner
            || string.Equals(key, "Suite", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "RunId", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "OS", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "Profile", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "RunMode", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "Iteration", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "Status", StringComparison.OrdinalIgnoreCase)
@@ -916,6 +919,7 @@ public sealed class PowerShellBenchmarkRunner
             "Engine",
             "Operation",
             "Host",
+            "Profile",
             "OS",
             "RunMode"
         };

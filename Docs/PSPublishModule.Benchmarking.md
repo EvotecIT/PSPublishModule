@@ -65,22 +65,23 @@ benchmark 'managed-modules' -out 'Ignore/Benchmarks/ManagedModules' {
         }
     }
 
-    compare Engine -Baseline Managed -Metric MedianMs
+    comparison Engine -Baseline Managed -Metric MedianMs
     readme 'README.MD' -Block 'managed-module-benchmark-table' -Renderer ComparisonTable
     artifacts Json, Csv, Markdown
 }
 ```
 
-The short DSL keywords are scoped to benchmark evaluation. Explicit names are
-also available inside benchmark specs when a file benefits from a more verbose
-style:
+Benchmark declaration words are real PSPublishModule commands. The shorter DSL
+keywords are aliases over the explicit command names, so a spec can use a compact
+Pester-style form while still being backed by normal PowerShell parameter
+binding.
 
 | Short form | Explicit form |
 | --- | --- |
 | `benchmark` | `New-BenchmarkSuite` |
 | `cases` | `Add-BenchmarkCases` |
 | `case` | `Add-BenchmarkCase` |
-| `from` | `Add-BenchmarkCaseSource` |
+| `caseSource` | `Add-BenchmarkCaseSource` |
 | `axis` | `Add-BenchmarkAxis` |
 | `setup` | `Set-BenchmarkSetup` |
 | `data` | `Set-BenchmarkDataFactory` |
@@ -91,34 +92,55 @@ style:
 | `skip` | `Add-BenchmarkSkipRule` |
 | `validate` | `Add-BenchmarkValidation` |
 | `metric` | `Add-BenchmarkMetric` |
-| `compare` | `Add-BenchmarkComparison` |
+| `comparison` | `Add-BenchmarkComparison` |
 | `readme` | `Add-BenchmarkReadmeBlock` |
 | `artifacts` | `Set-BenchmarkArtifacts` |
+
+The managed-module provider comparison in
+`Benchmarks/ManagedModules/managed-modules.benchmark.ps1` is intentionally a
+normal benchmark spec. It keeps PSPublishModule-specific module scenarios,
+provider command mappings, native-provider install safety, validation, and
+managed-result metrics in the benchmark file while the reusable runner,
+artifact, comparison, profile, and README update mechanics stay in PowerForge.
 
 ## Running A Suite
 
 Run a suite from a file:
 
 ```powershell
-Invoke-BenchmarkSuite -Path .\Benchmarks\managed-modules.benchmark.ps1
+Invoke-BenchmarkSuite -Path .\Benchmarks\ManagedModules\managed-modules.benchmark.ps1
 ```
 
 Inspect the resolved work without executing measurements:
 
 ```powershell
-Invoke-BenchmarkSuite -Path .\Benchmarks\managed-modules.benchmark.ps1 -Plan
+Invoke-BenchmarkSuite -Path .\Benchmarks\ManagedModules\managed-modules.benchmark.ps1 -Plan
 ```
 
 Override common runner settings from the command line:
 
 ```powershell
 Invoke-BenchmarkSuite `
-    -Path .\Benchmarks\managed-modules.benchmark.ps1 `
+    -Path .\Benchmarks\ManagedModules\managed-modules.benchmark.ps1 `
     -OutputRoot .\Ignore\Benchmarks\ManagedModules `
     -WarmupCount 1 `
     -IterationCount 5 `
     -RunMode local
 ```
+
+Select a focused matrix from the command line:
+
+```powershell
+Invoke-BenchmarkSuite `
+    -Path .\Benchmarks\ManagedModules\managed-modules.benchmark.ps1 `
+    -Scenario SingleModule, AzAccounts `
+    -Operation Find, Install, Save `
+    -Engine Managed, ModuleFast, PSResourceGet
+```
+
+`-Scenario` is an alias for `-Case`. The runner applies `-Case`, `-Engine`,
+`-Operation`, and `-Host` after the spec is declared, so benchmark files do not
+need to parse comma-separated strings or duplicate matrix-selection logic.
 
 `Invoke-BenchmarkSuite` returns the full run result. The run contains raw
 samples, summary rows, comparison rows, metadata, and artifact paths.
@@ -131,7 +153,7 @@ in this order:
 1. expand cases and axes into work items
 2. evaluate skip rules
 3. run `setup`
-4. run `data`
+4. run the configured data factory
 5. run warmup iterations
 6. time the selected `operation`
 7. run `validate`

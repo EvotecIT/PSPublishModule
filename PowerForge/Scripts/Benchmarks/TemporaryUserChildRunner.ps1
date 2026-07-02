@@ -15,7 +15,13 @@ foreach ($modulePath in @($request.ModulePaths)) {
 }
 $scriptRoot = [System.IO.Path]::GetDirectoryName($request.SpecPath)
 $block = [scriptblock]::Create([System.IO.File]::ReadAllText($request.SpecPath))
-$suites = [PowerForge.PowerShellBenchmarkDslRuntime]::Evaluate($block, $scriptRoot)
+$benchmarkVariables = @{}
+if ($null -ne $request.BenchmarkVariables) {
+    foreach ($property in @($request.BenchmarkVariables.PSObject.Properties)) {
+        $benchmarkVariables[$property.Name] = [string] $property.Value
+    }
+}
+$suites = [PowerForge.PowerShellBenchmarkDslRuntime]::Evaluate($block, $scriptRoot, $benchmarkVariables)
 if ($request.SuiteIndex -ge $suites.Length) {
     throw "Benchmark spec '$($request.SpecPath)' did not produce suite index $($request.SuiteIndex)."
 }
@@ -29,6 +35,14 @@ if (-not [string]::IsNullOrWhiteSpace($request.RunMode)) {
 }
 if (-not [string]::IsNullOrWhiteSpace($request.SuiteName)) {
     $suite.Name = $request.SuiteName
+}
+if ($null -ne $request.Selection) {
+    $selection = [PowerForge.PowerShellBenchmarkSelection]::new()
+    $selection.Cases = @($request.Selection.Cases)
+    $selection.Engines = @($request.Selection.Engines)
+    $selection.Operations = @($request.Selection.Operations)
+    $selection.Hosts = @($request.Selection.Hosts)
+    [PowerForge.PowerShellBenchmarkSuiteFilter]::Apply($suite, $selection)
 }
 $readmePaths = @()
 if ([System.IO.File]::Exists($request.ReadmePathFile)) {

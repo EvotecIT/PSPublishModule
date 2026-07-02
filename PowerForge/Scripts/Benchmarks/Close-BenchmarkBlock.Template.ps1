@@ -6,18 +6,28 @@ $capturedFunctions = @{}
 $skipNames = @(
     'args', 'input', 'this', 'PSItem', '_', 'Error',
     'PWD', 'captured', 'capturedFunctions', 'scriptText', 'scriptRoot',
+    'BenchmarkCallerFunctions',
     'ConfirmPreference', 'DebugPreference', 'ErrorActionPreference', 'ErrorView',
     'InformationPreference', 'ProgressPreference', 'PSNativeCommandUseErrorActionPreference',
     'PSDefaultParameterValues', 'VerbosePreference', 'WarningPreference', 'WhatIfPreference'
 )
 $skipFunctions = @(
     '__PowerForgeCloseBenchmarkBlock',
-    'benchmark', 'cases', 'case', 'from', 'axis', 'setup', 'data', 'skip', 'validate', 'profile', 'cleanup', 'engine', 'operation', 'metric', 'compare', 'readme', 'artifacts',
+    'benchmark', 'cases', 'case', 'caseSource', 'from', 'axis', 'setup', 'data', 'skip', 'validate', 'profile', 'cleanup', 'engine', 'operation', 'metric', 'compare', 'comparison', 'readme', 'artifacts',
     'New-BenchmarkSuite', 'Add-BenchmarkCases', 'Add-BenchmarkCase', 'Add-BenchmarkCaseSource', 'Add-BenchmarkAxis',
     'Set-BenchmarkSetup', 'Set-BenchmarkDataFactory', 'Set-BenchmarkProfile', 'Set-BenchmarkCleanup', 'Add-BenchmarkEngine', 'Add-BenchmarkOperation',
     'Add-BenchmarkSkipRule', 'Add-BenchmarkValidation', 'Add-BenchmarkMetric', 'Add-BenchmarkComparison',
     'Add-BenchmarkReadmeBlock', 'Set-BenchmarkArtifacts'
 )
+if ($null -ne $BenchmarkCallerFunctions) {
+    foreach ($entry in $BenchmarkCallerFunctions.GetEnumerator()) {
+        if ($skipFunctions -contains $entry.Key) { continue }
+        if (-not $capturedFunctions.ContainsKey($entry.Key)) {
+            $capturedFunctions[$entry.Key] = [string] $entry.Value
+        }
+    }
+}
+
 for ($scope = 2; $scope -lt 20; $scope++) {
     try {
         $variables = Get-Variable -Scope $scope -ErrorAction Stop

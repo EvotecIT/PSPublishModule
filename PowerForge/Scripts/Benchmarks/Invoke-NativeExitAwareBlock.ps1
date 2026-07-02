@@ -3,7 +3,8 @@ param(
     [object[]] $Arguments = @()
 )
 
-$previousGlobalLastExitCode = $global:LASTEXITCODE
+$previousGlobalLastExitCodeVariable = Get-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
+$previousGlobalLastExitCode = if ($null -eq $previousGlobalLastExitCodeVariable) { $null } else { $previousGlobalLastExitCodeVariable.Value }
 $global:LASTEXITCODE = 0
 $nativeExitTracker = [PowerForge.PowerShellNativeExitCodeTracker]::Install($ExecutionContext.SessionState)
 try {
@@ -18,5 +19,9 @@ try {
 }
 finally {
     $nativeExitTracker.Dispose()
-    $global:LASTEXITCODE = $previousGlobalLastExitCode
+    if ($null -eq $previousGlobalLastExitCodeVariable) {
+        Remove-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
+    } else {
+        $global:LASTEXITCODE = $previousGlobalLastExitCode
+    }
 }

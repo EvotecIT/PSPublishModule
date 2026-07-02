@@ -56,8 +56,9 @@ if (-not (Test-Path -LiteralPath $cliProject)) { throw "PowerForge.Cli project n
 if (-not (Test-Path -LiteralPath $moduleProject)) { throw "PSPublishModule project not found: $moduleProject" }
 
 if ($Framework -eq 'auto') {
-    $runtimesText = (dotnet --list-runtimes 2>$null) -join "`n"
-    $Framework = if ($runtimesText -match '(?m)^Microsoft\.NETCore\.App\s+10\.') { 'net10.0' } else { 'net8.0' }
+    # Choose the binary that this PowerShell host can load, not merely the
+    # newest .NET runtime installed for dotnet.exe.
+    $Framework = if ($PSVersionTable.PSEdition -eq 'Core' -and [Environment]::Version.Major -ge 10) { 'net10.0' } else { 'net8.0' }
 }
 
 if (-not $NoBuild) {

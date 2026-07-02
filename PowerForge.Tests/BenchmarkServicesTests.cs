@@ -6,6 +6,8 @@ namespace PowerForge.Tests;
 
 public sealed partial class BenchmarkServicesTests
 {
+    private static readonly Lazy<Runspace> BenchmarkDslRunspace = new(CreateBenchmarkDslRunspace);
+
     [Fact]
     public void SummaryService_CalculatesMedianAndComparisonRatio()
     {
@@ -678,6 +680,37 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(2, update.Metrics.Length);
         Assert.Contains(update.Metrics, metric => metric.Key.Contains("|Windows|", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(update.Metrics, metric => metric.Key.Contains("|Linux|", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static PowerShellBenchmarkSuite[] EvaluateBenchmarkDsl(ScriptBlock scriptBlock, string? scriptRoot = null, IReadOnlyDictionary<string, string?>? benchmarkVariables = null)
+    {
+        if (Runspace.DefaultRunspace is null)
+        {
+            Runspace.DefaultRunspace = BenchmarkDslRunspace.Value;
+        }
+
+        ImportBenchmarkDslCommands(Runspace.DefaultRunspace);
+        return PowerShellBenchmarkDslRuntime.Evaluate(scriptBlock, scriptRoot, benchmarkVariables);
+    }
+
+    private static Runspace CreateBenchmarkDslRunspace()
+    {
+        var runspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
+        runspace.Open();
+        return runspace;
+    }
+
+    private static void ImportBenchmarkDslCommands(Runspace runspace)
+    {
+        using var powerShell = PowerShell.Create(runspace);
+        powerShell.AddCommand("Import-Module")
+            .AddArgument(typeof(PSPublishModule.InvokeBenchmarkSuiteCommand).Assembly.Location)
+            .AddParameter("Force");
+        powerShell.Invoke();
+        if (!powerShell.HadErrors) return;
+
+        var message = string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString()));
+        throw new InvalidOperationException("Failed to import PSPublishModule benchmark commands for test evaluation." + Environment.NewLine + message);
     }
 
 }

@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
@@ -65,6 +67,53 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
     public string? Suite { get; set; }
 
     /// <summary>
+    /// Case or scenario names to include.
+    /// </summary>
+    [Parameter]
+    [Alias("Cases", "Scenario", "Scenarios")]
+    public string[]? Case { get; set; }
+
+    /// <summary>
+    /// Engine names to include.
+    /// </summary>
+    [Parameter]
+    [Alias("Engines")]
+    public string[]? Engine { get; set; }
+
+    /// <summary>
+    /// Operation names to include.
+    /// </summary>
+    [Parameter]
+    [Alias("Operations")]
+    public string[]? Operation { get; set; }
+
+    /// <summary>
+    /// Host labels to include.
+    /// </summary>
+    [Parameter]
+    [Alias("Host", "Hosts")]
+    public string[]? HostName { get; set; }
+
+    /// <summary>
+    /// Optional profile override.
+    /// </summary>
+    [Parameter]
+    public PowerShellBenchmarkProfileKind? Profile { get; set; }
+
+    /// <summary>
+    /// Optional cleanup override.
+    /// </summary>
+    [Parameter]
+    public PowerShellBenchmarkCleanupMode? Cleanup { get; set; }
+
+    /// <summary>
+    /// Optional variables exposed to benchmark specs as <c>$BenchmarkVariables</c>.
+    /// </summary>
+    [Parameter]
+    [Alias("Variables")]
+    public Hashtable? Variable { get; set; }
+
+    /// <summary>
     /// Prints the resolved plan instead of executing measurements.
     /// </summary>
     [Parameter]
@@ -91,7 +140,8 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
             block = Settings.GetNewClosure();
         }
 
-        var suites = PowerShellBenchmarkDslRuntime.Evaluate(block, scriptRoot);
+        var benchmarkVariables = GetBenchmarkVariables();
+        var suites = PowerShellBenchmarkDslRuntime.Evaluate(block, scriptRoot, benchmarkVariables);
         if (suites.Length == 0)
             ThrowTerminatingError(new ErrorRecord(new InvalidOperationException("Benchmark spec did not declare any benchmark suites."), "BenchmarkSuiteMissing", ErrorCategory.InvalidData, Path));
 
@@ -101,6 +151,7 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
         {
             var suite = suites[suiteIndex];
             ApplyOverrides(suite);
+            PowerShellBenchmarkSuiteFilter.Apply(suite, GetSelection());
             ResolveSuitePaths(suite);
             if (Plan)
             {
@@ -127,6 +178,8 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
                     RunMode = suite.RunMode,
                     SuiteName = suite.Name,
                     Cleanup = suite.Cleanup,
+                    BenchmarkVariables = benchmarkVariables,
+                    Selection = GetSelection(),
                     ReadmePaths = suite.ReadmeBlocks.Select(block => block.Path).ToArray()
                 }));
                 continue;
@@ -146,7 +199,18 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
         if (IterationCount.HasValue) suite.IterationCount = Math.Max(1, IterationCount.Value);
         if (!string.IsNullOrWhiteSpace(RunMode)) suite.RunMode = RunMode!;
         if (!string.IsNullOrWhiteSpace(Suite)) suite.Name = Suite!;
+        if (Profile.HasValue) suite.Profile = Profile.Value;
+        if (Cleanup.HasValue) suite.Cleanup = Cleanup.Value;
     }
+
+    private PowerShellBenchmarkSelection GetSelection()
+        => new()
+        {
+            Cases = Case ?? Array.Empty<string>(),
+            Engines = Engine ?? Array.Empty<string>(),
+            Operations = Operation ?? Array.Empty<string>(),
+            Hosts = HostName ?? Array.Empty<string>()
+        };
 
     private void ResolveSuitePaths(PowerShellBenchmarkSuite suite)
     {
@@ -162,4 +226,28 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
         => System.IO.Path.IsPathRooted(path)
             ? path
             : SessionState.Path.GetUnresolvedProviderPathFromPSPath(path);
+
+    private Dictionary<string, string?> GetBenchmarkVariables()
+    {
+        var variables = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        if (Variable is null) return variables;
+        foreach (DictionaryEntry entry in Variable)
+        {
+            var name = Convert.ToString(entry.Key);
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+            variables[name!] = ConvertBenchmarkVariableValue(entry.Value);
+        }
+
+        return variables;
+    }
+
+    private static string? ConvertBenchmarkVariableValue(object? value)
+    {
+        if (value is null) return null;
+        if (value is string text) return text;
+        if (value is IEnumerable enumerable)
+            return string.Join(",", enumerable.Cast<object?>().Select(static item => Convert.ToString(item)));
+        return Convert.ToString(value);
+    }
 }
