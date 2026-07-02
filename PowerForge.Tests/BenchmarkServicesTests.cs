@@ -40,6 +40,23 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void SummaryService_RejectsAmbiguousCaseOnlyComparisonBaselines()
+    {
+        var summary = new[]
+        {
+            new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Run", Engine = "Managed", Host = "Current", MedianMs = 10 },
+            new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Run", Engine = "managed", Host = "Current", MedianMs = 20 },
+            new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Run", Engine = "Other", Host = "Current", MedianMs = 30 }
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new BenchmarkSummaryService().Compare(summary, "MANAGED"));
+
+        Assert.Contains("ambiguous", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Managed", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("managed", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SummaryService_RejectsComparisonBaselineWithNoMetric()
     {
         var summary = new[]
@@ -2227,6 +2244,51 @@ benchmark 'expandable-root' {
     }
 
     [Fact]
+    public void DslRuntime_PreservesPSScriptRootInExpandableSubexpressions()
+    {
+        var root = CreateTempRoot();
+        var fixture = Path.Combine(root, "fixture.txt");
+        File.WriteAllText(fixture, "ok");
+        var script = ScriptBlock.Create(@"
+benchmark 'expandable-subexpression-root' {
+    axis Operation Run
+    axis Engine Managed
+    setup { param($case, $run) $run.FixtureText = Get-Content -LiteralPath ""$($PSScriptRoot)/fixture.txt"" -Raw }
+    engine Managed { operation Run { param($case, $run) if ($run.FixtureText -ne 'ok') { throw 'expandable subexpression root missing' } } }
+}
+");
+
+        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script, root));
+        suite.WarmupCount = 0;
+        suite.IterationCount = 1;
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
+    }
+
+    [Fact]
+    public void DslRuntime_DoesNotCaptureErrorPreferenceVariables()
+    {
+        var script = ScriptBlock.Create(@"
+$ErrorActionPreference = 'Continue'
+benchmark 'preferences' {
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) Write-Error 'should stop' } }
+}
+");
+
+        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+        suite.WarmupCount = 0;
+        suite.IterationCount = 1;
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Contains("should stop", sample.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void DslRuntime_PreservesSpecLocalHelperFunctionsInCapturedBlocks()
     {
         var root = CreateTempRoot();
@@ -3242,6 +3304,19 @@ benchmark 'path-temp-user' -out 'out' {
     {
         var suite = CreateRunnableSuite();
         suite.Engines[0].Operations["Run"] = ScriptBlock.Create("param($case, $run) $global:LASTEXITCODE = 23");
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Contains("23", sample.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Runner_PreservesFirstNativeFailureWhenLaterCommandResetsExitCode()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create("param($case, $run) $global:LASTEXITCODE = 23; $global:LASTEXITCODE = 0");
 
         var result = new PowerShellBenchmarkRunner().Run(suite);
 

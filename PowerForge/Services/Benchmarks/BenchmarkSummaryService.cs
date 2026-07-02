@@ -45,7 +45,7 @@ public sealed class BenchmarkSummaryService
             if (group.All(r => string.Equals(r.Status, "Skipped", StringComparison.OrdinalIgnoreCase)))
                 continue;
 
-            var baseline = group.FirstOrDefault(r => string.Equals(r.Engine, baselineEngine, StringComparison.OrdinalIgnoreCase));
+            var baseline = ResolveBaseline(group, baselineEngine);
             if (baseline is null)
                 throw new InvalidOperationException($"Benchmark comparison baseline '{baselineEngine}' was not found for {DescribeGroup(group.First())}.");
             var baselineValue = GetMetricValue(baseline, metric);
@@ -75,6 +75,29 @@ public sealed class BenchmarkSummaryService
         }
 
         return result.ToArray();
+    }
+
+    private static BenchmarkSummaryRow? ResolveBaseline(IEnumerable<BenchmarkSummaryRow> group, string baselineEngine)
+    {
+        var rows = group.ToArray();
+        var exact = rows.Where(r => string.Equals(r.Engine, baselineEngine, StringComparison.Ordinal)).ToArray();
+        if (exact.Length == 1)
+            return exact[0];
+        if (exact.Length > 1)
+            throw new InvalidOperationException($"Benchmark comparison baseline '{baselineEngine}' matched multiple exact engine rows.");
+
+        var insensitive = rows.Where(r => string.Equals(r.Engine, baselineEngine, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (insensitive.Length == 0)
+            return null;
+
+        var distinctEngineNames = insensitive
+            .Select(r => r.Engine)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (distinctEngineNames.Length > 1)
+            throw new InvalidOperationException($"Benchmark comparison baseline '{baselineEngine}' is ambiguous because matching engine rows differ only by case: {string.Join(", ", distinctEngineNames)}.");
+
+        return insensitive[0];
     }
 
     internal static double? GetMetricValue(BenchmarkSummaryRow? row, string metric)

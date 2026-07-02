@@ -137,9 +137,10 @@ public static class PowerShellBenchmarkDslRuntime
     {
         if (scriptBlock is null) throw new ArgumentNullException(nameof(scriptBlock));
         var scriptText = scriptBlock.ToString();
-        return string.IsNullOrWhiteSpace(scriptRoot)
+        var rooted = string.IsNullOrWhiteSpace(scriptRoot)
             ? scriptText
             : ReplaceScriptRootVariables(scriptText, scriptRoot!);
+        return PowerShellNativeExitCodeGuard.AddChecks(rooted);
     }
 
     /// <summary>
@@ -353,84 +354,9 @@ public static class PowerShellBenchmarkDslRuntime
     private static Dictionary<string, string> CreateFunctionBodies()
     {
         var scriptRootLiteral = ToPowerShellLiteral(Current.Value?.ScriptRoot ?? string.Empty);
-        var closeBenchmarkBlock = """
-param([scriptblock] $ScriptBlock)
-$scriptRoot = __POWERFORGE_SCRIPT_ROOT__
-$captured = @{}
-$capturedFunctions = @{}
-$skipNames = @(
-    'args', 'input', 'this', 'PSItem', '_', 'Error',
-    'PWD', 'captured', 'capturedFunctions', 'scriptText', 'scriptRoot'
-)
-$skipFunctions = @(
-    '__PowerForgeCloseBenchmarkBlock',
-    'benchmark', 'cases', 'case', 'from', 'axis', 'setup', 'data', 'skip', 'validate', 'profile', 'cleanup', 'engine', 'operation', 'metric', 'compare', 'readme', 'artifacts',
-    'New-BenchmarkSuite', 'Add-BenchmarkCases', 'Add-BenchmarkCase', 'Add-BenchmarkCaseSource', 'Add-BenchmarkAxis',
-    'Set-BenchmarkSetup', 'Set-BenchmarkDataFactory', 'Set-BenchmarkProfile', 'Set-BenchmarkCleanup', 'Add-BenchmarkEngine', 'Add-BenchmarkOperation',
-    'Add-BenchmarkSkipRule', 'Add-BenchmarkValidation', 'Add-BenchmarkMetric', 'Add-BenchmarkComparison',
-    'Add-BenchmarkReadmeBlock', 'Set-BenchmarkArtifacts'
-)
-for ($scope = 2; $scope -lt 20; $scope++) {
-    try {
-        $variables = Get-Variable -Scope $scope -ErrorAction Stop
-    } catch {
-        break
-    }
-
-    foreach ($variable in $variables) {
-        if ($skipNames -contains $variable.Name) { continue }
-        if ($captured.ContainsKey($variable.Name)) { continue }
-        if (($variable.Options -band [System.Management.Automation.ScopedItemOptions]::Constant) -or
-            ($variable.Options -band [System.Management.Automation.ScopedItemOptions]::ReadOnly)) { continue }
-        $captured[$variable.Name] = $variable.Value
-    }
-}
-
-foreach ($function in Get-Command -CommandType Function -ErrorAction SilentlyContinue) {
-    if ($skipFunctions -contains $function.Name) { continue }
-    if ($function.Name -like '*:*') { continue }
-    if (-not [string]::IsNullOrWhiteSpace($function.Source)) { continue }
-    if (-not [string]::IsNullOrWhiteSpace($function.ModuleName)) { continue }
-    if (($function.Options -band [System.Management.Automation.ScopedItemOptions]::Constant) -or
-        ($function.Options -band [System.Management.Automation.ScopedItemOptions]::ReadOnly)) { continue }
-    if ([string]::IsNullOrWhiteSpace($function.Definition)) { continue }
-    if (-not $capturedFunctions.ContainsKey($function.Name)) {
-        $capturedFunctions[$function.Name] = [PowerForge.PowerShellBenchmarkDslRuntime]::CaptureScriptText([scriptblock]::Create([string] $function.Definition), $scriptRoot)
-    }
-}
-
-$scriptText = [PowerForge.PowerShellBenchmarkDslRuntime]::CaptureScriptText($ScriptBlock, $scriptRoot)
-{
-    $previousFunctions = @{}
-    $missingFunctions = @{}
-    try {
-        foreach ($entry in $capturedFunctions.GetEnumerator()) {
-            $functionPath = "Function:\$($entry.Key)"
-            $existingFunction = Get-Item -Path $functionPath -ErrorAction SilentlyContinue
-            if ($null -eq $existingFunction) {
-                $missingFunctions[$entry.Key] = $true
-            } else {
-                $previousFunctions[$entry.Key] = $existingFunction.ScriptBlock
-            }
-            Set-Item -Path $functionPath -Value ([scriptblock]::Create([string] $entry.Value)) -ErrorAction Stop
-        }
-        foreach ($entry in $captured.GetEnumerator()) {
-            Set-Variable -Name $entry.Key -Value $entry.Value -Scope Local
-        }
-        & ([scriptblock]::Create($scriptText)) @args
-    }
-    finally {
-        foreach ($entry in $capturedFunctions.GetEnumerator()) {
-            $functionPath = "Function:\$($entry.Key)"
-            if ($previousFunctions.ContainsKey($entry.Key)) {
-                Set-Item -Path $functionPath -Value $previousFunctions[$entry.Key] -ErrorAction SilentlyContinue
-            } elseif ($missingFunctions.ContainsKey($entry.Key)) {
-                Remove-Item -Path $functionPath -ErrorAction SilentlyContinue
-            }
-        }
-    }
-}.GetNewClosure()
-""".Replace("__POWERFORGE_SCRIPT_ROOT__", scriptRootLiteral);
+        var closeBenchmarkBlock = EmbeddedScripts
+            .Load("Scripts/Benchmarks/Close-BenchmarkBlock.Template.ps1")
+            .Replace("__POWERFORGE_SCRIPT_ROOT__", scriptRootLiteral);
 
         return new()
         {
@@ -562,25 +488,8 @@ $scriptText = [PowerForge.PowerShellBenchmarkDslRuntime]::CaptureScriptText($Scr
     private static Collection<PSObject> InvokeWithNativeExitCheck(ScriptBlock scriptBlock, Hashtable? functionsToDefine)
         => NativeExitAwareInvokeWrapper.InvokeWithContext(functionsToDefine, CreateInvocationVariables(), new object[] { scriptBlock });
 
-    private static readonly ScriptBlock NativeExitAwareInvokeWrapper = ScriptBlock.Create("""
-param([scriptblock] $Block)
-$previousLastExitCode = $global:LASTEXITCODE
-$global:LASTEXITCODE = 0
-try {
-    & $Block
-    $nativeExitCode = $global:LASTEXITCODE
-    if ($null -ne $nativeExitCode -and $nativeExitCode -ne 0) {
-        throw "Native command exited with code $nativeExitCode."
-    }
-}
-finally {
-    if ($null -eq $previousLastExitCode) {
-        Remove-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
-    } else {
-        $global:LASTEXITCODE = $previousLastExitCode
-    }
-}
-""");
+    private static readonly ScriptBlock NativeExitAwareInvokeWrapper =
+        ScriptBlock.Create(EmbeddedScripts.Load("Scripts/Benchmarks/Invoke-NativeExitAwareBlock.ps1"));
 
     private static ScriptBlock CaptureScriptBlock(ScriptBlock scriptBlock)
         => scriptBlock;
@@ -603,6 +512,9 @@ finally {
         var expandableStrings = ast.FindAll(node => node is System.Management.Automation.Language.ExpandableStringExpressionAst, searchNestedScriptBlocks: true)
             .Select(node => node.Extent)
             .ToArray();
+        var subExpressions = ast.FindAll(node => node is System.Management.Automation.Language.SubExpressionAst, searchNestedScriptBlocks: true)
+            .Select(node => node.Extent)
+            .ToArray();
         var replacements = ast.FindAll(node => node is System.Management.Automation.Language.VariableExpressionAst variable
                                              && IsPSScriptRootVariable(variable), searchNestedScriptBlocks: true)
             .Cast<System.Management.Automation.Language.VariableExpressionAst>()
@@ -614,7 +526,9 @@ finally {
         var rooted = script;
         foreach (var variable in replacements)
         {
-            var literal = IsInsideAnyExtent(variable.Extent, expandableStrings)
+            var literal = IsInsideAnyExtent(variable.Extent, subExpressions)
+                ? ToPowerShellLiteral(scriptRoot)
+                : IsInsideAnyExtent(variable.Extent, expandableStrings)
                 ? ToPowerShellExpandableStringText(scriptRoot)
                 : ToPowerShellLiteral(scriptRoot);
             rooted = rooted.Remove(variable.Extent.StartOffset, variable.Extent.EndOffset - variable.Extent.StartOffset)
