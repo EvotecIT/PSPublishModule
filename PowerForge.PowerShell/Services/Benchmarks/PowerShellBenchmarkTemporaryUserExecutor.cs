@@ -31,11 +31,26 @@ public sealed class PowerShellBenchmarkTemporaryUserRequest
     /// <summary>Run mode after caller-side overrides.</summary>
     public string RunMode { get; set; } = "standard";
 
+    /// <summary>Run order after caller-side overrides.</summary>
+    public PowerShellBenchmarkRunOrder RunOrder { get; set; } = PowerShellBenchmarkRunOrder.Rotated;
+
+    /// <summary>Delay between measured samples, in milliseconds.</summary>
+    public int CooldownMilliseconds { get; set; }
+
+    /// <summary>Outlier mode after caller-side overrides.</summary>
+    public PowerShellBenchmarkOutlierMode OutlierMode { get; set; } = PowerShellBenchmarkOutlierMode.None;
+
     /// <summary>Suite name after caller-side overrides.</summary>
     public string SuiteName { get; set; } = string.Empty;
 
     /// <summary>Cleanup mode requested by the suite.</summary>
     public PowerShellBenchmarkCleanupMode Cleanup { get; set; } = PowerShellBenchmarkCleanupMode.Always;
+
+    /// <summary>Variables exposed to the file-backed benchmark spec as <c>$BenchmarkVariables</c>.</summary>
+    public Dictionary<string, string?> BenchmarkVariables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Selection applied to the suite after child-process evaluation.</summary>
+    public PowerShellBenchmarkSelection Selection { get; set; } = new();
 
     /// <summary>Resolved README/document block paths that the child runner may update.</summary>
     public string[] ReadmePaths { get; set; } = Array.Empty<string>();
@@ -122,7 +137,12 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
                 WarmupCount = request.WarmupCount,
                 IterationCount = request.IterationCount,
                 RunMode = request.RunMode ?? string.Empty,
+                RunOrder = request.RunOrder.ToString(),
+                CooldownMilliseconds = request.CooldownMilliseconds,
+                OutlierMode = request.OutlierMode.ToString(),
                 SuiteName = request.SuiteName ?? string.Empty,
+                BenchmarkVariables = request.BenchmarkVariables,
+                Selection = request.Selection,
                 ModulePaths = modulePaths,
                 RunStartedUtc = childRunStartedUtc.ToString("O")
             });
@@ -339,7 +359,12 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
         public int WarmupCount { get; set; }
         public int IterationCount { get; set; }
         public string RunMode { get; set; } = string.Empty;
+        public string RunOrder { get; set; } = string.Empty;
+        public int CooldownMilliseconds { get; set; }
+        public string OutlierMode { get; set; } = string.Empty;
         public string SuiteName { get; set; } = string.Empty;
+        public Dictionary<string, string?> BenchmarkVariables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+        public PowerShellBenchmarkSelection Selection { get; set; } = new();
         public string[] ModulePaths { get; set; } = Array.Empty<string>();
         public string RunStartedUtc { get; set; } = string.Empty;
     }

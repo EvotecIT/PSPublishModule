@@ -9,15 +9,16 @@ public sealed class BenchmarkSummaryService
     /// Creates summary rows from raw samples.
     /// </summary>
     /// <param name="samples">Raw benchmark samples.</param>
+    /// <param name="outlierMode">Outlier policy applied to successful timing samples.</param>
     /// <returns>Summary rows.</returns>
-    public BenchmarkSummaryRow[] Summarize(IEnumerable<BenchmarkSample> samples)
+    public BenchmarkSummaryRow[] Summarize(IEnumerable<BenchmarkSample> samples, PowerShellBenchmarkOutlierMode outlierMode = PowerShellBenchmarkOutlierMode.None)
     {
         return (samples ?? Array.Empty<BenchmarkSample>())
             .GroupBy(s => MakeKey(s.Suite, s.Scenario, s.Operation, s.Engine, s.Host, s.Os, s.RunMode, s.Variables), StringComparer.Ordinal)
             .Select(group =>
             {
                 var first = group.First();
-                return BuildSummaryRow(first.Suite, first.Scenario, first.Operation, first.Engine, first.Host, first.Os, first.RunMode, first.Variables, group);
+                return BuildSummaryRow(first.Suite, first.Scenario, first.Operation, first.Engine, first.Host, first.Os, first.RunMode, first.Variables, group, outlierMode);
             })
             .OrderBy(r => r.Suite, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.Scenario, StringComparer.OrdinalIgnoreCase)
@@ -110,6 +111,10 @@ public sealed class BenchmarkSummaryService
         if (string.Equals(name, "MeanMs", StringComparison.OrdinalIgnoreCase)) return row.MeanMs;
         if (string.Equals(name, "MinMs", StringComparison.OrdinalIgnoreCase)) return row.MinMs;
         if (string.Equals(name, "MaxMs", StringComparison.OrdinalIgnoreCase)) return row.MaxMs;
+        if (string.Equals(name, "P95Ms", StringComparison.OrdinalIgnoreCase) || string.Equals(name, "P95", StringComparison.OrdinalIgnoreCase)) return row.P95Ms;
+        if (string.Equals(name, "P99Ms", StringComparison.OrdinalIgnoreCase) || string.Equals(name, "P99", StringComparison.OrdinalIgnoreCase)) return row.P99Ms;
+        if (string.Equals(name, "StdDevMs", StringComparison.OrdinalIgnoreCase) || string.Equals(name, "StdDev", StringComparison.OrdinalIgnoreCase)) return row.StdDevMs;
+        if (string.Equals(name, "StdErrMs", StringComparison.OrdinalIgnoreCase) || string.Equals(name, "StdErr", StringComparison.OrdinalIgnoreCase)) return row.StdErrMs;
         if (row.Metrics.TryGetValue(name, out var value)) return value;
         foreach (var entry in row.Metrics)
         {
@@ -129,16 +134,18 @@ public sealed class BenchmarkSummaryService
         string os,
         string runMode,
         IReadOnlyDictionary<string, string?> variables,
-        IEnumerable<BenchmarkSample> samples)
+        IEnumerable<BenchmarkSample> samples,
+        PowerShellBenchmarkOutlierMode outlierMode)
     {
         var all = samples.ToArray();
         var successfulSamples = all
             .Where(s => s.Status == BenchmarkSampleStatus.Succeeded)
             .ToArray();
-        var successful = successfulSamples
+        var allSuccessful = successfulSamples
             .Select(s => s.DurationMs)
             .OrderBy(v => v)
             .ToArray();
+        var successful = ApplyOutlierPolicy(allSuccessful, outlierMode);
 
         var row = new BenchmarkSummaryRow
         {
@@ -152,6 +159,7 @@ public sealed class BenchmarkSummaryService
             Variables = CopyVariables(variables),
             SampleCount = successful.Length,
             FailureCount = all.Count(s => s.Status == BenchmarkSampleStatus.Failed),
+            OutlierCount = allSuccessful.Length - successful.Length,
             Status = all.Any(s => s.Status == BenchmarkSampleStatus.Failed)
                 ? "Failed"
                 : successful.Length > 0
@@ -162,8 +170,19 @@ public sealed class BenchmarkSummaryService
             MedianMs = Median(successful),
             MeanMs = successful.Length == 0 ? null : successful.Average(),
             MinMs = successful.Length == 0 ? null : successful.Min(),
-            MaxMs = successful.Length == 0 ? null : successful.Max()
+            MaxMs = successful.Length == 0 ? null : successful.Max(),
+            P95Ms = Percentile(successful, 0.95),
+            P99Ms = Percentile(successful, 0.99),
+            StdDevMs = StandardDeviation(successful),
+            StdErrMs = StandardError(successful)
         };
+
+        foreach (var reason in all
+                     .Where(s => s.Status == BenchmarkSampleStatus.Failed && !string.IsNullOrWhiteSpace(s.Reason))
+                     .GroupBy(s => s.Reason, StringComparer.OrdinalIgnoreCase))
+        {
+            row.FailureReasons[reason.Key] = reason.Count();
+        }
 
         foreach (var metric in successfulSamples
                      .SelectMany(s => s.Metrics)
@@ -178,6 +197,10 @@ public sealed class BenchmarkSummaryService
         row.MeanMs = GetPrimaryTimingOverride(row.Metrics, "MeanMs") ?? row.MeanMs;
         row.MinMs = GetPrimaryTimingOverride(row.Metrics, "MinMs") ?? row.MinMs;
         row.MaxMs = GetPrimaryTimingOverride(row.Metrics, "MaxMs") ?? row.MaxMs;
+        row.P95Ms = GetPrimaryTimingOverride(row.Metrics, "P95Ms") ?? row.P95Ms;
+        row.P99Ms = GetPrimaryTimingOverride(row.Metrics, "P99Ms") ?? row.P99Ms;
+        row.StdDevMs = GetPrimaryTimingOverride(row.Metrics, "StdDevMs") ?? row.StdDevMs;
+        row.StdErrMs = GetPrimaryTimingOverride(row.Metrics, "StdErrMs") ?? row.StdErrMs;
         return row;
     }
 
@@ -200,6 +223,39 @@ public sealed class BenchmarkSummaryService
         var middle = values.Count / 2;
         if (values.Count % 2 == 1) return values[middle];
         return (values[middle - 1] + values[middle]) / 2.0;
+    }
+
+    private static double[] ApplyOutlierPolicy(IReadOnlyList<double> values, PowerShellBenchmarkOutlierMode mode)
+    {
+        if (mode != PowerShellBenchmarkOutlierMode.ExcludeMinMax || values.Count < 5)
+            return values.ToArray();
+        return values.Skip(1).Take(values.Count - 2).ToArray();
+    }
+
+    private static double? Percentile(IReadOnlyList<double> values, double percentile)
+    {
+        if (values.Count == 0) return null;
+        if (values.Count == 1) return values[0];
+        var rank = (values.Count - 1) * percentile;
+        var lower = (int)Math.Floor(rank);
+        var upper = (int)Math.Ceiling(rank);
+        if (lower == upper) return values[lower];
+        var weight = rank - lower;
+        return values[lower] + ((values[upper] - values[lower]) * weight);
+    }
+
+    private static double? StandardDeviation(IReadOnlyList<double> values)
+    {
+        if (values.Count < 2) return null;
+        var mean = values.Average();
+        var sum = values.Sum(value => Math.Pow(value - mean, 2));
+        return Math.Sqrt(sum / (values.Count - 1));
+    }
+
+    private static double? StandardError(IReadOnlyList<double> values)
+    {
+        var stdDev = StandardDeviation(values);
+        return stdDev.HasValue ? stdDev.Value / Math.Sqrt(values.Count) : null;
     }
 
     private static string MakeKey(

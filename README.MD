@@ -365,7 +365,7 @@ is not changed.
 Run the managed module benchmark:
 
 ```powershell
-pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 -BenchmarkHost PowerShell7 -RepeatCount 1
+Invoke-BenchmarkSuite -Path .\Benchmarks\ManagedModules\managed-modules.benchmark.ps1 -Scenario SingleModule, GraphAuthentication, Graph, AzAccounts, Az -Operation Install -Engine Managed, ModuleFast -WarmupCount 1 -IterationCount 3 -RunMode local
 ```
 
 Import existing artifacts or BenchmarkDotNet output:
@@ -395,7 +395,7 @@ Test-BenchmarkGate `
 
 See [Docs/PSPublishModule.Benchmarking.md](Docs/PSPublishModule.Benchmarking.md)
 for the benchmark command guide and [Benchmarks/ManagedModules/README.md](Benchmarks/ManagedModules/README.md)
-for the managed module benchmark runner commands.
+for the managed module benchmark suite.
 
 ## Quick Start: .NET Publish and Packaging
 

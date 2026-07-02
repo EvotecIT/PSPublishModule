@@ -6,6 +6,8 @@ namespace PowerForge.Tests;
 
 public sealed partial class BenchmarkServicesTests
 {
+    private static readonly Lazy<Runspace> BenchmarkDslRunspace = new(CreateBenchmarkDslRunspace);
+
     [Fact]
     public void SummaryService_CalculatesMedianAndComparisonRatio()
     {
@@ -24,6 +26,30 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(20, managed.MedianMs);
         var other = Assert.Single(comparison, r => r.Engine == "Other");
         Assert.Equal(1, other.Ratio);
+    }
+
+    [Fact]
+    public void SummaryService_CalculatesPercentilesDeviationAndOutliers()
+    {
+        var samples = new[]
+        {
+            Sample("suite", "case", "Run", "Managed", 1),
+            Sample("suite", "case", "Run", "Managed", 2),
+            Sample("suite", "case", "Run", "Managed", 3),
+            Sample("suite", "case", "Run", "Managed", 4),
+            Sample("suite", "case", "Run", "Managed", 100)
+        };
+
+        var row = Assert.Single(new BenchmarkSummaryService().Summarize(samples, PowerShellBenchmarkOutlierMode.ExcludeMinMax));
+
+        Assert.Equal(3, row.SampleCount);
+        Assert.Equal(2, row.OutlierCount);
+        Assert.Equal(3, row.MedianMs);
+        Assert.Equal(3, row.MeanMs);
+        Assert.Equal(3.9, row.P95Ms);
+        Assert.Equal(3.98, row.P99Ms);
+        Assert.Equal(1, row.StdDevMs);
+        Assert.InRange(row.StdErrMs.GetValueOrDefault(), 0.57, 0.58);
     }
 
     [Fact]
@@ -678,6 +704,37 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(2, update.Metrics.Length);
         Assert.Contains(update.Metrics, metric => metric.Key.Contains("|Windows|", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(update.Metrics, metric => metric.Key.Contains("|Linux|", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static PowerShellBenchmarkSuite[] EvaluateBenchmarkDsl(ScriptBlock scriptBlock, string? scriptRoot = null, IReadOnlyDictionary<string, string?>? benchmarkVariables = null)
+    {
+        if (Runspace.DefaultRunspace is null)
+        {
+            Runspace.DefaultRunspace = BenchmarkDslRunspace.Value;
+        }
+
+        ImportBenchmarkDslCommands(Runspace.DefaultRunspace);
+        return PowerShellBenchmarkDslRuntime.Evaluate(scriptBlock, scriptRoot, benchmarkVariables);
+    }
+
+    private static Runspace CreateBenchmarkDslRunspace()
+    {
+        var runspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
+        runspace.Open();
+        return runspace;
+    }
+
+    private static void ImportBenchmarkDslCommands(Runspace runspace)
+    {
+        using var powerShell = PowerShell.Create(runspace);
+        powerShell.AddCommand("Import-Module")
+            .AddArgument(typeof(PSPublishModule.InvokeBenchmarkSuiteCommand).Assembly.Location)
+            .AddParameter("Force");
+        powerShell.Invoke();
+        if (!powerShell.HadErrors) return;
+
+        var message = string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString()));
+        throw new InvalidOperationException("Failed to import PSPublishModule benchmark commands for test evaluation." + Environment.NewLine + message);
     }
 
 }

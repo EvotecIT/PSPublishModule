@@ -65,6 +65,18 @@ public enum BenchmarkMetricDirection
 }
 
 /// <summary>
+/// Optional outlier policy applied when aggregating successful sample timings.
+/// </summary>
+public enum PowerShellBenchmarkOutlierMode
+{
+    /// <summary>Keep all successful measured samples.</summary>
+    None,
+
+    /// <summary>Drop the single minimum and maximum timing when at least five samples exist.</summary>
+    ExcludeMinMax
+}
+
+/// <summary>
 /// One raw measurement emitted by a benchmark run.
 /// </summary>
 public sealed class BenchmarkSample
@@ -170,6 +182,24 @@ public sealed class BenchmarkSummaryRow
 
     /// <summary>Maximum duration in milliseconds.</summary>
     public double? MaxMs { get; set; }
+
+    /// <summary>95th percentile duration in milliseconds.</summary>
+    public double? P95Ms { get; set; }
+
+    /// <summary>99th percentile duration in milliseconds.</summary>
+    public double? P99Ms { get; set; }
+
+    /// <summary>Sample standard deviation in milliseconds.</summary>
+    public double? StdDevMs { get; set; }
+
+    /// <summary>Standard error in milliseconds.</summary>
+    public double? StdErrMs { get; set; }
+
+    /// <summary>Number of successful samples excluded by the summary policy.</summary>
+    public int OutlierCount { get; set; }
+
+    /// <summary>Failure reasons and counts for this group.</summary>
+    public Dictionary<string, int> FailureReasons { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Custom numeric metrics aggregated as averages by metric name.</summary>
     public Dictionary<string, double> Metrics { get; set; } = new(StringComparer.OrdinalIgnoreCase);

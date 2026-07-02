@@ -145,7 +145,7 @@ benchmark 'stale-native-exit' {
 
         try
         {
-            var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+            var suite = Assert.Single(EvaluateBenchmarkDsl(script));
             suite.WarmupCount = 0;
             suite.IterationCount = 1;
             var result = new PowerShellBenchmarkRunner().Run(suite);
@@ -239,6 +239,23 @@ benchmark 'stale-native-exit' {
 
         Assert.Equal(new[] { "1", "2", "3" }, firstIteration);
         Assert.Equal(new[] { "2", "3", "1" }, secondIteration);
+    }
+
+    [Fact]
+    public void Runner_HonorsSequentialRunOrderPolicy()
+    {
+        var suite = CreateRunnableSuite();
+        suite.IterationCount = 2;
+        suite.RunOrder = PowerShellBenchmarkRunOrder.Sequential;
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows", Values = { 1, 2, 3 } });
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+        var firstIteration = result.Samples.Where(sample => sample.Iteration == 0).Select(sample => sample.Variables["Rows"]).ToArray();
+        var secondIteration = result.Samples.Where(sample => sample.Iteration == 1).Select(sample => sample.Variables["Rows"]).ToArray();
+
+        Assert.Equal(new[] { "1", "2", "3" }, firstIteration);
+        Assert.Equal(new[] { "1", "2", "3" }, secondIteration);
+        Assert.Equal("Sequential", result.Metadata["runOrder"]);
     }
 
     [Fact]
@@ -401,7 +418,7 @@ benchmark 'stale-native-exit' {
         Assert.Contains($",Managed,{result.Samples[0].Host},{result.Samples[0].Os},{result.Samples[0].RunMode},10,0,Succeeded", samplesCsv);
         Assert.Contains(result.Samples[0].DurationMs.ToString("G17", System.Globalization.CultureInfo.InvariantCulture), samplesCsv);
         Assert.Contains(",0.00042", samplesCsv);
-        Assert.Contains("Suite,Scenario,Operation,Engine,Host,OS,RunMode,Rows,SampleCount,FailureCount,Status,MedianMs,MeanMs,MinMs,MaxMs,TinyMetric", summaryCsv);
+        Assert.Contains("Suite,Scenario,Operation,Engine,Host,OS,RunMode,Rows,SampleCount,FailureCount,OutlierCount,Status,MedianMs,MeanMs,MinMs,MaxMs,P95Ms,P99Ms,StdDevMs,StdErrMs,FailureReasons,TinyMetric", summaryCsv);
         Assert.Contains(",0.00042", summaryCsv);
     }
 

@@ -15,7 +15,13 @@ foreach ($modulePath in @($request.ModulePaths)) {
 }
 $scriptRoot = [System.IO.Path]::GetDirectoryName($request.SpecPath)
 $block = [scriptblock]::Create([System.IO.File]::ReadAllText($request.SpecPath))
-$suites = [PowerForge.PowerShellBenchmarkDslRuntime]::Evaluate($block, $scriptRoot)
+$benchmarkVariables = @{}
+if ($null -ne $request.BenchmarkVariables) {
+    foreach ($property in @($request.BenchmarkVariables.PSObject.Properties)) {
+        $benchmarkVariables[$property.Name] = [string] $property.Value
+    }
+}
+$suites = [PowerForge.PowerShellBenchmarkDslRuntime]::Evaluate($block, $scriptRoot, $benchmarkVariables)
 if ($request.SuiteIndex -ge $suites.Length) {
     throw "Benchmark spec '$($request.SpecPath)' did not produce suite index $($request.SuiteIndex)."
 }
@@ -24,11 +30,26 @@ $suite.Profile = [PowerForge.PowerShellBenchmarkProfileKind]::Current
 $suite.OutputRoot = $request.OutputRoot
 $suite.WarmupCount = [Math]::Max(0, [int]$request.WarmupCount)
 $suite.IterationCount = [Math]::Max(1, [int]$request.IterationCount)
+$suite.CooldownMilliseconds = [Math]::Max(0, [int]$request.CooldownMilliseconds)
 if (-not [string]::IsNullOrWhiteSpace($request.RunMode)) {
     $suite.RunMode = $request.RunMode
 }
+if (-not [string]::IsNullOrWhiteSpace($request.RunOrder)) {
+    $suite.RunOrder = [PowerForge.PowerShellBenchmarkRunOrder] $request.RunOrder
+}
+if (-not [string]::IsNullOrWhiteSpace($request.OutlierMode)) {
+    $suite.OutlierMode = [PowerForge.PowerShellBenchmarkOutlierMode] $request.OutlierMode
+}
 if (-not [string]::IsNullOrWhiteSpace($request.SuiteName)) {
     $suite.Name = $request.SuiteName
+}
+if ($null -ne $request.Selection) {
+    $selection = [PowerForge.PowerShellBenchmarkSelection]::new()
+    $selection.Cases = @($request.Selection.Cases)
+    $selection.Engines = @($request.Selection.Engines)
+    $selection.Operations = @($request.Selection.Operations)
+    $selection.Hosts = @($request.Selection.Hosts)
+    [PowerForge.PowerShellBenchmarkSuiteFilter]::Apply($suite, $selection)
 }
 $readmePaths = @()
 if ([System.IO.File]::Exists($request.ReadmePathFile)) {

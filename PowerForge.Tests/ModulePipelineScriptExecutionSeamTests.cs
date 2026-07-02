@@ -112,6 +112,80 @@ public sealed class ModulePipelineScriptExecutionSeamTests
         Assert.Contains("Modules", hostedOperations.LastExcludePatterns, StringComparer.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Run_SignsBeforeDocumentationExtraction()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationOptionsSegment
+                    {
+                        Options = new ConfigurationOptions
+                        {
+                            Signing = new SigningOptionsConfiguration
+                            {
+                                CertificateThumbprint = "ABC123"
+                            }
+                        }
+                    },
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            SignMerged = true
+                        }
+                    },
+                    new ConfigurationDocumentationSegment
+                    {
+                        Configuration = new DocumentationConfiguration
+                        {
+                            Path = "Docs",
+                            PathReadme = "Docs\\Readme.md"
+                        }
+                    },
+                    new ConfigurationBuildDocumentationSegment
+                    {
+                        Configuration = new BuildDocumentationConfiguration
+                        {
+                            Enable = true,
+                            GenerateExternalHelp = false
+                        }
+                    }
+                }
+            };
+
+            var plan = runner.Plan(spec);
+            runner.Run(spec, plan);
+
+            Assert.Equal(new[] { "Sign", "Docs" }, hostedOperations.OperationOrder);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
     {
         Directory.CreateDirectory(moduleRoot);
@@ -172,6 +246,7 @@ public sealed class ModulePipelineScriptExecutionSeamTests
         public string[] LastIncludePatterns { get; private set; } = Array.Empty<string>();
         public string[] LastExcludePatterns { get; private set; } = Array.Empty<string>();
         public ModuleSigningResult NextSigningResult { get; set; } = new();
+        public List<string> OperationOrder { get; } = new();
 
         public IReadOnlyList<ModuleDependencyInstallResult> EnsureDependenciesInstalled(
             ModuleDependency[] dependencies,
@@ -192,7 +267,18 @@ public sealed class ModulePipelineScriptExecutionSeamTests
             ModulePipelineStep? extractStep,
             ModulePipelineStep? writeStep,
             ModulePipelineStep? externalHelpStep)
-            => throw new InvalidOperationException("Not used in this test.");
+        {
+            OperationOrder.Add("Docs");
+            return new DocumentationBuildResult(
+                enabled: true,
+                docsPath: Path.Combine(stagingPath, "Docs"),
+                readmePath: Path.Combine(stagingPath, "Docs", "Readme.md"),
+                succeeded: true,
+                exitCode: 0,
+                markdownFiles: 0,
+                externalHelpFilePath: string.Empty,
+                errorMessage: null);
+        }
 
         public ModuleValidationReport ValidateModule(ModuleValidationSpec spec)
             => throw new InvalidOperationException("Not used in this test.");
@@ -241,6 +327,7 @@ public sealed class ModulePipelineScriptExecutionSeamTests
             string[] excludeSubstrings,
             SigningOptionsConfiguration signing)
         {
+            OperationOrder.Add("Sign");
             SignCalls++;
             LastIncludePatterns = includePatterns ?? Array.Empty<string>();
             LastExcludePatterns = excludeSubstrings ?? Array.Empty<string>();

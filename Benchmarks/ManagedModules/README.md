@@ -1,15 +1,29 @@
 # Managed Module Benchmarks
 
-This folder contains the benchmark runner used to measure managed module
-lifecycle commands. It writes CSV evidence and can refresh the benchmark table
-in the root README.
+This folder contains the managed module benchmark suite used to compare
+PSPublishModule's managed module lifecycle commands with equivalent public
+provider commands. The suite is a PowerForge benchmark spec: provider setup,
+command invocation, skip rules, validation, and managed result metrics are
+declared in the spec; the reusable runner, profile, artifact, comparison, and
+README update mechanics stay in PowerForge.
 
-The runner measures public commands. It does not skip dependencies or replace a
-tool's normal install behavior just to make a row faster.
+## Run The Focused Comparison
 
-## Scenarios
+Build or import the PSPublishModule you want to measure, then run:
 
-The built-in scenarios are:
+```powershell
+Invoke-BenchmarkSuite `
+    -Path .\Benchmarks\ManagedModules\managed-modules.benchmark.ps1 `
+    -Scenario SingleModule, GraphAuthentication, Graph, AzAccounts, Az `
+    -Operation Install `
+    -Engine Managed, ModuleFast `
+    -WarmupCount 1 `
+    -IterationCount 3 `
+    -RunMode local
+```
+
+That focused comparison measures `Install` for `Managed` and `ModuleFast` across
+the standard scenario set:
 
 - `SingleModule`: `PSScriptAnalyzer`
 - `GraphAuthentication`: `Microsoft.Graph.Authentication`
@@ -17,151 +31,69 @@ The built-in scenarios are:
 - `AzAccounts`: `Az.Accounts`
 - `Az`: `Az`
 
-## Operations
+Run from the PowerShell host you want to measure. For example, start PowerShell
+7 when comparing ModuleFast behavior on PowerShell 7.
 
-Supported operations are:
+## Select A Matrix
 
-- `Find`
-- `Install`
-- `Save`
+The benchmark spec declares the available cases, engines, and operations. Use
+runner filters when you want a focused matrix:
 
-Repair is not included because the comparison tools do not expose an equivalent
-module-estate repair command.
-
-## Engines
-
-Supported engines are:
-
-- `Managed`
-- `ModuleFast`
-- `PSResourceGet`
-- `PowerShellGet`
-
-The `Managed` engine uses PSPublishModule's managed lifecycle commands. Native
-provider install rows use the provider's normal `CurrentUser` install behavior.
-When those rows are enabled on Windows, the runner can execute them inside a
-temporary local user profile so the real user module folder is not changed.
-
-## Run The Default Profile
-
-The default profile is `ManagedVsModuleFast`. It runs install-focused rows for
-the engines that expose equivalent install commands.
-
-```powershell
-pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass `
-    -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 `
-    -BenchmarkHost PowerShell7 `
-    -RepeatCount 1
-```
-
-Use `-OutputPath` and `-OutputRoot` to control where evidence is written:
-
-```powershell
-pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass `
-    -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 `
-    -BenchmarkHost PowerShell7 `
-    -RepeatCount 3 `
-    -OutputPath .\Ignore\Benchmarks\ManagedModules\managed-module-benchmark.csv `
-    -OutputRoot .\Ignore\Benchmarks\ManagedModules\Runs
-```
-
-## Run The Full Matrix
-
-Use `-ComparisonProfile Full` when you need a broader compatibility baseline
-across all supported operations and engines.
-
-```powershell
-pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass `
-    -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 `
-    -ComparisonProfile Full `
-    -BenchmarkHost PowerShell7 `
-    -RepeatCount 1
-```
-
-Limit a run with `-ScenarioName`, `-Operation`, and `-Engine`:
-
-```powershell
-pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass `
-    -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 `
-    -ComparisonProfile Full `
-    -ScenarioName GraphAuthentication `
-    -Operation Install `
-    -Engine Managed,PSResourceGet `
-    -BenchmarkHost PowerShell7
-```
-
-## Host Selection
-
-`-BenchmarkHost` controls which PowerShell host runs the measured work:
-
-| Value | Behavior |
+| Filter | Example |
 | --- | --- |
-| `Current` | Uses the current host. |
-| `PowerShell7` | Uses the highest available PowerShell 7 executable. |
-| `WindowsPowerShell` | Uses Windows PowerShell 5.1. |
+| `-Scenario` / `-Case` | `SingleModule, AzAccounts` |
+| `-Operation` | `Find, Install, Save` |
+| `-Engine` | `Managed, PSResourceGet, PowerShellGet` |
 
-Append results from another host with `-Append`:
+Example full matrix for one scenario:
 
 ```powershell
-pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass `
-    -File .\Benchmarks\ManagedModules\Invoke-ManagedModuleBenchmarkMatrix.ps1 `
-    -BenchmarkHost WindowsPowerShell `
-    -RepeatCount 1 `
-    -Append
+Invoke-BenchmarkSuite `
+    -Path .\Benchmarks\ManagedModules\managed-modules.benchmark.ps1 `
+    -Scenario SingleModule `
+    -Operation Find, Install, Save `
+    -Engine Managed, ModuleFast, PSResourceGet, PowerShellGet
 ```
 
-Windows PowerShell 5.1 uses short root-level run and temp folders by default to
-avoid legacy path-length issues in deep module graphs.
+`ModuleFast` only participates in `Install`; non-equivalent lanes are recorded as
+skipped instead of being timed.
 
-## Temporary User Native Installs
+## Native Provider Installs
 
-Native `Install-Module` and `Install-PSResource` install into a user module
-location. On Windows, the runner measures those rows from a temporary local user
-profile and removes that account/profile after the run.
+`Install-PSResource` and `Install-Module` install into the current user profile.
+The suite skips those install lanes by default so a normal benchmark run does
+not mutate the maintainer's real module folder.
 
-Use `-SkipTemporaryUserNativeInstall` only when the machine cannot create a
-temporary local benchmark account. Use `-KeepTemporaryUserProfile` when a failed
-native-provider run needs inspection.
-
-## ModuleFast Selection
-
-`-ModuleFastModulePath` selects the ModuleFast module implementation loaded by
-the benchmark host. When it is omitted, the host uses the `Install-ModuleFast`
-command already available in that PowerShell session.
-
-`-ModuleFastSource` controls the source URL passed to ModuleFast. The result CSV
-records `ModuleFastSource`, `ModuleFastModulePath`, `EngineCommandPath`,
-`EngineModuleBase`, and `EngineModuleVersion` so rows from different module
-implementations or sources can be separated later.
-
-## Output Columns
-
-The CSV includes:
-
-- scenario, operation, engine, host, repeat number, status, and elapsed seconds
-- source and module identity columns for each engine
-- managed phase timings for install/save rows
-- byte counts, request counts, and wait/max columns for managed dependency work
-- failure reason when a row does not complete
-
-When `-RepeatCount` is greater than one, the README updater uses the median
-successful timing for each row.
-
-## Refresh The Root README Table
-
-After a run, update the root README marker block:
+To measure those lanes safely on Windows, run the suite through the
+`TemporaryLocalUser` benchmark profile from an elevated PowerShell session:
 
 ```powershell
-pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass `
-    -File .\Benchmarks\ManagedModules\Update-ManagedModuleBenchmarkReadme.ps1 `
-    -ResultPath .\Ignore\Benchmarks\ManagedModules\managed-module-benchmark.csv
+Invoke-BenchmarkSuite `
+    -Path .\Benchmarks\ManagedModules\managed-modules.benchmark.ps1 `
+    -Profile TemporaryLocalUser `
+    -Cleanup KeepOnFailure `
+    -Operation Install `
+    -Engine Managed, PSResourceGet, PowerShellGet
 ```
 
-Limit the rendered engines:
+The shared benchmark runner creates and removes the temporary local account,
+writes normalized JSON/CSV/Markdown artifacts, and preserves the profile only
+when requested by cleanup mode.
+
+## Artifacts And README Table
+
+The suite writes artifacts under `Ignore\Benchmarks\ManagedModules` by default:
+
+- `samples.json` / `samples.csv`
+- `summary.json` / `summary.csv`
+- `comparison.json` / `comparison.md`
+- `metadata.json`
+- `run-report.json`
+
+The suite also declares the root `README.MD` benchmark block, so a normal run can
+refresh the managed-module table directly. To inspect the planned lanes without
+running network or install work:
 
 ```powershell
-pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass `
-    -File .\Benchmarks\ManagedModules\Update-ManagedModuleBenchmarkReadme.ps1 `
-    -ResultPath .\Ignore\Benchmarks\ManagedModules\managed-module-benchmark.csv `
-    -Engine Managed,ModuleFast
+Invoke-BenchmarkSuite -Path .\Benchmarks\ManagedModules\managed-modules.benchmark.ps1 -Plan
 ```

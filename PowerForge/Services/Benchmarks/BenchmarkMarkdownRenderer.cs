@@ -17,8 +17,8 @@ public sealed class BenchmarkMarkdownRenderer
     {
         var rows = (summary ?? Array.Empty<BenchmarkSummaryRow>()).ToArray();
         var markdown = new StringBuilder();
-        markdown.AppendLine("| Scenario | Variables | Operation | Host | OS | RunMode | Engine | Samples | Median | Mean | Status |");
-        markdown.AppendLine("| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | --- |");
+        markdown.AppendLine("| Scenario | Variables | Operation | Host | OS | RunMode | Engine | Samples | Failures | Median | Mean | P95 | StdDev | Status |");
+        markdown.AppendLine("| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |");
         foreach (var row in rows.OrderBy(r => r.Scenario, StringComparer.OrdinalIgnoreCase)
                      .ThenBy(r => FormatVariables(r.Variables), StringComparer.OrdinalIgnoreCase)
                       .ThenBy(r => r.Operation, StringComparer.OrdinalIgnoreCase)
@@ -28,7 +28,7 @@ public sealed class BenchmarkMarkdownRenderer
                       .ThenBy(r => r.Engine, StringComparer.OrdinalIgnoreCase))
         {
             markdown.AppendLine(
-                $"| {Cell(row.Scenario)} | {Cell(FormatVariables(row.Variables))} | {Cell(row.Operation)} | {Cell(row.Host)} | {Cell(row.Os)} | {Cell(row.RunMode)} | {Cell(row.Engine)} | {row.SampleCount} | {Number(row.MedianMs)} | {Number(row.MeanMs)} | {Cell(row.Status)} |");
+                $"| {Cell(row.Scenario)} | {Cell(FormatVariables(row.Variables))} | {Cell(row.Operation)} | {Cell(row.Host)} | {Cell(row.Os)} | {Cell(row.RunMode)} | {Cell(row.Engine)} | {row.SampleCount} | {row.FailureCount} | {Number(row.MedianMs)} | {Number(row.MeanMs)} | {Number(row.P95Ms)} | {Number(row.StdDevMs)} | {Cell(row.Status)} |");
         }
 
         return markdown.ToString().TrimEnd() + Environment.NewLine;
