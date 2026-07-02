@@ -225,7 +225,9 @@ public sealed class BenchmarkResultImporter
             var metadataColumns = SampleMetadataColumnsFor(map, isBenchmarkDotNetCsv);
             var method = GetCsvScenarioName(map, isBenchmarkDotNetCsv) ?? Path.GetFileNameWithoutExtension(path);
             var mean = ParseDuration(GetCsvSampleDuration(map, isBenchmarkDotNetCsv, out var durationHeader), durationHeader);
-            var status = ParseSampleStatus(Get(map, "Status"), mean.HasValue);
+            var status = isBenchmarkDotNetCsv
+                ? ParseSampleStatus(null, mean.HasValue)
+                : ParseSampleStatus(Get(map, "Status"), mean.HasValue);
             samples.Add(new BenchmarkSample
             {
                 RunId = "import",
@@ -1036,6 +1038,7 @@ public sealed class BenchmarkResultImporter
             columns.Remove("Engine");
             columns.Remove("Host");
             columns.Remove("Iteration");
+            columns.Remove("Status");
             columns.Remove("DurationMs");
             columns.Remove("MedianMs");
             columns.Remove("MeanMs");

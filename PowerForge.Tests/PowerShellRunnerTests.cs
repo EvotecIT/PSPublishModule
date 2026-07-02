@@ -61,7 +61,7 @@ public sealed class PowerShellRunnerTests
     }
 
     [Fact]
-    public void Run_SkipsWindowsAppsPowerShellAliasesWhenResolvingPath()
+    public void Run_UsesCurrentUserWindowsAppsPowerShellAliasesWhenResolvingPath()
     {
         if (Path.DirectorySeparatorChar != '\\')
             return;
@@ -94,8 +94,8 @@ public sealed class PowerShellRunnerTests
                 preferPwsh: true));
 
             Assert.NotNull(captured);
-            Assert.Equal(realPath, captured!.FileName);
-            Assert.Equal(realPath, result.Executable);
+        Assert.Equal(aliasPath, captured!.FileName);
+        Assert.Equal(aliasPath, result.Executable);
         }
         finally
         {

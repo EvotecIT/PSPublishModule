@@ -1204,6 +1204,21 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_PreservesBenchmarkDotNetStatusParameter()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "Demo-report.csv");
+        File.WriteAllText(csv, "Method,Status,Mean\nWrite,Failed,1.500 ms\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+        var sample = Assert.Single(result.Samples);
+
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status);
+        Assert.Equal("Failed", sample.Variables["Status"]);
+        Assert.Equal(1.5, sample.DurationMs);
+    }
+
+    [Fact]
     public void Importer_KeepsBenchmarkDotNetCsvDetectionWithReservedParameterNames()
     {
         var root = CreateTempRoot();
@@ -2252,6 +2267,14 @@ public sealed class BenchmarkServicesTests
         Assert.Contains("%3F", question, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void RunnerPathSegments_DistinguishEmptyAndWhitespaceValues()
+    {
+        Assert.Equal("_", PowerShellBenchmarkPathSegments.Value(string.Empty));
+        Assert.Equal("%20", PowerShellBenchmarkPathSegments.Value(" "));
+        Assert.NotEqual(PowerShellBenchmarkPathSegments.Value(string.Empty), PowerShellBenchmarkPathSegments.Value(" "));
+    }
+
     [Theory]
     [InlineData("CON")]
     [InlineData("PRN.txt")]
@@ -3152,6 +3175,18 @@ benchmark 'path-temp-user' -out 'out' {
 
         Assert.Contains("duplicate value", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ABC", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Runner_RejectsDuplicateExpandedCaseLanes()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Cases.Add(new PowerShellBenchmarkCase { Name = "Same" });
+        suite.Cases.Add(new PowerShellBenchmarkCase { Name = "Same" });
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Plan(suite));
+
+        Assert.Contains("duplicate case lane", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
@@ -4072,7 +4107,7 @@ benchmark 'stale-native-exit' {
 
         var resolved = PowerShellBenchmarkTemporaryUserExecutor.ResolvePowerShellExecutable(windowsApps, programFilesPwsh, windowsPowerShell);
 
-        Assert.Equal(windowsPowerShell, resolved);
+        Assert.Null(resolved);
     }
 
     private static BenchmarkSample Sample(

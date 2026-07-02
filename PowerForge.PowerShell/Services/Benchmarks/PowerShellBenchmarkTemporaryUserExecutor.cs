@@ -201,7 +201,7 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
         if (!string.IsNullOrWhiteSpace(fallback))
             return fallback!;
 
-        return "pwsh.exe";
+        throw new InvalidOperationException("TemporaryLocalUser benchmark profile requires a real PowerShell executable that can be launched by another local user. Install PowerShell 7 under Program Files or run from Windows PowerShell with compatible assemblies.");
     }
 
     internal static string? ResolvePowerShellExecutable(string? current, string? programFilesPwsh, string? windowsPowerShell)
@@ -210,6 +210,8 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
             return current!;
         if (!string.IsNullOrWhiteSpace(programFilesPwsh) && File.Exists(programFilesPwsh))
             return programFilesPwsh;
+        if (IsPwshExecutable(current) && IsWindowsAppsPath(current))
+            return null;
         if (!string.IsNullOrWhiteSpace(windowsPowerShell) && File.Exists(windowsPowerShell))
             return windowsPowerShell;
         return null;

@@ -54,6 +54,7 @@ public sealed class PowerShellBenchmarkRunner
         ValidateAxisCaseValueCollisions(suite, cases);
         ValidateMetricVariableCollisions(suite, cases);
         var expanded = ExpandCases(cases, suite.Axes);
+        ValidateUniqueExpandedCaseLanes(suite, expanded);
         var engineAxis = GetAxisValues(suite.Axes, "Engine") ?? suite.Engines.Select(e => (object?)e.Name).ToArray();
         var explicitOperationAxis = GetAxisValues(suite.Axes, "Operation");
         var currentHostLabel = GetCurrentHostLabel();
@@ -415,6 +416,26 @@ public sealed class PowerShellBenchmarkRunner
                 throw new NotSupportedException($"Benchmark suite '{suite.Name}' metric '{metric.Name}' conflicts with a matrix or case variable of the same name. Use distinct names so CSV artifacts can round-trip.");
         }
     }
+
+    private static void ValidateUniqueExpandedCaseLanes(PowerShellBenchmarkSuite suite, IEnumerable<Dictionary<string, object?>> expanded)
+    {
+        var seen = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var values in expanded)
+        {
+            var key = ExpandedCaseLaneKey(values);
+            var scenario = GetScenarioName(values);
+            if (seen.TryGetValue(key, out var existing))
+                throw new NotSupportedException($"Benchmark suite '{suite.Name}' expands duplicate case lane '{existing}'. Case lanes must be unique; use IterationCount to repeat the same lane.");
+            seen[key] = scenario;
+        }
+    }
+
+    private static string ExpandedCaseLaneKey(IReadOnlyDictionary<string, object?> values)
+        => string.Join(
+            "\u001f",
+            values
+                .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(k => string.Concat(k.Key, "\u001e", Convert.ToString(k.Value, CultureInfo.InvariantCulture) ?? string.Empty)));
 
     private static void ValidateComparisons(PowerShellBenchmarkSuite suite)
     {

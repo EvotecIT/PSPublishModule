@@ -32,7 +32,10 @@ internal static class PowerShellBenchmarkPathSegments
 
     internal static string Value(string? value)
     {
-        var text = string.IsNullOrWhiteSpace(value) ? "_" : value!;
+        if (string.IsNullOrEmpty(value))
+            return "_";
+
+        var text = value!;
         var escaped = Uri.EscapeDataString(text).Replace("_", "%5F");
         escaped = EscapeTrailingWindowsIgnoredCharacters(escaped);
         escaped = EscapeWindowsDeviceName(text, escaped);
