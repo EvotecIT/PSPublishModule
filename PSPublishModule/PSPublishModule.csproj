@@ -57,9 +57,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\Shared\SpectrePipelineSummaryWriter.cs" Link="Shared\SpectrePipelineSummaryWriter.cs" />
-    <Compile Include="..\Shared\SpectreConsoleLogger.cs" Link="Shared\SpectreConsoleLogger.cs" />
-    <Compile Include="..\Shared\SpectreModulePipelineConsoleUi.cs" Link="Shared\SpectreModulePipelineConsoleUi.cs" />
+    <Compile Include="..\PowerForge.ConsoleShared\SpectrePipelineSummaryWriter.cs" Link="PowerForge.ConsoleShared\SpectrePipelineSummaryWriter.cs" />
+    <Compile Include="..\PowerForge.ConsoleShared\SpectreConsoleLogger.cs" Link="PowerForge.ConsoleShared\SpectreConsoleLogger.cs" />
+    <Compile Include="..\PowerForge.ConsoleShared\SpectreModulePipelineConsoleUi.cs" Link="PowerForge.ConsoleShared\SpectreModulePipelineConsoleUi.cs" />
   </ItemGroup>
 
 </Project>
