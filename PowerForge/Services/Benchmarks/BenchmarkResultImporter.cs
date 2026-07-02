@@ -231,7 +231,7 @@ public sealed class BenchmarkResultImporter
             samples.Add(new BenchmarkSample
             {
                 RunId = "import",
-                Suite = suiteOverride ?? Get(map, "Suite") ?? defaultSuite,
+                Suite = GetCsvSuite(map, suiteOverride, defaultSuite, isBenchmarkDotNetCsv),
                 Scenario = method,
                 Operation = GetCsvOperation(map, isBenchmarkDotNetCsv),
                 Engine = GetCsvEngine(map, isBenchmarkDotNetCsv),
@@ -273,7 +273,7 @@ public sealed class BenchmarkResultImporter
             var failureCount = ParseInt(Get(map, "FailureCount")) ?? 0;
             rows.Add(new BenchmarkSummaryRow
             {
-                Suite = suiteOverride ?? Get(map, "Suite") ?? defaultSuite,
+                Suite = GetCsvSuite(map, suiteOverride, defaultSuite, isBenchmarkDotNetCsv),
                 Scenario = GetCsvScenarioName(map, isBenchmarkDotNetCsv) ?? Path.GetFileNameWithoutExtension(path),
                 Operation = GetCsvOperation(map, isBenchmarkDotNetCsv),
                 Engine = GetCsvEngine(map, isBenchmarkDotNetCsv),
@@ -690,6 +690,9 @@ public sealed class BenchmarkResultImporter
             ? Get(values, "Method", "Benchmark")
             : Get(values, "Scenario", "Method", "Benchmark");
 
+    private static string GetCsvSuite(IReadOnlyDictionary<string, string> values, string? suiteOverride, string defaultSuite, bool isBenchmarkDotNetCsv)
+        => suiteOverride ?? (isBenchmarkDotNetCsv ? defaultSuite : Get(values, "Suite") ?? defaultSuite);
+
     private static string GetCsvOperation(IReadOnlyDictionary<string, string> values, bool isBenchmarkDotNetCsv)
         => isBenchmarkDotNetCsv ? "Run" : Get(values, "Operation") ?? "Run";
 
@@ -1059,6 +1062,7 @@ public sealed class BenchmarkResultImporter
         if (isBenchmarkDotNetCsv)
         {
             columns.Remove("Scenario");
+            columns.Remove("Suite");
             columns.Remove("Operation");
             columns.Remove("Engine");
             columns.Remove("Host");
@@ -1085,6 +1089,7 @@ public sealed class BenchmarkResultImporter
         if (isBenchmarkDotNetCsv)
         {
             columns.Remove("Scenario");
+            columns.Remove("Suite");
             columns.Remove("Operation");
             columns.Remove("Engine");
             columns.Remove("Host");

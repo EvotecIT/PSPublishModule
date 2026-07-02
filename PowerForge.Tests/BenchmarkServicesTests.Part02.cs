@@ -594,6 +594,23 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_PreservesBenchmarkDotNetSuiteParameter()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "Demo-report.csv");
+        File.WriteAllText(csv, "Method,Suite,Mean\nWrite,ParameterSuite,1.500 ms\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+        var sample = Assert.Single(result.Samples);
+        var row = Assert.Single(result.Summary);
+
+        Assert.Equal("demo", sample.Suite);
+        Assert.Equal("demo", row.Suite);
+        Assert.Equal("ParameterSuite", sample.Variables["Suite"]);
+        Assert.Equal("ParameterSuite", row.Variables["Suite"]);
+    }
+
+    [Fact]
     public void Importer_KeepsBenchmarkDotNetCsvDetectionWithReservedParameterNames()
     {
         var root = CreateTempRoot();
