@@ -11,7 +11,7 @@ internal sealed class ManagedModuleInstallContext : IDisposable
     private readonly ConcurrentDictionary<string, ManagedModuleInstallPending> _inFlightInstalls;
     private readonly ConcurrentDictionary<string, ManagedModuleInstallResult> _completedInstalls;
     private readonly ConcurrentDictionary<string, string[]> _installedVersions;
-    private readonly ConcurrentDictionary<string, Lazy<Task<string>>> _dependencyVersionSelections;
+    private readonly ConcurrentDictionary<string, Lazy<Task<ManagedModuleDependencyVersionSelection>>> _dependencyVersionSelections;
 #if !NET472
     private readonly ConcurrentDictionary<string, Lazy<Task<ManagedModuleBufferedPackage>>> _bufferedPackagePrefetches;
     private readonly SemaphoreSlim _bufferedPackagePrefetchGate;
@@ -26,7 +26,7 @@ internal sealed class ManagedModuleInstallContext : IDisposable
             new ConcurrentDictionary<string, ManagedModuleInstallPending>(StringComparer.OrdinalIgnoreCase),
             new ConcurrentDictionary<string, ManagedModuleInstallResult>(StringComparer.OrdinalIgnoreCase),
             new ConcurrentDictionary<string, string[]>(StringComparer.OrdinalIgnoreCase),
-            new ConcurrentDictionary<string, Lazy<Task<string>>>(StringComparer.OrdinalIgnoreCase)
+            new ConcurrentDictionary<string, Lazy<Task<ManagedModuleDependencyVersionSelection>>>(StringComparer.OrdinalIgnoreCase)
 #if !NET472
             ,
             new ConcurrentDictionary<string, Lazy<Task<ManagedModuleBufferedPackage>>>(StringComparer.OrdinalIgnoreCase),
@@ -43,7 +43,7 @@ internal sealed class ManagedModuleInstallContext : IDisposable
         ConcurrentDictionary<string, ManagedModuleInstallPending> inFlightInstalls,
         ConcurrentDictionary<string, ManagedModuleInstallResult> completedInstalls,
         ConcurrentDictionary<string, string[]> installedVersions,
-        ConcurrentDictionary<string, Lazy<Task<string>>> dependencyVersionSelections
+        ConcurrentDictionary<string, Lazy<Task<ManagedModuleDependencyVersionSelection>>> dependencyVersionSelections
 #if !NET472
         ,
         ConcurrentDictionary<string, Lazy<Task<ManagedModuleBufferedPackage>>> bufferedPackagePrefetches,
@@ -192,7 +192,15 @@ internal sealed class ManagedModuleInstallContext : IDisposable
         if (factory is null)
             throw new ArgumentNullException(nameof(factory));
 
-        var newLazy = new Lazy<Task<string>>(factory, LazyThreadSafetyMode.ExecutionAndPublication);
+        var newLazy = new Lazy<Task<ManagedModuleDependencyVersionSelection>>(
+            async () =>
+            {
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                var version = await factory().ConfigureAwait(false);
+                stopwatch.Stop();
+                return new ManagedModuleDependencyVersionSelection(version, shared: false, stopwatch.Elapsed);
+            },
+            LazyThreadSafetyMode.ExecutionAndPublication);
         var lazy = _dependencyVersionSelections.GetOrAdd(
             key,
             _ => newLazy);
@@ -343,18 +351,18 @@ internal sealed class ManagedModuleInstallContext : IDisposable
 
     private async Task<ManagedModuleDependencyVersionSelection> CompleteDependencyVersionSelectionAsync(
         string key,
-        Lazy<Task<string>> lazy,
+        Lazy<Task<ManagedModuleDependencyVersionSelection>> lazy,
         bool shared)
     {
         try
         {
-            var version = await lazy.Value.ConfigureAwait(false);
-            return new ManagedModuleDependencyVersionSelection(version, shared);
+            var selection = await lazy.Value.ConfigureAwait(false);
+            return new ManagedModuleDependencyVersionSelection(selection.Version, shared, selection.Elapsed);
         }
         catch
         {
-            ((ICollection<KeyValuePair<string, Lazy<Task<string>>>>)_dependencyVersionSelections)
-                .Remove(new KeyValuePair<string, Lazy<Task<string>>>(key, lazy));
+            ((ICollection<KeyValuePair<string, Lazy<Task<ManagedModuleDependencyVersionSelection>>>>)_dependencyVersionSelections)
+                .Remove(new KeyValuePair<string, Lazy<Task<ManagedModuleDependencyVersionSelection>>>(key, lazy));
             throw;
         }
     }
@@ -524,15 +532,18 @@ internal sealed class ManagedModuleInstallContext : IDisposable
 
 internal readonly struct ManagedModuleDependencyVersionSelection
 {
-    public ManagedModuleDependencyVersionSelection(string version, bool shared)
+    public ManagedModuleDependencyVersionSelection(string version, bool shared, TimeSpan elapsed = default)
     {
         Version = version;
         Shared = shared;
+        Elapsed = elapsed;
     }
 
     public string Version { get; }
 
     public bool Shared { get; }
+
+    public TimeSpan Elapsed { get; }
 }
 
 internal sealed class ManagedModuleInstallPending : IDisposable

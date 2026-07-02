@@ -270,10 +270,12 @@ public sealed class PowerShellRunner : IPowerShellRunner
             try
             {
                 var candidate = Path.Combine(dir, fileName);
-                if (File.Exists(candidate)) return candidate;
+                if (File.Exists(candidate))
+                    return candidate;
             }
             catch { /* ignore */ }
         }
         return null;
     }
+
 }

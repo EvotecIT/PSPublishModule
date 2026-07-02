@@ -60,6 +60,49 @@ public sealed class PowerShellRunnerTests
             captured!.Arguments);
     }
 
+    [Fact]
+    public void Run_UsesCurrentUserWindowsAppsPowerShellAliasesWhenResolvingPath()
+    {
+        if (Path.DirectorySeparatorChar != '\\')
+            return;
+
+        using var directory = new TemporaryDirectory();
+        var windowsApps = Directory.CreateDirectory(Path.Combine(directory.Path, "Microsoft", "WindowsApps"));
+        var realPowerShell = Directory.CreateDirectory(Path.Combine(directory.Path, "PowerShell", "7"));
+        var aliasPath = Path.Combine(windowsApps.FullName, "pwsh.exe");
+        var realPath = Path.Combine(realPowerShell.FullName, "pwsh.exe");
+        File.WriteAllText(aliasPath, string.Empty);
+        File.WriteAllText(realPath, string.Empty);
+
+        var originalPath = Environment.GetEnvironmentVariable("PATH");
+        try
+        {
+            Environment.SetEnvironmentVariable(
+                "PATH",
+                string.Join(Path.PathSeparator, windowsApps.FullName, realPowerShell.FullName));
+
+            ProcessRunRequest? captured = null;
+            var processRunner = new StubProcessRunner(request => {
+                captured = request;
+                return new ProcessRunResult(0, "ok", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+            });
+
+            var runner = new PowerShellRunner(processRunner);
+            var result = runner.Run(PowerShellRunRequest.ForCommand(
+                "Get-ChildItem",
+                TimeSpan.FromSeconds(5),
+                preferPwsh: true));
+
+            Assert.NotNull(captured);
+        Assert.Equal(aliasPath, captured!.FileName);
+        Assert.Equal(aliasPath, result.Executable);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PATH", originalPath);
+        }
+    }
+
     private static string CreateStubExecutablePath()
     {
         var path = Path.Combine(Path.GetTempPath(), "powerforge-pwsh-stub.exe");

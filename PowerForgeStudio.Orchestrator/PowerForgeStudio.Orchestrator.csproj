@@ -9,10 +9,26 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <DbaClientXRoot Condition="'$(DbaClientXRoot)' == '' and '$(EVOTEC_GITHUB_ROOT)' != '' and Exists('$(EVOTEC_GITHUB_ROOT)\DbaClientX\DbaClientX.SQLite\DbaClientX.SQLite.csproj')">$(EVOTEC_GITHUB_ROOT)\DbaClientX</DbaClientXRoot>
+    <DbaClientXRoot Condition="'$(DbaClientXRoot)' == '' and Exists('..\..\DbaClientX\DbaClientX.SQLite\DbaClientX.SQLite.csproj')">..\..\DbaClientX</DbaClientXRoot>
+    <DbaClientXRoot Condition="'$(DbaClientXRoot)' == '' and Exists('..\..\..\DbaClientX\DbaClientX.SQLite\DbaClientX.SQLite.csproj')">..\..\..\DbaClientX</DbaClientXRoot>
+  </PropertyGroup>
+
+  <Target Name="ValidateDbaClientXProjectReference" BeforeTargets="ResolveReferences">
+    <Error Condition="'$(DbaClientXRoot)' == ''" Text="DbaClientX.SQLite project was not found. Set DbaClientXRoot or EVOTEC_GITHUB_ROOT to the Evotec repository root." />
+  </Target>
+
   <ItemGroup>
-    <ProjectReference Include="..\..\DbaClientX\DbaClientX.SQLite\DbaClientX.SQLite.csproj" />
+    <ProjectReference Include="$(DbaClientXRoot)\DbaClientX.Core\DbaClientX.Core.csproj" />
+    <ProjectReference Include="$(DbaClientXRoot)\DbaClientX.SQLite\DbaClientX.SQLite.csproj" />
     <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
     <ProjectReference Include="..\PowerForgeStudio.Domain\PowerForgeStudio.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- DbaClientX.SQLite exposes Microsoft.Data.Sqlite types in its public async API. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
   </ItemGroup>
 </Project>
 

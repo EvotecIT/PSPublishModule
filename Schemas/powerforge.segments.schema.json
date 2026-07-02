@@ -1018,16 +1018,6 @@
       "required": ["Type"]
     },
 
-    "GateSegment": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "Type": { "const": "Gate" },
-        "Configuration": { "$ref": "#/$defs/GateConfiguration" }
-      },
-      "required": ["Type"]
-    },
-
     "PublishSegment": {
       "type": "object",
       "additionalProperties": false,
@@ -1076,7 +1066,6 @@
         { "$ref": "#/$defs/CommandSegment" },
         { "$ref": "#/$defs/ExecuteSegment" },
         { "$ref": "#/$defs/ExternalAssetSegment" },
-        { "$ref": "#/$defs/GateSegment" },
         { "$ref": "#/$defs/XcodeProjectVersionSegment" },
         { "$ref": "#/$defs/AppleAppSegment" },
         { "$ref": "#/$defs/PlaceHolderSegment" },
