@@ -63,6 +63,24 @@ public static class BenchmarkJson
         throw new InvalidOperationException($"Benchmark summary JSON must be an array or contain a summary property: {path}");
     }
 
+    /// <summary>
+    /// Reads benchmark comparison rows from either a full run result or a comparison array.
+    /// </summary>
+    /// <param name="path">Comparison JSON path.</param>
+    /// <returns>Comparison rows.</returns>
+    public static BenchmarkComparisonRow[] ReadComparison(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var doc = JsonDocument.Parse(stream);
+        var root = doc.RootElement;
+        if (root.ValueKind == JsonValueKind.Array)
+            return JsonSerializer.Deserialize<BenchmarkComparisonRow[]>(root.GetRawText(), Options) ?? Array.Empty<BenchmarkComparisonRow>();
+        if (root.ValueKind == JsonValueKind.Object && TryGetPropertyIgnoreCase(root, "comparison", out var comparison))
+            return JsonSerializer.Deserialize<BenchmarkComparisonRow[]>(comparison.GetRawText(), Options) ?? Array.Empty<BenchmarkComparisonRow>();
+
+        throw new InvalidOperationException($"Benchmark comparison JSON must be an array or contain a comparison property: {path}");
+    }
+
     internal static bool TryGetPropertyIgnoreCase(JsonElement node, string propertyName, out JsonElement value)
     {
         value = default;

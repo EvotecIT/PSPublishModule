@@ -80,7 +80,7 @@ public sealed class UpdateBenchmarkDocumentCommand : PSCmdlet
             var comparisonPath = string.IsNullOrWhiteSpace(ComparisonPath)
                 ? throw new PSArgumentException("ComparisonPath is required when Renderer is ComparisonTable.")
                 : SessionState.Path.GetUnresolvedProviderPathFromPSPath(ComparisonPath!);
-            return BenchmarkJson.Read<BenchmarkComparisonRow[]>(comparisonPath);
+            return BenchmarkJson.ReadComparison(comparisonPath);
         }
     }
 }

@@ -319,6 +319,55 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void UpdateBenchmarkDocumentCommand_ReadsComparisonFromRunReport()
+    {
+        var root = CreateTempRoot();
+        var readme = Path.Combine(root, "README.md");
+        var runReportPath = Path.Combine(root, "run-report.json");
+        File.WriteAllText(readme, "<!-- BENCHMARK:results:START -->\nold\n<!-- BENCHMARK:results:END -->\n");
+        BenchmarkJson.Write(runReportPath, new BenchmarkRunResult
+        {
+            Suite = "demo",
+            Comparison = new[]
+            {
+                new BenchmarkComparisonRow
+                {
+                    Suite = "demo",
+                    Scenario = "case",
+                    Operation = "Run",
+                    Engine = "Other",
+                    Host = "Current",
+                    BaselineEngine = "Managed",
+                    Metric = "MedianMs",
+                    Actual = 20,
+                    Baseline = 10,
+                    Ratio = 2
+                }
+            }
+        });
+
+        var initialSessionState = InitialSessionState.CreateDefault();
+        initialSessionState.Commands.Add(new SessionStateCmdletEntry("Update-BenchmarkDocument", typeof(PSPublishModule.UpdateBenchmarkDocumentCommand), helpFileName: null));
+        using var runspace = RunspaceFactory.CreateRunspace(initialSessionState);
+        runspace.Open();
+        using var ps = PowerShell.Create(runspace);
+        ps.AddCommand("Update-BenchmarkDocument")
+            .AddParameter("Path", readme)
+            .AddParameter("BlockId", "results")
+            .AddParameter("ComparisonPath", runReportPath)
+            .AddParameter("Renderer", "ComparisonTable");
+
+        var output = ps.Invoke();
+
+        Assert.False(ps.HadErrors);
+        Assert.Single(output);
+        var text = File.ReadAllText(readme);
+        Assert.Contains("Other", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Managed", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("old", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void TestBenchmarkGateCommand_DefaultGroupByIncludesRunMode()
     {
         var groupBy = typeof(PSPublishModule.TestBenchmarkGateCommand)

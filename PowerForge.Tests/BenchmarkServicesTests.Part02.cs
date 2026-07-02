@@ -679,4 +679,47 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(12, Assert.Single(result.Summary).MedianMs);
     }
 
+    [Fact]
+    public void Importer_PreservesNumericBenchmarkDotNetParametersNamedLikeStatistics()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "Demo-report.csv");
+        File.WriteAllText(csv, "Method,Median,Allocated,Mean [ms]\nWrite,42,1024,1.500\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+
+        var sample = Assert.Single(result.Samples);
+        var row = Assert.Single(result.Summary);
+        Assert.Equal(1.5, sample.DurationMs);
+        Assert.Equal(1.5, row.MedianMs);
+        Assert.Equal("42", sample.Variables["Median"]);
+        Assert.Equal("1024", sample.Variables["Allocated"]);
+        Assert.Equal("42", row.Variables["Median"]);
+        Assert.Equal("1024", row.Variables["Allocated"]);
+        Assert.False(sample.Metrics.ContainsKey("MedianMs"));
+        Assert.False(sample.Metrics.ContainsKey("Allocated"));
+    }
+
+    [Fact]
+    public void Importer_PrefersBenchmarkDotNetShapeOverNormalizedLookingParameters()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "Demo-report.csv");
+        File.WriteAllText(csv, "Method,Status,DurationMs,Suite,Mean [ms]\nWrite,Failed,ParameterDuration,ParameterSuite,1.500\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+
+        var sample = Assert.Single(result.Samples);
+        var row = Assert.Single(result.Summary);
+        Assert.Equal("demo", sample.Suite);
+        Assert.Equal("demo", row.Suite);
+        Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status);
+        Assert.Equal(1.5, sample.DurationMs);
+        Assert.Equal(1.5, row.MedianMs);
+        Assert.Equal("Failed", sample.Variables["Status"]);
+        Assert.Equal("ParameterDuration", sample.Variables["DurationMs"]);
+        Assert.Equal("ParameterSuite", sample.Variables["Suite"]);
+        Assert.Equal("ParameterDuration", row.Variables["DurationMs"]);
+    }
+
 }

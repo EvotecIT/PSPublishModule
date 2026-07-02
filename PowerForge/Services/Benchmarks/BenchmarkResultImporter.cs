@@ -1018,7 +1018,7 @@ public sealed class BenchmarkResultImporter
         var metrics = HeadersAfter(headers, "Reason");
         if (includeBenchmarkDotNetStatisticColumns)
         {
-            foreach (var header in headers.Where(IsBenchmarkDotNetMetricColumn))
+            foreach (var header in BenchmarkDotNetMetricColumnsFor(headers))
                 metrics.Add(header);
         }
         return metrics;
@@ -1029,7 +1029,7 @@ public sealed class BenchmarkResultImporter
         var metrics = HeadersAfter(headers, "MaxMs");
         if (includeBenchmarkDotNetStatisticColumns)
         {
-            foreach (var header in headers.Where(IsBenchmarkDotNetMetricColumn))
+            foreach (var header in BenchmarkDotNetMetricColumnsFor(headers))
                 metrics.Add(header);
         }
         return metrics;
@@ -1132,8 +1132,8 @@ public sealed class BenchmarkResultImporter
     private static bool LooksLikeBenchmarkDotNetCsv(string[] headers)
     {
         var names = new HashSet<string>(headers, StringComparer.OrdinalIgnoreCase);
-        return !LooksLikeNormalizedRunnerCsv(names)
-               && (names.Contains("Method") || names.Contains("Benchmark"))
+        return (names.Contains("Method") || names.Contains("Benchmark"))
+               && (!LooksLikeNormalizedRunnerCsv(names) || !names.Contains("Scenario"))
                && headers.Any(IsBenchmarkDotNetStatisticColumn);
     }
 
@@ -1156,6 +1156,22 @@ public sealed class BenchmarkResultImporter
         var normalized = RemoveBracketUnit(key).Replace(" ", string.Empty);
         return BenchmarkDotNetStatisticColumns.Contains(normalized);
     }
+
+    private static IEnumerable<string> BenchmarkDotNetMetricColumnsFor(string[] headers)
+    {
+        var firstUnitQualifiedStatistic = Array.FindIndex(headers, IsUnitQualifiedBenchmarkDotNetStatisticColumn);
+        if (firstUnitQualifiedStatistic < 0)
+            return headers.Where(IsBenchmarkDotNetMetricColumn);
+
+        return headers
+            .Skip(firstUnitQualifiedStatistic)
+            .Where(IsBenchmarkDotNetMetricColumn);
+    }
+
+    private static bool IsUnitQualifiedBenchmarkDotNetStatisticColumn(string key)
+        => key.Contains("[", StringComparison.Ordinal)
+           && key.Contains("]", StringComparison.Ordinal)
+           && IsBenchmarkDotNetStatisticColumn(key);
 
     private static string? BenchmarkDotNetStatisticMetricName(string key)
     {
