@@ -419,7 +419,7 @@ public sealed class PowerShellBenchmarkRunner
 
     private static void ValidateUniqueExpandedCaseLanes(PowerShellBenchmarkSuite suite, IEnumerable<Dictionary<string, object?>> expanded)
     {
-        var seen = new Dictionary<string, string>(StringComparer.Ordinal);
+        var seen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var values in expanded)
         {
             var key = ExpandedCaseLaneKey(values);
@@ -435,7 +435,10 @@ public sealed class PowerShellBenchmarkRunner
             "\u001f",
             values
                 .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
-                .Select(k => string.Concat(k.Key, "\u001e", Convert.ToString(k.Value, CultureInfo.InvariantCulture) ?? string.Empty)));
+                .Select(k => string.Concat(
+                    PowerShellBenchmarkPathSegments.Value(k.Key),
+                    "\u001e",
+                    PowerShellBenchmarkPathSegments.Value(Convert.ToString(k.Value, CultureInfo.InvariantCulture)))));
 
     private static void ValidateComparisons(PowerShellBenchmarkSuite suite)
     {

@@ -701,8 +701,33 @@ public sealed class BenchmarkResultImporter
 
     private static string? GetCsvSampleDuration(IReadOnlyDictionary<string, string> values, bool isBenchmarkDotNetCsv, out string? matchedHeader)
         => isBenchmarkDotNetCsv
-            ? GetWithHeader(values, out matchedHeader, "Median [ns]", "Median [us]", "Median [ms]", "Median [s]", "Median", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean [s]", "Mean", "MedianMs", "MeanMs", "DurationMs")
+            ? GetBenchmarkDotNetDuration(values, out matchedHeader)
             : GetWithHeader(values, out matchedHeader, "DurationMs", "MedianMs", "MeanMs");
+
+    private static string? GetBenchmarkDotNetDuration(IReadOnlyDictionary<string, string> values, out string? matchedHeader)
+    {
+        var names = new[]
+        {
+            "Median [ns]", "Median [us]", "Median [ms]", "Median [s]",
+            "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean [s]",
+            "Median", "Mean", "MedianMs", "MeanMs", "DurationMs"
+        };
+        foreach (var name in names)
+        {
+            if (!values.TryGetValue(name, out var value) || string.IsNullOrWhiteSpace(value))
+                continue;
+
+            var trimmed = value.Trim();
+            if (ParseDuration(trimmed, name).HasValue)
+            {
+                matchedHeader = name;
+                return trimmed;
+            }
+        }
+
+        matchedHeader = null;
+        return null;
+    }
 
     private static string? GetWithHeader(IReadOnlyDictionary<string, string> values, out string? matchedHeader, params string[] names)
     {
