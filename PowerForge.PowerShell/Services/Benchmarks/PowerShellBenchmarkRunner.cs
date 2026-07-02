@@ -356,10 +356,13 @@ public sealed class PowerShellBenchmarkRunner
 
     private static void ValidateMetricNames(PowerShellBenchmarkSuite suite)
     {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var metric in suite.Metrics)
         {
             if (string.IsNullOrWhiteSpace(metric.Name))
                 throw new InvalidOperationException($"Benchmark suite '{suite.Name}' defines a metric without a name.");
+            if (!names.Add(metric.Name))
+                throw new NotSupportedException($"Benchmark suite '{suite.Name}' defines duplicate metric '{metric.Name}'. Metric names must be unique ignoring case.");
             if (IsBenchmarkColumn(metric.Name) || ReservedMatrixAxisNames.Contains(metric.Name))
                 throw new NotSupportedException($"Benchmark suite '{suite.Name}' metric '{metric.Name}' conflicts with a built-in benchmark artifact column. Use a different metric name.");
         }

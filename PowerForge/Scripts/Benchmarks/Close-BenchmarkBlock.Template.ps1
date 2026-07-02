@@ -8,7 +8,7 @@ $skipNames = @(
     'PWD', 'captured', 'capturedFunctions', 'scriptText', 'scriptRoot',
     'ConfirmPreference', 'DebugPreference', 'ErrorActionPreference', 'ErrorView',
     'InformationPreference', 'ProgressPreference', 'PSNativeCommandUseErrorActionPreference',
-    'VerbosePreference', 'WarningPreference', 'WhatIfPreference'
+    'PSDefaultParameterValues', 'VerbosePreference', 'WarningPreference', 'WhatIfPreference'
 )
 $skipFunctions = @(
     '__PowerForgeCloseBenchmarkBlock',

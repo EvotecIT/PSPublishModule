@@ -43,6 +43,7 @@ try {
     $result = [PowerForge.PowerShellBenchmarkRunner]::new().Run($suite)
     [PowerForge.BenchmarkJson]::Write($request.ResultPath, $result)
 } catch {
-    [PowerForge.PowerShellBenchmarkTemporaryUserExecutor]::TryCopyLatestRunReport($request.OutputRoot, $request.ResultPath) | Out-Null
+    $runStartedUtc = [DateTimeOffset]::Parse([string] $request.RunStartedUtc, [System.Globalization.CultureInfo]::InvariantCulture)
+    [PowerForge.PowerShellBenchmarkTemporaryUserExecutor]::TryCopyLatestRunReport($request.OutputRoot, $request.ResultPath, $runStartedUtc) | Out-Null
     throw
 }

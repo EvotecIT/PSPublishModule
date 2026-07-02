@@ -698,7 +698,7 @@ public sealed class BenchmarkResultImporter
 
     private static string? GetCsvSampleDuration(IReadOnlyDictionary<string, string> values, bool isBenchmarkDotNetCsv, out string? matchedHeader)
         => isBenchmarkDotNetCsv
-            ? GetWithHeader(values, out matchedHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median [s]", "Median", "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean [s]", "Mean", "DurationMs")
+            ? GetWithHeader(values, out matchedHeader, "Median [ns]", "Median [us]", "Median [ms]", "Median [s]", "Median", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean [s]", "Mean", "MedianMs", "MeanMs", "DurationMs")
             : GetWithHeader(values, out matchedHeader, "DurationMs", "MedianMs", "MeanMs");
 
     private static string? GetWithHeader(IReadOnlyDictionary<string, string> values, out string? matchedHeader, params string[] names)
@@ -923,6 +923,8 @@ public sealed class BenchmarkResultImporter
     {
         var firstRecord = ReadCsvRecords(path).FirstOrDefault();
         if (firstRecord is null) return false;
+        if (LooksLikeBenchmarkDotNetCsv(firstRecord))
+            return false;
         var headers = new HashSet<string>(firstRecord, StringComparer.OrdinalIgnoreCase);
         return (headers.Contains("SampleCount") || headers.Contains("FailureCount") || headers.Contains("MedianMs"))
                && !headers.Contains("Iteration")
@@ -1034,6 +1036,8 @@ public sealed class BenchmarkResultImporter
             columns.Remove("Host");
             columns.Remove("Iteration");
             columns.Remove("DurationMs");
+            columns.Remove("MedianMs");
+            columns.Remove("MeanMs");
             return columns;
         }
 
@@ -1056,6 +1060,10 @@ public sealed class BenchmarkResultImporter
             columns.Remove("Engine");
             columns.Remove("Host");
             columns.Remove("DurationMs");
+            columns.Remove("MedianMs");
+            columns.Remove("MeanMs");
+            columns.Remove("MinMs");
+            columns.Remove("MaxMs");
             return columns;
         }
 

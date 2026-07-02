@@ -251,9 +251,7 @@ public sealed partial class ManagedModuleInstallService
             cancellationToken).ConfigureAwait(false);
         result.DependencyVersionRange = dependency.VersionRange;
         if (dependencyVersion.Shared)
-            result.VersionSelectionWaitElapsed += dependencyVersion.Elapsed > dependencyVersionStopwatch.Elapsed
-                ? dependencyVersion.Elapsed
-                : dependencyVersionStopwatch.Elapsed;
+            result.VersionSelectionWaitElapsed += dependencyVersionStopwatch.Elapsed;
         else
             result.VersionResolutionElapsed += dependencyVersionStopwatch.Elapsed;
         return result;

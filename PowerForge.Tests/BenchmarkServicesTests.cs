@@ -353,6 +353,34 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void GateService_RejectsNonFiniteTolerances()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        BenchmarkJson.Write(summaryPath, new[]
+        {
+            new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Run", Engine = "Managed", Host = "Current", MedianMs = 100 }
+        });
+
+        Assert.Throws<ArgumentException>(() => new BenchmarkGateService().Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            BaselineMode = BenchmarkBaselineMode.Update,
+            RelativeTolerance = double.NaN
+        }));
+
+        Assert.Throws<ArgumentException>(() => new BenchmarkGateService().Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            BaselineMode = BenchmarkBaselineMode.Update,
+            AbsoluteToleranceMs = double.PositiveInfinity
+        }));
+    }
+
+    [Fact]
     public void GateService_RejectsDuplicateGroupKeys()
     {
         var root = CreateTempRoot();
@@ -425,6 +453,50 @@ public sealed class BenchmarkServicesTests
         Assert.Equal(2, update.Metrics.Select(metric => metric.Key).Distinct(StringComparer.Ordinal).Count());
         Assert.True(verify.Passed);
         Assert.DoesNotContain(verify.Metrics, metric => metric.MissingInBaseline || metric.MissingInCurrent);
+    }
+
+    [Fact]
+    public void GateService_TrimsVariableGroupFields()
+    {
+        var root = CreateTempRoot();
+        var summaryPath = Path.Combine(root, "summary.json");
+        var baselinePath = Path.Combine(root, "baseline.json");
+        BenchmarkJson.Write(summaryPath, new[]
+        {
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                MedianMs = 10,
+                Variables = new Dictionary<string, string?> { ["Input"] = "A" }
+            },
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                MedianMs = 20,
+                Variables = new Dictionary<string, string?> { ["Input"] = "B" }
+            }
+        });
+
+        var update = new BenchmarkGateService().Evaluate(new BenchmarkGateRequest
+        {
+            SummaryPath = summaryPath,
+            BaselinePath = baselinePath,
+            BaselineMode = BenchmarkBaselineMode.Update,
+            GroupBy = new[] { "Suite", " Variables.Input " }
+        });
+
+        Assert.True(update.Passed);
+        Assert.Equal(2, update.Metrics.Length);
+        Assert.Contains(update.Metrics, metric => metric.Key.Contains("|A|", StringComparison.Ordinal));
+        Assert.Contains(update.Metrics, metric => metric.Key.Contains("|B|", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1053,6 +1125,25 @@ public sealed class BenchmarkServicesTests
         Assert.Equal("Cold", sample.Variables["Iteration"]);
         Assert.Equal("InputName", sample.Variables["DurationMs"]);
         Assert.Equal(1.5, row.MedianMs);
+    }
+
+    [Fact]
+    public void Importer_PrefersBenchmarkDotNetStatisticColumnsOverAliasParameters()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "Demo-report.csv");
+        File.WriteAllText(csv, "Method,MedianMs,MeanMs,Mean [ms]\nWrite,ParamMedian,ParamMean,1.500\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+
+        var sample = Assert.Single(result.Samples);
+        var row = Assert.Single(result.Summary);
+        Assert.Equal(1.5, sample.DurationMs);
+        Assert.Equal(1.5, row.MedianMs);
+        Assert.Equal("ParamMedian", sample.Variables["MedianMs"]);
+        Assert.Equal("ParamMean", sample.Variables["MeanMs"]);
+        Assert.Equal("ParamMedian", row.Variables["MedianMs"]);
+        Assert.Equal("ParamMean", row.Variables["MeanMs"]);
     }
 
     [Fact]
@@ -2307,6 +2398,28 @@ benchmark 'preferences' {
     }
 
     [Fact]
+    public void DslRuntime_DoesNotCaptureDefaultParameterValues()
+    {
+        var script = ScriptBlock.Create(@"
+$PSDefaultParameterValues = @{ 'Write-Error:ErrorAction' = 'SilentlyContinue' }
+benchmark 'default-parameter-values' {
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) Write-Error 'should stop' } }
+}
+");
+
+        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+        suite.WarmupCount = 0;
+        suite.IterationCount = 1;
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Contains("should stop", sample.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void DslRuntime_PreservesSpecLocalHelperFunctionsInCapturedBlocks()
     {
         var root = CreateTempRoot();
@@ -2975,6 +3088,19 @@ benchmark 'path-temp-user' -out 'out' {
 
         Assert.Contains("Rows", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("variable", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Runner_RejectsDuplicateProgrammaticMetricNames()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Metrics.Add(new PowerShellBenchmarkMetric { Name = "Rows", ScriptBlock = ScriptBlock.Create("1") });
+        suite.Metrics.Add(new PowerShellBenchmarkMetric { Name = "rows", ScriptBlock = ScriptBlock.Create("2") });
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Plan(suite));
+
+        Assert.Contains("duplicate metric", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("rows", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -3735,10 +3861,32 @@ benchmark 'path-temp-user' -out 'out' {
             }
         });
 
-        var copied = PowerShellBenchmarkTemporaryUserExecutor.TryCopyLatestRunReport(Path.Combine(root, "out"), resultPath);
+        var copied = PowerShellBenchmarkTemporaryUserExecutor.TryCopyLatestRunReport(Path.Combine(root, "out"), resultPath, DateTimeOffset.UtcNow.AddMinutes(-1));
 
         Assert.True(copied);
         Assert.Equal("run", BenchmarkJson.Read<BenchmarkRunResult>(resultPath).RunId);
+    }
+
+    [Fact]
+    public void TemporaryUserExecutor_DoesNotRecoverStaleRunReport()
+    {
+        var root = CreateTempRoot();
+        var runRoot = Path.Combine(root, "out", "old-run");
+        Directory.CreateDirectory(runRoot);
+        var reportPath = Path.Combine(runRoot, "run-report.json");
+        var resultPath = Path.Combine(root, "result.json");
+        BenchmarkJson.Write(reportPath, new BenchmarkRunResult
+        {
+            RunId = "old-run",
+            Suite = "suite",
+            Samples = new[] { Sample("suite", "case", "Run", "Managed", 1) }
+        });
+        File.SetLastWriteTimeUtc(reportPath, DateTime.UtcNow.AddMinutes(-10));
+
+        var copied = PowerShellBenchmarkTemporaryUserExecutor.TryCopyLatestRunReport(Path.Combine(root, "out"), resultPath, DateTimeOffset.UtcNow);
+
+        Assert.False(copied);
+        Assert.False(File.Exists(resultPath));
     }
 
     [Fact]

@@ -21,6 +21,8 @@ public sealed class BenchmarkGateService
         if (request is null) throw new ArgumentNullException(nameof(request));
         var rows = BenchmarkJson.ReadSummary(request.SummaryPath);
         ValidateGroupBy(request.GroupBy);
+        ValidateTolerance(nameof(request.RelativeTolerance), request.RelativeTolerance);
+        ValidateTolerance(nameof(request.AbsoluteToleranceMs), request.AbsoluteToleranceMs);
         var actual = BuildMetricMap(rows, request);
         var failedRowMessages = BuildFailedRowMessages(rows, request).ToArray();
         var missingMetricMessages = BuildMissingMetricMessages(rows, request).ToArray();
@@ -199,7 +201,15 @@ public sealed class BenchmarkGateService
     }
 
     private static IReadOnlyList<string> EffectiveGroupBy(IReadOnlyList<string>? groupBy)
-        => groupBy is { Count: > 0 } ? groupBy : DefaultGroupBy;
+        => groupBy is { Count: > 0 }
+            ? groupBy.Select(field => field?.Trim() ?? string.Empty).ToArray()
+            : DefaultGroupBy;
+
+    private static void ValidateTolerance(string name, double value)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value) || value < 0)
+            throw new ArgumentException($"Benchmark gate {name} must be a finite value >= 0.", name);
+    }
 
     private static string GetField(BenchmarkSummaryRow row, string field)
     {

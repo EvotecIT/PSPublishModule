@@ -108,6 +108,7 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
 
             File.WriteAllText(wrapperPath, ChildRunnerScript, new UTF8Encoding(false));
             File.WriteAllLines(readmePathFile, GetReadmePathsForChild(request), new UTF8Encoding(false));
+            var childRunStartedUtc = DateTimeOffset.UtcNow;
             BenchmarkJson.Write(childRequestPath, new ChildRunnerRequest
             {
                 SpecPath = request.SpecPath,
@@ -122,7 +123,8 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
                 IterationCount = request.IterationCount,
                 RunMode = request.RunMode ?? string.Empty,
                 SuiteName = request.SuiteName ?? string.Empty,
-                ModulePaths = modulePaths
+                ModulePaths = modulePaths,
+                RunStartedUtc = childRunStartedUtc.ToString("O")
             });
             identity.GrantFileAccess(wrapperPath, "R");
             identity.GrantFileAccess(readmePathFile, "R");
@@ -288,15 +290,16 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
             BenchmarkJson.Write(metadataPath, result.Metadata);
     }
 
-    internal static bool TryCopyLatestRunReport(string outputRoot, string resultPath)
+    internal static bool TryCopyLatestRunReport(string outputRoot, string resultPath, DateTimeOffset runStartedUtc)
     {
         if (string.IsNullOrWhiteSpace(outputRoot) || string.IsNullOrWhiteSpace(resultPath) || !Directory.Exists(outputRoot))
             return false;
 
+        var threshold = runStartedUtc.UtcDateTime;
         var reportPath = Directory
             .EnumerateFiles(outputRoot, "run-report.json", SearchOption.AllDirectories)
             .Select(path => new FileInfo(path))
-            .Where(file => file.Exists)
+            .Where(file => file.Exists && file.LastWriteTimeUtc >= threshold)
             .OrderByDescending(file => file.LastWriteTimeUtc)
             .Select(file => file.FullName)
             .FirstOrDefault();
@@ -336,6 +339,7 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
         public string RunMode { get; set; } = string.Empty;
         public string SuiteName { get; set; } = string.Empty;
         public string[] ModulePaths { get; set; } = Array.Empty<string>();
+        public string RunStartedUtc { get; set; } = string.Empty;
     }
 
     private static string ChildRunnerScript => EmbeddedScripts.Load("Scripts/Benchmarks/TemporaryUserChildRunner.ps1");
