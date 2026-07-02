@@ -1032,6 +1032,8 @@ public sealed class BenchmarkResultImporter
             columns.Remove("Operation");
             columns.Remove("Engine");
             columns.Remove("Host");
+            columns.Remove("Iteration");
+            columns.Remove("DurationMs");
             return columns;
         }
 
@@ -1053,6 +1055,7 @@ public sealed class BenchmarkResultImporter
             columns.Remove("Operation");
             columns.Remove("Engine");
             columns.Remove("Host");
+            columns.Remove("DurationMs");
             return columns;
         }
 
@@ -1087,11 +1090,18 @@ public sealed class BenchmarkResultImporter
     private static bool LooksLikeBenchmarkDotNetCsv(string[] headers)
     {
         var names = new HashSet<string>(headers, StringComparer.OrdinalIgnoreCase);
-        return !names.Contains("Iteration")
-               && !names.Contains("DurationMs")
+        return !LooksLikeNormalizedRunnerCsv(names)
                && (names.Contains("Method") || names.Contains("Benchmark"))
                && headers.Any(IsBenchmarkDotNetStatisticColumn);
     }
+
+    private static bool LooksLikeNormalizedRunnerCsv(HashSet<string> names)
+        => names.Contains("Status")
+           && (names.Contains("DurationMs") || names.Contains("Iteration"))
+           && (names.Contains("Suite")
+               || names.Contains("RunId")
+               || names.Contains("Operation")
+               || names.Contains("Engine"));
 
     private static bool IsBenchmarkDotNetStatisticColumn(string key)
     {

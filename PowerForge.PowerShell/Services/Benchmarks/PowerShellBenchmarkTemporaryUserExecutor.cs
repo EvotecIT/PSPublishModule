@@ -141,16 +141,15 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
                 wrapperPath,
                 "-RequestPath",
                 childRequestPath);
-            if (processResult.ExitCode != 0)
-                throw new InvalidOperationException($"Temporary benchmark user process failed with exit code {processResult.ExitCode}. STDOUT: {processResult.Stdout} STDERR: {processResult.Stderr} Scratch: {scratchRoot}");
-
             if (!File.Exists(resultPath))
                 throw new InvalidOperationException($"Temporary benchmark user process did not write a result file. STDOUT: {processResult.Stdout} STDERR: {processResult.Stderr} Scratch: {scratchRoot}");
 
             result = BenchmarkJson.Read<BenchmarkRunResult>(resultPath);
-            failed = result.Samples.Any(sample => sample.Status == BenchmarkSampleStatus.Failed);
+            failed = processResult.ExitCode != 0 || result.Samples.Any(sample => sample.Status == BenchmarkSampleStatus.Failed);
             EnrichResult(result, request, identity.UserName, scratchRoot, ShouldKeep(request.Cleanup, failed));
             RewriteEnrichedArtifacts(result);
+            if (processResult.ExitCode != 0)
+                throw new InvalidOperationException($"Temporary benchmark user process failed with exit code {processResult.ExitCode}. Result artifacts were preserved. STDOUT: {processResult.Stdout} STDERR: {processResult.Stderr} Scratch: {scratchRoot}");
             return result;
         }
         finally
@@ -183,25 +182,35 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
     {
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         var programFilesPwsh = Path.Combine(programFiles, "PowerShell", "7", "pwsh.exe");
+        var windowsPowerShell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
         try
         {
             var current = Process.GetCurrentProcess().MainModule?.FileName;
-            if (IsPowerShellExecutable(current) && !IsWindowsAppsPath(current))
-                return current!;
-            if (IsPwshExecutable(current) && File.Exists(programFilesPwsh))
-                return programFilesPwsh;
-            if (IsPowerShellExecutable(current))
-                return current!;
+            var resolved = ResolvePowerShellExecutable(current, programFilesPwsh, windowsPowerShell);
+            if (!string.IsNullOrWhiteSpace(resolved))
+                return resolved!;
         }
         catch
         {
             // Fall back to the installed PowerShell locations below.
         }
 
-        if (File.Exists(programFilesPwsh))
-            return programFilesPwsh;
+        var fallback = ResolvePowerShellExecutable(null, programFilesPwsh, windowsPowerShell);
+        if (!string.IsNullOrWhiteSpace(fallback))
+            return fallback!;
 
         return "pwsh.exe";
+    }
+
+    internal static string? ResolvePowerShellExecutable(string? current, string? programFilesPwsh, string? windowsPowerShell)
+    {
+        if (IsPowerShellExecutable(current) && !IsWindowsAppsPath(current))
+            return current!;
+        if (!string.IsNullOrWhiteSpace(programFilesPwsh) && File.Exists(programFilesPwsh))
+            return programFilesPwsh;
+        if (!string.IsNullOrWhiteSpace(windowsPowerShell) && File.Exists(windowsPowerShell))
+            return windowsPowerShell;
+        return null;
     }
 
     private static bool IsPowerShellExecutable(string? path)
@@ -277,6 +286,26 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
             BenchmarkJson.Write(reportPath, result);
         if (result.Artifacts.TryGetValue("metadata.json", out var metadataPath) && File.Exists(metadataPath))
             BenchmarkJson.Write(metadataPath, result.Metadata);
+    }
+
+    internal static bool TryCopyLatestRunReport(string outputRoot, string resultPath)
+    {
+        if (string.IsNullOrWhiteSpace(outputRoot) || string.IsNullOrWhiteSpace(resultPath) || !Directory.Exists(outputRoot))
+            return false;
+
+        var reportPath = Directory
+            .EnumerateFiles(outputRoot, "run-report.json", SearchOption.AllDirectories)
+            .Select(path => new FileInfo(path))
+            .Where(file => file.Exists)
+            .OrderByDescending(file => file.LastWriteTimeUtc)
+            .Select(file => file.FullName)
+            .FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(reportPath))
+            return false;
+
+        var result = BenchmarkJson.Read<BenchmarkRunResult>(reportPath);
+        BenchmarkJson.Write(resultPath, result);
+        return true;
     }
 
     private static void TryDeleteDirectory(string path)

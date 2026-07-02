@@ -1038,6 +1038,24 @@ public sealed class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_KeepsBenchmarkDotNetCsvDetectionWithReservedParameterNames()
+    {
+        var root = CreateTempRoot();
+        var csv = Path.Combine(root, "Demo-report.csv");
+        File.WriteAllText(csv, "Method,Iteration,DurationMs,Mean\nWrite,Cold,InputName,1.500 ms\n");
+
+        var result = new BenchmarkResultImporter().Import(csv, "demo");
+
+        var sample = Assert.Single(result.Samples);
+        var row = Assert.Single(result.Summary);
+        Assert.Equal("Write", sample.Scenario);
+        Assert.Equal(1.5, sample.DurationMs);
+        Assert.Equal("Cold", sample.Variables["Iteration"]);
+        Assert.Equal("InputName", sample.Variables["DurationMs"]);
+        Assert.Equal(1.5, row.MedianMs);
+    }
+
+    [Fact]
     public void Importer_PrefersDurationMsForNormalizedSampleCsv()
     {
         var root = CreateTempRoot();
@@ -2844,6 +2862,31 @@ benchmark 'path-temp-user' -out 'out' {
     }
 
     [Fact]
+    public void Runner_RejectsDuplicateProgrammaticEngineNames()
+    {
+        var suite = CreateRunnableSuite();
+        var engine = new PowerShellBenchmarkEngine { Name = "managed" };
+        engine.Operations["Run"] = ScriptBlock.Create("param($case, $run)");
+        suite.Engines.Add(engine);
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Plan(suite));
+
+        Assert.Contains("duplicate engine", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Runner_RejectsDuplicateProgrammaticAxisNames()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows", Values = { 1 } });
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "rows", Values = { 2 } });
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Plan(suite));
+
+        Assert.Contains("duplicate matrix axis", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Runner_RejectsUnsupportedOsAxis()
     {
         var suite = CreateRunnableSuite();
@@ -3662,6 +3705,57 @@ benchmark 'path-temp-user' -out 'out' {
         Assert.Equal(PowerShellBenchmarkProfileKind.TemporaryLocalUser.ToString(), report.Metadata["profile"]);
         Assert.Equal(PowerShellBenchmarkProfileKind.TemporaryLocalUser.ToString(), metadata["profile"]);
         Assert.Equal(PowerShellBenchmarkCleanupMode.KeepOnFailure.ToString(), metadata["cleanup"]);
+    }
+
+    [Fact]
+    public void TemporaryUserExecutor_RecoversLatestRunReportForLateChildFailures()
+    {
+        var root = CreateTempRoot();
+        var runRoot = Path.Combine(root, "out", "run");
+        Directory.CreateDirectory(runRoot);
+        var reportPath = Path.Combine(runRoot, "run-report.json");
+        var resultPath = Path.Combine(root, "result.json");
+        BenchmarkJson.Write(reportPath, new BenchmarkRunResult
+        {
+            RunId = "run",
+            Suite = "suite",
+            Samples = new[]
+            {
+                new BenchmarkSample
+                {
+                    RunId = "run",
+                    Suite = "suite",
+                    Scenario = "case",
+                    Operation = "Run",
+                    Engine = "Managed",
+                    Host = "Current",
+                    Status = BenchmarkSampleStatus.Succeeded,
+                    DurationMs = 1
+                }
+            }
+        });
+
+        var copied = PowerShellBenchmarkTemporaryUserExecutor.TryCopyLatestRunReport(Path.Combine(root, "out"), resultPath);
+
+        Assert.True(copied);
+        Assert.Equal("run", BenchmarkJson.Read<BenchmarkRunResult>(resultPath).RunId);
+    }
+
+    [Fact]
+    public void TemporaryUserExecutor_DoesNotUseWindowsAppsPowerShellAliasForTempUser()
+    {
+        var root = CreateTempRoot();
+        var windowsApps = Path.Combine(root, "WindowsApps", "pwsh.exe");
+        var programFilesPwsh = Path.Combine(root, "ProgramFiles", "PowerShell", "7", "pwsh.exe");
+        var windowsPowerShell = Path.Combine(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(windowsApps)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(windowsPowerShell)!);
+        File.WriteAllText(windowsApps, string.Empty);
+        File.WriteAllText(windowsPowerShell, string.Empty);
+
+        var resolved = PowerShellBenchmarkTemporaryUserExecutor.ResolvePowerShellExecutable(windowsApps, programFilesPwsh, windowsPowerShell);
+
+        Assert.Equal(windowsPowerShell, resolved);
     }
 
     private static BenchmarkSample Sample(

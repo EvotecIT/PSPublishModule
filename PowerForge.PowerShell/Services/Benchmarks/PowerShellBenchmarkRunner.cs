@@ -43,6 +43,8 @@ public sealed class PowerShellBenchmarkRunner
     private PowerShellBenchmarkWorkItem[] PlanInCurrentRunspace(PowerShellBenchmarkSuite suite)
     {
         if (suite is null) throw new ArgumentNullException(nameof(suite));
+        ValidateUniqueEngineNames(suite);
+        ValidateUniqueAxisNames(suite);
         ValidateSupportedAxes(suite);
         var cases = suite.Cases.Count == 0
             ? new[] { new PowerShellBenchmarkCase { Name = "Default" } }
@@ -315,6 +317,30 @@ public sealed class PowerShellBenchmarkRunner
         {
             if (ReservedMatrixAxisNames.Contains(axis.Name))
                 throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested reserved matrix axis '{axis.Name}'. Use a different matrix variable name.");
+        }
+    }
+
+    private static void ValidateUniqueEngineNames(PowerShellBenchmarkSuite suite)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var engine in suite.Engines)
+        {
+            if (string.IsNullOrWhiteSpace(engine.Name))
+                throw new InvalidOperationException($"Benchmark suite '{suite.Name}' defines an engine without a name.");
+            if (!names.Add(engine.Name))
+                throw new NotSupportedException($"Benchmark suite '{suite.Name}' defines duplicate engine '{engine.Name}'. Engine names must be unique ignoring case.");
+        }
+    }
+
+    private static void ValidateUniqueAxisNames(PowerShellBenchmarkSuite suite)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var axis in suite.Axes)
+        {
+            if (string.IsNullOrWhiteSpace(axis.Name))
+                throw new InvalidOperationException($"Benchmark suite '{suite.Name}' defines a matrix axis without a name.");
+            if (!names.Add(axis.Name))
+                throw new NotSupportedException($"Benchmark suite '{suite.Name}' defines duplicate matrix axis '{axis.Name}'. Axis names must be unique ignoring case.");
         }
     }
 

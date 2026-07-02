@@ -39,5 +39,10 @@ for ($index = 0; $index -lt $suite.ReadmeBlocks.Count -and $index -lt $readmePat
         $suite.ReadmeBlocks[$index].Path = $readmePaths[$index]
     }
 }
-$result = [PowerForge.PowerShellBenchmarkRunner]::new().Run($suite)
-[PowerForge.BenchmarkJson]::Write($request.ResultPath, $result)
+try {
+    $result = [PowerForge.PowerShellBenchmarkRunner]::new().Run($suite)
+    [PowerForge.BenchmarkJson]::Write($request.ResultPath, $result)
+} catch {
+    [PowerForge.PowerShellBenchmarkTemporaryUserExecutor]::TryCopyLatestRunReport($request.OutputRoot, $request.ResultPath) | Out-Null
+    throw
+}
