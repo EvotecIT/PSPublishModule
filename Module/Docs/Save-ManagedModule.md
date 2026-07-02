@@ -11,7 +11,7 @@ Saves modules from a managed repository to an explicit module root.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Save-ManagedModule [-Name] <string[]> [-Path] <string> [-Repository <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-PackageCacheDirectory <string>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [-Force] [-AllowClobber] [-AcceptLicense] [-AuthenticodeCheck] [-SkipDependencyCheck] [-Plan] [-BundleMetadataPath <string>] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
+Save-ManagedModule [-Name] <string[]> [-Path] <string> [-Repository <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-PackageCacheDirectory <string>] [-DependencyConcurrency <int>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [-Force] [-AllowClobber] [-AcceptLicense] [-AuthenticodeCheck] [-SkipDependencyCheck] [-Plan] [-BundleMetadataPath <string>] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -169,6 +169,22 @@ Optional repository credential username.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: UserName
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -DependencyConcurrency
+Maximum number of dependency branches to save concurrently. Omit to use the managed engine default.
+
+```yaml
+Type: Int32
+Parameter Sets: __AllParameterSets
+Aliases: None
 Possible values:
 
 Required: False

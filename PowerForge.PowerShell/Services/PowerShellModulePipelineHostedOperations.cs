@@ -374,6 +374,11 @@ internal sealed class PowerShellModulePipelineHostedOperations : IModulePipeline
     }
 
     private static string FormatSigningSummary(ModuleSigningResult summary)
-        => $"matched {summary.TotalAfterExclude}, signed {summary.SignedNew} new, re-signed {summary.Resigned}, " +
-           $"already signed {summary.AlreadySignedOther} third-party/{summary.AlreadySignedByThisCert} by this cert, failed {summary.Failed}.";
+    {
+        var details = summary.FailedFiles is { Length: > 0 }
+            ? $" Failed files: {string.Join(" | ", summary.FailedFiles.Take(5))}."
+            : string.Empty;
+        return $"matched {summary.TotalAfterExclude}, signed {summary.SignedNew} new, re-signed {summary.Resigned}, " +
+               $"already signed {summary.AlreadySignedOther} third-party/{summary.AlreadySignedByThisCert} by this cert, failed {summary.Failed}.{details}";
+    }
 }

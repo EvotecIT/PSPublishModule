@@ -56,6 +56,49 @@ function EmitSummary(
   Write-Output ('PFSIGN::COUNT::' + [string]($signedNew + $resigned))
 }
 
+function Invoke-WithFileRetry {
+  param(
+    [Parameter(Mandatory = $true)] [scriptblock]$ScriptBlock,
+    [Parameter(Mandatory = $true)] [string]$FilePath,
+    [Parameter(Mandatory = $true)] [string]$Action
+  )
+
+  $maxAttempts = 15
+  $delay = 200
+  for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    try {
+      return & $ScriptBlock
+    } catch {
+      if ($attempt -ge $maxAttempts) {
+        $message = $_.Exception.Message
+        if ([string]::IsNullOrWhiteSpace($message)) {
+          $message = 'unknown error'
+        }
+
+        throw ('{0} failed for ''{1}'' after {2} attempt(s): {3}' -f $Action, $FilePath, $maxAttempts, $message)
+      }
+
+      Start-Sleep -Milliseconds $delay
+      $delay = [Math]::Min($delay * 2, 5000)
+    }
+  }
+}
+
+function Add-FailedFile {
+  param(
+    [Parameter(Mandatory = $true)] [System.Collections.Generic.List[string]]$List,
+    [Parameter(Mandatory = $true)] [string]$FilePath,
+    [string]$Message
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Message)) {
+    $List.Add($FilePath) | Out-Null
+    return
+  }
+
+  $List.Add(('{0} :: {1}' -f $FilePath, ($Message -replace '\s+', ' ').Trim())) | Out-Null
+}
+
 try {
   if ([string]::IsNullOrWhiteSpace($RootPath)) { throw "RootPath is required." }
   if (-not (Test-Path -LiteralPath $RootPath)) { throw "RootPath not found: $RootPath" }
@@ -143,14 +186,22 @@ try {
     }
 
     foreach ($f in $all) {
-      $sig = Get-AuthenticodeSignature -FilePath $f
-      $status = [string]$sig.Status
-      $preStatus[$f] = $status
+      try {
+        $sig = Invoke-WithFileRetry -FilePath $f -Action 'Get-AuthenticodeSignature' -ScriptBlock {
+          Get-AuthenticodeSignature -FilePath $f -ErrorAction Stop
+        }
+        $status = [string]$sig.Status
+        $preStatus[$f] = $status
 
-      if ($status -ne 'NotSigned') {
-        $tp = $sig.SignerCertificate?.Thumbprint
-        if (-not [string]::IsNullOrWhiteSpace($tp)) { $tp = ($tp -replace '\s','').ToUpperInvariant() }
-        if (-not [string]::IsNullOrWhiteSpace($tp) -and $tp -eq $thisTp) { $alreadyByThis++ } else { $alreadyOther++ }
+        if ($status -ne 'NotSigned') {
+          $tp = $sig.SignerCertificate?.Thumbprint
+          if (-not [string]::IsNullOrWhiteSpace($tp)) { $tp = ($tp -replace '\s','').ToUpperInvariant() }
+          if (-not [string]::IsNullOrWhiteSpace($tp) -and $tp -eq $thisTp) { $alreadyByThis++ } else { $alreadyOther++ }
+        }
+      } catch {
+        $preStatus[$f] = 'PrecheckFailed'
+        $failed++
+        Add-FailedFile -List $failedFiles -FilePath $f -Message ("precheck failed: " + $_.Exception.Message)
       }
     }
 
@@ -161,9 +212,13 @@ try {
       $wasSigned = $preStatus[$f] -ne 'NotSigned'
       try {
         if ($overwrite) {
-          $r = Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer $ts -IncludeChain All -HashAlgorithm SHA256 -Force
+          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -ScriptBlock {
+            Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer $ts -IncludeChain All -HashAlgorithm SHA256 -Force -ErrorAction Stop
+          }
         } else {
-          $r = Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer $ts -IncludeChain All -HashAlgorithm SHA256
+          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -ScriptBlock {
+            Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer $ts -IncludeChain All -HashAlgorithm SHA256 -ErrorAction Stop
+          }
         }
 
         $status = if ($r) { [string]$r.Status } else { 'Unknown' }
@@ -173,11 +228,12 @@ try {
           if ($wasSigned) { $resigned++ } else { $signedNew++ }
         } else {
           $failed++
-          $failedFiles.Add($f) | Out-Null
+          $statusMessage = if ($r) { [string]$r.StatusMessage } else { '' }
+          Add-FailedFile -List $failedFiles -FilePath $f -Message ("signing returned status " + $status + " " + $statusMessage)
         }
       } catch {
         $failed++
-        $failedFiles.Add($f) | Out-Null
+        Add-FailedFile -List $failedFiles -FilePath $f -Message $_.Exception.Message
       }
     }
   } else {
@@ -189,10 +245,18 @@ try {
     }
 
     foreach ($f in $all) {
-      $sig = Get-OpenAuthenticodeSignature -FilePath $f
-      $status = [string]$sig.SStatus
-      $preStatus[$f] = $status
-      if ($status -ne 'NotSigned') { $alreadyOther++ }
+      try {
+        $sig = Invoke-WithFileRetry -FilePath $f -Action 'Get-OpenAuthenticodeSignature' -ScriptBlock {
+          Get-OpenAuthenticodeSignature -FilePath $f -ErrorAction Stop
+        }
+        $status = [string]$sig.SStatus
+        $preStatus[$f] = $status
+        if ($status -ne 'NotSigned') { $alreadyOther++ }
+      } catch {
+        $preStatus[$f] = 'PrecheckFailed'
+        $failed++
+        Add-FailedFile -List $failedFiles -FilePath $f -Message ("precheck failed: " + $_.Exception.Message)
+      }
     }
 
     $targets = if ($overwrite) { $all } else { $all | Where-Object { $preStatus[$_] -eq 'NotSigned' } }
@@ -202,9 +266,13 @@ try {
       $wasSigned = $preStatus[$f] -ne 'NotSigned'
       try {
         if ($overwrite) {
-          $r = Set-OpenAuthenticodeSignature -FilePath $f -Certificate $cert -TimeStampServer $ts -IncludeChain WholeChain -HashAlgorithm SHA256 -Force
+          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-OpenAuthenticodeSignature' -ScriptBlock {
+            Set-OpenAuthenticodeSignature -FilePath $f -Certificate $cert -TimeStampServer $ts -IncludeChain WholeChain -HashAlgorithm SHA256 -Force -ErrorAction Stop
+          }
         } else {
-          $r = Set-OpenAuthenticodeSignature -FilePath $f -Certificate $cert -TimeStampServer $ts -IncludeChain WholeChain -HashAlgorithm SHA256
+          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-OpenAuthenticodeSignature' -ScriptBlock {
+            Set-OpenAuthenticodeSignature -FilePath $f -Certificate $cert -TimeStampServer $ts -IncludeChain WholeChain -HashAlgorithm SHA256 -ErrorAction Stop
+          }
         }
 
         $status = if ($r) { [string]$r.Status } else { 'Unknown' }
@@ -214,11 +282,12 @@ try {
           if ($wasSigned) { $resigned++ } else { $signedNew++ }
         } else {
           $failed++
-          $failedFiles.Add($f) | Out-Null
+          $statusMessage = if ($r) { [string]$r.StatusMessage } else { '' }
+          Add-FailedFile -List $failedFiles -FilePath $f -Message ("signing returned status " + $status + " " + $statusMessage)
         }
       } catch {
         $failed++
-        $failedFiles.Add($f) | Out-Null
+        Add-FailedFile -List $failedFiles -FilePath $f -Message $_.Exception.Message
       }
     }
   }
@@ -241,4 +310,3 @@ try {
   EmitError $_.Exception.Message
   exit 1
 }
-

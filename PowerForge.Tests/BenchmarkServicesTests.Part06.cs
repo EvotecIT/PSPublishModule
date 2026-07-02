@@ -145,7 +145,7 @@ benchmark 'stale-native-exit' {
 
         try
         {
-            var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+            var suite = Assert.Single(EvaluateBenchmarkDsl(script));
             suite.WarmupCount = 0;
             suite.IterationCount = 1;
             var result = new PowerShellBenchmarkRunner().Run(suite);
