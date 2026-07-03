@@ -264,6 +264,51 @@ public sealed class ManagedModuleDependencyInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_does_not_reenter_already_active_satisfied_dependency_during_manifest_repair()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            "1.0.0",
+            ("Company.Core", "1.0.0"));
+        WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.Core",
+            "1.0.0",
+            "1.0.0",
+            ("Company.Tools", "1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var plan = await service.PlanInstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.False(plan.WouldWriteFiles);
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.Equal("Company.Core", dependency.Name);
+        Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, dependency.Status);
+        var cycleDependency = Assert.Single(dependency.DependencyResults);
+        Assert.Equal("Company.Tools", cycleDependency.Name);
+        Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, cycleDependency.Status);
+    }
+
+    [Fact]
     public async Task InstallAsync_repairs_manifest_dependency_from_flat_root_module_layout()
     {
         using var feed = new TemporaryDirectory();

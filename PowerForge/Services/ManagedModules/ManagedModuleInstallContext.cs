@@ -90,6 +90,9 @@ internal sealed class ManagedModuleInstallContext : IDisposable
         return new PopOnDispose(_active, normalized);
     }
 
+    public bool IsActive(string moduleName)
+        => _active.Contains(moduleName.Trim());
+
     public bool TryBeginInstall(
         string key,
         out Task<ManagedModuleInstallResult> existingInstall,

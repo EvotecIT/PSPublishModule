@@ -210,7 +210,12 @@ public sealed partial class ManagedModuleInstallService
         if (isSatisfied)
         {
             ManagedModuleInstallResult satisfiedInstallResult;
-            if (request.RepairInstalledManifestDependencies)
+            if (request.RepairInstalledManifestDependencies && context.IsActive(dependency.Id))
+            {
+                satisfiedInstallResult = satisfiedResult;
+                satisfiedInstallResult.Elapsed = satisfiedStopwatch.Elapsed;
+            }
+            else if (request.RepairInstalledManifestDependencies)
             {
                 satisfiedInstallResult = await InstallAsync(
                     CreateDependencyInstallRequest(
