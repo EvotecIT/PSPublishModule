@@ -32,10 +32,10 @@ public sealed class ManagedModuleBenchmarkSuiteTests
         Assert.Contains("benchmark 'managed-modules'", text, StringComparison.Ordinal);
         Assert.Contains("caseSource", text, StringComparison.Ordinal);
         Assert.Contains("engine Managed", text, StringComparison.Ordinal);
+        Assert.Contains("engine ModuleFastCSharp", text, StringComparison.Ordinal);
         Assert.Contains("operation Install", text, StringComparison.Ordinal);
         Assert.DoesNotContain("New-ManagedModuleBenchmarkSuite", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Invoke-BenchmarkSuite", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("BenchmarkVariables", text, StringComparison.Ordinal);
         Assert.DoesNotContain("PSPUBLISHMODULE_BENCHMARK_", text, StringComparison.Ordinal);
         Assert.DoesNotContain("GetEnvironmentVariable", text, StringComparison.Ordinal);
         Assert.DoesNotContain("function ", text, StringComparison.OrdinalIgnoreCase);
@@ -100,17 +100,42 @@ public sealed class ManagedModuleBenchmarkSuiteTests
         {
             Cases = new[] { "SingleModule" },
             Operations = new[] { "Find", "Install", "Save" },
-            Engines = new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }
+            Engines = new[] { "Managed", "ModuleFast", "ModuleFastCSharp", "PSResourceGet", "PowerShellGet" }
         });
 
         var plan = new PowerShellBenchmarkRunner().Plan(suite);
 
-        Assert.Equal(12, plan.Length);
+        Assert.Equal(15, plan.Length);
         Assert.Contains(plan, item => item.Engine == "ModuleFast" && item.Operation == "Find" && item.IsSkipped);
         Assert.Contains(plan, item => item.Engine == "ModuleFast" && item.Operation == "Save" && item.IsSkipped);
+        Assert.Contains(plan, item => item.Engine == "ModuleFastCSharp" && item.Operation == "Find" && item.IsSkipped);
+        Assert.Contains(plan, item => item.Engine == "ModuleFastCSharp" && item.Operation == "Install" && item.IsSkipped);
+        Assert.Contains(plan, item => item.Engine == "ModuleFastCSharp" && item.Operation == "Save" && item.IsSkipped);
         Assert.Contains(plan, item => item.Engine == "Managed" && item.Operation == "Find");
         Assert.Contains(plan, item => item.Engine == "PSResourceGet" && item.Operation == "Save");
         Assert.Contains(suite.Comparisons, comparison => comparison.Baseline == "Managed" && comparison.Metrics.Contains("MedianMs"));
+    }
+
+    [Fact]
+    public void ManagedModuleSuite_ModuleFastCSharpRunsOnlyWhenPathIsSupplied()
+    {
+        var suite = LoadSuite(
+            new PowerShellBenchmarkSelection
+            {
+                Cases = new[] { "SingleModule" },
+                Operations = new[] { "Install" },
+                Engines = new[] { "Managed", "ModuleFastCSharp" }
+            },
+            variables: new Dictionary<string, string?>
+            {
+                ["ModuleFastCSharpPath"] = @"C:\Temp\ModuleFast\ModuleFast.psd1"
+            });
+
+        var plan = new PowerShellBenchmarkRunner().Plan(suite);
+
+        Assert.Equal(2, plan.Length);
+        Assert.Contains(plan, item => item.Engine == "Managed" && !item.IsSkipped);
+        Assert.Contains(plan, item => item.Engine == "ModuleFastCSharp" && !item.IsSkipped);
     }
 
     [Fact]
@@ -148,11 +173,14 @@ public sealed class ManagedModuleBenchmarkSuiteTests
         Assert.Contains(plan, item => item.Engine == "PowerShellGet" && item.Operation == "Install" && item.IsSkipped);
     }
 
-    private static PowerShellBenchmarkSuite LoadSuite(PowerShellBenchmarkSelection? selection = null, PowerShellBenchmarkProfileKind? profile = null)
+    private static PowerShellBenchmarkSuite LoadSuite(
+        PowerShellBenchmarkSelection? selection = null,
+        PowerShellBenchmarkProfileKind? profile = null,
+        IReadOnlyDictionary<string, string?>? variables = null)
     {
         var path = Path.Combine(RepoRootLocator.Find(), "Benchmarks", "ManagedModules", "managed-modules.benchmark.ps1");
         var scriptRoot = Path.GetDirectoryName(path)!;
-        var suites = EvaluateBenchmarkDsl(System.Management.Automation.ScriptBlock.Create(File.ReadAllText(path)), scriptRoot);
+        var suites = EvaluateBenchmarkDsl(System.Management.Automation.ScriptBlock.Create(File.ReadAllText(path)), scriptRoot, variables);
         var suite = Assert.Single(suites);
         if (profile.HasValue)
             suite.Profile = profile.Value;
@@ -160,7 +188,10 @@ public sealed class ManagedModuleBenchmarkSuiteTests
         return suite;
     }
 
-    private static PowerShellBenchmarkSuite[] EvaluateBenchmarkDsl(System.Management.Automation.ScriptBlock scriptBlock, string? scriptRoot)
+    private static PowerShellBenchmarkSuite[] EvaluateBenchmarkDsl(
+        System.Management.Automation.ScriptBlock scriptBlock,
+        string? scriptRoot,
+        IReadOnlyDictionary<string, string?>? variables = null)
     {
         var previousRunspace = System.Management.Automation.Runspaces.Runspace.DefaultRunspace;
         var runspace = BenchmarkDslRunspace.Value;
@@ -178,7 +209,7 @@ public sealed class ManagedModuleBenchmarkSuiteTests
                 throw new InvalidOperationException("Failed to import PSPublishModule benchmark commands for test evaluation." + Environment.NewLine + message);
             }
 
-            return PowerShellBenchmarkDslRuntime.Evaluate(scriptBlock, scriptRoot);
+            return PowerShellBenchmarkDslRuntime.Evaluate(scriptBlock, scriptRoot, variables);
         }
         finally
         {

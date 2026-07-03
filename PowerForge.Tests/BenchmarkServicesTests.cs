@@ -275,6 +275,44 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void MarkdownRenderer_RendersComparisonAsPivotedReadmeTable()
+    {
+        var markdown = new BenchmarkMarkdownRenderer().RenderComparisonTable(new[]
+        {
+            new BenchmarkComparisonRow
+            {
+                Scenario = "SingleModule",
+                Operation = "Install",
+                Engine = "Managed",
+                Host = "Core-7.6.3",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Actual = 1000,
+                Baseline = 1000,
+                Ratio = 1,
+                Variables = new Dictionary<string, string?> { ["ModuleName"] = "PSScriptAnalyzer" }
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "SingleModule",
+                Operation = "Install",
+                Engine = "ModuleFast",
+                Host = "Core-7.6.3",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Actual = 1500,
+                Baseline = 1000,
+                Ratio = 1.5,
+                Variables = new Dictionary<string, string?> { ["ModuleName"] = "PSScriptAnalyzer" }
+            }
+        });
+
+        Assert.Contains("| Scenario | Host | Operation | Managed | ModuleFast | Result |", markdown);
+        Assert.Contains("| PSScriptAnalyzer | Core-7.6.3 | Install | 1.00x (1.00s) | 1.50x (1.50s) | Managed fastest |", markdown);
+        Assert.DoesNotContain("Baseline Value", markdown, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void UpdateBenchmarkDocumentCommand_RejectsUnknownRenderers()
     {
         var root = CreateTempRoot();

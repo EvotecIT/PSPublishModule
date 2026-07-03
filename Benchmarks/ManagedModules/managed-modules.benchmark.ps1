@@ -5,8 +5,8 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
     profile Current -Cleanup KeepOnFailure
     caseSource @(
         [pscustomobject]@{ Name = 'SingleModule'; ModuleName = 'PSScriptAnalyzer'; Version = '1.25.0'; AcceptLicense = $false }
-        [pscustomobject]@{ Name = 'GraphAuthentication'; ModuleName = 'Microsoft.Graph.Authentication'; Version = '2.29.1'; AcceptLicense = $false }
-        [pscustomobject]@{ Name = 'Graph'; ModuleName = 'Microsoft.Graph'; Version = '2.29.1'; AcceptLicense = $false }
+        [pscustomobject]@{ Name = 'GraphAuthentication'; ModuleName = 'Microsoft.Graph.Authentication'; Version = '2.29.1'; AcceptLicense = $true }
+        [pscustomobject]@{ Name = 'Graph'; ModuleName = 'Microsoft.Graph'; Version = '2.29.1'; AcceptLicense = $true }
         [pscustomobject]@{ Name = 'AzAccounts'; ModuleName = 'Az.Accounts'; Version = '5.1.0'; AcceptLicense = $true }
         [pscustomobject]@{ Name = 'Az'; ModuleName = 'Az'; Version = '14.0.0'; AcceptLicense = $true }
     )
@@ -15,10 +15,11 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
     setup {
         param($case, $run)
 
-        $run.RepositoryName = 'PSGallery'
-        $run.RepositoryUri = 'https://www.powershellgallery.com/api/v3/index.json'
-        $run.ModuleFastSource = 'https://pwsh.gallery/index.json'
-        $run.ModuleFastModulePath = ''
+        $run.RepositoryName = $BenchmarkVariables['RepositoryName'] ?? 'PSGallery'
+        $run.RepositoryUri = $BenchmarkVariables['RepositoryUri'] ?? 'https://www.powershellgallery.com/api/v3/index.json'
+        $run.ModuleFastSource = $BenchmarkVariables['ModuleFastSource'] ?? 'https://pwsh.gallery/index.json'
+        $run.ModuleFastModulePath = $BenchmarkVariables['ModuleFastPath'] ?? ''
+        $run.ModuleFastCSharpPath = $BenchmarkVariables['ModuleFastCSharpPath'] ?? ''
         $run.InstallRoot = Join-Path $run.OutputDirectory 'installed'
         $run.SaveRoot = Join-Path $run.OutputDirectory 'saved'
         $run.PackageCacheRoot = Join-Path $run.OutputDirectory 'package-cache'
@@ -29,7 +30,11 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
     skip {
         param($case)
 
-        if ($case.Engine -eq 'ModuleFast' -and $case.Operation -ne 'Install') {
+        if ($case.Engine -in @('ModuleFast', 'ModuleFastCSharp') -and $case.Operation -ne 'Install') {
+            return $true
+        }
+
+        if ($case.Engine -eq 'ModuleFastCSharp' -and -not ($BenchmarkVariables['ModuleFastCSharpPath'] ?? '').Trim()) {
             return $true
         }
 
@@ -61,6 +66,7 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
                 -ModuleRoot $run.InstallRoot `
                 -PackageCacheDirectory $run.PackageCacheRoot `
                 -AcceptLicense:$case.AcceptLicense `
+                -AllowClobber `
                 -Force
         }
 
@@ -83,11 +89,26 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         operation Install {
             param($case, $run)
 
+            Remove-Module ModuleFast -Force -ErrorAction SilentlyContinue
             if ($run.ModuleFastModulePath -and $run.ModuleFastModulePath.Trim()) {
-                Import-Module -LiteralPath $run.ModuleFastModulePath -Force
-            } elseif (-not (Get-Command -Name Install-ModuleFast -ErrorAction SilentlyContinue)) {
+                Import-Module -Name $run.ModuleFastModulePath -Force
+            } else {
                 Import-Module ModuleFast -ErrorAction Stop
             }
+
+            Install-ModuleFast "$($case.ModuleName)=$($case.Version)" `
+                -Destination $run.InstallRoot `
+                -Source $run.ModuleFastSource `
+                -NoPSModulePathUpdate | Out-Null
+        }
+    }
+
+    engine ModuleFastCSharp {
+        operation Install {
+            param($case, $run)
+
+            Remove-Module ModuleFast -Force -ErrorAction SilentlyContinue
+            Import-Module -Name $run.ModuleFastCSharpPath -Force
 
             Install-ModuleFast "$($case.ModuleName)=$($case.Version)" `
                 -Destination $run.InstallRoot `
@@ -141,7 +162,7 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
 
         $root = switch ($case.Operation) {
             'Install' {
-                if ($case.Engine -notin @('Managed', 'ModuleFast')) { return }
+                if ($case.Engine -notin @('Managed', 'ModuleFast', 'ModuleFastCSharp')) { return }
                 $run.InstallRoot
             }
             'Save' { $run.SaveRoot }

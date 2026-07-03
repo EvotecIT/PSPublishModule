@@ -352,20 +352,31 @@ layout. Native provider install rows that target `CurrentUser` can be measured
 under the `TemporaryLocalUser` benchmark profile so the real user module folder
 is not changed.
 
+The optional `ModuleFastCSharp` lane can compare a locally built ModuleFast C#
+branch without making normal runs depend on an external checkout. Pass
+`-Variable @{ ModuleFastCSharpPath = '...\ModuleFast.psd1' }` and include
+`ModuleFastCSharp` in `-Engine` when you want that experimental lane.
+
 <!-- managed-module-benchmark-table:start -->
 | Scenario | Host | Operation | Managed | ModuleFast | Result |
-| --- | --- | --- | --- | --- | --- |
-| Az.Accounts | PowerShell 7 | Install | 1.00x (0.83s) | 1.12x (0.93s) | Managed fastest |
-| Az | PowerShell 7 | Install | 1.00x (5.19s) | Failed | Managed only successful |
-| Graph.Authentication | PowerShell 7 | Install | 1.00x (2.48s) | 0.41x (1.01s) | Managed slower than ModuleFast |
-| Graph | PowerShell 7 | Install | 1.00x (6.58s) | 0.84x (5.55s) | Managed slower than ModuleFast |
-| PSScriptAnalyzer | PowerShell 7 | Install | 1.00x (2.15s) | 0.92x (1.97s) | Managed slower than ModuleFast |
+| --- | --- | --- | ---: | ---: | --- |
+| Az | Core-7.6.3 | Install | 1.00x (3.66s) | 1.52x (5.58s) | Managed fastest |
+| Az.Accounts | Core-7.6.3 | Install | 1.00x (559ms) | 1.25x (698ms) | Managed fastest |
+| Microsoft.Graph | Core-7.6.3 | Install | 1.00x (5.16s) | 1.14x (5.90s) | Managed fastest |
+| Microsoft.Graph.Authentication | Core-7.6.3 | Install | 1.00x (499ms) | 1.43x (714ms) | Managed fastest |
+| PSScriptAnalyzer | Core-7.6.3 | Install | 1.00x (832ms) | 1.08x (899ms) | Managed fastest |
 <!-- managed-module-benchmark-table:end -->
 
 Run the managed module benchmark:
 
 ```powershell
-Invoke-BenchmarkSuite -Path .\Benchmarks\ManagedModules\managed-modules.benchmark.ps1 -Scenario SingleModule, GraphAuthentication, Graph, AzAccounts, Az -Operation Install -Engine Managed, ModuleFast -WarmupCount 1 -IterationCount 3 -RunMode local
+Invoke-BenchmarkSuite `
+    -Path .\Benchmarks\ManagedModules\managed-modules.benchmark.ps1 `
+    -Scenario SingleModule, GraphAuthentication, Graph, AzAccounts, Az `
+    -Operation Install `
+    -Engine Managed, ModuleFast `
+    -WarmupCount 1 `
+    -IterationCount 3
 ```
 
 Import existing artifacts or BenchmarkDotNet output:

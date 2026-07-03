@@ -43,7 +43,7 @@ runner filters when you want a focused matrix:
 | --- | --- |
 | `-Scenario` / `-Case` | `SingleModule, AzAccounts` |
 | `-Operation` | `Find, Install, Save` |
-| `-Engine` | `Managed, PSResourceGet, PowerShellGet` |
+| `-Engine` | `Managed, ModuleFast, ModuleFastCSharp, PSResourceGet, PowerShellGet` |
 
 Example full matrix for one scenario:
 
@@ -57,6 +57,28 @@ Invoke-BenchmarkSuite `
 
 `ModuleFast` only participates in `Install`; non-equivalent lanes are recorded as
 skipped instead of being timed.
+
+`ModuleFastCSharp` is an opt-in experimental lane for testing a locally built
+ModuleFast branch without making normal benchmark runs depend on an external
+checkout:
+
+```powershell
+Invoke-BenchmarkSuite `
+    -Path .\Benchmarks\ManagedModules\managed-modules.benchmark.ps1 `
+    -Operation Install `
+    -Engine Managed, ModuleFast, ModuleFastCSharp `
+    -Variable @{
+        ModuleFastCSharpPath = '<path-to-built-ModuleFast>\ModuleFast.psd1'
+    }
+```
+
+When `ModuleFastCSharpPath` is omitted, `ModuleFastCSharp` lanes are skipped.
+Use `ModuleFastPath` the same way to pin the released/script ModuleFast lane to
+a specific local module path instead of resolving `ModuleFast` from
+`PSModulePath`. The lane runs in the same PowerShell process as the benchmark
+host, so the local ModuleFast build must be dependency-compatible with the
+loaded PSPublishModule/PowerForge assemblies. Incompatible builds fail as normal
+benchmark rows with the captured exception.
 
 ## Native Provider Installs
 
