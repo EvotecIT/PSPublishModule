@@ -360,11 +360,13 @@ public sealed partial class BenchmarkServicesTests
         Directory.CreateDirectory(run);
         File.WriteAllText(
             Path.Combine(run, "summary.csv"),
-            "Suite,Scenario,Operation,Engine,Host,OS,RunMode,Rows,SampleCount,FailureCount,OutlierCount,Status,MedianMs,MeanMs,MinMs,MaxMs,P95Ms,P99Ms,StdDevMs,StdErrMs,FailureReasons,CustomMetric\nsuite,case,Run,Managed,Current,Windows,local,10,3,0,1,Succeeded,10,11,9,13,12,13,1.5,0.5,,42\n");
+            "Suite,Scenario,Operation,Engine,Host,OS,RunMode,Rows,SampleCount,FailureCount,OutlierCount,Status,MedianMs,MeanMs,MinMs,MaxMs,P95Ms,P99Ms,StdDevMs,StdErrMs,FailureReasons,CustomMetric\nsuite,case,Run,Managed,Current,Windows,local,10,3,3,1,Failed,10,11,9,13,12,13,1.5,0.5,2x network timeout; 1x access denied,42\n");
 
         var row = Assert.Single(new BenchmarkResultImporter().Import(root).Summary);
 
         Assert.Equal(1, row.OutlierCount);
+        Assert.Equal(2, row.FailureReasons["network timeout"]);
+        Assert.Equal(1, row.FailureReasons["access denied"]);
         Assert.Equal(12, row.P95Ms);
         Assert.Equal(13, row.P99Ms);
         Assert.Equal(1.5, row.StdDevMs);

@@ -430,7 +430,7 @@ public sealed class AddBenchmarkMetricCommand : BenchmarkDslCommand
 public sealed class AddBenchmarkComparisonCommand : BenchmarkDslCommand
 {
     /// <summary>Dimension to compare.</summary>
-    [Parameter(Mandatory = true, Position = 0)]
+    [Parameter(Position = 0)]
     [ValidateNotNullOrEmpty]
     public string Dimension { get; set; } = "Engine";
 

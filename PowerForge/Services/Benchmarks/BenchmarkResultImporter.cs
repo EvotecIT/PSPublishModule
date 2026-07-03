@@ -293,6 +293,7 @@ public sealed class BenchmarkResultImporter
                 P99Ms = ParseDuration(GetWithHeader(map, out var p99Header, "P99Ms", "P99 [ns]", "P99 [us]", "P99 [ms]", "P99 [s]", "P99"), p99Header),
                 StdDevMs = ParseDuration(GetWithHeader(map, out var stdDevHeader, "StdDevMs", "StdDev [ns]", "StdDev [us]", "StdDev [ms]", "StdDev [s]", "StdDev"), stdDevHeader),
                 StdErrMs = ParseDuration(GetWithHeader(map, out var stdErrHeader, "StdErrMs", "StdErr [ns]", "StdErr [us]", "StdErr [ms]", "StdErr [s]", "StdErr"), stdErrHeader),
+                FailureReasons = ParseFailureReasons(Get(map, "FailureReasons")),
                 Metrics = ExtractMetrics(map, metricHeaders, isBenchmarkDotNetCsv)
             });
         }
@@ -987,6 +988,38 @@ public sealed class BenchmarkResultImporter
 
     private static int? ParseInt(string? value)
         => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
+
+    private static Dictionary<string, int> ParseFailureReasons(string? value)
+    {
+        var reasons = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(value))
+            return reasons;
+
+        foreach (var rawPart in value!.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var part = rawPart.Trim();
+            if (part.Length == 0)
+                continue;
+
+            var count = 1;
+            var reason = part;
+            var marker = part.IndexOf("x ", StringComparison.Ordinal);
+            if (marker > 0 && int.TryParse(part.Substring(0, marker).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            {
+                count = parsed;
+                reason = part.Substring(marker + 2).Trim();
+            }
+
+            if (reason.Length == 0)
+                continue;
+
+            reasons[reason] = reasons.TryGetValue(reason, out var existing)
+                ? existing + count
+                : count;
+        }
+
+        return reasons;
+    }
 
     private static long? ParseLong(string? value)
         => long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;

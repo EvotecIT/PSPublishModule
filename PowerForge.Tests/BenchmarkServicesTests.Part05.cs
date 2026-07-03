@@ -599,6 +599,21 @@ benchmark 'runtime-assert' -out '{{escapedRoot}}' {
     }
 
     [Fact]
+    public void AddBenchmarkComparisonCommand_DefaultsDimensionToEngine()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'comparison-default' {
+    Add-BenchmarkComparison -Baseline 'Managed'
+}
+");
+
+        var comparison = Assert.Single(Assert.Single(EvaluateBenchmarkDsl(script)).Comparisons);
+
+        Assert.Equal("Engine", comparison.Dimension);
+        Assert.Equal("Managed", comparison.Baseline);
+    }
+
+    [Fact]
     public void DslRuntime_StripsGeneratedScenarioCaseMetadata()
     {
         var script = ScriptBlock.Create(@"
