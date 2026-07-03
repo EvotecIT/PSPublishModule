@@ -122,6 +122,33 @@ public sealed class ManagedModuleDependencyInstallServiceTests
     }
 
     [Fact]
+    public async Task PlanInstallAsync_reports_manifest_dependency_repair_from_normalized_version_directory()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0",
+            "1.0.0",
+            ("Company.Core", "1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var plan = await service.PlanInstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0"), plan.ModulePath);
+        Assert.Equal(ManagedModuleInstallPlanAction.SkipExisting, plan.Action);
+        Assert.True(plan.WouldWriteFiles);
+    }
+
+    [Fact]
     public async Task InstallAsync_repairs_manifest_dependencies_below_already_installed_dependency()
     {
         using var feed = new TemporaryDirectory();
@@ -154,6 +181,86 @@ public sealed class ManagedModuleDependencyInstallServiceTests
         Assert.Equal("Company.Leaf", transitiveDependency.Name);
         Assert.Equal(ManagedModuleInstallStatus.Installed, transitiveDependency.Status);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Leaf", "1.0.0", "Company.Leaf.psd1")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_repairs_manifest_dependency_from_normalized_version_directory()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var installedPath = WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0",
+            "1.0.0",
+            ("Company.Core", "1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            files: CreateCoreFiles("1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(installedPath, result.ModulePath);
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.Equal("Company.Core", dependency.Name);
+        Assert.Equal(ManagedModuleInstallStatus.Installed, dependency.Status);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "1.0.0", "Company.Core.psd1")));
+    }
+
+    [Fact]
+    public async Task PlanInstallAsync_inspects_same_dependency_name_at_different_installed_paths()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            "1.0.0",
+            ("Company.BranchA", "1.0.0"),
+            ("Company.BranchB", "1.0.0"));
+        WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.BranchA",
+            "1.0.0",
+            "1.0.0",
+            ("Company.Shared", "1.0.0"));
+        WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.BranchB",
+            "1.0.0",
+            "1.0.0",
+            ("Company.Shared", "2.0.0"));
+        WriteInstalledModuleManifest(moduleRoot.Path, "Company.Shared", "1.0.0", "1.0.0");
+        WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.Shared",
+            "2.0.0",
+            "2.0.0",
+            ("Company.Leaf", "1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var plan = await service.PlanInstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(ManagedModuleInstallPlanAction.SkipExisting, plan.Action);
+        Assert.True(plan.WouldWriteFiles);
     }
 
     [Fact]
@@ -429,12 +536,27 @@ public sealed class ManagedModuleDependencyInstallServiceTests
         string version,
         string dependencyName,
         string dependencyVersion)
+        => WriteInstalledModuleManifest(moduleRoot, moduleName, version, version, (dependencyName, dependencyVersion));
+
+    private static string WriteInstalledModuleManifest(
+        string moduleRoot,
+        string moduleName,
+        string directoryName,
+        string moduleVersion,
+        params (string Name, string Version)[] dependencies)
     {
-        var modulePath = Path.Combine(moduleRoot, moduleName, version);
+        var modulePath = Path.Combine(moduleRoot, moduleName, directoryName);
         Directory.CreateDirectory(modulePath);
+        var requiredModules = dependencies.Length == 0
+            ? string.Empty
+            : "; RequiredModules = @(" + string.Join(
+                ", ",
+                dependencies.Select(static dependency =>
+                    "@{ ModuleName = '" + dependency.Name + "'; RequiredVersion = '" + dependency.Version + "'; }")) + ")";
         File.WriteAllText(
             Path.Combine(modulePath, moduleName + ".psd1"),
-            "@{ ModuleVersion = '" + version + "'; RequiredModules = @(@{ ModuleName = '" + dependencyName + "'; RequiredVersion = '" + dependencyVersion + "'; }) }");
+            "@{ ModuleVersion = '" + moduleVersion + "'" + requiredModules + " }");
+        return modulePath;
     }
 
     private sealed class SatisfiedDependencyTrustFeedHandler : HttpMessageHandler

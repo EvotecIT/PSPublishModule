@@ -872,6 +872,10 @@ public sealed partial class ManagedModuleInstallService
         if (Directory.Exists(versionPath))
             return versionPath;
 
+        var equivalentVersionPath = ResolveInstalledVersionDirectoryPath(moduleFolder, moduleName, version);
+        if (!string.IsNullOrWhiteSpace(equivalentVersionPath))
+            return equivalentVersionPath!;
+
         var flatManifestPath = ResolveInstalledManifestPath(moduleName, moduleFolder);
         if (!string.IsNullOrWhiteSpace(flatManifestPath) &&
             IsInstalledModulePathSatisfied(moduleFolder, moduleName, version))
@@ -880,6 +884,39 @@ public sealed partial class ManagedModuleInstallService
         }
 
         return versionPath;
+    }
+
+    private static string? ResolveInstalledVersionDirectoryPath(string moduleFolder, string moduleName, string version)
+    {
+        if (!Directory.Exists(moduleFolder))
+            return null;
+
+        try
+        {
+            foreach (var directoryPath in Directory.EnumerateDirectories(moduleFolder))
+            {
+                var directoryName = Path.GetFileName(directoryPath);
+                if (string.IsNullOrWhiteSpace(directoryName) ||
+                    ManagedModuleInstallContext.IsManagedStageDirectory(directoryName!) ||
+                    !IsInstalledVersionDirectoryName(directoryName))
+                {
+                    continue;
+                }
+
+                if (IsInstalledModulePathSatisfied(directoryPath, moduleName, version))
+                    return directoryPath;
+            }
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        return null;
     }
 
     private static bool IsInstalledModulePathSatisfied(string modulePath, string moduleName, string version)
@@ -908,6 +945,26 @@ public sealed partial class ManagedModuleInstallService
         {
             return true;
         }
+    }
+
+    private static bool IsInstalledVersionDirectoryName(string? directoryName)
+    {
+        if (string.IsNullOrWhiteSpace(directoryName))
+            return false;
+
+        var value = directoryName!.Trim();
+        var plusIndex = value.IndexOf('+');
+        if (plusIndex >= 0)
+            value = value.Substring(0, plusIndex);
+
+        var dashIndex = value.IndexOf('-');
+        var numeric = dashIndex >= 0 ? value.Substring(0, dashIndex) : value;
+        if (numeric.Length == 0)
+            return false;
+
+        var parts = numeric.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length > 0 &&
+               parts.All(static part => part.Length > 0 && part.All(static character => character >= '0' && character <= '9'));
     }
 
     private static ManagedModuleVersionInfo CreateRequestedVersionInfo(ManagedModuleInstallRequest request, string version)

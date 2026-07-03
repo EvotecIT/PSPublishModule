@@ -513,7 +513,7 @@ public sealed partial class ManagedModuleInstallService
         string modulePath,
         ISet<string> visited)
     {
-        if (!visited.Add(moduleName.Trim()))
+        if (!visited.Add(CreateManifestRepairVisitKey(moduleName, modulePath)))
             return false;
 
         var metadata = CreateInstalledManifestDependencyMetadata(moduleName, string.Empty, modulePath);
@@ -536,6 +536,12 @@ public sealed partial class ManagedModuleInstallService
 
         return false;
     }
+
+    private static string CreateManifestRepairVisitKey(string moduleName, string modulePath)
+        => string.Join("|", moduleName.Trim(), NormalizeManifestRepairPath(modulePath));
+
+    private static string NormalizeManifestRepairPath(string modulePath)
+        => Path.GetFullPath(modulePath.Trim().Trim('"')).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
     private static string? ResolveInstalledManifestPath(string moduleName, string modulePath)
     {
