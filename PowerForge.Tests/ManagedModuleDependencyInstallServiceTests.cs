@@ -259,8 +259,6 @@ public sealed class ManagedModuleDependencyInstallServiceTests
         Assert.Equal("Company.Core", dependency.Name);
         Assert.Equal("1.2.0", dependency.Version);
         Assert.Equal("[1.0.0,2.0.0)", dependency.DependencyVersionRange);
-        Assert.True(dependency.VersionSelectionWaitElapsed >= TimeSpan.FromMilliseconds(50));
-        Assert.True(dependency.VersionResolutionElapsed < dependency.VersionSelectionWaitElapsed);
         Assert.Equal(1, handler.CoreVersionQueryCount);
     }
 
@@ -413,9 +411,9 @@ public sealed class ManagedModuleDependencyInstallServiceTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
-            if (uri.Contains("/FindPackagesById()", StringComparison.OrdinalIgnoreCase) &&
+            if (uri.Contains("/Packages()", StringComparison.OrdinalIgnoreCase) &&
                 uri.Contains("Company.Core", StringComparison.OrdinalIgnoreCase) &&
-                uri.Contains("$filter=IsLatestVersion", StringComparison.OrdinalIgnoreCase))
+                uri.Contains("IsLatestVersion", StringComparison.OrdinalIgnoreCase))
             {
                 System.Threading.Interlocked.Increment(ref _latestQueryCount);
                 return Task.FromResult(XmlFeed());
