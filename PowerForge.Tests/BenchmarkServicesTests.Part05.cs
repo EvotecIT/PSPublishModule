@@ -482,6 +482,29 @@ Invoke-BenchmarkSuite -Settings {
     }
 
     [Fact]
+    public void DslRuntime_CapturesAssertionHelpersWithoutImportedCmdlets()
+    {
+        var root = CreateTempRoot();
+        File.WriteAllText(Path.Combine(root, "expected.txt"), "ok");
+        var escapedRoot = root.Replace("'", "''");
+        var script = ScriptBlock.Create($$"""
+benchmark 'runtime-assert' -out '{{escapedRoot}}' {
+    policy -Warmup 0 -Iterations 1
+    caseSource @{ Name = 'Default' }
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+    validate { param($case, $run) assertPath (Join-Path '{{escapedRoot}}' 'expected.txt') }
+}
+""");
+
+        var suite = Assert.Single(EvaluateBenchmarkDslWithoutImportedCommands(script));
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        Assert.All(result.Samples, sample => Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status));
+    }
+
+    [Fact]
     public void AddBenchmarkComparisonCommand_ExportsOnlyImportSafeAlias()
     {
         var alias = typeof(PSPublishModule.AddBenchmarkComparisonCommand)

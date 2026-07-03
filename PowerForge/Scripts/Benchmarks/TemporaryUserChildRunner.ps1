@@ -13,6 +13,16 @@ foreach ($modulePath in @($request.ModulePaths)) {
         Import-Module -Name $modulePath -Force -ErrorAction Stop
     }
 }
+$benchmarkDslAliases = @(
+    'benchmark', 'cases', 'case', 'caseSource', 'from', 'axis', 'setup', 'data', 'skip', 'validate', 'policy', 'profile', 'cleanup', 'engine', 'operation', 'metric', 'comparison', 'readme', 'artifacts',
+    'assertPath', 'assertValue'
+)
+foreach ($aliasName in $benchmarkDslAliases) {
+    $alias = Get-Alias -Name $aliasName -ErrorAction SilentlyContinue
+    if ($null -ne $alias -and $alias.Source -eq 'PSPublishModule') {
+        Remove-Item -LiteralPath "Alias:$aliasName" -Force -ErrorAction SilentlyContinue
+    }
+}
 $scriptRoot = [System.IO.Path]::GetDirectoryName($request.SpecPath)
 $block = [scriptblock]::Create([System.IO.File]::ReadAllText($request.SpecPath))
 $benchmarkVariables = @{}

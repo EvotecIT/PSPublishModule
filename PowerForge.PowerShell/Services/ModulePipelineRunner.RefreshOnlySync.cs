@@ -91,8 +91,10 @@ public sealed partial class ModulePipelineRunner
         if (sourceHasCustomIncludeScripts)
             return false;
 
-        var sourceIsSingleFileModule = IsSourceSingleFileModule(plan);
-        return !sourceIsSingleFileModule || IsGeneratedSourceBootstrapper(sourcePsm1Path, plan.ModuleName);
+        if (File.Exists(sourcePsm1Path))
+            return IsGeneratedSourceBootstrapper(sourcePsm1Path, plan.ModuleName);
+
+        return !IsSourceSingleFileModule(plan);
     }
 
     private static bool IsGeneratedSourceBootstrapper(string sourcePsm1Path, string moduleName)
