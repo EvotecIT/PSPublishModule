@@ -237,6 +237,9 @@ public sealed class BenchmarkComparisonRow
     /// <summary>Baseline engine name.</summary>
     public string BaselineEngine { get; set; } = string.Empty;
 
+    /// <summary>Summary status for the compared engine.</summary>
+    public string Status { get; set; } = string.Empty;
+
     /// <summary>Actual metric value for the compared engine.</summary>
     public double? Actual { get; set; }
 

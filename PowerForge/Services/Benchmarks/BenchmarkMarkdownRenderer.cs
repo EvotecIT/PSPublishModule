@@ -43,7 +43,13 @@ public sealed class BenchmarkMarkdownRenderer
     {
         var rows = (comparison ?? Array.Empty<BenchmarkComparisonRow>()).ToArray();
         var markdown = new StringBuilder();
-        var baseline = rows.Select(r => r.BaselineEngine).FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value)) ?? "Baseline";
+        var baselines = rows
+            .Select(r => r.BaselineEngine)
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var primaryBaseline = baselines.FirstOrDefault() ?? "Baseline";
+        var includeBaseline = baselines.Length > 1;
         var includeVariables = rows.Any(static row => !string.IsNullOrWhiteSpace(FormatComparisonVariables(row.Variables)));
         var includeOs = rows.Select(static row => row.Os ?? string.Empty).Where(static value => value.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).Skip(1).Any();
         var includeRunMode = rows.Select(static row => row.RunMode ?? string.Empty).Where(static value => value.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).Skip(1).Any();
@@ -56,7 +62,7 @@ public sealed class BenchmarkMarkdownRenderer
             .Select(r => r.Engine)
             .Where(static value => !string.IsNullOrWhiteSpace(value))
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(engine => string.Equals(engine, baseline, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .OrderBy(engine => !includeBaseline && string.Equals(engine, primaryBaseline, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
             .ThenBy(engine => engine, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -67,6 +73,7 @@ public sealed class BenchmarkMarkdownRenderer
         if (includeRunMode) markdown.Append(" RunMode |");
         markdown.Append(" Operation |");
         if (includeMetric) markdown.Append(" Metric |");
+        if (includeBaseline) markdown.Append(" Baseline |");
         foreach (var engine in engines)
             markdown.Append(' ').Append(Cell(engine)).Append(" |");
         markdown.AppendLine(" Result |");
@@ -78,18 +85,21 @@ public sealed class BenchmarkMarkdownRenderer
         if (includeRunMode) markdown.Append(" --- |");
         markdown.Append(" --- |");
         if (includeMetric) markdown.Append(" --- |");
+        if (includeBaseline) markdown.Append(" --- |");
         foreach (var _ in engines)
             markdown.Append(" ---: |");
         markdown.AppendLine(" --- |");
 
         foreach (var group in rows
-                     .GroupBy(r => string.Join("\u001f", r.Scenario, FormatVariables(r.Variables), r.Operation, r.Host, r.Os, r.RunMode, r.Metric), StringComparer.Ordinal)
+                     .GroupBy(r => string.Join("\u001f", r.Scenario, FormatVariables(r.Variables), r.Operation, r.Host, r.Os, r.RunMode, r.Metric, r.BaselineEngine), StringComparer.Ordinal)
                      .OrderBy(g => DisplayScenario(g.First()), StringComparer.OrdinalIgnoreCase)
                      .ThenBy(g => g.First().Operation, StringComparer.OrdinalIgnoreCase)
                      .ThenBy(g => g.First().Host, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(g => g.First().BaselineEngine, StringComparer.OrdinalIgnoreCase)
                      .ThenBy(g => g.First().Metric, StringComparer.OrdinalIgnoreCase))
         {
             var first = group.First();
+            var baseline = string.IsNullOrWhiteSpace(first.BaselineEngine) ? primaryBaseline : first.BaselineEngine;
             var byEngine = group
                 .GroupBy(r => r.Engine, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
@@ -106,6 +116,8 @@ public sealed class BenchmarkMarkdownRenderer
             markdown.Append(' ').Append(Cell(first.Operation)).Append(" |");
             if (includeMetric)
                 markdown.Append(' ').Append(Cell(string.IsNullOrWhiteSpace(first.Metric) ? "MedianMs" : first.Metric)).Append(" |");
+            if (includeBaseline)
+                markdown.Append(' ').Append(Cell(baseline)).Append(" |");
             foreach (var engine in engines)
             {
                 byEngine.TryGetValue(engine, out var row);
@@ -125,8 +137,15 @@ public sealed class BenchmarkMarkdownRenderer
 
     private static string FormatComparisonValue(BenchmarkComparisonRow? row)
     {
-        if (row?.Actual is null)
+        if (row is null)
+            return "n/a";
+        if (row.Actual is null)
+        {
+            if (string.Equals(row.Status, "Skipped", StringComparison.OrdinalIgnoreCase))
+                return "Skipped";
             return "Failed";
+        }
+
         var ratio = row.Ratio.HasValue ? row.Ratio.Value.ToString("0.00", CultureInfo.InvariantCulture) + "x" : "n/a";
         var value = IsDurationMetric(row.Metric)
             ? FormatDuration(row.Actual.Value)

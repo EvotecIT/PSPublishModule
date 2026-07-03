@@ -67,6 +67,7 @@ public sealed class BenchmarkSummaryService
                     Variables = CopyVariables(row.Variables),
                     Engine = row.Engine,
                     BaselineEngine = baselineEngine,
+                    Status = row.Status,
                     Metric = metric,
                     Actual = actual,
                     Baseline = baselineValue,

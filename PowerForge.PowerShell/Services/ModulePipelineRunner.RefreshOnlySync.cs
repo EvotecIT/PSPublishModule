@@ -87,24 +87,26 @@ public sealed partial class ModulePipelineRunner
         ModulePipelinePlan plan,
         string sourcePsm1Path)
     {
+        if (plan.BuildSpec.DevelopmentBinariesMode != ModuleDevelopmentBinaryMode.Off)
+            return false;
+
         var sourceHasCustomIncludeScripts = HasCustomIncludeScriptFiles(plan.BuildSpec.SourcePath, plan.Information);
         if (sourceHasCustomIncludeScripts)
             return false;
 
         if (File.Exists(sourcePsm1Path))
-            return IsGeneratedSourceBootstrapper(sourcePsm1Path, plan.ModuleName);
+            return IsGeneratedSourceBuildBootstrapper(sourcePsm1Path, plan.ModuleName);
 
         return !IsSourceSingleFileModule(plan);
     }
 
-    private static bool IsGeneratedSourceBootstrapper(string sourcePsm1Path, string moduleName)
+    private static bool IsGeneratedSourceBuildBootstrapper(string sourcePsm1Path, string moduleName)
     {
         if (!File.Exists(sourcePsm1Path))
             return false;
 
         var content = File.ReadAllText(sourcePsm1Path);
-        return IsGeneratedSourceDevelopmentBootstrapperContent(content, moduleName) ||
-               IsGeneratedSourceBuildBootstrapperContent(content, moduleName);
+        return IsGeneratedSourceBuildBootstrapperContent(content, moduleName);
     }
 
     private static bool IsGeneratedSourceBuildBootstrapperContent(string content, string moduleName)

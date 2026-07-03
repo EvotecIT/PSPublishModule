@@ -217,6 +217,22 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void SummaryService_CarriesStatusIntoComparisonRows()
+    {
+        var summary = new[]
+        {
+            new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Run", Engine = "Managed", Host = "Current", Status = "Succeeded", MedianMs = 10 },
+            new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Run", Engine = "Other", Host = "Current", Status = "Skipped" }
+        };
+
+        var comparison = new BenchmarkSummaryService().Compare(summary, "Managed");
+
+        var other = Assert.Single(comparison, row => row.Engine == "Other");
+        Assert.Equal("Skipped", other.Status);
+        Assert.Null(other.Actual);
+    }
+
+    [Fact]
     public void DocumentUpdater_ReplacesMarkerBlock()
     {
         var root = CreateTempRoot();
@@ -374,6 +390,101 @@ public sealed partial class BenchmarkServicesTests
         Assert.Contains("| Scenario | Variables | Host | Operation | Metric | Managed | Other | Result |", markdown);
         Assert.Contains("| case | Rows=10 | Current | Run | MedianMs | 1.00x (10ms) | 2.00x (20ms) | Managed fastest |", markdown);
         Assert.Contains("| case | Rows=20 | Current | Run | P95Ms | 1.00x (15ms) | 2.00x (30ms) | Managed fastest |", markdown);
+    }
+
+    [Fact]
+    public void MarkdownRenderer_PreservesBaselineDimension()
+    {
+        var markdown = new BenchmarkMarkdownRenderer().RenderComparisonTable(new[]
+        {
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Actual = 10,
+                Baseline = 10,
+                Ratio = 1
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Actual = 20,
+                Baseline = 10,
+                Ratio = 2
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                BaselineEngine = "Other",
+                Metric = "MedianMs",
+                Actual = 10,
+                Baseline = 20,
+                Ratio = 0.5
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                BaselineEngine = "Other",
+                Metric = "MedianMs",
+                Actual = 20,
+                Baseline = 20,
+                Ratio = 1
+            }
+        });
+
+        Assert.Contains("| Scenario | Host | Operation | Baseline | Managed | Other | Result |", markdown);
+        Assert.Contains("| case | Current | Run | Managed | 1.00x (10ms) | 2.00x (20ms) | Managed fastest |", markdown);
+        Assert.Contains("| case | Current | Run | Other | 0.50x (10ms) | 1.00x (20ms) | Other slower than Managed |", markdown);
+    }
+
+    [Fact]
+    public void MarkdownRenderer_RendersSkippedComparisonRowsAsSkipped()
+    {
+        var markdown = new BenchmarkMarkdownRenderer().RenderComparisonTable(new[]
+        {
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Status = "Succeeded",
+                Actual = 10,
+                Baseline = 10,
+                Ratio = 1
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Status = "Skipped",
+                Baseline = 10
+            }
+        });
+
+        Assert.Contains("| case | Current | Run | 1.00x (10ms) | Skipped | Managed only successful |", markdown);
+        Assert.DoesNotContain("Failed", markdown, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
