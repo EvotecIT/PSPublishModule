@@ -90,9 +90,6 @@ public sealed partial class ModulePipelineRunner
                     plan);
 
             if (!plan.BuildSpec.RefreshManifestOnly)
-                TryWriteTypeAcceleratorSurfaceReport(plan, buildResult, state);
-
-            if (!plan.BuildSpec.RefreshManifestOnly)
                 TryRegenerateSourceDevelopmentBootstrapperFromManifest(buildResult, plan);
 
             session.Done(session.ManifestStep);
@@ -103,6 +100,15 @@ public sealed partial class ModulePipelineRunner
             throw;
         }
         ExecuteActions(ModulePipelineActionStage.AfterManifest, plan, session, state);
+    }
+
+    private void ExecuteTypeAcceleratorSurfaceReportPhase(ModulePipelinePlan plan, ModulePipelineRunState state)
+    {
+        var buildResult = state.RequireBuildResult();
+        if (plan.BuildSpec.RefreshManifestOnly)
+            return;
+
+        TryWriteTypeAcceleratorSurfaceReport(plan, buildResult, state);
     }
 
     private void ExecuteDocumentationPhase(

@@ -3,7 +3,6 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
-using System.Text;
 using System.Threading;
 
 namespace PowerForge;
@@ -22,17 +21,29 @@ public static class PowerShellBenchmarkDslRuntime
     /// <param name="scriptRoot">Optional script root exposed as <c>$PSScriptRoot</c>.</param>
     /// <returns>Declared benchmark suites.</returns>
     public static PowerShellBenchmarkSuite[] Evaluate(ScriptBlock scriptBlock, string? scriptRoot = null)
+        => Evaluate(scriptBlock, scriptRoot, benchmarkVariables: null);
+
+    /// <summary>
+    /// Evaluates a script block with benchmark DSL helper functions and caller-supplied benchmark variables.
+    /// </summary>
+    /// <param name="scriptBlock">Benchmark script block.</param>
+    /// <param name="scriptRoot">Optional script root exposed as <c>$PSScriptRoot</c>.</param>
+    /// <param name="benchmarkVariables">Optional caller-supplied variables exposed as <c>$BenchmarkVariables</c>.</param>
+    /// <returns>Declared benchmark suites.</returns>
+    public static PowerShellBenchmarkSuite[] Evaluate(ScriptBlock scriptBlock, string? scriptRoot, IReadOnlyDictionary<string, string?>? benchmarkVariables)
     {
         if (scriptBlock is null) throw new ArgumentNullException(nameof(scriptBlock));
         var previous = Current.Value;
         var context = new PowerShellBenchmarkDslContext
         {
-            ScriptRoot = scriptRoot
+            ScriptRoot = scriptRoot,
+            BenchmarkVariables = CopyBenchmarkVariables(benchmarkVariables)
         };
         Current.Value = context;
         Runspace? createdRunspace = null;
         var previousRunspace = Runspace.DefaultRunspace;
-        AliasSnapshot? compareAlias = null;
+        List<AliasSnapshot?> aliasSnapshots = new();
+        FunctionSnapshot? compareFunction = null;
         try
         {
             if (Runspace.DefaultRunspace is null)
@@ -42,13 +53,17 @@ public static class PowerShellBenchmarkDslRuntime
                 Runspace.DefaultRunspace = createdRunspace;
             }
 
-            compareAlias = RemoveAlias("compare");
-            InvokeRootBlock(scriptBlock, CreateFunctions());
+            foreach (var aliasName in CreateFunctionBodies().Keys)
+                aliasSnapshots.Add(RemoveAlias(aliasName));
+            compareFunction = SetLegacyCompareFunction();
+            InvokeRootBlock(scriptBlock);
             return context.Suites.ToArray();
         }
         finally
         {
-            RestoreAlias(compareAlias);
+            RestoreFunction(compareFunction);
+            for (var i = aliasSnapshots.Count - 1; i >= 0; i--)
+                RestoreAlias(aliasSnapshots[i]);
             Runspace.DefaultRunspace = previousRunspace;
             createdRunspace?.Dispose();
             Current.Value = previous;
@@ -78,6 +93,24 @@ public static class PowerShellBenchmarkDslRuntime
         finally
         {
             context.SuiteStack.Pop();
+        }
+    }
+
+    /// <summary>
+    /// Registers caller-visible helper functions captured by the PowerShell command surface.
+    /// </summary>
+    /// <param name="functions">Function definitions keyed by name.</param>
+    public static void RegisterCallerFunctions(IReadOnlyDictionary<string, string>? functions)
+    {
+        if (functions is null || functions.Count == 0) return;
+        var context = RequireContext();
+        foreach (var entry in functions)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Key) || string.IsNullOrWhiteSpace(entry.Value))
+                continue;
+            if (context.CallerFunctions.ContainsKey(entry.Key))
+                continue;
+            context.CallerFunctions[entry.Key] = CaptureScriptText(ScriptBlock.Create(entry.Value), context.ScriptRoot);
         }
     }
 
@@ -112,10 +145,25 @@ public static class PowerShellBenchmarkDslRuntime
     public static void From(ScriptBlock scriptBlock)
     {
         var suite = RequireSuite();
-        foreach (var value in InvokeStrict(scriptBlock))
+        foreach (var value in InvokeStrict(CloseScriptBlock(scriptBlock)))
         {
             var item = ConvertToCase(value);
             suite.Cases.Add(item);
+        }
+    }
+
+    /// <summary>
+    /// Adds generated cases from already evaluated values.
+    /// </summary>
+    /// <param name="values">Case source values.</param>
+    public static void FromValues(object?[] values)
+    {
+        var suite = RequireSuite();
+        foreach (var value in Flatten(values ?? Array.Empty<object?>()))
+        {
+            if (value is null)
+                continue;
+            suite.Cases.Add(ConvertToCase(PSObject.AsPSObject(value)));
         }
     }
 
@@ -163,25 +211,51 @@ public static class PowerShellBenchmarkDslRuntime
     /// Sets suite setup block.
     /// </summary>
     /// <param name="scriptBlock">Setup block.</param>
-    public static void Setup(ScriptBlock scriptBlock) => RequireSuite().Setup = CaptureScriptBlock(scriptBlock);
+    public static void Setup(ScriptBlock scriptBlock) => RequireSuite().Setup = CloseScriptBlock(scriptBlock);
 
     /// <summary>
     /// Sets suite data block.
     /// </summary>
     /// <param name="scriptBlock">Data block.</param>
-    public static void Data(ScriptBlock scriptBlock) => RequireSuite().Data = CaptureScriptBlock(scriptBlock);
+    public static void Data(ScriptBlock scriptBlock) => RequireSuite().Data = CloseScriptBlock(scriptBlock);
+
+    /// <summary>
+    /// Sets benchmark run policy defaults.
+    /// </summary>
+    /// <param name="warmup">Optional warmup iteration count.</param>
+    /// <param name="iteration">Optional measured iteration count.</param>
+    /// <param name="runMode">Optional run mode label.</param>
+    /// <param name="order">Optional work-item ordering strategy.</param>
+    /// <param name="cooldownMilliseconds">Optional delay between measured samples.</param>
+    /// <param name="outlierMode">Optional summary outlier policy.</param>
+    public static void Policy(int? warmup, int? iteration, string? runMode, string? order, int? cooldownMilliseconds, string? outlierMode)
+    {
+        var suite = RequireSuite();
+        if (warmup.HasValue)
+            suite.WarmupCount = Math.Max(0, warmup.Value);
+        if (iteration.HasValue)
+            suite.IterationCount = Math.Max(1, iteration.Value);
+        if (!string.IsNullOrWhiteSpace(runMode))
+            suite.RunMode = runMode!;
+        if (!string.IsNullOrWhiteSpace(order))
+            suite.RunOrder = ParseEnum<PowerShellBenchmarkRunOrder>(order!, "run order");
+        if (cooldownMilliseconds.HasValue)
+            suite.CooldownMilliseconds = Math.Max(0, cooldownMilliseconds.Value);
+        if (!string.IsNullOrWhiteSpace(outlierMode))
+            suite.OutlierMode = ParseEnum<PowerShellBenchmarkOutlierMode>(outlierMode!, "outlier mode");
+    }
 
     /// <summary>
     /// Sets suite skip block.
     /// </summary>
     /// <param name="scriptBlock">Skip block.</param>
-    public static void Skip(ScriptBlock scriptBlock) => RequireSuite().Skip = CaptureScriptBlock(scriptBlock);
+    public static void Skip(ScriptBlock scriptBlock) => RequireSuite().Skip = CloseScriptBlock(scriptBlock);
 
     /// <summary>
     /// Sets suite validation block.
     /// </summary>
     /// <param name="scriptBlock">Validation block.</param>
-    public static void Validate(ScriptBlock scriptBlock) => RequireSuite().Validate = CaptureScriptBlock(scriptBlock);
+    public static void Validate(ScriptBlock scriptBlock) => RequireSuite().Validate = CloseScriptBlock(scriptBlock);
 
     /// <summary>
     /// Sets suite profile isolation mode.
@@ -244,7 +318,7 @@ public static class PowerShellBenchmarkDslRuntime
         var engine = context.EngineStack.Peek();
         if (engine.Operations.ContainsKey(operationName))
             throw new InvalidOperationException($"Benchmark engine '{engine.Name}' already defines operation '{operationName}'.");
-        engine.Operations[operationName] = CaptureScriptBlock(scriptBlock);
+        engine.Operations[operationName] = CloseScriptBlock(scriptBlock);
     }
 
     /// <summary>
@@ -260,7 +334,7 @@ public static class PowerShellBenchmarkDslRuntime
             throw new InvalidOperationException($"Benchmark suite '{suite.Name}' already defines metric '{metricName}'.");
         if (IsReservedMetricName(metricName))
             throw new InvalidOperationException($"Benchmark metric name '{metricName}' is reserved for built-in benchmark artifact columns.");
-        suite.Metrics.Add(new PowerShellBenchmarkMetric { Name = metricName, ScriptBlock = CaptureScriptBlock(scriptBlock) });
+        suite.Metrics.Add(new PowerShellBenchmarkMetric { Name = metricName, ScriptBlock = CloseScriptBlock(scriptBlock) });
     }
 
     private static bool IsReservedMetricName(string name)
@@ -289,7 +363,15 @@ public static class PowerShellBenchmarkDslRuntime
         "MedianMs",
         "MeanMs",
         "MinMs",
-        "MaxMs"
+        "MaxMs",
+        "P95Ms",
+        "P95",
+        "P99Ms",
+        "P99",
+        "StdDevMs",
+        "StdDev",
+        "StdErrMs",
+        "StdErr"
     };
 
     /// <summary>
@@ -348,53 +430,83 @@ public static class PowerShellBenchmarkDslRuntime
         return cleanup;
     }
 
+    private static T ParseEnum<T>(string name, string label) where T : struct, Enum
+    {
+        var valueName = RequireName(name, label);
+        if (!Enum.TryParse<T>(valueName, ignoreCase: true, out var value))
+            throw new NotSupportedException($"Benchmark {label} '{valueName}' is not supported.");
+        return value;
+    }
+
     private static IEnumerable<PSObject> InvokeStrict(ScriptBlock scriptBlock)
-        => InvokeWithScriptRoot(scriptBlock, functionsToDefine: null);
+        => InvokeWithScriptRoot(scriptBlock, CreateFunctions());
 
     private static Dictionary<string, string> CreateFunctionBodies()
     {
-        var scriptRootLiteral = ToPowerShellLiteral(Current.Value?.ScriptRoot ?? string.Empty);
-        var closeBenchmarkBlock = EmbeddedScripts
-            .Load("Scripts/Benchmarks/Close-BenchmarkBlock.Template.ps1")
-            .Replace("__POWERFORGE_SCRIPT_ROOT__", scriptRootLiteral);
+        static string Call(string methodName, string parameterBlock, string arguments)
+            => $"{parameterBlock} __PowerForgeBenchmarkDslInvoke -Name '{methodName}' -Arguments ({arguments})";
+
+        const string AssertPathBody = "param([Parameter(Position=0, Mandatory=$true)] [string] $Path, [switch] $Not, [string] $Message, [switch] $PassThru) $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path); $exists = [System.IO.File]::Exists($resolved) -or [System.IO.Directory]::Exists($resolved); if ($exists -eq (-not $Not.IsPresent)) { if ($PassThru) { $resolved }; return }; if ([string]::IsNullOrWhiteSpace($Message)) { if ($Not.IsPresent) { $Message = \"Expected path '$resolved' not to exist.\" } else { $Message = \"Expected path '$resolved' to exist.\" } }; throw $Message";
+        const string AssertValueBody = "param([Parameter(Position=0, Mandatory=$true)] [object] $Actual, [Parameter(Position=1)] [object] $Expected, [switch] $NotNull, [string] $Message, [switch] $PassThru) $passed = if ($NotNull.IsPresent) { $null -ne $Actual } else { [object]::Equals($Actual, $Expected) }; if ($passed) { if ($PassThru) { $Actual }; return }; if ([string]::IsNullOrWhiteSpace($Message)) { if ($NotNull.IsPresent) { $Message = 'Expected benchmark value not to be null.' } else { $Message = \"Expected benchmark value '$Actual' to equal '$Expected'.\" } }; throw $Message";
 
         return new()
         {
-            ["__PowerForgeCloseBenchmarkBlock"] = closeBenchmarkBlock,
-            ["benchmark"] = "param([Parameter(Position=0)] [string] $Name, [Alias('out')] [string] $OutputRoot, [Parameter(Position=1)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Benchmark($Name, $OutputRoot, $ScriptBlock)",
-            ["cases"] = "param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Cases($ScriptBlock)",
-            ["case"] = "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [hashtable] $Values) [PowerForge.PowerShellBenchmarkDslRuntime]::Case($Name, $Values)",
-            ["from"] = "param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::From($ScriptBlock)",
-            ["axis"] = "param([Parameter(Position=0)] [string] $Name, [Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) [PowerForge.PowerShellBenchmarkDslRuntime]::Axis($Name, $Values)",
-            ["setup"] = "param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Setup((__PowerForgeCloseBenchmarkBlock $ScriptBlock))",
-            ["data"] = "param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Data((__PowerForgeCloseBenchmarkBlock $ScriptBlock))",
-            ["skip"] = "param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Skip((__PowerForgeCloseBenchmarkBlock $ScriptBlock))",
-            ["validate"] = "param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Validate((__PowerForgeCloseBenchmarkBlock $ScriptBlock))",
-            ["profile"] = "param([Parameter(Position=0)] [string] $Name, [string] $Cleanup) [PowerForge.PowerShellBenchmarkDslRuntime]::Profile($Name, $Cleanup)",
-            ["cleanup"] = "param([Parameter(Position=0)] [string] $Name) [PowerForge.PowerShellBenchmarkDslRuntime]::Cleanup($Name)",
-            ["engine"] = "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Engine($Name, $ScriptBlock)",
-            ["operation"] = "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Operation($Name, (__PowerForgeCloseBenchmarkBlock $ScriptBlock))",
-            ["metric"] = "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Metric($Name, (__PowerForgeCloseBenchmarkBlock $ScriptBlock))",
-            ["compare"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric) [PowerForge.PowerShellBenchmarkDslRuntime]::Compare($Dimension, $Baseline, $Metric)",
-            ["readme"] = "param([Parameter(Position=0)] [string] $Path, [string] $Block, [string] $Renderer) [PowerForge.PowerShellBenchmarkDslRuntime]::Readme($Path, $Block, $Renderer)",
-            ["artifacts"] = "param([Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) [PowerForge.PowerShellBenchmarkDslRuntime]::Artifacts($Values)",
-            ["New-BenchmarkSuite"] = "param([Parameter(Position=0)] [string] $Name, [Alias('out')] [string] $OutputRoot, [Parameter(Position=1)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Benchmark($Name, $OutputRoot, $ScriptBlock)",
-            ["Add-BenchmarkCases"] = "param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Cases($ScriptBlock)",
-            ["Add-BenchmarkCase"] = "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [hashtable] $Values) [PowerForge.PowerShellBenchmarkDslRuntime]::Case($Name, $Values)",
-            ["Add-BenchmarkCaseSource"] = "param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::From($ScriptBlock)",
-            ["Add-BenchmarkAxis"] = "param([Parameter(Position=0)] [string] $Name, [Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) [PowerForge.PowerShellBenchmarkDslRuntime]::Axis($Name, $Values)",
-            ["Set-BenchmarkSetup"] = "param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Setup((__PowerForgeCloseBenchmarkBlock $ScriptBlock))",
-            ["Set-BenchmarkDataFactory"] = "param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Data((__PowerForgeCloseBenchmarkBlock $ScriptBlock))",
-            ["Set-BenchmarkProfile"] = "param([Parameter(Position=0)] [string] $Name, [string] $Cleanup) [PowerForge.PowerShellBenchmarkDslRuntime]::Profile($Name, $Cleanup)",
-            ["Set-BenchmarkCleanup"] = "param([Parameter(Position=0)] [string] $Name) [PowerForge.PowerShellBenchmarkDslRuntime]::Cleanup($Name)",
-            ["Add-BenchmarkEngine"] = "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Engine($Name, $ScriptBlock)",
-            ["Add-BenchmarkOperation"] = "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Operation($Name, (__PowerForgeCloseBenchmarkBlock $ScriptBlock))",
-            ["Add-BenchmarkSkipRule"] = "param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Skip((__PowerForgeCloseBenchmarkBlock $ScriptBlock))",
-            ["Add-BenchmarkValidation"] = "param([Parameter(Position=0)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Validate((__PowerForgeCloseBenchmarkBlock $ScriptBlock))",
-            ["Add-BenchmarkMetric"] = "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock) [PowerForge.PowerShellBenchmarkDslRuntime]::Metric($Name, (__PowerForgeCloseBenchmarkBlock $ScriptBlock))",
-            ["Add-BenchmarkComparison"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric) [PowerForge.PowerShellBenchmarkDslRuntime]::Compare($Dimension, $Baseline, $Metric)",
-            ["Add-BenchmarkReadmeBlock"] = "param([Parameter(Position=0)] [string] $Path, [string] $Block, [string] $Renderer) [PowerForge.PowerShellBenchmarkDslRuntime]::Readme($Path, $Block, $Renderer)",
-            ["Set-BenchmarkArtifacts"] = "param([Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) [PowerForge.PowerShellBenchmarkDslRuntime]::Artifacts($Values)"
+            ["__PowerForgeBenchmarkDslInvoke"] = """
+param([Parameter(Mandatory=$true)] [string] $Name, [object[]] $Arguments = @())
+$runtimeType = $PowerForgeBenchmarkDslRuntimeType
+if ($null -eq $runtimeType) { throw 'Benchmark DSL runtime type was not provided.' }
+$flags = [System.Reflection.BindingFlags]'Public, Static'
+$methods = @($runtimeType.GetMethods($flags) | Where-Object { $_.Name -eq $Name -and $_.GetParameters().Count -eq $Arguments.Count })
+if ($methods.Count -ne 1) { throw "Benchmark DSL runtime method '$Name' with $($Arguments.Count) argument(s) was not found." }
+try {
+    $methods[0].Invoke($null, $Arguments)
+} catch [System.Reflection.TargetInvocationException] {
+    if ($_.Exception.InnerException) { throw $_.Exception.InnerException }
+    throw
+}
+""",
+            ["benchmark"] = Call("Benchmark", "param([Parameter(Position=0)] [string] $Name, [Alias('out')] [string] $OutputRoot, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $OutputRoot, $ScriptBlock)"),
+            ["cases"] = Call("Cases", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
+            ["case"] = Call("Case", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [hashtable] $Values)", "[object[]] @($Name, $Values)"),
+            ["caseSource"] = "param([Parameter(Position=0, ValueFromRemainingArguments=$true)] [object[]] $InputObject) if ($InputObject.Count -eq 1 -and $InputObject[0] -is [scriptblock]) { __PowerForgeBenchmarkDslInvoke -Name 'From' -Arguments ([object[]] @($InputObject[0])) } else { $arguments = [object[]]::new(1); $arguments[0] = $InputObject; __PowerForgeBenchmarkDslInvoke -Name 'FromValues' -Arguments $arguments }",
+            ["from"] = "param([Parameter(Position=0, ValueFromRemainingArguments=$true)] [object[]] $InputObject) if ($InputObject.Count -eq 1 -and $InputObject[0] -is [scriptblock]) { __PowerForgeBenchmarkDslInvoke -Name 'From' -Arguments ([object[]] @($InputObject[0])) } else { $arguments = [object[]]::new(1); $arguments[0] = $InputObject; __PowerForgeBenchmarkDslInvoke -Name 'FromValues' -Arguments $arguments }",
+            ["axis"] = "param([Parameter(Position=0)] [string] $Name, [Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) $arguments = [object[]]::new(2); $arguments[0] = $Name; $arguments[1] = $Values; __PowerForgeBenchmarkDslInvoke -Name 'Axis' -Arguments $arguments",
+            ["setup"] = Call("Setup", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
+            ["data"] = Call("Data", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
+            ["skip"] = Call("Skip", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
+            ["validate"] = Call("Validate", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
+            ["policy"] = "param([int] $Warmup, [Alias('Iterations')] [int] $Iteration, [string] $RunMode, [object] $Order, [int] $CooldownMilliseconds, [object] $OutlierMode) $w=$null; $i=$null; $c=$null; if ($PSBoundParameters.ContainsKey('Warmup')) { $w=$Warmup }; if ($PSBoundParameters.ContainsKey('Iteration')) { $i=$Iteration }; if ($PSBoundParameters.ContainsKey('CooldownMilliseconds')) { $c=$CooldownMilliseconds }; $arguments = [object[]]::new(6); $arguments[0] = $w; $arguments[1] = $i; $arguments[2] = $RunMode; $arguments[3] = [string] $Order; $arguments[4] = $c; $arguments[5] = [string] $OutlierMode; __PowerForgeBenchmarkDslInvoke -Name 'Policy' -Arguments $arguments",
+            ["profile"] = Call("Profile", "param([Parameter(Position=0)] [string] $Name, [string] $Cleanup)", "[object[]] @($Name, $Cleanup)"),
+            ["cleanup"] = Call("Cleanup", "param([Parameter(Position=0)] [string] $Name)", "[object[]] @($Name)"),
+            ["engine"] = Call("Engine", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
+            ["operation"] = Call("Operation", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
+            ["metric"] = Call("Metric", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
+            ["compare"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric) $arguments = [object[]]::new(3); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
+            ["comparison"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric) $arguments = [object[]]::new(3); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
+            ["readme"] = Call("Readme", "param([Parameter(Position=0)] [string] $Path, [string] $Block, [string] $Renderer)", "[object[]] @($Path, $Block, $Renderer)"),
+            ["artifacts"] = "param([Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) $arguments = [object[]]::new(1); $arguments[0] = $Values; __PowerForgeBenchmarkDslInvoke -Name 'Artifacts' -Arguments $arguments",
+            ["assertPath"] = AssertPathBody,
+            ["assertValue"] = AssertValueBody,
+            ["New-BenchmarkSuite"] = Call("Benchmark", "param([Parameter(Position=0)] [string] $Name, [Alias('out')] [string] $OutputRoot, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $OutputRoot, $ScriptBlock)"),
+            ["Add-BenchmarkCases"] = Call("Cases", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
+            ["Add-BenchmarkCase"] = Call("Case", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [hashtable] $Values)", "[object[]] @($Name, $Values)"),
+            ["Add-BenchmarkCaseSource"] = "param([Parameter(Position=0, ValueFromRemainingArguments=$true)] [object[]] $InputObject) if ($InputObject.Count -eq 1 -and $InputObject[0] -is [scriptblock]) { __PowerForgeBenchmarkDslInvoke -Name 'From' -Arguments ([object[]] @($InputObject[0])) } else { $arguments = [object[]]::new(1); $arguments[0] = $InputObject; __PowerForgeBenchmarkDslInvoke -Name 'FromValues' -Arguments $arguments }",
+            ["Add-BenchmarkAxis"] = "param([Parameter(Position=0)] [string] $Name, [Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) $arguments = [object[]]::new(2); $arguments[0] = $Name; $arguments[1] = $Values; __PowerForgeBenchmarkDslInvoke -Name 'Axis' -Arguments $arguments",
+            ["Set-BenchmarkSetup"] = Call("Setup", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
+            ["Set-BenchmarkDataFactory"] = Call("Data", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
+            ["Set-BenchmarkPolicy"] = "param([int] $Warmup, [Alias('Iterations')] [int] $Iteration, [string] $RunMode, [object] $Order, [int] $CooldownMilliseconds, [object] $OutlierMode) $w=$null; $i=$null; $c=$null; if ($PSBoundParameters.ContainsKey('Warmup')) { $w=$Warmup }; if ($PSBoundParameters.ContainsKey('Iteration')) { $i=$Iteration }; if ($PSBoundParameters.ContainsKey('CooldownMilliseconds')) { $c=$CooldownMilliseconds }; $arguments = [object[]]::new(6); $arguments[0] = $w; $arguments[1] = $i; $arguments[2] = $RunMode; $arguments[3] = [string] $Order; $arguments[4] = $c; $arguments[5] = [string] $OutlierMode; __PowerForgeBenchmarkDslInvoke -Name 'Policy' -Arguments $arguments",
+            ["Set-BenchmarkProfile"] = Call("Profile", "param([Parameter(Position=0)] [string] $Name, [string] $Cleanup)", "[object[]] @($Name, $Cleanup)"),
+            ["Set-BenchmarkCleanup"] = Call("Cleanup", "param([Parameter(Position=0)] [string] $Name)", "[object[]] @($Name)"),
+            ["Add-BenchmarkEngine"] = Call("Engine", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
+            ["Add-BenchmarkOperation"] = Call("Operation", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
+            ["Add-BenchmarkSkipRule"] = Call("Skip", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
+            ["Add-BenchmarkValidation"] = Call("Validate", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
+            ["Add-BenchmarkMetric"] = Call("Metric", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
+            ["Add-BenchmarkComparison"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric) $arguments = [object[]]::new(3); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
+            ["Add-BenchmarkReadmeBlock"] = Call("Readme", "param([Parameter(Position=0)] [string] $Path, [string] $Block, [string] $Renderer)", "[object[]] @($Path, $Block, $Renderer)"),
+            ["Set-BenchmarkArtifacts"] = "param([Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) $arguments = [object[]]::new(1); $arguments[0] = $Values; __PowerForgeBenchmarkDslInvoke -Name 'Artifacts' -Arguments $arguments",
+            ["Assert-BenchmarkPath"] = AssertPathBody,
+            ["Assert-BenchmarkValue"] = AssertValueBody
         };
     }
 
@@ -404,20 +516,6 @@ public static class PowerShellBenchmarkDslRuntime
         foreach (var entry in CreateFunctionBodies())
             functions[entry.Key] = ScriptBlock.Create(entry.Value);
         return functions;
-    }
-
-    private static string CreateFunctionBootstrap(string source)
-    {
-        var builder = new StringBuilder();
-        foreach (var entry in CreateFunctionBodies())
-        {
-            builder.Append("function ").Append(entry.Key).AppendLine(" {");
-            builder.AppendLine(entry.Value);
-            builder.AppendLine("}");
-        }
-
-        builder.AppendLine(source);
-        return builder.ToString();
     }
 
     private static PowerShellBenchmarkCase ConvertToCase(PSObject value)
@@ -455,7 +553,8 @@ public static class PowerShellBenchmarkDslRuntime
     {
         foreach (var value in values ?? Array.Empty<object?>())
         {
-            if (value is string || value is null)
+            var baseObject = value is PSObject psObject ? psObject.BaseObject : value;
+            if (value is string || value is null || baseObject is IDictionary)
             {
                 yield return value;
                 continue;
@@ -479,26 +578,43 @@ public static class PowerShellBenchmarkDslRuntime
     private static void InvokeDslBlock(ScriptBlock scriptBlock)
         => InvokeWithScriptRoot(scriptBlock, CreateFunctions());
 
-    private static IEnumerable<PSObject> InvokeRootBlock(ScriptBlock scriptBlock, Hashtable functionsToDefine)
-        => InvokeWithNativeExitCheck(PrepareRootScriptBlock(scriptBlock), functionsToDefine);
+    private static IEnumerable<PSObject> InvokeRootBlock(ScriptBlock scriptBlock)
+        => InvokeWithNativeExitCheck(PrepareRootScriptBlock(scriptBlock), CreateFunctions());
 
     private static IEnumerable<PSObject> InvokeWithScriptRoot(ScriptBlock scriptBlock, Hashtable? functionsToDefine)
         => InvokeWithNativeExitCheck(scriptBlock, functionsToDefine);
 
     private static Collection<PSObject> InvokeWithNativeExitCheck(ScriptBlock scriptBlock, Hashtable? functionsToDefine)
-        => NativeExitAwareInvokeWrapper.InvokeWithContext(functionsToDefine, CreateInvocationVariables(), new object[] { scriptBlock });
+        => NativeExitAwareInvokeWrapper.InvokeWithContext(functionsToDefine, CreateInvocationVariables(), new object[] { scriptBlock, Array.Empty<object>(), true, typeof(PowerShellNativeExitCodeTracker) });
 
     private static readonly ScriptBlock NativeExitAwareInvokeWrapper =
         ScriptBlock.Create(EmbeddedScripts.Load("Scripts/Benchmarks/Invoke-NativeExitAwareBlock.ps1"));
 
-    private static ScriptBlock CaptureScriptBlock(ScriptBlock scriptBlock)
-        => scriptBlock;
+    /// <summary>
+    /// Captures a benchmark lifecycle block with local variables, helper functions, and script-root handling.
+    /// </summary>
+    /// <param name="scriptBlock">Benchmark block to close over.</param>
+    /// <returns>A closed script block that can be executed later by the runner.</returns>
+    public static ScriptBlock CloseScriptBlock(ScriptBlock scriptBlock)
+    {
+        if (scriptBlock is null) throw new ArgumentNullException(nameof(scriptBlock));
+        var scriptRootLiteral = ToPowerShellLiteral(Current.Value?.ScriptRoot ?? string.Empty);
+        var closer = ScriptBlock.Create(EmbeddedScripts
+            .Load("Scripts/Benchmarks/Close-BenchmarkBlock.Template.ps1")
+            .Replace("__POWERFORGE_SCRIPT_ROOT__", scriptRootLiteral));
+        var output = NativeExitAwareInvokeWrapper.InvokeWithContext(
+            functionsToDefine: null,
+            variablesToDefine: CreateInvocationVariables(),
+            new object[] { closer, new object[] { scriptBlock }, true, typeof(PowerShellNativeExitCodeTracker) });
+        return output.FirstOrDefault()?.BaseObject as ScriptBlock
+               ?? throw new InvalidOperationException("Benchmark block capture did not return a script block.");
+    }
 
     private static ScriptBlock PrepareRootScriptBlock(ScriptBlock scriptBlock)
     {
         var source = CaptureScriptText(scriptBlock);
         if (scriptBlock.Module is not null)
-            return scriptBlock.Module.NewBoundScriptBlock(ScriptBlock.Create(CreateFunctionBootstrap(source)));
+            return scriptBlock.Module.NewBoundScriptBlock(ScriptBlock.Create(source));
 
         if (string.Equals(source, scriptBlock.ToString(), StringComparison.Ordinal))
             return scriptBlock;
@@ -557,8 +673,26 @@ public static class PowerShellBenchmarkDslRuntime
         var variables = new List<PSVariable>
         {
             new("ErrorActionPreference", ActionPreference.Stop),
-            new("PSNativeCommandUseErrorActionPreference", true)
+            new("PSNativeCommandUseErrorActionPreference", true),
+            new("BenchmarkSpecEvaluation", true),
+            new("BenchmarkVariables", RequireContext().BenchmarkVariables),
+            new("BenchmarkVariable", RequireContext().BenchmarkVariables),
+            new("BenchmarkCallerFunctions", RequireContext().CallerFunctions),
+            new("PowerForgeBenchmarkDslRuntimeType", typeof(PowerShellBenchmarkDslRuntime))
         };
+        return variables;
+    }
+
+    private static Hashtable CopyBenchmarkVariables(IReadOnlyDictionary<string, string?>? source)
+    {
+        var variables = new Hashtable(StringComparer.OrdinalIgnoreCase);
+        if (source is null) return variables;
+        foreach (var entry in source)
+        {
+            if (!string.IsNullOrWhiteSpace(entry.Key))
+                variables[entry.Key] = entry.Value;
+        }
+
         return variables;
     }
 
@@ -594,6 +728,67 @@ public static class PowerShellBenchmarkDslRuntime
             .Invoke();
     }
 
+    private static FunctionSnapshot? SetLegacyCompareFunction()
+    {
+        using var commandProbe = PowerShell.Create(RunspaceMode.CurrentRunspace);
+        var comparisonCommand = commandProbe.AddCommand("Get-Command")
+            .AddArgument("Add-BenchmarkComparison")
+            .AddParameter("CommandType", CommandTypes.Cmdlet)
+            .AddParameter("ErrorAction", "SilentlyContinue")
+            .Invoke<CommandInfo>()
+            .FirstOrDefault();
+        if (comparisonCommand is null) return null;
+
+        ScriptBlock? previous = null;
+        var wasMissing = true;
+        using (var getter = PowerShell.Create(RunspaceMode.CurrentRunspace))
+        {
+            previous = getter.AddCommand("Get-Item")
+                .AddArgument("Function:compare")
+                .AddParameter("ErrorAction", "SilentlyContinue")
+                .Invoke<FunctionInfo>()
+                .FirstOrDefault()
+                ?.ScriptBlock;
+            wasMissing = previous is null;
+        }
+
+        using var setter = PowerShell.Create(RunspaceMode.CurrentRunspace);
+        setter.AddCommand("Set-Item")
+            .AddArgument("Function:compare")
+            .AddParameter("Value", ScriptBlock.Create("""
+param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric)
+$parameters = @{ Dimension = $Dimension; Baseline = $Baseline }
+if ($PSBoundParameters.ContainsKey('Metric')) { $parameters['Metric'] = $Metric }
+Add-BenchmarkComparison @parameters
+"""))
+            .AddParameter("Force")
+            .AddParameter("ErrorAction", "Stop")
+            .Invoke();
+        return new FunctionSnapshot("compare", previous, wasMissing);
+    }
+
+    private static void RestoreFunction(FunctionSnapshot? snapshot)
+    {
+        if (snapshot is null) return;
+        using var setter = PowerShell.Create(RunspaceMode.CurrentRunspace);
+        if (snapshot.WasMissing)
+        {
+            setter.AddCommand("Remove-Item")
+                .AddArgument("Function:" + snapshot.Name)
+                .AddParameter("Force")
+                .AddParameter("ErrorAction", "SilentlyContinue")
+                .Invoke();
+            return;
+        }
+
+        setter.AddCommand("Set-Item")
+            .AddArgument("Function:" + snapshot.Name)
+            .AddParameter("Value", snapshot.ScriptBlock)
+            .AddParameter("Force")
+            .AddParameter("ErrorAction", "SilentlyContinue")
+            .Invoke();
+    }
+
     private static PowerShellBenchmarkSuite RequireSuite()
     {
         var context = RequireContext();
@@ -614,6 +809,8 @@ public static class PowerShellBenchmarkDslRuntime
         internal Stack<PowerShellBenchmarkSuite> SuiteStack { get; } = new();
         internal Stack<PowerShellBenchmarkEngine> EngineStack { get; } = new();
         internal string? ScriptRoot { get; set; }
+        internal Hashtable BenchmarkVariables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+        internal Dictionary<string, string> CallerFunctions { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
     private sealed class AliasSnapshot
@@ -628,5 +825,19 @@ public static class PowerShellBenchmarkDslRuntime
         internal string Name { get; }
         internal string Definition { get; }
         internal ScopedItemOptions Options { get; }
+    }
+
+    private sealed class FunctionSnapshot
+    {
+        internal FunctionSnapshot(string name, ScriptBlock? scriptBlock, bool wasMissing)
+        {
+            Name = name;
+            ScriptBlock = scriptBlock;
+            WasMissing = wasMissing;
+        }
+
+        internal string Name { get; }
+        internal ScriptBlock? ScriptBlock { get; }
+        internal bool WasMissing { get; }
     }
 }

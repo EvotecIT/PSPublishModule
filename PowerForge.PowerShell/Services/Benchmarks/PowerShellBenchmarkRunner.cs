@@ -1,11 +1,9 @@
-using System.Collections;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
 using System.Runtime.InteropServices;
-using System.Text;
 
 namespace PowerForge;
 
@@ -31,7 +29,7 @@ public sealed class PowerShellBenchmarkRunner
 
         try
         {
-            return PlanInCurrentRunspace(suite);
+            return PlanInCurrentRunspace(suite, allowExternalHosts: true);
         }
         finally
         {
@@ -40,7 +38,7 @@ public sealed class PowerShellBenchmarkRunner
         }
     }
 
-    private PowerShellBenchmarkWorkItem[] PlanInCurrentRunspace(PowerShellBenchmarkSuite suite)
+    private PowerShellBenchmarkWorkItem[] PlanInCurrentRunspace(PowerShellBenchmarkSuite suite, bool allowExternalHosts)
     {
         if (suite is null) throw new ArgumentNullException(nameof(suite));
         ValidateUniqueEngineNames(suite);
@@ -57,8 +55,9 @@ public sealed class PowerShellBenchmarkRunner
         ValidateUniqueExpandedCaseLanes(suite, expanded);
         var engineAxis = GetAxisValues(suite.Axes, "Engine") ?? suite.Engines.Select(e => (object?)e.Name).ToArray();
         var explicitOperationAxis = GetAxisValues(suite.Axes, "Operation");
-        var currentHostLabel = GetCurrentHostLabel();
+        var currentHostLabel = PowerShellBenchmarkHostRuntime.GetCurrentHostLabel();
         var hostAxis = GetAxisValues(suite.Axes, "Host") ?? new object?[] { currentHostLabel };
+        var planningProfile = (suite.PlanningProfile ?? suite.Profile).ToString();
         if (expanded.Count == 0) throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define any runnable cases.");
         if (engineAxis.Length == 0) throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define any engine values.");
         if (hostAxis.Length == 0) throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define any host values.");
@@ -80,9 +79,12 @@ public sealed class PowerShellBenchmarkRunner
             {
                 var operationName = Convert.ToString(operationValue, CultureInfo.InvariantCulture) ?? string.Empty;
                 var requestedHostName = Convert.ToString(hostValue, CultureInfo.InvariantCulture) ?? "Current";
-                if (!IsCurrentHost(requestedHostName, currentHostLabel))
+                if (!PowerShellBenchmarkHostRuntime.IsCurrentHost(requestedHostName, currentHostLabel) && !allowExternalHosts)
                     throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested host '{requestedHostName}', but this runner only supports the current PowerShell host. Use 'Current' or run the suite from the target host.");
-                var hostName = NormalizeCurrentHost(requestedHostName, currentHostLabel);
+                var hostName = PowerShellBenchmarkHostRuntime.IsCurrentHost(requestedHostName, currentHostLabel)
+                    ? PowerShellBenchmarkHostRuntime.NormalizeCurrentHost(requestedHostName, currentHostLabel)
+                    : requestedHostName;
+                values["Profile"] = planningProfile;
                 values["Engine"] = engineName;
                 values["Operation"] = operationName;
                 values["Host"] = hostName;
@@ -141,11 +143,11 @@ public sealed class PowerShellBenchmarkRunner
         if (suite is null) throw new ArgumentNullException(nameof(suite));
         ValidateCurrentRunspaceProfile(suite);
         ValidateComparisons(suite);
-        ValidateReadmeBlocks(suite);
+        PowerShellBenchmarkArtifactWriter.ValidateReadmeBlocks(suite);
         var runId = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
         var started = DateTimeOffset.UtcNow;
         var samples = new List<BenchmarkSample>();
-        var workItems = Plan(suite);
+        var workItems = PlanInCurrentRunspace(suite, allowExternalHosts: false);
         ValidateComparisonWorkItems(suite, workItems);
         var runnable = new List<PowerShellBenchmarkWorkItem>();
         foreach (var item in workItems)
@@ -176,12 +178,15 @@ public sealed class PowerShellBenchmarkRunner
 
         for (var iteration = 0; iteration < Math.Max(1, suite.IterationCount); iteration++)
         {
-            foreach (var item in Rotate(runnable, iteration))
+            foreach (var item in OrderWorkItems(runnable, iteration, suite.RunOrder))
+            {
                 samples.Add(InvokeMeasuredIteration(suite, item, ToPsObject(item.Values), iteration, runId, recordSample: true));
+                ApplyCooldown(suite);
+            }
         }
 
         var summarizer = new BenchmarkSummaryService();
-        var summary = summarizer.Summarize(samples);
+        var summary = summarizer.Summarize(samples, suite.OutlierMode);
         var result = new BenchmarkRunResult
         {
             RunId = runId,
@@ -191,7 +196,7 @@ public sealed class PowerShellBenchmarkRunner
             Samples = samples.ToArray(),
             Summary = summary,
             Comparison = Array.Empty<BenchmarkComparisonRow>(),
-            Metadata = BuildMetadata(suite)
+            Metadata = PowerShellBenchmarkEnvironmentMetadata.Build(suite)
         };
 
         try
@@ -203,12 +208,12 @@ public sealed class PowerShellBenchmarkRunner
         }
         catch
         {
-            WriteArtifacts(suite, result);
+            PowerShellBenchmarkArtifactWriter.WriteArtifacts(suite, result);
             throw;
         }
 
-        WriteArtifacts(suite, result);
-        UpdateReadmeBlocks(suite, result);
+        PowerShellBenchmarkArtifactWriter.WriteArtifacts(suite, result);
+        PowerShellBenchmarkArtifactWriter.UpdateReadmeBlocks(suite, result);
         return result;
     }
 
@@ -237,30 +242,43 @@ public sealed class PowerShellBenchmarkRunner
             ["OutputPath"] = Path.Combine(outputDirectory, "output")
         });
         var durationMs = 0d;
+        var stage = "Setup";
+        Stopwatch? operationStopwatch = null;
 
         try
         {
             Directory.CreateDirectory(outputDirectory);
             InvokeOptional(suite.Setup, caseObject, runObject);
+            stage = "Data";
             var data = CaptureData(InvokeOptional(suite.Data, caseObject, runObject));
             SetProperty(runObject, "Data", data);
 
-            var stopwatch = Stopwatch.StartNew();
+            stage = iteration < 0 ? "Warmup operation" : "Operation";
+            operationStopwatch = Stopwatch.StartNew();
             InvokeStrict(item.Handler, caseObject, runObject);
-            stopwatch.Stop();
-            durationMs = stopwatch.Elapsed.TotalMilliseconds;
+            operationStopwatch.Stop();
+            durationMs = operationStopwatch.Elapsed.TotalMilliseconds;
             SetProperty(runObject, "DurationMs", durationMs);
 
             if (!recordSample)
                 return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Succeeded, durationMs, string.Empty, null);
 
+            stage = "Validation";
             InvokeOptional(suite.Validate, caseObject, runObject);
+            stage = "Metrics";
             var metrics = CaptureMetrics(suite, caseObject, runObject);
             return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Succeeded, durationMs, string.Empty, metrics);
         }
         catch (Exception ex) when (!IsPowerShellStopRequest(ex))
         {
-            return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Failed, durationMs, ex.InnerException?.Message ?? ex.Message, null);
+            if (operationStopwatch is { IsRunning: true })
+            {
+                operationStopwatch.Stop();
+                durationMs = operationStopwatch.Elapsed.TotalMilliseconds;
+                SetProperty(runObject, "DurationMs", durationMs);
+            }
+
+            return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Failed, durationMs, FormatFailureReason(stage, ex), null);
         }
     }
 
@@ -308,12 +326,46 @@ public sealed class PowerShellBenchmarkRunner
         return false;
     }
 
+    private static string FormatFailureReason(string stage, Exception exception)
+    {
+        var message = exception.InnerException?.Message ?? exception.Message;
+        var detail = new List<string> { string.Concat(stage, " failed: ", message) };
+        var errorRecord = GetErrorRecord(exception);
+        var invocation = errorRecord?.InvocationInfo;
+        if (invocation is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(invocation.ScriptName))
+                detail.Add($"Location: {invocation.ScriptName}:{invocation.ScriptLineNumber}:{invocation.OffsetInLine}");
+            if (!string.IsNullOrWhiteSpace(invocation.Line))
+                detail.Add($"Line: {invocation.Line.Trim()}");
+            if (!string.IsNullOrWhiteSpace(invocation.PositionMessage))
+                detail.Add(invocation.PositionMessage.Trim());
+        }
+
+        return string.Join(Environment.NewLine, detail.Distinct(StringComparer.Ordinal));
+    }
+
+    private static ErrorRecord? GetErrorRecord(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is RuntimeException runtimeException && runtimeException.ErrorRecord is not null)
+                return runtimeException.ErrorRecord;
+            if (current is ActionPreferenceStopException actionPreferenceStopException && actionPreferenceStopException.ErrorRecord is not null)
+                return actionPreferenceStopException.ErrorRecord;
+        }
+
+        return null;
+    }
+
     private static void ValidateSupportedAxes(PowerShellBenchmarkSuite suite)
     {
         if (GetAxisValues(suite.Axes, "OS") is not null)
             throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested an OS axis, but this runner only supports the current operating system. Run the suite on each target OS and compare imported results instead.");
         if (GetAxisValues(suite.Axes, "RunMode") is not null)
             throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested a RunMode axis, but RunMode is suite metadata. Set suite RunMode once, or use a different matrix variable name.");
+        if (GetAxisValues(suite.Axes, "Profile") is not null)
+            throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested a Profile axis, but Profile is suite metadata. Set suite Profile once, or use a different matrix variable name.");
         foreach (var axis in suite.Axes)
         {
             if (ReservedMatrixAxisNames.Contains(axis.Name))
@@ -460,22 +512,8 @@ public sealed class PowerShellBenchmarkRunner
                 var normalized = string.IsNullOrWhiteSpace(metric) ? "MedianMs" : metric.Trim();
                 if (IsPrimaryComparisonMetric(normalized) || customMetrics.Contains(normalized))
                     continue;
-                throw new NotSupportedException($"Benchmark comparison metric '{metric}' is not supported by suite '{suite.Name}'. Use MedianMs, MeanMs, MinMs, MaxMs, or a declared custom metric.");
+                throw new NotSupportedException($"Benchmark comparison metric '{metric}' is not supported by suite '{suite.Name}'. Use MedianMs, MeanMs, MinMs, MaxMs, P95Ms/P95, P99Ms/P99, StdDevMs/StdDev, StdErrMs/StdErr, or a declared custom metric.");
             }
-        }
-    }
-
-    private static void ValidateReadmeBlocks(PowerShellBenchmarkSuite suite)
-    {
-        var updater = new BenchmarkDocumentUpdater();
-        foreach (var block in suite.ReadmeBlocks)
-        {
-            if (IsSupportedReadmeRenderer(block.Renderer))
-            {
-                updater.ValidateBlock(block.Path, block.BlockId);
-                continue;
-            }
-            throw new NotSupportedException($"Benchmark README renderer '{block.Renderer}' is not supported.");
         }
     }
 
@@ -494,7 +532,15 @@ public sealed class PowerShellBenchmarkRunner
         => string.Equals(metric, "MedianMs", StringComparison.OrdinalIgnoreCase)
            || string.Equals(metric, "MeanMs", StringComparison.OrdinalIgnoreCase)
            || string.Equals(metric, "MinMs", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(metric, "MaxMs", StringComparison.OrdinalIgnoreCase);
+           || string.Equals(metric, "MaxMs", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(metric, "P95Ms", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(metric, "P95", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(metric, "P99Ms", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(metric, "P99", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(metric, "StdDevMs", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(metric, "StdDev", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(metric, "StdErrMs", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(metric, "StdErr", StringComparison.OrdinalIgnoreCase);
 
     private static void ValidateComparisonWorkItems(PowerShellBenchmarkSuite suite, IReadOnlyList<PowerShellBenchmarkWorkItem> workItems)
     {
@@ -519,6 +565,14 @@ public sealed class PowerShellBenchmarkRunner
     private static string ComparisonGroupKey(string suite, PowerShellBenchmarkWorkItem item)
         => string.Join("\u001f", suite, item.Scenario, item.Operation, item.Host, GetOperatingSystemLabel(), FormatVariables(ToVariables(item.Values)));
 
+    private static IEnumerable<PowerShellBenchmarkWorkItem> OrderWorkItems(IReadOnlyList<PowerShellBenchmarkWorkItem> items, int iteration, PowerShellBenchmarkRunOrder order)
+        => order switch
+        {
+            PowerShellBenchmarkRunOrder.Sequential => items,
+            PowerShellBenchmarkRunOrder.Randomized => Randomize(items, iteration),
+            _ => Rotate(items, iteration)
+        };
+
     private static IEnumerable<PowerShellBenchmarkWorkItem> Rotate(IReadOnlyList<PowerShellBenchmarkWorkItem> items, int iteration)
     {
         if (items.Count == 0)
@@ -526,6 +580,25 @@ public sealed class PowerShellBenchmarkRunner
         var offset = iteration % items.Count;
         for (var i = 0; i < items.Count; i++)
             yield return items[(offset + i) % items.Count];
+    }
+
+    private static IEnumerable<PowerShellBenchmarkWorkItem> Randomize(IReadOnlyList<PowerShellBenchmarkWorkItem> items, int iteration)
+    {
+        var ordered = items.ToArray();
+        var random = new Random(unchecked((iteration + 1) * 397) ^ ordered.Length);
+        for (var i = ordered.Length - 1; i > 0; i--)
+        {
+            var j = random.Next(i + 1);
+            (ordered[i], ordered[j]) = (ordered[j], ordered[i]);
+        }
+
+        return ordered;
+    }
+
+    private static void ApplyCooldown(PowerShellBenchmarkSuite suite)
+    {
+        if (suite.CooldownMilliseconds > 0)
+            System.Threading.Thread.Sleep(suite.CooldownMilliseconds);
     }
 
     private static Collection<PSObject> InvokeOptional(ScriptBlock? block, PSObject caseObject, PSObject runObject)
@@ -567,93 +640,6 @@ public sealed class PowerShellBenchmarkRunner
 
     private static bool IsFinite(double value)
         => !double.IsNaN(value) && !double.IsInfinity(value);
-
-    private static Dictionary<string, string> BuildMetadata(PowerShellBenchmarkSuite suite)
-        => new(StringComparer.OrdinalIgnoreCase)
-        {
-            ["suite"] = suite.Name,
-            ["pwsh"] = PSVersionInfo(),
-            ["machine"] = Environment.MachineName,
-            ["os"] = Environment.OSVersion.ToString(),
-            ["profile"] = suite.Profile.ToString(),
-            ["cleanup"] = suite.Cleanup.ToString()
-        };
-
-    private static string PSVersionInfo()
-        => Convert.ToString(PSObject.AsPSObject(typeof(PSObject).Assembly.GetName().Version).BaseObject, CultureInfo.InvariantCulture) ?? string.Empty;
-
-    private static object? PSVersionInfoValue(string name)
-    {
-        using var ps = PowerShell.Create();
-        return ps.AddScript($"$PSVersionTable.{name}").Invoke().FirstOrDefault()?.BaseObject;
-    }
-
-    private static void WriteArtifacts(PowerShellBenchmarkSuite suite, BenchmarkRunResult result)
-    {
-        var outputRoot = Path.Combine(suite.OutputRoot, result.RunId);
-        Directory.CreateDirectory(outputRoot);
-        if (suite.Artifacts.HasFlag(BenchmarkArtifactKind.Json))
-        {
-            var samplesPath = Path.Combine(outputRoot, "samples.json");
-            var summaryPath = Path.Combine(outputRoot, "summary.json");
-            var comparisonPath = Path.Combine(outputRoot, "comparison.json");
-            var metadataPath = Path.Combine(outputRoot, "metadata.json");
-            var runReportPath = Path.Combine(outputRoot, "run-report.json");
-            result.Artifacts["samples.json"] = samplesPath;
-            result.Artifacts["summary.json"] = summaryPath;
-            result.Artifacts["comparison.json"] = comparisonPath;
-            result.Artifacts["metadata.json"] = metadataPath;
-            result.Artifacts["run-report.json"] = runReportPath;
-            BenchmarkJson.Write(samplesPath, result.Samples);
-            BenchmarkJson.Write(summaryPath, result.Summary);
-            BenchmarkJson.Write(comparisonPath, result.Comparison);
-            BenchmarkJson.Write(metadataPath, result.Metadata);
-        }
-
-        if (suite.Artifacts.HasFlag(BenchmarkArtifactKind.Csv))
-        {
-            var samplesCsv = Path.Combine(outputRoot, "samples.csv");
-            var summaryCsv = Path.Combine(outputRoot, "summary.csv");
-            File.WriteAllText(samplesCsv, WriteSamplesCsv(result.Samples), new UTF8Encoding(false));
-            File.WriteAllText(summaryCsv, WriteSummaryCsv(result.Summary), new UTF8Encoding(false));
-            result.Artifacts["samples.csv"] = samplesCsv;
-            result.Artifacts["summary.csv"] = summaryCsv;
-        }
-
-        if (suite.Artifacts.HasFlag(BenchmarkArtifactKind.Markdown))
-        {
-            var renderer = new BenchmarkMarkdownRenderer();
-            var summaryMd = Path.Combine(outputRoot, "summary.md");
-            var comparisonMd = Path.Combine(outputRoot, "comparison.md");
-            File.WriteAllText(summaryMd, renderer.RenderSummaryTable(result.Summary), new UTF8Encoding(false));
-            File.WriteAllText(comparisonMd, renderer.RenderComparisonTable(result.Comparison), new UTF8Encoding(false));
-            result.Artifacts["summary.md"] = summaryMd;
-            result.Artifacts["comparison.md"] = comparisonMd;
-        }
-
-        if (suite.Artifacts.HasFlag(BenchmarkArtifactKind.Json) && result.Artifacts.TryGetValue("run-report.json", out var runReportFinalPath))
-            BenchmarkJson.Write(runReportFinalPath, result);
-    }
-
-    private static void UpdateReadmeBlocks(PowerShellBenchmarkSuite suite, BenchmarkRunResult result)
-    {
-        var updater = new BenchmarkDocumentUpdater();
-        var renderer = new BenchmarkMarkdownRenderer();
-        foreach (var block in suite.ReadmeBlocks)
-        {
-            var markdown = block.Renderer switch
-            {
-                var value when string.Equals(value, "SummaryTable", StringComparison.OrdinalIgnoreCase) => renderer.RenderSummaryTable(result.Summary),
-                var value when string.Equals(value, "ComparisonTable", StringComparison.OrdinalIgnoreCase) => renderer.RenderComparisonTable(result.Comparison),
-                _ => throw new NotSupportedException($"Benchmark README renderer '{block.Renderer}' is not supported.")
-            };
-            updater.UpdateBlock(block.Path, block.BlockId, markdown);
-        }
-    }
-
-    private static bool IsSupportedReadmeRenderer(string? renderer)
-        => string.Equals(renderer, "SummaryTable", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(renderer, "ComparisonTable", StringComparison.OrdinalIgnoreCase);
 
     private static List<Dictionary<string, object?>> ExpandCases(IEnumerable<PowerShellBenchmarkCase> cases, IEnumerable<PowerShellBenchmarkAxis> axes)
     {
@@ -702,28 +688,6 @@ public sealed class PowerShellBenchmarkRunner
         return "Scenario";
     }
 
-    private static bool IsCurrentHost(string host, string currentHostLabel)
-        => string.IsNullOrWhiteSpace(host)
-           || string.Equals(host, "Current", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(host, "CurrentHost", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(host, currentHostLabel, StringComparison.OrdinalIgnoreCase);
-
-    private static string NormalizeCurrentHost(string host, string currentHostLabel)
-        => string.IsNullOrWhiteSpace(host)
-           || string.Equals(host, "Current", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(host, "CurrentHost", StringComparison.OrdinalIgnoreCase)
-            ? currentHostLabel
-            : host;
-
-    private static string GetCurrentHostLabel()
-    {
-        var edition = Convert.ToString(PSVersionInfoValue("PSEdition"), CultureInfo.InvariantCulture);
-        var version = Convert.ToString(PSVersionInfoValue("PSVersion"), CultureInfo.InvariantCulture);
-        if (string.IsNullOrWhiteSpace(edition))
-            edition = "PowerShell";
-        return string.IsNullOrWhiteSpace(version) ? edition! : string.Concat(edition, "-", version);
-    }
-
     private static string MatrixPathSegment(IReadOnlyDictionary<string, object?> values)
         => PowerShellBenchmarkPathSegments.Matrix(values, IsBuiltInPathValue);
 
@@ -739,7 +703,8 @@ public sealed class PowerShellBenchmarkRunner
         => string.Equals(key, "Scenario", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "Engine", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "Operation", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(key, "Host", StringComparison.OrdinalIgnoreCase);
+           || string.Equals(key, "Host", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "Profile", StringComparison.OrdinalIgnoreCase);
 
     private static PSObject ToPsObject(IReadOnlyDictionary<string, object?> values)
     {
@@ -751,9 +716,6 @@ public sealed class PowerShellBenchmarkRunner
         return psObject;
     }
 
-    private static object? GetProperty(PSObject value, string name)
-        => value.Properties[name]?.Value;
-
     private static void SetProperty(PSObject value, string name, object? propertyValue)
     {
         var existing = value.Properties[name];
@@ -763,71 +725,6 @@ public sealed class PowerShellBenchmarkRunner
             existing.Value = propertyValue;
     }
 
-    private static string WriteSamplesCsv(IEnumerable<BenchmarkSample> samples)
-    {
-        var rows = samples.ToArray();
-        var variableHeaders = GetVariableHeaders(rows.Select(row => row.Variables));
-        var metricHeaders = GetMetricHeaders(rows.Select(row => row.Metrics));
-        var builder = new StringBuilder();
-        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS", "RunMode" }.Concat(variableHeaders).Concat(new[] { "Iteration", "Status", "DurationMs", "Reason" }).Concat(metricHeaders).Select(Cell)));
-        foreach (var sample in rows)
-        {
-            var cells = new List<string>
-            {
-                Cell(sample.Suite),
-                Cell(sample.Scenario),
-                Cell(sample.Operation),
-                Cell(sample.Engine),
-                Cell(sample.Host),
-                Cell(sample.Os),
-                Cell(sample.RunMode)
-            };
-            cells.AddRange(variableHeaders.Select(header => Cell(sample.Variables.TryGetValue(header, out var value) ? value : null)));
-            cells.Add(sample.Iteration.ToString(CultureInfo.InvariantCulture));
-            cells.Add(sample.Status.ToString());
-            cells.Add(Number(sample.DurationMs));
-            cells.Add(Cell(sample.Reason));
-            cells.AddRange(metricHeaders.Select(header => sample.Metrics.TryGetValue(header, out var value) ? Number(value) : string.Empty));
-            builder.AppendLine(string.Join(",", cells));
-        }
-
-        return builder.ToString();
-    }
-
-    private static string WriteSummaryCsv(IEnumerable<BenchmarkSummaryRow> rows)
-    {
-        var summaryRows = rows.ToArray();
-        var variableHeaders = GetVariableHeaders(summaryRows.Select(row => row.Variables));
-        var metricHeaders = GetMetricHeaders(summaryRows.Select(row => row.Metrics));
-        var builder = new StringBuilder();
-        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS", "RunMode" }.Concat(variableHeaders).Concat(new[] { "SampleCount", "FailureCount", "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs" }).Concat(metricHeaders).Select(Cell)));
-        foreach (var row in summaryRows)
-        {
-            var cells = new List<string>
-            {
-                Cell(row.Suite),
-                Cell(row.Scenario),
-                Cell(row.Operation),
-                Cell(row.Engine),
-                Cell(row.Host),
-                Cell(row.Os),
-                Cell(row.RunMode)
-            };
-            cells.AddRange(variableHeaders.Select(header => Cell(row.Variables.TryGetValue(header, out var value) ? value : null)));
-            cells.Add(row.SampleCount.ToString(CultureInfo.InvariantCulture));
-            cells.Add(row.FailureCount.ToString(CultureInfo.InvariantCulture));
-            cells.Add(Cell(row.Status));
-            cells.Add(Number(row.MedianMs));
-            cells.Add(Number(row.MeanMs));
-            cells.Add(Number(row.MinMs));
-            cells.Add(Number(row.MaxMs));
-            cells.AddRange(metricHeaders.Select(header => row.Metrics.TryGetValue(header, out var value) ? Number(value) : string.Empty));
-            builder.AppendLine(string.Join(",", cells));
-        }
-
-        return builder.ToString();
-    }
-
     private static Collection<PSObject> InvokeStrict(ScriptBlock block, params object[] args)
     {
         var variables = new List<PSVariable>
@@ -835,7 +732,7 @@ public sealed class PowerShellBenchmarkRunner
             new("ErrorActionPreference", ActionPreference.Stop),
             new("PSNativeCommandUseErrorActionPreference", true)
         };
-        return NativeExitAwareInvokeWrapper.InvokeWithContext(functionsToDefine: null, variablesToDefine: variables, new object[] { PrepareNativeExitGuardedBlock(block), args });
+        return NativeExitAwareInvokeWrapper.InvokeWithContext(functionsToDefine: null, variablesToDefine: variables, new object[] { PrepareNativeExitGuardedBlock(block), args, false, typeof(PowerShellNativeExitCodeTracker) });
     }
 
     private static ScriptBlock PrepareNativeExitGuardedBlock(ScriptBlock block)
@@ -845,21 +742,6 @@ public sealed class PowerShellBenchmarkRunner
 
     private static readonly ScriptBlock NativeExitAwareInvokeWrapper =
         ScriptBlock.Create(EmbeddedScripts.Load("Scripts/Benchmarks/Invoke-NativeExitAwareBlock.ps1"));
-
-    private static string[] GetVariableHeaders(IEnumerable<Dictionary<string, string?>> variables)
-        => variables
-            .SelectMany(row => row.Keys)
-            .Where(key => !IsBenchmarkColumn(key))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-    private static string[] GetMetricHeaders(IEnumerable<Dictionary<string, double>> metrics)
-        => metrics
-            .SelectMany(row => row.Keys)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
 
     private static string FormatVariables(IReadOnlyDictionary<string, string?> variables)
         => string.Join(
@@ -879,11 +761,27 @@ public sealed class PowerShellBenchmarkRunner
            || string.Equals(key, "Suite", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "RunId", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "OS", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "Profile", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "RunMode", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "Iteration", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "Status", StringComparison.OrdinalIgnoreCase)
            || string.Equals(key, "DurationMs", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(key, "Reason", StringComparison.OrdinalIgnoreCase);
+           || string.Equals(key, "Reason", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "SampleCount", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "FailureCount", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "OutlierCount", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "FailureReasons", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "MedianMs", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "MeanMs", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "MinMs", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "MaxMs", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "P95Ms", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "P99Ms", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "StdDevMs", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(key, "StdErrMs", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsBenchmarkColumnName(string key)
+        => IsBenchmarkColumn(key);
 
     private static readonly HashSet<string> ReservedMatrixAxisNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -903,7 +801,13 @@ public sealed class PowerShellBenchmarkRunner
         "MedianMs",
         "MeanMs",
         "MinMs",
-        "MaxMs"
+        "MaxMs",
+        "P95Ms",
+        "P99Ms",
+        "StdDevMs",
+        "StdErrMs",
+        "OutlierCount",
+        "FailureReasons"
     };
 
     private static readonly HashSet<string> ReservedCaseVariableNames = CreateReservedCaseVariableNames();
@@ -916,20 +820,11 @@ public sealed class PowerShellBenchmarkRunner
             "Engine",
             "Operation",
             "Host",
+            "Profile",
             "OS",
             "RunMode"
         };
         return names;
     }
 
-    private static string Number(double? value)
-        => value.HasValue ? value.Value.ToString("G17", CultureInfo.InvariantCulture) : string.Empty;
-
-    private static string Cell(string? value)
-    {
-        var text = value ?? string.Empty;
-        return text.Contains(",", StringComparison.Ordinal) || text.Contains("\"", StringComparison.Ordinal) || text.Contains("\n", StringComparison.Ordinal)
-            ? "\"" + text.Replace("\"", "\"\"") + "\""
-            : text;
-    }
 }

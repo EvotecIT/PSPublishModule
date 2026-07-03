@@ -16,6 +16,8 @@
     [switch] $SignIncludeBinaries,
     [switch] $SignIncludeInternals,
     [switch] $SignIncludeExe,
+    [switch] $NoInteractive,
+    [switch] $NoExitCode,
     [string] $DiagnosticsBaselinePath,
     [switch] $GenerateDiagnosticsBaseline,
     [switch] $UpdateDiagnosticsBaseline,
@@ -30,12 +32,24 @@ $artefactsRoot = Join-Path $moduleRoot 'Artefacts'
 $csproj = Join-Path -Path $repoRoot -ChildPath 'PSPublishModule/PSPublishModule.csproj'
 $sourceManifest = Join-Path -Path $moduleRoot -ChildPath 'PSPublishModule.psd1'
 $sourceLibRoot = Join-Path -Path $moduleRoot -ChildPath 'Lib'
-$tfm = if ($Framework -ne 'auto') {
-    $Framework
-} else {
-    $runtimesText = (dotnet --list-runtimes 2>$null) -join "`n"
-    if ($runtimesText -match '(?m)^Microsoft\.NETCore\.App\s+10\.') { 'net10.0' } else { 'net8.0' }
+
+function Resolve-ImportFramework {
+    param([string] $RequestedFramework)
+
+    if ($RequestedFramework -ne 'auto') {
+        return $RequestedFramework
+    }
+
+    # Choose the binary that this PowerShell host can load, not merely the
+    # newest .NET runtime installed for dotnet.exe.
+    if ($PSVersionTable.PSEdition -eq 'Core' -and [Environment]::Version.Major -ge 10) {
+        return 'net10.0'
+    }
+
+    'net8.0'
 }
+
+$tfm = Resolve-ImportFramework -RequestedFramework $Framework
 $binaryModule = Join-Path -Path $repoRoot -ChildPath ("PSPublishModule/bin/{0}/{1}/PSPublishModule.dll" -f $Configuration, $tfm)
 
 function Invoke-LocalPSPublishModuleBuild {
@@ -91,12 +105,13 @@ if (-not $invokeModuleBuildCommand -or $invokeModuleBuildCommand.Source -ne 'PSP
 
 $buildParams = @{
     ModuleName = 'PSPublishModule'
-    ExitCode   = $true
 }
+if (-not $NoExitCode.IsPresent) { $buildParams.ExitCode = $true }
 if ($JsonOnly) {
     $buildParams.JsonOnly = $true
     $buildParams.JsonPath = $JsonPath
 }
+if ($NoInteractive.IsPresent) { $buildParams.NoInteractive = $true }
 if ($PSBoundParameters.ContainsKey('DiagnosticsBaselinePath')) { $buildParams.DiagnosticsBaselinePath = $DiagnosticsBaselinePath }
 if ($PSBoundParameters.ContainsKey('GenerateDiagnosticsBaseline')) { $buildParams.GenerateDiagnosticsBaseline = $GenerateDiagnosticsBaseline.IsPresent }
 if ($PSBoundParameters.ContainsKey('UpdateDiagnosticsBaseline')) { $buildParams.UpdateDiagnosticsBaseline = $UpdateDiagnosticsBaseline.IsPresent }

@@ -10,7 +10,7 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
-    private static void DeleteDirectoryWithRetries(string? path, int maxAttempts = 10, int initialDelayMs = 250)
+    private static void DeleteDirectoryWithRetries(string? path, int maxAttempts = 15, int initialDelayMs = 250)
     {
         if (path is null) return;
         var trimmed = path.Trim().Trim('"');
@@ -58,7 +58,7 @@ public sealed partial class ModulePipelineRunner
             if (delayMs > 0)
                 System.Threading.Thread.Sleep(delayMs);
 
-            delayMs = delayMs <= 0 ? 0 : Math.Min(delayMs * 2, 3000);
+            delayMs = delayMs <= 0 ? 0 : Math.Min(delayMs * 2, 5000);
         }
     }
 

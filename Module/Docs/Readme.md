@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.39
+Help Version: 3.0.41
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -15,6 +15,45 @@ Adds App Store Connect beta testers to a TestFlight beta group.
 
 ### [Add-AppStoreConnectBuildToBetaGroup](Add-AppStoreConnectBuildToBetaGroup.md)
 Adds App Store Connect builds to a TestFlight beta group.
+
+### [Add-BenchmarkAxis](Add-BenchmarkAxis.md)
+Adds a benchmark matrix axis.
+
+### [Add-BenchmarkCase](Add-BenchmarkCase.md)
+Adds one benchmark case.
+
+### [Add-BenchmarkCases](Add-BenchmarkCases.md)
+Groups benchmark case declarations.
+
+### [Add-BenchmarkCaseSource](Add-BenchmarkCaseSource.md)
+Adds benchmark cases from a script block or evaluated objects.
+
+### [Add-BenchmarkComparison](Add-BenchmarkComparison.md)
+Adds a benchmark comparison definition.
+
+### [Add-BenchmarkEngine](Add-BenchmarkEngine.md)
+Adds a benchmark engine.
+
+### [Add-BenchmarkMetric](Add-BenchmarkMetric.md)
+Adds a custom benchmark metric.
+
+### [Add-BenchmarkOperation](Add-BenchmarkOperation.md)
+Adds an operation handler to the current benchmark engine.
+
+### [Add-BenchmarkReadmeBlock](Add-BenchmarkReadmeBlock.md)
+Adds a README or Markdown benchmark block target.
+
+### [Add-BenchmarkSkipRule](Add-BenchmarkSkipRule.md)
+Adds a benchmark skip rule.
+
+### [Add-BenchmarkValidation](Add-BenchmarkValidation.md)
+Adds a benchmark validation block.
+
+### [Assert-BenchmarkPath](Assert-BenchmarkPath.md)
+Asserts that a benchmark path exists or does not exist.
+
+### [Assert-BenchmarkValue](Assert-BenchmarkValue.md)
+Asserts a benchmark value condition.
 
 ### [Convert-ProjectConsistency](Convert-ProjectConsistency.md)
 Converts a project to a consistent encoding/line ending policy and reports the results.
@@ -99,6 +138,9 @@ Retrieves project version information from .csproj, .psd1, and build scripts.
 ### [Get-XcodeProjectVersion](Get-XcodeProjectVersion.md)
 Reads version information from an Xcode project.
 
+### [Import-BenchmarkResult](Import-BenchmarkResult.md)
+Imports BenchmarkDotNet or normalized benchmark artifacts into the common benchmark schema.
+
 ### [Import-ConfigurationProject](Import-ConfigurationProject.md)
 Imports a PowerShell-authored project release object from JSON.
 
@@ -128,6 +170,9 @@ Resolves the module and copies its documentation payload into a destination fold
 ### [Install-ModuleScript](Install-ModuleScript.md)
 Copies only PowerShell scripts from a module's Internals\Scripts folder to a destination path.
 The destination is flattened (no Module/Version subfolders).
+
+### [Invoke-BenchmarkSuite](Invoke-BenchmarkSuite.md)
+Runs a reusable PowerShell benchmark suite.
 
 ### [Invoke-DotNetPublish](Invoke-DotNetPublish.md)
 Executes DotNet publish engine from DSL settings or an existing JSON config.
@@ -173,6 +218,9 @@ Creates an App Store Connect TestFlight beta tester.
 
 ### [New-AppStoreConnectScreenshotSet](New-AppStoreConnectScreenshotSet.md)
 Creates an App Store Connect screenshot set for an App Store version localization.
+
+### [New-BenchmarkSuite](New-BenchmarkSuite.md)
+Declares a PowerShell benchmark suite.
 
 ### [New-ConfigurationAppleApp](New-ConfigurationAppleApp.md)
 Creates configuration for preparing an Apple app target in a release pipeline.
@@ -249,6 +297,12 @@ Creates a DotNet publish target entry for DotNet publish DSL.
 ### [New-ConfigurationExecute](New-ConfigurationExecute.md)
 Creates a module pipeline lifecycle action.
 
+### [New-ConfigurationExternalAsset](New-ConfigurationExternalAsset.md)
+Adds an external asset bundle that is prepared before module staging.
+
+### [New-ConfigurationExternalAssetFile](New-ConfigurationExternalAssetFile.md)
+Creates a file entry for an external asset bundle.
+
 ### [New-ConfigurationFileConsistency](New-ConfigurationFileConsistency.md)
 Creates configuration for file consistency checking (encoding and line endings) during module build.
 
@@ -269,6 +323,9 @@ Creates a configuration manifest for a PowerShell module.
 
 ### [New-ConfigurationModule](New-ConfigurationModule.md)
 Provides a way to configure required, external, embedded, or approved modules used in the project.
+
+### [New-ConfigurationModuleBuildProfile](New-ConfigurationModuleBuildProfile.md)
+Emits a reusable module build profile for common PowerForge module builds.
 
 ### [New-ConfigurationModuleSkip](New-ConfigurationModuleSkip.md)
 Provides a way to ignore certain commands or modules during build-time dependency validation.
@@ -381,6 +438,24 @@ Creates or finds an App Store version and selects a processed build for Distribu
 ### [Set-AppStoreConnectVersionLocalization](Set-AppStoreConnectVersionLocalization.md)
 Updates localized metadata fields on an App Store version localization.
 
+### [Set-BenchmarkArtifacts](Set-BenchmarkArtifacts.md)
+Sets requested benchmark artifacts.
+
+### [Set-BenchmarkCleanup](Set-BenchmarkCleanup.md)
+Sets the benchmark cleanup mode.
+
+### [Set-BenchmarkDataFactory](Set-BenchmarkDataFactory.md)
+Sets the suite data factory block.
+
+### [Set-BenchmarkPolicy](Set-BenchmarkPolicy.md)
+Sets benchmark run policy defaults.
+
+### [Set-BenchmarkProfile](Set-BenchmarkProfile.md)
+Sets the benchmark profile mode.
+
+### [Set-BenchmarkSetup](Set-BenchmarkSetup.md)
+Sets the suite setup block.
+
 ### [Set-ManagedModuleRepository](Set-ManagedModuleRepository.md)
 Creates or updates a saved managed module repository profile.
 
@@ -427,8 +502,14 @@ Checks whether an App Store Connect Distribution version is ready for submission
 ### [Test-AppStoreConnectScreenshotSyncConfig](Test-AppStoreConnectScreenshotSyncConfig.md)
 Validates an App Store Connect screenshot sync configuration against local files.
 
+### [Test-BenchmarkGate](Test-BenchmarkGate.md)
+Tests normalized benchmark summaries against a JSON baseline.
+
 ### [Test-IsolatedModuleProfile](Test-IsolatedModuleProfile.md)
 Validates a curated isolated module profile without importing it.
+
+### [Update-BenchmarkDocument](Update-BenchmarkDocument.md)
+Updates a marker-delimited benchmark block in a Markdown document.
 
 ### [Update-ManagedModule](Update-ManagedModule.md)
 Updates installed PowerShell modules through the managed C# module engine.

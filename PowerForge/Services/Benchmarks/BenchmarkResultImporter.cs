@@ -283,11 +283,17 @@ public sealed class BenchmarkResultImporter
                 Variables = ExtractVariables(map, metadataColumns, metricHeaders, isBenchmarkDotNetCsv),
                 SampleCount = ParseInt(Get(map, "SampleCount")) ?? 0,
                 FailureCount = failureCount,
+                OutlierCount = ParseInt(Get(map, "OutlierCount")) ?? 0,
                 Status = Get(map, "Status") ?? (failureCount > 0 ? "Failed" : "Succeeded"),
                 MedianMs = ParseDuration(GetWithHeader(map, out var medianHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median [s]", "Median"), medianHeader),
                 MeanMs = ParseDuration(GetWithHeader(map, out var meanHeader, "MeanMs", "Mean [ns]", "Mean [us]", "Mean [ms]", "Mean [s]", "Mean"), meanHeader),
                 MinMs = ParseDuration(GetWithHeader(map, out var minHeader, "MinMs", "Min [ns]", "Min [us]", "Min [ms]", "Min [s]", "Min"), minHeader),
                 MaxMs = ParseDuration(GetWithHeader(map, out var maxHeader, "MaxMs", "Max [ns]", "Max [us]", "Max [ms]", "Max [s]", "Max"), maxHeader),
+                P95Ms = ParseDuration(GetWithHeader(map, out var p95Header, "P95Ms", "P95 [ns]", "P95 [us]", "P95 [ms]", "P95 [s]", "P95"), p95Header),
+                P99Ms = ParseDuration(GetWithHeader(map, out var p99Header, "P99Ms", "P99 [ns]", "P99 [us]", "P99 [ms]", "P99 [s]", "P99"), p99Header),
+                StdDevMs = ParseDuration(GetWithHeader(map, out var stdDevHeader, "StdDevMs", "StdDev [ns]", "StdDev [us]", "StdDev [ms]", "StdDev [s]", "StdDev"), stdDevHeader),
+                StdErrMs = ParseDuration(GetWithHeader(map, out var stdErrHeader, "StdErrMs", "StdErr [ns]", "StdErr [us]", "StdErr [ms]", "StdErr [s]", "StdErr"), stdErrHeader),
+                FailureReasons = ParseFailureReasons(Get(map, "FailureReasons")),
                 Metrics = ExtractMetrics(map, metricHeaders, isBenchmarkDotNetCsv)
             });
         }
@@ -983,6 +989,38 @@ public sealed class BenchmarkResultImporter
     private static int? ParseInt(string? value)
         => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
 
+    private static Dictionary<string, int> ParseFailureReasons(string? value)
+    {
+        var reasons = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(value))
+            return reasons;
+
+        foreach (var rawPart in value!.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var part = rawPart.Trim();
+            if (part.Length == 0)
+                continue;
+
+            var count = 1;
+            var reason = part;
+            var marker = part.IndexOf("x ", StringComparison.Ordinal);
+            if (marker > 0 && int.TryParse(part.Substring(0, marker).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            {
+                count = parsed;
+                reason = part.Substring(marker + 2).Trim();
+            }
+
+            if (reason.Length == 0)
+                continue;
+
+            reasons[reason] = reasons.TryGetValue(reason, out var existing)
+                ? existing + count
+                : count;
+        }
+
+        return reasons;
+    }
+
     private static long? ParseLong(string? value)
         => long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
 
@@ -1026,7 +1064,9 @@ public sealed class BenchmarkResultImporter
 
     private static HashSet<string> SummaryMetricColumnsFor(string[] headers, bool includeBenchmarkDotNetStatisticColumns)
     {
-        var metrics = HeadersAfter(headers, "MaxMs");
+        var metrics = HeadersAfter(headers, headers.Any(header => string.Equals(header, "FailureReasons", StringComparison.OrdinalIgnoreCase)) ? "FailureReasons" : "MaxMs");
+        foreach (var column in SummaryMetadataColumns)
+            metrics.Remove(column);
         if (includeBenchmarkDotNetStatisticColumns)
         {
             foreach (var header in BenchmarkDotNetMetricColumnsFor(headers))
@@ -1053,7 +1093,7 @@ public sealed class BenchmarkResultImporter
     private static readonly HashSet<string> SummaryMetadataColumns = new(StringComparer.OrdinalIgnoreCase)
     {
         "Suite", "Scenario", "Method", "Benchmark", "Operation", "Engine", "Job", "Host", "OS", "RunMode", "SampleCount", "FailureCount",
-        "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs"
+        "OutlierCount", "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs", "P95Ms", "P99Ms", "StdDevMs", "StdErrMs", "FailureReasons"
     };
 
     private static HashSet<string> SampleMetadataColumnsFor(IReadOnlyDictionary<string, string> values, bool isBenchmarkDotNetCsv)

@@ -6,6 +6,8 @@ namespace PowerForge.Tests;
 
 public sealed partial class BenchmarkServicesTests
 {
+    private static readonly Lazy<Runspace> BenchmarkDslRunspace = new(CreateBenchmarkDslRunspace);
+
     [Fact]
     public void SummaryService_CalculatesMedianAndComparisonRatio()
     {
@@ -24,6 +26,30 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(20, managed.MedianMs);
         var other = Assert.Single(comparison, r => r.Engine == "Other");
         Assert.Equal(1, other.Ratio);
+    }
+
+    [Fact]
+    public void SummaryService_CalculatesPercentilesDeviationAndOutliers()
+    {
+        var samples = new[]
+        {
+            Sample("suite", "case", "Run", "Managed", 1),
+            Sample("suite", "case", "Run", "Managed", 2),
+            Sample("suite", "case", "Run", "Managed", 3),
+            Sample("suite", "case", "Run", "Managed", 4),
+            Sample("suite", "case", "Run", "Managed", 100)
+        };
+
+        var row = Assert.Single(new BenchmarkSummaryService().Summarize(samples, PowerShellBenchmarkOutlierMode.ExcludeMinMax));
+
+        Assert.Equal(3, row.SampleCount);
+        Assert.Equal(2, row.OutlierCount);
+        Assert.Equal(3, row.MedianMs);
+        Assert.Equal(3, row.MeanMs);
+        Assert.Equal(3.9, row.P95Ms);
+        Assert.Equal(3.98, row.P99Ms);
+        Assert.Equal(1, row.StdDevMs);
+        Assert.InRange(row.StdErrMs.GetValueOrDefault(), 0.57, 0.58);
     }
 
     [Fact]
@@ -80,7 +106,7 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
-    public void SummaryService_RejectsComparisonBaselineWithNoMetric()
+    public void SummaryService_KeepsComparisonRowsWhenBaselineHasNoMetric()
     {
         var summary = new[]
         {
@@ -105,9 +131,55 @@ public sealed partial class BenchmarkServicesTests
             }
         };
 
-        var ex = Assert.Throws<InvalidOperationException>(() => new BenchmarkSummaryService().Compare(summary, "Managed"));
+        var comparison = new BenchmarkSummaryService().Compare(summary, "Managed");
 
-        Assert.Contains("MedianMs", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, comparison.Length);
+        Assert.All(comparison, row =>
+        {
+            Assert.Null(row.Baseline);
+            Assert.Null(row.Ratio);
+        });
+        Assert.Contains(comparison, row => row.Engine == "Managed" && row.Status == "Failed");
+        Assert.Contains(comparison, row => row.Engine == "Other" && row.Actual == 10);
+    }
+
+    [Fact]
+    public void SummaryService_IgnoresBuiltInLaneVariablesWhenComparing()
+    {
+        var summary = new[]
+        {
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                Status = "Succeeded",
+                MedianMs = 10,
+                Variables = new Dictionary<string, string?> { ["Engine"] = "Managed", ["Operation"] = "Run", ["Host"] = "Current", ["ModuleName"] = "PSScriptAnalyzer" }
+            },
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                Status = "Succeeded",
+                MedianMs = 20,
+                Variables = new Dictionary<string, string?> { ["Engine"] = "Other", ["Operation"] = "Run", ["Host"] = "Current", ["ModuleName"] = "PSScriptAnalyzer" }
+            }
+        };
+
+        var comparison = new BenchmarkSummaryService().Compare(summary, "Managed");
+
+        var other = Assert.Single(comparison, row => row.Engine == "Other");
+        Assert.Equal(2, other.Ratio);
+        Assert.Equal("PSScriptAnalyzer", other.Variables["ModuleName"]);
+        Assert.False(other.Variables.ContainsKey("Engine"));
+        Assert.False(other.Variables.ContainsKey("Operation"));
+        Assert.False(other.Variables.ContainsKey("Host"));
     }
 
     [Fact]
@@ -191,6 +263,22 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void SummaryService_CarriesStatusIntoComparisonRows()
+    {
+        var summary = new[]
+        {
+            new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Run", Engine = "Managed", Host = "Current", Status = "Succeeded", MedianMs = 10 },
+            new BenchmarkSummaryRow { Suite = "suite", Scenario = "case", Operation = "Run", Engine = "Other", Host = "Current", Status = "Skipped" }
+        };
+
+        var comparison = new BenchmarkSummaryService().Compare(summary, "Managed");
+
+        var other = Assert.Single(comparison, row => row.Engine == "Other");
+        Assert.Equal("Skipped", other.Status);
+        Assert.Null(other.Actual);
+    }
+
+    [Fact]
     public void DocumentUpdater_ReplacesMarkerBlock()
     {
         var root = CreateTempRoot();
@@ -246,6 +334,275 @@ public sealed partial class BenchmarkServicesTests
 
         Assert.Contains("0.00042", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("| 0 | 0 |", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MarkdownRenderer_RendersComparisonAsPivotedReadmeTable()
+    {
+        var markdown = new BenchmarkMarkdownRenderer().RenderComparisonTable(new[]
+        {
+            new BenchmarkComparisonRow
+            {
+                Scenario = "SingleModule",
+                Operation = "Install",
+                Engine = "Managed",
+                Host = "Core-7.6.3",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Actual = 1000,
+                Baseline = 1000,
+                Ratio = 1,
+                Variables = new Dictionary<string, string?> { ["ModuleName"] = "PSScriptAnalyzer" }
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "SingleModule",
+                Operation = "Install",
+                Engine = "ModuleFast",
+                Host = "Core-7.6.3",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Actual = 1500,
+                Baseline = 1000,
+                Ratio = 1.5,
+                Variables = new Dictionary<string, string?> { ["ModuleName"] = "PSScriptAnalyzer" }
+            }
+        });
+
+        Assert.Contains("| Scenario | Variables | Host | Operation | Managed | ModuleFast | Result |", markdown);
+        Assert.Contains("| SingleModule | ModuleName=PSScriptAnalyzer | Core-7.6.3 | Install | 1.00x (1.00s) | 1.50x (1.50s) | Managed fastest |", markdown);
+        Assert.DoesNotContain("Baseline Value", markdown, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void MarkdownRenderer_PreservesMatrixAndMetricDimensions()
+    {
+        var markdown = new BenchmarkMarkdownRenderer().RenderComparisonTable(new[]
+        {
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Actual = 10,
+                Baseline = 10,
+                Ratio = 1,
+                Variables = new Dictionary<string, string?> { ["Rows"] = "10" }
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Actual = 20,
+                Baseline = 10,
+                Ratio = 2,
+                Variables = new Dictionary<string, string?> { ["Rows"] = "10" }
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "P95Ms",
+                Actual = 15,
+                Baseline = 15,
+                Ratio = 1,
+                Variables = new Dictionary<string, string?> { ["Rows"] = "20" }
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "P95Ms",
+                Actual = 30,
+                Baseline = 15,
+                Ratio = 2,
+                Variables = new Dictionary<string, string?> { ["Rows"] = "20" }
+            }
+        });
+
+        Assert.Contains("| Scenario | Variables | Host | Operation | Metric | Managed | Other | Result |", markdown);
+        Assert.Contains("| case | Rows=10 | Current | Run | MedianMs | 1.00x (10ms) | 2.00x (20ms) | Managed fastest |", markdown);
+        Assert.Contains("| case | Rows=20 | Current | Run | P95Ms | 1.00x (15ms) | 2.00x (30ms) | Managed fastest |", markdown);
+    }
+
+    [Fact]
+    public void MarkdownRenderer_PreservesBaselineDimension()
+    {
+        var markdown = new BenchmarkMarkdownRenderer().RenderComparisonTable(new[]
+        {
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Actual = 10,
+                Baseline = 10,
+                Ratio = 1
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Actual = 20,
+                Baseline = 10,
+                Ratio = 2
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                BaselineEngine = "Other",
+                Metric = "MedianMs",
+                Actual = 10,
+                Baseline = 20,
+                Ratio = 0.5
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                BaselineEngine = "Other",
+                Metric = "MedianMs",
+                Actual = 20,
+                Baseline = 20,
+                Ratio = 1
+            }
+        });
+
+        Assert.Contains("| Scenario | Host | Operation | Baseline | Managed | Other | Result |", markdown);
+        Assert.Contains("| case | Current | Run | Managed | 1.00x (10ms) | 2.00x (20ms) | Managed fastest |", markdown);
+        Assert.Contains("| case | Current | Run | Other | 0.50x (10ms) | 1.00x (20ms) | Other slower than Managed |", markdown);
+    }
+
+    [Fact]
+    public void MarkdownRenderer_PreservesScenarioWhenModuleNameVariableIsPresent()
+    {
+        var markdown = new BenchmarkMarkdownRenderer().RenderComparisonTable(new[]
+        {
+            new BenchmarkComparisonRow
+            {
+                Scenario = "Cold",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Actual = 10,
+                Baseline = 10,
+                Ratio = 1,
+                Variables = new Dictionary<string, string?> { ["ModuleName"] = "PSScriptAnalyzer" }
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "Cold",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Actual = 20,
+                Baseline = 10,
+                Ratio = 2,
+                Variables = new Dictionary<string, string?> { ["ModuleName"] = "PSScriptAnalyzer" }
+            }
+        });
+
+        Assert.Contains("| Scenario | Variables | Host | Operation | Managed | Other | Result |", markdown);
+        Assert.Contains("| Cold | ModuleName=PSScriptAnalyzer | Current | Run | 1.00x (10ms) | 2.00x (20ms) | Managed fastest |", markdown);
+    }
+
+    [Fact]
+    public void MarkdownRenderer_RendersSkippedComparisonRowsAsSkipped()
+    {
+        var markdown = new BenchmarkMarkdownRenderer().RenderComparisonTable(new[]
+        {
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Status = "Succeeded",
+                Actual = 10,
+                Baseline = 10,
+                Ratio = 1
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Status = "Skipped",
+                Baseline = 10
+            }
+        });
+
+        Assert.Contains("| case | Current | Run | 1.00x (10ms) | Skipped | Managed only successful |", markdown);
+        Assert.DoesNotContain("Failed", markdown, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void MarkdownRenderer_DoesNotFormatCustomMetricsAsDurations()
+    {
+        var markdown = new BenchmarkMarkdownRenderer().RenderComparisonTable(new[]
+        {
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "RowsPerSecond",
+                Actual = 1000,
+                Baseline = 1000,
+                Ratio = 1
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "RowsPerSecond",
+                Actual = 1200,
+                Baseline = 1000,
+                Ratio = 1.2
+            }
+        });
+
+        Assert.Contains("| case | Current | Run | RowsPerSecond | 1.00x (1000) | 1.20x (1200) | Managed baseline |", markdown);
+        Assert.DoesNotContain("1.00s", markdown, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -678,6 +1035,37 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(2, update.Metrics.Length);
         Assert.Contains(update.Metrics, metric => metric.Key.Contains("|Windows|", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(update.Metrics, metric => metric.Key.Contains("|Linux|", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static PowerShellBenchmarkSuite[] EvaluateBenchmarkDsl(ScriptBlock scriptBlock, string? scriptRoot = null, IReadOnlyDictionary<string, string?>? benchmarkVariables = null)
+    {
+        if (Runspace.DefaultRunspace is null)
+        {
+            Runspace.DefaultRunspace = BenchmarkDslRunspace.Value;
+        }
+
+        ImportBenchmarkDslCommands(Runspace.DefaultRunspace);
+        return PowerShellBenchmarkDslRuntime.Evaluate(scriptBlock, scriptRoot, benchmarkVariables);
+    }
+
+    private static Runspace CreateBenchmarkDslRunspace()
+    {
+        var runspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
+        runspace.Open();
+        return runspace;
+    }
+
+    private static void ImportBenchmarkDslCommands(Runspace runspace)
+    {
+        using var powerShell = PowerShell.Create(runspace);
+        powerShell.AddCommand("Import-Module")
+            .AddArgument(typeof(PSPublishModule.InvokeBenchmarkSuiteCommand).Assembly.Location)
+            .AddParameter("Force");
+        powerShell.Invoke();
+        if (!powerShell.HadErrors) return;
+
+        var message = string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString()));
+        throw new InvalidOperationException("Failed to import PSPublishModule benchmark commands for test evaluation." + Environment.NewLine + message);
     }
 
 }

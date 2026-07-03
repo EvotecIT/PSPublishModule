@@ -46,6 +46,32 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Runner_RejectsProfileAxisAsSuiteMetadata()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Profile", Values = { "Current", "TemporaryLocalUser" } });
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Plan(suite));
+
+        Assert.Contains("Profile axis", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("suite metadata", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Runner_UsesPlanningProfileForSkipRules()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Profile = PowerShellBenchmarkProfileKind.Current;
+        suite.PlanningProfile = PowerShellBenchmarkProfileKind.TemporaryLocalUser;
+        suite.Skip = ScriptBlock.Create("param($case) $case.Profile -ne 'TemporaryLocalUser'");
+
+        var item = Assert.Single(new PowerShellBenchmarkRunner().Plan(suite));
+
+        Assert.False(item.IsSkipped);
+        Assert.Equal("TemporaryLocalUser", item.Values["Profile"]);
+    }
+
+    [Fact]
     public void Runner_RejectsMatrixAxesThatShadowCaseVariables()
     {
         var suite = CreateRunnableSuite();
@@ -111,6 +137,90 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(item.Host, item.Values["Host"]);
     }
 
+    [Theory]
+    [InlineData("/usr/bin/pwsh")]
+    [InlineData("/usr/local/bin/pwsh")]
+    [InlineData(@"C:\Program Files\PowerShell\7\pwsh.exe")]
+    public void HostRuntime_AcceptsExtensionlessPwshExecutableNames(string executable)
+    {
+        Assert.True(PowerShellBenchmarkHostRuntime.IsPwshExecutable(executable));
+    }
+
+    [Theory]
+    [InlineData("/usr/bin/powershell")]
+    [InlineData(@"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")]
+    public void HostRuntime_AcceptsExtensionlessDesktopExecutableNames(string executable)
+    {
+        Assert.True(PowerShellBenchmarkHostRuntime.IsDesktopExecutable(executable));
+    }
+
+    [Fact]
+    public void HostRuntime_ResolvesPwshFromPath()
+    {
+        var root = CreateTempRoot();
+        var executable = Path.Combine(root, "pwsh");
+        File.WriteAllText(executable, string.Empty);
+        var previousPath = Environment.GetEnvironmentVariable("PATH");
+        try
+        {
+            Environment.SetEnvironmentVariable("PATH", root + Path.PathSeparator + previousPath);
+
+            var resolved = PowerShellBenchmarkHostRuntime.ResolveExecutableFromPath("pwsh");
+
+            Assert.Equal(executable, resolved);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PATH", previousPath);
+        }
+    }
+
+    [Fact]
+    public void TemporaryUserChildRunner_PreservesNullBenchmarkVariables()
+    {
+        var script = PowerForgeScripts.Load("Scripts/Benchmarks/TemporaryUserChildRunner.ps1");
+
+        Assert.Contains("$benchmarkVariables[$property.Name] = $property.Value", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("[string] $property.Value", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HostRuntime_MapsPackagedStandardAssembliesToDesktopDefaultAssemblies()
+    {
+        var root = CreateTempRoot();
+        var current = Path.Combine(root, "Lib", "Standard", "net8.0", "PowerForge.PowerShell.dll");
+        var desktop = Path.Combine(root, "Lib", "Default", "net472", "PowerForge.PowerShell.dll");
+        Directory.CreateDirectory(Path.GetDirectoryName(desktop)!);
+        File.WriteAllText(desktop, string.Empty);
+
+        var resolved = PowerShellBenchmarkHostRuntime.ResolveAssemblyForHost(current, "powershell");
+
+        Assert.Equal(desktop, resolved);
+    }
+
+    [Fact]
+    public void HostRuntime_MapsPackagedDefaultAssembliesToCoreStandardAssemblies()
+    {
+        var root = CreateTempRoot();
+        var current = Path.Combine(root, "Lib", "Default", "net472", "PowerForge.PowerShell.dll");
+        var core = Path.Combine(root, "Lib", "Standard", "net8.0", "PowerForge.PowerShell.dll");
+        Directory.CreateDirectory(Path.GetDirectoryName(core)!);
+        File.WriteAllText(core, string.Empty);
+
+        var resolved = PowerShellBenchmarkHostRuntime.ResolveAssemblyForHost(current, "pwsh");
+
+        Assert.Equal(core, resolved);
+    }
+
+    [Fact]
+    public void DslClosureTemplate_UsesFunctionProviderForDesktopCompatibility()
+    {
+        var script = PowerForgeScripts.Load("Scripts/Benchmarks/Close-BenchmarkBlock.Template.ps1");
+
+        Assert.Contains("Get-ChildItem -Path Function:", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Get-Command -CommandType Function", script, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Runner_PreservesMultipleDataBlockItems()
     {
@@ -145,7 +255,7 @@ benchmark 'stale-native-exit' {
 
         try
         {
-            var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+            var suite = Assert.Single(EvaluateBenchmarkDsl(script));
             suite.WarmupCount = 0;
             suite.IterationCount = 1;
             var result = new PowerShellBenchmarkRunner().Run(suite);
@@ -239,6 +349,23 @@ benchmark 'stale-native-exit' {
 
         Assert.Equal(new[] { "1", "2", "3" }, firstIteration);
         Assert.Equal(new[] { "2", "3", "1" }, secondIteration);
+    }
+
+    [Fact]
+    public void Runner_HonorsSequentialRunOrderPolicy()
+    {
+        var suite = CreateRunnableSuite();
+        suite.IterationCount = 2;
+        suite.RunOrder = PowerShellBenchmarkRunOrder.Sequential;
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows", Values = { 1, 2, 3 } });
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+        var firstIteration = result.Samples.Where(sample => sample.Iteration == 0).Select(sample => sample.Variables["Rows"]).ToArray();
+        var secondIteration = result.Samples.Where(sample => sample.Iteration == 1).Select(sample => sample.Variables["Rows"]).ToArray();
+
+        Assert.Equal(new[] { "1", "2", "3" }, firstIteration);
+        Assert.Equal(new[] { "1", "2", "3" }, secondIteration);
+        Assert.Equal("Sequential", result.Metadata["runOrder"]);
     }
 
     [Fact]
@@ -401,7 +528,7 @@ benchmark 'stale-native-exit' {
         Assert.Contains($",Managed,{result.Samples[0].Host},{result.Samples[0].Os},{result.Samples[0].RunMode},10,0,Succeeded", samplesCsv);
         Assert.Contains(result.Samples[0].DurationMs.ToString("G17", System.Globalization.CultureInfo.InvariantCulture), samplesCsv);
         Assert.Contains(",0.00042", samplesCsv);
-        Assert.Contains("Suite,Scenario,Operation,Engine,Host,OS,RunMode,Rows,SampleCount,FailureCount,Status,MedianMs,MeanMs,MinMs,MaxMs,TinyMetric", summaryCsv);
+        Assert.Contains("Suite,Scenario,Operation,Engine,Host,OS,RunMode,Rows,SampleCount,FailureCount,OutlierCount,Status,MedianMs,MeanMs,MinMs,MaxMs,P95Ms,P99Ms,StdDevMs,StdErrMs,FailureReasons,TinyMetric", summaryCsv);
         Assert.Contains(",0.00042", summaryCsv);
     }
 
@@ -462,7 +589,69 @@ benchmark 'stale-native-exit' {
 
         var sample = Assert.Single(result.Samples);
         Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Contains("Operation failed", sample.Reason, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("boom", sample.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Runner_ReportsFailureStageAndPowerShellLocation()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create("""
+param($case, $run)
+throw 'handler exploded'
+""");
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Contains("Operation failed", sample.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("handler exploded", sample.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Line:", sample.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("throw 'handler exploded'", sample.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Runner_RecordsElapsedDurationForFailedOperations()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create("param($case, $run) Start-Sleep -Milliseconds 20; throw 'late failure'");
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Contains("Operation failed", sample.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.True(sample.DurationMs > 0);
+    }
+
+    [Fact]
+    public void Runner_ReportsValidationFailureStage()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Validate = ScriptBlock.Create("param($case, $run) throw 'bad output'");
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Contains("Validation failed", sample.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("bad output", sample.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Runner_ReportsMetricFailureStage()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Metrics.Add(new PowerShellBenchmarkMetric { Name = "Rows", ScriptBlock = ScriptBlock.Create("throw 'metric broke'") });
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Contains("Metrics failed", sample.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("metric broke", sample.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -561,7 +750,7 @@ benchmark 'stale-native-exit' {
     }
 
     [Fact]
-    public void Runner_WritesFailureArtifactsBeforeComparisonErrors()
+    public void Runner_WritesFailureArtifactsAndComparisonRowsWhenBaselineFails()
     {
         var suite = CreateRunnableSuite();
         suite.Artifacts = BenchmarkArtifactKind.Json;
@@ -572,14 +761,14 @@ benchmark 'stale-native-exit' {
         suite.Axes.Single(axis => axis.Name == "Engine").Values.Add("Other");
         suite.Comparisons.Add(new PowerShellBenchmarkComparison { Dimension = "Engine", Baseline = "Managed" });
 
-        var ex = Assert.Throws<InvalidOperationException>(() => new PowerShellBenchmarkRunner().Run(suite));
+        var result = new PowerShellBenchmarkRunner().Run(suite);
         var samplesPath = Assert.Single(Directory.GetFiles(suite.OutputRoot, "samples.json", SearchOption.AllDirectories));
         var summaryPath = Assert.Single(Directory.GetFiles(suite.OutputRoot, "summary.json", SearchOption.AllDirectories));
         var reportPath = Assert.Single(Directory.GetFiles(suite.OutputRoot, "run-report.json", SearchOption.AllDirectories));
         var samples = BenchmarkJson.Read<BenchmarkSample[]>(samplesPath);
 
-        Assert.Contains("Managed", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("MedianMs", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(result.Comparison, row => row.Engine == "Managed" && row.Status == "Failed" && row.Baseline is null && row.Ratio is null);
+        Assert.Contains(result.Comparison, row => row.Engine == "Other" && row.Actual.HasValue && row.Baseline is null && row.Ratio is null);
         Assert.Contains(samples, sample => sample.Engine == "Managed" && sample.Status == BenchmarkSampleStatus.Failed);
         Assert.True(File.Exists(summaryPath));
         Assert.True(File.Exists(reportPath));
@@ -638,6 +827,31 @@ benchmark 'stale-native-exit' {
 
         Assert.Contains("RowsPerSecondd", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.False(File.Exists(output));
+    }
+
+    [Theory]
+    [InlineData("P95")]
+    [InlineData("P99")]
+    [InlineData("StdDev")]
+    [InlineData("StdErr")]
+    public void Runner_AllowsTimingAliasComparisonMetrics(string metricName)
+    {
+        var suite = CreateRunnableSuite();
+        suite.IterationCount = 2;
+        var other = new PowerShellBenchmarkEngine { Name = "Other" };
+        other.Operations["Run"] = ScriptBlock.Create("param($case, $run)");
+        suite.Engines.Add(other);
+        suite.Axes.Single(axis => axis.Name == "Engine").Values.Add("Other");
+        suite.Comparisons.Add(new PowerShellBenchmarkComparison
+        {
+            Dimension = "Engine",
+            Baseline = "Managed",
+            Metrics = new[] { metricName }
+        });
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        Assert.Contains(result.Comparison, row => row.Engine == "Other" && row.Metric == metricName && row.Actual.HasValue);
     }
 
     [Fact]

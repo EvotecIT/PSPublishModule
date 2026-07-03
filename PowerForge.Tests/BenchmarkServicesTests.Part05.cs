@@ -26,7 +26,7 @@ benchmark 'helpers' {
 }
 ");
 
-        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script, root));
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script, root));
         suite.WarmupCount = 0;
         suite.IterationCount = 1;
         var result = new PowerShellBenchmarkRunner().Run(suite);
@@ -59,7 +59,7 @@ benchmark 'helpers' {
 }
 ");
 
-            var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+            var suite = Assert.Single(EvaluateBenchmarkDsl(script));
             suite.WarmupCount = 0;
             suite.IterationCount = 1;
             var result = new PowerShellBenchmarkRunner().Run(suite);
@@ -88,7 +88,7 @@ benchmark 'dup' {
 }
 ");
 
-        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var ex = Assert.ThrowsAny<Exception>(() => EvaluateBenchmarkDsl(script));
 
         Assert.Contains("already defines engine", ex.ToString(), StringComparison.OrdinalIgnoreCase);
     }
@@ -106,7 +106,7 @@ benchmark 'dup-axis' {
 }
 ");
 
-        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var ex = Assert.ThrowsAny<Exception>(() => EvaluateBenchmarkDsl(script));
 
         Assert.Contains("already defines axis", ex.ToString(), StringComparison.OrdinalIgnoreCase);
     }
@@ -125,7 +125,7 @@ benchmark 'dup-operation' {
 }
 ");
 
-        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var ex = Assert.ThrowsAny<Exception>(() => EvaluateBenchmarkDsl(script));
 
         Assert.Contains("already defines operation", ex.ToString(), StringComparison.OrdinalIgnoreCase);
     }
@@ -143,7 +143,7 @@ benchmark 'dup-metric' {
 }
 ");
 
-        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var ex = Assert.ThrowsAny<Exception>(() => EvaluateBenchmarkDsl(script));
 
         Assert.Contains("already defines metric", ex.ToString(), StringComparison.OrdinalIgnoreCase);
     }
@@ -160,7 +160,7 @@ benchmark 'reserved-metric' {
 }
 ");
 
-        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var ex = Assert.ThrowsAny<Exception>(() => EvaluateBenchmarkDsl(script));
 
         Assert.Contains("reserved", ex.ToString(), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("MedianMs", ex.ToString(), StringComparison.OrdinalIgnoreCase);
@@ -178,10 +178,32 @@ benchmark 'reserved-artifact-metric' {
 }
 ");
 
-        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var ex = Assert.ThrowsAny<Exception>(() => EvaluateBenchmarkDsl(script));
 
         Assert.Contains("reserved", ex.ToString(), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Status", ex.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("P95")]
+    [InlineData("P99")]
+    [InlineData("StdDev")]
+    [InlineData("StdErr")]
+    public void DslRuntime_RejectsReservedTimingMetricAliases(string metricName)
+    {
+        var script = ScriptBlock.Create($$"""
+benchmark 'reserved-timing-alias' {
+    axis Operation Run
+    axis Engine Managed
+    metric {{metricName}} { 123 }
+    engine Managed { operation Run { param($case, $run) } }
+}
+""");
+
+        var ex = Assert.ThrowsAny<Exception>(() => EvaluateBenchmarkDsl(script));
+
+        Assert.Contains("reserved", ex.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(metricName, ex.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -196,10 +218,58 @@ benchmark 'temp-user' {
 }
 ");
 
-        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script));
 
         Assert.Equal(PowerShellBenchmarkProfileKind.TemporaryLocalUser, suite.Profile);
         Assert.Equal(PowerShellBenchmarkCleanupMode.KeepOnFailure, suite.Cleanup);
+    }
+
+    [Fact]
+    public void DslRuntime_ParsesBenchmarkPolicy()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'policy-suite' {
+    policy -Warmup 2 -Iterations 5 -RunMode publish -Order Sequential -CooldownMilliseconds 10 -OutlierMode ExcludeMinMax
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script));
+
+        Assert.Equal(2, suite.WarmupCount);
+        Assert.Equal(5, suite.IterationCount);
+        Assert.Equal("publish", suite.RunMode);
+        Assert.Equal(PowerShellBenchmarkRunOrder.Sequential, suite.RunOrder);
+        Assert.Equal(10, suite.CooldownMilliseconds);
+        Assert.Equal(PowerShellBenchmarkOutlierMode.ExcludeMinMax, suite.OutlierMode);
+    }
+
+    [Fact]
+    public void DslRuntime_ExposesBenchmarkVariablesToSpecs()
+    {
+        var script = ScriptBlock.Create(@"
+$caseName = $BenchmarkVariables['CaseName']
+$rows = $BenchmarkVariable['Rows']
+benchmark 'variables' {
+    caseSource { [pscustomobject]@{ Name = $caseName; Rows = $rows } }
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+        var variables = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["CaseName"] = "FromVariable",
+            ["Rows"] = "42"
+        };
+
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script, scriptRoot: null, benchmarkVariables: variables));
+        var item = Assert.Single(new PowerShellBenchmarkRunner().Plan(suite));
+
+        Assert.Equal("FromVariable", item.Scenario);
+        Assert.Equal("42", item.Values["Rows"]);
     }
 
     [Fact]
@@ -214,7 +284,7 @@ benchmark 'bad-profile' {
 }
 ");
 
-        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var ex = Assert.ThrowsAny<Exception>(() => EvaluateBenchmarkDsl(script));
 
         Assert.Contains("LocalAdmin", ex.ToString(), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("profile", ex.ToString(), StringComparison.OrdinalIgnoreCase);
@@ -250,7 +320,7 @@ benchmark 'closure' {
 }
 ");
 
-        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script, root));
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script, root));
         suite.WarmupCount = 0;
         suite.IterationCount = 1;
         var result = new PowerShellBenchmarkRunner().Run(suite);
@@ -286,7 +356,7 @@ benchmark 'helper-root' {
 }
 ");
 
-        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script, root));
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script, root));
         suite.WarmupCount = 0;
         suite.IterationCount = 1;
         var result = new PowerShellBenchmarkRunner().Run(suite);
@@ -306,12 +376,241 @@ benchmark 'ordered' {
 }
 ");
 
-        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script));
         var benchmarkCase = Assert.Single(suite.Cases);
 
         Assert.Equal("A", benchmarkCase.Name);
         Assert.Equal(10, benchmarkCase.Values["Rows"]);
         Assert.DoesNotContain("Name", benchmarkCase.Values.Keys);
+    }
+
+    [Fact]
+    public void DslRuntime_HandlesDirectHashtableCaseSourceAsSingleCase()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'hashtable-source' {
+    caseSource @{ Name = 'Small'; Rows = 1 }
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var suite = Assert.Single(EvaluateBenchmarkDslWithoutImportedCommands(script));
+        var benchmarkCase = Assert.Single(suite.Cases);
+
+        Assert.Equal("Small", benchmarkCase.Name);
+        Assert.Equal(1, benchmarkCase.Values["Rows"]);
+        Assert.DoesNotContain("Name", benchmarkCase.Values.Keys);
+    }
+
+    [Fact]
+    public void DslRuntime_EvaluatesShortDslWithoutImportedCmdlets()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'self-contained' {
+    policy -Warmup 0 -Iterations 1 -Order Sequential
+    caseSource @{ Name = 'Default'; Rows = 1 }
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+    compare Engine -Baseline Managed
+}
+");
+
+        var suite = Assert.Single(EvaluateBenchmarkDslWithoutImportedCommands(script));
+
+        Assert.Equal(0, suite.WarmupCount);
+        Assert.Equal(1, suite.IterationCount);
+        Assert.Equal(PowerShellBenchmarkRunOrder.Sequential, suite.RunOrder);
+        Assert.Equal("Default", Assert.Single(suite.Cases).Name);
+        Assert.Equal("Managed", Assert.Single(suite.Comparisons).Baseline);
+    }
+
+    [Fact]
+    public void DslRuntime_PrefersRuntimeDslHelpersOverAliases()
+    {
+        var previousRunspace = Runspace.DefaultRunspace;
+        using var runspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
+        runspace.Open();
+        Runspace.DefaultRunspace = runspace;
+        try
+        {
+            using (var setup = PowerShell.Create(runspace))
+            {
+                setup.AddScript("""
+function New-BenchmarkSuite { throw 'benchmark alias was used' }
+function Add-BenchmarkAxis { throw 'axis alias was used' }
+function Add-BenchmarkEngine { throw 'engine alias was used' }
+Set-Alias -Name benchmark -Value New-BenchmarkSuite
+Set-Alias -Name axis -Value Add-BenchmarkAxis
+Set-Alias -Name engine -Value Add-BenchmarkEngine
+""");
+                setup.Invoke();
+                Assert.Empty(setup.Streams.Error);
+            }
+
+            var script = ScriptBlock.Create("""
+    benchmark 'alias-shadow' {
+        policy -Warmup 0 -Iterations 1
+        caseSource @{ Name = 'Default' }
+        axis Operation Run
+        axis Engine Managed
+        engine Managed { operation Run { param($case, $run) } }
+        compare Engine -Baseline Managed
+    }
+""");
+
+            var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+            var item = Assert.Single(new PowerShellBenchmarkRunner().Plan(suite));
+
+            Assert.Equal("Default", item.Scenario);
+
+            using var verify = PowerShell.Create(runspace);
+            verify.AddCommand("Get-Alias").AddArgument("benchmark");
+            var benchmarkAlias = Assert.IsType<AliasInfo>(Assert.Single(verify.Invoke()).BaseObject);
+            Assert.Equal("New-BenchmarkSuite", benchmarkAlias.Definition);
+
+            verify.Commands.Clear();
+            verify.AddCommand("Get-Alias").AddArgument("engine");
+            var engineAlias = Assert.IsType<AliasInfo>(Assert.Single(verify.Invoke()).BaseObject);
+            Assert.Equal("Add-BenchmarkEngine", engineAlias.Definition);
+        }
+        finally
+        {
+            Runspace.DefaultRunspace = previousRunspace;
+        }
+    }
+
+    [Fact]
+    public void InvokeBenchmarkSuiteCommand_RefreshesCapturedHelperFunctionsBetweenSuites()
+    {
+        var initialSessionState = InitialSessionState.CreateDefault();
+        initialSessionState.Commands.Add(new SessionStateCmdletEntry("Invoke-BenchmarkSuite", typeof(PSPublishModule.InvokeBenchmarkSuiteCommand), helpFileName: null));
+        using var runspace = RunspaceFactory.CreateRunspace(initialSessionState);
+        runspace.Open();
+        ImportBenchmarkDslCommands(runspace);
+        using var ps = PowerShell.Create(runspace);
+        ps.AddScript("""
+Invoke-BenchmarkSuite -Settings {
+    function Get-Probe { 'first' }
+    benchmark 'first' {
+        policy -Warmup 0 -Iterations 1
+        caseSource @{ Name = 'Default' }
+        axis Operation Run
+        axis Engine Managed
+        setup { param($case, $run) $run.Probe = Get-Probe }
+        engine Managed { operation Run { param($case, $run) if ($run.Probe -ne 'first') { throw "expected first, got $($run.Probe)" } } }
+    }
+
+    function Get-Probe { 'second' }
+    benchmark 'second' {
+        policy -Warmup 0 -Iterations 1
+        caseSource @{ Name = 'Default' }
+        axis Operation Run
+        axis Engine Managed
+        setup { param($case, $run) $run.Probe = Get-Probe }
+        engine Managed { operation Run { param($case, $run) if ($run.Probe -ne 'second') { throw "expected second, got $($run.Probe)" } } }
+    }
+}
+""");
+
+        var output = ps.Invoke();
+
+        Assert.Empty(ps.Streams.Error);
+        Assert.Equal(2, output.Count);
+        Assert.All(output, item =>
+        {
+            var result = Assert.IsType<BenchmarkRunResult>(item.BaseObject);
+            Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
+        });
+    }
+
+    [Fact]
+    public void InvokeBenchmarkSuiteCommand_PrefersRuntimeAssertionsOverImportedAliases()
+    {
+        var root = CreateTempRoot();
+        File.WriteAllText(Path.Combine(root, "expected.txt"), "ok");
+        var escapedRoot = root.Replace("'", "''");
+        var initialSessionState = InitialSessionState.CreateDefault();
+        initialSessionState.Commands.Add(new SessionStateCmdletEntry("Invoke-BenchmarkSuite", typeof(PSPublishModule.InvokeBenchmarkSuiteCommand), helpFileName: null));
+        using var runspace = RunspaceFactory.CreateRunspace(initialSessionState);
+        runspace.Open();
+        ImportBenchmarkDslCommands(runspace);
+        using var ps = PowerShell.Create(runspace);
+        ps.AddScript($$"""
+Invoke-BenchmarkSuite -Settings {
+    benchmark 'assert-alias' -out '{{escapedRoot}}' {
+        policy -Warmup 0 -Iterations 1
+        caseSource @{ Name = 'Default' }
+        axis Operation Run
+        axis Engine Managed
+        engine Managed { operation Run { param($case, $run) } }
+        validate { param($case, $run) assertPath (Join-Path '{{escapedRoot}}' 'expected.txt') }
+    }
+}
+""");
+
+        var output = ps.Invoke();
+
+        Assert.Empty(ps.Streams.Error);
+        var result = Assert.IsType<BenchmarkRunResult>(Assert.Single(output).BaseObject);
+        Assert.All(result.Samples, sample => Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status));
+
+        ps.Commands.Clear();
+        ps.AddCommand("Get-Alias").AddArgument("assertPath");
+        var assertPathAlias = Assert.IsType<AliasInfo>(Assert.Single(ps.Invoke()).BaseObject);
+        Assert.Equal("Assert-BenchmarkPath", assertPathAlias.Definition);
+    }
+
+    [Fact]
+    public void DslRuntime_CapturesAssertionHelpersWithoutImportedCmdlets()
+    {
+        var root = CreateTempRoot();
+        File.WriteAllText(Path.Combine(root, "expected.txt"), "ok");
+        var escapedRoot = root.Replace("'", "''");
+        var script = ScriptBlock.Create($$"""
+benchmark 'runtime-assert' -out '{{escapedRoot}}' {
+    policy -Warmup 0 -Iterations 1
+    caseSource @{ Name = 'Default' }
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+    validate { param($case, $run) assertPath (Join-Path '{{escapedRoot}}' 'expected.txt') }
+}
+""");
+
+        var suite = Assert.Single(EvaluateBenchmarkDslWithoutImportedCommands(script));
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        Assert.All(result.Samples, sample => Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status));
+    }
+
+    [Fact]
+    public void AddBenchmarkComparisonCommand_ExportsOnlyImportSafeAlias()
+    {
+        var alias = typeof(PSPublishModule.AddBenchmarkComparisonCommand)
+            .GetCustomAttributes(inherit: false)
+            .OfType<AliasAttribute>()
+            .Single();
+
+        Assert.Contains("comparison", alias.AliasNames);
+        Assert.DoesNotContain("compare", alias.AliasNames);
+    }
+
+    [Fact]
+    public void AddBenchmarkComparisonCommand_DefaultsDimensionToEngine()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'comparison-default' {
+    Add-BenchmarkComparison -Baseline 'Managed'
+}
+");
+
+        var comparison = Assert.Single(Assert.Single(EvaluateBenchmarkDsl(script)).Comparisons);
+
+        Assert.Equal("Engine", comparison.Dimension);
+        Assert.Equal("Managed", comparison.Baseline);
     }
 
     [Fact]
@@ -326,7 +625,7 @@ benchmark 'scenario-case' {
 }
 ");
 
-        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script));
         var benchmarkCase = Assert.Single(suite.Cases);
 
         Assert.Equal("Generated", benchmarkCase.Name);
@@ -346,7 +645,7 @@ benchmark 'none' {
 }
 ");
 
-        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script));
 
         Assert.Equal(BenchmarkArtifactKind.None, suite.Artifacts);
     }
@@ -363,7 +662,7 @@ benchmark 'bad' {
 }
 ");
 
-        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var ex = Assert.ThrowsAny<Exception>(() => EvaluateBenchmarkDsl(script));
 
         Assert.Contains("MarkDownn", ex.ToString(), StringComparison.OrdinalIgnoreCase);
     }
@@ -375,6 +674,69 @@ benchmark 'bad' {
 
         Assert.NotNull(property);
         Assert.Contains(property!.GetCustomAttributes(inherit: true), attribute => attribute is ParameterAttribute);
+    }
+
+    [Fact]
+    public void InvokeBenchmarkSuiteCommand_ExposesBenchmarkVariableParameter()
+    {
+        var property = typeof(PSPublishModule.InvokeBenchmarkSuiteCommand).GetProperty("Variable");
+
+        Assert.NotNull(property);
+        Assert.Contains(property!.GetCustomAttributes(inherit: true), attribute => attribute is ParameterAttribute);
+    }
+
+    private static PowerShellBenchmarkSuite[] EvaluateBenchmarkDslWithoutImportedCommands(ScriptBlock scriptBlock)
+    {
+        var previousRunspace = Runspace.DefaultRunspace;
+        using var runspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
+        runspace.Open();
+        Runspace.DefaultRunspace = runspace;
+        try
+        {
+            return PowerShellBenchmarkDslRuntime.Evaluate(scriptBlock);
+        }
+        finally
+        {
+            Runspace.DefaultRunspace = previousRunspace;
+        }
+    }
+
+    [Fact]
+    public void InvokeBenchmarkSuiteCommand_PassesBenchmarkVariablesToFileBackedSpec()
+    {
+        var root = CreateTempRoot();
+        var spec = Path.Combine(root, "variables.benchmark.ps1");
+        File.WriteAllText(spec, @"
+$caseName = $BenchmarkVariables['CaseName']
+$rows = $BenchmarkVariables['Rows']
+benchmark 'variables' {
+    caseSource { [pscustomobject]@{ Name = $caseName; Rows = $rows } }
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+        var initialSessionState = InitialSessionState.CreateDefault();
+        initialSessionState.Commands.Add(new SessionStateCmdletEntry("Invoke-BenchmarkSuite", typeof(PSPublishModule.InvokeBenchmarkSuiteCommand), helpFileName: null));
+        using var runspace = RunspaceFactory.CreateRunspace(initialSessionState);
+        runspace.Open();
+        ImportBenchmarkDslCommands(runspace);
+        using var ps = PowerShell.Create(runspace);
+        ps.AddCommand("Invoke-BenchmarkSuite")
+            .AddParameter("Path", spec)
+            .AddParameter("Variable", new System.Collections.Hashtable
+            {
+                ["CaseName"] = "FromVariable",
+                ["Rows"] = new[] { "10", "20" }
+            })
+            .AddParameter("Plan");
+
+        var output = ps.Invoke();
+
+        Assert.Empty(ps.Streams.Error);
+        var item = Assert.IsType<PowerShellBenchmarkWorkItem>(Assert.Single(output).BaseObject);
+        Assert.Equal("FromVariable", item.Scenario);
+        Assert.Equal("10,20", item.Values["Rows"]);
     }
 
     [Fact]
@@ -390,6 +752,7 @@ benchmark 'bad' {
             initialSessionState.Commands.Add(new System.Management.Automation.Runspaces.SessionStateCmdletEntry("Invoke-BenchmarkSuite", typeof(PSPublishModule.InvokeBenchmarkSuiteCommand), helpFileName: null));
             using var runspace = System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace(initialSessionState);
             runspace.Open();
+            ImportBenchmarkDslCommands(runspace);
             using var ps = System.Management.Automation.PowerShell.Create(runspace);
             ps.AddCommand("Set-Location").AddParameter("Path", shellRoot);
             ps.Invoke();
@@ -426,6 +789,7 @@ benchmark 'path' -out 'relative-out' {
         initialSessionState.Commands.Add(new SessionStateCmdletEntry("Invoke-BenchmarkSuite", typeof(PSPublishModule.InvokeBenchmarkSuiteCommand), helpFileName: null));
         using var runspace = RunspaceFactory.CreateRunspace(initialSessionState);
         runspace.Open();
+        ImportBenchmarkDslCommands(runspace);
         using var ps = PowerShell.Create(runspace);
         ps.AddCommand("Set-Location").AddParameter("Path", shellRoot);
         ps.Invoke();
@@ -461,6 +825,7 @@ Invoke-BenchmarkSuite -Settings {
         initialSessionState.Commands.Add(new System.Management.Automation.Runspaces.SessionStateCmdletEntry("Invoke-BenchmarkSuite", typeof(PSPublishModule.InvokeBenchmarkSuiteCommand), helpFileName: null));
         using var runspace = System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace(initialSessionState);
         runspace.Open();
+        ImportBenchmarkDslCommands(runspace);
         using var ps = System.Management.Automation.PowerShell.Create(runspace);
         var escapedRoot = root.Replace("'", "''");
         var settings = ScriptBlock.Create($@"
@@ -489,6 +854,7 @@ benchmark 'whatif' -out '{escapedRoot}' {{
         initialSessionState.Commands.Add(new System.Management.Automation.Runspaces.SessionStateCmdletEntry("Invoke-BenchmarkSuite", typeof(PSPublishModule.InvokeBenchmarkSuiteCommand), helpFileName: null));
         using var runspace = System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace(initialSessionState);
         runspace.Open();
+        ImportBenchmarkDslCommands(runspace);
         using var ps = System.Management.Automation.PowerShell.Create(runspace);
         var settings = ScriptBlock.Create(@"
 benchmark 'inline-temp-user' {
@@ -523,6 +889,7 @@ benchmark 'path-temp-user' -out 'out' {
         initialSessionState.Commands.Add(new System.Management.Automation.Runspaces.SessionStateCmdletEntry("Invoke-BenchmarkSuite", typeof(PSPublishModule.InvokeBenchmarkSuiteCommand), helpFileName: null));
         using var runspace = System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace(initialSessionState);
         runspace.Open();
+        ImportBenchmarkDslCommands(runspace);
         using var ps = System.Management.Automation.PowerShell.Create(runspace);
         ps.AddCommand("Set-Location").AddParameter("Path", root);
         ps.Invoke();
@@ -539,14 +906,151 @@ benchmark 'path-temp-user' -out 'out' {
     }
 
     [Fact]
-    public void Runner_RejectsUnsupportedHostAxis()
+    public void Runner_PlanKeepsExternalHostAxisVisible()
     {
         var suite = CreateRunnableSuite();
-        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Host", Values = { "PowerShell7" } });
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Host", Values = { "Core", "Desktop" } });
 
-        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Plan(suite));
+        var plan = new PowerShellBenchmarkRunner().Plan(suite);
+
+        Assert.Contains(plan, item => item.Host.StartsWith("Core-", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan, item => item.Host == "Desktop");
+    }
+
+    [Fact]
+    public void Runner_RejectsExternalHostAxisDuringInProcessRun()
+    {
+        var suite = CreateRunnableSuite();
+        var externalHost = PowerShellBenchmarkHostRuntime.GetCurrentHostLabel().StartsWith("Desktop-", StringComparison.OrdinalIgnoreCase)
+            ? "Core"
+            : "Desktop";
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Host", Values = { externalHost } });
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Run(suite));
 
         Assert.Contains("only supports the current PowerShell host", ex.Message);
+    }
+
+    [Fact]
+    public void HostExecutor_RecordsFailedSamplesWhenHostCannotBeResolved()
+    {
+        var root = CreateTempRoot();
+        var spec = Path.Combine(root, "host-failure.benchmark.ps1");
+        File.WriteAllText(spec, "# child process is not started for this regression test");
+        var suite = CreateRunnableSuite();
+        suite.OutputRoot = Path.Combine(root, "out");
+        suite.RunMode = "test";
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Host", Values = { "PowerForgeMissingHost" } });
+
+        var result = new PowerShellBenchmarkHostExecutor().Run(suite, new PowerShellBenchmarkHostRunRequest
+        {
+            SpecPath = spec,
+            WorkingDirectory = root,
+            OutputRoot = suite.OutputRoot,
+            WarmupCount = 0,
+            IterationCount = 1,
+            RunMode = suite.RunMode,
+            SuiteName = suite.Name,
+            Hosts = new[] { "PowerForgeMissingHost" },
+            ExternalHostTimeoutSeconds = 1
+        });
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Equal("PowerForgeMissingHost", sample.Host);
+        Assert.Contains("External host 'PowerForgeMissingHost' failed", sample.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Failed", Assert.Single(result.Summary).Status);
+    }
+
+    [Fact]
+    public void HostExecutor_DoesNotUseParentSkipRulesToSuppressExternalHost()
+    {
+        var root = CreateTempRoot();
+        var spec = Path.Combine(root, "host-skipped.benchmark.ps1");
+        File.WriteAllText(spec, "# child process is not started because the host cannot be resolved");
+        var suite = CreateRunnableSuite();
+        suite.OutputRoot = Path.Combine(root, "out");
+        suite.Skip = ScriptBlock.Create("$true");
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Host", Values = { "PowerForgeMissingHost" } });
+
+        var result = new PowerShellBenchmarkHostExecutor().Run(suite, new PowerShellBenchmarkHostRunRequest
+        {
+            SpecPath = spec,
+            WorkingDirectory = root,
+            OutputRoot = suite.OutputRoot,
+            WarmupCount = 0,
+            IterationCount = 1,
+            RunMode = suite.RunMode,
+            SuiteName = suite.Name,
+            Hosts = new[] { "PowerForgeMissingHost" },
+            ExternalHostTimeoutSeconds = 1
+        });
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Equal("PowerForgeMissingHost", sample.Host);
+        Assert.Contains("External host 'PowerForgeMissingHost' failed", sample.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Failed", Assert.Single(result.Summary).Status);
+    }
+
+    [Fact]
+    public void HostExecutor_NormalizesFullExecutablePathToCurrentForChildSelection()
+    {
+        var root = CreateTempRoot();
+        var executable = Path.Combine(root, "pwsh");
+        File.WriteAllText(executable, string.Empty);
+
+        Assert.Equal("Current", PowerShellBenchmarkHostExecutor.NormalizeChildHostSelection(executable, executable));
+        Assert.Equal("Core", PowerShellBenchmarkHostExecutor.NormalizeChildHostSelection("Core", executable));
+    }
+
+    [Fact]
+    public void HostExecutor_DeduplicatesResolvedExecutableHostSelections()
+    {
+        var root = CreateTempRoot();
+        var executable = Path.Combine(root, "pwsh");
+        File.WriteAllText(executable, string.Empty);
+
+        var selections = PowerShellBenchmarkHostExecutor.ResolveHostSelections(new[] { executable, executable });
+
+        var selection = Assert.Single(selections);
+        Assert.Equal(executable, selection.Host);
+        Assert.Equal(executable, selection.Executable);
+    }
+
+    [Fact]
+    public void HostExecutor_PreflightsReadmeBlocksBeforeLaunchingHost()
+    {
+        var root = CreateTempRoot();
+        var spec = Path.Combine(root, "host-readme-preflight.benchmark.ps1");
+        File.WriteAllText(spec, "# host should not launch before README validation");
+        var readme = Path.Combine(root, "README.md");
+        File.WriteAllText(readme, "<!-- BENCHMARK:other:START -->\nold\n<!-- BENCHMARK:other:END -->\n");
+        var suite = CreateRunnableSuite();
+        suite.OutputRoot = Path.Combine(root, "out");
+        suite.ReadmeBlocks.Add(new PowerShellBenchmarkReadmeBlock
+        {
+            Path = readme,
+            BlockId = "results",
+            Renderer = "SummaryTable"
+        });
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Host", Values = { "PowerForgeMissingHost" } });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new PowerShellBenchmarkHostExecutor().Run(suite, new PowerShellBenchmarkHostRunRequest
+        {
+            SpecPath = spec,
+            WorkingDirectory = root,
+            OutputRoot = suite.OutputRoot,
+            WarmupCount = 0,
+            IterationCount = 1,
+            RunMode = suite.RunMode,
+            SuiteName = suite.Name,
+            Hosts = new[] { "PowerForgeMissingHost" },
+            ExternalHostTimeoutSeconds = 1
+        }));
+
+        Assert.Contains("results", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("External host", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

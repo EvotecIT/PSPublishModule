@@ -30,6 +30,21 @@ public enum PowerShellBenchmarkCleanupMode
 }
 
 /// <summary>
+/// Ordering strategy for measured benchmark work items.
+/// </summary>
+public enum PowerShellBenchmarkRunOrder
+{
+    /// <summary>Run work items in their resolved plan order every iteration.</summary>
+    Sequential,
+
+    /// <summary>Rotate work item order by iteration to reduce first-lane bias.</summary>
+    Rotated,
+
+    /// <summary>Shuffle work item order deterministically for each iteration.</summary>
+    Randomized
+}
+
+/// <summary>
 /// PowerShell-authored benchmark suite definition.
 /// </summary>
 public sealed class PowerShellBenchmarkSuite
@@ -49,8 +64,20 @@ public sealed class PowerShellBenchmarkSuite
     /// <summary>Run mode label.</summary>
     public string RunMode { get; set; } = "standard";
 
+    /// <summary>Measured work-item ordering strategy.</summary>
+    public PowerShellBenchmarkRunOrder RunOrder { get; set; } = PowerShellBenchmarkRunOrder.Rotated;
+
+    /// <summary>Delay between measured samples, in milliseconds.</summary>
+    public int CooldownMilliseconds { get; set; }
+
+    /// <summary>Outlier policy used by the summary service.</summary>
+    public PowerShellBenchmarkOutlierMode OutlierMode { get; set; } = PowerShellBenchmarkOutlierMode.None;
+
     /// <summary>PowerShell profile isolation mode.</summary>
     public PowerShellBenchmarkProfileKind Profile { get; set; } = PowerShellBenchmarkProfileKind.Current;
+
+    /// <summary>Profile value exposed to planning, skip rules, and case metadata when execution must use a different host profile.</summary>
+    public PowerShellBenchmarkProfileKind? PlanningProfile { get; set; }
 
     /// <summary>Cleanup behavior for benchmark-owned temporary environment state.</summary>
     public PowerShellBenchmarkCleanupMode Cleanup { get; set; } = PowerShellBenchmarkCleanupMode.Always;

@@ -145,7 +145,14 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
         }
         finally
         {
+            loadedAssemblies.Clear();
+            loadedPaths.Clear();
             alc.Unload();
+            for (var attempt = 0; attempt < 5; attempt++)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
         }
 #else
         return new ModuleTypeAcceleratorSurfaceReport(

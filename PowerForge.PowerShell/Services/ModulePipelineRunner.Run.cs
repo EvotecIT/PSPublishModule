@@ -46,10 +46,11 @@ public sealed partial class ModulePipelineRunner
         try
         {
             ExecutePreparationAndBuildPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, pipeline, state);
-            ExecuteDocumentationPhase(plan, session, session.Reporter, state);
             ExecuteFormattingAndSigningPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, state);
+            ExecuteTypeAcceleratorSurfaceReportPhase(plan, state);
+            ExecuteDocumentationPhase(plan, session, session.Reporter, state);
             // Refresh the project-root manifest before validation or tests can abort the run so callers always see current metadata.
-            state.ProjectManifestSyncMessage = SyncBuildManifestToProjectRoot(plan);
+            state.ProjectManifestSyncMessage = SyncBuildManifestToProjectRoot(plan, state.BuildResult);
             ExecuteValidationPhases(plan, session, state);
             ExecuteTestPhases(plan, session, state);
             ExecutePackagingPublishAndInstallPhases(spec, plan, session, packagingRequiredModules, pipeline, state);

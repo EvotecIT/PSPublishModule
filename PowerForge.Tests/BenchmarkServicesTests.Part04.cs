@@ -353,6 +353,29 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_RoundTripsRunnerSummaryTimingColumns()
+    {
+        var root = CreateTempRoot();
+        var run = Path.Combine(root, "run1");
+        Directory.CreateDirectory(run);
+        File.WriteAllText(
+            Path.Combine(run, "summary.csv"),
+            "Suite,Scenario,Operation,Engine,Host,OS,RunMode,Rows,SampleCount,FailureCount,OutlierCount,Status,MedianMs,MeanMs,MinMs,MaxMs,P95Ms,P99Ms,StdDevMs,StdErrMs,FailureReasons,CustomMetric\nsuite,case,Run,Managed,Current,Windows,local,10,3,3,1,Failed,10,11,9,13,12,13,1.5,0.5,2x network timeout; 1x access denied,42\n");
+
+        var row = Assert.Single(new BenchmarkResultImporter().Import(root).Summary);
+
+        Assert.Equal(1, row.OutlierCount);
+        Assert.Equal(2, row.FailureReasons["network timeout"]);
+        Assert.Equal(1, row.FailureReasons["access denied"]);
+        Assert.Equal(12, row.P95Ms);
+        Assert.Equal(13, row.P99Ms);
+        Assert.Equal(1.5, row.StdDevMs);
+        Assert.Equal(0.5, row.StdErrMs);
+        Assert.Equal(42, row.Metrics["CustomMetric"]);
+        Assert.DoesNotContain("P95Ms", row.Metrics.Keys);
+    }
+
+    [Fact]
     public void RunnerPathSegments_EscapeInvalidCharactersWithoutCollisions()
     {
         var colon = PowerShellBenchmarkPathSegments.Value("Case:A");
@@ -404,7 +427,7 @@ New-BenchmarkSuite 'long' {
 }
 ");
 
-        var suites = PowerShellBenchmarkDslRuntime.Evaluate(script);
+        var suites = EvaluateBenchmarkDsl(script);
         var runner = new PowerShellBenchmarkRunner();
 
         Assert.Equal(2, suites.Length);
@@ -438,7 +461,7 @@ benchmark 'pwd' {{
 }}
 ");
 
-        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script, root));
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script, root));
         suite.WarmupCount = 0;
         suite.IterationCount = 1;
         var result = new PowerShellBenchmarkRunner().Run(suite);
@@ -458,7 +481,7 @@ benchmark 'bad' {
 }
 ");
 
-        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var ex = Assert.ThrowsAny<Exception>(() => EvaluateBenchmarkDsl(script));
 
         Assert.Contains("case boom", ex.ToString(), StringComparison.OrdinalIgnoreCase);
     }
@@ -475,7 +498,7 @@ benchmark 'bad' {
 }
 ");
 
-        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var ex = Assert.ThrowsAny<Exception>(() => EvaluateBenchmarkDsl(script));
 
         Assert.Contains("stopped", ex.ToString(), StringComparison.OrdinalIgnoreCase);
     }
@@ -492,7 +515,7 @@ benchmark 'bad' {
 }
 ");
 
-        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var ex = Assert.ThrowsAny<Exception>(() => EvaluateBenchmarkDsl(script));
 
         Assert.Contains("23", ex.ToString(), StringComparison.OrdinalIgnoreCase);
     }
@@ -509,7 +532,7 @@ benchmark 'bad' {
 }
 ");
 
-        var ex = Assert.ThrowsAny<Exception>(() => PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var ex = Assert.ThrowsAny<Exception>(() => EvaluateBenchmarkDsl(script));
 
         Assert.Contains("root boom", ex.ToString(), StringComparison.OrdinalIgnoreCase);
     }
@@ -527,7 +550,7 @@ benchmark 'rooted' {
 }
 ");
 
-        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script, root));
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script, root));
         var benchmarkCase = Assert.Single(suite.Cases);
 
         Assert.Equal(root, benchmarkCase.Values["Root"]);
@@ -549,7 +572,7 @@ benchmark 'closure' {
 }
 ");
 
-        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script, root));
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script, root));
         suite.WarmupCount = 0;
         suite.IterationCount = 1;
         var result = new PowerShellBenchmarkRunner().Run(suite);
@@ -572,7 +595,7 @@ benchmark 'expandable-root' {
 }
 ");
 
-        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script, root));
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script, root));
         suite.WarmupCount = 0;
         suite.IterationCount = 1;
         var result = new PowerShellBenchmarkRunner().Run(suite);
@@ -595,7 +618,7 @@ benchmark 'expandable-subexpression-root' {
 }
 ");
 
-        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script, root));
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script, root));
         suite.WarmupCount = 0;
         suite.IterationCount = 1;
         var result = new PowerShellBenchmarkRunner().Run(suite);
@@ -615,7 +638,7 @@ benchmark 'preferences' {
 }
 ");
 
-        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script));
         suite.WarmupCount = 0;
         suite.IterationCount = 1;
         var result = new PowerShellBenchmarkRunner().Run(suite);
@@ -637,7 +660,7 @@ benchmark 'default-parameter-values' {
 }
 ");
 
-        var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script));
         suite.WarmupCount = 0;
         suite.IterationCount = 1;
         var result = new PowerShellBenchmarkRunner().Run(suite);
