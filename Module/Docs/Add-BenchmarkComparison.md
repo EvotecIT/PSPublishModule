@@ -11,7 +11,7 @@ Adds a benchmark comparison definition.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Add-BenchmarkComparison [-Dimension] <string> -Baseline <string> [-Metric <string[]>] [<CommonParameters>]
+Add-BenchmarkComparison [[-Dimension] <string>] -Baseline <string> [-Metric <string[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -52,7 +52,7 @@ Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
 
-Required: True
+Required: False
 Position: 0
 Default value: None
 Accept pipeline input: False
