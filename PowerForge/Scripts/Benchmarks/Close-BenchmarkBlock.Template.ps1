@@ -6,19 +6,36 @@ $capturedFunctions = @{}
 $skipNames = @(
     'args', 'input', 'this', 'PSItem', '_', 'Error',
     'PWD', 'captured', 'capturedFunctions', 'scriptText', 'scriptRoot',
-    'BenchmarkCallerFunctions',
+    'BenchmarkCallerFunctions', 'PowerForgeBenchmarkDslRuntimeType',
     'ConfirmPreference', 'DebugPreference', 'ErrorActionPreference', 'ErrorView',
     'InformationPreference', 'ProgressPreference', 'PSNativeCommandUseErrorActionPreference',
     'PSDefaultParameterValues', 'VerbosePreference', 'WarningPreference', 'WhatIfPreference'
 )
 $skipFunctions = @(
-    '__PowerForgeCloseBenchmarkBlock',
+    '__PowerForgeCloseBenchmarkBlock', '__PowerForgeBenchmarkDslInvoke',
     'benchmark', 'cases', 'case', 'caseSource', 'from', 'axis', 'setup', 'data', 'skip', 'validate', 'policy', 'profile', 'cleanup', 'engine', 'operation', 'metric', 'compare', 'comparison', 'readme', 'artifacts',
     'New-BenchmarkSuite', 'Add-BenchmarkCases', 'Add-BenchmarkCase', 'Add-BenchmarkCaseSource', 'Add-BenchmarkAxis',
     'Set-BenchmarkSetup', 'Set-BenchmarkDataFactory', 'Set-BenchmarkPolicy', 'Set-BenchmarkProfile', 'Set-BenchmarkCleanup', 'Add-BenchmarkEngine', 'Add-BenchmarkOperation',
     'Add-BenchmarkSkipRule', 'Add-BenchmarkValidation', 'Add-BenchmarkMetric', 'Add-BenchmarkComparison',
     'Add-BenchmarkReadmeBlock', 'Set-BenchmarkArtifacts'
 )
+
+function __PowerForgeBenchmarkDslInvoke {
+    param([Parameter(Mandatory = $true)] [string] $Name, [object[]] $Arguments = @())
+
+    $runtimeType = $PowerForgeBenchmarkDslRuntimeType
+    if ($null -eq $runtimeType) { throw 'Benchmark DSL runtime type was not provided.' }
+    $flags = [System.Reflection.BindingFlags]'Public, Static'
+    $methods = @($runtimeType.GetMethods($flags) | Where-Object { $_.Name -eq $Name -and $_.GetParameters().Count -eq $Arguments.Count })
+    if ($methods.Count -ne 1) { throw "Benchmark DSL runtime method '$Name' with $($Arguments.Count) argument(s) was not found." }
+    try {
+        $methods[0].Invoke($null, $Arguments)
+    } catch [System.Reflection.TargetInvocationException] {
+        if ($_.Exception.InnerException) { throw $_.Exception.InnerException }
+        throw
+    }
+}
+
 if ($null -ne $BenchmarkCallerFunctions) {
     foreach ($entry in $BenchmarkCallerFunctions.GetEnumerator()) {
         if ($skipFunctions -contains $entry.Key) { continue }
@@ -53,11 +70,11 @@ foreach ($function in Get-Command -CommandType Function -ErrorAction SilentlyCon
         ($function.Options -band [System.Management.Automation.ScopedItemOptions]::ReadOnly)) { continue }
     if ([string]::IsNullOrWhiteSpace($function.Definition)) { continue }
     if (-not $capturedFunctions.ContainsKey($function.Name)) {
-        $capturedFunctions[$function.Name] = [PowerForge.PowerShellBenchmarkDslRuntime]::CaptureScriptText([scriptblock]::Create([string] $function.Definition), $scriptRoot)
+        $capturedFunctions[$function.Name] = __PowerForgeBenchmarkDslInvoke -Name 'CaptureScriptText' -Arguments ([object[]] @([scriptblock]::Create([string] $function.Definition), $scriptRoot))
     }
 }
 
-$scriptText = [PowerForge.PowerShellBenchmarkDslRuntime]::CaptureScriptText($ScriptBlock, $scriptRoot)
+$scriptText = __PowerForgeBenchmarkDslInvoke -Name 'CaptureScriptText' -Arguments ([object[]] @($ScriptBlock, $scriptRoot))
 {
     $previousFunctions = @{}
     $missingFunctions = @{}

@@ -76,6 +76,9 @@ public sealed class PowerShellBenchmarkSuite
     /// <summary>PowerShell profile isolation mode.</summary>
     public PowerShellBenchmarkProfileKind Profile { get; set; } = PowerShellBenchmarkProfileKind.Current;
 
+    /// <summary>Profile value exposed to planning, skip rules, and case metadata when execution must use a different host profile.</summary>
+    public PowerShellBenchmarkProfileKind? PlanningProfile { get; set; }
+
     /// <summary>Cleanup behavior for benchmark-owned temporary environment state.</summary>
     public PowerShellBenchmarkCleanupMode Cleanup { get; set; } = PowerShellBenchmarkCleanupMode.Always;
 

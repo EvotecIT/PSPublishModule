@@ -60,7 +60,7 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
                 -Scope Custom `
                 -ModuleRoot $run.InstallRoot `
                 -PackageCacheDirectory $run.PackageCacheRoot `
-                -AcceptLicense:([bool] $case.AcceptLicense) `
+                -AcceptLicense:$case.AcceptLicense `
                 -Force
         }
 
@@ -74,7 +74,7 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
                 -RepositoryName $run.RepositoryName `
                 -Path $run.SaveRoot `
                 -PackageCacheDirectory $run.PackageCacheRoot `
-                -AcceptLicense:([bool] $case.AcceptLicense) `
+                -AcceptLicense:$case.AcceptLicense `
                 -Force
         }
     }
@@ -83,7 +83,7 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         operation Install {
             param($case, $run)
 
-            if (-not [string]::IsNullOrWhiteSpace([string] $run.ModuleFastModulePath)) {
+            if ($run.ModuleFastModulePath -and $run.ModuleFastModulePath.Trim()) {
                 Import-Module -LiteralPath $run.ModuleFastModulePath -Force
             } elseif (-not (Get-Command -Name Install-ModuleFast -ErrorAction SilentlyContinue)) {
                 Import-Module ModuleFast -ErrorAction Stop

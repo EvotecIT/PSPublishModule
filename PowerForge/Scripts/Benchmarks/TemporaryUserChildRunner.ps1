@@ -26,6 +26,7 @@ if ($request.SuiteIndex -ge $suites.Length) {
     throw "Benchmark spec '$($request.SpecPath)' did not produce suite index $($request.SuiteIndex)."
 }
 $suite = $suites[$request.SuiteIndex]
+$suite.PlanningProfile = [PowerForge.PowerShellBenchmarkProfileKind]::TemporaryLocalUser
 $suite.Profile = [PowerForge.PowerShellBenchmarkProfileKind]::Current
 $suite.OutputRoot = $request.OutputRoot
 $suite.WarmupCount = [Math]::Max(0, [int]$request.WarmupCount)

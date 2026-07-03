@@ -57,6 +57,7 @@ public sealed class PowerShellBenchmarkRunner
         var explicitOperationAxis = GetAxisValues(suite.Axes, "Operation");
         var currentHostLabel = GetCurrentHostLabel();
         var hostAxis = GetAxisValues(suite.Axes, "Host") ?? new object?[] { currentHostLabel };
+        var planningProfile = (suite.PlanningProfile ?? suite.Profile).ToString();
         if (expanded.Count == 0) throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define any runnable cases.");
         if (engineAxis.Length == 0) throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define any engine values.");
         if (hostAxis.Length == 0) throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define any host values.");
@@ -81,7 +82,7 @@ public sealed class PowerShellBenchmarkRunner
                 if (!IsCurrentHost(requestedHostName, currentHostLabel))
                     throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested host '{requestedHostName}', but this runner only supports the current PowerShell host. Use 'Current' or run the suite from the target host.");
                 var hostName = NormalizeCurrentHost(requestedHostName, currentHostLabel);
-                values["Profile"] = suite.Profile.ToString();
+                values["Profile"] = planningProfile;
                 values["Engine"] = engineName;
                 values["Operation"] = operationName;
                 values["Host"] = hostName;
@@ -239,30 +240,43 @@ public sealed class PowerShellBenchmarkRunner
             ["OutputPath"] = Path.Combine(outputDirectory, "output")
         });
         var durationMs = 0d;
+        var stage = "Setup";
+        Stopwatch? operationStopwatch = null;
 
         try
         {
             Directory.CreateDirectory(outputDirectory);
             InvokeOptional(suite.Setup, caseObject, runObject);
+            stage = "Data";
             var data = CaptureData(InvokeOptional(suite.Data, caseObject, runObject));
             SetProperty(runObject, "Data", data);
 
-            var stopwatch = Stopwatch.StartNew();
+            stage = iteration < 0 ? "Warmup operation" : "Operation";
+            operationStopwatch = Stopwatch.StartNew();
             InvokeStrict(item.Handler, caseObject, runObject);
-            stopwatch.Stop();
-            durationMs = stopwatch.Elapsed.TotalMilliseconds;
+            operationStopwatch.Stop();
+            durationMs = operationStopwatch.Elapsed.TotalMilliseconds;
             SetProperty(runObject, "DurationMs", durationMs);
 
             if (!recordSample)
                 return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Succeeded, durationMs, string.Empty, null);
 
+            stage = "Validation";
             InvokeOptional(suite.Validate, caseObject, runObject);
+            stage = "Metrics";
             var metrics = CaptureMetrics(suite, caseObject, runObject);
             return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Succeeded, durationMs, string.Empty, metrics);
         }
         catch (Exception ex) when (!IsPowerShellStopRequest(ex))
         {
-            return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Failed, durationMs, ex.InnerException?.Message ?? ex.Message, null);
+            if (operationStopwatch is { IsRunning: true })
+            {
+                operationStopwatch.Stop();
+                durationMs = operationStopwatch.Elapsed.TotalMilliseconds;
+                SetProperty(runObject, "DurationMs", durationMs);
+            }
+
+            return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Failed, durationMs, FormatFailureReason(stage, ex), null);
         }
     }
 
@@ -310,12 +324,46 @@ public sealed class PowerShellBenchmarkRunner
         return false;
     }
 
+    private static string FormatFailureReason(string stage, Exception exception)
+    {
+        var message = exception.InnerException?.Message ?? exception.Message;
+        var detail = new List<string> { string.Concat(stage, " failed: ", message) };
+        var errorRecord = GetErrorRecord(exception);
+        var invocation = errorRecord?.InvocationInfo;
+        if (invocation is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(invocation.ScriptName))
+                detail.Add($"Location: {invocation.ScriptName}:{invocation.ScriptLineNumber}:{invocation.OffsetInLine}");
+            if (!string.IsNullOrWhiteSpace(invocation.Line))
+                detail.Add($"Line: {invocation.Line.Trim()}");
+            if (!string.IsNullOrWhiteSpace(invocation.PositionMessage))
+                detail.Add(invocation.PositionMessage.Trim());
+        }
+
+        return string.Join(Environment.NewLine, detail.Distinct(StringComparer.Ordinal));
+    }
+
+    private static ErrorRecord? GetErrorRecord(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is RuntimeException runtimeException && runtimeException.ErrorRecord is not null)
+                return runtimeException.ErrorRecord;
+            if (current is ActionPreferenceStopException actionPreferenceStopException && actionPreferenceStopException.ErrorRecord is not null)
+                return actionPreferenceStopException.ErrorRecord;
+        }
+
+        return null;
+    }
+
     private static void ValidateSupportedAxes(PowerShellBenchmarkSuite suite)
     {
         if (GetAxisValues(suite.Axes, "OS") is not null)
             throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested an OS axis, but this runner only supports the current operating system. Run the suite on each target OS and compare imported results instead.");
         if (GetAxisValues(suite.Axes, "RunMode") is not null)
             throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested a RunMode axis, but RunMode is suite metadata. Set suite RunMode once, or use a different matrix variable name.");
+        if (GetAxisValues(suite.Axes, "Profile") is not null)
+            throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested a Profile axis, but Profile is suite metadata. Set suite Profile once, or use a different matrix variable name.");
         foreach (var axis in suite.Axes)
         {
             if (ReservedMatrixAxisNames.Contains(axis.Name))
@@ -720,7 +768,7 @@ public sealed class PowerShellBenchmarkRunner
             new("ErrorActionPreference", ActionPreference.Stop),
             new("PSNativeCommandUseErrorActionPreference", true)
         };
-        return NativeExitAwareInvokeWrapper.InvokeWithContext(functionsToDefine: null, variablesToDefine: variables, new object[] { PrepareNativeExitGuardedBlock(block), args });
+        return NativeExitAwareInvokeWrapper.InvokeWithContext(functionsToDefine: null, variablesToDefine: variables, new object[] { PrepareNativeExitGuardedBlock(block), args, false, typeof(PowerShellNativeExitCodeTracker) });
     }
 
     private static ScriptBlock PrepareNativeExitGuardedBlock(ScriptBlock block)

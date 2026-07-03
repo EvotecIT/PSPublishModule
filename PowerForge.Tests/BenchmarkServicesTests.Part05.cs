@@ -363,6 +363,100 @@ benchmark 'ordered' {
     }
 
     [Fact]
+    public void DslRuntime_HandlesDirectHashtableCaseSourceAsSingleCase()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'hashtable-source' {
+    caseSource @{ Name = 'Small'; Rows = 1 }
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var suite = Assert.Single(EvaluateBenchmarkDslWithoutImportedCommands(script));
+        var benchmarkCase = Assert.Single(suite.Cases);
+
+        Assert.Equal("Small", benchmarkCase.Name);
+        Assert.Equal(1, benchmarkCase.Values["Rows"]);
+        Assert.DoesNotContain("Name", benchmarkCase.Values.Keys);
+    }
+
+    [Fact]
+    public void DslRuntime_EvaluatesShortDslWithoutImportedCmdlets()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'self-contained' {
+    policy -Warmup 0 -Iterations 1 -Order Sequential
+    caseSource @{ Name = 'Default'; Rows = 1 }
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+    compare Engine -Baseline Managed
+}
+");
+
+        var suite = Assert.Single(EvaluateBenchmarkDslWithoutImportedCommands(script));
+
+        Assert.Equal(0, suite.WarmupCount);
+        Assert.Equal(1, suite.IterationCount);
+        Assert.Equal(PowerShellBenchmarkRunOrder.Sequential, suite.RunOrder);
+        Assert.Equal("Default", Assert.Single(suite.Cases).Name);
+        Assert.Equal("Managed", Assert.Single(suite.Comparisons).Baseline);
+    }
+
+    [Fact]
+    public void InvokeBenchmarkSuiteCommand_PrefersRuntimeDslHelpersOverImportedAliases()
+    {
+        var initialSessionState = InitialSessionState.CreateDefault();
+        initialSessionState.Commands.Add(new SessionStateCmdletEntry("Invoke-BenchmarkSuite", typeof(PSPublishModule.InvokeBenchmarkSuiteCommand), helpFileName: null));
+        using var runspace = RunspaceFactory.CreateRunspace(initialSessionState);
+        runspace.Open();
+        ImportBenchmarkDslCommands(runspace);
+        using var ps = PowerShell.Create(runspace);
+        ps.AddScript("""
+Invoke-BenchmarkSuite -Settings {
+    benchmark 'alias-shadow' {
+        policy -Warmup 0 -Iterations 1
+        caseSource @{ Name = 'Default' }
+        axis Operation Run
+        axis Engine Managed
+        engine Managed { operation Run { param($case, $run) } }
+        compare Engine -Baseline Managed
+    }
+} -Plan
+""");
+
+        var output = ps.Invoke();
+
+        Assert.Empty(ps.Streams.Error);
+        var item = Assert.IsType<PowerShellBenchmarkWorkItem>(Assert.Single(output).BaseObject);
+        Assert.Equal("Default", item.Scenario);
+
+        ps.Commands.Clear();
+        ps.AddCommand("Get-Alias").AddArgument("benchmark");
+        var benchmarkAlias = Assert.IsType<AliasInfo>(Assert.Single(ps.Invoke()).BaseObject);
+        Assert.Equal("New-BenchmarkSuite", benchmarkAlias.Definition);
+
+        ps.Commands.Clear();
+        ps.AddCommand("Get-Alias").AddArgument("compare");
+        var compareAlias = Assert.IsType<AliasInfo>(Assert.Single(ps.Invoke()).BaseObject);
+        Assert.Equal("Compare-Object", compareAlias.Definition);
+    }
+
+    [Fact]
+    public void AddBenchmarkComparisonCommand_ExportsOnlyImportSafeAlias()
+    {
+        var alias = typeof(PSPublishModule.AddBenchmarkComparisonCommand)
+            .GetCustomAttributes(inherit: false)
+            .OfType<AliasAttribute>()
+            .Single();
+
+        Assert.Contains("comparison", alias.AliasNames);
+        Assert.DoesNotContain("compare", alias.AliasNames);
+    }
+
+    [Fact]
     public void DslRuntime_StripsGeneratedScenarioCaseMetadata()
     {
         var script = ScriptBlock.Create(@"
@@ -432,6 +526,22 @@ benchmark 'bad' {
 
         Assert.NotNull(property);
         Assert.Contains(property!.GetCustomAttributes(inherit: true), attribute => attribute is ParameterAttribute);
+    }
+
+    private static PowerShellBenchmarkSuite[] EvaluateBenchmarkDslWithoutImportedCommands(ScriptBlock scriptBlock)
+    {
+        var previousRunspace = Runspace.DefaultRunspace;
+        using var runspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
+        runspace.Open();
+        Runspace.DefaultRunspace = runspace;
+        try
+        {
+            return PowerShellBenchmarkDslRuntime.Evaluate(scriptBlock);
+        }
+        finally
+        {
+            Runspace.DefaultRunspace = previousRunspace;
+        }
     }
 
     [Fact]

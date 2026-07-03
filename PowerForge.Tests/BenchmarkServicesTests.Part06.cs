@@ -46,6 +46,32 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Runner_RejectsProfileAxisAsSuiteMetadata()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Profile", Values = { "Current", "TemporaryLocalUser" } });
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Plan(suite));
+
+        Assert.Contains("Profile axis", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("suite metadata", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Runner_UsesPlanningProfileForSkipRules()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Profile = PowerShellBenchmarkProfileKind.Current;
+        suite.PlanningProfile = PowerShellBenchmarkProfileKind.TemporaryLocalUser;
+        suite.Skip = ScriptBlock.Create("param($case) $case.Profile -ne 'TemporaryLocalUser'");
+
+        var item = Assert.Single(new PowerShellBenchmarkRunner().Plan(suite));
+
+        Assert.False(item.IsSkipped);
+        Assert.Equal("TemporaryLocalUser", item.Values["Profile"]);
+    }
+
+    [Fact]
     public void Runner_RejectsMatrixAxesThatShadowCaseVariables()
     {
         var suite = CreateRunnableSuite();
@@ -479,7 +505,69 @@ benchmark 'stale-native-exit' {
 
         var sample = Assert.Single(result.Samples);
         Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Contains("Operation failed", sample.Reason, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("boom", sample.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Runner_ReportsFailureStageAndPowerShellLocation()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create("""
+param($case, $run)
+throw 'handler exploded'
+""");
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Contains("Operation failed", sample.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("handler exploded", sample.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Line:", sample.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("throw 'handler exploded'", sample.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Runner_RecordsElapsedDurationForFailedOperations()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Engines[0].Operations["Run"] = ScriptBlock.Create("param($case, $run) Start-Sleep -Milliseconds 20; throw 'late failure'");
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Contains("Operation failed", sample.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.True(sample.DurationMs > 0);
+    }
+
+    [Fact]
+    public void Runner_ReportsValidationFailureStage()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Validate = ScriptBlock.Create("param($case, $run) throw 'bad output'");
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Contains("Validation failed", sample.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("bad output", sample.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Runner_ReportsMetricFailureStage()
+    {
+        var suite = CreateRunnableSuite();
+        suite.Metrics.Add(new PowerShellBenchmarkMetric { Name = "Rows", ScriptBlock = ScriptBlock.Create("throw 'metric broke'") });
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Contains("Metrics failed", sample.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("metric broke", sample.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
