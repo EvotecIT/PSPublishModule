@@ -137,6 +137,23 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(item.Host, item.Values["Host"]);
     }
 
+    [Theory]
+    [InlineData("/usr/bin/pwsh")]
+    [InlineData("/usr/local/bin/pwsh")]
+    [InlineData(@"C:\Program Files\PowerShell\7\pwsh.exe")]
+    public void HostRuntime_AcceptsExtensionlessPwshExecutableNames(string executable)
+    {
+        Assert.True(PowerShellBenchmarkHostRuntime.IsPwshExecutable(executable));
+    }
+
+    [Theory]
+    [InlineData("/usr/bin/powershell")]
+    [InlineData(@"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")]
+    public void HostRuntime_AcceptsExtensionlessDesktopExecutableNames(string executable)
+    {
+        Assert.True(PowerShellBenchmarkHostRuntime.IsDesktopExecutable(executable));
+    }
+
     [Fact]
     public void DslClosureTemplate_UsesFunctionProviderForDesktopCompatibility()
     {

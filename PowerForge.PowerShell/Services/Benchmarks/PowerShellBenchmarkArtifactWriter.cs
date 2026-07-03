@@ -82,6 +82,25 @@ internal static class PowerShellBenchmarkArtifactWriter
     }
 
     /// <summary>
+    /// Validates declared Markdown benchmark blocks before benchmark work starts.
+    /// </summary>
+    /// <param name="suite">Benchmark suite.</param>
+    public static void ValidateReadmeBlocks(PowerShellBenchmarkSuite suite)
+    {
+        var updater = new BenchmarkDocumentUpdater();
+        foreach (var block in suite.ReadmeBlocks)
+        {
+            if (IsSupportedReadmeRenderer(block.Renderer))
+            {
+                updater.ValidateBlock(block.Path, block.BlockId);
+                continue;
+            }
+
+            throw new NotSupportedException($"Benchmark README renderer '{block.Renderer}' is not supported.");
+        }
+    }
+
+    /// <summary>
     /// Determines whether a Markdown renderer name is supported.
     /// </summary>
     /// <param name="renderer">Renderer name.</param>

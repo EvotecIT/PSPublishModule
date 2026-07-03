@@ -979,6 +979,52 @@ benchmark 'path-temp-user' -out 'out' {
     }
 
     [Fact]
+    public void HostExecutor_NormalizesFullExecutablePathToCurrentForChildSelection()
+    {
+        var root = CreateTempRoot();
+        var executable = Path.Combine(root, "pwsh");
+        File.WriteAllText(executable, string.Empty);
+
+        Assert.Equal("Current", PowerShellBenchmarkHostExecutor.NormalizeChildHostSelection(executable, executable));
+        Assert.Equal("Core", PowerShellBenchmarkHostExecutor.NormalizeChildHostSelection("Core", executable));
+    }
+
+    [Fact]
+    public void HostExecutor_PreflightsReadmeBlocksBeforeLaunchingHost()
+    {
+        var root = CreateTempRoot();
+        var spec = Path.Combine(root, "host-readme-preflight.benchmark.ps1");
+        File.WriteAllText(spec, "# host should not launch before README validation");
+        var readme = Path.Combine(root, "README.md");
+        File.WriteAllText(readme, "<!-- BENCHMARK:other:START -->\nold\n<!-- BENCHMARK:other:END -->\n");
+        var suite = CreateRunnableSuite();
+        suite.OutputRoot = Path.Combine(root, "out");
+        suite.ReadmeBlocks.Add(new PowerShellBenchmarkReadmeBlock
+        {
+            Path = readme,
+            BlockId = "results",
+            Renderer = "SummaryTable"
+        });
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Host", Values = { "PowerForgeMissingHost" } });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new PowerShellBenchmarkHostExecutor().Run(suite, new PowerShellBenchmarkHostRunRequest
+        {
+            SpecPath = spec,
+            WorkingDirectory = root,
+            OutputRoot = suite.OutputRoot,
+            WarmupCount = 0,
+            IterationCount = 1,
+            RunMode = suite.RunMode,
+            SuiteName = suite.Name,
+            Hosts = new[] { "PowerForgeMissingHost" },
+            ExternalHostTimeoutSeconds = 1
+        }));
+
+        Assert.Contains("results", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("External host", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Runner_RejectsTemporaryLocalUserProfileWithoutFileBackedExecutor()
     {
         var suite = CreateRunnableSuite();

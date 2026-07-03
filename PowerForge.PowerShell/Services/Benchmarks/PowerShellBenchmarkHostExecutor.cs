@@ -80,6 +80,7 @@ public sealed class PowerShellBenchmarkHostExecutor
         if (suite is null) throw new ArgumentNullException(nameof(suite));
         if (request is null) throw new ArgumentNullException(nameof(request));
         ValidateRequest(request);
+        PowerShellBenchmarkArtifactWriter.ValidateReadmeBlocks(suite);
 
         var hosts = request.Hosts.Length == 0
             ? PowerShellBenchmarkHostRuntime.GetRequestedHosts(suite)
@@ -168,7 +169,7 @@ public sealed class PowerShellBenchmarkHostExecutor
             Cases = request.Selection.Cases,
             Engines = request.Selection.Engines,
             Operations = request.Selection.Operations,
-            Hosts = new[] { host }
+            Hosts = new[] { NormalizeChildHostSelection(host, executable) }
         };
         return new PowerShellBenchmarkChildRunnerRequest
         {
@@ -379,6 +380,18 @@ public sealed class PowerShellBenchmarkHostExecutor
     }
 
     private static string ChildRunnerScript => EmbeddedScripts.Load("Scripts/Benchmarks/TemporaryUserChildRunner.ps1");
+
+    internal static string NormalizeChildHostSelection(string host, string executable)
+    {
+        if (File.Exists(host)
+            && string.Equals(Path.GetFullPath(host), Path.GetFullPath(executable), PathComparison))
+            return "Current";
+
+        return host;
+    }
+
+    private static StringComparison PathComparison
+        => RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     private sealed class ProcessResult
     {

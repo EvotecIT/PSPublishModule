@@ -77,11 +77,11 @@ internal static class PowerShellBenchmarkHostRuntime
         if (File.Exists(host))
             return host;
 
-        throw new InvalidOperationException($"Benchmark host '{host}' is not a known PowerShell host. Use Core, Desktop, Current, or a full pwsh.exe/powershell.exe path.");
+        throw new InvalidOperationException($"Benchmark host '{host}' is not a known PowerShell host. Use Core, Desktop, Current, or a full pwsh/pwsh.exe/powershell/powershell.exe path.");
     }
 
     internal static bool IsDesktopExecutable(string executable)
-        => string.Equals(Path.GetFileName(executable), "powershell.exe", StringComparison.OrdinalIgnoreCase);
+        => IsExecutableName(executable, "powershell", "powershell.exe");
 
     internal static string ResolveAssemblyForHost(string currentAssemblyPath, string executable)
     {
@@ -164,14 +164,20 @@ internal static class PowerShellBenchmarkHostRuntime
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             return false;
-        var fileName = Path.GetFileName(path);
-        return string.Equals(fileName, "pwsh.exe", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(fileName, "powershell.exe", StringComparison.OrdinalIgnoreCase);
+        return IsExecutableName(path, "pwsh", "pwsh.exe", "powershell", "powershell.exe");
     }
 
-    private static bool IsPwshExecutable(string? path)
+    internal static bool IsPwshExecutable(string? path)
         => !string.IsNullOrWhiteSpace(path)
-           && string.Equals(Path.GetFileName(path), "pwsh.exe", StringComparison.OrdinalIgnoreCase);
+           && IsExecutableName(path, "pwsh", "pwsh.exe");
+
+    private static bool IsExecutableName(string? path, params string[] names)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+        var fileName = Path.GetFileName(path);
+        return names.Any(name => string.Equals(fileName, name, StringComparison.OrdinalIgnoreCase));
+    }
 
     private static bool IsWindowsAppsPath(string? path)
         => !string.IsNullOrWhiteSpace(path)

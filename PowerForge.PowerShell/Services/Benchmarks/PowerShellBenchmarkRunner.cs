@@ -143,7 +143,7 @@ public sealed class PowerShellBenchmarkRunner
         if (suite is null) throw new ArgumentNullException(nameof(suite));
         ValidateCurrentRunspaceProfile(suite);
         ValidateComparisons(suite);
-        ValidateReadmeBlocks(suite);
+        PowerShellBenchmarkArtifactWriter.ValidateReadmeBlocks(suite);
         var runId = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
         var started = DateTimeOffset.UtcNow;
         var samples = new List<BenchmarkSample>();
@@ -514,20 +514,6 @@ public sealed class PowerShellBenchmarkRunner
                     continue;
                 throw new NotSupportedException($"Benchmark comparison metric '{metric}' is not supported by suite '{suite.Name}'. Use MedianMs, MeanMs, MinMs, MaxMs, P95Ms/P95, P99Ms/P99, StdDevMs/StdDev, StdErrMs/StdErr, or a declared custom metric.");
             }
-        }
-    }
-
-    private static void ValidateReadmeBlocks(PowerShellBenchmarkSuite suite)
-    {
-        var updater = new BenchmarkDocumentUpdater();
-        foreach (var block in suite.ReadmeBlocks)
-        {
-            if (PowerShellBenchmarkArtifactWriter.IsSupportedReadmeRenderer(block.Renderer))
-            {
-                updater.ValidateBlock(block.Path, block.BlockId);
-                continue;
-            }
-            throw new NotSupportedException($"Benchmark README renderer '{block.Renderer}' is not supported.");
         }
     }
 
