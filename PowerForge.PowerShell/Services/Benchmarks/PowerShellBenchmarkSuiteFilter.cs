@@ -36,7 +36,7 @@ public static class PowerShellBenchmarkSuiteFilter
         FilterCases(suite, Normalize(selection.Cases));
         FilterEngines(suite, Normalize(selection.Engines));
         ReplaceAxisWhenRequested(suite, "Operation", Normalize(selection.Operations));
-        ReplaceAxisWhenRequested(suite, "Host", Normalize(selection.Hosts));
+        ReplaceAxisWhenRequested(suite, "Host", GetRequestedHosts(suite, selection));
     }
 
     private static void FilterCases(PowerShellBenchmarkSuite suite, string[] requested)
@@ -84,6 +84,18 @@ public static class PowerShellBenchmarkSuiteFilter
 
         existing.Values.AddRange(requested);
     }
+
+    private static string[] GetRequestedHosts(PowerShellBenchmarkSuite suite, PowerShellBenchmarkSelection selection)
+    {
+        var requested = Normalize(selection.Hosts);
+        if (requested.Length > 0 || !HasAxis(suite, "Host"))
+            return requested;
+
+        return new[] { "Current" };
+    }
+
+    private static bool HasAxis(PowerShellBenchmarkSuite suite, string name)
+        => suite.Axes.Any(axis => string.Equals(axis.Name, name, StringComparison.OrdinalIgnoreCase));
 
     private static void ThrowIfMissing(string suiteName, string label, string[] requested, string[] available)
     {

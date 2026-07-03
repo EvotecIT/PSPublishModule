@@ -78,6 +78,24 @@ public sealed class ManagedModuleBenchmarkSuiteTests
     }
 
     [Fact]
+    public void ManagedModuleSuite_ExplicitHostSelectionKeepsHostMatrix()
+    {
+        var suite = LoadSuite(new PowerShellBenchmarkSelection
+        {
+            Cases = new[] { "SingleModule" },
+            Engines = new[] { "Managed", "ModuleFast" },
+            Operations = new[] { "Install" },
+            Hosts = new[] { "Core", "Desktop" }
+        });
+
+        var plan = new PowerShellBenchmarkRunner().Plan(suite);
+
+        Assert.Equal(4, plan.Length);
+        Assert.Contains(plan, item => item.Host.StartsWith("Core-", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan, item => item.Host == "Desktop");
+    }
+
+    [Fact]
     public void ManagedModuleSuite_CanPlanThroughRealBenchmarkCommandsAndAliases()
     {
         var path = Path.Combine(RepoRootLocator.Find(), "Benchmarks", "ManagedModules", "managed-modules.benchmark.ps1");
