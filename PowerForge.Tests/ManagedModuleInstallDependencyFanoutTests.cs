@@ -85,7 +85,7 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
 
         Assert.Equal(ManagedModuleInstallStatus.Installed, result.Status);
         Assert.True(handler.CoreLatestRequestedBeforeRootDownload);
-        Assert.Contains(handler.Requests, static request => request.EndsWith("id='Company.Core'&$filter=IsLatestVersion&$top=1&semVerLevel=2.0.0", StringComparison.Ordinal));
+        Assert.Contains(handler.Requests, static request => request.EndsWith("Packages()?$filter=Id%20eq%20'Company.Core'%20and%20IsLatestVersion&$top=1&semVerLevel=2.0.0", StringComparison.Ordinal));
     }
 
 #if !NET472
@@ -263,12 +263,12 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
             lock (_syncRoot)
             {
                 if (url.Equals("https://example.test/api/v2/package/Company.Root/1.0.0", StringComparison.OrdinalIgnoreCase))
-                    CoreLatestRequestedBeforeRootDownload = _requests.Any(static item => item.Contains("id='Company.Core'&$filter=IsLatestVersion", StringComparison.Ordinal));
+                    CoreLatestRequestedBeforeRootDownload = _requests.Any(static item => item.Contains("Id%20eq%20'Company.Core'%20and%20IsLatestVersion", StringComparison.Ordinal));
 
                 _requests.Add(url);
             }
 
-            if (url.Equals("https://example.test/api/v2/FindPackagesById()?id='Company.Root'&$filter=IsLatestVersion&$top=1&semVerLevel=2.0.0", StringComparison.OrdinalIgnoreCase))
+            if (url.Equals("https://example.test/api/v2/Packages()?$filter=Id%20eq%20'Company.Root'%20and%20IsLatestVersion&$top=1&semVerLevel=2.0.0", StringComparison.OrdinalIgnoreCase))
             {
                 return CreateXmlResponse(
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
@@ -277,7 +277,7 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
                     "</feed>");
             }
 
-            if (url.Equals("https://example.test/api/v2/FindPackagesById()?id='Company.Core'&$filter=IsLatestVersion&$top=1&semVerLevel=2.0.0", StringComparison.OrdinalIgnoreCase))
+            if (url.Equals("https://example.test/api/v2/Packages()?$filter=Id%20eq%20'Company.Core'%20and%20IsLatestVersion&$top=1&semVerLevel=2.0.0", StringComparison.OrdinalIgnoreCase))
             {
                 return CreateXmlResponse(
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
