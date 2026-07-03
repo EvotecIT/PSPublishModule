@@ -42,6 +42,8 @@ public static class PowerShellBenchmarkDslRuntime
         Current.Value = context;
         Runspace? createdRunspace = null;
         var previousRunspace = Runspace.DefaultRunspace;
+        AliasSnapshot? assertPathAlias = null;
+        AliasSnapshot? assertValueAlias = null;
         AliasSnapshot? compareAlias = null;
         FunctionSnapshot? compareFunction = null;
         try
@@ -53,6 +55,8 @@ public static class PowerShellBenchmarkDslRuntime
                 Runspace.DefaultRunspace = createdRunspace;
             }
 
+            assertPathAlias = RemoveAlias("assertPath");
+            assertValueAlias = RemoveAlias("assertValue");
             compareAlias = RemoveAlias("compare");
             compareFunction = SetLegacyCompareFunction();
             InvokeRootBlock(scriptBlock);
@@ -62,6 +66,8 @@ public static class PowerShellBenchmarkDslRuntime
         {
             RestoreFunction(compareFunction);
             RestoreAlias(compareAlias);
+            RestoreAlias(assertValueAlias);
+            RestoreAlias(assertPathAlias);
             Runspace.DefaultRunspace = previousRunspace;
             createdRunspace?.Dispose();
             Current.Value = previous;
@@ -436,6 +442,9 @@ public static class PowerShellBenchmarkDslRuntime
         static string Call(string methodName, string parameterBlock, string arguments)
             => $"{parameterBlock} __PowerForgeBenchmarkDslInvoke -Name '{methodName}' -Arguments ({arguments})";
 
+        const string AssertPathBody = "param([Parameter(Position=0, Mandatory=$true)] [string] $Path, [switch] $Not, [string] $Message, [switch] $PassThru) $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path); $exists = [System.IO.File]::Exists($resolved) -or [System.IO.Directory]::Exists($resolved); if ($exists -eq (-not $Not.IsPresent)) { if ($PassThru) { $resolved }; return }; if ([string]::IsNullOrWhiteSpace($Message)) { if ($Not.IsPresent) { $Message = \"Expected path '$resolved' not to exist.\" } else { $Message = \"Expected path '$resolved' to exist.\" } }; throw $Message";
+        const string AssertValueBody = "param([Parameter(Position=0, Mandatory=$true)] [object] $Actual, [Parameter(Position=1)] [object] $Expected, [switch] $NotNull, [string] $Message, [switch] $PassThru) $passed = if ($NotNull.IsPresent) { $null -ne $Actual } else { [object]::Equals($Actual, $Expected) }; if ($passed) { if ($PassThru) { $Actual }; return }; if ([string]::IsNullOrWhiteSpace($Message)) { if ($NotNull.IsPresent) { $Message = 'Expected benchmark value not to be null.' } else { $Message = \"Expected benchmark value '$Actual' to equal '$Expected'.\" } }; throw $Message";
+
         return new()
         {
             ["__PowerForgeBenchmarkDslInvoke"] = """
@@ -472,8 +481,8 @@ try {
             ["comparison"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric) $arguments = [object[]]::new(3); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
             ["readme"] = Call("Readme", "param([Parameter(Position=0)] [string] $Path, [string] $Block, [string] $Renderer)", "[object[]] @($Path, $Block, $Renderer)"),
             ["artifacts"] = "param([Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) $arguments = [object[]]::new(1); $arguments[0] = $Values; __PowerForgeBenchmarkDslInvoke -Name 'Artifacts' -Arguments $arguments",
-            ["assertPath"] = "param([Parameter(Position=0, Mandatory=$true)] [string] $Path, [switch] $Not, [string] $Message, [switch] $PassThru) $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path); $exists = [System.IO.File]::Exists($resolved) -or [System.IO.Directory]::Exists($resolved); if ($exists -eq (-not $Not.IsPresent)) { if ($PassThru) { $resolved }; return }; if ([string]::IsNullOrWhiteSpace($Message)) { if ($Not.IsPresent) { $Message = \"Expected path '$resolved' not to exist.\" } else { $Message = \"Expected path '$resolved' to exist.\" } }; throw $Message",
-            ["assertValue"] = "param([Parameter(Position=0, Mandatory=$true)] [object] $Actual, [Parameter(Position=1)] [object] $Expected, [switch] $NotNull, [string] $Message, [switch] $PassThru) $passed = if ($NotNull.IsPresent) { $null -ne $Actual } else { [object]::Equals($Actual, $Expected) }; if ($passed) { if ($PassThru) { $Actual }; return }; if ([string]::IsNullOrWhiteSpace($Message)) { if ($NotNull.IsPresent) { $Message = 'Expected benchmark value not to be null.' } else { $Message = \"Expected benchmark value '$Actual' to equal '$Expected'.\" } }; throw $Message",
+            ["assertPath"] = AssertPathBody,
+            ["assertValue"] = AssertValueBody,
             ["New-BenchmarkSuite"] = Call("Benchmark", "param([Parameter(Position=0)] [string] $Name, [Alias('out')] [string] $OutputRoot, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $OutputRoot, $ScriptBlock)"),
             ["Add-BenchmarkCases"] = Call("Cases", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
             ["Add-BenchmarkCase"] = Call("Case", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [hashtable] $Values)", "[object[]] @($Name, $Values)"),
@@ -492,8 +501,8 @@ try {
             ["Add-BenchmarkComparison"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric) $arguments = [object[]]::new(3); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
             ["Add-BenchmarkReadmeBlock"] = Call("Readme", "param([Parameter(Position=0)] [string] $Path, [string] $Block, [string] $Renderer)", "[object[]] @($Path, $Block, $Renderer)"),
             ["Set-BenchmarkArtifacts"] = "param([Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) $arguments = [object[]]::new(1); $arguments[0] = $Values; __PowerForgeBenchmarkDslInvoke -Name 'Artifacts' -Arguments $arguments",
-            ["Assert-BenchmarkPath"] = "param([Parameter(Position=0, Mandatory=$true)] [string] $Path, [switch] $Not, [string] $Message, [switch] $PassThru) assertPath -Path $Path -Not:$Not -Message $Message -PassThru:$PassThru",
-            ["Assert-BenchmarkValue"] = "param([Parameter(Position=0, Mandatory=$true)] [object] $Actual, [Parameter(Position=1)] [object] $Expected, [switch] $NotNull, [string] $Message, [switch] $PassThru) assertValue -Actual $Actual -Expected $Expected -NotNull:$NotNull -Message $Message -PassThru:$PassThru"
+            ["Assert-BenchmarkPath"] = AssertPathBody,
+            ["Assert-BenchmarkValue"] = AssertValueBody
         };
     }
 

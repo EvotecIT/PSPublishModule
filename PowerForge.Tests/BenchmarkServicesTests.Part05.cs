@@ -445,6 +445,43 @@ Invoke-BenchmarkSuite -Settings {
     }
 
     [Fact]
+    public void InvokeBenchmarkSuiteCommand_PrefersRuntimeAssertionsOverImportedAliases()
+    {
+        var root = CreateTempRoot();
+        File.WriteAllText(Path.Combine(root, "expected.txt"), "ok");
+        var escapedRoot = root.Replace("'", "''");
+        var initialSessionState = InitialSessionState.CreateDefault();
+        initialSessionState.Commands.Add(new SessionStateCmdletEntry("Invoke-BenchmarkSuite", typeof(PSPublishModule.InvokeBenchmarkSuiteCommand), helpFileName: null));
+        using var runspace = RunspaceFactory.CreateRunspace(initialSessionState);
+        runspace.Open();
+        ImportBenchmarkDslCommands(runspace);
+        using var ps = PowerShell.Create(runspace);
+        ps.AddScript($$"""
+Invoke-BenchmarkSuite -Settings {
+    benchmark 'assert-alias' -out '{{escapedRoot}}' {
+        policy -Warmup 0 -Iterations 1
+        caseSource @{ Name = 'Default' }
+        axis Operation Run
+        axis Engine Managed
+        engine Managed { operation Run { param($case, $run) } }
+        validate { param($case, $run) assertPath (Join-Path '{{escapedRoot}}' 'expected.txt') }
+    }
+}
+""");
+
+        var output = ps.Invoke();
+
+        Assert.Empty(ps.Streams.Error);
+        var result = Assert.IsType<BenchmarkRunResult>(Assert.Single(output).BaseObject);
+        Assert.All(result.Samples, sample => Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status));
+
+        ps.Commands.Clear();
+        ps.AddCommand("Get-Alias").AddArgument("assertPath");
+        var assertPathAlias = Assert.IsType<AliasInfo>(Assert.Single(ps.Invoke()).BaseObject);
+        Assert.Equal("Assert-BenchmarkPath", assertPathAlias.Definition);
+    }
+
+    [Fact]
     public void AddBenchmarkComparisonCommand_ExportsOnlyImportSafeAlias()
     {
         var alias = typeof(PSPublishModule.AddBenchmarkComparisonCommand)

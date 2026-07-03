@@ -89,7 +89,10 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
                 Import-Module ModuleFast -ErrorAction Stop
             }
 
-            Install-ModuleFast -Name $case.ModuleName -Path $run.InstallRoot -Source $run.ModuleFastSource -Force | Out-Null
+            Install-ModuleFast "$($case.ModuleName)=$($case.Version)" `
+                -Destination $run.InstallRoot `
+                -Source $run.ModuleFastSource `
+                -NoPSModulePathUpdate | Out-Null
         }
     }
 
