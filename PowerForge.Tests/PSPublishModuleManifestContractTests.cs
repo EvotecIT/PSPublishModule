@@ -112,7 +112,8 @@ public sealed class PSPublishModuleManifestContractTests
 
         Assert.Contains("Framework      = $Framework", selfBuildScript, StringComparison.Ordinal);
         Assert.Contains("[ValidateSet('auto', 'net10.0', 'net8.0')][string] $Framework = 'auto'", buildScript, StringComparison.Ordinal);
-        Assert.Contains("$tfm = if ($Framework -ne 'auto')", buildScript, StringComparison.Ordinal);
+        Assert.Contains("function Resolve-ImportFramework", buildScript, StringComparison.Ordinal);
+        Assert.Contains("$tfm = Resolve-ImportFramework -RequestedFramework $Framework", buildScript, StringComparison.Ordinal);
         Assert.Contains("\"PSPublishModule/bin/{0}/{1}/PSPublishModule.dll\" -f $Configuration, $tfm", buildScript, StringComparison.Ordinal);
     }
 

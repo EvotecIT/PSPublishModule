@@ -345,7 +345,7 @@ public sealed partial class ManagedModuleRepositoryClient
         var latestPredicate = includePrerelease ? "IsAbsoluteLatestVersion" : "IsLatestVersion";
         return new Uri(
             new Uri(EnsureTrailingSlash(source)),
-            $"FindPackagesById()?id='{escapedId}'&$filter={latestPredicate}&$top=1&semVerLevel=2.0.0");
+            $"Packages()?$filter=Id eq '{escapedId}' and {latestPredicate}&$top=1&semVerLevel=2.0.0");
     }
 
     private static bool ShouldUsePrefixFilter(string pattern)
