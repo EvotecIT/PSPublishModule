@@ -42,9 +42,7 @@ public static class PowerShellBenchmarkDslRuntime
         Current.Value = context;
         Runspace? createdRunspace = null;
         var previousRunspace = Runspace.DefaultRunspace;
-        AliasSnapshot? assertPathAlias = null;
-        AliasSnapshot? assertValueAlias = null;
-        AliasSnapshot? compareAlias = null;
+        List<AliasSnapshot?> aliasSnapshots = new();
         FunctionSnapshot? compareFunction = null;
         try
         {
@@ -55,9 +53,8 @@ public static class PowerShellBenchmarkDslRuntime
                 Runspace.DefaultRunspace = createdRunspace;
             }
 
-            assertPathAlias = RemoveAlias("assertPath");
-            assertValueAlias = RemoveAlias("assertValue");
-            compareAlias = RemoveAlias("compare");
+            foreach (var aliasName in CreateFunctionBodies().Keys)
+                aliasSnapshots.Add(RemoveAlias(aliasName));
             compareFunction = SetLegacyCompareFunction();
             InvokeRootBlock(scriptBlock);
             return context.Suites.ToArray();
@@ -65,9 +62,8 @@ public static class PowerShellBenchmarkDslRuntime
         finally
         {
             RestoreFunction(compareFunction);
-            RestoreAlias(compareAlias);
-            RestoreAlias(assertValueAlias);
-            RestoreAlias(assertPathAlias);
+            for (var i = aliasSnapshots.Count - 1; i >= 0; i--)
+                RestoreAlias(aliasSnapshots[i]);
             Runspace.DefaultRunspace = previousRunspace;
             createdRunspace?.Dispose();
             Current.Value = previous;
@@ -367,7 +363,15 @@ public static class PowerShellBenchmarkDslRuntime
         "MedianMs",
         "MeanMs",
         "MinMs",
-        "MaxMs"
+        "MaxMs",
+        "P95Ms",
+        "P95",
+        "P99Ms",
+        "P99",
+        "StdDevMs",
+        "StdDev",
+        "StdErrMs",
+        "StdErr"
     };
 
     /// <summary>

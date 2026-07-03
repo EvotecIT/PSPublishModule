@@ -156,7 +156,7 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
         }
         else
         {
-            block = Settings.GetNewClosure();
+            block = Settings;
         }
 
         var benchmarkVariables = GetBenchmarkVariables();

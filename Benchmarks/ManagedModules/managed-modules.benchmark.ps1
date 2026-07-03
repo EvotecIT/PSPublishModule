@@ -19,7 +19,6 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         $run.RepositoryUri = $BenchmarkVariables['RepositoryUri'] ?? 'https://www.powershellgallery.com/api/v3/index.json'
         $run.ModuleFastSource = $BenchmarkVariables['ModuleFastSource'] ?? 'https://pwsh.gallery/index.json'
         $run.ModuleFastModulePath = $BenchmarkVariables['ModuleFastPath'] ?? ''
-        $run.ModuleFastCSharpPath = $BenchmarkVariables['ModuleFastCSharpPath'] ?? ''
         $run.InstallRoot = Join-Path $run.OutputDirectory 'installed'
         $run.SaveRoot = Join-Path $run.OutputDirectory 'saved'
         $run.PackageCacheRoot = Join-Path $run.OutputDirectory 'package-cache'
@@ -30,11 +29,7 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
     skip {
         param($case)
 
-        if ($case.Engine -in @('ModuleFast', 'ModuleFastCSharp') -and $case.Operation -ne 'Install') {
-            return $true
-        }
-
-        if ($case.Engine -eq 'ModuleFastCSharp' -and -not ($BenchmarkVariables['ModuleFastCSharpPath'] ?? '').Trim()) {
+        if ($case.Engine -eq 'ModuleFast' -and $case.Operation -ne 'Install') {
             return $true
         }
 
@@ -103,20 +98,6 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         }
     }
 
-    engine ModuleFastCSharp {
-        operation Install {
-            param($case, $run)
-
-            Remove-Module ModuleFast -Force -ErrorAction SilentlyContinue
-            Import-Module -Name $run.ModuleFastCSharpPath -Force
-
-            Install-ModuleFast "$($case.ModuleName)=$($case.Version)" `
-                -Destination $run.InstallRoot `
-                -Source $run.ModuleFastSource `
-                -NoPSModulePathUpdate | Out-Null
-        }
-    }
-
     engine PSResourceGet {
         operation Find {
             param($case, $run)
@@ -162,7 +143,7 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
 
         $root = switch ($case.Operation) {
             'Install' {
-                if ($case.Engine -notin @('Managed', 'ModuleFast', 'ModuleFastCSharp')) { return }
+                if ($case.Engine -notin @('Managed', 'ModuleFast')) { return }
                 $run.InstallRoot
             }
             'Save' { $run.SaveRoot }

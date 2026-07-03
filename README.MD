@@ -352,11 +352,6 @@ layout. Native provider install rows that target `CurrentUser` can be measured
 under the `TemporaryLocalUser` benchmark profile so the real user module folder
 is not changed.
 
-The optional `ModuleFastCSharp` lane can compare a locally built ModuleFast C#
-branch without making normal runs depend on an external checkout. Pass
-`-Variable @{ ModuleFastCSharpPath = '...\ModuleFast.psd1' }` and include
-`ModuleFastCSharp` in `-Engine` when you want that experimental lane.
-
 <!-- managed-module-benchmark-table:start -->
 | Scenario | Host | Operation | Managed | ModuleFast | Result |
 | --- | --- | --- | ---: | ---: | --- |

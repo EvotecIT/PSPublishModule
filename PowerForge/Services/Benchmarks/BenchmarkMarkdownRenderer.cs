@@ -44,6 +44,14 @@ public sealed class BenchmarkMarkdownRenderer
         var rows = (comparison ?? Array.Empty<BenchmarkComparisonRow>()).ToArray();
         var markdown = new StringBuilder();
         var baseline = rows.Select(r => r.BaselineEngine).FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value)) ?? "Baseline";
+        var includeVariables = rows.Any(static row => !string.IsNullOrWhiteSpace(FormatComparisonVariables(row.Variables)));
+        var includeOs = rows.Select(static row => row.Os ?? string.Empty).Where(static value => value.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).Skip(1).Any();
+        var includeRunMode = rows.Select(static row => row.RunMode ?? string.Empty).Where(static value => value.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).Skip(1).Any();
+        var includeMetric = rows
+            .Select(static row => string.IsNullOrWhiteSpace(row.Metric) ? "MedianMs" : row.Metric)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count() > 1
+            || rows.Any(static row => !IsDefaultDurationMetric(row.Metric));
         var engines = rows
             .Select(r => r.Engine)
             .Where(static value => !string.IsNullOrWhiteSpace(value))
@@ -52,21 +60,34 @@ public sealed class BenchmarkMarkdownRenderer
             .ThenBy(engine => engine, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        markdown.Append("| Scenario | Host | Operation |");
+        markdown.Append("| Scenario |");
+        if (includeVariables) markdown.Append(" Variables |");
+        markdown.Append(" Host |");
+        if (includeOs) markdown.Append(" OS |");
+        if (includeRunMode) markdown.Append(" RunMode |");
+        markdown.Append(" Operation |");
+        if (includeMetric) markdown.Append(" Metric |");
         foreach (var engine in engines)
             markdown.Append(' ').Append(Cell(engine)).Append(" |");
         markdown.AppendLine(" Result |");
 
-        markdown.Append("| --- | --- | --- |");
+        markdown.Append("| --- |");
+        if (includeVariables) markdown.Append(" --- |");
+        markdown.Append(" --- |");
+        if (includeOs) markdown.Append(" --- |");
+        if (includeRunMode) markdown.Append(" --- |");
+        markdown.Append(" --- |");
+        if (includeMetric) markdown.Append(" --- |");
         foreach (var _ in engines)
             markdown.Append(" ---: |");
         markdown.AppendLine(" --- |");
 
         foreach (var group in rows
-                     .GroupBy(r => string.Join("\u001f", r.Scenario, FormatVariables(r.Variables), r.Operation, r.Host, r.Os, r.RunMode), StringComparer.Ordinal)
+                     .GroupBy(r => string.Join("\u001f", r.Scenario, FormatVariables(r.Variables), r.Operation, r.Host, r.Os, r.RunMode, r.Metric), StringComparer.Ordinal)
                      .OrderBy(g => DisplayScenario(g.First()), StringComparer.OrdinalIgnoreCase)
                      .ThenBy(g => g.First().Operation, StringComparer.OrdinalIgnoreCase)
-                     .ThenBy(g => g.First().Host, StringComparer.OrdinalIgnoreCase))
+                     .ThenBy(g => g.First().Host, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(g => g.First().Metric, StringComparer.OrdinalIgnoreCase))
         {
             var first = group.First();
             var byEngine = group
@@ -74,18 +95,24 @@ public sealed class BenchmarkMarkdownRenderer
                 .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
             markdown.Append("| ")
                 .Append(Cell(DisplayScenario(first)))
-                .Append(" | ")
-                .Append(Cell(first.Host))
-                .Append(" | ")
-                .Append(Cell(first.Operation))
                 .Append(" |");
+            if (includeVariables)
+                markdown.Append(' ').Append(Cell(FormatComparisonVariables(first.Variables))).Append(" |");
+            markdown.Append(' ').Append(Cell(first.Host)).Append(" |");
+            if (includeOs)
+                markdown.Append(' ').Append(Cell(first.Os)).Append(" |");
+            if (includeRunMode)
+                markdown.Append(' ').Append(Cell(first.RunMode)).Append(" |");
+            markdown.Append(' ').Append(Cell(first.Operation)).Append(" |");
+            if (includeMetric)
+                markdown.Append(' ').Append(Cell(string.IsNullOrWhiteSpace(first.Metric) ? "MedianMs" : first.Metric)).Append(" |");
             foreach (var engine in engines)
             {
                 byEngine.TryGetValue(engine, out var row);
                 markdown.Append(' ').Append(Cell(FormatComparisonValue(row))).Append(" |");
             }
             markdown.AppendLine(
-                $" {Cell(FormatComparisonResult(baseline, group))} |");
+                $" {Cell(FormatComparisonResult(baseline, first.Metric, group))} |");
         }
 
         return markdown.ToString().TrimEnd() + Environment.NewLine;
@@ -101,11 +128,17 @@ public sealed class BenchmarkMarkdownRenderer
         if (row?.Actual is null)
             return "Failed";
         var ratio = row.Ratio.HasValue ? row.Ratio.Value.ToString("0.00", CultureInfo.InvariantCulture) + "x" : "n/a";
-        return $"{ratio} ({FormatDuration(row.Actual.Value)})";
+        var value = IsDurationMetric(row.Metric)
+            ? FormatDuration(row.Actual.Value)
+            : Number(row.Actual.Value);
+        return $"{ratio} ({value})";
     }
 
-    private static string FormatComparisonResult(string baseline, IEnumerable<BenchmarkComparisonRow> rows)
+    private static string FormatComparisonResult(string baseline, string? metric, IEnumerable<BenchmarkComparisonRow> rows)
     {
+        if (!IsDurationMetric(metric))
+            return $"{baseline} baseline";
+
         var successful = rows
             .Where(static row => row.Actual.HasValue)
             .OrderBy(static row => row.Actual!.Value)
@@ -125,6 +158,19 @@ public sealed class BenchmarkMarkdownRenderer
         return $"{baseline} slower than {fastest}";
     }
 
+    private static bool IsDefaultDurationMetric(string? metric)
+        => string.IsNullOrWhiteSpace(metric) || string.Equals(metric, "MedianMs", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsDurationMetric(string? metric)
+    {
+        var name = string.IsNullOrWhiteSpace(metric) ? "MedianMs" : metric!.Trim();
+        return name.EndsWith("Ms", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(name, "P95", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(name, "P99", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(name, "StdDev", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(name, "StdErr", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string FormatDuration(double milliseconds)
         => milliseconds >= 1000
             ? (milliseconds / 1000).ToString("0.00", CultureInfo.InvariantCulture) + "s"
@@ -140,6 +186,14 @@ public sealed class BenchmarkMarkdownRenderer
         => string.Join(
             ", ",
             (variables ?? new Dictionary<string, string?>())
+                .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(k => string.Concat(k.Key, "=", k.Value ?? string.Empty)));
+
+    private static string FormatComparisonVariables(IReadOnlyDictionary<string, string?> variables)
+        => string.Join(
+            ", ",
+            (variables ?? new Dictionary<string, string?>())
+                .Where(k => !string.Equals(k.Key, "ModuleName", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(k => string.Concat(k.Key, "=", k.Value ?? string.Empty)));
 }

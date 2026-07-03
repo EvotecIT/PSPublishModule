@@ -63,6 +63,9 @@ public static class PowerShellBenchmarkSuiteFilter
         if (suite.Engines.Count == 0)
             throw new InvalidOperationException($"Benchmark suite '{suite.Name}' engine selection did not leave any runnable engines.");
         ReplaceAxisWhenRequested(suite, "Engine", requested);
+        suite.Comparisons.RemoveAll(comparison =>
+            string.Equals(comparison.Dimension, "Engine", StringComparison.OrdinalIgnoreCase)
+            && !selected.Contains(comparison.Baseline));
     }
 
     private static void ReplaceAxisWhenRequested(PowerShellBenchmarkSuite suite, string name, string[] requested)

@@ -313,6 +313,105 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void MarkdownRenderer_PreservesMatrixAndMetricDimensions()
+    {
+        var markdown = new BenchmarkMarkdownRenderer().RenderComparisonTable(new[]
+        {
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Actual = 10,
+                Baseline = 10,
+                Ratio = 1,
+                Variables = new Dictionary<string, string?> { ["Rows"] = "10" }
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Actual = 20,
+                Baseline = 10,
+                Ratio = 2,
+                Variables = new Dictionary<string, string?> { ["Rows"] = "10" }
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "P95Ms",
+                Actual = 15,
+                Baseline = 15,
+                Ratio = 1,
+                Variables = new Dictionary<string, string?> { ["Rows"] = "20" }
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "P95Ms",
+                Actual = 30,
+                Baseline = 15,
+                Ratio = 2,
+                Variables = new Dictionary<string, string?> { ["Rows"] = "20" }
+            }
+        });
+
+        Assert.Contains("| Scenario | Variables | Host | Operation | Metric | Managed | Other | Result |", markdown);
+        Assert.Contains("| case | Rows=10 | Current | Run | MedianMs | 1.00x (10ms) | 2.00x (20ms) | Managed fastest |", markdown);
+        Assert.Contains("| case | Rows=20 | Current | Run | P95Ms | 1.00x (15ms) | 2.00x (30ms) | Managed fastest |", markdown);
+    }
+
+    [Fact]
+    public void MarkdownRenderer_DoesNotFormatCustomMetricsAsDurations()
+    {
+        var markdown = new BenchmarkMarkdownRenderer().RenderComparisonTable(new[]
+        {
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "RowsPerSecond",
+                Actual = 1000,
+                Baseline = 1000,
+                Ratio = 1
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "RowsPerSecond",
+                Actual = 1200,
+                Baseline = 1000,
+                Ratio = 1.2
+            }
+        });
+
+        Assert.Contains("| case | Current | Run | RowsPerSecond | 1.00x (1000) | 1.20x (1200) | Managed baseline |", markdown);
+        Assert.DoesNotContain("1.00s", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void UpdateBenchmarkDocumentCommand_RejectsUnknownRenderers()
     {
         var root = CreateTempRoot();

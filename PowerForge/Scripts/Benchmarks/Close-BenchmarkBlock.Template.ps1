@@ -69,9 +69,7 @@ foreach ($function in Get-Command -CommandType Function -ErrorAction SilentlyCon
     if (($function.Options -band [System.Management.Automation.ScopedItemOptions]::Constant) -or
         ($function.Options -band [System.Management.Automation.ScopedItemOptions]::ReadOnly)) { continue }
     if ([string]::IsNullOrWhiteSpace($function.Definition)) { continue }
-    if (-not $capturedFunctions.ContainsKey($function.Name)) {
-        $capturedFunctions[$function.Name] = __PowerForgeBenchmarkDslInvoke -Name 'CaptureScriptText' -Arguments ([object[]] @([scriptblock]::Create([string] $function.Definition), $scriptRoot))
-    }
+    $capturedFunctions[$function.Name] = __PowerForgeBenchmarkDslInvoke -Name 'CaptureScriptText' -Arguments ([object[]] @([scriptblock]::Create([string] $function.Definition), $scriptRoot))
 }
 
 $scriptText = __PowerForgeBenchmarkDslInvoke -Name 'CaptureScriptText' -Arguments ([object[]] @($ScriptBlock, $scriptRoot))

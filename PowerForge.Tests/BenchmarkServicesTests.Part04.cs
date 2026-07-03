@@ -353,6 +353,27 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Importer_RoundTripsRunnerSummaryTimingColumns()
+    {
+        var root = CreateTempRoot();
+        var run = Path.Combine(root, "run1");
+        Directory.CreateDirectory(run);
+        File.WriteAllText(
+            Path.Combine(run, "summary.csv"),
+            "Suite,Scenario,Operation,Engine,Host,OS,RunMode,Rows,SampleCount,FailureCount,OutlierCount,Status,MedianMs,MeanMs,MinMs,MaxMs,P95Ms,P99Ms,StdDevMs,StdErrMs,FailureReasons,CustomMetric\nsuite,case,Run,Managed,Current,Windows,local,10,3,0,1,Succeeded,10,11,9,13,12,13,1.5,0.5,,42\n");
+
+        var row = Assert.Single(new BenchmarkResultImporter().Import(root).Summary);
+
+        Assert.Equal(1, row.OutlierCount);
+        Assert.Equal(12, row.P95Ms);
+        Assert.Equal(13, row.P99Ms);
+        Assert.Equal(1.5, row.StdDevMs);
+        Assert.Equal(0.5, row.StdErrMs);
+        Assert.Equal(42, row.Metrics["CustomMetric"]);
+        Assert.DoesNotContain("P95Ms", row.Metrics.Keys);
+    }
+
+    [Fact]
     public void RunnerPathSegments_EscapeInvalidCharactersWithoutCollisions()
     {
         var colon = PowerShellBenchmarkPathSegments.Value("Case:A");

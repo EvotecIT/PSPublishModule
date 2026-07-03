@@ -32,8 +32,8 @@ public sealed class ManagedModuleBenchmarkSuiteTests
         Assert.Contains("benchmark 'managed-modules'", text, StringComparison.Ordinal);
         Assert.Contains("caseSource", text, StringComparison.Ordinal);
         Assert.Contains("engine Managed", text, StringComparison.Ordinal);
-        Assert.Contains("engine ModuleFastCSharp", text, StringComparison.Ordinal);
         Assert.Contains("operation Install", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("ModuleFastCSharp", text, StringComparison.Ordinal);
         Assert.DoesNotContain("New-ManagedModuleBenchmarkSuite", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Invoke-BenchmarkSuite", text, StringComparison.Ordinal);
         Assert.DoesNotContain("PSPUBLISHMODULE_BENCHMARK_", text, StringComparison.Ordinal);
@@ -59,6 +59,22 @@ public sealed class ManagedModuleBenchmarkSuiteTests
         Assert.Contains(plan, item => item.Scenario == "SingleModule" && item.Engine == "Managed" && item.Operation == "Install");
         Assert.Contains(plan, item => item.Scenario == "Az" && item.Engine == "ModuleFast" && item.Operation == "Install");
         Assert.DoesNotContain(plan, item => item.Operation == "Repair");
+    }
+
+    [Fact]
+    public void ManagedModuleSuite_DropsComparisonWhenBaselineEngineIsFilteredOut()
+    {
+        var suite = LoadSuite(new PowerShellBenchmarkSelection
+        {
+            Engines = new[] { "ModuleFast" },
+            Operations = new[] { "Install" },
+            Cases = new[] { "SingleModule" }
+        });
+
+        var plan = new PowerShellBenchmarkRunner().Plan(suite);
+
+        Assert.Single(plan);
+        Assert.Empty(suite.Comparisons);
     }
 
     [Fact]
@@ -100,42 +116,17 @@ public sealed class ManagedModuleBenchmarkSuiteTests
         {
             Cases = new[] { "SingleModule" },
             Operations = new[] { "Find", "Install", "Save" },
-            Engines = new[] { "Managed", "ModuleFast", "ModuleFastCSharp", "PSResourceGet", "PowerShellGet" }
+            Engines = new[] { "Managed", "ModuleFast", "PSResourceGet", "PowerShellGet" }
         });
 
         var plan = new PowerShellBenchmarkRunner().Plan(suite);
 
-        Assert.Equal(15, plan.Length);
+        Assert.Equal(12, plan.Length);
         Assert.Contains(plan, item => item.Engine == "ModuleFast" && item.Operation == "Find" && item.IsSkipped);
         Assert.Contains(plan, item => item.Engine == "ModuleFast" && item.Operation == "Save" && item.IsSkipped);
-        Assert.Contains(plan, item => item.Engine == "ModuleFastCSharp" && item.Operation == "Find" && item.IsSkipped);
-        Assert.Contains(plan, item => item.Engine == "ModuleFastCSharp" && item.Operation == "Install" && item.IsSkipped);
-        Assert.Contains(plan, item => item.Engine == "ModuleFastCSharp" && item.Operation == "Save" && item.IsSkipped);
         Assert.Contains(plan, item => item.Engine == "Managed" && item.Operation == "Find");
         Assert.Contains(plan, item => item.Engine == "PSResourceGet" && item.Operation == "Save");
         Assert.Contains(suite.Comparisons, comparison => comparison.Baseline == "Managed" && comparison.Metrics.Contains("MedianMs"));
-    }
-
-    [Fact]
-    public void ManagedModuleSuite_ModuleFastCSharpRunsOnlyWhenPathIsSupplied()
-    {
-        var suite = LoadSuite(
-            new PowerShellBenchmarkSelection
-            {
-                Cases = new[] { "SingleModule" },
-                Operations = new[] { "Install" },
-                Engines = new[] { "Managed", "ModuleFastCSharp" }
-            },
-            variables: new Dictionary<string, string?>
-            {
-                ["ModuleFastCSharpPath"] = @"C:\Temp\ModuleFast\ModuleFast.psd1"
-            });
-
-        var plan = new PowerShellBenchmarkRunner().Plan(suite);
-
-        Assert.Equal(2, plan.Length);
-        Assert.Contains(plan, item => item.Engine == "Managed" && !item.IsSkipped);
-        Assert.Contains(plan, item => item.Engine == "ModuleFastCSharp" && !item.IsSkipped);
     }
 
     [Fact]

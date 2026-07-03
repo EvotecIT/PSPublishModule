@@ -184,6 +184,28 @@ benchmark 'reserved-artifact-metric' {
         Assert.Contains("Status", ex.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("P95")]
+    [InlineData("P99")]
+    [InlineData("StdDev")]
+    [InlineData("StdErr")]
+    public void DslRuntime_RejectsReservedTimingMetricAliases(string metricName)
+    {
+        var script = ScriptBlock.Create($$"""
+benchmark 'reserved-timing-alias' {
+    axis Operation Run
+    axis Engine Managed
+    metric {{metricName}} { 123 }
+    engine Managed { operation Run { param($case, $run) } }
+}
+""");
+
+        var ex = Assert.ThrowsAny<Exception>(() => EvaluateBenchmarkDsl(script));
+
+        Assert.Contains("reserved", ex.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(metricName, ex.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void DslRuntime_ParsesTemporaryLocalUserProfileAndCleanup()
     {
@@ -406,7 +428,62 @@ benchmark 'self-contained' {
     }
 
     [Fact]
-    public void InvokeBenchmarkSuiteCommand_PrefersRuntimeDslHelpersOverImportedAliases()
+    public void DslRuntime_PrefersRuntimeDslHelpersOverAliases()
+    {
+        var previousRunspace = Runspace.DefaultRunspace;
+        using var runspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
+        runspace.Open();
+        Runspace.DefaultRunspace = runspace;
+        try
+        {
+            using (var setup = PowerShell.Create(runspace))
+            {
+                setup.AddScript("""
+function New-BenchmarkSuite { throw 'benchmark alias was used' }
+function Add-BenchmarkAxis { throw 'axis alias was used' }
+function Add-BenchmarkEngine { throw 'engine alias was used' }
+Set-Alias -Name benchmark -Value New-BenchmarkSuite
+Set-Alias -Name axis -Value Add-BenchmarkAxis
+Set-Alias -Name engine -Value Add-BenchmarkEngine
+""");
+                setup.Invoke();
+                Assert.Empty(setup.Streams.Error);
+            }
+
+            var script = ScriptBlock.Create("""
+    benchmark 'alias-shadow' {
+        policy -Warmup 0 -Iterations 1
+        caseSource @{ Name = 'Default' }
+        axis Operation Run
+        axis Engine Managed
+        engine Managed { operation Run { param($case, $run) } }
+        compare Engine -Baseline Managed
+    }
+""");
+
+            var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(script));
+            var item = Assert.Single(new PowerShellBenchmarkRunner().Plan(suite));
+
+            Assert.Equal("Default", item.Scenario);
+
+            using var verify = PowerShell.Create(runspace);
+            verify.AddCommand("Get-Alias").AddArgument("benchmark");
+            var benchmarkAlias = Assert.IsType<AliasInfo>(Assert.Single(verify.Invoke()).BaseObject);
+            Assert.Equal("New-BenchmarkSuite", benchmarkAlias.Definition);
+
+            verify.Commands.Clear();
+            verify.AddCommand("Get-Alias").AddArgument("engine");
+            var engineAlias = Assert.IsType<AliasInfo>(Assert.Single(verify.Invoke()).BaseObject);
+            Assert.Equal("Add-BenchmarkEngine", engineAlias.Definition);
+        }
+        finally
+        {
+            Runspace.DefaultRunspace = previousRunspace;
+        }
+    }
+
+    [Fact]
+    public void InvokeBenchmarkSuiteCommand_RefreshesCapturedHelperFunctionsBetweenSuites()
     {
         var initialSessionState = InitialSessionState.CreateDefault();
         initialSessionState.Commands.Add(new SessionStateCmdletEntry("Invoke-BenchmarkSuite", typeof(PSPublishModule.InvokeBenchmarkSuiteCommand), helpFileName: null));
@@ -416,32 +493,37 @@ benchmark 'self-contained' {
         using var ps = PowerShell.Create(runspace);
         ps.AddScript("""
 Invoke-BenchmarkSuite -Settings {
-    benchmark 'alias-shadow' {
+    function Get-Probe { 'first' }
+    benchmark 'first' {
         policy -Warmup 0 -Iterations 1
         caseSource @{ Name = 'Default' }
         axis Operation Run
         axis Engine Managed
-        engine Managed { operation Run { param($case, $run) } }
-        compare Engine -Baseline Managed
+        setup { param($case, $run) $run.Probe = Get-Probe }
+        engine Managed { operation Run { param($case, $run) if ($run.Probe -ne 'first') { throw "expected first, got $($run.Probe)" } } }
     }
-} -Plan
+
+    function Get-Probe { 'second' }
+    benchmark 'second' {
+        policy -Warmup 0 -Iterations 1
+        caseSource @{ Name = 'Default' }
+        axis Operation Run
+        axis Engine Managed
+        setup { param($case, $run) $run.Probe = Get-Probe }
+        engine Managed { operation Run { param($case, $run) if ($run.Probe -ne 'second') { throw "expected second, got $($run.Probe)" } } }
+    }
+}
 """);
 
         var output = ps.Invoke();
 
         Assert.Empty(ps.Streams.Error);
-        var item = Assert.IsType<PowerShellBenchmarkWorkItem>(Assert.Single(output).BaseObject);
-        Assert.Equal("Default", item.Scenario);
-
-        ps.Commands.Clear();
-        ps.AddCommand("Get-Alias").AddArgument("benchmark");
-        var benchmarkAlias = Assert.IsType<AliasInfo>(Assert.Single(ps.Invoke()).BaseObject);
-        Assert.Equal("New-BenchmarkSuite", benchmarkAlias.Definition);
-
-        ps.Commands.Clear();
-        ps.AddCommand("Get-Alias").AddArgument("compare");
-        var compareAlias = Assert.IsType<AliasInfo>(Assert.Single(ps.Invoke()).BaseObject);
-        Assert.Equal("Compare-Object", compareAlias.Definition);
+        Assert.Equal(2, output.Count);
+        Assert.All(output, item =>
+        {
+            var result = Assert.IsType<BenchmarkRunResult>(item.BaseObject);
+            Assert.Equal(BenchmarkSampleStatus.Succeeded, Assert.Single(result.Samples).Status);
+        });
     }
 
     [Fact]
