@@ -41,6 +41,38 @@ public sealed class ManagedModuleDependencyInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_repairs_manifest_dependency_when_root_module_is_already_installed()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        WriteInstalledRootWithRequiredModule(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Core", "1.0.0");
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "marker.txt"), "keep-root");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            files: CreateCoreFiles("1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, result.Status);
+        Assert.Equal("keep-root", File.ReadAllText(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "marker.txt")));
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.Equal("Company.Core", dependency.Name);
+        Assert.Equal("1.0.0", dependency.Version);
+        Assert.Equal(ManagedModuleInstallStatus.Installed, dependency.Status);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "1.0.0", "Company.Core.psd1")));
+    }
+
+    [Fact]
     public async Task InstallAsync_skips_dependency_version_query_for_satisfied_dependency_when_only_repository_trust_is_required()
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -273,6 +305,20 @@ public sealed class ManagedModuleDependencyInstallServiceTests
         {
             ["Company.Core.psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
+
+    private static void WriteInstalledRootWithRequiredModule(
+        string moduleRoot,
+        string moduleName,
+        string version,
+        string dependencyName,
+        string dependencyVersion)
+    {
+        var modulePath = Path.Combine(moduleRoot, moduleName, version);
+        Directory.CreateDirectory(modulePath);
+        File.WriteAllText(
+            Path.Combine(modulePath, moduleName + ".psd1"),
+            "@{ ModuleVersion = '" + version + "'; RequiredModules = @(@{ ModuleName = '" + dependencyName + "'; RequiredVersion = '" + dependencyVersion + "'; }) }");
+    }
 
     private sealed class SatisfiedDependencyTrustFeedHandler : HttpMessageHandler
     {
