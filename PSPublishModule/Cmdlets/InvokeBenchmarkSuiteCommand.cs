@@ -238,7 +238,7 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
                     SuiteName = suite.Name,
                     Cleanup = suite.Cleanup,
                     BenchmarkVariables = benchmarkVariables,
-                    Selection = GetTemporaryUserSelection(),
+                    Selection = GetTemporaryUserSelection(suite),
                     ReadmePaths = suite.ReadmeBlocks.Select(block => block.Path).ToArray()
                 }));
                 continue;
@@ -284,15 +284,23 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
                .ToArray()
            ?? Array.Empty<string>();
 
-    private PowerShellBenchmarkSelection GetTemporaryUserSelection()
+    private PowerShellBenchmarkSelection GetTemporaryUserSelection(PowerShellBenchmarkSuite suite)
     {
         var selection = GetSelection();
         if (selection.Hosts.Length == 0)
         {
-            var currentHost = PowerShellBenchmarkHostRuntime.GetCurrentHostLabel();
-            selection.Hosts = currentHost.StartsWith("Desktop-", StringComparison.OrdinalIgnoreCase)
-                ? new[] { "Desktop" }
-                : new[] { "Core" };
+            var suiteHosts = GetSuiteHosts(suite);
+            if (suiteHosts.Length > 0)
+            {
+                selection.Hosts = suiteHosts;
+            }
+            else
+            {
+                var currentHost = PowerShellBenchmarkHostRuntime.GetCurrentHostLabel();
+                selection.Hosts = currentHost.StartsWith("Desktop-", StringComparison.OrdinalIgnoreCase)
+                    ? new[] { "Desktop" }
+                    : new[] { "Core" };
+            }
         }
         return selection;
     }

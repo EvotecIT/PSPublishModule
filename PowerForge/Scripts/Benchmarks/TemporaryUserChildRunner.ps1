@@ -8,7 +8,7 @@ Set-Location -LiteralPath $request.WorkingDirectory
 [System.Environment]::CurrentDirectory = (Get-Location).ProviderPath
 foreach ($modulePath in @($request.ModulePaths)) {
     if (-not [string]::IsNullOrWhiteSpace($modulePath) -and [System.IO.File]::Exists($modulePath)) {
-        Import-Module -Name $modulePath -Force -ErrorAction Stop
+        Import-Module -Name $modulePath -Force -ErrorAction SilentlyContinue
     }
 }
 function Add-PowerForgeBenchmarkAssembly {

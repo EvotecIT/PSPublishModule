@@ -948,11 +948,11 @@ benchmark 'path-temp-user' -out 'out' {
     }
 
     [Fact]
-    public void HostExecutor_DoesNotLaunchExternalHostWhenAllHostItemsAreSkipped()
+    public void HostExecutor_DoesNotUseParentSkipRulesToSuppressExternalHost()
     {
         var root = CreateTempRoot();
         var spec = Path.Combine(root, "host-skipped.benchmark.ps1");
-        File.WriteAllText(spec, "# child process is not started for this regression test");
+        File.WriteAllText(spec, "# child process is not started because the host cannot be resolved");
         var suite = CreateRunnableSuite();
         suite.OutputRoot = Path.Combine(root, "out");
         suite.Skip = ScriptBlock.Create("$true");
@@ -972,9 +972,10 @@ benchmark 'path-temp-user' -out 'out' {
         });
 
         var sample = Assert.Single(result.Samples);
-        Assert.Equal(BenchmarkSampleStatus.Skipped, sample.Status);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
         Assert.Equal("PowerForgeMissingHost", sample.Host);
-        Assert.Equal("Skipped", Assert.Single(result.Summary).Status);
+        Assert.Contains("External host 'PowerForgeMissingHost' failed", sample.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Failed", Assert.Single(result.Summary).Status);
     }
 
     [Fact]

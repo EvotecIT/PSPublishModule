@@ -91,12 +91,6 @@ public sealed class PowerShellBenchmarkHostExecutor
         var results = new List<BenchmarkRunResult>();
         foreach (var host in hosts)
         {
-            if (TryCreateSkippedHostResult(suite, host, started, out var skipped))
-            {
-                results.Add(skipped);
-                continue;
-            }
-
             results.Add(RunHost(suite, request, host, started));
         }
 
@@ -262,7 +256,7 @@ public sealed class PowerShellBenchmarkHostExecutor
         var samples = new PowerShellBenchmarkRunner()
             .Plan(suite)
             .Where(item => IsHostMatch(item.Host, host))
-            .Select(item => CreateHostFailureSample(runId, suite, item, item.IsSkipped ? BenchmarkSampleStatus.Skipped : BenchmarkSampleStatus.Failed, item.IsSkipped ? "Skipped by benchmark rule." : reason))
+            .Select(item => CreateHostFailureSample(runId, suite, item, BenchmarkSampleStatus.Failed, reason))
             .ToArray();
         if (samples.Length == 0)
         {
@@ -294,33 +288,6 @@ public sealed class PowerShellBenchmarkHostExecutor
             Samples = samples,
             Metadata = PowerShellBenchmarkEnvironmentMetadata.Build(suite)
         };
-    }
-
-    private static bool TryCreateSkippedHostResult(PowerShellBenchmarkSuite suite, string host, DateTimeOffset started, out BenchmarkRunResult result)
-    {
-        var items = new PowerShellBenchmarkRunner()
-            .Plan(suite)
-            .Where(item => IsHostMatch(item.Host, host))
-            .ToArray();
-        if (items.Length == 0 || items.Any(item => !item.IsSkipped))
-        {
-            result = new BenchmarkRunResult();
-            return false;
-        }
-
-        var runId = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
-        result = new BenchmarkRunResult
-        {
-            RunId = runId,
-            Suite = suite.Name,
-            StartedUtc = started,
-            FinishedUtc = DateTimeOffset.UtcNow,
-            Samples = items
-                .Select(item => CreateHostFailureSample(runId, suite, item, BenchmarkSampleStatus.Skipped, "Skipped by benchmark rule."))
-                .ToArray(),
-            Metadata = PowerShellBenchmarkEnvironmentMetadata.Build(suite)
-        };
-        return true;
     }
 
     private static BenchmarkSample CreateHostFailureSample(string runId, PowerShellBenchmarkSuite suite, PowerShellBenchmarkWorkItem item, BenchmarkSampleStatus status, string reason)
