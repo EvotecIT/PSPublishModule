@@ -990,6 +990,20 @@ benchmark 'path-temp-user' -out 'out' {
     }
 
     [Fact]
+    public void HostExecutor_DeduplicatesResolvedExecutableHostSelections()
+    {
+        var root = CreateTempRoot();
+        var executable = Path.Combine(root, "pwsh");
+        File.WriteAllText(executable, string.Empty);
+
+        var selections = PowerShellBenchmarkHostExecutor.ResolveHostSelections(new[] { executable, executable });
+
+        var selection = Assert.Single(selections);
+        Assert.Equal(executable, selection.Host);
+        Assert.Equal(executable, selection.Executable);
+    }
+
+    [Fact]
     public void HostExecutor_PreflightsReadmeBlocksBeforeLaunchingHost()
     {
         var root = CreateTempRoot();

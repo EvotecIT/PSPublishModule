@@ -88,11 +88,12 @@ public sealed class PowerShellBenchmarkHostExecutor
         if (hosts.Length == 0)
             hosts = new[] { "Current" };
 
+        var hostSelections = ResolveHostSelections(hosts);
         var started = DateTimeOffset.UtcNow;
         var results = new List<BenchmarkRunResult>();
-        foreach (var host in hosts)
+        foreach (var host in hostSelections)
         {
-            results.Add(RunHost(suite, request, host, started));
+            results.Add(RunHost(suite, request, host.Host, host.Executable, started));
         }
 
         var merged = PowerShellBenchmarkResultMerger.Merge(suite, results, started);
@@ -116,7 +117,7 @@ public sealed class PowerShellBenchmarkHostExecutor
         Directory.CreateDirectory(request.OutputRoot);
     }
 
-    private static BenchmarkRunResult RunHost(PowerShellBenchmarkSuite suite, PowerShellBenchmarkHostRunRequest request, string host, DateTimeOffset started)
+    private static BenchmarkRunResult RunHost(PowerShellBenchmarkSuite suite, PowerShellBenchmarkHostRunRequest request, string host, string? executable, DateTimeOffset started)
     {
         var scratchRoot = Path.Combine(Path.GetTempPath(), "pf-benchmark-host-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(scratchRoot);
@@ -130,7 +131,7 @@ public sealed class PowerShellBenchmarkHostExecutor
 
         try
         {
-            var executable = PowerShellBenchmarkHostRuntime.ResolveExecutable(host);
+            executable ??= PowerShellBenchmarkHostRuntime.ResolveExecutable(host);
             File.WriteAllText(wrapperPath, ChildRunnerScript, new UTF8Encoding(false));
             File.WriteAllLines(readmePathFile, Array.Empty<string>(), new UTF8Encoding(false));
             BenchmarkJson.Write(childRequestPath, CreateChildRequest(request, host, executable, resultPath, readmePathFile, started));
@@ -390,8 +391,36 @@ public sealed class PowerShellBenchmarkHostExecutor
         return host;
     }
 
+    internal static (string Host, string? Executable)[] ResolveHostSelections(IEnumerable<string> hosts)
+    {
+        var selections = new List<(string Host, string? Executable)>();
+        var seen = new HashSet<string>(PathComparer);
+        foreach (var host in hosts)
+        {
+            string? executable = null;
+            var key = "host:" + host;
+            try
+            {
+                executable = PowerShellBenchmarkHostRuntime.ResolveExecutable(host);
+                key = Path.GetFullPath(executable);
+            }
+            catch
+            {
+                // Preserve existing per-host failure reporting for unresolved hosts.
+            }
+
+            if (seen.Add(key))
+                selections.Add((host, executable));
+        }
+
+        return selections.ToArray();
+    }
+
     private static StringComparison PathComparison
         => RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+    private static StringComparer PathComparer
+        => RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
     private sealed class ProcessResult
     {

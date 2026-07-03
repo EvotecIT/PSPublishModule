@@ -155,6 +155,34 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void HostRuntime_MapsPackagedStandardAssembliesToDesktopDefaultAssemblies()
+    {
+        var root = CreateTempRoot();
+        var current = Path.Combine(root, "Lib", "Standard", "net8.0", "PowerForge.PowerShell.dll");
+        var desktop = Path.Combine(root, "Lib", "Default", "net472", "PowerForge.PowerShell.dll");
+        Directory.CreateDirectory(Path.GetDirectoryName(desktop)!);
+        File.WriteAllText(desktop, string.Empty);
+
+        var resolved = PowerShellBenchmarkHostRuntime.ResolveAssemblyForHost(current, "powershell");
+
+        Assert.Equal(desktop, resolved);
+    }
+
+    [Fact]
+    public void HostRuntime_MapsPackagedDefaultAssembliesToCoreStandardAssemblies()
+    {
+        var root = CreateTempRoot();
+        var current = Path.Combine(root, "Lib", "Default", "net472", "PowerForge.PowerShell.dll");
+        var core = Path.Combine(root, "Lib", "Standard", "net8.0", "PowerForge.PowerShell.dll");
+        Directory.CreateDirectory(Path.GetDirectoryName(core)!);
+        File.WriteAllText(core, string.Empty);
+
+        var resolved = PowerShellBenchmarkHostRuntime.ResolveAssemblyForHost(current, "pwsh");
+
+        Assert.Equal(core, resolved);
+    }
+
+    [Fact]
     public void DslClosureTemplate_UsesFunctionProviderForDesktopCompatibility()
     {
         var script = PowerForgeScripts.Load("Scripts/Benchmarks/Close-BenchmarkBlock.Template.ps1");

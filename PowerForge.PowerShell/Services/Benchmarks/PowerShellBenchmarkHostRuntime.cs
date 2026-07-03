@@ -97,15 +97,45 @@ internal static class PowerShellBenchmarkHostRuntime
 
     private static IEnumerable<string> GetAssemblyCandidates(string currentAssemblyPath, string targetFramework, bool desktop)
     {
-        foreach (var candidate in ReplaceSegments(currentAssemblyPath, desktop ? "Core" : "Default", desktop ? "Default" : "Core"))
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var baseCandidate in GetHostFolderCandidates(currentAssemblyPath, desktop).Append(currentAssemblyPath))
+        {
+            foreach (var candidate in GetFrameworkCandidates(baseCandidate, targetFramework).Append(baseCandidate))
+            {
+                if (seen.Add(candidate))
+                    yield return candidate;
+            }
+        }
+
+        if (seen.Add(currentAssemblyPath))
+            yield return currentAssemblyPath;
+    }
+
+    private static IEnumerable<string> GetHostFolderCandidates(string currentAssemblyPath, bool desktop)
+    {
+        if (desktop)
+        {
+            foreach (var candidate in ReplaceSegments(currentAssemblyPath, "Core", "Default"))
+                yield return candidate;
+            foreach (var candidate in ReplaceSegments(currentAssemblyPath, "Standard", "Default"))
+                yield return candidate;
+            yield break;
+        }
+
+        foreach (var candidate in ReplaceSegments(currentAssemblyPath, "Default", "Standard"))
             yield return candidate;
+        foreach (var candidate in ReplaceSegments(currentAssemblyPath, "Default", "Core"))
+            yield return candidate;
+    }
+
+    private static IEnumerable<string> GetFrameworkCandidates(string currentAssemblyPath, string targetFramework)
+    {
         foreach (var candidate in ReplaceSegments(currentAssemblyPath, "net10.0", targetFramework))
             yield return candidate;
         foreach (var candidate in ReplaceSegments(currentAssemblyPath, "net8.0", targetFramework))
             yield return candidate;
         foreach (var candidate in ReplaceSegments(currentAssemblyPath, "net472", targetFramework))
             yield return candidate;
-        yield return currentAssemblyPath;
     }
 
     private static IEnumerable<string> ReplaceSegments(string path, string oldSegment, string newSegment)
