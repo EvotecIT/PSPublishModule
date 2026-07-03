@@ -6,12 +6,24 @@ $ErrorActionPreference = 'Stop'
 $request = [System.IO.File]::ReadAllText($RequestPath) | ConvertFrom-Json
 Set-Location -LiteralPath $request.WorkingDirectory
 [System.Environment]::CurrentDirectory = (Get-Location).ProviderPath
-Add-Type -Path $request.PowerForgeAssemblyPath
-Add-Type -Path $request.PowerForgePowerShellAssemblyPath
 foreach ($modulePath in @($request.ModulePaths)) {
     if (-not [string]::IsNullOrWhiteSpace($modulePath) -and [System.IO.File]::Exists($modulePath)) {
         Import-Module -Name $modulePath -Force -ErrorAction Stop
     }
+}
+function Add-PowerForgeBenchmarkAssembly {
+    param([string] $Path)
+
+    try {
+        Add-Type -Path $Path -ErrorAction Stop
+    } catch [System.Reflection.ReflectionTypeLoadException] {
+        $messages = @($_.Exception.LoaderExceptions | ForEach-Object { $_.Message })
+        throw "Failed to load benchmark assembly '$Path'. Loader exceptions: $($messages -join '; ')"
+    }
+}
+if ($null -eq ('PowerForge.PowerShellBenchmarkDslRuntime' -as [type])) {
+    Add-PowerForgeBenchmarkAssembly -Path $request.PowerForgeAssemblyPath
+    Add-PowerForgeBenchmarkAssembly -Path $request.PowerForgePowerShellAssemblyPath
 }
 $benchmarkDslAliases = @(
     'benchmark', 'cases', 'case', 'caseSource', 'from', 'axis', 'setup', 'data', 'skip', 'validate', 'policy', 'profile', 'cleanup', 'engine', 'operation', 'metric', 'comparison', 'readme', 'artifacts',
@@ -25,7 +37,7 @@ foreach ($aliasName in $benchmarkDslAliases) {
 }
 $scriptRoot = [System.IO.Path]::GetDirectoryName($request.SpecPath)
 $block = [scriptblock]::Create([System.IO.File]::ReadAllText($request.SpecPath))
-$benchmarkVariables = @{}
+$benchmarkVariables = [System.Collections.Generic.Dictionary[string,string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 if ($null -ne $request.BenchmarkVariables) {
     foreach ($property in @($request.BenchmarkVariables.PSObject.Properties)) {
         $benchmarkVariables[$property.Name] = [string] $property.Value
@@ -36,7 +48,9 @@ if ($request.SuiteIndex -ge $suites.Length) {
     throw "Benchmark spec '$($request.SpecPath)' did not produce suite index $($request.SuiteIndex)."
 }
 $suite = $suites[$request.SuiteIndex]
-$suite.PlanningProfile = [PowerForge.PowerShellBenchmarkProfileKind]::TemporaryLocalUser
+if (-not [string]::IsNullOrWhiteSpace($request.PlanningProfile)) {
+    $suite.PlanningProfile = [PowerForge.PowerShellBenchmarkProfileKind] $request.PlanningProfile
+}
 $suite.Profile = [PowerForge.PowerShellBenchmarkProfileKind]::Current
 $suite.OutputRoot = $request.OutputRoot
 $suite.WarmupCount = [Math]::Max(0, [int]$request.WarmupCount)
@@ -70,6 +84,9 @@ for ($index = 0; $index -lt $suite.ReadmeBlocks.Count -and $index -lt $readmePat
     if (-not [string]::IsNullOrWhiteSpace($readmePaths[$index])) {
         $suite.ReadmeBlocks[$index].Path = $readmePaths[$index]
     }
+}
+if ($request.PSObject.Properties.Name -contains 'UpdateReadmeBlocks' -and -not $request.UpdateReadmeBlocks) {
+    $suite.ReadmeBlocks.Clear()
 }
 try {
     $result = [PowerForge.PowerShellBenchmarkRunner]::new().Run($suite)

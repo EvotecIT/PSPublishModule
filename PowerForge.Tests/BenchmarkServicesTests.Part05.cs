@@ -891,14 +891,90 @@ benchmark 'path-temp-user' -out 'out' {
     }
 
     [Fact]
-    public void Runner_RejectsUnsupportedHostAxis()
+    public void Runner_PlanKeepsExternalHostAxisVisible()
     {
         var suite = CreateRunnableSuite();
-        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Host", Values = { "PowerShell7" } });
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Host", Values = { "Core", "Desktop" } });
 
-        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Plan(suite));
+        var plan = new PowerShellBenchmarkRunner().Plan(suite);
+
+        Assert.Contains(plan, item => item.Host.StartsWith("Core-", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan, item => item.Host == "Desktop");
+    }
+
+    [Fact]
+    public void Runner_RejectsExternalHostAxisDuringInProcessRun()
+    {
+        var suite = CreateRunnableSuite();
+        var externalHost = PowerShellBenchmarkHostRuntime.GetCurrentHostLabel().StartsWith("Desktop-", StringComparison.OrdinalIgnoreCase)
+            ? "Core"
+            : "Desktop";
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Host", Values = { externalHost } });
+
+        var ex = Assert.Throws<NotSupportedException>(() => new PowerShellBenchmarkRunner().Run(suite));
 
         Assert.Contains("only supports the current PowerShell host", ex.Message);
+    }
+
+    [Fact]
+    public void HostExecutor_RecordsFailedSamplesWhenHostCannotBeResolved()
+    {
+        var root = CreateTempRoot();
+        var spec = Path.Combine(root, "host-failure.benchmark.ps1");
+        File.WriteAllText(spec, "# child process is not started for this regression test");
+        var suite = CreateRunnableSuite();
+        suite.OutputRoot = Path.Combine(root, "out");
+        suite.RunMode = "test";
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Host", Values = { "PowerForgeMissingHost" } });
+
+        var result = new PowerShellBenchmarkHostExecutor().Run(suite, new PowerShellBenchmarkHostRunRequest
+        {
+            SpecPath = spec,
+            WorkingDirectory = root,
+            OutputRoot = suite.OutputRoot,
+            WarmupCount = 0,
+            IterationCount = 1,
+            RunMode = suite.RunMode,
+            SuiteName = suite.Name,
+            Hosts = new[] { "PowerForgeMissingHost" },
+            ExternalHostTimeoutSeconds = 1
+        });
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Failed, sample.Status);
+        Assert.Equal("PowerForgeMissingHost", sample.Host);
+        Assert.Contains("External host 'PowerForgeMissingHost' failed", sample.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Failed", Assert.Single(result.Summary).Status);
+    }
+
+    [Fact]
+    public void HostExecutor_DoesNotLaunchExternalHostWhenAllHostItemsAreSkipped()
+    {
+        var root = CreateTempRoot();
+        var spec = Path.Combine(root, "host-skipped.benchmark.ps1");
+        File.WriteAllText(spec, "# child process is not started for this regression test");
+        var suite = CreateRunnableSuite();
+        suite.OutputRoot = Path.Combine(root, "out");
+        suite.Skip = ScriptBlock.Create("$true");
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Host", Values = { "PowerForgeMissingHost" } });
+
+        var result = new PowerShellBenchmarkHostExecutor().Run(suite, new PowerShellBenchmarkHostRunRequest
+        {
+            SpecPath = spec,
+            WorkingDirectory = root,
+            OutputRoot = suite.OutputRoot,
+            WarmupCount = 0,
+            IterationCount = 1,
+            RunMode = suite.RunMode,
+            SuiteName = suite.Name,
+            Hosts = new[] { "PowerForgeMissingHost" },
+            ExternalHostTimeoutSeconds = 1
+        });
+
+        var sample = Assert.Single(result.Samples);
+        Assert.Equal(BenchmarkSampleStatus.Skipped, sample.Status);
+        Assert.Equal("PowerForgeMissingHost", sample.Host);
+        Assert.Equal("Skipped", Assert.Single(result.Summary).Status);
     }
 
     [Fact]

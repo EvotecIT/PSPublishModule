@@ -10,15 +10,19 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         [pscustomobject]@{ Name = 'AzAccounts'; ModuleName = 'Az.Accounts'; Version = '5.1.0'; AcceptLicense = $true }
         [pscustomobject]@{ Name = 'Az'; ModuleName = 'Az'; Version = '14.0.0'; AcceptLicense = $true }
     )
-    axis Host Current
+    axis Host Core, Desktop
 
     setup {
         param($case, $run)
 
-        $run.RepositoryName = $BenchmarkVariables['RepositoryName'] ?? 'PSGallery'
-        $run.RepositoryUri = $BenchmarkVariables['RepositoryUri'] ?? 'https://www.powershellgallery.com/api/v3/index.json'
-        $run.ModuleFastSource = $BenchmarkVariables['ModuleFastSource'] ?? 'https://pwsh.gallery/index.json'
-        $run.ModuleFastModulePath = $BenchmarkVariables['ModuleFastPath'] ?? ''
+        $run.RepositoryName = $BenchmarkVariables['RepositoryName']
+        if (-not $run.RepositoryName) { $run.RepositoryName = 'PSGallery' }
+        $run.RepositoryUri = $BenchmarkVariables['RepositoryUri']
+        if (-not $run.RepositoryUri) { $run.RepositoryUri = 'https://www.powershellgallery.com/api/v3/index.json' }
+        $run.ModuleFastSource = $BenchmarkVariables['ModuleFastSource']
+        if (-not $run.ModuleFastSource) { $run.ModuleFastSource = 'https://pwsh.gallery/index.json' }
+        $run.ModuleFastModulePath = $BenchmarkVariables['ModuleFastPath']
+        if (-not $run.ModuleFastModulePath) { $run.ModuleFastModulePath = '' }
         $run.InstallRoot = Join-Path $run.OutputDirectory 'installed'
         $run.SaveRoot = Join-Path $run.OutputDirectory 'saved'
         $run.PackageCacheRoot = Join-Path $run.OutputDirectory 'package-cache'
@@ -29,7 +33,27 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
     skip {
         param($case)
 
+        if ($case.Host -eq 'Desktop') {
+            return $true
+        }
+
         if ($case.Engine -eq 'ModuleFast' -and $case.Operation -ne 'Install') {
+            return $true
+        }
+
+        if ($case.Engine -eq 'ModuleFast' -and $case.Host -notlike 'Core*') {
+            return $true
+        }
+
+        if ($case.Engine -eq 'PSResourceGet' -and $case.Host -notlike 'Core*') {
+            return $true
+        }
+
+        if ($case.Engine -eq 'PSResourceGet' -and -not (Get-Command -Name Find-PSResource -ErrorAction SilentlyContinue)) {
+            return $true
+        }
+
+        if ($case.Engine -eq 'PowerShellGet' -and -not (Get-Command -Name Find-Module -ErrorAction SilentlyContinue)) {
             return $true
         }
 
@@ -76,6 +100,7 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
                 -Path $run.SaveRoot `
                 -PackageCacheDirectory $run.PackageCacheRoot `
                 -AcceptLicense:$case.AcceptLicense `
+                -AllowClobber `
                 -Force
         }
     }

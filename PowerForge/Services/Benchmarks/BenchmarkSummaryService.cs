@@ -42,7 +42,7 @@ public sealed class BenchmarkSummaryService
     {
         var rows = (summary ?? Array.Empty<BenchmarkSummaryRow>()).ToArray();
         var result = new List<BenchmarkComparisonRow>();
-        foreach (var group in rows.GroupBy(r => MakeKey(r.Suite, r.Scenario, r.Operation, string.Empty, r.Host, r.Os, r.RunMode, r.Variables), StringComparer.Ordinal))
+        foreach (var group in rows.GroupBy(r => MakeKey(r.Suite, r.Scenario, r.Operation, string.Empty, r.Host, r.Os, r.RunMode, ComparisonVariables(r.Variables)), StringComparer.Ordinal))
         {
             if (group.All(r => string.Equals(r.Status, "Skipped", StringComparison.OrdinalIgnoreCase)))
                 continue;
@@ -51,8 +51,6 @@ public sealed class BenchmarkSummaryService
             if (baseline is null)
                 throw new InvalidOperationException($"Benchmark comparison baseline '{baselineEngine}' was not found for {DescribeGroup(group.First())}.");
             var baselineValue = GetMetricValue(baseline, metric);
-            if (!baselineValue.HasValue)
-                throw new InvalidOperationException($"Benchmark comparison baseline '{baselineEngine}' has no value for metric '{metric}' in {DescribeGroup(baseline)}.");
             foreach (var row in group.OrderBy(r => r.Engine, StringComparer.OrdinalIgnoreCase))
             {
                 var actual = GetMetricValue(row, metric);
@@ -64,7 +62,7 @@ public sealed class BenchmarkSummaryService
                     Host = row.Host,
                     Os = row.Os,
                     RunMode = row.RunMode,
-                    Variables = CopyVariables(row.Variables),
+                    Variables = ComparisonVariables(row.Variables),
                     Engine = row.Engine,
                     BaselineEngine = baselineEngine,
                     Status = row.Status,
@@ -285,6 +283,21 @@ public sealed class BenchmarkSummaryService
         var copy = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in variables)
             copy[entry.Key] = entry.Value;
+        return copy;
+    }
+
+    private static Dictionary<string, string?> ComparisonVariables(IReadOnlyDictionary<string, string?> variables)
+    {
+        var copy = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in variables)
+        {
+            if (string.Equals(entry.Key, "Engine", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(entry.Key, "Operation", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(entry.Key, "Host", StringComparison.OrdinalIgnoreCase))
+                continue;
+            copy[entry.Key] = entry.Value;
+        }
+
         return copy;
     }
 }

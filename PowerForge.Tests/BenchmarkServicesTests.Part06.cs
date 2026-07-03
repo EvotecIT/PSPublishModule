@@ -666,7 +666,7 @@ throw 'handler exploded'
     }
 
     [Fact]
-    public void Runner_WritesFailureArtifactsBeforeComparisonErrors()
+    public void Runner_WritesFailureArtifactsAndComparisonRowsWhenBaselineFails()
     {
         var suite = CreateRunnableSuite();
         suite.Artifacts = BenchmarkArtifactKind.Json;
@@ -677,14 +677,14 @@ throw 'handler exploded'
         suite.Axes.Single(axis => axis.Name == "Engine").Values.Add("Other");
         suite.Comparisons.Add(new PowerShellBenchmarkComparison { Dimension = "Engine", Baseline = "Managed" });
 
-        var ex = Assert.Throws<InvalidOperationException>(() => new PowerShellBenchmarkRunner().Run(suite));
+        var result = new PowerShellBenchmarkRunner().Run(suite);
         var samplesPath = Assert.Single(Directory.GetFiles(suite.OutputRoot, "samples.json", SearchOption.AllDirectories));
         var summaryPath = Assert.Single(Directory.GetFiles(suite.OutputRoot, "summary.json", SearchOption.AllDirectories));
         var reportPath = Assert.Single(Directory.GetFiles(suite.OutputRoot, "run-report.json", SearchOption.AllDirectories));
         var samples = BenchmarkJson.Read<BenchmarkSample[]>(samplesPath);
 
-        Assert.Contains("Managed", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("MedianMs", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(result.Comparison, row => row.Engine == "Managed" && row.Status == "Failed" && row.Baseline is null && row.Ratio is null);
+        Assert.Contains(result.Comparison, row => row.Engine == "Other" && row.Actual.HasValue && row.Baseline is null && row.Ratio is null);
         Assert.Contains(samples, sample => sample.Engine == "Managed" && sample.Status == BenchmarkSampleStatus.Failed);
         Assert.True(File.Exists(summaryPath));
         Assert.True(File.Exists(reportPath));

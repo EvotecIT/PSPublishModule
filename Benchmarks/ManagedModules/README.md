@@ -7,7 +7,7 @@ command invocation, skip rules, validation, and managed result metrics are
 declared in the spec; the reusable runner, profile, artifact, comparison, and
 README update mechanics stay in PowerForge.
 
-## Run The Focused Comparison
+## Run The Matrix
 
 Build or import the PSPublishModule you want to measure, then run:
 
@@ -15,15 +15,16 @@ Build or import the PSPublishModule you want to measure, then run:
 Invoke-BenchmarkSuite `
     -Path .\Benchmarks\ManagedModules\managed-modules.benchmark.ps1 `
     -Scenario SingleModule, GraphAuthentication, Graph, AzAccounts, Az `
-    -Operation Install `
-    -Engine Managed, ModuleFast `
+    -Operation Find, Install, Save `
+    -Engine Managed, ModuleFast, PSResourceGet, PowerShellGet `
+    -Host Core, Desktop `
     -WarmupCount 1 `
     -IterationCount 3 `
     -RunMode local
 ```
 
-That focused comparison measures `Install` for `Managed` and `ModuleFast` across
-the standard scenario set:
+That comparison expands the standard scenario set across the lifecycle
+operations and provider engines:
 
 - `SingleModule`: `PSScriptAnalyzer`
 - `GraphAuthentication`: `Microsoft.Graph.Authentication`
@@ -31,8 +32,10 @@ the standard scenario set:
 - `AzAccounts`: `Az.Accounts`
 - `Az`: `Az`
 
-Run from the PowerShell host you want to measure. For example, start PowerShell
-7 when comparing ModuleFast behavior on PowerShell 7.
+The checked-in README table is usually refreshed with a one-iteration
+`matrix-smoke` run so the full matrix shape is proven without multiplying the
+large Graph/Az download work by the normal warmup policy. For stable local
+numbers, keep the warmup and iteration counts above.
 
 ## Select A Matrix
 
@@ -44,6 +47,7 @@ runner filters when you want a focused matrix:
 | `-Scenario` / `-Case` | `SingleModule, AzAccounts` |
 | `-Operation` | `Find, Install, Save` |
 | `-Engine` | `Managed, ModuleFast, PSResourceGet, PowerShellGet` |
+| `-Host` | `Core, Desktop` |
 
 Example full matrix for one scenario:
 
@@ -57,6 +61,10 @@ Invoke-BenchmarkSuite `
 
 `ModuleFast` only participates in `Install`; non-equivalent lanes are recorded as
 skipped instead of being timed.
+Desktop lanes are currently kept visible as skipped rows because the benchmark
+engine cannot safely execute the PowerShell-authored suite inside Windows
+PowerShell 5.1 without risking a stuck child host. The matrix still records that
+the lane exists and is not comparable.
 
 Use `ModuleFastPath` to pin the released ModuleFast lane to a specific local
 module path instead of resolving `ModuleFast` from `PSModulePath`.

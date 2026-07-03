@@ -135,7 +135,8 @@ Invoke-BenchmarkSuite `
     -Path .\Benchmarks\ManagedModules\managed-modules.benchmark.ps1 `
     -Scenario SingleModule, AzAccounts `
     -Operation Find, Install, Save `
-    -Engine Managed, ModuleFast, PSResourceGet
+    -Engine Managed, ModuleFast, PSResourceGet, PowerShellGet `
+    -Host Core, Desktop
 ```
 
 `-Scenario` is an alias for `-Case`. The runner applies `-Case`, `-Engine`,

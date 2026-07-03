@@ -114,6 +114,13 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
     public string[]? HostName { get; set; }
 
     /// <summary>
+    /// Maximum time allowed for each external PowerShell host process.
+    /// </summary>
+    [Parameter]
+    [ValidateRange(1, int.MaxValue)]
+    public int ExternalHostTimeoutSeconds { get; set; } = 1800;
+
+    /// <summary>
     /// Optional profile override.
     /// </summary>
     [Parameter]
@@ -166,6 +173,7 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
 
         var runner = new PowerShellBenchmarkRunner();
         var temporaryUserRunner = new PowerShellBenchmarkTemporaryUserExecutor();
+        var hostRunner = new PowerShellBenchmarkHostExecutor();
         for (var suiteIndex = 0; suiteIndex < suites.Length; suiteIndex++)
         {
             var suite = suites[suiteIndex];
@@ -175,6 +183,35 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
             if (Plan)
             {
                 WriteObject(runner.Plan(suite), enumerateCollection: true);
+                continue;
+            }
+
+            if (suite.Profile == PowerShellBenchmarkProfileKind.Current && hostRunner.RequiresHostProcesses(suite))
+            {
+                if (string.IsNullOrWhiteSpace(resolvedSpecPath))
+                    ThrowTerminatingError(new ErrorRecord(new InvalidOperationException("Benchmark host matrix execution requires Invoke-BenchmarkSuite -Path because inline -Settings script blocks cannot be re-evaluated in child PowerShell hosts."), "BenchmarkHostMatrixRequiresPath", ErrorCategory.InvalidOperation, suite));
+
+                if (!ShouldProcess(suite.OutputRoot, $"Run benchmark suite '{suite.Name}' across selected PowerShell hosts"))
+                    continue;
+
+                WriteObject(hostRunner.Run(suite, new PowerShellBenchmarkHostRunRequest
+                {
+                    SpecPath = resolvedSpecPath!,
+                    SuiteIndex = suiteIndex,
+                    WorkingDirectory = callerRoot,
+                    OutputRoot = suite.OutputRoot,
+                    WarmupCount = suite.WarmupCount,
+                    IterationCount = suite.IterationCount,
+                    RunMode = suite.RunMode,
+                    RunOrder = suite.RunOrder,
+                    CooldownMilliseconds = suite.CooldownMilliseconds,
+                    OutlierMode = suite.OutlierMode,
+                    SuiteName = suite.Name,
+                    BenchmarkVariables = benchmarkVariables,
+                    Selection = GetSelection(),
+                    Hosts = GetSuiteHosts(suite),
+                    ExternalHostTimeoutSeconds = ExternalHostTimeoutSeconds
+                }));
                 continue;
             }
 
@@ -201,7 +238,7 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
                     SuiteName = suite.Name,
                     Cleanup = suite.Cleanup,
                     BenchmarkVariables = benchmarkVariables,
-                    Selection = GetSelection(),
+                    Selection = GetTemporaryUserSelection(),
                     ReadmePaths = suite.ReadmeBlocks.Select(block => block.Path).ToArray()
                 }));
                 continue;
@@ -236,6 +273,29 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
             Operations = Operation ?? Array.Empty<string>(),
             Hosts = HostName ?? Array.Empty<string>()
         };
+
+    private static string[] GetSuiteHosts(PowerShellBenchmarkSuite suite)
+        => suite.Axes.FirstOrDefault(axis => string.Equals(axis.Name, "Host", StringComparison.OrdinalIgnoreCase))
+               ?.Values
+               .Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture))
+               .Where(value => !string.IsNullOrWhiteSpace(value))
+               .Select(value => value!)
+               .Distinct(StringComparer.OrdinalIgnoreCase)
+               .ToArray()
+           ?? Array.Empty<string>();
+
+    private PowerShellBenchmarkSelection GetTemporaryUserSelection()
+    {
+        var selection = GetSelection();
+        if (selection.Hosts.Length == 0)
+        {
+            var currentHost = PowerShellBenchmarkHostRuntime.GetCurrentHostLabel();
+            selection.Hosts = currentHost.StartsWith("Desktop-", StringComparison.OrdinalIgnoreCase)
+                ? new[] { "Desktop" }
+                : new[] { "Core" };
+        }
+        return selection;
+    }
 
     private void ResolveSuitePaths(PowerShellBenchmarkSuite suite)
     {

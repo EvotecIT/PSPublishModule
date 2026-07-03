@@ -124,7 +124,7 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
             File.WriteAllText(wrapperPath, ChildRunnerScript, new UTF8Encoding(false));
             File.WriteAllLines(readmePathFile, GetReadmePathsForChild(request), new UTF8Encoding(false));
             var childRunStartedUtc = DateTimeOffset.UtcNow;
-            BenchmarkJson.Write(childRequestPath, new ChildRunnerRequest
+            BenchmarkJson.Write(childRequestPath, new PowerShellBenchmarkChildRunnerRequest
             {
                 SpecPath = request.SpecPath,
                 SuiteIndex = request.SuiteIndex,
@@ -141,10 +141,12 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
                 CooldownMilliseconds = request.CooldownMilliseconds,
                 OutlierMode = request.OutlierMode.ToString(),
                 SuiteName = request.SuiteName ?? string.Empty,
+                PlanningProfile = PowerShellBenchmarkProfileKind.TemporaryLocalUser.ToString(),
                 BenchmarkVariables = request.BenchmarkVariables,
                 Selection = request.Selection,
                 ModulePaths = modulePaths,
-                RunStartedUtc = childRunStartedUtc.ToString("O")
+                RunStartedUtc = childRunStartedUtc.ToString("O"),
+                UpdateReadmeBlocks = true
             });
             identity.GrantFileAccess(wrapperPath, "R");
             identity.GrantFileAccess(readmePathFile, "R");
@@ -344,29 +346,6 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
         {
             // Cleanup is best effort; the account has already been removed.
         }
-    }
-
-    private sealed class ChildRunnerRequest
-    {
-        public string SpecPath { get; set; } = string.Empty;
-        public int SuiteIndex { get; set; }
-        public string ResultPath { get; set; } = string.Empty;
-        public string PowerForgeAssemblyPath { get; set; } = string.Empty;
-        public string PowerForgePowerShellAssemblyPath { get; set; } = string.Empty;
-        public string ReadmePathFile { get; set; } = string.Empty;
-        public string WorkingDirectory { get; set; } = string.Empty;
-        public string OutputRoot { get; set; } = string.Empty;
-        public int WarmupCount { get; set; }
-        public int IterationCount { get; set; }
-        public string RunMode { get; set; } = string.Empty;
-        public string RunOrder { get; set; } = string.Empty;
-        public int CooldownMilliseconds { get; set; }
-        public string OutlierMode { get; set; } = string.Empty;
-        public string SuiteName { get; set; } = string.Empty;
-        public Dictionary<string, string?> BenchmarkVariables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-        public PowerShellBenchmarkSelection Selection { get; set; } = new();
-        public string[] ModulePaths { get; set; } = Array.Empty<string>();
-        public string RunStartedUtc { get; set; } = string.Empty;
     }
 
     private static string ChildRunnerScript => EmbeddedScripts.Load("Scripts/Benchmarks/TemporaryUserChildRunner.ps1");

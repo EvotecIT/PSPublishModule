@@ -29,7 +29,7 @@ public sealed class PowerShellBenchmarkRunner
 
         try
         {
-            return PlanInCurrentRunspace(suite);
+            return PlanInCurrentRunspace(suite, allowExternalHosts: true);
         }
         finally
         {
@@ -38,7 +38,7 @@ public sealed class PowerShellBenchmarkRunner
         }
     }
 
-    private PowerShellBenchmarkWorkItem[] PlanInCurrentRunspace(PowerShellBenchmarkSuite suite)
+    private PowerShellBenchmarkWorkItem[] PlanInCurrentRunspace(PowerShellBenchmarkSuite suite, bool allowExternalHosts)
     {
         if (suite is null) throw new ArgumentNullException(nameof(suite));
         ValidateUniqueEngineNames(suite);
@@ -55,7 +55,7 @@ public sealed class PowerShellBenchmarkRunner
         ValidateUniqueExpandedCaseLanes(suite, expanded);
         var engineAxis = GetAxisValues(suite.Axes, "Engine") ?? suite.Engines.Select(e => (object?)e.Name).ToArray();
         var explicitOperationAxis = GetAxisValues(suite.Axes, "Operation");
-        var currentHostLabel = GetCurrentHostLabel();
+        var currentHostLabel = PowerShellBenchmarkHostRuntime.GetCurrentHostLabel();
         var hostAxis = GetAxisValues(suite.Axes, "Host") ?? new object?[] { currentHostLabel };
         var planningProfile = (suite.PlanningProfile ?? suite.Profile).ToString();
         if (expanded.Count == 0) throw new InvalidOperationException($"Benchmark suite '{suite.Name}' does not define any runnable cases.");
@@ -79,9 +79,11 @@ public sealed class PowerShellBenchmarkRunner
             {
                 var operationName = Convert.ToString(operationValue, CultureInfo.InvariantCulture) ?? string.Empty;
                 var requestedHostName = Convert.ToString(hostValue, CultureInfo.InvariantCulture) ?? "Current";
-                if (!IsCurrentHost(requestedHostName, currentHostLabel))
+                if (!PowerShellBenchmarkHostRuntime.IsCurrentHost(requestedHostName, currentHostLabel) && !allowExternalHosts)
                     throw new NotSupportedException($"Benchmark suite '{suite.Name}' requested host '{requestedHostName}', but this runner only supports the current PowerShell host. Use 'Current' or run the suite from the target host.");
-                var hostName = NormalizeCurrentHost(requestedHostName, currentHostLabel);
+                var hostName = PowerShellBenchmarkHostRuntime.IsCurrentHost(requestedHostName, currentHostLabel)
+                    ? PowerShellBenchmarkHostRuntime.NormalizeCurrentHost(requestedHostName, currentHostLabel)
+                    : requestedHostName;
                 values["Profile"] = planningProfile;
                 values["Engine"] = engineName;
                 values["Operation"] = operationName;
@@ -145,7 +147,7 @@ public sealed class PowerShellBenchmarkRunner
         var runId = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
         var started = DateTimeOffset.UtcNow;
         var samples = new List<BenchmarkSample>();
-        var workItems = Plan(suite);
+        var workItems = PlanInCurrentRunspace(suite, allowExternalHosts: false);
         ValidateComparisonWorkItems(suite, workItems);
         var runnable = new List<PowerShellBenchmarkWorkItem>();
         foreach (var item in workItems)
@@ -653,12 +655,6 @@ public sealed class PowerShellBenchmarkRunner
     private static bool IsFinite(double value)
         => !double.IsNaN(value) && !double.IsInfinity(value);
 
-    private static object? PSVersionInfoValue(string name)
-    {
-        using var ps = PowerShell.Create();
-        return ps.AddScript($"$PSVersionTable.{name}").Invoke().FirstOrDefault()?.BaseObject;
-    }
-
     private static List<Dictionary<string, object?>> ExpandCases(IEnumerable<PowerShellBenchmarkCase> cases, IEnumerable<PowerShellBenchmarkAxis> axes)
     {
         var matrixAxes = axes
@@ -704,28 +700,6 @@ public sealed class PowerShellBenchmarkRunner
         if (values.TryGetValue("Name", out var name) && !string.IsNullOrWhiteSpace(Convert.ToString(name, CultureInfo.InvariantCulture)))
             return Convert.ToString(name, CultureInfo.InvariantCulture)!;
         return "Scenario";
-    }
-
-    private static bool IsCurrentHost(string host, string currentHostLabel)
-        => string.IsNullOrWhiteSpace(host)
-           || string.Equals(host, "Current", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(host, "CurrentHost", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(host, currentHostLabel, StringComparison.OrdinalIgnoreCase);
-
-    private static string NormalizeCurrentHost(string host, string currentHostLabel)
-        => string.IsNullOrWhiteSpace(host)
-           || string.Equals(host, "Current", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(host, "CurrentHost", StringComparison.OrdinalIgnoreCase)
-            ? currentHostLabel
-            : host;
-
-    private static string GetCurrentHostLabel()
-    {
-        var edition = Convert.ToString(PSVersionInfoValue("PSEdition"), CultureInfo.InvariantCulture);
-        var version = Convert.ToString(PSVersionInfoValue("PSVersion"), CultureInfo.InvariantCulture);
-        if (string.IsNullOrWhiteSpace(edition))
-            edition = "PowerShell";
-        return string.IsNullOrWhiteSpace(version) ? edition! : string.Concat(edition, "-", version);
     }
 
     private static string MatrixPathSegment(IReadOnlyDictionary<string, object?> values)

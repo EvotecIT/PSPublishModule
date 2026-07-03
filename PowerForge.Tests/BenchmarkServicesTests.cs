@@ -106,7 +106,7 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
-    public void SummaryService_RejectsComparisonBaselineWithNoMetric()
+    public void SummaryService_KeepsComparisonRowsWhenBaselineHasNoMetric()
     {
         var summary = new[]
         {
@@ -131,9 +131,55 @@ public sealed partial class BenchmarkServicesTests
             }
         };
 
-        var ex = Assert.Throws<InvalidOperationException>(() => new BenchmarkSummaryService().Compare(summary, "Managed"));
+        var comparison = new BenchmarkSummaryService().Compare(summary, "Managed");
 
-        Assert.Contains("MedianMs", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, comparison.Length);
+        Assert.All(comparison, row =>
+        {
+            Assert.Null(row.Baseline);
+            Assert.Null(row.Ratio);
+        });
+        Assert.Contains(comparison, row => row.Engine == "Managed" && row.Status == "Failed");
+        Assert.Contains(comparison, row => row.Engine == "Other" && row.Actual == 10);
+    }
+
+    [Fact]
+    public void SummaryService_IgnoresBuiltInLaneVariablesWhenComparing()
+    {
+        var summary = new[]
+        {
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                Status = "Succeeded",
+                MedianMs = 10,
+                Variables = new Dictionary<string, string?> { ["Engine"] = "Managed", ["Operation"] = "Run", ["Host"] = "Current", ["ModuleName"] = "PSScriptAnalyzer" }
+            },
+            new BenchmarkSummaryRow
+            {
+                Suite = "suite",
+                Scenario = "case",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                Status = "Succeeded",
+                MedianMs = 20,
+                Variables = new Dictionary<string, string?> { ["Engine"] = "Other", ["Operation"] = "Run", ["Host"] = "Current", ["ModuleName"] = "PSScriptAnalyzer" }
+            }
+        };
+
+        var comparison = new BenchmarkSummaryService().Compare(summary, "Managed");
+
+        var other = Assert.Single(comparison, row => row.Engine == "Other");
+        Assert.Equal(2, other.Ratio);
+        Assert.Equal("PSScriptAnalyzer", other.Variables["ModuleName"]);
+        Assert.False(other.Variables.ContainsKey("Engine"));
+        Assert.False(other.Variables.ContainsKey("Operation"));
+        Assert.False(other.Variables.ContainsKey("Host"));
     }
 
     [Fact]

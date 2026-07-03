@@ -340,10 +340,12 @@ cases, matrix axes, engines, operations, validation, comparison rules, and
 requested artifacts.
 
 The managed module benchmark measures normal module lifecycle commands against
-representative module graphs. The generated table below uses Managed as the
-baseline for each completed row. Other values show the relative timing and the
-measured duration in parentheses. Failed rows mean the tool did not produce a
-valid comparable result for that lane.
+representative module graphs. The generated table below is a one-iteration
+matrix smoke over `Find`, `Install`, and `Save`; use the command below with
+warmup and multiple iterations for stable local timing. Managed is the baseline
+for each completed row. Other values show the relative timing and the measured
+duration in parentheses. Failed rows mean the tool did not produce a valid
+comparable result for that lane.
 
 The managed install path uses PSPublishModule repository profiles, dependency
 planning, package download, extraction, caching, SHA256 delivery evidence,
@@ -353,13 +355,23 @@ under the `TemporaryLocalUser` benchmark profile so the real user module folder
 is not changed.
 
 <!-- managed-module-benchmark-table:start -->
-| Scenario | Host | Operation | Managed | ModuleFast | Result |
-| --- | --- | --- | ---: | ---: | --- |
-| Az | Core-7.6.3 | Install | 1.00x (3.66s) | 1.52x (5.58s) | Managed fastest |
-| Az.Accounts | Core-7.6.3 | Install | 1.00x (559ms) | 1.25x (698ms) | Managed fastest |
-| Microsoft.Graph | Core-7.6.3 | Install | 1.00x (5.16s) | 1.14x (5.90s) | Managed fastest |
-| Microsoft.Graph.Authentication | Core-7.6.3 | Install | 1.00x (499ms) | 1.43x (714ms) | Managed fastest |
-| PSScriptAnalyzer | Core-7.6.3 | Install | 1.00x (832ms) | 1.08x (899ms) | Managed fastest |
+| Scenario | Variables | Host | Operation | Managed | ModuleFast | PowerShellGet | PSResourceGet | Result |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |
+| Az | AcceptLicense=True, ModuleName=Az, Version=14.0.0 | Core-7.5.5 | Find | 1.00x (296ms) | Skipped | 3.66x (1.08s) | 1.65x (490ms) | Managed fastest |
+| Az | AcceptLicense=True, ModuleName=Az, Version=14.0.0 | Core-7.5.5 | Install | 1.00x (3.92s) | 1.66x (6.51s) | Skipped | Skipped | Managed fastest |
+| Az | AcceptLicense=True, ModuleName=Az, Version=14.0.0 | Core-7.5.5 | Save | 1.00x (5.58s) | Skipped | 38.94x (217.41s) | 24.34x (135.90s) | Managed fastest |
+| AzAccounts | AcceptLicense=True, ModuleName=Az.Accounts, Version=5.1.0 | Core-7.5.5 | Find | 1.00x (310ms) | Skipped | 3.91x (1.21s) | 1.32x (411ms) | Managed fastest |
+| AzAccounts | AcceptLicense=True, ModuleName=Az.Accounts, Version=5.1.0 | Core-7.5.5 | Install | 1.00x (656ms) | 1.57x (1.03s) | Skipped | Skipped | Managed fastest |
+| AzAccounts | AcceptLicense=True, ModuleName=Az.Accounts, Version=5.1.0 | Core-7.5.5 | Save | 1.00x (608ms) | Skipped | 10.82x (6.58s) | 2.57x (1.56s) | Managed fastest |
+| Graph | AcceptLicense=True, ModuleName=Microsoft.Graph, Version=2.29.1 | Core-7.5.5 | Find | 1.00x (306ms) | Skipped | 5.19x (1.59s) | 1.55x (473ms) | Managed fastest |
+| Graph | AcceptLicense=True, ModuleName=Microsoft.Graph, Version=2.29.1 | Core-7.5.5 | Install | 1.00x (5.47s) | 1.05x (5.74s) | Skipped | Skipped | Managed fastest |
+| Graph | AcceptLicense=True, ModuleName=Microsoft.Graph, Version=2.29.1 | Core-7.5.5 | Save | 1.00x (4.88s) | Skipped | 26.00x (126.82s) | 12.04x (58.75s) | Managed fastest |
+| GraphAuthentication | AcceptLicense=True, ModuleName=Microsoft.Graph.Authentication, Version=2.29.1 | Core-7.5.5 | Find | 1.00x (234ms) | Skipped | 2.04x (478ms) | 1.42x (333ms) | Managed fastest |
+| GraphAuthentication | AcceptLicense=True, ModuleName=Microsoft.Graph.Authentication, Version=2.29.1 | Core-7.5.5 | Install | 1.00x (473ms) | 1.62x (767ms) | Skipped | Skipped | Managed fastest |
+| GraphAuthentication | AcceptLicense=True, ModuleName=Microsoft.Graph.Authentication, Version=2.29.1 | Core-7.5.5 | Save | 1.00x (492ms) | Skipped | 12.06x (5.94s) | 2.75x (1.35s) | Managed fastest |
+| SingleModule | AcceptLicense=False, ModuleName=PSScriptAnalyzer, Version=1.25.0 | Core-7.5.5 | Find | 1.00x (258ms) | Skipped | 9.34x (2.41s) | 2.94x (759ms) | Managed fastest |
+| SingleModule | AcceptLicense=False, ModuleName=PSScriptAnalyzer, Version=1.25.0 | Core-7.5.5 | Install | 1.00x (935ms) | 1.91x (1.79s) | Skipped | Skipped | Managed fastest |
+| SingleModule | AcceptLicense=False, ModuleName=PSScriptAnalyzer, Version=1.25.0 | Core-7.5.5 | Save | 1.00x (838ms) | Skipped | 6.58x (5.52s) | 2.32x (1.94s) | Managed fastest |
 <!-- managed-module-benchmark-table:end -->
 
 Run the managed module benchmark:
@@ -368,8 +380,9 @@ Run the managed module benchmark:
 Invoke-BenchmarkSuite `
     -Path .\Benchmarks\ManagedModules\managed-modules.benchmark.ps1 `
     -Scenario SingleModule, GraphAuthentication, Graph, AzAccounts, Az `
-    -Operation Install `
-    -Engine Managed, ModuleFast `
+    -Operation Find, Install, Save `
+    -Engine Managed, ModuleFast, PSResourceGet, PowerShellGet `
+    -Host Core, Desktop `
     -WarmupCount 1 `
     -IterationCount 3
 ```
