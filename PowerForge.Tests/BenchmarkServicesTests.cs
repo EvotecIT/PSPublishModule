@@ -323,8 +323,8 @@ public sealed partial class BenchmarkServicesTests
             }
         });
 
-        Assert.Contains("| Scenario | Host | Operation | Managed | ModuleFast | Result |", markdown);
-        Assert.Contains("| PSScriptAnalyzer | Core-7.6.3 | Install | 1.00x (1.00s) | 1.50x (1.50s) | Managed fastest |", markdown);
+        Assert.Contains("| Scenario | Variables | Host | Operation | Managed | ModuleFast | Result |", markdown);
+        Assert.Contains("| SingleModule | ModuleName=PSScriptAnalyzer | Core-7.6.3 | Install | 1.00x (1.00s) | 1.50x (1.50s) | Managed fastest |", markdown);
         Assert.DoesNotContain("Baseline Value", markdown, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -450,6 +450,43 @@ public sealed partial class BenchmarkServicesTests
         Assert.Contains("| Scenario | Host | Operation | Baseline | Managed | Other | Result |", markdown);
         Assert.Contains("| case | Current | Run | Managed | 1.00x (10ms) | 2.00x (20ms) | Managed fastest |", markdown);
         Assert.Contains("| case | Current | Run | Other | 0.50x (10ms) | 1.00x (20ms) | Other slower than Managed |", markdown);
+    }
+
+    [Fact]
+    public void MarkdownRenderer_PreservesScenarioWhenModuleNameVariableIsPresent()
+    {
+        var markdown = new BenchmarkMarkdownRenderer().RenderComparisonTable(new[]
+        {
+            new BenchmarkComparisonRow
+            {
+                Scenario = "Cold",
+                Operation = "Run",
+                Engine = "Managed",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Actual = 10,
+                Baseline = 10,
+                Ratio = 1,
+                Variables = new Dictionary<string, string?> { ["ModuleName"] = "PSScriptAnalyzer" }
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "Cold",
+                Operation = "Run",
+                Engine = "Other",
+                Host = "Current",
+                BaselineEngine = "Managed",
+                Metric = "MedianMs",
+                Actual = 20,
+                Baseline = 10,
+                Ratio = 2,
+                Variables = new Dictionary<string, string?> { ["ModuleName"] = "PSScriptAnalyzer" }
+            }
+        });
+
+        Assert.Contains("| Scenario | Variables | Host | Operation | Managed | Other | Result |", markdown);
+        Assert.Contains("| Cold | ModuleName=PSScriptAnalyzer | Current | Run | 1.00x (10ms) | 2.00x (20ms) | Managed fastest |", markdown);
     }
 
     [Fact]

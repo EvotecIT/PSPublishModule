@@ -176,6 +176,7 @@ try {
   $failed = 0
   $unknownError = 0
   $failedFiles = New-Object 'System.Collections.Generic.List[string]'
+  $precheckFailures = @{}
 
   if ($IsWindows -or $PSVersionTable.PSVersion.Major -le 5) {
     if (-not (Get-Command Get-AuthenticodeSignature -ErrorAction SilentlyContinue)) {
@@ -200,8 +201,7 @@ try {
         }
       } catch {
         $preStatus[$f] = 'PrecheckFailed'
-        $failed++
-        Add-FailedFile -List $failedFiles -FilePath $f -Message ("precheck failed: " + $_.Exception.Message)
+        $precheckFailures[$f] = "precheck failed: " + $_.Exception.Message
       }
     }
 
@@ -209,6 +209,7 @@ try {
     $attempted = $targets.Count
 
     foreach ($f in $targets) {
+      if ($precheckFailures.ContainsKey($f)) { [void]$precheckFailures.Remove($f) }
       $wasSigned = $preStatus[$f] -ne 'NotSigned'
       try {
         if ($overwrite) {
@@ -236,6 +237,11 @@ try {
         Add-FailedFile -List $failedFiles -FilePath $f -Message $_.Exception.Message
       }
     }
+
+    foreach ($entry in $precheckFailures.GetEnumerator()) {
+      $failed++
+      Add-FailedFile -List $failedFiles -FilePath $entry.Key -Message $entry.Value
+    }
   } else {
     if (-not (Get-Command Set-OpenAuthenticodeSignature -ErrorAction SilentlyContinue)) {
       throw "OpenAuthenticode is required on non-Windows for signing. Install the OpenAuthenticode module."
@@ -254,8 +260,7 @@ try {
         if ($status -ne 'NotSigned') { $alreadyOther++ }
       } catch {
         $preStatus[$f] = 'PrecheckFailed'
-        $failed++
-        Add-FailedFile -List $failedFiles -FilePath $f -Message ("precheck failed: " + $_.Exception.Message)
+        $precheckFailures[$f] = "precheck failed: " + $_.Exception.Message
       }
     }
 
@@ -263,6 +268,7 @@ try {
     $attempted = $targets.Count
 
     foreach ($f in $targets) {
+      if ($precheckFailures.ContainsKey($f)) { [void]$precheckFailures.Remove($f) }
       $wasSigned = $preStatus[$f] -ne 'NotSigned'
       try {
         if ($overwrite) {
@@ -289,6 +295,11 @@ try {
         $failed++
         Add-FailedFile -List $failedFiles -FilePath $f -Message $_.Exception.Message
       }
+    }
+
+    foreach ($entry in $precheckFailures.GetEnumerator()) {
+      $failed++
+      Add-FailedFile -List $failedFiles -FilePath $entry.Key -Message $entry.Value
     }
   }
 

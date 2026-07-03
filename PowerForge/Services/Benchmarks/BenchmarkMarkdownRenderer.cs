@@ -131,9 +131,7 @@ public sealed class BenchmarkMarkdownRenderer
     }
 
     private static string DisplayScenario(BenchmarkComparisonRow row)
-        => row.Variables.TryGetValue("ModuleName", out var moduleName) && !string.IsNullOrWhiteSpace(moduleName)
-            ? moduleName!
-            : row.Scenario;
+        => row.Scenario;
 
     private static string FormatComparisonValue(BenchmarkComparisonRow? row)
     {
@@ -212,7 +210,6 @@ public sealed class BenchmarkMarkdownRenderer
         => string.Join(
             ", ",
             (variables ?? new Dictionary<string, string?>())
-                .Where(k => !string.Equals(k.Key, "ModuleName", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(k => string.Concat(k.Key, "=", k.Value ?? string.Empty)));
 }

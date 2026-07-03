@@ -745,6 +745,31 @@ throw 'handler exploded'
         Assert.False(File.Exists(output));
     }
 
+    [Theory]
+    [InlineData("P95")]
+    [InlineData("P99")]
+    [InlineData("StdDev")]
+    [InlineData("StdErr")]
+    public void Runner_AllowsTimingAliasComparisonMetrics(string metricName)
+    {
+        var suite = CreateRunnableSuite();
+        suite.IterationCount = 2;
+        var other = new PowerShellBenchmarkEngine { Name = "Other" };
+        other.Operations["Run"] = ScriptBlock.Create("param($case, $run)");
+        suite.Engines.Add(other);
+        suite.Axes.Single(axis => axis.Name == "Engine").Values.Add("Other");
+        suite.Comparisons.Add(new PowerShellBenchmarkComparison
+        {
+            Dimension = "Engine",
+            Baseline = "Managed",
+            Metrics = new[] { metricName }
+        });
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        Assert.Contains(result.Comparison, row => row.Engine == "Other" && row.Metric == metricName && row.Actual.HasValue);
+    }
+
     [Fact]
     public void Runner_RejectsMissingComparisonBaselineBeforeMeasurement()
     {

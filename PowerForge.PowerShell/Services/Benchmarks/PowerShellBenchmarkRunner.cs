@@ -510,7 +510,7 @@ public sealed class PowerShellBenchmarkRunner
                 var normalized = string.IsNullOrWhiteSpace(metric) ? "MedianMs" : metric.Trim();
                 if (IsPrimaryComparisonMetric(normalized) || customMetrics.Contains(normalized))
                     continue;
-                throw new NotSupportedException($"Benchmark comparison metric '{metric}' is not supported by suite '{suite.Name}'. Use MedianMs, MeanMs, MinMs, MaxMs, or a declared custom metric.");
+                throw new NotSupportedException($"Benchmark comparison metric '{metric}' is not supported by suite '{suite.Name}'. Use MedianMs, MeanMs, MinMs, MaxMs, P95Ms/P95, P99Ms/P99, StdDevMs/StdDev, StdErrMs/StdErr, or a declared custom metric.");
             }
         }
     }
@@ -546,9 +546,13 @@ public sealed class PowerShellBenchmarkRunner
            || string.Equals(metric, "MinMs", StringComparison.OrdinalIgnoreCase)
            || string.Equals(metric, "MaxMs", StringComparison.OrdinalIgnoreCase)
            || string.Equals(metric, "P95Ms", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(metric, "P95", StringComparison.OrdinalIgnoreCase)
            || string.Equals(metric, "P99Ms", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(metric, "P99", StringComparison.OrdinalIgnoreCase)
            || string.Equals(metric, "StdDevMs", StringComparison.OrdinalIgnoreCase)
-           || string.Equals(metric, "StdErrMs", StringComparison.OrdinalIgnoreCase);
+           || string.Equals(metric, "StdDev", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(metric, "StdErrMs", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(metric, "StdErr", StringComparison.OrdinalIgnoreCase);
 
     private static void ValidateComparisonWorkItems(PowerShellBenchmarkSuite suite, IReadOnlyList<PowerShellBenchmarkWorkItem> workItems)
     {
