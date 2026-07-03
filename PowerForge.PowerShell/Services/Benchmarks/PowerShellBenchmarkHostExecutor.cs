@@ -223,6 +223,7 @@ public sealed class PowerShellBenchmarkHostExecutor
                 QuoteArgument(childRequestPath)
             })
         };
+        ConfigureModulePath(start, executable);
 
         using var process = Process.Start(start) ?? throw new InvalidOperationException($"Failed to start benchmark host '{executable}'.");
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
@@ -356,6 +357,46 @@ public sealed class PowerShellBenchmarkHostExecutor
 
     private static string QuoteArgument(string value)
         => "\"" + value.Replace("\"", "\\\"") + "\"";
+
+    private static void ConfigureModulePath(ProcessStartInfo start, string executable)
+    {
+        if (!PowerShellBenchmarkHostRuntime.IsDesktopExecutable(executable))
+            return;
+
+        var modulePaths = GetWindowsPowerShellModulePaths();
+        if (modulePaths.Length > 0)
+            start.Environment["PSModulePath"] = string.Join(Path.PathSeparator.ToString(), modulePaths);
+    }
+
+    private static string[] GetWindowsPowerShellModulePaths()
+    {
+        var paths = new List<string>();
+        AddIfDirectory(paths, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "WindowsPowerShell", "Modules"));
+        AddIfDirectory(paths, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WindowsPowerShell", "Modules"));
+        AddIfDirectory(paths, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "Modules"));
+
+        var inherited = Environment.GetEnvironmentVariable("PSModulePath");
+        if (!string.IsNullOrWhiteSpace(inherited))
+        {
+            foreach (var path in inherited.Split(Path.PathSeparator))
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                    continue;
+                if (path.Contains(@"\PowerShell\7\", StringComparison.OrdinalIgnoreCase)
+                    || path.Contains(@"\WindowsApps\", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                AddIfDirectory(paths, path);
+            }
+        }
+
+        return paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static void AddIfDirectory(List<string> paths, string path)
+    {
+        if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+            paths.Add(path);
+    }
 
     private static void TryDeleteDirectory(string path)
     {

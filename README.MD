@@ -357,21 +357,36 @@ is not changed.
 <!-- managed-module-benchmark-table:start -->
 | Scenario | Variables | Host | Operation | Managed | ModuleFast | PowerShellGet | PSResourceGet | Result |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |
-| Az | AcceptLicense=True, ModuleName=Az, Version=14.0.0 | Core-7.5.5 | Find | 1.00x (296ms) | Skipped | 3.66x (1.08s) | 1.65x (490ms) | Managed fastest |
-| Az | AcceptLicense=True, ModuleName=Az, Version=14.0.0 | Core-7.5.5 | Install | 1.00x (3.92s) | 1.66x (6.51s) | Skipped | Skipped | Managed fastest |
-| Az | AcceptLicense=True, ModuleName=Az, Version=14.0.0 | Core-7.5.5 | Save | 1.00x (5.58s) | Skipped | 38.94x (217.41s) | 24.34x (135.90s) | Managed fastest |
-| AzAccounts | AcceptLicense=True, ModuleName=Az.Accounts, Version=5.1.0 | Core-7.5.5 | Find | 1.00x (310ms) | Skipped | 3.91x (1.21s) | 1.32x (411ms) | Managed fastest |
-| AzAccounts | AcceptLicense=True, ModuleName=Az.Accounts, Version=5.1.0 | Core-7.5.5 | Install | 1.00x (656ms) | 1.57x (1.03s) | Skipped | Skipped | Managed fastest |
-| AzAccounts | AcceptLicense=True, ModuleName=Az.Accounts, Version=5.1.0 | Core-7.5.5 | Save | 1.00x (608ms) | Skipped | 10.82x (6.58s) | 2.57x (1.56s) | Managed fastest |
-| Graph | AcceptLicense=True, ModuleName=Microsoft.Graph, Version=2.29.1 | Core-7.5.5 | Find | 1.00x (306ms) | Skipped | 5.19x (1.59s) | 1.55x (473ms) | Managed fastest |
-| Graph | AcceptLicense=True, ModuleName=Microsoft.Graph, Version=2.29.1 | Core-7.5.5 | Install | 1.00x (5.47s) | 1.05x (5.74s) | Skipped | Skipped | Managed fastest |
-| Graph | AcceptLicense=True, ModuleName=Microsoft.Graph, Version=2.29.1 | Core-7.5.5 | Save | 1.00x (4.88s) | Skipped | 26.00x (126.82s) | 12.04x (58.75s) | Managed fastest |
-| GraphAuthentication | AcceptLicense=True, ModuleName=Microsoft.Graph.Authentication, Version=2.29.1 | Core-7.5.5 | Find | 1.00x (234ms) | Skipped | 2.04x (478ms) | 1.42x (333ms) | Managed fastest |
-| GraphAuthentication | AcceptLicense=True, ModuleName=Microsoft.Graph.Authentication, Version=2.29.1 | Core-7.5.5 | Install | 1.00x (473ms) | 1.62x (767ms) | Skipped | Skipped | Managed fastest |
-| GraphAuthentication | AcceptLicense=True, ModuleName=Microsoft.Graph.Authentication, Version=2.29.1 | Core-7.5.5 | Save | 1.00x (492ms) | Skipped | 12.06x (5.94s) | 2.75x (1.35s) | Managed fastest |
-| SingleModule | AcceptLicense=False, ModuleName=PSScriptAnalyzer, Version=1.25.0 | Core-7.5.5 | Find | 1.00x (258ms) | Skipped | 9.34x (2.41s) | 2.94x (759ms) | Managed fastest |
-| SingleModule | AcceptLicense=False, ModuleName=PSScriptAnalyzer, Version=1.25.0 | Core-7.5.5 | Install | 1.00x (935ms) | 1.91x (1.79s) | Skipped | Skipped | Managed fastest |
-| SingleModule | AcceptLicense=False, ModuleName=PSScriptAnalyzer, Version=1.25.0 | Core-7.5.5 | Save | 1.00x (838ms) | Skipped | 6.58x (5.52s) | 2.32x (1.94s) | Managed fastest |
+| Az | AcceptLicense=True, ModuleName=Az, Version=14.0.0 | Core-7.5.5 | Find | 1.00x (210ms) | Skipped | 3.77x (791ms) | 2.57x (538ms) | Managed fastest |
+| Az | AcceptLicense=True, ModuleName=Az, Version=14.0.0 | Desktop-5.1.26100.8655 | Find | 1.00x (207ms) | Skipped | 3.56x (738ms) | Skipped | Managed fastest |
+| Az | AcceptLicense=True, ModuleName=Az, Version=14.0.0 | Core-7.5.5 | Install | 1.00x (3.73s) | 2.55x (9.52s) | Skipped | Skipped | Managed fastest |
+| Az | AcceptLicense=True, ModuleName=Az, Version=14.0.0 | Desktop-5.1.26100.8655 | Install | 1.00x (5.59s) | Skipped | Skipped | Skipped | Managed only successful |
+| Az | AcceptLicense=True, ModuleName=Az, Version=14.0.0 | Core-7.5.5 | Save | 1.00x (3.58s) | Skipped | 113.61x (406.91s) | 41.01x (146.90s) | Managed fastest |
+| Az | AcceptLicense=True, ModuleName=Az, Version=14.0.0 | Desktop-5.1.26100.8655 | Save | 1.00x (5.78s) | Skipped | 29.25x (169.12s) | Skipped | Managed fastest |
+| AzAccounts | AcceptLicense=True, ModuleName=Az.Accounts, Version=5.1.0 | Core-7.5.5 | Find | 1.00x (2.90s) | Skipped | 0.42x (1.21s) | 0.11x (329ms) | Managed slower than PSResourceGet |
+| AzAccounts | AcceptLicense=True, ModuleName=Az.Accounts, Version=5.1.0 | Desktop-5.1.26100.8655 | Find | 1.00x (175ms) | Skipped | 4.45x (777ms) | Skipped | Managed fastest |
+| AzAccounts | AcceptLicense=True, ModuleName=Az.Accounts, Version=5.1.0 | Core-7.5.5 | Install | 1.00x (588ms) | 3.00x (1.76s) | Skipped | Skipped | Managed fastest |
+| AzAccounts | AcceptLicense=True, ModuleName=Az.Accounts, Version=5.1.0 | Desktop-5.1.26100.8655 | Install | 1.00x (755ms) | Skipped | Skipped | Skipped | Managed only successful |
+| AzAccounts | AcceptLicense=True, ModuleName=Az.Accounts, Version=5.1.0 | Core-7.5.5 | Save | 1.00x (747ms) | Skipped | 19.92x (14.89s) | 2.33x (1.74s) | Managed fastest |
+| AzAccounts | AcceptLicense=True, ModuleName=Az.Accounts, Version=5.1.0 | Desktop-5.1.26100.8655 | Save | 1.00x (694ms) | Skipped | 4.21x (2.92s) | Skipped | Managed fastest |
+| Graph | AcceptLicense=True, ModuleName=Microsoft.Graph, Version=2.29.1 | Core-7.5.5 | Find | 1.00x (309ms) | Skipped | 4.40x (1.36s) | 5.18x (1.60s) | Managed fastest |
+| Graph | AcceptLicense=True, ModuleName=Microsoft.Graph, Version=2.29.1 | Desktop-5.1.26100.8655 | Find | 1.00x (241ms) | Skipped | 2.92x (703ms) | Skipped | Managed fastest |
+| Graph | AcceptLicense=True, ModuleName=Microsoft.Graph, Version=2.29.1 | Core-7.5.5 | Install | 1.00x (7.35s) | 0.76x (5.55s) | Skipped | Skipped | Managed slower than ModuleFast |
+| Graph | AcceptLicense=True, ModuleName=Microsoft.Graph, Version=2.29.1 | Desktop-5.1.26100.8655 | Install | 1.00x (4.19s) | Skipped | Skipped | Skipped | Managed only successful |
+| Graph | AcceptLicense=True, ModuleName=Microsoft.Graph, Version=2.29.1 | Core-7.5.5 | Save | 1.00x (6.88s) | Skipped | 26.92x (185.28s) | 18.19x (125.21s) | Managed fastest |
+| Graph | AcceptLicense=True, ModuleName=Microsoft.Graph, Version=2.29.1 | Desktop-5.1.26100.8655 | Save | 1.00x (4.85s) | Skipped | 13.91x (67.41s) | Skipped | Managed fastest |
+| GraphAuthentication | AcceptLicense=True, ModuleName=Microsoft.Graph.Authentication, Version=2.29.1 | Core-7.5.5 | Find | 1.00x (187ms) | Skipped | 2.95x (551ms) | 1.75x (327ms) | Managed fastest |
+| GraphAuthentication | AcceptLicense=True, ModuleName=Microsoft.Graph.Authentication, Version=2.29.1 | Desktop-5.1.26100.8655 | Find | 1.00x (481ms) | Skipped | 2.05x (986ms) | Skipped | Managed fastest |
+| GraphAuthentication | AcceptLicense=True, ModuleName=Microsoft.Graph.Authentication, Version=2.29.1 | Core-7.5.5 | Install | 1.00x (457ms) | 3.02x (1.38s) | Skipped | Skipped | Managed fastest |
+| GraphAuthentication | AcceptLicense=True, ModuleName=Microsoft.Graph.Authentication, Version=2.29.1 | Desktop-5.1.26100.8655 | Install | 1.00x (620ms) | Skipped | Skipped | Skipped | Managed only successful |
+| GraphAuthentication | AcceptLicense=True, ModuleName=Microsoft.Graph.Authentication, Version=2.29.1 | Core-7.5.5 | Save | 1.00x (479ms) | Skipped | 18.89x (9.05s) | 7.45x (3.57s) | Managed fastest |
+| GraphAuthentication | AcceptLicense=True, ModuleName=Microsoft.Graph.Authentication, Version=2.29.1 | Desktop-5.1.26100.8655 | Save | 1.00x (713ms) | Skipped | 3.65x (2.61s) | Skipped | Managed fastest |
+| SingleModule | AcceptLicense=False, ModuleName=PSScriptAnalyzer, Version=1.25.0 | Core-7.5.5 | Find | 1.00x (348ms) | Skipped | 4.99x (1.73s) | 1.42x (493ms) | Managed fastest |
+| SingleModule | AcceptLicense=False, ModuleName=PSScriptAnalyzer, Version=1.25.0 | Desktop-5.1.26100.8655 | Find | 1.00x (267ms) | Skipped | 12.61x (3.36s) | Skipped | Managed fastest |
+| SingleModule | AcceptLicense=False, ModuleName=PSScriptAnalyzer, Version=1.25.0 | Core-7.5.5 | Install | 1.00x (999ms) | 2.07x (2.07s) | Skipped | Skipped | Managed fastest |
+| SingleModule | AcceptLicense=False, ModuleName=PSScriptAnalyzer, Version=1.25.0 | Desktop-5.1.26100.8655 | Install | 1.00x (1.18s) | Skipped | Skipped | Skipped | Managed only successful |
+| SingleModule | AcceptLicense=False, ModuleName=PSScriptAnalyzer, Version=1.25.0 | Core-7.5.5 | Save | 1.00x (756ms) | Skipped | 14.83x (11.21s) | 6.53x (4.93s) | Managed fastest |
+| SingleModule | AcceptLicense=False, ModuleName=PSScriptAnalyzer, Version=1.25.0 | Desktop-5.1.26100.8655 | Save | 1.00x (1.15s) | Skipped | 2.60x (2.99s) | Skipped | Managed fastest |
 <!-- managed-module-benchmark-table:end -->
 
 Run the managed module benchmark:

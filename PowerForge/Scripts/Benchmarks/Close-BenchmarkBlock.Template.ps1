@@ -61,7 +61,7 @@ for ($scope = 2; $scope -lt 20; $scope++) {
     }
 }
 
-foreach ($function in Get-Command -CommandType Function -ErrorAction SilentlyContinue) {
+foreach ($function in Get-ChildItem -Path Function: -ErrorAction SilentlyContinue) {
     if ($skipFunctions -contains $function.Name) { continue }
     if ($function.Name -like '*:*') { continue }
     if (-not [string]::IsNullOrWhiteSpace($function.Source)) { continue }

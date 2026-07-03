@@ -138,6 +138,15 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void DslClosureTemplate_UsesFunctionProviderForDesktopCompatibility()
+    {
+        var script = PowerForgeScripts.Load("Scripts/Benchmarks/Close-BenchmarkBlock.Template.ps1");
+
+        Assert.Contains("Get-ChildItem -Path Function:", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Get-Command -CommandType Function", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Runner_PreservesMultipleDataBlockItems()
     {
         var suite = CreateRunnableSuite();

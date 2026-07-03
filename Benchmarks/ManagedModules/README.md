@@ -32,10 +32,10 @@ operations and provider engines:
 - `AzAccounts`: `Az.Accounts`
 - `Az`: `Az`
 
-The checked-in README table is usually refreshed with a one-iteration
-`matrix-smoke` run so the full matrix shape is proven without multiplying the
-large Graph/Az download work by the normal warmup policy. For stable local
-numbers, keep the warmup and iteration counts above.
+The checked-in README table is usually refreshed with a one-iteration full
+matrix smoke so the full matrix shape is proven without multiplying the large
+Graph/Az download work by the normal warmup policy. For stable local numbers,
+keep the warmup and iteration counts above.
 
 ## Select A Matrix
 
@@ -61,10 +61,9 @@ Invoke-BenchmarkSuite `
 
 `ModuleFast` only participates in `Install`; non-equivalent lanes are recorded as
 skipped instead of being timed.
-Desktop lanes are currently kept visible as skipped rows because the benchmark
-engine cannot safely execute the PowerShell-authored suite inside Windows
-PowerShell 5.1 without risking a stuck child host. The matrix still records that
-the lane exists and is not comparable.
+The `Desktop` host runs the supported Windows PowerShell 5.1 lanes. Engines that
+do not support that host, such as `ModuleFast` and `PSResourceGet`, are recorded
+as skipped for that host instead of being treated as failures.
 
 Use `ModuleFastPath` to pin the released ModuleFast lane to a specific local
 module path instead of resolving `ModuleFast` from `PSModulePath`.

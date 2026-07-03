@@ -23,19 +23,21 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         if (-not $run.ModuleFastSource) { $run.ModuleFastSource = 'https://pwsh.gallery/index.json' }
         $run.ModuleFastModulePath = $BenchmarkVariables['ModuleFastPath']
         if (-not $run.ModuleFastModulePath) { $run.ModuleFastModulePath = '' }
-        $run.InstallRoot = Join-Path $run.OutputDirectory 'installed'
-        $run.SaveRoot = Join-Path $run.OutputDirectory 'saved'
-        $run.PackageCacheRoot = Join-Path $run.OutputDirectory 'package-cache'
+        $hashBytes = [System.Security.Cryptography.SHA1]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($run.OutputDirectory))
+        $hash = [System.BitConverter]::ToString($hashBytes).Replace('-', '').Substring(0, 12).ToLowerInvariant()
+        $run.WorkRoot = Join-Path ([System.IO.Path]::GetTempPath()) "pf-mm-$hash"
+        $run.InstallRoot = Join-Path $run.WorkRoot 'installed'
+        $run.SaveRoot = Join-Path $run.WorkRoot 'saved'
+        $run.PackageCacheRoot = Join-Path $run.WorkRoot 'package-cache'
 
+        if (Test-Path -LiteralPath $run.WorkRoot) {
+            Remove-Item -LiteralPath $run.WorkRoot -Recurse -Force
+        }
         New-Item -ItemType Directory -Path $run.InstallRoot, $run.SaveRoot, $run.PackageCacheRoot -Force | Out-Null
     }
 
     skip {
         param($case)
-
-        if ($case.Host -eq 'Desktop') {
-            return $true
-        }
 
         if ($case.Engine -eq 'ModuleFast' -and $case.Operation -ne 'Install') {
             return $true
@@ -49,11 +51,11 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
             return $true
         }
 
-        if ($case.Engine -eq 'PSResourceGet' -and -not (Get-Command -Name Find-PSResource -ErrorAction SilentlyContinue)) {
+        if ($case.Engine -eq 'PSResourceGet' -and -not (Get-Module -ListAvailable -Name Microsoft.PowerShell.PSResourceGet)) {
             return $true
         }
 
-        if ($case.Engine -eq 'PowerShellGet' -and -not (Get-Command -Name Find-Module -ErrorAction SilentlyContinue)) {
+        if ($case.Engine -eq 'PowerShellGet' -and -not (Get-Module -ListAvailable -Name PowerShellGet)) {
             return $true
         }
 
@@ -127,18 +129,21 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         operation Find {
             param($case, $run)
 
+            Import-Module Microsoft.PowerShell.PSResourceGet -ErrorAction Stop
             Find-PSResource -Name $case.ModuleName -Repository $run.RepositoryName | Out-Null
         }
 
         operation Install {
             param($case, $run)
 
+            Import-Module Microsoft.PowerShell.PSResourceGet -ErrorAction Stop
             Install-PSResource -Name $case.ModuleName -Version $case.Version -Repository $run.RepositoryName -TrustRepository -AcceptLicense -Reinstall | Out-Null
         }
 
         operation Save {
             param($case, $run)
 
+            Import-Module Microsoft.PowerShell.PSResourceGet -ErrorAction Stop
             Save-PSResource -Name $case.ModuleName -Version $case.Version -Repository $run.RepositoryName -Path $run.SaveRoot -TrustRepository -AcceptLicense | Out-Null
         }
     }
@@ -147,18 +152,21 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         operation Find {
             param($case, $run)
 
+            Import-Module PowerShellGet -ErrorAction Stop
             Find-Module -Name $case.ModuleName -Repository $run.RepositoryName | Out-Null
         }
 
         operation Install {
             param($case, $run)
 
+            Import-Module PowerShellGet -ErrorAction Stop
             Install-Module -Name $case.ModuleName -RequiredVersion $case.Version -Repository $run.RepositoryName -Scope CurrentUser -AllowClobber -AcceptLicense -Force | Out-Null
         }
 
         operation Save {
             param($case, $run)
 
+            Import-Module PowerShellGet -ErrorAction Stop
             Save-Module -Name $case.ModuleName -RequiredVersion $case.Version -Repository $run.RepositoryName -Path $run.SaveRoot -AcceptLicense -Force | Out-Null
         }
     }
