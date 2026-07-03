@@ -69,9 +69,12 @@ internal static class PowerShellBenchmarkHostRuntime
         {
             if (File.Exists(programFilesPwsh))
                 return programFilesPwsh;
+            var pathPwsh = ResolveExecutableFromPath("pwsh");
+            if (pathPwsh is not null)
+                return pathPwsh;
             if (IsPwshExecutable(current) && !IsWindowsAppsPath(current))
                 return current!;
-            throw new InvalidOperationException($"Benchmark host '{host}' requires PowerShell 7, but '{programFilesPwsh}' was not found.");
+            throw new InvalidOperationException($"Benchmark host '{host}' requires PowerShell 7, but neither '{programFilesPwsh}' nor pwsh on PATH was found.");
         }
 
         if (File.Exists(host))
@@ -200,6 +203,59 @@ internal static class PowerShellBenchmarkHostRuntime
     internal static bool IsPwshExecutable(string? path)
         => !string.IsNullOrWhiteSpace(path)
            && IsExecutableName(path, "pwsh", "pwsh.exe");
+
+    internal static string? ResolveExecutableFromPath(params string[] fileNames)
+    {
+        var path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        foreach (var directory in path.Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            foreach (var fileName in ExpandExecutableNames(fileNames))
+            {
+                try
+                {
+                    var candidate = Path.Combine(directory, fileName);
+                    if (File.Exists(candidate))
+                        return candidate;
+                }
+                catch
+                {
+                    // Ignore malformed PATH entries.
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> ExpandExecutableNames(IEnumerable<string> fileNames)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var fileName in fileNames)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+                continue;
+            if (seen.Add(fileName))
+                yield return fileName;
+            if (Path.GetExtension(fileName).Length > 0)
+                continue;
+            foreach (var extension in GetPathExtensions())
+            {
+                var expanded = fileName + extension;
+                if (seen.Add(expanded))
+                    yield return expanded;
+            }
+        }
+    }
+
+    private static string[] GetPathExtensions()
+    {
+        if (Path.DirectorySeparatorChar != '\\')
+            return Array.Empty<string>();
+        var pathExt = Environment.GetEnvironmentVariable("PATHEXT");
+        return string.IsNullOrWhiteSpace(pathExt)
+            ? new[] { ".EXE", ".CMD", ".BAT", ".COM" }
+            : pathExt.Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries);
+    }
 
     private static bool IsExecutableName(string? path, params string[] names)
     {

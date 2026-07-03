@@ -155,6 +155,36 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void HostRuntime_ResolvesPwshFromPath()
+    {
+        var root = CreateTempRoot();
+        var executable = Path.Combine(root, "pwsh");
+        File.WriteAllText(executable, string.Empty);
+        var previousPath = Environment.GetEnvironmentVariable("PATH");
+        try
+        {
+            Environment.SetEnvironmentVariable("PATH", root + Path.PathSeparator + previousPath);
+
+            var resolved = PowerShellBenchmarkHostRuntime.ResolveExecutableFromPath("pwsh");
+
+            Assert.Equal(executable, resolved);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PATH", previousPath);
+        }
+    }
+
+    [Fact]
+    public void TemporaryUserChildRunner_PreservesNullBenchmarkVariables()
+    {
+        var script = PowerForgeScripts.Load("Scripts/Benchmarks/TemporaryUserChildRunner.ps1");
+
+        Assert.Contains("$benchmarkVariables[$property.Name] = $property.Value", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("[string] $property.Value", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void HostRuntime_MapsPackagedStandardAssembliesToDesktopDefaultAssemblies()
     {
         var root = CreateTempRoot();

@@ -40,7 +40,7 @@ $block = [scriptblock]::Create([System.IO.File]::ReadAllText($request.SpecPath))
 $benchmarkVariables = [System.Collections.Generic.Dictionary[string,string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 if ($null -ne $request.BenchmarkVariables) {
     foreach ($property in @($request.BenchmarkVariables.PSObject.Properties)) {
-        $benchmarkVariables[$property.Name] = [string] $property.Value
+        $benchmarkVariables[$property.Name] = $property.Value
     }
 }
 $suites = [PowerForge.PowerShellBenchmarkDslRuntime]::Evaluate($block, $scriptRoot, $benchmarkVariables)
