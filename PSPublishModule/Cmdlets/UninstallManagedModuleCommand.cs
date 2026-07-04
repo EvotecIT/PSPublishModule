@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Management.Automation;
 using PowerForge;
@@ -34,7 +35,7 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
     public string[] Name { get; set; } = Array.Empty<string>();
 
     /// <summary>Exact version or NuGet-style version range to uninstall. When omitted, the latest matching version is selected.</summary>
-    [Parameter]
+    [Parameter(ValueFromPipelineByPropertyName = true)]
     [Alias("RequiredVersion")]
     [ValidateNotNullOrEmpty]
     public string? Version { get; set; }
@@ -53,7 +54,7 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
     public ManagedModuleShellEdition ShellEdition { get; set; } = ManagedModuleShellEdition.Auto;
 
     /// <summary>Explicit module root. Use with Scope Custom.</summary>
-    [Parameter]
+    [Parameter(ValueFromPipelineByPropertyName = true)]
     [Alias("Path")]
     [ValidateNotNullOrEmpty]
     public string? ModuleRoot { get; set; }
@@ -78,7 +79,7 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
     /// <summary>Uninstalls requested modules.</summary>
     protected override void ProcessRecord()
     {
-        var moduleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot);
+        var moduleRoot = ResolveModuleRoot();
         var service = new ManagedModuleUninstallService();
         var request = new ManagedModuleUninstallRequest
         {
@@ -140,5 +141,37 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             .Concat(sessionLoaded)
             .Where(static module => !string.IsNullOrWhiteSpace(module.Name))
             .ToArray();
+    }
+
+    private string? ResolveModuleRoot()
+    {
+        var resolved = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot);
+        if (string.IsNullOrWhiteSpace(resolved) ||
+            Name.Length != 1 ||
+            string.IsNullOrWhiteSpace(Name[0]))
+        {
+            return resolved;
+        }
+
+        return TryResolveModuleRootFromInstalledPath(resolved!, Name[0]) ?? resolved;
+    }
+
+    private static string? TryResolveModuleRootFromInstalledPath(string path, string moduleName)
+    {
+        if (!Directory.Exists(path))
+            return null;
+
+        var selectedDirectory = new DirectoryInfo(path);
+        if (string.Equals(selectedDirectory.Name, moduleName, StringComparison.OrdinalIgnoreCase))
+            return selectedDirectory.Parent?.FullName;
+
+        var moduleDirectory = selectedDirectory.Parent;
+        if (moduleDirectory is null ||
+            !string.Equals(moduleDirectory.Name, moduleName, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return moduleDirectory.Parent?.FullName;
     }
 }

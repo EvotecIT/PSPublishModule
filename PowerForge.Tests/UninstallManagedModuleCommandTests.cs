@@ -166,15 +166,19 @@ public sealed class UninstallManagedModuleCommandTests
         CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
         var service = new ManagedModuleUninstallService();
 
-        var exception = Assert.Throws<ArgumentException>(() => service.PlanUninstall(new ManagedModuleUninstallRequest
+        foreach (var version in new[] { ">=1.0.0 < 2.0.0", ">=1.0.0 <" })
         {
-            Name = new[] { "Company.Tools" },
-            Version = ">=1.0.0 < 2.0.0",
-            Scope = ManagedModuleInstallScope.Custom,
-            ModuleRoot = moduleRoot.Path
-        }));
+            var exception = Assert.Throws<ArgumentException>(() => service.PlanUninstall(new ManagedModuleUninstallRequest
+            {
+                Name = new[] { "Company.Tools" },
+                Version = version,
+                Scope = ManagedModuleInstallScope.Custom,
+                ModuleRoot = moduleRoot.Path
+            }));
 
-        Assert.Contains("Invalid version range syntax", exception.Message);
+            Assert.Contains("Invalid version range syntax", exception.Message);
+        }
+
         Assert.True(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0")));
     }
 
@@ -248,6 +252,98 @@ public sealed class UninstallManagedModuleCommandTests
         AssertNoPowerShellErrors(ps);
         var plan = Assert.IsType<ManagedModuleUninstallPlan>(Assert.Single(results).BaseObject);
         Assert.Equal(new[] { "Company.A1", "Company.B2" }, plan.Targets.Select(static target => target.Name).OrderBy(static name => name).ToArray());
+    }
+
+    [Fact]
+    public void UninstallManagedModule_binds_piped_inventory_path_and_version()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.1.0");
+        var installedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddScript("$row = [pscustomobject]@{ Name = 'Company.Tools'; Version = '1.0.0'; Path = '" + EscapePowerShellSingleQuoted(installedPath) + "' }; $row | Uninstall-ManagedModule");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleUninstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal("1.0.0", result.Version);
+        Assert.False(Directory.Exists(installedPath));
+        Assert.True(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0")));
+    }
+
+    [Fact]
+    public void UninstallManagedModule_reports_not_installed_when_requested_version_is_missing()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Version", "2.0.0")
+            .AddParameter("Path", moduleRoot.Path);
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleUninstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedModuleUninstallStatus.NotInstalled, result.Status);
+        Assert.Equal("Company.Tools", result.Name);
+        Assert.True(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0")));
+    }
+
+    [Fact]
+    public void UninstallManagedModule_removes_dependents_before_dependencies()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Core", "1.0.0");
+        CreateInstalledModule(moduleRoot.Path, "Company.Lib", "1.0.0", "Company.Core", "1.0.0");
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Lib", "1.0.0");
+        var service = new ManagedModuleUninstallService();
+        var plan = service.PlanUninstall(new ManagedModuleUninstallRequest
+        {
+            Name = new[] { "Company.*" },
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        var results = service.Uninstall(plan);
+
+        Assert.Equal(new[] { "Company.Tools", "Company.Lib", "Company.Core" }, results.Select(static result => result.Name).ToArray());
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0")));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Lib", "1.0.0")));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "1.0.0")));
+    }
+
+    [Fact]
+    public void UninstallManagedModule_rejects_case_variant_root_escape_on_case_sensitive_filesystems()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var plan = new ManagedModuleUninstallPlan
+        {
+            Name = new[] { "Company.Tools" },
+            ModuleRoot = "/tmp/modules",
+            SkipDependencyCheck = true,
+            Targets = new[]
+            {
+                new ManagedModuleUninstallTarget
+                {
+                    Name = "Company.Tools",
+                    Version = "1.0.0",
+                    ModuleRoot = "/tmp/modules",
+                    ModulePath = "/tmp/Modules/Company.Tools/1.0.0"
+                }
+            }
+        };
+        var service = new ManagedModuleUninstallService();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Uninstall(plan));
+
+        Assert.Contains("outside module root", exception.Message);
     }
 
     private static PowerShell CreatePowerShellWithModuleImported()
@@ -343,6 +439,9 @@ public sealed class UninstallManagedModuleCommandTests
         => string.IsNullOrWhiteSpace(requiredModuleGuid)
             ? string.Empty
             : "Guid = '" + requiredModuleGuid + "'";
+
+    private static string EscapePowerShellSingleQuoted(string value)
+        => value.Replace("'", "''");
 
     private static void AssertNoPowerShellErrors(PowerShell ps)
     {

@@ -23,13 +23,13 @@ public sealed class ManagedModuleUninstallService
         var matchingCandidates = candidates
             .Where(module => names.Any(pattern => pattern.IsMatch(module.Name)))
             .ToArray();
-        var missingNames = names
-            .Where(static pattern => !pattern.IsWildcard)
-            .Where(pattern => !matchingCandidates.Any(candidate => pattern.IsMatch(candidate.Name)))
-            .Select(static pattern => pattern.Original)
-            .ToArray();
         var targets = SelectTargets(matchingCandidates, request)
             .Select(candidate => ToTarget(candidate, moduleRoot, request))
+            .ToArray();
+        var missingNames = names
+            .Where(static pattern => !pattern.IsWildcard)
+            .Where(pattern => !targets.Any(target => pattern.IsMatch(target.Name)))
+            .Select(static pattern => pattern.Original)
             .ToArray();
 
         if (!request.AllowLoadedModuleUninstall)
@@ -64,7 +64,7 @@ public sealed class ManagedModuleUninstallService
         if (plan.Targets.Count > 0)
         {
             ValidateUninstallPlan(plan);
-            foreach (var target in plan.Targets)
+            foreach (var target in OrderTargetsForRemoval(plan.Targets))
                 results.Add(UninstallTarget(plan, target));
         }
 
@@ -124,6 +124,52 @@ public sealed class ManagedModuleUninstallService
             DependencyCheckSkipped = plan.SkipDependencyCheck,
             WasLoaded = target.IsLoaded
         };
+    }
+
+    private static IReadOnlyList<ManagedModuleUninstallTarget> OrderTargetsForRemoval(
+        IReadOnlyList<ManagedModuleUninstallTarget> targets)
+    {
+        if (targets.Count < 2)
+            return targets;
+
+        var byKey = targets.ToDictionary(
+            static target => ModuleKey.Create(target.Name, target.Version, target.ModulePath),
+            static target => target);
+        var ordered = new List<ManagedModuleUninstallTarget>(targets.Count);
+        var states = new Dictionary<ModuleKey, int>();
+
+        foreach (var target in targets)
+            VisitRemovalTarget(target, byKey, states, ordered);
+
+        return ordered;
+    }
+
+    private static void VisitRemovalTarget(
+        ManagedModuleUninstallTarget target,
+        IReadOnlyDictionary<ModuleKey, ManagedModuleUninstallTarget> byKey,
+        IDictionary<ModuleKey, int> states,
+        ICollection<ManagedModuleUninstallTarget> ordered)
+    {
+        var key = ModuleKey.Create(target.Name, target.Version, target.ModulePath);
+        if (states.TryGetValue(key, out var state))
+        {
+            if (state == 1)
+                return;
+            if (state == 2)
+                return;
+        }
+
+        states[key] = 1;
+        foreach (var dependent in byKey.Values)
+        {
+            if (ReferenceEquals(dependent, target))
+                continue;
+            if (ReadRequiredModules(dependent).Any(requiredModule => RequiredModuleMatchesTarget(requiredModule, target)))
+                VisitRemovalTarget(dependent, byKey, states, ordered);
+        }
+
+        ordered.Add(target);
+        states[key] = 2;
     }
 
     private static IReadOnlyList<InstalledModuleCandidate> SelectTargets(
@@ -270,6 +316,14 @@ public sealed class ManagedModuleUninstallService
             ? Array.Empty<RequiredModuleReference>()
             : ModuleManifestValueReader.ReadRequiredModules(candidate.ManifestPath!);
 
+    private static RequiredModuleReference[] ReadRequiredModules(ManagedModuleUninstallTarget target)
+    {
+        var manifestPath = FindModuleManifest(target.ModulePath, target.Name);
+        return string.IsNullOrWhiteSpace(manifestPath)
+            ? Array.Empty<RequiredModuleReference>()
+            : ModuleManifestValueReader.ReadRequiredModules(manifestPath!);
+    }
+
     private static IReadOnlyList<InstalledModuleCandidate> EnumerateInstalledModules(string moduleRoot)
     {
         if (string.IsNullOrWhiteSpace(moduleRoot) || !Directory.Exists(moduleRoot))
@@ -386,6 +440,7 @@ public sealed class ManagedModuleUninstallService
 
     private static ManagedModuleVersionRange ParseUninstallRange(string value)
     {
+        ValidateUninstallRangeSyntax(value);
         var range = ManagedModuleVersionRange.Parse(value);
         var trimmed = value.Trim();
         if ((trimmed.StartsWith(">", StringComparison.Ordinal) || trimmed.StartsWith("<", StringComparison.Ordinal)) &&
@@ -399,6 +454,26 @@ public sealed class ManagedModuleUninstallService
         return range;
     }
 
+    private static void ValidateUninstallRangeSyntax(string value)
+    {
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith(">", StringComparison.Ordinal) ||
+            trimmed.StartsWith("<", StringComparison.Ordinal))
+        {
+            var tokens = trimmed.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length == 0 ||
+                tokens.Any(static token => !Regex.IsMatch(token, @"^(>=|>|<=|<)[^\s<>=,]+$", RegexOptions.CultureInvariant)))
+            {
+                throw new ArgumentException($"Invalid version range syntax: '{value}'.", nameof(value));
+            }
+        }
+
+        var startsBracketed = trimmed.StartsWith("[", StringComparison.Ordinal) || trimmed.StartsWith("(", StringComparison.Ordinal);
+        var endsBracketed = trimmed.EndsWith("]", StringComparison.Ordinal) || trimmed.EndsWith(")", StringComparison.Ordinal);
+        if (startsBracketed != endsBracketed)
+            throw new ArgumentException($"Invalid version range syntax: '{value}'.", nameof(value));
+    }
+
     private static bool PathMatches(string modulePath, string? loadedPath)
     {
         if (string.IsNullOrWhiteSpace(loadedPath))
@@ -406,22 +481,28 @@ public sealed class ManagedModuleUninstallService
 
         var normalizedModulePath = NormalizePath(modulePath);
         var normalizedLoadedPath = NormalizePath(loadedPath!);
-        return string.Equals(normalizedModulePath, normalizedLoadedPath, StringComparison.OrdinalIgnoreCase) ||
-               normalizedLoadedPath.StartsWith(normalizedModulePath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
-               normalizedLoadedPath.StartsWith(normalizedModulePath + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(normalizedModulePath, normalizedLoadedPath, PathStringComparison) ||
+               normalizedLoadedPath.StartsWith(normalizedModulePath + Path.DirectorySeparatorChar, PathStringComparison) ||
+               normalizedLoadedPath.StartsWith(normalizedModulePath + Path.AltDirectorySeparatorChar, PathStringComparison);
     }
 
     private static void EnsureTargetUnderRoot(string moduleRoot, string modulePath)
     {
         var root = NormalizePath(moduleRoot);
         var target = NormalizePath(modulePath);
-        if (!string.Equals(root, target, StringComparison.OrdinalIgnoreCase) &&
-            !target.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
-            !target.StartsWith(root + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(root, target, PathStringComparison) &&
+            !target.StartsWith(root + Path.DirectorySeparatorChar, PathStringComparison) &&
+            !target.StartsWith(root + Path.AltDirectorySeparatorChar, PathStringComparison))
         {
             throw new InvalidOperationException($"Refusing to remove module path outside module root: {modulePath}");
         }
     }
+
+    private static StringComparison PathStringComparison
+        => Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+    private static StringComparer PathStringComparer
+        => Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
     private static void TryDeleteEmptyModuleDirectory(string moduleRoot, string moduleName)
     {
@@ -630,7 +711,7 @@ public sealed class ManagedModuleUninstallService
         public bool Equals(ModuleKey other)
             => string.Equals(Name, other.Name, StringComparison.OrdinalIgnoreCase) &&
                VersionsEqual(Version, other.Version) &&
-               string.Equals(Path, other.Path, StringComparison.OrdinalIgnoreCase);
+               string.Equals(Path, other.Path, PathStringComparison);
 
         public override bool Equals(object? obj)
             => obj is ModuleKey other && Equals(other);
@@ -642,7 +723,7 @@ public sealed class ManagedModuleUninstallService
                 var hash = 17;
                 hash = (hash * 31) + StringComparer.OrdinalIgnoreCase.GetHashCode(Name);
                 hash = (hash * 31) + StringComparer.OrdinalIgnoreCase.GetHashCode(ModuleStateVersion.NormalizeOrOriginal(Version));
-                hash = (hash * 31) + StringComparer.OrdinalIgnoreCase.GetHashCode(Path);
+                hash = (hash * 31) + PathStringComparer.GetHashCode(Path);
                 return hash;
             }
         }
