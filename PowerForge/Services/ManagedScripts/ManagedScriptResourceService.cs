@@ -36,8 +36,8 @@ public sealed class ManagedScriptResourceService
 
         var destinationPath = ResolveDestinationPath(request.DestinationPath);
         var scriptPath = ResolveScriptPath(destinationPath, request.Name);
-        var existingVersion = TryReadExistingVersion(scriptPath);
-        var satisfiedExistingVersion = TryResolveSatisfiedExistingVersion(request, existingVersion);
+        var existingVersion = TryReadExistingVersion(scriptPath, allowInvalidMetadata: request.Force);
+        var satisfiedExistingVersion = TryResolveSatisfiedExistingVersion(request, scriptPath, existingVersion);
         if (satisfiedExistingVersion is not null)
         {
             return new ManagedScriptSavePlan
@@ -61,7 +61,8 @@ public sealed class ManagedScriptResourceService
         }
 
         var versionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken).ConfigureAwait(false);
-        var action = ResolvePlanAction(File.Exists(scriptPath), existingVersion, versionInfo.Version, request.Force, RequiresPackageVerificationBeforeSkip(request));
+        ThrowIfSelectedVersionInvalid(versionInfo);
+        var action = ResolvePlanAction(File.Exists(scriptPath), scriptPath, existingVersion, versionInfo.Version, request.Force, RequiresPackageVerificationBeforeSkip(request));
         if (RequiresPlanPackageMetadata(action, versionInfo))
         {
             versionInfo = await EnrichVersionInfoWithPackageMetadataAsync(
@@ -109,8 +110,8 @@ public sealed class ManagedScriptResourceService
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var destinationPath = ResolveDestinationPath(request.DestinationPath);
         var scriptPath = ResolveScriptPath(destinationPath, request.Name);
-        var existingVersion = TryReadExistingVersion(scriptPath);
-        var satisfiedExistingVersion = TryResolveSatisfiedExistingVersion(request, existingVersion);
+        var existingVersion = TryReadExistingVersion(scriptPath, allowInvalidMetadata: request.Force);
+        var satisfiedExistingVersion = TryResolveSatisfiedExistingVersion(request, scriptPath, existingVersion);
         if (satisfiedExistingVersion is not null)
         {
             stopwatch.Stop();
@@ -120,9 +121,11 @@ public sealed class ManagedScriptResourceService
         var versionResolutionStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var versionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken).ConfigureAwait(false);
         versionResolutionStopwatch.Stop();
+        ThrowIfSelectedVersionInvalid(versionInfo);
 
         var existingSelectedVersion = !string.IsNullOrWhiteSpace(existingVersion) &&
                                       ManagedModuleVersionComparer.Instance.Compare(existingVersion!, versionInfo.Version) == 0 &&
+                                      ExistingScriptCanSkip(scriptPath) &&
                                       !request.Force;
         if (existingSelectedVersion && !RequiresPackageVerificationBeforeSkip(request))
         {
@@ -339,8 +342,9 @@ public sealed class ManagedScriptResourceService
         throw new InvalidOperationException($"Package '{packagePath}' does not contain expected script payload '{expectedName}'.");
     }
 
-    private static ManagedScriptSavePlanAction ResolvePlanAction(
+    private ManagedScriptSavePlanAction ResolvePlanAction(
         bool scriptExists,
+        string scriptPath,
         string? existingVersion,
         string selectedVersion,
         bool force,
@@ -351,6 +355,7 @@ public sealed class ManagedScriptResourceService
             if (force)
                 return ManagedScriptSavePlanAction.Reinstall;
             if (!string.IsNullOrWhiteSpace(existingVersion) &&
+                ExistingScriptCanSkip(scriptPath) &&
                 ManagedModuleVersionComparer.Instance.Compare(existingVersion!, selectedVersion) == 0)
             {
                 return requiresPackageVerification
@@ -378,7 +383,7 @@ public sealed class ManagedScriptResourceService
            !versionInfo.RequireLicenseAcceptance &&
            string.IsNullOrWhiteSpace(versionInfo.License);
 
-    private static string? TryResolveSatisfiedExistingVersion(ManagedScriptSaveRequest request, string? existingVersion)
+    private string? TryResolveSatisfiedExistingVersion(ManagedScriptSaveRequest request, string scriptPath, string? existingVersion)
     {
         if (request.Force ||
             RequiresPackageVerificationBeforeSkip(request) ||
@@ -388,7 +393,7 @@ public sealed class ManagedScriptResourceService
             return null;
         }
 
-        return IsExistingVersionSatisfied(request, existingVersion!)
+        return ExistingScriptCanSkip(scriptPath) && IsExistingVersionSatisfied(request, existingVersion!)
             ? existingVersion
             : null;
     }
@@ -414,7 +419,7 @@ public sealed class ManagedScriptResourceService
         return range.IsSatisfiedBy(existingVersion);
     }
 
-    private string? TryReadExistingVersion(string scriptPath)
+    private string? TryReadExistingVersion(string scriptPath, bool allowInvalidMetadata = false)
     {
         if (!File.Exists(scriptPath))
             return null;
@@ -433,7 +438,12 @@ public sealed class ManagedScriptResourceService
         catch (InvalidOperationException exception)
         {
             if (exception.Message.IndexOf("not a valid version", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                if (allowInvalidMetadata)
+                    return null;
+
                 throw;
+            }
 
             return null;
         }
@@ -480,6 +490,13 @@ public sealed class ManagedScriptResourceService
         => !string.IsNullOrWhiteSpace(request.ExpectedPackageSha256) ||
            ManagedModuleTrustEvaluator.HasAllowedAuthorPolicy(request.TrustPolicy);
 
+    private bool ExistingScriptCanSkip(string scriptPath)
+    {
+        var info = _scriptFileInfoService.Read(scriptPath);
+        ThrowIfScriptMetadataIncomplete(info, scriptPath);
+        return true;
+    }
+
     private static string ResolveDestinationPath(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -525,6 +542,12 @@ public sealed class ManagedScriptResourceService
 
         throw new InvalidOperationException(
             $"Package '{packagePath}' script metadata is incomplete. PSScriptInfo GUID, AUTHOR, and comment-help DESCRIPTION are required.");
+    }
+
+    private static void ThrowIfSelectedVersionInvalid(ManagedModuleVersionInfo versionInfo)
+    {
+        _ = ManagedModulePackageIdentity.RequireSafeVersion(versionInfo.Version, nameof(versionInfo.Version));
+        ValidateScriptVersion(versionInfo.Version, nameof(versionInfo.Version));
     }
 
     private static ManagedModuleVersionRange ResolveVersionRange(string? versionPolicy, string? minimumVersion, string? maximumVersion)
