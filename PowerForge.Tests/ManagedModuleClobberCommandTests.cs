@@ -62,6 +62,23 @@ public sealed class ManagedModuleClobberCommandTests
     }
 
     [Fact]
+    public void InstallManagedModule_rejects_allow_clobber_with_no_clobber()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("ModuleRoot", moduleRoot.Path)
+            .AddParameter("AllowClobber")
+            .AddParameter("NoClobber");
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+
+        Assert.Contains("AllowClobber", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("NoClobber", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void InstallManagedModule_rejects_wildcard_export_clobber_risk_by_default()
     {
         using var feed = new TemporaryDirectory();
