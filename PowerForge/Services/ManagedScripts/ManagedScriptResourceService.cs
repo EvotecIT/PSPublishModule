@@ -56,6 +56,7 @@ public sealed class ManagedScriptResourceService
             ScriptRoot = savePlan.DestinationPath,
             ScriptPath = savePlan.ScriptPath,
             WouldWriteFiles = savePlan.WouldWriteFiles,
+            WouldVerifyPackage = savePlan.WouldVerifyPackage,
             ExistingVersion = savePlan.ExistingVersion,
             RequestedVersion = savePlan.RequestedVersion,
             MinimumVersion = savePlan.MinimumVersion,
@@ -717,6 +718,7 @@ public sealed class ManagedScriptResourceService
         {
             ManagedScriptSavePlanAction.SkipExisting => ManagedScriptInstallPlanAction.SkipExisting,
             ManagedScriptSavePlanAction.Reinstall => ManagedScriptInstallPlanAction.Reinstall,
+            ManagedScriptSavePlanAction.VerifyExisting => ManagedScriptInstallPlanAction.VerifyExisting,
             ManagedScriptSavePlanAction.BlockedExisting => ManagedScriptInstallPlanAction.BlockedExisting,
             _ => ManagedScriptInstallPlanAction.Install
         };
@@ -742,6 +744,7 @@ public sealed class ManagedScriptResourceService
             ScriptRoot = resolved.ScriptRoot,
             ScriptPath = scriptPath,
             WouldWriteFiles = false,
+            WouldVerifyPackage = false,
             ExistingVersion = existing.Version,
             RequestedVersion = request.Version,
             MinimumVersion = request.MinimumVersion,
@@ -837,7 +840,9 @@ public sealed class ManagedScriptResourceService
         }
 
         var shellEdition = ResolveShellEdition(request.ShellEdition);
-        var folderName = shellEdition == ManagedModuleShellEdition.Desktop ? "WindowsPowerShell" : "PowerShell";
+        var folderName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && shellEdition == ManagedModuleShellEdition.Desktop
+            ? "WindowsPowerShell"
+            : "PowerShell";
         var scope = request.Scope;
         var scriptRoot = scope switch
         {
@@ -873,7 +878,9 @@ public sealed class ManagedScriptResourceService
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         if (string.IsNullOrWhiteSpace(home))
-            home = Environment.GetEnvironmentVariable("HOME") ?? ".";
+            home = Environment.GetEnvironmentVariable("HOME");
+        if (string.IsNullOrWhiteSpace(home))
+            throw new InvalidOperationException("Unable to resolve the current user home directory for script installation.");
 
         return Path.Combine(home, ".local", "share", folderName.ToLowerInvariant(), "Scripts");
     }

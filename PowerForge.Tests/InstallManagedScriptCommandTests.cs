@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Management.Automation;
 using PowerForge;
 using PSPublishModule;
@@ -239,6 +240,75 @@ public sealed class InstallManagedScriptCommandTests
 
         var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
         Assert.Contains("not trusted", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void InstallManagedScript_plan_verifies_existing_selected_version_when_package_policy_is_requested()
+    {
+        using var feed = new TemporaryDirectory();
+        using var scriptRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            },
+            requireLicenseAcceptance: true);
+        File.WriteAllText(Path.Combine(scriptRoot.Path, "Invoke-CompanyTask.ps1"), CreateScript("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ScriptRoot", scriptRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("ExpectedPackageSha256", new string('0', 64))
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedScriptInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptInstallPlanAction.VerifyExisting, plan.Action);
+        Assert.False(plan.WouldWriteFiles);
+        Assert.True(plan.WouldVerifyPackage);
+        Assert.True(plan.LicenseAcceptanceRequired);
+    }
+
+    [Fact]
+    public void InstallManagedScript_uses_unix_powershell_script_root_for_desktop_shell()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return;
+
+        using var feed = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            });
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (string.IsNullOrWhiteSpace(home))
+            home = Environment.GetEnvironmentVariable("HOME");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ShellEdition", ManagedModuleShellEdition.Desktop)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedScriptInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.Equal(Path.Combine(home!, ".local", "share", "powershell", "Scripts"), plan.ScriptRoot);
     }
 
     [Fact]
