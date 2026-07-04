@@ -29,4 +29,9 @@ public sealed class ManagedModuleUninstallPlan
     /// Selected installed module versions.
     /// </summary>
     public IReadOnlyList<ManagedModuleUninstallTarget> Targets { get; set; } = Array.Empty<ManagedModuleUninstallTarget>();
+
+    /// <summary>
+    /// Explicit module names from the request that did not match any installed module.
+    /// </summary>
+    public IReadOnlyList<string> MissingNames { get; set; } = Array.Empty<string>();
 }

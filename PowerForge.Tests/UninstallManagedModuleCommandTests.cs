@@ -83,6 +83,24 @@ public sealed class UninstallManagedModuleCommandTests
     }
 
     [Fact]
+    public void UninstallManagedModule_reports_not_installed_for_missing_name_in_mixed_request()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedModule")
+            .AddParameter("Name", new[] { "Company.Tools", "Company.Missing" })
+            .AddParameter("Path", moduleRoot.Path);
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var typed = results.Select(item => Assert.IsType<ManagedModuleUninstallResult>(item.BaseObject)).ToArray();
+        Assert.Contains(typed, result => result.Name == "Company.Tools" && result.Status == ManagedModuleUninstallStatus.Uninstalled);
+        Assert.Contains(typed, result => result.Name == "Company.Missing" && result.Status == ManagedModuleUninstallStatus.NotInstalled);
+    }
+
+    [Fact]
     public void UninstallManagedModule_rechecks_dependencies_after_target_filtering()
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -142,6 +160,76 @@ public sealed class UninstallManagedModuleCommandTests
     }
 
     [Fact]
+    public void UninstallManagedModule_rejects_malformed_comparator_range()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var service = new ManagedModuleUninstallService();
+
+        var exception = Assert.Throws<ArgumentException>(() => service.PlanUninstall(new ManagedModuleUninstallRequest
+        {
+            Name = new[] { "Company.Tools" },
+            Version = ">=1.0.0 < 2.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        }));
+
+        Assert.Contains("Invalid version range syntax", exception.Message);
+        Assert.True(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0")));
+    }
+
+    [Fact]
+    public void UninstallManagedModule_flat_layout_uninstall_preserves_versioned_siblings()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateFlatInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "2.0.0");
+        var flatManifest = Path.Combine(moduleRoot.Path, "Company.Tools", "Company.Tools.psd1");
+        var siblingManifest = Path.Combine(moduleRoot.Path, "Company.Tools", "2.0.0", "Company.Tools.psd1");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Version", "1.0.0")
+            .AddParameter("Path", moduleRoot.Path);
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleUninstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedModuleUninstallStatus.Uninstalled, result.Status);
+        Assert.False(File.Exists(flatManifest));
+        Assert.True(File.Exists(siblingManifest));
+    }
+
+    [Fact]
+    public void UninstallManagedModule_dependency_check_honors_required_module_guid()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        const string requiredGuid = "11111111-1111-1111-1111-111111111111";
+        const string otherGuid = "22222222-2222-2222-2222-222222222222";
+        CreateInstalledModule(moduleRoot.Path, "Company.Core", "1.0.0", moduleGuid: requiredGuid);
+        CreateInstalledModule(moduleRoot.Path, "Company.Core", "1.1.0", moduleGuid: otherGuid);
+        CreateInstalledModule(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            requiredModuleName: "Company.Core",
+            requiredModuleVersion: "1.0.0",
+            requiredModuleGuid: requiredGuid);
+        var service = new ManagedModuleUninstallService();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.PlanUninstall(new ManagedModuleUninstallRequest
+        {
+            Name = new[] { "Company.Core" },
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        }));
+
+        Assert.Contains("Company.Core 1.0.0 is required by Company.Tools 1.0.0", exception.Message);
+    }
+
+    [Fact]
     public void UninstallManagedModule_supports_powershell_wildcard_patterns()
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -179,20 +267,54 @@ public sealed class UninstallManagedModuleCommandTests
         string name,
         string version,
         string? requiredModuleName = null,
-        string? requiredVersion = null)
+        string? requiredVersion = null,
+        string? requiredModuleVersion = null,
+        string? requiredModuleGuid = null,
+        string? moduleGuid = null)
     {
         var modulePath = Path.Combine(root, name, version);
         Directory.CreateDirectory(modulePath);
+        WriteModuleFiles(modulePath, name, version, requiredModuleName, requiredVersion, requiredModuleVersion, requiredModuleGuid, moduleGuid);
+    }
+
+    private static void CreateFlatInstalledModule(
+        string root,
+        string name,
+        string version,
+        string? moduleGuid = null)
+    {
+        var modulePath = Path.Combine(root, name);
+        Directory.CreateDirectory(modulePath);
+        WriteModuleFiles(modulePath, name, version, requiredModuleName: null, requiredVersion: null, requiredModuleVersion: null, requiredModuleGuid: null, moduleGuid);
+        Directory.CreateDirectory(Path.Combine(modulePath, "en-US"));
+        File.WriteAllText(Path.Combine(modulePath, "en-US", "about_Company.Tools.help.txt"), string.Empty);
+    }
+
+    private static void WriteModuleFiles(
+        string modulePath,
+        string name,
+        string version,
+        string? requiredModuleName,
+        string? requiredVersion,
+        string? requiredModuleVersion,
+        string? requiredModuleGuid,
+        string? moduleGuid)
+    {
         var prereleaseIndex = version.IndexOf('-');
         var moduleVersion = prereleaseIndex >= 0 ? version.Substring(0, prereleaseIndex) : version;
         var prerelease = prereleaseIndex >= 0 ? version.Substring(prereleaseIndex + 1) : null;
+        var guid = string.IsNullOrWhiteSpace(moduleGuid)
+            ? string.Empty
+            : $@"
+    GUID = '{moduleGuid}'";
         var requiredModules = string.IsNullOrWhiteSpace(requiredModuleName)
             ? string.Empty
             : $@"
     RequiredModules = @(
         @{{
             ModuleName = '{requiredModuleName}'
-            RequiredVersion = '{requiredVersion}'
+            {FormatRequiredModuleVersion(requiredVersion, requiredModuleVersion)}
+            {FormatRequiredModuleGuid(requiredModuleGuid)}
         }}
     )";
         var privateData = string.IsNullOrWhiteSpace(prerelease)
@@ -206,11 +328,21 @@ public sealed class UninstallManagedModuleCommandTests
         File.WriteAllText(Path.Combine(modulePath, name + ".psd1"), $$"""
 @{
     RootModule = '{{name}}.psm1'
-    ModuleVersion = '{{moduleVersion}}'{{requiredModules}}{{privateData}}
+    ModuleVersion = '{{moduleVersion}}'{{guid}}{{requiredModules}}{{privateData}}
 }
 """);
         File.WriteAllText(Path.Combine(modulePath, name + ".psm1"), string.Empty);
     }
+
+    private static string FormatRequiredModuleVersion(string? requiredVersion, string? requiredModuleVersion)
+        => !string.IsNullOrWhiteSpace(requiredModuleVersion)
+            ? "ModuleVersion = '" + requiredModuleVersion + "'"
+            : "RequiredVersion = '" + requiredVersion + "'";
+
+    private static string FormatRequiredModuleGuid(string? requiredModuleGuid)
+        => string.IsNullOrWhiteSpace(requiredModuleGuid)
+            ? string.Empty
+            : "Guid = '" + requiredModuleGuid + "'";
 
     private static void AssertNoPowerShellErrors(PowerShell ps)
     {

@@ -120,7 +120,8 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             Version = plan.Version,
             ModuleRoot = plan.ModuleRoot,
             SkipDependencyCheck = plan.SkipDependencyCheck,
-            Targets = targets
+            Targets = targets,
+            MissingNames = plan.MissingNames
         };
         WriteObject(service.Uninstall(selectedPlan), enumerateCollection: true);
     }

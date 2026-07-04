@@ -26,6 +26,16 @@ public sealed class ManagedModuleUninstallTarget
     public string ModulePath { get; set; } = string.Empty;
 
     /// <summary>
+    /// Installed module GUID, when declared by the manifest.
+    /// </summary>
+    public string? Guid { get; set; }
+
+    /// <summary>
+    /// True when the selected install is a legacy flat module folder instead of a version directory.
+    /// </summary>
+    public bool IsFlatLayout { get; set; }
+
+    /// <summary>
     /// True when loaded module evidence matched this installed version.
     /// </summary>
     public bool IsLoaded { get; set; }

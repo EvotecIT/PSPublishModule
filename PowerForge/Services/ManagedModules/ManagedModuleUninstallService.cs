@@ -23,6 +23,11 @@ public sealed class ManagedModuleUninstallService
         var matchingCandidates = candidates
             .Where(module => names.Any(pattern => pattern.IsMatch(module.Name)))
             .ToArray();
+        var missingNames = names
+            .Where(static pattern => !pattern.IsWildcard)
+            .Where(pattern => !matchingCandidates.Any(candidate => pattern.IsMatch(candidate.Name)))
+            .Select(static pattern => pattern.Original)
+            .ToArray();
         var targets = SelectTargets(matchingCandidates, request)
             .Select(candidate => ToTarget(candidate, moduleRoot, request))
             .ToArray();
@@ -39,7 +44,8 @@ public sealed class ManagedModuleUninstallService
             Version = request.Version,
             ModuleRoot = moduleRoot,
             SkipDependencyCheck = request.SkipDependencyCheck,
-            Targets = targets
+            Targets = targets,
+            MissingNames = missingNames
         };
     }
 
@@ -51,23 +57,28 @@ public sealed class ManagedModuleUninstallService
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
 
-        if (plan.Targets.Count == 0)
+        var missingNames = plan.MissingNames.Count == 0 && plan.Targets.Count == 0
+            ? plan.Name
+            : plan.MissingNames;
+        var results = new List<ManagedModuleUninstallResult>(plan.Targets.Count + missingNames.Count);
+        if (plan.Targets.Count > 0)
         {
-            return plan.Name.Select(name => new ManagedModuleUninstallResult
+            ValidateUninstallPlan(plan);
+            foreach (var target in plan.Targets)
+                results.Add(UninstallTarget(plan, target));
+        }
+
+        foreach (var name in missingNames)
+        {
+            results.Add(new ManagedModuleUninstallResult
             {
                 Name = name,
                 Version = plan.Version ?? string.Empty,
                 ModuleRoot = plan.ModuleRoot,
                 Status = ManagedModuleUninstallStatus.NotInstalled,
                 DependencyCheckSkipped = plan.SkipDependencyCheck
-            }).ToArray();
+            });
         }
-
-        ValidateUninstallPlan(plan);
-
-        var results = new List<ManagedModuleUninstallResult>(plan.Targets.Count);
-        foreach (var target in plan.Targets)
-            results.Add(UninstallTarget(plan, target));
 
         return results;
     }
@@ -93,7 +104,10 @@ public sealed class ManagedModuleUninstallService
         EnsureTargetUnderRoot(plan.ModuleRoot, target.ModulePath);
         using (ManagedModuleInstallLock.Acquire(plan.ModuleRoot, target.Name, CancellationToken.None))
         {
-            Directory.Delete(GetFileSystemPath(target.ModulePath), recursive: true);
+            if (target.IsFlatLayout)
+                DeleteFlatModuleTarget(target);
+            else
+                Directory.Delete(GetFileSystemPath(target.ModulePath), recursive: true);
             TryDeleteEmptyModuleDirectory(target.ModuleRoot, target.Name);
         }
 
@@ -131,7 +145,7 @@ public sealed class ManagedModuleUninstallService
         var version = request.Version!.Trim();
         if (IsRangeExpression(version))
         {
-            var range = ManagedModuleVersionRange.Parse(version);
+            var range = ParseUninstallRange(version);
             return candidates
                 .Where(candidate => range.IsSatisfiedBy(candidate.Version))
                 .Where(candidate => request.Prerelease || range.AllowsPrerelease || !candidate.IsPrerelease)
@@ -158,6 +172,8 @@ public sealed class ManagedModuleUninstallService
             Version = candidate.Version,
             ModuleRoot = moduleRoot,
             ModulePath = candidate.ModulePath,
+            Guid = candidate.Guid,
+            IsFlatLayout = candidate.IsFlatLayout,
             IsLoaded = IsLoaded(candidate, request.LoadedModules)
         };
 
@@ -194,9 +210,7 @@ public sealed class ManagedModuleUninstallService
 
                 foreach (var requiredModule in ReadRequiredModules(candidate))
                 {
-                    if (!string.Equals(requiredModule.ModuleName, target.Name, StringComparison.OrdinalIgnoreCase))
-                        continue;
-                    if (!ModulePublisher.DoesVersionMatchRequiredModule(requiredModule, target.Version))
+                    if (!RequiredModuleMatchesTarget(requiredModule, target))
                         continue;
                     if (HasRemainingSatisfyingCandidate(candidates, targetKeys, requiredModule))
                         continue;
@@ -231,8 +245,25 @@ public sealed class ManagedModuleUninstallService
         RequiredModuleReference requiredModule)
         => candidates.Any(candidate =>
             !targetKeys.Contains(ModuleKey.Create(candidate.Name, candidate.Version, candidate.ModulePath)) &&
-            string.Equals(candidate.Name, requiredModule.ModuleName, StringComparison.OrdinalIgnoreCase) &&
-            ModulePublisher.DoesVersionMatchRequiredModule(requiredModule, candidate.Version));
+            RequiredModuleMatchesCandidate(requiredModule, candidate));
+
+    private static bool RequiredModuleMatchesTarget(
+        RequiredModuleReference requiredModule,
+        ManagedModuleUninstallTarget target)
+        => string.Equals(requiredModule.ModuleName, target.Name, StringComparison.OrdinalIgnoreCase) &&
+           ModulePublisher.DoesVersionMatchRequiredModule(requiredModule, target.Version) &&
+           RequiredModuleGuidMatches(requiredModule.Guid, target.Guid);
+
+    private static bool RequiredModuleMatchesCandidate(
+        RequiredModuleReference requiredModule,
+        InstalledModuleCandidate candidate)
+        => string.Equals(requiredModule.ModuleName, candidate.Name, StringComparison.OrdinalIgnoreCase) &&
+           ModulePublisher.DoesVersionMatchRequiredModule(requiredModule, candidate.Version) &&
+           RequiredModuleGuidMatches(requiredModule.Guid, candidate.Guid);
+
+    private static bool RequiredModuleGuidMatches(string? requiredGuid, string? installedGuid)
+        => string.IsNullOrWhiteSpace(requiredGuid) ||
+           string.Equals(requiredGuid!.Trim(), installedGuid?.Trim(), StringComparison.OrdinalIgnoreCase);
 
     private static RequiredModuleReference[] ReadRequiredModules(InstalledModuleCandidate candidate)
         => string.IsNullOrWhiteSpace(candidate.ManifestPath)
@@ -253,10 +284,7 @@ public sealed class ManagedModuleUninstallService
 
             var flatManifest = FindModuleManifest(moduleDirectory, moduleName);
             if (flatManifest is not null && TryReadManifestVersion(flatManifest, out var flatVersion))
-            {
-                modules.Add(new InstalledModuleCandidate(moduleName, flatVersion, moduleDirectory, flatManifest));
-                continue;
-            }
+                modules.Add(new InstalledModuleCandidate(moduleName, flatVersion, moduleDirectory, flatManifest, ReadManifestGuid(flatManifest), isFlatLayout: true));
 
             foreach (var versionDirectory in EnumerateDirectories(moduleDirectory))
             {
@@ -266,9 +294,9 @@ public sealed class ManagedModuleUninstallService
 
                 var manifest = FindModuleManifest(versionDirectory, moduleName);
                 if (manifest is not null && TryReadManifestVersion(manifest, out var manifestVersion))
-                    modules.Add(new InstalledModuleCandidate(moduleName, manifestVersion, versionDirectory, manifest));
+                    modules.Add(new InstalledModuleCandidate(moduleName, manifestVersion, versionDirectory, manifest, ReadManifestGuid(manifest), isFlatLayout: false));
                 else if (ModuleStateVersion.TryParse(versionName, out _))
-                    modules.Add(new InstalledModuleCandidate(moduleName, versionName, versionDirectory, manifest));
+                    modules.Add(new InstalledModuleCandidate(moduleName, versionName, versionDirectory, manifest, guid: null, isFlatLayout: false));
             }
         }
 
@@ -291,6 +319,9 @@ public sealed class ManagedModuleUninstallService
             : manifestVersion!.Trim() + "-" + prerelease!.Trim().TrimStart('-');
         return true;
     }
+
+    private static string? ReadManifestGuid(string manifestPath)
+        => ModuleManifestValueReader.ReadTopLevelString(manifestPath, "GUID");
 
     private static string? FindModuleManifest(string modulePath, string moduleName)
     {
@@ -353,6 +384,21 @@ public sealed class ManagedModuleUninstallService
            value.StartsWith("<", StringComparison.Ordinal) ||
            value.Contains(",", StringComparison.Ordinal);
 
+    private static ManagedModuleVersionRange ParseUninstallRange(string value)
+    {
+        var range = ManagedModuleVersionRange.Parse(value);
+        var trimmed = value.Trim();
+        if ((trimmed.StartsWith(">", StringComparison.Ordinal) || trimmed.StartsWith("<", StringComparison.Ordinal)) &&
+            range.ExactVersion is null &&
+            range.MaximumVersion is null &&
+            string.Equals(range.MinimumVersion, trimmed, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException($"Invalid version range syntax: '{value}'.", nameof(value));
+        }
+
+        return range;
+    }
+
     private static bool PathMatches(string modulePath, string? loadedPath)
     {
         if (string.IsNullOrWhiteSpace(loadedPath))
@@ -387,6 +433,27 @@ public sealed class ManagedModuleUninstallService
             return;
 
         Directory.Delete(GetFileSystemPath(moduleDirectory), recursive: false);
+    }
+
+    private static void DeleteFlatModuleTarget(ManagedModuleUninstallTarget target)
+    {
+        if (!Directory.Exists(target.ModulePath))
+            return;
+
+        foreach (var file in Directory.GetFiles(target.ModulePath, "*", SearchOption.TopDirectoryOnly))
+            File.Delete(GetFileSystemPath(file));
+
+        foreach (var directory in Directory.GetDirectories(target.ModulePath, "*", SearchOption.TopDirectoryOnly))
+        {
+            var directoryName = Path.GetFileName(directory);
+            if (ManagedModuleInstallContext.IsManagedStageDirectory(directoryName) ||
+                ModuleStateVersion.TryParse(directoryName, out _))
+            {
+                continue;
+            }
+
+            Directory.Delete(GetFileSystemPath(directory), recursive: true);
+        }
     }
 
     private static IReadOnlyList<string> EnumerateDirectories(string path)
@@ -427,12 +494,20 @@ public sealed class ManagedModuleUninstallService
 
     private sealed class InstalledModuleCandidate
     {
-        public InstalledModuleCandidate(string name, string version, string modulePath, string? manifestPath)
+        public InstalledModuleCandidate(
+            string name,
+            string version,
+            string modulePath,
+            string? manifestPath,
+            string? guid,
+            bool isFlatLayout)
         {
             Name = name;
             Version = version;
             ModulePath = modulePath;
             ManifestPath = manifestPath;
+            Guid = guid;
+            IsFlatLayout = isFlatLayout;
         }
 
         public string Name { get; }
@@ -442,6 +517,10 @@ public sealed class ManagedModuleUninstallService
         public string ModulePath { get; }
 
         public string? ManifestPath { get; }
+
+        public string? Guid { get; }
+
+        public bool IsFlatLayout { get; }
 
         public bool IsPrerelease => ManagedModuleVersionComparer.IsPrerelease(Version);
     }
@@ -460,6 +539,8 @@ public sealed class ManagedModuleUninstallService
         }
 
         public string Original { get; }
+
+        public bool IsWildcard => _regex is not null;
 
         public bool IsMatch(string value)
             => _regex is null
