@@ -423,6 +423,8 @@ public sealed class InstallManagedScriptCommandTests
            <#
            .SYNOPSIS
            Test script.
+           .DESCRIPTION
+           Test script.
            #>
            Write-Output 'ok'
            """;
