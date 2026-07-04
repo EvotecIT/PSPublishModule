@@ -299,6 +299,7 @@ managed module flow.
 
 See [Docs/PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md),
 [Docs/PSPublishModule.ManagedModules.Compatibility.md](Docs/PSPublishModule.ManagedModules.Compatibility.md),
+[Docs/PSPublishModule.PSResourceGetParity.md](Docs/PSPublishModule.PSResourceGetParity.md),
 and `Get-Help about_PrivateGalleries`.
 
 ## Quick Start: Managed Module Lifecycle
@@ -615,6 +616,7 @@ Start here:
 - [Docs/PSPublishModule.ModuleDocumentation.md](Docs/PSPublishModule.ModuleDocumentation.md)
 - [Docs/PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md)
 - [Docs/PSPublishModule.ManagedModules.Compatibility.md](Docs/PSPublishModule.ManagedModules.Compatibility.md)
+- [Docs/PSPublishModule.PSResourceGetParity.md](Docs/PSPublishModule.PSResourceGetParity.md)
 - [Docs/PSPublishModule.ManagedModules.Roadmap.md](Docs/PSPublishModule.ManagedModules.Roadmap.md)
 - [Benchmarks/ManagedModules/README.md](Benchmarks/ManagedModules/README.md)
 - [Docs/PSPublishModule.ModuleIsolation.md](Docs/PSPublishModule.ModuleIsolation.md)
