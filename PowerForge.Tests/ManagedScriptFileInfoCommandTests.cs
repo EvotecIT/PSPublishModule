@@ -125,6 +125,34 @@ public sealed class ManagedScriptFileInfoCommandTests
     }
 
     [Fact]
+    public void UpdateManagedScriptFileInfo_preserves_author_when_omitted()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ManagedScriptFileInfo")
+            .AddParameter("Path", path)
+            .AddParameter("Description", "Creates a company report.")
+            .AddParameter("Author", "Original Author");
+        _ = ps.Invoke();
+        AssertNoPowerShellErrors(ps);
+
+        ps.Commands.Clear();
+        ps.AddCommand("Update-ManagedScriptFileInfo")
+            .AddParameter("Path", path)
+            .AddParameter("Version", "1.2.3");
+        _ = ps.Invoke();
+        AssertNoPowerShellErrors(ps);
+
+        ps.Commands.Clear();
+        ps.AddCommand("Get-ManagedScriptFileInfo").AddParameter("Path", path);
+        var read = Assert.IsType<ManagedScriptFileInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal("Original Author", read.Author);
+    }
+
+    [Fact]
     public void NewManagedScriptFileInfo_rejects_conflicting_required_module_versions()
     {
         using var directory = new TemporaryDirectory();

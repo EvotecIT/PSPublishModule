@@ -15,7 +15,7 @@ public sealed class ManagedScriptFileInfo
     public string Version { get; set; } = string.Empty;
 
     /// <summary>Script metadata GUID.</summary>
-    public Guid Guid { get; set; } = Guid.NewGuid();
+    public Guid Guid { get; set; }
 
     /// <summary>Script author.</summary>
     public string? Author { get; set; }

@@ -111,8 +111,11 @@ public sealed class ManagedScriptFileInfoService
     {
         try
         {
-            _ = Read(path);
-            return true;
+            var info = Read(path);
+            return !string.IsNullOrWhiteSpace(info.Version) &&
+                   info.Guid != Guid.Empty &&
+                   !string.IsNullOrWhiteSpace(info.Author) &&
+                   !string.IsNullOrWhiteSpace(info.Description);
         }
         catch (IOException)
         {
@@ -431,7 +434,8 @@ public sealed class ManagedScriptFileInfoService
         endIndex = index;
         helpBlock = string.Empty;
         var current = index;
-        var builder = new StringBuilder();
+        var candidateBuilder = new StringBuilder();
+        var originalBuilder = new StringBuilder();
         var readAnyComment = false;
         while (TryReadLine(text, current, out var line, out var nextIndex))
         {
@@ -444,26 +448,28 @@ public sealed class ManagedScriptFileInfoService
             var content = trimmed.Length == 1
                 ? string.Empty
                 : trimmed.Substring(1).TrimStart();
-            builder.AppendLine(content);
+            candidateBuilder.AppendLine(content);
+            originalBuilder.AppendLine(line);
             current = nextIndex;
         }
 
         if (!readAnyComment)
             return false;
 
-        var candidate = builder.ToString();
+        var candidate = candidateBuilder.ToString();
         if (!IsCommentHelpBlock(candidate))
             return false;
 
         endIndex = current;
-        helpBlock = candidate;
+        helpBlock = originalBuilder.ToString();
         return true;
     }
 
     private static string? ReadDescriptionFromHelp(string helpBlock)
     {
+        var parseText = NormalizeHelpForParsing(helpBlock);
         var match = Regex.Match(
-            helpBlock,
+            parseText,
             $@"(?ms)^\s*\.DESCRIPTION\b\s*(?<description>.*?)(?=^\s*\.(?:{CommentHelpKeyPattern})\b\s*|\s*#>\s*\z)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         return match.Success
@@ -606,6 +612,9 @@ public sealed class ManagedScriptFileInfoService
         if (string.Equals(existingDescription, normalizedDescription, StringComparison.Ordinal))
             return EnsureScriptHelpSeparator(helpBlock);
 
+        if (IsLineCommentHelpBlock(helpBlock))
+            return EnsureScriptHelpSeparator(UpdateDescriptionInLineCommentHelp(helpBlock, normalizedDescription));
+
         var match = Regex.Match(
             helpBlock,
             $@"(?ms)^\s*\.DESCRIPTION\b\s*(?<description>.*?)(?=^\s*\.(?:{CommentHelpKeyPattern})\b\s*|\s*#>\s*\z)",
@@ -614,7 +623,7 @@ public sealed class ManagedScriptFileInfoService
         {
             var openingIndex = helpBlock.IndexOf("<#", StringComparison.Ordinal);
             if (openingIndex < 0)
-                return EnsureScriptHelpSeparator(InsertDescriptionInLineHelp(helpBlock, normalizedDescription));
+                return EnsureScriptHelpSeparator(InsertDescriptionInLineCommentHelp(helpBlock, normalizedDescription));
 
             var insertIndex = openingIndex + 2;
             return EnsureScriptHelpSeparator(helpBlock.Insert(insertIndex, Environment.NewLine + Environment.NewLine + ".DESCRIPTION" + Environment.NewLine + normalizedDescription + Environment.NewLine));
@@ -637,8 +646,111 @@ public sealed class ManagedScriptFileInfoService
         return EnsureScriptHelpSeparator(builder.ToString());
     }
 
-    private static string InsertDescriptionInLineHelp(string helpBlock, string description)
-        => ".DESCRIPTION" + Environment.NewLine + description + Environment.NewLine + Environment.NewLine + helpBlock.TrimStart('\r', '\n');
+    private static string NormalizeHelpForParsing(string helpBlock)
+    {
+        if (!IsLineCommentHelpBlock(helpBlock))
+            return helpBlock;
+
+        var builder = new StringBuilder();
+        foreach (var line in SplitLines(helpBlock))
+        {
+            var trimmed = line.TrimStart();
+            if (trimmed.StartsWith("#", StringComparison.Ordinal))
+                builder.AppendLine(trimmed.Length == 1 ? string.Empty : trimmed.Substring(1).TrimStart());
+            else
+                builder.AppendLine(line);
+        }
+
+        return builder.ToString();
+    }
+
+    private static bool IsLineCommentHelpBlock(string helpBlock)
+        => Regex.IsMatch(
+            helpBlock,
+            $@"(?m)^\s*#\s*\.(?:{CommentHelpKeyPattern})\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static string UpdateDescriptionInLineCommentHelp(string helpBlock, string description)
+    {
+        var lines = SplitLines(helpBlock).ToList();
+        var descriptionIndex = FindLineCommentHelpKey(lines, "DESCRIPTION");
+        if (descriptionIndex < 0)
+            return InsertDescriptionInLineCommentHelp(helpBlock, description);
+
+        var nextSectionIndex = lines.Count;
+        for (var i = descriptionIndex + 1; i < lines.Count; i++)
+        {
+            if (TryGetLineCommentHelpKey(lines[i], out _))
+            {
+                nextSectionIndex = i;
+                break;
+            }
+        }
+
+        var commentPrefix = GetLineCommentPrefix(lines[descriptionIndex]);
+        var replacement = RenderLineCommentDescription(commentPrefix, description);
+        lines.RemoveRange(descriptionIndex + 1, nextSectionIndex - descriptionIndex - 1);
+        lines.InsertRange(descriptionIndex + 1, replacement);
+        return string.Join(Environment.NewLine, lines).TrimEnd('\r', '\n');
+    }
+
+    private static string InsertDescriptionInLineCommentHelp(string helpBlock, string description)
+    {
+        var lines = new List<string> { "# .DESCRIPTION" };
+        lines.AddRange(RenderLineCommentDescription("#", description));
+        lines.AddRange(SplitLines(helpBlock.TrimStart('\r', '\n')));
+        return string.Join(Environment.NewLine, lines).TrimEnd('\r', '\n');
+    }
+
+    private static IReadOnlyList<string> RenderLineCommentDescription(string commentPrefix, string description)
+    {
+        var lines = new List<string>();
+        foreach (var line in SplitLines(description))
+            lines.Add(line.Length == 0 ? commentPrefix : commentPrefix + " " + line);
+
+        lines.Add(commentPrefix);
+        return lines;
+    }
+
+    private static int FindLineCommentHelpKey(IReadOnlyList<string> lines, string key)
+    {
+        for (var i = 0; i < lines.Count; i++)
+        {
+            if (TryGetLineCommentHelpKey(lines[i], out var candidate) &&
+                string.Equals(candidate, key, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+
+        return -1;
+    }
+
+    private static bool TryGetLineCommentHelpKey(string line, out string key)
+    {
+        key = string.Empty;
+        var trimmed = line.TrimStart();
+        if (!trimmed.StartsWith("#", StringComparison.Ordinal))
+            return false;
+
+        var content = trimmed.Length == 1 ? string.Empty : trimmed.Substring(1).TrimStart();
+        var match = Regex.Match(
+            content,
+            $@"^\.(?<key>{CommentHelpKeyPattern})\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (!match.Success)
+            return false;
+
+        key = match.Groups["key"].Value;
+        return true;
+    }
+
+    private static string GetLineCommentPrefix(string line)
+    {
+        var hashIndex = line.IndexOf('#');
+        return hashIndex < 0 ? "#" : line.Substring(0, hashIndex + 1);
+    }
+
+    private static IReadOnlyList<string> SplitLines(string value)
+        => value.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
 
     private static string EnsureScriptHelpSeparator(string value)
         => value.TrimEnd('\r', '\n') + Environment.NewLine + Environment.NewLine + Environment.NewLine;

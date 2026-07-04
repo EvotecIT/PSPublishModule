@@ -30,12 +30,13 @@ internal static class ManagedScriptFileInfoCommandSupport
         bool externalModuleDependenciesSpecified = false,
         bool requiredScriptsSpecified = false,
         bool externalScriptDependenciesSpecified = false,
-        bool tagsSpecified = false)
+        bool tagsSpecified = false,
+        bool defaultAuthorWhenOmitted = false)
         => new()
         {
             Path = path,
             Version = version ?? string.Empty,
-            Author = ResolveAuthor(author),
+            Author = ResolveAuthor(author, defaultAuthorWhenOmitted),
             Description = description,
             Guid = guid,
             CompanyName = companyName,
@@ -102,8 +103,8 @@ internal static class ManagedScriptFileInfoCommandSupport
         return null;
     }
 
-    private static string ResolveAuthor(string? author)
+    private static string? ResolveAuthor(string? author, bool defaultWhenOmitted)
         => string.IsNullOrWhiteSpace(author)
-            ? Environment.UserName
+            ? defaultWhenOmitted ? Environment.UserName : null
             : author!.Trim();
 }

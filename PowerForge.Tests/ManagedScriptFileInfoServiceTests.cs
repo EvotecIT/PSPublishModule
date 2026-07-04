@@ -413,6 +413,24 @@ Demo script.
     }
 
     [Fact]
+    public void Test_ReturnsFalseForIncompleteMetadata()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        File.WriteAllText(path, """
+<#PSScriptInfo
+
+.VERSION 1.0.0
+
+.GUID 11111111-2222-3333-4444-555555555555
+
+#>
+""");
+
+        Assert.False(new ManagedScriptFileInfoService().Test(path));
+    }
+
+    [Fact]
     public void Update_PreservesScriptBodyAndUpdatesSelectedMetadata()
     {
         using var directory = new TemporaryDirectory();
@@ -440,6 +458,29 @@ Demo script.
         Assert.Equal("After description", result.Description);
         Assert.Contains("\"body\"", text, StringComparison.Ordinal);
         Assert.Contains(".TAGS updated", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Update_PreservesExistingGuidWhenSparseUpdateOmitsGuid()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        var service = new ManagedScriptFileInfoService();
+        var guid = Guid.Parse("11111111-2222-3333-4444-555555555555");
+        service.Create(new ManagedScriptFileInfo
+        {
+            Path = path,
+            Guid = guid,
+            Author = "Evotec",
+            Description = "Before description"
+        }, overwrite: false);
+
+        var result = service.Update(path, new ManagedScriptFileInfo
+        {
+            Version = "1.2.3"
+        }, removeSignature: false);
+
+        Assert.Equal(guid, result.Guid);
     }
 
     [Fact]
@@ -567,12 +608,16 @@ function Invoke-Company { "ok" }
 function Invoke-Company { "ok" }
 """);
 
-        new ManagedScriptFileInfoService().Update(path, new ManagedScriptFileInfo { Version = "1.2.3" }, removeSignature: false);
+        new ManagedScriptFileInfoService().Update(path, new ManagedScriptFileInfo
+        {
+            Version = "1.2.3",
+            Description = "Updated line-comment description."
+        }, removeSignature: false);
         var text = File.ReadAllText(path);
 
-        Assert.Contains(".DESCRIPTION", text, StringComparison.Ordinal);
-        Assert.Contains("Script description.", text, StringComparison.Ordinal);
-        Assert.Contains(".EXAMPLE", text, StringComparison.Ordinal);
+        Assert.Contains("# .DESCRIPTION", text, StringComparison.Ordinal);
+        Assert.Contains("# Updated line-comment description.", text, StringComparison.Ordinal);
+        Assert.Contains("# .EXAMPLE", text, StringComparison.Ordinal);
         Assert.DoesNotContain("<#" + Environment.NewLine + Environment.NewLine + ".DESCRIPTION" + Environment.NewLine + Environment.NewLine, text, StringComparison.Ordinal);
     }
 

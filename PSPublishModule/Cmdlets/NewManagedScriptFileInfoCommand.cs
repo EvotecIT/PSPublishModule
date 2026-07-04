@@ -113,7 +113,8 @@ public sealed class NewManagedScriptFileInfoCommand : PSCmdlet
                 LicenseUri,
                 IconUri,
                 ReleaseNotes,
-                PrivateData);
+                PrivateData,
+                defaultAuthorWhenOmitted: true);
 
             _ = service.Create(info, Force.IsPresent);
         }
