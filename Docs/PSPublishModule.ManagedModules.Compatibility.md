@@ -24,7 +24,7 @@ Baseline references:
 | `Publish-Module` | `Publish-ManagedModule` | Supported | Packs and publishes modules to local folder or NuGet v3-compatible feeds. |
 | `Find-PSResource` | `Find-ManagedModule` | Partial | Module packages are supported. Script/resource-kind specific behavior is out of scope for the managed module engine. |
 | `Save-PSResource` | `Save-ManagedModule` | Partial | Module packages are supported; non-module resource kinds remain compatibility-path work. |
-| `Install-PSResource` | `Install-ManagedModule` | Partial | Module packages, version ranges, prerelease, repository priority, and scope are supported. |
+| `Install-PSResource` | `Install-ManagedModule` | Partial | Module packages, version ranges, prerelease, repository priority, scope, and required-resource batch installs are supported. |
 | `Update-PSResource` | `Update-ManagedModule` | Partial | Module update workflows are supported. Non-module resources remain compatibility-path work. |
 | `Publish-PSResource` | `Publish-ManagedModule` | Partial | Module package publishing is supported. Script/resource publishing remains compatibility-path work. |
 
@@ -65,6 +65,16 @@ Save-ManagedModule -Name Company.Tools -RequiredVersion 1.2.0 -Path C:\OfflineMo
 ```powershell
 Install-ManagedModule -Name Company.Tools -Scope CurrentUser -Repository PSGallery
 Install-ManagedModule -Name Company.Tools -RequiredVersion 1.2.0 -ProfileName CompanyModules -AcceptLicense
+Install-ManagedModule -RequiredResource @{
+    'Company.Tools' = @{
+        Version = '1.2.0'
+        Repository = 'PSGallery'
+        Prerelease = $false
+        Reinstall = $true
+        AcceptLicense = $true
+    }
+}
+Install-ManagedModule -RequiredResourceFile .\required-resources.psd1 -Path C:\OfflineModules
 ```
 
 Default install is latest-first for broad requests. When the caller does not pin an exact version, `Install-ManagedModule` resolves the repository-selected version first, then compares that selected version with the target module root. If the repository has a newer version than the locally installed copy, the newer version is installed side-by-side. If the selected version is already installed, the command performs a cheap installed-manifest dependency health check. Missing or unsatisfied manifest `RequiredModules` are repaired automatically without forcing a healthy root-module reinstall.
@@ -144,6 +154,7 @@ Repair-ManagedModule -Inventory $inventory -Latest -Repository PSGallery -ShowSu
 | Prerelease | Supported | `-Prerelease`, `-AllowPrerelease` alias where useful |
 | Scope | Supported | CurrentUser, AllUsers, Custom module root |
 | Dependency handling | Supported | Dependency closure, skip dependency check, package dependency mirroring during managed publish |
+| Required resource batch install | Supported for module resources | `-RequiredResource`, `-RequiredResourceFile`, and PSResourceGet-style nested hashtable values with `Name`, `Version`, `Repository`, `AcceptLicense`, `Prerelease`, `Scope`, `Quiet`, `Reinstall`, `TrustRepository`, `NoClobber`, and `SkipDependencyCheck` keys |
 | Trust/integrity | Supported | Trusted repository requirement, allowed author policy, expected package SHA256 |
 | WhatIf/Confirm | Supported | Mutating cmdlets use PowerShell `ShouldProcess` |
 | Summaries | Supported | Spectre.Console summaries remain host-side; result objects are still pipeline-friendly |
@@ -153,6 +164,8 @@ Repair-ManagedModule -Inventory $inventory -Latest -Repository PSGallery -ShowSu
 Compatibility aliases are exposed only when the old name maps to the same managed behavior. `-RequiredVersion`, `-AllowPrerelease`, `-Source`, `-RepositoryUri`, `-Path`, `-DestinationPath`, `-SkipDependenciesCheck`, `-ModulePath`, and `-NuGetApiKey` are safe aliases because they do not change the safety model.
 
 `-TrustRepository` is not exposed as an alias. In PowerShellGet and PSResourceGet it is commonly used to skip an untrusted-repository prompt for that invocation. The managed engine does not prompt inside the reusable core; it uses repository profile trust evidence and the explicit `-RequireTrustedRepository` policy. A direct alias would invert the meaning and could make automation less safe.
+
+`Install-ManagedModule -RequiredResource` and `-RequiredResourceFile` accept the PSResourceGet per-resource keys `TrustRepository` and `Quiet` so existing resource maps do not fail validation. Repository trust still follows the managed safety model above, and quiet output remains controlled by the managed cmdlet/output path rather than by a per-resource option.
 
 `-SkipPublisherCheck` is not exposed as an alias or no-op switch. Managed install, save, update, and repair currently use source trust, allowed-author policy, expected package SHA256, license acceptance, clobber checks, and optional `-AuthenticodeCheck`. Cloning PowerShellGet publisher-check behavior needs a separate signed fixture and catalog evidence before it becomes a public compatibility switch.
 
@@ -182,6 +195,7 @@ This checklist is the guardrail for replacing common PowerShellGet and PSResourc
 - [x] PSResourceGet-style semantic version ranges are supported through `-VersionPolicy`.
 - [x] PSResourceGet-style `-TrustRepository` behavior maps to trusted repository profiles and `-RequireTrustedRepository` policy instead of hidden prompts.
 - [x] Public `-Proxy` and `-ProxyCredential` parameters are exposed on managed find/install/save/update/publish repository cmdlets and flow into the managed repository client.
+- [x] `Install-ManagedModule` supports PSResourceGet-style module batch installs through `-RequiredResource` and `-RequiredResourceFile`, including nested resource option hashtables and version range strings.
 - [x] Define exact public semantics for `-Force` on install/save/update, including exact-version reinstall, no-op plans, rollback-protected replacement, downgrade blocking, and no implied cleanup.
 - [x] Define exact public semantics for `-Force` in repair and maintenance flows, including receipt repair and cleanup interactions.
 - [x] Define exact public semantics for `-AllowClobber` versus PSResourceGet `-NoClobber`, including exported command conflicts in the selected target root.

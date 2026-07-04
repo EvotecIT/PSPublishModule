@@ -219,6 +219,96 @@ public sealed class PrivateManagedModuleCommandTests
     }
 
     [Fact]
+    public void InstallManagedModule_accepts_required_resource_hashtable()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.One.1.0.0.nupkg"),
+            "Company.One",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0", "Company.One"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Two.2.0.0-beta1.nupkg"),
+            "Company.Two",
+            "2.0.0-beta1",
+            files: CreateModuleFiles("2.0.0-beta1", "Company.Two"));
+        var requiredResource = new System.Collections.Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.One"] = new System.Collections.Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Version"] = "1.0.0",
+                ["Repository"] = feed.Path,
+                ["Reinstall"] = true
+            },
+            ["Company.Two"] = new System.Collections.Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Version"] = "2.0.0-beta1",
+                ["Repository"] = feed.Path,
+                ["Prerelease"] = true,
+                ["SkipDependencyCheck"] = true
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedModule")
+            .AddParameter("RequiredResource", requiredResource)
+            .AddParameter("Path", moduleRoot.Path);
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal(2, results.Count);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.One", "1.0.0", "Company.One.psd1")));
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Two", "2.0.0-beta1", "Company.Two.psd1")));
+    }
+
+    [Fact]
+    public void InstallManagedModule_accepts_required_resource_file()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        using var files = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        var requiredResourceFile = Path.Combine(files.Path, "required.psd1");
+        File.WriteAllText(
+            requiredResourceFile,
+            "@{ 'Company.Tools' = @{ Version = '1.0.0'; Repository = '" + EscapePowerShellSingleQuoted(feed.Path) + "' } }");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedModule")
+            .AddParameter("RequiredResourceFile", requiredResourceFile)
+            .AddParameter("Path", moduleRoot.Path);
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal("Company.Tools", result.Name);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.psd1")));
+    }
+
+    [Fact]
+    public void InstallManagedModule_rejects_required_resource_string_shorthand()
+    {
+        var requiredResource = new System.Collections.Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools"] = "1.0.0"
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedModule")
+            .AddParameter("RequiredResource", requiredResource)
+            .AddParameter("Path", Path.GetTempPath());
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+
+        Assert.Contains("value must be a hashtable", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void UpdateManagedModule_can_use_managed_transport_from_repository_profile()
     {
         using var feed = new TemporaryDirectory();
