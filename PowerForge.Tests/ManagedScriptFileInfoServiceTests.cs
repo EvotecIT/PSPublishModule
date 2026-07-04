@@ -449,6 +449,107 @@ param([string] $Name)
     }
 
     [Fact]
+    public void Update_AddsDescriptionToExistingScriptHelpWithoutDuplicatingHelp()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        File.WriteAllText(path, """
+<#PSScriptInfo
+
+.VERSION 1.0.0.0
+
+.GUID 11111111-2222-3333-4444-555555555555
+
+#>
+
+<#
+.SYNOPSIS
+Runs the workflow.
+
+.EXAMPLE
+Invoke-Company
+#>
+
+function Invoke-Company { "ok" }
+""");
+
+        new ManagedScriptFileInfoService().Update(path, new ManagedScriptFileInfo { Description = "Script description." }, removeSignature: false);
+        var text = File.ReadAllText(path);
+
+        Assert.Contains(".DESCRIPTION", text, StringComparison.Ordinal);
+        Assert.Contains("Script description.", text, StringComparison.Ordinal);
+        Assert.Contains(".SYNOPSIS", text, StringComparison.Ordinal);
+        Assert.Contains("Runs the workflow.", text, StringComparison.Ordinal);
+        Assert.Single(IndexesOf(text, ".SYNOPSIS"));
+        Assert.True(text.IndexOf(".DESCRIPTION", StringComparison.Ordinal) < text.IndexOf(".SYNOPSIS", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Update_ReplacesModuleRequiresThatAppearAfterScriptHelp()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        File.WriteAllText(path, """
+<#PSScriptInfo
+
+.VERSION 1.0.0.0
+
+.GUID 11111111-2222-3333-4444-555555555555
+
+#>
+
+<#
+.DESCRIPTION
+Script description.
+#>
+
+#Requires -Module Pester
+
+function Invoke-Company { "ok" }
+""");
+
+        var result = new ManagedScriptFileInfoService().Update(path, new ManagedScriptFileInfo
+        {
+            RequiredModules = [new ManagedScriptRequiredModule { ModuleName = "Az.Accounts" }],
+            RequiredModulesSpecified = true
+        }, removeSignature: false);
+        var text = File.ReadAllText(path);
+
+        Assert.Equal("Az.Accounts", Assert.Single(result.RequiredModules).ModuleName);
+        Assert.Contains("#Requires -Module Az.Accounts", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("#Requires -Module Pester", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Update_KeepsScriptHelpSeparatedFromFirstFunction()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        File.WriteAllText(path, """
+<#PSScriptInfo
+
+.VERSION 1.0.0.0
+
+.GUID 11111111-2222-3333-4444-555555555555
+
+#>
+
+<#
+.DESCRIPTION
+Script description.
+#>
+
+
+function Invoke-Company { "ok" }
+""");
+
+        new ManagedScriptFileInfoService().Update(path, new ManagedScriptFileInfo { Version = "1.2.3" }, removeSignature: false);
+        var text = File.ReadAllText(path);
+
+        Assert.Contains("#>" + Environment.NewLine + Environment.NewLine + Environment.NewLine + "function Invoke-Company", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Update_CanClearListMetadataWhenExplicitlySpecified()
     {
         using var directory = new TemporaryDirectory();
@@ -485,5 +586,18 @@ param([string] $Name)
 
         Assert.Contains("#Requires -Module Pester", text, StringComparison.Ordinal);
         Assert.DoesNotContain("@{ ModuleName = 'Pester' }", text, StringComparison.Ordinal);
+    }
+
+    private static IReadOnlyList<int> IndexesOf(string text, string value)
+    {
+        var indexes = new List<int>();
+        var index = 0;
+        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+        {
+            indexes.Add(index);
+            index += value.Length;
+        }
+
+        return indexes;
     }
 }

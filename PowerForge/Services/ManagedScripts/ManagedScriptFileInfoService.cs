@@ -310,17 +310,28 @@ public sealed class ManagedScriptFileInfoService
         var requiredModules = new List<ManagedScriptRequiredModule>();
         var removeSpans = new List<TextSpan>();
         var index = 0;
+        string? scriptHelp = null;
+        string description = string.Empty;
 
-        SkipBlankLines(remainder, ref index);
-        while (TryReadLine(remainder, index, out var line, out var nextIndex))
+        while (true)
         {
-            var trimmed = line.Trim();
-            if (trimmed.Length == 0)
+            SkipBlankLines(remainder, ref index);
+
+            if (scriptHelp is null &&
+                TryReadCommentBlock(remainder, index, out var helpEnd) &&
+                IsCommentHelpBlock(remainder.Substring(index, helpEnd - index)))
             {
-                index = nextIndex;
+                scriptHelp = remainder.Substring(index, helpEnd - index);
+                description = ReadDescriptionFromHelp(scriptHelp) ?? string.Empty;
+                removeSpans.Add(new TextSpan(index, helpEnd - index));
+                index = helpEnd;
                 continue;
             }
 
+            if (!TryReadLine(remainder, index, out var line, out var nextIndex))
+                break;
+
+            var trimmed = line.Trim();
             if (!trimmed.StartsWith("#Requires", StringComparison.OrdinalIgnoreCase))
                 break;
 
@@ -337,21 +348,8 @@ public sealed class ManagedScriptFileInfoService
             }
 
             index = nextIndex;
-            SkipBlankLines(remainder, ref index);
         }
 
-        var helpStart = index;
-        SkipBlankLines(remainder, ref helpStart);
-        var scriptHelp = TryReadCommentBlock(remainder, helpStart, out var helpEnd) &&
-                         ReadDescriptionFromHelp(remainder.Substring(helpStart, helpEnd - helpStart)) is not null
-            ? remainder.Substring(helpStart, helpEnd - helpStart)
-            : null;
-        if (scriptHelp is not null)
-            removeSpans.Add(new TextSpan(helpStart, helpEnd - helpStart));
-
-        var description = scriptHelp is null
-            ? string.Empty
-            : ReadDescriptionFromHelp(scriptHelp) ?? string.Empty;
         return new ScriptPrefixParts(
             requiredModules,
             scriptHelp,
@@ -399,10 +397,14 @@ public sealed class ManagedScriptFileInfoService
             return false;
 
         endIndex = closeIndex + 2;
-        while (endIndex < text.Length && (text[endIndex] == '\r' || text[endIndex] == '\n'))
-            endIndex++;
         return true;
     }
+
+    private static bool IsCommentHelpBlock(string helpBlock)
+        => Regex.IsMatch(
+            helpBlock,
+            $@"(?m)^\s*\.(?:{CommentHelpKeyPattern})\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static string? ReadDescriptionFromHelp(string helpBlock)
     {
@@ -537,8 +539,7 @@ public sealed class ManagedScriptFileInfoService
         builder.AppendLine(DefaultIfBlank(info.Description, string.Empty));
         builder.AppendLine();
         builder.AppendLine("#>");
-        builder.AppendLine();
-        return builder.ToString();
+        return EnsureScriptHelpSeparator(builder.ToString());
     }
 
     private static string UpdateDescriptionInHelp(string helpBlock, string? description)
@@ -546,7 +547,7 @@ public sealed class ManagedScriptFileInfoService
         var existingDescription = ReadDescriptionFromHelp(helpBlock);
         var normalizedDescription = NormalizeBlockValue(description ?? string.Empty);
         if (string.Equals(existingDescription, normalizedDescription, StringComparison.Ordinal))
-            return EnsureTrailingBlankLine(helpBlock);
+            return EnsureScriptHelpSeparator(helpBlock);
 
         var match = Regex.Match(
             helpBlock,
@@ -559,12 +560,12 @@ public sealed class ManagedScriptFileInfoService
                 return RenderGeneratedDescription(normalizedDescription);
 
             var insertIndex = openingIndex + 2;
-            return EnsureTrailingBlankLine(helpBlock.Insert(insertIndex, Environment.NewLine + Environment.NewLine + ".DESCRIPTION" + Environment.NewLine + normalizedDescription + Environment.NewLine));
+            return EnsureScriptHelpSeparator(helpBlock.Insert(insertIndex, Environment.NewLine + Environment.NewLine + ".DESCRIPTION" + Environment.NewLine + normalizedDescription + Environment.NewLine));
         }
 
         var group = match.Groups["description"];
         var replacement = Environment.NewLine + normalizedDescription + Environment.NewLine + Environment.NewLine;
-        return EnsureTrailingBlankLine(helpBlock.Remove(group.Index, group.Length).Insert(group.Index, replacement));
+        return EnsureScriptHelpSeparator(helpBlock.Remove(group.Index, group.Length).Insert(group.Index, replacement));
     }
 
     private static string RenderGeneratedDescription(string description)
@@ -576,12 +577,11 @@ public sealed class ManagedScriptFileInfoService
         builder.AppendLine(description);
         builder.AppendLine();
         builder.AppendLine("#>");
-        builder.AppendLine();
-        return builder.ToString();
+        return EnsureScriptHelpSeparator(builder.ToString());
     }
 
-    private static string EnsureTrailingBlankLine(string value)
-        => value.TrimEnd('\r', '\n') + Environment.NewLine + Environment.NewLine;
+    private static string EnsureScriptHelpSeparator(string value)
+        => value.TrimEnd('\r', '\n') + Environment.NewLine + Environment.NewLine + Environment.NewLine;
 
     private static string RemoveSpans(string text, IReadOnlyList<TextSpan> spans)
     {
