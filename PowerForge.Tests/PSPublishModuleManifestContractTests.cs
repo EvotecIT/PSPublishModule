@@ -52,6 +52,7 @@ public sealed class PSPublishModuleManifestContractTests
     {
         "Get-ManagedScriptFileInfo",
         "New-ManagedScriptFileInfo",
+        "Save-ManagedScript",
         "Test-ManagedScriptFileInfo",
         "Update-ManagedScriptFileInfo"
     };
