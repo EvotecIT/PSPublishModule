@@ -28,6 +28,28 @@ public sealed class UninstallManagedScriptCommandTests
     }
 
     [Fact]
+    public void UninstallManagedScript_binds_script_root_from_pipeline_object()
+    {
+        using var scriptRoot = new TemporaryDirectory();
+        var scriptPath = Path.Combine(scriptRoot.Path, "Invoke-CompanyTask.ps1");
+        File.WriteAllText(scriptPath, CreateScript("1.0.0"));
+        var input = new PSObject();
+        input.Properties.Add(new PSNoteProperty("Name", "Invoke-CompanyTask"));
+        input.Properties.Add(new PSNoteProperty("ScriptRoot", scriptRoot.Path));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedScript")
+            .AddParameter("RequiredVersion", "1.0.0");
+        var results = ps.Invoke(new[] { input });
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptUninstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptUninstallStatus.Removed, result.Status);
+        Assert.Equal(scriptRoot.Path, result.ScriptRoot);
+        Assert.False(File.Exists(scriptPath));
+    }
+
+    [Fact]
     public void UninstallManagedScript_plan_does_not_remove_script()
     {
         using var scriptRoot = new TemporaryDirectory();
@@ -120,7 +142,7 @@ public sealed class UninstallManagedScriptCommandTests
         AssertNoPowerShellErrors(ps);
         var result = Assert.IsType<ManagedScriptUninstallResult>(Assert.Single(results).BaseObject);
         Assert.Equal(ManagedScriptUninstallStatus.SkippedVersionMismatch, result.Status);
-        Assert.Equal("1.foo", result.ExistingVersion);
+        Assert.Null(result.ExistingVersion);
         Assert.True(File.Exists(scriptPath));
     }
 
@@ -197,7 +219,30 @@ public sealed class UninstallManagedScriptCommandTests
         AssertNoPowerShellErrors(ps);
         var result = Assert.IsType<ManagedScriptUninstallResult>(Assert.Single(results).BaseObject);
         Assert.Equal(ManagedScriptUninstallStatus.SkippedVersionMismatch, result.Status);
-        Assert.Equal("1.0.0-..", result.ExistingVersion);
+        Assert.Null(result.ExistingVersion);
+        Assert.True(File.Exists(scriptPath));
+    }
+
+    [Fact]
+    public void UninstallManagedScript_plan_treats_unreadable_exact_metadata_as_mismatch()
+    {
+        using var scriptRoot = new TemporaryDirectory();
+        var scriptPath = Path.Combine(scriptRoot.Path, "Invoke-CompanyTask.ps1");
+        File.WriteAllText(scriptPath, CreateScript("1.0.0-.."));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("ScriptRoot", scriptRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0-beta")
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedScriptUninstallPlan>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptUninstallPlanAction.SkipVersionMismatch, plan.Action);
+        Assert.False(plan.WouldRemoveFile);
+        Assert.Null(plan.ExistingVersion);
         Assert.True(File.Exists(scriptPath));
     }
 
@@ -252,6 +297,17 @@ public sealed class UninstallManagedScriptCommandTests
         string expected)
     {
         Assert.Equal(expected, ManagedScriptResourceService.ResolveScriptShellFolderName(shellEdition, isWindows));
+    }
+
+    [Fact]
+    public void Final_uninstall_action_revalidates_exact_version()
+    {
+        var action = ManagedScriptResourceService.ResolveFinalUninstallAction(
+            ManagedScriptUninstallPlanAction.Remove,
+            currentVersion: "2.0.0",
+            requestedVersion: "1.0.0");
+
+        Assert.Equal(ManagedScriptUninstallPlanAction.SkipVersionMismatch, action);
     }
 
     private static PowerShell CreatePowerShellWithModuleImported()

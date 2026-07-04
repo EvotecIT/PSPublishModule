@@ -118,7 +118,7 @@ public sealed class ManagedScriptResourceService
         ValidateUninstall(request);
         var resolved = ResolveScriptInstallRoot(request);
         var scriptPath = ResolveInstalledScriptPath(resolved.ScriptRoot, request.Name);
-        var scriptInfo = TryReadExistingInfo(scriptPath, request.Force);
+        var scriptInfo = TryReadExistingInfo(scriptPath, request.Force, allowUnreadableMetadata: !string.IsNullOrWhiteSpace(request.Version));
         var action = ResolveUninstallAction(scriptPath, scriptInfo?.Version, request.Version);
 
         return new ManagedScriptUninstallPlan
@@ -144,33 +144,50 @@ public sealed class ManagedScriptResourceService
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var plan = PlanUninstall(request);
         ManagedScriptFileInfo? scriptInfo = null;
+        var finalAction = plan.Action;
+        var finalExistingVersion = plan.ExistingVersion;
+        var finalSkipReason = plan.SkipReason;
         if (File.Exists(plan.ScriptPath))
         {
             try
             {
                 scriptInfo = _scriptFileInfoService.Read(plan.ScriptPath);
+                finalExistingVersion = scriptInfo.Version;
             }
-            catch when (request.Force)
+            catch when (request.Force || !string.IsNullOrWhiteSpace(request.Version))
             {
                 scriptInfo = null;
+                finalExistingVersion = null;
             }
         }
+        else if (plan.Action == ManagedScriptUninstallPlanAction.Remove)
+        {
+            finalAction = ManagedScriptUninstallPlanAction.SkipMissing;
+            finalExistingVersion = null;
+            finalSkipReason = ResolveUninstallSkipReason(finalAction, finalExistingVersion, request.Version);
+        }
 
-        if (plan.Action == ManagedScriptUninstallPlanAction.Remove)
+        if (finalAction == ManagedScriptUninstallPlanAction.Remove)
+        {
+            finalAction = ResolveFinalUninstallAction(plan.Action, finalExistingVersion, request.Version);
+            finalSkipReason = ResolveUninstallSkipReason(finalAction, finalExistingVersion, request.Version);
+        }
+
+        if (finalAction == ManagedScriptUninstallPlanAction.Remove)
             File.Delete(plan.ScriptPath);
 
         stopwatch.Stop();
         return new ManagedScriptUninstallResult
         {
             Name = plan.Name,
-            Status = MapUninstallStatus(plan.Action),
+            Status = MapUninstallStatus(finalAction),
             Scope = plan.Scope,
             ShellEdition = plan.ShellEdition,
             ScriptRoot = plan.ScriptRoot,
             ScriptPath = plan.ScriptPath,
-            ExistingVersion = plan.ExistingVersion,
+            ExistingVersion = finalExistingVersion,
             RequestedVersion = plan.RequestedVersion,
-            SkipReason = plan.SkipReason,
+            SkipReason = finalSkipReason,
             Elapsed = stopwatch.Elapsed,
             ScriptInfo = scriptInfo
         };
@@ -608,7 +625,7 @@ public sealed class ManagedScriptResourceService
         }
     }
 
-    private ManagedScriptFileInfo? TryReadExistingInfo(string scriptPath, bool force)
+    private ManagedScriptFileInfo? TryReadExistingInfo(string scriptPath, bool force, bool allowUnreadableMetadata = false)
     {
         if (!File.Exists(scriptPath))
             return null;
@@ -617,7 +634,7 @@ public sealed class ManagedScriptResourceService
         {
             return _scriptFileInfoService.Read(scriptPath);
         }
-        catch when (force)
+        catch when (force || allowUnreadableMetadata)
         {
             return null;
         }
@@ -865,7 +882,28 @@ public sealed class ManagedScriptResourceService
         if (!string.IsNullOrWhiteSpace(requestedVersion) &&
             (string.IsNullOrWhiteSpace(existingVersion) ||
              !IsValidScriptVersion(existingVersion) ||
-             ManagedModuleVersionComparer.Instance.Compare(existingVersion!, requestedVersion!.Trim()) != 0))
+             !ScriptVersionsMatch(existingVersion!, requestedVersion!)))
+        {
+            return ManagedScriptUninstallPlanAction.SkipVersionMismatch;
+        }
+
+        return ManagedScriptUninstallPlanAction.Remove;
+    }
+
+    internal static ManagedScriptUninstallPlanAction ResolveFinalUninstallAction(
+        ManagedScriptUninstallPlanAction plannedAction,
+        string? currentVersion,
+        string? requestedVersion)
+    {
+        if (plannedAction != ManagedScriptUninstallPlanAction.Remove ||
+            string.IsNullOrWhiteSpace(requestedVersion))
+        {
+            return plannedAction;
+        }
+
+        if (string.IsNullOrWhiteSpace(currentVersion) ||
+            !IsValidScriptVersion(currentVersion) ||
+            !ScriptVersionsMatch(currentVersion!, requestedVersion!))
         {
             return ManagedScriptUninstallPlanAction.SkipVersionMismatch;
         }
@@ -885,6 +923,29 @@ public sealed class ManagedScriptResourceService
                 : $"Installed script version '{existingVersion}' does not match requested version '{requestedVersion}'.",
             _ => null
         };
+
+    private static bool ScriptVersionsMatch(string existingVersion, string requestedVersion)
+    {
+        var existing = existingVersion.Trim();
+        var requested = requestedVersion.Trim();
+        if (!IsValidScriptVersion(existing) || !IsValidScriptVersion(requested))
+            return false;
+
+        var existingParts = SplitScriptVersionBuild(existing);
+        var requestedParts = SplitScriptVersionBuild(requested);
+        if (!string.Equals(existingParts.Build, requestedParts.Build, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return ManagedModuleVersionComparer.Instance.Compare(existingParts.Version, requestedParts.Version) == 0;
+    }
+
+    private static (string Version, string? Build) SplitScriptVersionBuild(string version)
+    {
+        var plusIndex = version.IndexOf('+');
+        return plusIndex < 0
+            ? (version, null)
+            : (version.Substring(0, plusIndex), version.Substring(plusIndex + 1));
+    }
 
     private static ManagedScriptUninstallStatus MapUninstallStatus(ManagedScriptUninstallPlanAction action)
         => action switch

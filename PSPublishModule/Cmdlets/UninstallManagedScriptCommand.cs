@@ -36,7 +36,7 @@ public sealed class UninstallManagedScriptCommand : PSCmdlet
     public ManagedModuleShellEdition ShellEdition { get; set; } = ManagedModuleShellEdition.Auto;
 
     /// <summary>Explicit script root. When supplied, Scope is treated as Custom.</summary>
-    [Parameter]
+    [Parameter(ValueFromPipelineByPropertyName = true)]
     [Alias("Path")]
     [ValidateNotNullOrEmpty]
     public string? ScriptRoot { get; set; }

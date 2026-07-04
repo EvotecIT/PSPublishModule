@@ -841,8 +841,38 @@ public sealed class ManagedScriptFileInfoService
 
     private static void ValidateScriptVersion(string version)
     {
-        if (!ModuleStateVersion.TryParse(version, out _))
+        var plusIndex = version.IndexOf('+');
+        var versionWithoutBuild = plusIndex >= 0 ? version.Substring(0, plusIndex) : version;
+        var build = plusIndex >= 0 ? version.Substring(plusIndex + 1) : null;
+        if (plusIndex >= 0 &&
+            (string.IsNullOrWhiteSpace(build) || !HasValidSemVerIdentifiers(build!)))
+        {
             throw new InvalidOperationException($"Script version '{version}' is not a valid version.");
+        }
+
+        if (!ModuleStateVersion.TryParse(versionWithoutBuild, out _))
+            throw new InvalidOperationException($"Script version '{version}' is not a valid version.");
+
+        var prereleaseIndex = versionWithoutBuild.IndexOf('-');
+        if (prereleaseIndex < 0)
+            return;
+
+        var prerelease = versionWithoutBuild.Substring(prereleaseIndex + 1);
+        if (!HasValidSemVerIdentifiers(prerelease))
+            throw new InvalidOperationException($"Script version '{version}' is not a valid version.");
+    }
+
+    private static bool HasValidSemVerIdentifiers(string value)
+    {
+        var identifiers = value.Split('.');
+        return identifiers.Length > 0 &&
+               identifiers.All(static identifier =>
+                   identifier.Length > 0 &&
+                   identifier.All(static character =>
+                       (character >= 'A' && character <= 'Z') ||
+                       (character >= 'a' && character <= 'z') ||
+                       (character >= '0' && character <= '9') ||
+                       character == '-'));
     }
 
     private static ManagedScriptFileInfo Merge(ManagedScriptFileInfo existing, ManagedScriptFileInfo updates)
