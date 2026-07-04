@@ -235,6 +235,12 @@ public sealed partial class ManagedModuleInstallService
             request.ExpectedPackageSha256);
         ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, metadata, request.TrustPolicy);
         ThrowIfLicenseAcceptanceRequired(metadata, request);
+        var authenticode = VerifySavedPackageAuthenticodeIfRequested(
+            request,
+            version,
+            packagePath,
+            metadata,
+            cacheDirectory);
 
         var result = CreateAlreadyInstalledResult(
             request,
@@ -246,6 +252,7 @@ public sealed partial class ManagedModuleInstallService
             repositoryRequestCount,
             installLockWaitElapsed);
         result.Download = CreateDownloadForExistingSavedPackage(request, version, packagePath, metadata);
+        result.AuthenticodeVerification = authenticode;
         result.FileCount = 1;
 
         if (request.SkipDependencyCheck)
@@ -266,6 +273,29 @@ public sealed partial class ManagedModuleInstallService
         result.PackageRepositoryRequestCount += SumPackageRepositoryRequestCount(dependencyResults);
         result.PackageRepositoryRedirectCount += SumPackageRepositoryRedirectCount(dependencyResults);
         return result;
+    }
+
+    private ManagedModuleAuthenticodeVerificationResult? VerifySavedPackageAuthenticodeIfRequested(
+        ManagedModuleInstallRequest request,
+        string version,
+        string packagePath,
+        ManagedModulePackageMetadata metadata,
+        string cacheDirectory)
+    {
+        if (!request.AuthenticodeCheck)
+            return null;
+
+        var validationRoot = Path.Combine(cacheDirectory, "authenticode-" + NewShortId());
+        try
+        {
+            var validationModulePath = CreateStageModulePath(validationRoot, request.Name, version);
+            _ = _extractor.ExtractPackage(packagePath, validationModulePath, metadata.Id);
+            return _authenticodeVerifier.VerifyDirectory(validationModulePath);
+        }
+        finally
+        {
+            ManagedModuleExtractedPackageCache.DeleteDirectoryQuietly(validationRoot);
+        }
     }
 
     private async Task<ManagedModuleInstallResult> CreateAlreadySavedPackageNoOpResultAsync(

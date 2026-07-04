@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.IO.Compression;
 using System.Management.Automation;
+using System.Runtime.InteropServices;
 using PowerForge;
 using PSPublishModule;
 
@@ -592,6 +593,36 @@ public sealed class SaveManagedModuleCommandTests
 
         var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
         Assert.Contains("requires license acceptance", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SaveManagedModule_as_nupkg_verifies_existing_package_authenticode_check()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return;
+
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", Path.Combine(destination.Path, "Unavailable"))
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AsNupkg")
+            .AddParameter("AuthenticodeCheck");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(results).BaseObject);
+        Assert.NotNull(result.AuthenticodeVerification);
+        Assert.Equal(0, result.AuthenticodeVerification.CheckedFiles);
     }
 
     [Fact]
