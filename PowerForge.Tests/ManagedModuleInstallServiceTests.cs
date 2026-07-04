@@ -133,6 +133,75 @@ public sealed partial class ManagedModuleInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_installs_repository_latest_when_older_satisfying_version_is_installed()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var existingPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(existingPath);
+        File.WriteAllText(Path.Combine(existingPath, "Company.Tools.psd1"), "@{ ModuleVersion = '1.0.0' }");
+        File.WriteAllText(Path.Combine(existingPath, "marker.txt"), "keep-old");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: CreateModuleFiles("1.1.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(ManagedModuleInstallStatus.Installed, result.Status);
+        Assert.Equal("1.1.0", result.Version);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
+        Assert.Equal("keep-old", File.ReadAllText(Path.Combine(existingPath, "marker.txt")));
+    }
+
+    [Fact]
+    public async Task PlanInstallAsync_reports_install_when_repository_latest_is_newer_than_installed_version()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var existingPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(existingPath);
+        File.WriteAllText(Path.Combine(existingPath, "Company.Tools.psd1"), "@{ ModuleVersion = '1.0.0' }");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: CreateModuleFiles("1.1.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var plan = await service.PlanInstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal("1.1.0", plan.Version);
+        Assert.Equal(ManagedModuleInstallPlanAction.Install, plan.Action);
+        Assert.False(plan.ExistingVersionFound);
+        Assert.True(plan.WouldWriteFiles);
+    }
+
+    [Fact]
     public async Task InstallAsync_does_not_skip_author_policy_for_existing_version()
     {
         using var feed = new TemporaryDirectory();

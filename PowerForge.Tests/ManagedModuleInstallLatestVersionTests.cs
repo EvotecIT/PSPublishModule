@@ -6,7 +6,7 @@ namespace PowerForge.Tests;
 public sealed class ManagedModuleInstallLatestVersionTests
 {
     [Fact]
-    public async Task PlanInstallAsync_skips_installed_unbounded_version_without_repository_lookup()
+    public async Task PlanInstallAsync_keeps_higher_installed_unbounded_version_after_repository_lookup()
     {
         var requests = new List<RecordedRequest>();
         using var client = new HttpClient(new LatestPackageHandler(requests));
@@ -27,11 +27,11 @@ public sealed class ManagedModuleInstallLatestVersionTests
         Assert.Equal("1.2.0", plan.Version);
         Assert.Equal(ManagedModuleInstallPlanAction.SkipExisting, plan.Action);
         Assert.True(plan.ExistingVersionFound);
-        Assert.Empty(requests);
+        Assert.Contains(requests, request => request.Url == LatestPackageHandler.LatestStableUrl);
     }
 
     [Fact]
-    public async Task InstallAsync_skips_installed_unbounded_version_without_repository_lookup()
+    public async Task InstallAsync_keeps_higher_installed_unbounded_version_after_repository_lookup()
     {
         var requests = new List<RecordedRequest>();
         using var client = new HttpClient(new LatestPackageHandler(requests));
@@ -51,18 +51,24 @@ public sealed class ManagedModuleInstallLatestVersionTests
 
         Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, result.Status);
         Assert.Equal("1.2.0", result.Version);
-        Assert.Equal(TimeSpan.Zero, result.VersionResolutionElapsed);
-        Assert.Equal(0, result.RepositoryRequestCount);
-        Assert.Empty(requests);
+        Assert.True(result.VersionResolutionElapsed > TimeSpan.Zero);
+        Assert.True(result.RepositoryRequestCount > 0);
+        Assert.Contains(requests, request => request.Url == LatestPackageHandler.LatestStableUrl);
     }
 
     [Fact]
-    public async Task InstallAsync_skips_highest_installed_version_within_requested_bounds_without_repository_lookup()
+    public async Task InstallAsync_keeps_higher_installed_version_within_requested_bounds_after_repository_lookup()
     {
-        var requests = new List<RecordedRequest>();
-        using var client = new HttpClient(new LatestPackageHandler(requests));
-        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
-        var service = new ManagedModuleInstallService(new NullLogger(), repositoryClient);
+        using var feed = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.psd1"] = "@{ ModuleVersion = '1.1.0' }"
+            });
+        var service = new ManagedModuleInstallService(new NullLogger());
         using var moduleRoot = new TemporaryDirectory();
         Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
         Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.2.0"));
@@ -70,7 +76,7 @@ public sealed class ManagedModuleInstallLatestVersionTests
 
         var result = await service.InstallAsync(new ManagedModuleInstallRequest
         {
-            Repository = new ManagedModuleRepository("Gallery", "https://example.test/api/v2"),
+            Repository = new ManagedModuleRepository("Gallery", feed.Path),
             Name = "Company.Tools",
             MinimumVersion = "1.1.0",
             MaximumVersion = "1.3.0",
@@ -80,8 +86,8 @@ public sealed class ManagedModuleInstallLatestVersionTests
 
         Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, result.Status);
         Assert.Equal("1.2.0", result.Version);
-        Assert.Equal(0, result.RepositoryRequestCount);
-        Assert.Empty(requests);
+        Assert.Equal(0, result.PackageRepositoryRequestCount);
+        Assert.False(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0", "Company.Tools.psd1")));
     }
 
     [Fact]

@@ -39,6 +39,12 @@ internal sealed class ModuleStateRepairPlanner
             actionsByModule[CreateActionKey(repairAction)] = repairAction;
         }
 
+        foreach (var repairAction in CreateManifestDependencyRepairActions(inventory, actionsByModule.Values.ToArray()))
+        {
+            RemoveActionKeysForModuleScope(actionsByModule, repairAction);
+            actionsByModule[CreateActionKey(repairAction)] = repairAction;
+        }
+
         return actionsByModule.Values
             .OrderBy(static action => action.ModuleName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static action => action.TargetScope, StringComparer.OrdinalIgnoreCase)
@@ -140,6 +146,45 @@ internal sealed class ModuleStateRepairPlanner
         }
     }
 
+    private static IEnumerable<ModuleStatePlanAction> CreateManifestDependencyRepairActions(
+        ModuleStateInventory inventory,
+        IEnumerable<ModuleStatePlanAction> existingActions)
+    {
+        foreach (var action in existingActions ?? Array.Empty<ModuleStatePlanAction>())
+        {
+            if (action.Kind != ModuleStatePlanActionKind.NoAction)
+                continue;
+
+            var installedModule = FindInstalledModuleForAction(inventory, action);
+            if (installedModule is null ||
+                string.IsNullOrWhiteSpace(installedModule.Path))
+            {
+                continue;
+            }
+
+            var moduleRoot = ResolveModuleRoot(installedModule);
+            if (string.IsNullOrWhiteSpace(moduleRoot) ||
+                !ManagedModuleInstallService.WouldRepairInstalledManifestDependencies(
+                    installedModule.Name,
+                    moduleRoot!,
+                    installedModule.Path!))
+            {
+                continue;
+            }
+
+            yield return new ModuleStatePlanAction(
+                ModuleStatePlanActionKind.Install,
+                installedModule.Name,
+                installedModule.Version,
+                "=" + ModuleStateVersion.NormalizeOrOriginal(installedModule.Version),
+                "Manifest dependency repair: installed module has missing or unsatisfied manifest RequiredModules.",
+                isRepair: true,
+                targetScope: installedModule.Scope,
+                targetPath: moduleRoot,
+                targetRepository: action.TargetRepository);
+        }
+    }
+
     private static ModuleStatePlanAction? FindCoveredAction(
         IEnumerable<ModuleStatePlanAction> existingActions,
         string moduleName,
@@ -157,6 +202,56 @@ internal sealed class ModuleStateRepairPlanner
             string.Equals(action.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase) &&
             (string.IsNullOrWhiteSpace(action.TargetScope) ||
              string.Equals(action.TargetScope, targetScope, StringComparison.OrdinalIgnoreCase)));
+
+    private static ModuleStateInstalledModule? FindInstalledModuleForAction(
+        ModuleStateInventory inventory,
+        ModuleStatePlanAction action)
+    {
+        var candidates = inventory.InstalledModules
+            .Where(module => string.Equals(module.Name, action.ModuleName, StringComparison.OrdinalIgnoreCase))
+            .Where(module => string.IsNullOrWhiteSpace(action.InstalledVersion) ||
+                             VersionsEqual(module.Version, action.InstalledVersion!))
+            .Where(module => string.IsNullOrWhiteSpace(action.TargetScope) ||
+                             string.Equals(module.Scope, action.TargetScope, StringComparison.OrdinalIgnoreCase))
+            .Where(module => string.IsNullOrWhiteSpace(action.TargetPath) ||
+                             IsUnderTargetPath(module.Path, action.TargetPath!))
+            .ToArray();
+
+        return SelectInstalledModule(candidates);
+    }
+
+    private static string? ResolveModuleRoot(ModuleStateInstalledModule module)
+    {
+        if (string.IsNullOrWhiteSpace(module.Path))
+            return null;
+
+        var moduleDirectory = new System.IO.DirectoryInfo(module.Path!);
+        if (string.Equals(moduleDirectory.Name, module.Name, StringComparison.OrdinalIgnoreCase))
+            return moduleDirectory.Parent?.FullName;
+
+        var parent = moduleDirectory.Parent;
+        return parent is not null &&
+               string.Equals(parent.Name, module.Name, StringComparison.OrdinalIgnoreCase)
+            ? parent.Parent?.FullName
+            : null;
+    }
+
+    private static bool IsUnderTargetPath(string? modulePath, string targetPath)
+    {
+        if (string.IsNullOrWhiteSpace(modulePath))
+            return false;
+
+        var normalizedModulePath = NormalizePath(modulePath!);
+        var normalizedTargetPath = NormalizePath(targetPath);
+        var comparison = FrameworkCompatibility.GetPathStringComparison(targetPath);
+        return string.Equals(normalizedModulePath, normalizedTargetPath, comparison) ||
+               normalizedModulePath.StartsWith(normalizedTargetPath + "/", comparison);
+    }
+
+    private static string NormalizePath(string path)
+        => path.Trim()
+            .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)
+            .Replace('\\', '/');
 
     private static ModuleStatePlanAction? CreateRepairAction(
         ModuleStateInventory inventory,

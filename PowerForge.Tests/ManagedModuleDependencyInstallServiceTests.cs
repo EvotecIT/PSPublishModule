@@ -73,6 +73,42 @@ public sealed class ManagedModuleDependencyInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_repairs_manifest_dependency_when_repository_latest_is_already_installed()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        WriteInstalledRootWithRequiredModule(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Core", "1.0.0");
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "marker.txt"), "keep-root");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateToolFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            files: CreateCoreFiles("1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, result.Status);
+        Assert.Equal("1.0.0", result.Version);
+        Assert.Equal("keep-root", File.ReadAllText(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "marker.txt")));
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.Equal("Company.Core", dependency.Name);
+        Assert.Equal(ManagedModuleInstallStatus.Installed, dependency.Status);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "1.0.0", "Company.Core.psd1")));
+    }
+
+    [Fact]
     public async Task InstallAsync_does_not_repair_manifest_dependencies_marked_external()
     {
         using var feed = new TemporaryDirectory();

@@ -22,6 +22,8 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Managed find, save, install, update, publish, and repair cmdlets exist as thin PowerShell surfaces over the reusable C# engine.
 - [x] The core managed path avoids PowerShellGet, PSResourceGet, PackageManagement, external executables, and embedded PowerShell scripts for supported module lifecycle operations.
 - [x] `Repair-ManagedModule` is the operator-facing maintenance surface for stale versions, source drift, scope drift, family coherence, loaded-module safety, and old-version cleanup planning.
+- [x] `Install-ManagedModule` uses latest-first repository selection for broad requests while preserving exact-version fast no-op behavior.
+- [x] Installed selected versions are checked for broken managed manifest dependencies and repaired automatically without requiring `-Force`.
 - [x] Benchmarks live outside the shipped module under `Benchmarks/ManagedModules`, with named gates for install, save, update, publish, repair, security, and host drift.
 - [x] Current local Graph and Az evidence shows managed install/save ahead of the measured compatible providers on PowerShell 7 and Windows PowerShell 5.1 for the recorded gates.
 - [ ] Final release claims still need a fresh repeated benchmark pass from the release candidate build, including retained command lines, suite metadata, gate results, and compact evidence paths.
@@ -91,6 +93,8 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] Support `Update-ManagedModule` without `-Name` so the command updates installed modules from the selected roots like `Update-Module`.
 - [x] Finish exact `-Force`, `-TrustRepository`, and `-SkipPublisherCheck` semantics so compatibility choices are explicit and unsurprising.
 - [x] Define exact install/save/update semantics for `-Force`, `-AllowClobber`, and `-AcceptLicense` so the common managed delivery path is explicit and unsurprising.
+- [x] Define exact broad-install behavior: resolve the repository-selected version first, install a newer selected version side-by-side, and only no-op when the selected installed version is present and healthy.
+- [x] Define exact repair behavior for broken installed manifest dependency graphs: restore missing or unsatisfied managed `RequiredModules` without forcing a healthy root-module replacement.
 - [ ] Complete managed Authenticode/catalog validation compatible with PowerShellGet/PSResourceGet expectations, including explicit catalog policy evidence, timestamped signatures, and short-lived certificate behavior.
 - [x] Add initial Windows managed `-AuthenticodeCheck` support for install/save/update by validating extracted signable files before promotion.
 
@@ -99,6 +103,7 @@ The public PowerShell surface should stay thin. Reusable behavior belongs in Pow
 - [x] `Get-ManagedModule` inventories installed modules and returns module rows by default.
 - [x] `Update-ManagedModule` updates named modules or, when no name is supplied, all discovered modules in the selected scope/root.
 - [x] `Repair-ManagedModule` plans and applies estate maintenance through the ModuleState engine with managed delivery as the default transport.
+- [x] `Repair-ManagedModule` detects broken installed manifest dependency graphs and plans managed install repair actions for the affected installed root version.
 - [x] Finish `Repair-ManagedModule` proof for loaded-module safety and old-version cleanup.
 - [ ] `-Plan` remains the non-mutating inspection switch across install, update, and repair flows.
 - [ ] `-WhatIf` remains the operator safety gate for mutations.

@@ -533,6 +533,39 @@ public sealed class RepairManagedModuleCommandTests
     }
 
     [Fact]
+    public void RepairManagedModule_AppliesManifestDependencyRepairToInstalledModule()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModuleWithRequiredModule(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Core", "1.0.0");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            files: CreateModuleFiles("Company.Core", "1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("Name", new[] { "Company.Tools" })
+            .AddParameter("Repository", feed.Path);
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions, static action =>
+            string.Equals(action.ModuleName, "Company.Tools", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("Install", action.Kind);
+        Assert.True(action.IsRepair);
+        Assert.Equal("=1.0.0", action.VersionPolicy);
+        Assert.True(result.Apply.ExecutionRequested);
+        var execution = Assert.Single(result.Apply.ExecutionResults);
+        Assert.Equal("Install", execution.Operation);
+        Assert.True(execution.OperationPerformed);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "1.0.0", "Company.Core.psd1")));
+    }
+
+    [Fact]
     public void RepairManagedModule_ForceDoesNotApproveExplicitDowngradePolicy()
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -566,6 +599,22 @@ public sealed class RepairManagedModuleCommandTests
         File.WriteAllText(
             Path.Combine(modulePath, name + ".psd1"),
             "@{ RootModule = '" + name + ".psm1'; ModuleVersion = '" + version + "' }");
+        File.WriteAllText(Path.Combine(modulePath, name + ".psm1"), string.Empty);
+        return modulePath;
+    }
+
+    private static string CreateInstalledModuleWithRequiredModule(
+        string moduleRoot,
+        string name,
+        string version,
+        string dependencyName,
+        string dependencyVersion)
+    {
+        var modulePath = Path.Combine(moduleRoot, name, version);
+        Directory.CreateDirectory(modulePath);
+        File.WriteAllText(
+            Path.Combine(modulePath, name + ".psd1"),
+            "@{ RootModule = '" + name + ".psm1'; ModuleVersion = '" + version + "'; RequiredModules = @(@{ ModuleName = '" + dependencyName + "'; RequiredVersion = '" + dependencyVersion + "'; }) }");
         File.WriteAllText(Path.Combine(modulePath, name + ".psm1"), string.Empty);
         return modulePath;
     }
