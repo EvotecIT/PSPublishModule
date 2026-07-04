@@ -416,18 +416,14 @@ public sealed partial class ManagedModuleInstallService
             return Array.Empty<string>();
 
         var safePackageId = ManagedModulePackageIdentity.RequireSafeId(packageId, nameof(packageId));
-        var prefix = safePackageId + ".";
         var suffix = ".nupkg";
         try
         {
             return Directory.EnumerateFiles(root, "*" + suffix, SearchOption.TopDirectoryOnly)
                 .Select(path => Path.GetFileName(path))
-                .Where(fileName => !string.IsNullOrWhiteSpace(fileName) &&
-                                   fileName!.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
-                                   fileName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-                .Select(fileName => fileName!.Substring(prefix.Length, fileName.Length - prefix.Length - suffix.Length))
+                .Select(fileName => TryReadSavedPackageVersion(fileName, safePackageId, out var savedVersion) ? savedVersion : null)
                 .Where(static version => !string.IsNullOrWhiteSpace(version))
-                .Where(static version => IsInstalledVersionDirectoryName(version))
+                .Select(static version => version!)
                 .ToArray();
         }
         catch (IOException)
@@ -447,8 +443,6 @@ public sealed partial class ManagedModuleInstallService
 
         var safePackageId = ManagedModulePackageIdentity.RequireSafeId(packageId, nameof(packageId));
         var safeVersion = ManagedModulePackageIdentity.RequireSafeVersion(version, nameof(version));
-        var prefix = safePackageId + ".";
-        var suffix = "." + safeVersion + ".nupkg";
         if (Directory.Exists(root))
         {
             try
@@ -457,9 +451,8 @@ public sealed partial class ManagedModuleInstallService
                     .FirstOrDefault(path =>
                     {
                         var fileName = Path.GetFileName(path);
-                        return !string.IsNullOrWhiteSpace(fileName) &&
-                               fileName!.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
-                               fileName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
+                        return TryReadSavedPackageVersion(fileName, safePackageId, out var savedVersion) &&
+                               ManagedModuleVersionComparer.Instance.Compare(savedVersion, safeVersion) == 0;
                     });
                 if (!string.IsNullOrWhiteSpace(matchedPath))
                     return matchedPath;
@@ -475,6 +468,31 @@ public sealed partial class ManagedModuleInstallService
         }
 
         return File.Exists(expectedPath) ? expectedPath : null;
+    }
+
+    private static bool TryReadSavedPackageVersion(
+        string? fileName,
+        string safePackageId,
+        out string version)
+    {
+        version = string.Empty;
+        if (string.IsNullOrWhiteSpace(fileName))
+            return false;
+
+        var prefix = safePackageId + ".";
+        const string suffix = ".nupkg";
+        if (!fileName!.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+            !fileName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var candidate = fileName.Substring(prefix.Length, fileName.Length - prefix.Length - suffix.Length);
+        if (string.IsNullOrWhiteSpace(candidate) || !IsInstalledVersionDirectoryName(candidate))
+            return false;
+
+        version = candidate;
+        return true;
     }
 
     private static bool AllowsInstalledDependencyVersion(

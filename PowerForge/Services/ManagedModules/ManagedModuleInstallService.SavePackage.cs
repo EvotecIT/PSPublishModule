@@ -305,6 +305,9 @@ public sealed partial class ManagedModuleInstallService
         string packagePath)
     {
         var metadata = ReadSavedPackageMetadata(request, version, packagePath);
+        var download = CreateDownloadForExistingSavedPackage(request, version, packagePath, metadata);
+        ManagedModulePackageIntegrity.VerifyDownload(download, request.ExpectedPackageSha256);
+        ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, metadata, request.TrustPolicy);
         return new ManagedModuleVersionInfo
         {
             Name = metadata.Id,

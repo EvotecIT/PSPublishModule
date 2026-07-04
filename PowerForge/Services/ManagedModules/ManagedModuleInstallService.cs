@@ -117,7 +117,7 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleVersionInfo? versionInfo = null,
         bool wouldRepairDependencies = false)
     {
-        var requiresPackageDownloadBeforeNoOp = RequiresPackageDownloadBeforeNoOp(request);
+        var requiresPackageDownloadBeforeNoOp = !request.SaveAsNupkg && RequiresPackageDownloadBeforeNoOp(request);
         var action = exists
             ? request.Force || requiresPackageDownloadBeforeNoOp ? ManagedModuleInstallPlanAction.Reinstall : ManagedModuleInstallPlanAction.SkipExisting
             : ManagedModuleInstallPlanAction.Install;
@@ -470,8 +470,6 @@ public sealed partial class ManagedModuleInstallService
     {
         version = string.Empty;
         if (request.Force)
-            return false;
-        if (RequiresPackageDownloadBeforeNoOp(request))
             return false;
 
         var savedVersion = GetSavedPackageVersions(moduleRoot, request.Name)
