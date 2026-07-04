@@ -866,7 +866,7 @@ public sealed class ManagedScriptResourceService
 
         if (!string.IsNullOrWhiteSpace(requestedVersion) &&
             (string.IsNullOrWhiteSpace(existingVersion) ||
-             !ModuleStateVersion.TryParse(existingVersion, out _) ||
+             !IsValidScriptVersion(existingVersion) ||
              ManagedModuleVersionComparer.Instance.Compare(existingVersion!, requestedVersion!.Trim()) != 0))
         {
             return ManagedScriptUninstallPlanAction.SkipVersionMismatch;
@@ -1251,12 +1251,34 @@ public sealed class ManagedScriptResourceService
         if (string.IsNullOrWhiteSpace(request.Name))
             throw new ArgumentException("Script name is required.", nameof(request));
         if (!string.IsNullOrWhiteSpace(request.Version) &&
-            !ModuleStateVersion.TryParse(request.Version, out _))
+            !IsValidScriptVersion(request.Version))
         {
             throw new ArgumentException($"Invalid script version '{request.Version}'.", nameof(request));
         }
 
         _ = ManagedModulePackageIdentity.RequireSafeId(request.Name.Trim(), nameof(request.Name));
+    }
+
+    private static bool IsValidScriptVersion(string? version)
+    {
+        if (!ModuleStateVersion.TryParse(version, out _))
+            return false;
+
+        var trimmed = version!.Trim();
+        var prereleaseIndex = trimmed.IndexOf('-');
+        if (prereleaseIndex < 0)
+            return true;
+
+        var prerelease = trimmed.Substring(prereleaseIndex + 1);
+        var identifiers = prerelease.Split('.');
+        return identifiers.Length > 0 &&
+               identifiers.All(static identifier =>
+                   identifier.Length > 0 &&
+                   identifier.All(static character =>
+                       (character >= 'A' && character <= 'Z') ||
+                       (character >= 'a' && character <= 'z') ||
+                       (character >= '0' && character <= '9') ||
+                       character == '-'));
     }
 
     private static void DeleteDirectoryQuietly(string path)
