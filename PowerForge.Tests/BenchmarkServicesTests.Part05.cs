@@ -340,6 +340,30 @@ benchmark 'typed-inputs' {
     }
 
     [Fact]
+    public void DslRuntime_BenchmarkBoolInputsParseStringDefaults()
+    {
+        var script = ScriptBlock.Create(@"
+$shortFalse = inputBool ShortFalse false
+$shortOff = inputBool ShortOff off
+$cmdletFalse = Get-BenchmarkInput CmdletFalse false -Bool
+$cmdletOn = Get-BenchmarkInput CmdletOn on -Bool
+benchmark 'bool-defaults' {
+    caseSource { [pscustomobject]@{ Name = 'Default'; ShortFalse = $shortFalse; ShortOff = $shortOff; CmdletFalse = $cmdletFalse; CmdletOn = $cmdletOn } }
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var item = Assert.Single(new PowerShellBenchmarkRunner().Plan(Assert.Single(EvaluateBenchmarkDsl(script))));
+
+        Assert.Equal(false, item.Values["ShortFalse"]);
+        Assert.Equal(false, item.Values["ShortOff"]);
+        Assert.Equal(false, item.Values["CmdletFalse"]);
+        Assert.Equal(true, item.Values["CmdletOn"]);
+    }
+
+    [Fact]
     public void DslRuntime_RejectsUnsupportedProfileNames()
     {
         var script = ScriptBlock.Create(@"
