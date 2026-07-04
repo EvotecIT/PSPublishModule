@@ -258,6 +258,41 @@ public sealed class SaveManagedScriptCommandTests
     }
 
     [Fact]
+    public void SaveManagedScript_plan_verifies_existing_selected_version_when_package_policy_is_requested()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            },
+            requireLicenseAcceptance: true);
+        File.WriteAllText(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1"), CreateScript("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("ExpectedPackageSha256", new string('0', 64))
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedScriptSavePlan>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptSavePlanAction.VerifyExisting, plan.Action);
+        Assert.False(plan.WouldWriteFiles);
+        Assert.True(plan.WouldVerifyPackage);
+        Assert.True(plan.LicenseAcceptanceRequired);
+    }
+
+    [Fact]
     public void SaveManagedScript_uses_script_source_location_for_registered_repository()
     {
         using var moduleFeed = new TemporaryDirectory();

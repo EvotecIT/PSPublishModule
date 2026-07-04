@@ -29,6 +29,9 @@ public sealed class ManagedScriptSavePlan
     /// <summary>True when the operation would write or replace a script file.</summary>
     public bool WouldWriteFiles { get; set; }
 
+    /// <summary>True when the operation would download and verify package metadata/content without writing the existing script.</summary>
+    public bool WouldVerifyPackage { get; set; }
+
     /// <summary>Existing script version read from PSScriptInfo, when available.</summary>
     public string? ExistingVersion { get; set; }
 
@@ -67,6 +70,9 @@ public enum ManagedScriptSavePlanAction
 
     /// <summary>Replace an existing script because force was requested.</summary>
     Reinstall,
+
+    /// <summary>Verify package policy for an existing matching script without writing it.</summary>
+    VerifyExisting,
 
     /// <summary>Cannot write because the target path already has another version or unreadable metadata and force was not requested.</summary>
     BlockedExisting
