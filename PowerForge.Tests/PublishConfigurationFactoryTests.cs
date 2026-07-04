@@ -486,6 +486,27 @@ public sealed class PublishConfigurationFactoryTests
     }
 
     [Fact]
+    public void Create_allows_built_in_psgallery_repository_uri()
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var segment = factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "ApiKey",
+            Type = PublishDestination.PowerShellGallery,
+            ApiKey = "token",
+            RepositoryName = "PSGallery",
+            RepositoryUri = "https://www.powershellgallery.com/api/v3/index.json",
+            RepositorySourceUri = "https://www.powershellgallery.com/api/v3/index.json",
+            RepositoryPublishUri = "https://www.powershellgallery.com/api/v3/index.json"
+        });
+
+        var repository = Assert.IsType<PublishRepositoryConfiguration>(segment.Configuration.Repository);
+        Assert.Equal("PSGallery", repository.Name);
+        Assert.Equal("https://www.powershellgallery.com/api/v3/index.json", repository.Uri);
+    }
+
+    [Fact]
     public void Create_allows_container_registry_repository_when_not_publishing()
     {
         var factory = new PublishConfigurationFactory();

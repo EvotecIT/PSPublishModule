@@ -962,6 +962,37 @@ public sealed class ManagedModuleAliasCommandTests
         Assert.Equal(RepositoryApiVersion.V2, segment.Configuration.Repository.ApiVersion);
     }
 
+    [Fact]
+    public void NewConfigurationPublish_profile_allows_saved_psgallery_profile()
+    {
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        new ModuleRepositoryProfileStore().SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "PSGallery",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "PSGallery",
+            RepositoryUri = "https://www.powershellgallery.com/api/v3/index.json",
+            RepositorySourceUri = "https://www.powershellgallery.com/api/v3/index.json",
+            RepositoryPublishUri = "https://www.powershellgallery.com/api/v3/index.json",
+            ApiVersion = RepositoryApiVersion.Auto
+        });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ConfigurationPublish")
+            .AddParameter("ProfileName", "PSGallery")
+            .AddParameter("ApiKey", "token")
+            .AddParameter("Enabled");
+
+        var segment = Assert.IsType<ConfigurationPublishSegment>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal("PSGallery", segment.Configuration.RepositoryName);
+        Assert.NotNull(segment.Configuration.Repository);
+        Assert.Equal("PSGallery", segment.Configuration.Repository.Name);
+        Assert.Equal("https://www.powershellgallery.com/api/v3/index.json", segment.Configuration.Repository.Uri);
+    }
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();
