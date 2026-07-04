@@ -274,6 +274,26 @@ public sealed class UninstallManagedModuleCommandTests
     }
 
     [Fact]
+    public void UninstallManagedModule_binds_piped_module_file_path()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.1.0");
+        var installedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var manifestPath = Path.Combine(installedPath, "Company.Tools.psd1");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddScript("$row = [pscustomobject]@{ Name = 'Company.Tools'; Version = '1.0.0'; Path = '" + EscapePowerShellSingleQuoted(manifestPath) + "' }; $row | Uninstall-ManagedModule");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleUninstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal("1.0.0", result.Version);
+        Assert.False(Directory.Exists(installedPath));
+        Assert.True(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0")));
+    }
+
+    [Fact]
     public void UninstallManagedModule_reports_not_installed_when_requested_version_is_missing()
     {
         using var moduleRoot = new TemporaryDirectory();

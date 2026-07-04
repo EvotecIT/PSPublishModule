@@ -162,6 +162,40 @@ public sealed class ManagedModuleUninstallServiceTests
         Assert.True(target.IsLoaded);
     }
 
+    [Fact]
+    public void Uninstall_empty_directory_cleanup_stays_inside_plan_root()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var outsideRoot = new TemporaryDirectory();
+        var modulePath = CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var outsideModuleDirectory = Path.Combine(outsideRoot.Path, "Company.Tools");
+        Directory.CreateDirectory(outsideModuleDirectory);
+        var service = new ManagedModuleUninstallService();
+        var plan = new ManagedModuleUninstallPlan
+        {
+            Name = new[] { "Company.Tools" },
+            ModuleRoot = moduleRoot.Path,
+            SkipDependencyCheck = true,
+            Targets = new[]
+            {
+                new ManagedModuleUninstallTarget
+                {
+                    Name = "Company.Tools",
+                    Version = "1.0.0",
+                    ModuleRoot = outsideRoot.Path,
+                    ModulePath = modulePath
+                }
+            }
+        };
+
+        var result = Assert.Single(service.Uninstall(plan));
+
+        Assert.Equal(moduleRoot.Path, result.ModuleRoot);
+        Assert.False(Directory.Exists(modulePath));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools")));
+        Assert.True(Directory.Exists(outsideModuleDirectory));
+    }
+
     private static ManagedModuleUninstallRequest CreateRequest(string moduleRoot, string name)
         => new()
         {

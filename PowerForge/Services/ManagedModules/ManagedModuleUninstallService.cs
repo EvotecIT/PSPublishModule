@@ -108,7 +108,7 @@ public sealed class ManagedModuleUninstallService
                 DeleteFlatModuleTarget(target);
             else
                 Directory.Delete(GetFileSystemPath(target.ModulePath), recursive: true);
-            TryDeleteEmptyModuleDirectory(target.ModuleRoot, target.Name);
+            TryDeleteEmptyModuleDirectory(plan.ModuleRoot, target.Name);
         }
 
         stopwatch.Stop();
@@ -117,7 +117,7 @@ public sealed class ManagedModuleUninstallService
         {
             Name = target.Name,
             Version = target.Version,
-            ModuleRoot = target.ModuleRoot,
+            ModuleRoot = plan.ModuleRoot,
             ModulePath = target.ModulePath,
             Status = ManagedModuleUninstallStatus.Uninstalled,
             Elapsed = stopwatch.Elapsed,

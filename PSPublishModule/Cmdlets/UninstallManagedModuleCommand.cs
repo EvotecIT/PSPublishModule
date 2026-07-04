@@ -158,6 +158,9 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
 
     private static string? TryResolveModuleRootFromInstalledPath(string path, string moduleName)
     {
+        if (File.Exists(path))
+            path = Path.GetDirectoryName(path) ?? path;
+
         if (!Directory.Exists(path))
             return null;
 
