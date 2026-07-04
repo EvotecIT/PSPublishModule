@@ -168,9 +168,17 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
     [Parameter]
     public SwitchParameter Force { get; set; }
 
+    /// <summary>PSResourceGet-compatible spelling for reinstalling the selected module version when it already exists.</summary>
+    [Parameter]
+    public SwitchParameter Reinstall { get; set; }
+
     /// <summary>Allow command exports to overlap with other modules in the target root.</summary>
     [Parameter]
     public SwitchParameter AllowClobber { get; set; }
+
+    /// <summary>PSResourceGet-compatible spelling for the managed default that rejects command export conflicts.</summary>
+    [Parameter]
+    public SwitchParameter NoClobber { get; set; }
 
     /// <summary>Accept package licenses when packages declare license acceptance is required.</summary>
     [Parameter]
@@ -193,6 +201,10 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
     [Parameter]
     public SwitchParameter ShowSummary { get; set; }
 
+    /// <summary>Suppress optional host summaries and progress-style output without changing pipeline result objects.</summary>
+    [Parameter]
+    public SwitchParameter Quiet { get; set; }
+
     /// <summary>Installs the requested modules.</summary>
     protected override async Task ProcessRecordAsync()
     {
@@ -203,6 +215,8 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var repositoryClient = ManagedModuleCommandSupport.CreateRepositoryClient(this, logger, Proxy, ProxyCredential);
         var service = new ManagedModuleInstallService(logger, repositoryClient);
+        ManagedModuleCommandSupport.ValidateClobberSwitches(AllowClobber.IsPresent, NoClobber.IsPresent);
+        var writeSummary = ManagedModuleCommandSupport.ShouldWriteSummary(ShowSummary.IsPresent, Quiet.IsPresent);
         var targets = ResolveTargets().ToArray();
         ManagedModuleCommandSupport.ValidateSinglePackageHashTarget(ExpectedPackageSha256, targets.Select(static target => target.Name).ToArray());
         var defaultRepository = ManagedModuleCommandSupport.CreateRepository(
@@ -245,7 +259,7 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
             {
                 var plan = await service.PlanInstallAsync(request, CancelToken).ConfigureAwait(false);
                 WriteObject(plan);
-                if (ShowSummary.IsPresent)
+                if (writeSummary)
                     ManagedModuleSummaryWriter.Write(plan);
                 continue;
             }
@@ -256,7 +270,7 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
             var result = await service.InstallAsync(request, CancelToken).ConfigureAwait(false);
 
             WriteObject(result);
-            if (ShowSummary.IsPresent)
+            if (writeSummary)
                 ManagedModuleSummaryWriter.Write(result);
         }
     }
@@ -269,6 +283,8 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
         if (ParameterSetName == RequiredResourceFileParameterSet)
             return ParseRequiredResource(ImportRequiredResourceFile());
 
+        var force = ManagedModuleCommandSupport.ResolveForce(Force.IsPresent, Reinstall.IsPresent);
+        var allowClobber = AllowClobber.IsPresent && !NoClobber.IsPresent;
         return Name.Select(moduleName => new RequiredResourceTarget(
             moduleName,
             Version,
@@ -278,8 +294,8 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
             Prerelease.IsPresent,
             Scope,
             null,
-            Force.IsPresent,
-            AllowClobber.IsPresent,
+            force,
+            allowClobber,
             AcceptLicense.IsPresent,
             SkipDependencyCheck.IsPresent));
     }
@@ -346,7 +362,7 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
         var name = GetString(options, "Name") ?? fallbackName;
         var repository = GetString(options, "Repository");
         var prerelease = GetBool(options, "Prerelease") ?? Prerelease.IsPresent;
-        var reinstall = GetBool(options, "Reinstall") ?? Force.IsPresent;
+        var reinstall = GetBool(options, "Reinstall") ?? ManagedModuleCommandSupport.ResolveForce(Force.IsPresent, Reinstall.IsPresent);
         var noClobber = GetBool(options, "NoClobber") ?? false;
         var acceptLicense = GetBool(options, "AcceptLicense") ?? AcceptLicense.IsPresent;
         var skipDependencyCheck = GetBool(options, "SkipDependencyCheck") ?? SkipDependencyCheck.IsPresent;
@@ -363,7 +379,7 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
             scope,
             repository,
             reinstall,
-            AllowClobber.IsPresent && !noClobber,
+            AllowClobber.IsPresent && !NoClobber.IsPresent && !noClobber,
             acceptLicense,
             skipDependencyCheck);
     }

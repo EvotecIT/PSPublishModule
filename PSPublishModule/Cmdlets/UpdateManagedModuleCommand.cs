@@ -212,6 +212,10 @@ public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
     [Parameter]
     public SwitchParameter ShowSummary { get; set; }
 
+    /// <summary>Suppress optional host summaries and progress-style output without changing pipeline result objects.</summary>
+    [Parameter]
+    public SwitchParameter Quiet { get; set; }
+
     /// <summary>Updates requested modules.</summary>
     protected override async Task ProcessRecordAsync()
     {
@@ -232,6 +236,7 @@ public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
         var targetModuleRoot = ManagedModuleInstallRootResolver.Resolve(targetScope, ShellEdition, moduleRoot);
         var moduleNames = ResolveModuleNames(targetModuleRoot).ToArray();
         var updateAllInstalled = Name.Length == 0;
+        var writeSummary = ManagedModuleCommandSupport.ShouldWriteSummary(ShowSummary.IsPresent, Quiet.IsPresent);
         if (moduleNames.Length == 0)
         {
             WriteVerbose($"No installed modules were found under '{targetModuleRoot}'.");
@@ -275,7 +280,7 @@ public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
                 {
                     var plan = await service.PlanUpdateAsync(request, CancelToken).ConfigureAwait(false);
                     WriteObject(plan);
-                    if (ShowSummary.IsPresent)
+                    if (writeSummary)
                         ManagedModuleSummaryWriter.Write(plan);
                     continue;
                 }
@@ -286,7 +291,7 @@ public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
                 var result = await service.UpdateAsync(request, CancelToken).ConfigureAwait(false);
 
                 WriteObject(result);
-                if (ShowSummary.IsPresent)
+                if (writeSummary)
                     ManagedModuleSummaryWriter.Write(result);
             }
             catch (Exception ex) when (updateAllInstalled)

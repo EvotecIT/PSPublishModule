@@ -163,6 +163,8 @@ Repair-ManagedModule -Inventory $inventory -Latest -Repository PSGallery -ShowSu
 
 Compatibility aliases are exposed only when the old name maps to the same managed behavior. `-RequiredVersion`, `-AllowPrerelease`, `-Source`, `-RepositoryUri`, `-Path`, `-DestinationPath`, `-SkipDependenciesCheck`, `-ModulePath`, and `-NuGetApiKey` are safe aliases because they do not change the safety model.
 
+PSResourceGet operator spellings are accepted where they map to the same managed behavior without changing automation output. `Install-ManagedModule -Reinstall` is equivalent to the managed reinstall behavior behind `-Force` for the selected version. `Install-ManagedModule -NoClobber` is accepted as an explicit spelling for the managed default that rejects command export conflicts. `Install-ManagedModule`, `Save-ManagedModule`, and `Update-ManagedModule` accept `-Quiet` to suppress optional host summaries and progress-style output without suppressing pipeline result objects.
+
 `-TrustRepository` is not exposed as an alias. In PowerShellGet and PSResourceGet it is commonly used to skip an untrusted-repository prompt for that invocation. The managed engine does not prompt inside the reusable core; it uses repository profile trust evidence and the explicit `-RequireTrustedRepository` policy. A direct alias would invert the meaning and could make automation less safe.
 
 `Install-ManagedModule -RequiredResource` and `-RequiredResourceFile` accept the PSResourceGet per-resource keys `TrustRepository` and `Quiet` so existing resource maps do not fail validation. Repository trust still follows the managed safety model above, and quiet output remains controlled by the managed cmdlet/output path rather than by a per-resource option.

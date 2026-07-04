@@ -130,6 +130,36 @@ public sealed class ManagedModulePlanCommandTests
     }
 
     [Fact]
+    public void InstallManagedModule_plan_reinstalls_existing_exact_version_with_reinstall()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", moduleRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("Plan")
+            .AddParameter("Reinstall");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedModuleInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedModuleInstallPlanAction.Reinstall, plan.Action);
+        Assert.True(plan.WouldWriteFiles);
+        Assert.True(plan.ExistingVersionFound);
+    }
+
+    [Fact]
     public void UpdateManagedModule_plan_reinstalls_selected_version_with_force_when_already_current()
     {
         using var feed = new TemporaryDirectory();

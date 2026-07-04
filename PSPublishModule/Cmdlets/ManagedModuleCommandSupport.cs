@@ -147,6 +147,18 @@ internal static class ManagedModuleCommandSupport
         throw new InvalidOperationException("ExpectedPackageSha256 can only be used when exactly one module is targeted.");
     }
 
+    internal static bool ResolveForce(bool force, bool reinstall)
+        => force || reinstall;
+
+    internal static void ValidateClobberSwitches(bool allowClobber, bool noClobber)
+    {
+        if (allowClobber && noClobber)
+            throw new InvalidOperationException("Specify either AllowClobber or NoClobber, not both.");
+    }
+
+    internal static bool ShouldWriteSummary(bool showSummary, bool quiet)
+        => showSummary && !quiet;
+
     internal static string ResolveRepositorySource(PSCmdlet cmdlet, string repository)
         => ResolveRepositorySource(cmdlet, repository, out _);
 

@@ -142,6 +142,24 @@ public sealed class ManagedModuleAliasCommandTests
     }
 
     [Theory]
+    [InlineData("Install-ManagedModule", "Quiet")]
+    [InlineData("Install-ManagedModule", "Reinstall")]
+    [InlineData("Install-ManagedModule", "NoClobber")]
+    [InlineData("Save-ManagedModule", "Quiet")]
+    [InlineData("Update-ManagedModule", "Quiet")]
+    public void Managed_module_commands_expose_psresourceget_operator_spelling(string commandName, string parameterName)
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Get-Command")
+            .AddArgument(commandName);
+
+        var command = Assert.IsType<CmdletInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.True(command.Parameters.ContainsKey(parameterName), $"{commandName} should expose PSResourceGet-compatible parameter '{parameterName}'.");
+    }
+
+    [Theory]
     [InlineData("Find-ManagedModule", "Name", "ModuleName")]
     [InlineData("Find-ManagedModule", "Repository", "Source")]
     [InlineData("Find-ManagedModule", "Repository", "RepositoryUri")]

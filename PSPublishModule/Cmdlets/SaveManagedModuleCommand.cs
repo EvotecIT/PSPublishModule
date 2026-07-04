@@ -175,6 +175,10 @@ public sealed class SaveManagedModuleCommand : AsyncPSCmdlet
     [Parameter]
     public SwitchParameter ShowSummary { get; set; }
 
+    /// <summary>Suppress optional host summaries and progress-style output without changing pipeline result objects.</summary>
+    [Parameter]
+    public SwitchParameter Quiet { get; set; }
+
     /// <summary>Saves requested modules.</summary>
     protected override async Task ProcessRecordAsync()
     {
@@ -192,6 +196,7 @@ public sealed class SaveManagedModuleCommand : AsyncPSCmdlet
         var repositoryClient = ManagedModuleCommandSupport.CreateRepositoryClient(this, logger, Proxy, ProxyCredential);
         var service = new ManagedModuleInstallService(logger, repositoryClient);
         ManagedModuleCommandSupport.ValidateSinglePackageHashTarget(ExpectedPackageSha256, Name);
+        var writeSummary = ManagedModuleCommandSupport.ShouldWriteSummary(ShowSummary.IsPresent, Quiet.IsPresent);
 
         foreach (var moduleName in Name)
         {
@@ -222,7 +227,7 @@ public sealed class SaveManagedModuleCommand : AsyncPSCmdlet
             {
                 var plan = await service.PlanInstallAsync(request, CancelToken).ConfigureAwait(false);
                 WriteObject(plan);
-                if (ShowSummary.IsPresent)
+                if (writeSummary)
                     ManagedModuleSummaryWriter.Write(plan);
                 continue;
             }
@@ -234,7 +239,7 @@ public sealed class SaveManagedModuleCommand : AsyncPSCmdlet
             _results.Add(result);
 
             WriteObject(result);
-            if (ShowSummary.IsPresent)
+            if (writeSummary)
                 ManagedModuleSummaryWriter.Write(result);
         }
     }
