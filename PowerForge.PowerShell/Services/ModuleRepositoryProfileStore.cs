@@ -174,6 +174,31 @@ internal sealed class ModuleRepositoryProfileStore
             .ToArray();
     }
 
+    public ModuleRepositoryProfile[] ReplaceProfiles(IEnumerable<ModuleRepositoryProfile> profiles)
+    {
+        if (profiles is null) throw new ArgumentNullException(nameof(profiles));
+
+        var normalizedProfiles = profiles
+            .Where(static profile => profile is not null)
+            .Select(Normalize)
+            .OrderBy(static profile => profile.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var profile in normalizedProfiles)
+        {
+            profile.CreatedAtUtc = profile.CreatedAtUtc == default ? now : profile.CreatedAtUtc;
+            profile.UpdatedAtUtc = now;
+        }
+
+        WriteDocument(new ModuleRepositoryProfileDocument
+        {
+            Profiles = normalizedProfiles
+        });
+
+        return normalizedProfiles;
+    }
+
     public void WriteProfilesFile(string path, IEnumerable<ModuleRepositoryProfile> profiles)
     {
         if (string.IsNullOrWhiteSpace(path))

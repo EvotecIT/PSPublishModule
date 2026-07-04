@@ -8,6 +8,9 @@ namespace PowerForge;
 /// </summary>
 public static class PrivateGalleryRepositoryEndpoints
 {
+    private const string PowerShellGalleryRepositoryName = "PSGallery";
+    private const string PowerShellGalleryRepositoryUri = "https://www.powershellgallery.com/api/v3/index.json";
+
     /// <summary>
     /// Resolves Azure Artifacts, JFrog, GitHub Packages, or generic NuGet private-gallery inputs into concrete repository endpoints.
     /// </summary>
@@ -118,13 +121,30 @@ public static class PrivateGalleryRepositoryEndpoints
         if (provider != PrivateGalleryProvider.NuGet)
             throw new ArgumentException($"Provider '{provider}' is not supported. Supported values: AzureArtifacts, JFrog, GitHubPackages, NuGet.", nameof(provider));
 
+        var normalizedRepositoryUri = NormalizeOptional(repositoryUri);
+        var candidateRepositoryName = NormalizeOptional(repositoryName) ?? NormalizeOptional(repository);
+        if (IsPowerShellGallery(candidateRepositoryName, normalizedRepositoryUri))
+        {
+            return new PrivateGalleryRepositoryEndpoint(
+                PrivateGalleryProvider.NuGet,
+                PowerShellGalleryRepositoryName,
+                null,
+                null,
+                PowerShellGalleryRepositoryName,
+                PowerShellGalleryRepositoryUri,
+                PowerShellGalleryRepositoryUri,
+                PowerShellGalleryRepositoryUri,
+                null,
+                null);
+        }
+
         var genericName = ResolveRepositoryName(repositoryName, repository);
         if (string.IsNullOrWhiteSpace(genericName))
             throw new ArgumentException("RepositoryName is required for generic NuGet private galleries.", nameof(repositoryName));
-        if (string.IsNullOrWhiteSpace(repositoryUri))
+        if (string.IsNullOrWhiteSpace(normalizedRepositoryUri))
             throw new ArgumentException("RepositoryUri is required for generic NuGet private galleries.", nameof(repositoryUri));
 
-        var genericSourceUri = NormalizeOptional(repositorySourceUri) ?? NormalizeOptional(repositoryUri)!;
+        var genericSourceUri = NormalizeOptional(repositorySourceUri) ?? normalizedRepositoryUri!;
         return new PrivateGalleryRepositoryEndpoint(
             PrivateGalleryProvider.NuGet,
             genericName!,
@@ -133,10 +153,14 @@ public static class PrivateGalleryRepositoryEndpoints
             NormalizeOptional(repository) ?? genericName!,
             genericSourceUri,
             NormalizeOptional(repositoryPublishUri) ?? genericSourceUri,
-            NormalizeOptional(repositoryUri)!,
+            normalizedRepositoryUri!,
             null,
             NormalizeOptional(repository));
     }
+
+    private static bool IsPowerShellGallery(string? repositoryName, string? repositoryUri)
+        => string.Equals(repositoryName, PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase) &&
+           string.Equals(repositoryUri, PowerShellGalleryRepositoryUri, StringComparison.OrdinalIgnoreCase);
 
     private static string? ResolveRepositoryName(string? repositoryName, string? repository)
     {
