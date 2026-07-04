@@ -299,6 +299,27 @@ public sealed partial class ManagedModuleInstallService
         string packagePath)
         => ReadSavedPackageMetadata(request.Name, version, packagePath);
 
+    private ManagedModuleVersionInfo CreateSavedPackageVersionInfo(
+        ManagedModuleInstallRequest request,
+        string version,
+        string packagePath)
+    {
+        var metadata = ReadSavedPackageMetadata(request, version, packagePath);
+        return new ManagedModuleVersionInfo
+        {
+            Name = metadata.Id,
+            Version = metadata.Version,
+            RepositoryName = request.Repository.Name,
+            RepositorySource = request.Repository.Source,
+            PackageSource = packagePath,
+            IsPrerelease = ManagedModuleVersionComparer.IsPrerelease(metadata.Version),
+            Listed = true,
+            License = metadata.License,
+            RequireLicenseAcceptance = metadata.RequireLicenseAcceptance,
+            Dependencies = metadata.Dependencies
+        };
+    }
+
     private ManagedModulePackageMetadata ReadSavedPackageMetadata(
         string packageId,
         string version,

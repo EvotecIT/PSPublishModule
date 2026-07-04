@@ -62,12 +62,16 @@ public sealed partial class ManagedModuleInstallService
             TrySelectInstalledNoOpVersion(request, moduleRoot, context: null, out var installedVersion))
         {
             var installedModulePath = ResolveNoOpTargetPath(request, moduleRoot, request.Name, installedVersion);
+            var installedVersionInfo = request.SaveAsNupkg
+                ? CreateSavedPackageVersionInfo(request, installedVersion, installedModulePath)
+                : null;
             return CreateInstallPlan(
                 request,
                 installedVersion,
                 moduleRoot,
                 installedModulePath,
                 exists: true,
+                installedVersionInfo,
                 wouldRepairDependencies: WouldWriteExistingTargetDependencies(request, moduleRoot, installedVersion, installedModulePath));
         }
 
@@ -469,15 +473,14 @@ public sealed partial class ManagedModuleInstallService
             return false;
         if (RequiresPackageDownloadBeforeNoOp(request))
             return false;
-        if (string.IsNullOrWhiteSpace(request.Version))
+
+        var savedVersion = GetSavedPackageVersions(moduleRoot, request.Name)
+            .Where(candidate => AllowsInstalledNoOpVersion(candidate, request))
+            .LastOrDefault();
+        if (savedVersion is null)
             return false;
 
-        var requestedVersion = request.Version!.Trim();
-        var packagePath = ResolveSavedPackagePath(moduleRoot, request.Name, requestedVersion);
-        if (!File.Exists(packagePath))
-            return false;
-
-        version = requestedVersion;
+        version = savedVersion;
         return true;
     }
 
@@ -487,7 +490,7 @@ public sealed partial class ManagedModuleInstallService
         string name,
         string version)
         => request.SaveAsNupkg
-            ? ResolveTargetPath(request, moduleRoot, name, version)
+            ? ResolveExistingSavedPackagePath(moduleRoot, name, version) ?? ResolveTargetPath(request, moduleRoot, name, version)
             : ResolveInstalledModulePath(moduleRoot, name, version);
 
     private static bool AllowsInstalledNoOpVersion(string version, ManagedModuleInstallRequest request)

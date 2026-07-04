@@ -376,6 +376,96 @@ public sealed class SaveManagedModuleCommandTests
     }
 
     [Fact]
+    public void SaveManagedModule_as_nupkg_plan_detects_existing_package_case_insensitively()
+    {
+        using var destination = new TemporaryDirectory();
+        var packagePath = Path.Combine(destination.Path, "company.tools.1.0.0.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.0.0",
+            files: CreateToolFiles("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", Path.Combine(destination.Path, "Unavailable"))
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AsNupkg")
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedModuleInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.True(plan.ExistingVersionFound);
+        Assert.Equal(ManagedModuleInstallPlanAction.SkipExisting, plan.Action);
+        Assert.Equal(packagePath, plan.ModulePath);
+        Assert.False(plan.WouldWriteFiles);
+    }
+
+    [Fact]
+    public void SaveManagedModule_as_nupkg_plan_detects_existing_package_for_version_range()
+    {
+        using var destination = new TemporaryDirectory();
+        var packagePath = Path.Combine(destination.Path, "Company.Tools.1.2.0.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.2.0",
+            files: CreateToolFiles("1.2.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", Path.Combine(destination.Path, "Unavailable"))
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("MinimumVersion", "1.0.0")
+            .AddParameter("AsNupkg")
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedModuleInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.True(plan.ExistingVersionFound);
+        Assert.Equal("1.2.0", plan.Version);
+        Assert.Equal(ManagedModuleInstallPlanAction.SkipExisting, plan.Action);
+        Assert.Equal(packagePath, plan.ModulePath);
+        Assert.False(plan.WouldWriteFiles);
+    }
+
+    [Fact]
+    public void SaveManagedModule_as_nupkg_plan_reports_license_required_for_existing_package()
+    {
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateToolFiles("1.0.0"),
+            requireLicenseAcceptance: true);
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", Path.Combine(destination.Path, "Unavailable"))
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AsNupkg")
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedModuleInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.True(plan.ExistingVersionFound);
+        Assert.True(plan.LicenseAcceptanceRequired);
+        Assert.False(plan.LicenseAccepted);
+    }
+
+    [Fact]
     public void SaveManagedModule_as_nupkg_plan_marks_existing_package_with_missing_dependencies_as_writing()
     {
         using var feed = new TemporaryDirectory();
