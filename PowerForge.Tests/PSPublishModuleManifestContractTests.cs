@@ -44,6 +44,14 @@ public sealed class PSPublishModuleManifestContractTests
         "Update-ManagedModule"
     };
 
+    private static readonly string[] ManagedScriptFileInfoCmdlets =
+    {
+        "Get-ManagedScriptFileInfo",
+        "New-ManagedScriptFileInfo",
+        "Test-ManagedScriptFileInfo",
+        "Update-ManagedScriptFileInfo"
+    };
+
     private static readonly string[] UnreleasedModuleStateCmdlets =
     {
         "Get-ModuleState",
@@ -154,6 +162,20 @@ public sealed class PSPublishModuleManifestContractTests
         var bootstrapperText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psm1"));
 
         foreach (var cmdlet in ManagedModuleCmdlets)
+        {
+            Assert.Contains($"'{cmdlet}'", manifestText, StringComparison.Ordinal);
+            Assert.Contains($"'{cmdlet}'", bootstrapperText, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Module_exports_managed_script_file_info_cmdlets()
+    {
+        var repoRoot = RepoRootLocator.Find();
+        var manifestText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psd1"));
+        var bootstrapperText = File.ReadAllText(Path.Combine(repoRoot, "Module", "PSPublishModule.psm1"));
+
+        foreach (var cmdlet in ManagedScriptFileInfoCmdlets)
         {
             Assert.Contains($"'{cmdlet}'", manifestText, StringComparison.Ordinal);
             Assert.Contains($"'{cmdlet}'", bootstrapperText, StringComparison.Ordinal);
