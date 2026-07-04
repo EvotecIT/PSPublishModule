@@ -459,6 +459,9 @@ public sealed partial class ManagedModuleInstallService
 
     private static bool CanSelectInstalledNoOpBeforeRepositoryResolution(ManagedModuleInstallRequest request)
     {
+        if (request.SaveAsNupkg)
+            return true;
+
         if (!string.IsNullOrWhiteSpace(request.Version))
             return true;
 
