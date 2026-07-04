@@ -1059,7 +1059,7 @@ public sealed partial class ManagedModuleInstallService
             : ResolveInstalledModulePath(moduleRoot, moduleName, version);
 
     private static string ResolveWriteTargetPath(ManagedModuleInstallRequest request, string moduleRoot, string moduleName, string version)
-        => request.SaveAsNupkg && request.Force
+        => request.SaveAsNupkg && (request.Force || RequiresPackageDownloadBeforeNoOp(request))
             ? ResolveExistingSavedPackagePath(moduleRoot, moduleName, version) ?? ResolveTargetPath(request, moduleRoot, moduleName, version)
             : ResolveTargetPath(request, moduleRoot, moduleName, version);
 
