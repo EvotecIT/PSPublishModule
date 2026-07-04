@@ -223,7 +223,7 @@ public sealed class SaveManagedScriptCommandTests
             .AddParameter("RequiredVersion", "1.0.0");
 
         var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
-        Assert.Contains("Unsafe package version", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not a valid", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
@@ -589,7 +589,88 @@ public sealed class SaveManagedScriptCommandTests
             .AddParameter("RequiredVersion", "1.0.0");
 
         var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
-        Assert.Contains("Unsafe package version", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not a valid", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
+    }
+
+    [Theory]
+    [InlineData("RequiredVersion", "garbage")]
+    [InlineData("MinimumVersion", "garbage")]
+    [InlineData("MaximumVersion", "garbage")]
+    [InlineData("VersionPolicy", ">= 2.0.0")]
+    public void SaveManagedScript_rejects_non_parseable_version_selectors(string parameterName, string parameterValue)
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter(parameterName, parameterValue);
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("not a valid", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SaveManagedScript_rejects_repository_package_with_non_parseable_version()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Invoke-CompanyTask.bad.nupkg"),
+            "Invoke-CompanyTask",
+            "bad",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("0.0.0")
+            });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path);
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("not a valid", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
+    }
+
+    [Fact]
+    public void SaveManagedScript_rejects_package_with_incomplete_script_metadata()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = """
+                    <#PSScriptInfo
+                    .VERSION 1.0.0
+                    .GUID 00000000-0000-0000-0000-000000000001
+                    #>
+                    Write-Output 'ok'
+                    """
+            });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0");
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("metadata is incomplete", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.False(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
     }
 
@@ -642,6 +723,8 @@ public sealed class SaveManagedScriptCommandTests
 
            <#
            .SYNOPSIS
+           Test script.
+           .DESCRIPTION
            Test script.
            #>
            Write-Output 'ok'

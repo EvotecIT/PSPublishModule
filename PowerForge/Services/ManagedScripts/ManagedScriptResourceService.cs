@@ -178,6 +178,7 @@ public sealed class ManagedScriptResourceService
             var stagedScriptPath = Path.Combine(stageRoot, Path.GetFileName(scriptPath));
             ExtractScriptPayload(download.PackagePath, request.Name, stagedScriptPath);
             var scriptInfo = _scriptFileInfoService.Read(stagedScriptPath);
+            ThrowIfScriptMetadataIncomplete(scriptInfo, download.PackagePath);
             ThrowIfScriptVersionDisagrees(scriptInfo, versionInfo.Version, download.PackagePath);
             extractionStopwatch.Stop();
 
@@ -429,6 +430,13 @@ public sealed class ManagedScriptResourceService
         {
             throw;
         }
+        catch (InvalidOperationException exception)
+        {
+            if (exception.Message.IndexOf("not a valid version", StringComparison.OrdinalIgnoreCase) >= 0)
+                throw;
+
+            return null;
+        }
         catch
         {
             return null;
@@ -495,12 +503,28 @@ public sealed class ManagedScriptResourceService
     private static void ThrowIfScriptVersionDisagrees(ManagedScriptFileInfo info, string packageVersion, string packagePath)
     {
         _ = ManagedModulePackageIdentity.RequireSafeVersion(info.Version, nameof(info.Version));
+        _ = ManagedModulePackageIdentity.RequireSafeVersion(packageVersion, nameof(packageVersion));
+        ValidateScriptVersion(info.Version, nameof(info.Version));
+        ValidateScriptVersion(packageVersion, nameof(packageVersion));
 
         if (ManagedModuleVersionComparer.Instance.Compare(info.Version, packageVersion) == 0)
             return;
 
         throw new InvalidOperationException(
             $"Package '{packagePath}' version '{packageVersion}' does not match script metadata version '{info.Version}'.");
+    }
+
+    private static void ThrowIfScriptMetadataIncomplete(ManagedScriptFileInfo info, string packagePath)
+    {
+        if (info.Guid != Guid.Empty &&
+            !string.IsNullOrWhiteSpace(info.Author) &&
+            !string.IsNullOrWhiteSpace(info.Description))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Package '{packagePath}' script metadata is incomplete. PSScriptInfo GUID, AUTHOR, and comment-help DESCRIPTION are required.");
     }
 
     private static ManagedModuleVersionRange ResolveVersionRange(string? versionPolicy, string? minimumVersion, string? maximumVersion)
@@ -515,11 +539,22 @@ public sealed class ManagedScriptResourceService
     private static void ValidateVersionRangeVersions(ManagedModuleVersionRange range)
     {
         if (!string.IsNullOrWhiteSpace(range.ExactVersion))
+        {
             _ = ManagedModulePackageIdentity.RequireSafeVersion(range.ExactVersion!, nameof(range.ExactVersion));
+            ValidateScriptVersion(range.ExactVersion, nameof(range.ExactVersion));
+        }
+
         if (!string.IsNullOrWhiteSpace(range.MinimumVersion))
+        {
             _ = ManagedModulePackageIdentity.RequireSafeVersion(range.MinimumVersion!, nameof(range.MinimumVersion));
+            ValidateScriptVersion(range.MinimumVersion, nameof(range.MinimumVersion));
+        }
+
         if (!string.IsNullOrWhiteSpace(range.MaximumVersion))
+        {
             _ = ManagedModulePackageIdentity.RequireSafeVersion(range.MaximumVersion!, nameof(range.MaximumVersion));
+            ValidateScriptVersion(range.MaximumVersion, nameof(range.MaximumVersion));
+        }
     }
 
     private static void ReplaceScriptFile(string stagedScriptPath, string scriptPath, bool force)
@@ -613,8 +648,86 @@ public sealed class ManagedScriptResourceService
         }
 
         if (!string.IsNullOrWhiteSpace(version))
+        {
             _ = ManagedModulePackageIdentity.RequireSafeVersion(version!, nameof(version));
-        _ = ResolveVersionRange(versionPolicy, minimumVersion, maximumVersion);
+            ValidateScriptVersion(version!, nameof(version));
+        }
+
+        if (!string.IsNullOrWhiteSpace(minimumVersion))
+        {
+            _ = ManagedModulePackageIdentity.RequireSafeVersion(minimumVersion!, nameof(minimumVersion));
+            ValidateScriptVersion(minimumVersion!, nameof(minimumVersion));
+        }
+
+        if (!string.IsNullOrWhiteSpace(maximumVersion))
+        {
+            _ = ManagedModulePackageIdentity.RequireSafeVersion(maximumVersion!, nameof(maximumVersion));
+            ValidateScriptVersion(maximumVersion!, nameof(maximumVersion));
+        }
+
+        ValidateVersionPolicy(versionPolicy);
+    }
+
+    private static void ValidateVersionPolicy(string? versionPolicy)
+    {
+        if (string.IsNullOrWhiteSpace(versionPolicy))
+            return;
+
+        var trimmed = versionPolicy!.Trim();
+        if (trimmed.StartsWith("=", StringComparison.Ordinal))
+        {
+            ValidateVersionPolicyOperand(trimmed.Substring(1), nameof(versionPolicy));
+            return;
+        }
+
+        if (trimmed.StartsWith(">", StringComparison.Ordinal) ||
+            trimmed.StartsWith("<", StringComparison.Ordinal))
+        {
+            foreach (var rawToken in trimmed.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var token = rawToken.Trim();
+                var operand = token.StartsWith(">=", StringComparison.Ordinal) || token.StartsWith("<=", StringComparison.Ordinal)
+                    ? token.Substring(2)
+                    : token.StartsWith(">", StringComparison.Ordinal) || token.StartsWith("<", StringComparison.Ordinal)
+                        ? token.Substring(1)
+                        : null;
+
+                if (string.IsNullOrWhiteSpace(operand))
+                    throw new ArgumentException($"VersionPolicy '{versionPolicy}' is not a valid version policy.", nameof(versionPolicy));
+
+                ValidateVersionPolicyOperand(operand, nameof(versionPolicy));
+            }
+
+            _ = ResolveVersionRange(versionPolicy, null, null);
+            return;
+        }
+
+        var range = ResolveVersionRange(versionPolicy, null, null);
+        if (range.ExactVersion is not null)
+            ValidateVersionPolicyOperand(range.ExactVersion, nameof(versionPolicy));
+        if (range.MinimumVersion is not null)
+            ValidateVersionPolicyOperand(range.MinimumVersion, nameof(versionPolicy));
+        if (range.MaximumVersion is not null)
+            ValidateVersionPolicyOperand(range.MaximumVersion, nameof(versionPolicy));
+    }
+
+    private static void ValidateVersionPolicyOperand(string? value, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new ArgumentException("Version policy contains an empty version operand.", parameterName);
+
+        var trimmed = value!.Trim();
+        _ = ManagedModulePackageIdentity.RequireSafeVersion(trimmed, parameterName);
+        ValidateScriptVersion(trimmed, parameterName);
+    }
+
+    private static void ValidateScriptVersion(string? value, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value) ||
+            !ModuleStateVersion.TryParse(value!.Trim(), out _))
+        {
+            throw new ArgumentException($"Script version '{value}' is not a valid version.", parameterName);
+        }
     }
 
     private static void DeleteFileQuietly(string path)
