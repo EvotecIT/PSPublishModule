@@ -104,7 +104,8 @@ public sealed partial class ManagedModuleInstallService
             modulePath,
             exists,
             versionInfo,
-            wouldRepairDependencies: exists &&
+            wouldRepairDependencies: ShouldProbeExistingTargetDependenciesForPlan(request) &&
+                                      exists &&
                                       WouldWriteExistingTargetDependencies(request, moduleRoot, versionInfo.Version, modulePath));
     }
 
@@ -551,6 +552,9 @@ public sealed partial class ManagedModuleInstallService
 
     private static bool RequiresPackageDownloadBeforeNoOp(ManagedModuleInstallRequest request)
         => RequiresVerifiedPackage(request) || ManagedModuleTrustEvaluator.HasAllowedAuthorPolicy(request.TrustPolicy);
+
+    private static bool ShouldProbeExistingTargetDependenciesForPlan(ManagedModuleInstallRequest request)
+        => !request.Force && !RequiresPackageDownloadBeforeNoOp(request);
 
     private async Task<ManagedModuleInstallResult> InstallResolvedAsync(
         ManagedModuleInstallRequest request,

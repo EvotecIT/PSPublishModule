@@ -437,6 +437,42 @@ public sealed class SaveManagedModuleCommandTests
     }
 
     [Fact]
+    public void SaveManagedModule_as_nupkg_does_not_treat_longer_package_id_as_existing_version()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(destination.Path, "Company.2024.1.0.0.nupkg"),
+            "Company.2024",
+            "1.0.0");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.1.0.0.nupkg"),
+            "Company",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.psd1"] = "@{ ModuleVersion = '1.0.0' }"
+            });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("AsNupkg");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal("Company", result.Name);
+        Assert.Equal("1.0.0", result.Version);
+        Assert.Equal(Path.Combine(destination.Path, "Company.1.0.0.nupkg"), result.ModulePath);
+        Assert.True(File.Exists(Path.Combine(destination.Path, "Company.2024.1.0.0.nupkg")));
+        Assert.True(File.Exists(Path.Combine(destination.Path, "Company.1.0.0.nupkg")));
+    }
+
+    [Fact]
     public void SaveManagedModule_as_nupkg_plan_reports_license_required_for_existing_package()
     {
         using var destination = new TemporaryDirectory();
@@ -493,6 +529,39 @@ public sealed class SaveManagedModuleCommandTests
         Assert.True(plan.SaveAsNupkg);
         Assert.True(plan.ExistingVersionFound);
         Assert.Equal(ManagedModuleInstallPlanAction.SkipExisting, plan.Action);
+        Assert.True(plan.WouldWriteFiles);
+    }
+
+    [Fact]
+    public void SaveManagedModule_as_nupkg_force_plan_does_not_read_corrupt_existing_package()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        var packagePath = Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg");
+        File.WriteAllText(packagePath, "not a package");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateToolFiles("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AsNupkg")
+            .AddParameter("Force")
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedModuleInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.True(plan.SaveAsNupkg);
+        Assert.True(plan.ExistingVersionFound);
+        Assert.Equal(ManagedModuleInstallPlanAction.Reinstall, plan.Action);
         Assert.True(plan.WouldWriteFiles);
     }
 

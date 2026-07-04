@@ -146,9 +146,31 @@ public sealed partial class ManagedModuleInstallService
 
                     promotionHadExistingTarget = File.Exists(packagePath);
                     var promotionMoveStopwatch = System.Diagnostics.Stopwatch.StartNew();
-                    CopyPackageToSavedPath(download.PackagePath, packagePath, overwrite: request.Force || RequiresPackageDownloadBeforeNoOp(request));
+                    var copiedPackage = CopyPackageToSavedPath(download.PackagePath, packagePath, overwrite: request.Force || RequiresPackageDownloadBeforeNoOp(request));
                     promotionMoveStopwatch.Stop();
                     promotionMoveElapsed = promotionMoveStopwatch.Elapsed;
+                    if (!copiedPackage)
+                    {
+                        _logger.Verbose($"Managed module save reused concurrently saved package: {packagePath}");
+                        var existing = await CreateAlreadySavedPackageResultAsync(
+                            request,
+                            version,
+                            moduleRoot,
+                            packagePath,
+                            stopwatch.Elapsed,
+                            versionResolutionElapsed,
+                            requestScope.Count,
+                            installLockWaitElapsed,
+                            cacheDirectory,
+                            context,
+                            cancellationToken).ConfigureAwait(false);
+                        existing.DependencyResults = dependencyResults;
+                        existing.DependencyElapsed = dependencyStopwatch.Elapsed;
+                        existing.RepositoryRequestCount += SumRepositoryRequestCount(dependencyResults);
+                        existing.PackageRepositoryRequestCount += SumPackageRepositoryRequestCount(dependencyResults);
+                        existing.PackageRepositoryRedirectCount += SumPackageRepositoryRedirectCount(dependencyResults);
+                        return existing;
+                    }
                 }
             }
 
@@ -385,7 +407,7 @@ public sealed partial class ManagedModuleInstallService
             Metadata = download.Metadata
         };
 
-    private static void CopyPackageToSavedPath(string sourcePath, string destinationPath, bool overwrite)
+    private static bool CopyPackageToSavedPath(string sourcePath, string destinationPath, bool overwrite)
     {
         var fullDestinationPath = Path.GetFullPath(destinationPath);
         var directory = Path.GetDirectoryName(fullDestinationPath);
@@ -400,13 +422,14 @@ public sealed partial class ManagedModuleInstallService
             if (File.Exists(fullDestinationPath))
             {
                 if (!overwrite)
-                    return;
+                    return false;
 
                 File.Replace(tempPath, fullDestinationPath, backupPath, ignoreMetadataErrors: true);
-                return;
+                return true;
             }
 
             File.Move(tempPath, fullDestinationPath);
+            return true;
         }
         catch
         {

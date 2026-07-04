@@ -421,8 +421,7 @@ public sealed partial class ManagedModuleInstallService
         try
         {
             return Directory.EnumerateFiles(root, "*" + suffix, SearchOption.TopDirectoryOnly)
-                .Select(path => Path.GetFileName(path))
-                .Select(fileName => TryReadSavedPackageVersion(fileName, safePackageId, out var savedVersion) ? savedVersion : null)
+                .Select(path => TryReadSavedPackageIdentityVersion(path, safePackageId, out var savedVersion) ? savedVersion : null)
                 .Where(static version => !string.IsNullOrWhiteSpace(version))
                 .Select(static version => version!)
                 .ToArray();
@@ -434,6 +433,34 @@ public sealed partial class ManagedModuleInstallService
         catch (UnauthorizedAccessException)
         {
             return Array.Empty<string>();
+        }
+    }
+
+    private static bool TryReadSavedPackageIdentityVersion(
+        string packagePath,
+        string safePackageId,
+        out string version)
+    {
+        version = string.Empty;
+        var fileName = Path.GetFileName(packagePath);
+        if (!TryReadSavedPackageVersion(fileName, safePackageId, out var fileVersion))
+            return false;
+
+        try
+        {
+            var metadata = new ManagedModulePackageReader().ReadMetadata(packagePath);
+            if (!metadata.Id.Equals(safePackageId, StringComparison.OrdinalIgnoreCase) ||
+                ManagedModuleVersionComparer.Instance.Compare(metadata.Version, fileVersion) != 0)
+            {
+                return false;
+            }
+
+            version = metadata.Version;
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 
