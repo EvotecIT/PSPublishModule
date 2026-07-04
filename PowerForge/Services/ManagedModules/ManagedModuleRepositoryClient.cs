@@ -154,33 +154,97 @@ public sealed partial class ManagedModuleRepositoryClient
         RepositoryCredential? credential = null,
         int take = 100,
         CancellationToken cancellationToken = default)
+        => await SearchPackagesAsync(repository, query, includePrerelease, credential, take, skip: 0, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>
+    /// Searches package ids from the repository and returns a page of latest selected versions per match.
+    /// </summary>
+    /// <param name="repository">Repository to query.</param>
+    /// <param name="query">Package id text or wildcard pattern.</param>
+    /// <param name="includePrerelease">Include prerelease versions.</param>
+    /// <param name="credential">Optional repository credential.</param>
+    /// <param name="take">Maximum number of results.</param>
+    /// <param name="skip">Number of matching results to skip before returning a page.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Latest selected package versions.</returns>
+    public async Task<IReadOnlyList<ManagedModuleVersionInfo>> SearchPackagesAsync(
+        ManagedModuleRepository repository,
+        string query,
+        bool includePrerelease,
+        RepositoryCredential? credential,
+        int take,
+        int skip,
+        CancellationToken cancellationToken = default)
     {
         if (repository is null)
             throw new ArgumentNullException(nameof(repository));
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Search query is required.", nameof(query));
+        if (skip < 0)
+            throw new ArgumentOutOfRangeException(nameof(skip), "Skip must not be negative.");
 
         return repository.Kind switch
         {
-            ManagedModuleRepositoryKind.LocalFolder => SearchLocalPackages(repository, query, includePrerelease, take),
+            ManagedModuleRepositoryKind.LocalFolder => SearchLocalPackages(repository, query, includePrerelease, take, skip),
             ManagedModuleRepositoryKind.NuGetV3 => await ExecuteCoalescedSearchQueryAsync(
                 repository,
                 query,
                 includePrerelease,
                 take,
+                skip,
                 credential,
                 cancellationToken,
-                token => SearchNuGetPackagesWithPowerShellGalleryReadApiAsync(repository, query, includePrerelease, credential, take, token)).ConfigureAwait(false),
+                token => SearchNuGetPackagesWithPowerShellGalleryReadApiAsync(repository, query, includePrerelease, credential, take, skip, token)).ConfigureAwait(false),
             ManagedModuleRepositoryKind.NuGetV2 => await ExecuteCoalescedSearchQueryAsync(
                 repository,
                 query,
                 includePrerelease,
                 take,
+                skip,
                 credential,
                 cancellationToken,
-                token => SearchNuGetV2PackagesAsync(repository, query, includePrerelease, credential, take, token)).ConfigureAwait(false),
+                token => SearchNuGetV2PackagesAsync(repository, query, includePrerelease, credential, take, skip, token)).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
+    }
+
+    /// <summary>
+    /// Resolves the latest available package version satisfying dependency metadata.
+    /// </summary>
+    /// <param name="repository">Repository to query.</param>
+    /// <param name="dependency">Dependency metadata.</param>
+    /// <param name="includePrerelease">Include prerelease versions even when the dependency range does not require them.</param>
+    /// <param name="credential">Optional repository credential.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The latest satisfying dependency version, or <c>null</c> when none is available.</returns>
+    public async Task<ManagedModuleVersionInfo?> GetLatestDependencyVersionAsync(
+        ManagedModuleRepository repository,
+        ManagedModuleDependencyInfo dependency,
+        bool includePrerelease = false,
+        RepositoryCredential? credential = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (repository is null)
+            throw new ArgumentNullException(nameof(repository));
+        if (dependency is null)
+            throw new ArgumentNullException(nameof(dependency));
+        if (string.IsNullOrWhiteSpace(dependency.Id))
+            throw new ArgumentException("Dependency id is required.", nameof(dependency));
+
+        var range = ManagedModuleVersionRange.Parse(dependency.VersionRange);
+        var versions = await GetVersionsAsync(
+                repository,
+                dependency.Id,
+                includePrerelease || range.AllowsPrerelease,
+                credential,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return versions
+            .Where(version => range.IsSatisfiedBy(version.Version))
+            .Where(version => range.ExactVersion is not null || version.Listed)
+            .OrderBy(version => version.Version, ManagedModuleVersionComparer.Instance)
+            .LastOrDefault();
     }
 
     /// <summary>
@@ -339,15 +403,16 @@ public sealed partial class ManagedModuleRepositoryClient
         bool includePrerelease,
         RepositoryCredential? credential,
         int take,
+        int skip,
         CancellationToken cancellationToken)
     {
         if (ShouldUsePowerShellGalleryV2ReadApi(repository))
         {
             var fallback = CreatePowerShellGalleryV2Fallback(repository);
-            return await SearchNuGetV2PackagesAsync(fallback, query, includePrerelease, credential, take, cancellationToken).ConfigureAwait(false);
+            return await SearchNuGetV2PackagesAsync(fallback, query, includePrerelease, credential, take, skip, cancellationToken).ConfigureAwait(false);
         }
 
-        return await SearchNuGetPackagesAsync(repository, query, includePrerelease, credential, take, cancellationToken).ConfigureAwait(false);
+        return await SearchNuGetPackagesAsync(repository, query, includePrerelease, credential, take, skip, cancellationToken).ConfigureAwait(false);
     }
 
     private ManagedModuleDownloadResult? TryUseCachedPackage(
@@ -484,7 +549,8 @@ public sealed partial class ManagedModuleRepositoryClient
                 IsPrerelease = metadata.IsPrerelease,
                 License = metadata.License,
                 RequireLicenseAcceptance = metadata.RequireLicenseAcceptance,
-                Dependencies = metadata.Dependencies
+                Dependencies = metadata.Dependencies,
+                Tags = metadata.Tags
             });
         }
 
@@ -497,7 +563,8 @@ public sealed partial class ManagedModuleRepositoryClient
         ManagedModuleRepository repository,
         string query,
         bool includePrerelease,
-        int take)
+        int take,
+        int skip)
     {
         var root = ResolveLocalFolder(repository.Source);
         if (!Directory.Exists(root))
@@ -508,6 +575,7 @@ public sealed partial class ManagedModuleRepositoryClient
             .GroupBy(version => version.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.OrderBy(version => version.Version, ManagedModuleVersionComparer.Instance).Last())
             .OrderBy(version => version.Name, StringComparer.OrdinalIgnoreCase)
+            .Skip(Math.Max(0, skip))
             .Take(Math.Max(1, take))
             .ToArray();
     }
@@ -518,35 +586,84 @@ public sealed partial class ManagedModuleRepositoryClient
         bool includePrerelease,
         RepositoryCredential? credential,
         int take,
+        int skip,
         CancellationToken cancellationToken)
     {
+        var pageSize = Math.Max(1, take);
+        var matchingSkip = Math.Max(0, skip);
+        var matches = new List<ManagedModuleVersionInfo>();
+        var serverSkip = 0;
         var searchService = await ResolveSearchQueryServiceAsync(repository, credential, cancellationToken).ConfigureAwait(false);
         var searchText = ManagedModuleSearchMatcher.ToSearchText(query);
-        var uri = BuildSearchQueryUri(
-            searchService,
-            $"q={Uri.EscapeDataString(searchText)}&prerelease={includePrerelease.ToString().ToLowerInvariant()}&take={Math.Max(1, take)}&semVerLevel=2.0.0");
-        using var response = await SendWithPolicyAsync(
-            () => CreateRequest(HttpMethod.Get, uri, credential, "application/json"),
-            cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-            throw CreateRepositoryHttpException(repository, "Search", response.StatusCode, $"Unable to search for '{query}'.");
 
-        using var document = await ReadJsonDocumentAsync(
-            response.Content,
-            repository,
-            "Search",
-            $"Managed module search for '{query}' returned malformed JSON.",
-            cancellationToken).ConfigureAwait(false);
-        if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
-            throw CreateRepositoryContractException(repository, "Search", "Repository response did not include a search data array.");
+        while (matches.Count < pageSize)
+        {
+            var uri = BuildSearchQueryUri(
+                searchService,
+                $"q={Uri.EscapeDataString(searchText)}&prerelease={includePrerelease.ToString().ToLowerInvariant()}&take={pageSize}&skip={serverSkip}&semVerLevel=2.0.0");
+            using var response = await SendWithPolicyAsync(
+                () => CreateRequest(HttpMethod.Get, uri, credential, "application/json"),
+                cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                throw CreateRepositoryHttpException(repository, "Search", response.StatusCode, $"Unable to search for '{query}'.");
 
-        return data.EnumerateArray()
-            .Select(item => ReadSearchResult(repository, item))
-            .Where(version => version is not null && ManagedModuleSearchMatcher.IsMatch(query, version.Name))
-            .Select(static version => version!)
-            .OrderBy(static version => version.Name, StringComparer.OrdinalIgnoreCase)
-            .Take(Math.Max(1, take))
-            .ToArray();
+            using var document = await ReadJsonDocumentAsync(
+                response.Content,
+                repository,
+                "Search",
+                $"Managed module search for '{query}' returned malformed JSON.",
+                cancellationToken).ConfigureAwait(false);
+            if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
+                throw CreateRepositoryContractException(repository, "Search", "Repository response did not include a search data array.");
+
+            var rawPage = data.EnumerateArray().ToArray();
+            if (rawPage.Length == 0)
+                break;
+
+            var totalHits = ReadSearchTotalHits(document.RootElement);
+            var pageMatches = rawPage
+                .Select(item => ReadSearchResult(repository, item))
+                .Where(version => version is not null && ManagedModuleSearchMatcher.IsMatch(query, version.Name))
+                .Select(static version => version!)
+                .OrderBy(static version => version.Name, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var match in pageMatches)
+            {
+                if (matchingSkip > 0)
+                {
+                    matchingSkip--;
+                    continue;
+                }
+
+                matches.Add(match);
+                if (matches.Count >= pageSize)
+                    break;
+            }
+
+            var nextServerSkip = serverSkip + rawPage.Length;
+            var serverHasMore = totalHits.HasValue
+                ? nextServerSkip < totalHits.Value
+                : rawPage.Length >= pageSize;
+            if (!serverHasMore)
+                break;
+
+            serverSkip = nextServerSkip;
+        }
+
+        return matches;
+    }
+
+    private static int? ReadSearchTotalHits(JsonElement root)
+    {
+        if (!root.TryGetProperty("totalHits", out var totalHits))
+            return null;
+
+        return totalHits.ValueKind switch
+        {
+            JsonValueKind.Number when totalHits.TryGetInt32(out var value) => value,
+            JsonValueKind.String when int.TryParse(totalHits.GetString(), out var value) => value,
+            _ => null
+        };
     }
 
     private async Task<IReadOnlyDictionary<string, bool>> TryResolveVersionListingMapAsync(
@@ -1084,8 +1201,32 @@ public sealed partial class ManagedModuleRepositoryClient
             License = ReadOptionalString(item, "licenseExpression") ??
                       ReadOptionalString(item, "licenseUrl"),
             RequireLicenseAcceptance = ReadOptionalBoolean(item, "requireLicenseAcceptance"),
-            Dependencies = ReadSearchDependencies(item)
+            Dependencies = ReadSearchDependencies(item),
+            Tags = ReadSearchTags(item)
         };
+    }
+
+    private static IReadOnlyList<string> ReadSearchTags(JsonElement item)
+    {
+        if (!item.TryGetProperty("tags", out var tags))
+            return Array.Empty<string>();
+
+        if (tags.ValueKind == JsonValueKind.Array)
+        {
+            var values = tags.EnumerateArray()
+                .Where(static tag => tag.ValueKind == JsonValueKind.String)
+                .Select(static tag => tag.GetString()?.Trim())
+                .Where(static tag => !string.IsNullOrWhiteSpace(tag))
+                .Select(static tag => tag!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            return values.Length == 0 ? Array.Empty<string>() : values;
+        }
+
+        if (tags.ValueKind == JsonValueKind.String)
+            return SplitTags(tags.GetString());
+
+        return Array.Empty<string>();
     }
 
     private static IReadOnlyList<ManagedModuleDependencyInfo> ReadSearchDependencies(JsonElement item)
@@ -1167,9 +1308,25 @@ public sealed partial class ManagedModuleRepositoryClient
                 PackageSource = file,
                 IsPrerelease = metadata.IsPrerelease,
                 License = metadata.License,
-                RequireLicenseAcceptance = metadata.RequireLicenseAcceptance
+                RequireLicenseAcceptance = metadata.RequireLicenseAcceptance,
+                Dependencies = metadata.Dependencies,
+                Tags = metadata.Tags
             };
         }
+    }
+
+    private static IReadOnlyList<string> SplitTags(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Array.Empty<string>();
+
+        var tags = value!
+            .Split(new[] { ' ', ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(static tag => tag.Trim())
+            .Where(static tag => tag.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return tags.Length == 0 ? Array.Empty<string>() : tags;
     }
 
     private static string? ReadOptionalString(JsonElement item, string propertyName)

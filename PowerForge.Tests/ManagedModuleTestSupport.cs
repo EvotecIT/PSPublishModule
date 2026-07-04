@@ -45,14 +45,15 @@ internal static class TestPackageFactory
         IReadOnlyList<TestDependency>? dependencies = null,
         IReadOnlyDictionary<string, string>? files = null,
         bool requireLicenseAcceptance = false,
-        string authors = "Evotec")
+        string authors = "Evotec",
+        string tags = "powershell automation company")
     {
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(packagePath)!);
         using var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create);
         var nuspec = archive.CreateEntry(id + ".nuspec");
         using (var writer = new StreamWriter(nuspec.Open()))
         {
-            writer.Write(CreateNuspec(id, version, dependencies, requireLicenseAcceptance, authors));
+            writer.Write(CreateNuspec(id, version, dependencies, requireLicenseAcceptance, authors, tags));
         }
 
         if (files is null)
@@ -71,7 +72,8 @@ internal static class TestPackageFactory
         string version,
         bool requireLicenseAcceptance = false,
         IReadOnlyDictionary<string, string>? files = null,
-        IReadOnlyList<TestDependency>? dependencies = null)
+        IReadOnlyList<TestDependency>? dependencies = null,
+        string tags = "powershell automation company")
     {
         using var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
@@ -79,7 +81,7 @@ internal static class TestPackageFactory
             var nuspec = archive.CreateEntry(id + ".nuspec");
             using (var writer = new StreamWriter(nuspec.Open()))
             {
-                writer.Write(CreateNuspec(id, version, dependencies, requireLicenseAcceptance));
+                writer.Write(CreateNuspec(id, version, dependencies, requireLicenseAcceptance, tags: tags));
             }
 
             if (files is not null)
@@ -101,7 +103,8 @@ internal static class TestPackageFactory
         string version,
         IReadOnlyList<TestDependency>? dependencies = null,
         bool requireLicenseAcceptance = false,
-        string authors = "Evotec")
+        string authors = "Evotec",
+        string tags = "powershell automation company")
     {
         var licenseAcceptanceXml = requireLicenseAcceptance
             ? "    <requireLicenseAcceptance>true</requireLicenseAcceptance>" + Environment.NewLine
@@ -117,7 +120,7 @@ internal static class TestPackageFactory
     <description>Test package.</description>
     <projectUrl>https://example.test/{id}</projectUrl>
     <license type="expression">MIT</license>
-{licenseAcceptanceXml}    <tags>powershell automation company</tags>
+{licenseAcceptanceXml}    <tags>{tags}</tags>
 {dependencyXml}
   </metadata>
 </package>

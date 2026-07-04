@@ -13,7 +13,7 @@ public sealed partial class ManagedModuleRepositoryClient
         CancellationToken cancellationToken,
         Func<CancellationToken, Task<IReadOnlyList<ManagedModuleVersionInfo>>> factory)
     {
-        var key = BuildCoalescedQueryKey("versions", repository, packageId, includePrerelease, take: null, credential, cancellationToken);
+        var key = BuildCoalescedQueryKey("versions", repository, packageId, includePrerelease, take: null, skip: null, credential, cancellationToken);
         return key is null
             ? factory(cancellationToken)
             : ExecuteCoalescedAsync(_versionQueryTasks, key, cancellationToken, factory);
@@ -27,7 +27,7 @@ public sealed partial class ManagedModuleRepositoryClient
         CancellationToken cancellationToken,
         Func<CancellationToken, Task<ManagedModuleVersionInfo?>> factory)
     {
-        var key = BuildCoalescedQueryKey("latest", repository, packageId, includePrerelease, take: null, credential, cancellationToken);
+        var key = BuildCoalescedQueryKey("latest", repository, packageId, includePrerelease, take: null, skip: null, credential, cancellationToken);
         return key is null
             ? factory(cancellationToken)
             : ExecuteCoalescedAsync(_latestVersionQueryTasks, key, cancellationToken, factory);
@@ -38,11 +38,12 @@ public sealed partial class ManagedModuleRepositoryClient
         string query,
         bool includePrerelease,
         int take,
+        int skip,
         RepositoryCredential? credential,
         CancellationToken cancellationToken,
         Func<CancellationToken, Task<IReadOnlyList<ManagedModuleVersionInfo>>> factory)
     {
-        var key = BuildCoalescedQueryKey("search", repository, query, includePrerelease, take, credential, cancellationToken);
+        var key = BuildCoalescedQueryKey("search", repository, query, includePrerelease, take, skip, credential, cancellationToken);
         return key is null
             ? factory(cancellationToken)
             : ExecuteCoalescedAsync(_searchQueryTasks, key, cancellationToken, factory);
@@ -94,6 +95,7 @@ public sealed partial class ManagedModuleRepositoryClient
         string value,
         bool includePrerelease,
         int? take,
+        int? skip,
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
@@ -107,7 +109,8 @@ public sealed partial class ManagedModuleRepositoryClient
             NormalizeCoalescedRepositorySource(repository.Source),
             value.Trim(),
             includePrerelease ? "pre" : "stable",
-            take?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty);
+            take?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+            skip?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty);
     }
 
     private static string NormalizeCoalescedRepositorySource(string source)
