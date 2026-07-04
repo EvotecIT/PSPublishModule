@@ -2,6 +2,8 @@
 
 This document defines the compatibility target for the managed C# module engine. It is not a promise to clone every historical behavior from PowerShellGet or PSResourceGet. The goal is a clean managed implementation that covers the common module lifecycle workflows and keeps escape hatches where provider support is incomplete.
 
+For the broader plan to reach PSResourceGet-shaped parity across modules, scripts, repository management, resource files, and packaging behaviors, see [PSResourceGet Parity Plan](PSPublishModule.PSResourceGetParity.md). This document remains the module-specific compatibility contract.
+
 Baseline references:
 
 - [PowerShellGet v2 command reference](https://learn.microsoft.com/en-us/powershell/module/powershellget/?view=powershellget-2.x)
@@ -150,7 +152,7 @@ Compatibility aliases are exposed only when the old name maps to the same manage
 
 ## PSResourceGet Resource-Kind Scope
 
-The managed engine is a module lifecycle engine. It supports module packages for find, save, install, update, publish, and estate repair. It does not currently claim support for the other PSResourceGet resource kinds or provider bootstrap behaviors:
+The current managed engine is a module lifecycle engine. It supports module packages for find, save, install, update, publish, and estate repair. It does not currently claim support for the other PSResourceGet resource kinds or provider bootstrap behaviors. Those gaps are now tracked by the broader [PSResourceGet Parity Plan](PSPublishModule.PSResourceGetParity.md), which keeps script/resource support isolated from the module hot path:
 
 - scripts as first-class resources
 - DSC resources as a separate resource-kind search/install surface
