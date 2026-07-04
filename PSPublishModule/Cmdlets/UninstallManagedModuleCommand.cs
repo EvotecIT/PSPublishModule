@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
@@ -28,6 +29,8 @@ namespace PSPublishModule;
 [OutputType(typeof(ManagedModuleUninstallResult), typeof(ManagedModuleUninstallPlan))]
 public sealed class UninstallManagedModuleCommand : PSCmdlet
 {
+    private readonly List<ManagedModuleUninstallPlan> _plans = [];
+
     /// <summary>Module names or wildcard patterns to uninstall.</summary>
     [Parameter(Mandatory = true, Position = 0, ValueFromPipelineByPropertyName = true)]
     [Alias("ModuleName")]
@@ -97,37 +100,47 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
         };
         var plan = service.PlanUninstall(request);
 
-        if (Plan.IsPresent)
+        _plans.Add(plan);
+    }
+
+    /// <summary>Runs planned uninstall operations after all pipeline input has been collected.</summary>
+    protected override void EndProcessing()
+    {
+        var service = new ManagedModuleUninstallService();
+        foreach (var plan in MergePlans(_plans))
         {
-            WriteObject(plan, enumerateCollection: false);
-            return;
+            if (Plan.IsPresent)
+            {
+                WriteObject(plan, enumerateCollection: false);
+                continue;
+            }
+
+            if (plan.Targets.Count == 0)
+            {
+                WriteObject(service.Uninstall(plan), enumerateCollection: true);
+                continue;
+            }
+
+            var targets = plan.Targets
+                .Where(target => ShouldProcess(
+                    target.ModulePath,
+                    $"Uninstall managed module '{target.Name}' version '{target.Version}'"))
+                .ToArray();
+            if (targets.Length == 0)
+                continue;
+
+            var selectedPlan = new ManagedModuleUninstallPlan
+            {
+                Name = plan.Name,
+                Version = plan.Version,
+                ModuleRoot = plan.ModuleRoot,
+                SkipDependencyCheck = plan.SkipDependencyCheck,
+                AllowLoadedModuleUninstall = plan.AllowLoadedModuleUninstall,
+                Targets = targets,
+                MissingNames = plan.MissingNames
+            };
+            WriteObject(service.Uninstall(selectedPlan), enumerateCollection: true);
         }
-
-        if (plan.Targets.Count == 0)
-        {
-            WriteObject(service.Uninstall(plan), enumerateCollection: true);
-            return;
-        }
-
-        var targets = plan.Targets
-            .Where(target => ShouldProcess(
-                target.ModulePath,
-                $"Uninstall managed module '{target.Name}' version '{target.Version}'"))
-            .ToArray();
-        if (targets.Length == 0)
-            return;
-
-        var selectedPlan = new ManagedModuleUninstallPlan
-        {
-            Name = plan.Name,
-            Version = plan.Version,
-            ModuleRoot = plan.ModuleRoot,
-            SkipDependencyCheck = plan.SkipDependencyCheck,
-            AllowLoadedModuleUninstall = plan.AllowLoadedModuleUninstall,
-            Targets = targets,
-            MissingNames = plan.MissingNames
-        };
-        WriteObject(service.Uninstall(selectedPlan), enumerateCollection: true);
     }
 
     private ManagedModuleLoadedModule[] ResolveLoadedModules()
@@ -169,7 +182,7 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
 
         var selectedDirectory = new DirectoryInfo(path);
         if (string.Equals(selectedDirectory.Name, moduleName, StringComparison.OrdinalIgnoreCase) &&
-            HasInstalledModuleManifest(selectedDirectory.FullName, moduleName))
+            HasInstalledModulePayload(selectedDirectory.FullName, moduleName))
         {
             return selectedDirectory.Parent?.FullName;
         }
@@ -177,7 +190,7 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
         var moduleDirectory = selectedDirectory.Parent;
         if (moduleDirectory is null ||
             !string.Equals(moduleDirectory.Name, moduleName, StringComparison.OrdinalIgnoreCase) ||
-            !HasInstalledModuleManifest(selectedDirectory.FullName, moduleName))
+            !HasInstalledModulePayload(selectedDirectory.FullName, moduleName))
         {
             return null;
         }
@@ -188,4 +201,102 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
     private static bool HasInstalledModuleManifest(string modulePath, string moduleName)
         => File.Exists(Path.Combine(modulePath, moduleName + ".psd1")) ||
            Directory.GetFiles(modulePath, "*.psd1", SearchOption.TopDirectoryOnly).Length > 0;
+
+    private static bool HasInstalledModulePayload(string modulePath, string moduleName)
+        => HasInstalledModuleManifest(modulePath, moduleName) ||
+           File.Exists(Path.Combine(modulePath, moduleName + ".psm1")) ||
+           File.Exists(Path.Combine(modulePath, moduleName + ".dll"));
+
+    private static StringComparison PathStringComparison
+        => Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+    private static StringComparer PathStringComparer
+        => Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    private static string NormalizePath(string path)
+        => Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+    private static IReadOnlyList<ManagedModuleUninstallPlan> MergePlans(IReadOnlyList<ManagedModuleUninstallPlan> plans)
+    {
+        if (plans.Count < 2)
+            return plans;
+
+        return plans
+            .GroupBy(
+                static plan => new PlanMergeKey(plan.ModuleRoot, plan.SkipDependencyCheck, plan.AllowLoadedModuleUninstall),
+                PlanMergeKey.Comparer)
+            .Select(static group => group.Count() == 1 ? group.Single() : MergePlanGroup(group))
+            .ToArray();
+    }
+
+    private static ManagedModuleUninstallPlan MergePlanGroup(IEnumerable<ManagedModuleUninstallPlan> plans)
+    {
+        var group = plans.ToArray();
+        var versions = group
+            .Select(static plan => plan.Version)
+            .Where(static version => !string.IsNullOrWhiteSpace(version))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return new ManagedModuleUninstallPlan
+        {
+            Name = group.SelectMany(static plan => plan.Name).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            Version = versions.Length == 1 ? versions[0] : null,
+            ModuleRoot = group[0].ModuleRoot,
+            SkipDependencyCheck = group[0].SkipDependencyCheck,
+            AllowLoadedModuleUninstall = group[0].AllowLoadedModuleUninstall,
+            Targets = group
+                .SelectMany(static plan => plan.Targets)
+                .GroupBy(static target => target.ModulePath, PathStringComparer)
+                .Select(static targetGroup => targetGroup.First())
+                .ToArray(),
+            MissingNames = group.SelectMany(static plan => plan.MissingNames).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+        };
+    }
+
+    private readonly struct PlanMergeKey : IEquatable<PlanMergeKey>
+    {
+        public PlanMergeKey(string moduleRoot, bool skipDependencyCheck, bool allowLoadedModuleUninstall)
+        {
+            ModuleRoot = NormalizePath(moduleRoot);
+            SkipDependencyCheck = skipDependencyCheck;
+            AllowLoadedModuleUninstall = allowLoadedModuleUninstall;
+        }
+
+        private string ModuleRoot { get; }
+
+        private bool SkipDependencyCheck { get; }
+
+        private bool AllowLoadedModuleUninstall { get; }
+
+        public static IEqualityComparer<PlanMergeKey> Comparer { get; } = new PlanMergeKeyComparer();
+
+        public bool Equals(PlanMergeKey other)
+            => string.Equals(ModuleRoot, other.ModuleRoot, PathStringComparison) &&
+               SkipDependencyCheck == other.SkipDependencyCheck &&
+               AllowLoadedModuleUninstall == other.AllowLoadedModuleUninstall;
+
+        public override bool Equals(object? obj)
+            => obj is PlanMergeKey other && Equals(other);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                var hash = PathStringComparer.GetHashCode(ModuleRoot);
+                hash = (hash * 397) ^ SkipDependencyCheck.GetHashCode();
+                hash = (hash * 397) ^ AllowLoadedModuleUninstall.GetHashCode();
+                return hash;
+            }
+        }
+
+        private sealed class PlanMergeKeyComparer : IEqualityComparer<PlanMergeKey>
+        {
+            public bool Equals(PlanMergeKey x, PlanMergeKey y)
+                => x.Equals(y);
+
+            public int GetHashCode(PlanMergeKey obj)
+                => obj.GetHashCode();
+        }
+    }
 }

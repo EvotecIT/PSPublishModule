@@ -106,6 +106,7 @@ public sealed class ManagedModuleUninstallService
         ManagedModuleUninstallTarget target)
     {
         var stopwatch = Stopwatch.StartNew();
+        ManagedModulePackageIdentity.RequireSafeId(target.Name, nameof(target.Name));
         EnsureTargetUnderRoot(plan.ModuleRoot, target.ModulePath);
         using (ManagedModuleInstallLock.Acquire(plan.ModuleRoot, target.Name, CancellationToken.None))
         {
@@ -493,7 +494,10 @@ public sealed class ManagedModuleUninstallService
         if (startsBracketed)
         {
             var body = trimmed.Trim('[', ']', '(', ')').Trim();
-            foreach (var operand in body.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+            if (body.Count(static character => character == ',') != 1)
+                throw new ArgumentException($"Invalid version range syntax: '{value}'.", nameof(value));
+
+            foreach (var operand in body.Split(new[] { ',' }, StringSplitOptions.None))
                 ValidateRangeOperand(value, operand);
         }
     }

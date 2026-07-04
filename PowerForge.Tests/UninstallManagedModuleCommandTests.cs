@@ -209,7 +209,7 @@ public sealed class UninstallManagedModuleCommandTests
         CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
         var service = new ManagedModuleUninstallService();
 
-        foreach (var version in new[] { ">=1.0.0 < 2.0.0", ">=1.0.0 <" })
+        foreach (var version in new[] { ">=1.0.0 < 2.0.0", ">=1.0.0 <", "[1.0.0,2.0.0,3.0.0]" })
         {
             var exception = Assert.Throws<ArgumentException>(() => service.PlanUninstall(new ManagedModuleUninstallRequest
             {
@@ -360,6 +360,48 @@ public sealed class UninstallManagedModuleCommandTests
     }
 
     [Fact]
+    public void UninstallManagedModule_binds_piped_manifestless_module_directory()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateManifestlessInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var installedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddScript("$row = [pscustomobject]@{ Name = 'Company.Tools'; Version = '1.0.0'; Path = '" + EscapePowerShellSingleQuoted(installedPath) + "' }; $row | Uninstall-ManagedModule");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleUninstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal("1.0.0", result.Version);
+        Assert.False(Directory.Exists(installedPath));
+    }
+
+    [Fact]
+    public void UninstallManagedModule_batches_piped_rows_for_dependency_safe_uninstall()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Core", "1.0.0");
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Core", "1.0.0");
+        var corePath = Path.Combine(moduleRoot.Path, "Company.Core", "1.0.0");
+        var toolsPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddScript(@"
+@(
+    [pscustomobject]@{ Name = 'Company.Core'; Version = '1.0.0'; Path = '" + EscapePowerShellSingleQuoted(corePath) + @"' }
+    [pscustomobject]@{ Name = 'Company.Tools'; Version = '1.0.0'; Path = '" + EscapePowerShellSingleQuoted(toolsPath) + @"' }
+) | Uninstall-ManagedModule
+");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var typed = results.Select(static result => Assert.IsType<ManagedModuleUninstallResult>(result.BaseObject)).ToArray();
+        Assert.Equal(new[] { "Company.Tools", "Company.Core" }, typed.Select(static result => result.Name).ToArray());
+        Assert.False(Directory.Exists(corePath));
+        Assert.False(Directory.Exists(toolsPath));
+    }
+
+    [Fact]
     public void UninstallManagedModule_reports_not_installed_when_requested_version_is_missing()
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -432,6 +474,36 @@ public sealed class UninstallManagedModuleCommandTests
         Assert.Contains("outside module root", exception.Message);
     }
 
+    [Fact]
+    public void UninstallManagedModule_rejects_unsafe_target_name_before_empty_directory_cleanup()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var targetPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var plan = new ManagedModuleUninstallPlan
+        {
+            Name = new[] { "Company.Tools" },
+            ModuleRoot = moduleRoot.Path,
+            SkipDependencyCheck = true,
+            Targets = new[]
+            {
+                new ManagedModuleUninstallTarget
+                {
+                    Name = "..",
+                    Version = "1.0.0",
+                    ModuleRoot = moduleRoot.Path,
+                    ModulePath = targetPath
+                }
+            }
+        };
+        var service = new ManagedModuleUninstallService();
+
+        var exception = Assert.Throws<ArgumentException>(() => service.Uninstall(plan));
+
+        Assert.Contains("safe package id", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(targetPath));
+    }
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();
@@ -470,6 +542,13 @@ public sealed class UninstallManagedModuleCommandTests
         WriteModuleFiles(modulePath, name, version, requiredModuleName: null, requiredVersion: null, requiredModuleVersion: null, requiredModuleGuid: null, moduleGuid);
         Directory.CreateDirectory(Path.Combine(modulePath, "en-US"));
         File.WriteAllText(Path.Combine(modulePath, "en-US", "about_Company.Tools.help.txt"), string.Empty);
+    }
+
+    private static void CreateManifestlessInstalledModule(string root, string name, string version)
+    {
+        var modulePath = Path.Combine(root, name, version);
+        Directory.CreateDirectory(modulePath);
+        File.WriteAllText(Path.Combine(modulePath, name + ".psm1"), string.Empty);
     }
 
     private static void WriteModuleFiles(
