@@ -70,7 +70,7 @@ internal sealed class ModuleStateManagedDeliveryService
         return new ModuleStateDeliveryExecutionResult
         {
             Operation = "Install",
-            OperationPerformed = result.Status == ManagedModuleInstallStatus.Installed,
+            OperationPerformed = InstallWroteFiles(result),
             RepositoryName = repository.Name,
             RequestedTransport = ModuleStateDeliveryTransport.ManagedModule,
             EffectiveTransport = ModuleStateDeliveryTransport.ManagedModule,
@@ -301,6 +301,10 @@ internal sealed class ModuleStateManagedDeliveryService
                 }
             }
         };
+
+    private static bool InstallWroteFiles(ManagedModuleInstallResult result)
+        => result.Status == ManagedModuleInstallStatus.Installed ||
+           result.DependencyResults.Any(InstallWroteFiles);
 
     private static string? FirstNonEmpty(params string?[] values)
         => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));

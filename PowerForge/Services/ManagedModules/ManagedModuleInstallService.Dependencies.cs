@@ -355,9 +355,15 @@ public sealed partial class ManagedModuleInstallService
         string version,
         ManagedModuleInstallRequest request,
         ManagedModuleVersionRange range)
+        => AllowsInstalledDependencyVersion(version, request.IncludePrerelease, range);
+
+    private static bool AllowsInstalledDependencyVersion(
+        string version,
+        bool includePrerelease,
+        ManagedModuleVersionRange range)
     {
         if (ManagedModuleVersionComparer.IsPrerelease(version) &&
-            !request.IncludePrerelease &&
+            !includePrerelease &&
             !range.AllowsPrerelease)
             return false;
 
@@ -503,19 +509,32 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleInstallRequest request,
         string moduleRoot,
         string modulePath)
-    {
-        if (request.SkipDependencyCheck)
-            return false;
+        => WouldRepairInstalledManifestDependencies(
+            request.Name,
+            moduleRoot,
+            modulePath,
+            request.IncludePrerelease,
+            request.SkipDependencyCheck);
 
-        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        return WouldRepairInstalledManifestDependenciesCore(request, request.Name, moduleRoot, modulePath, visited);
-    }
-
-    private static bool WouldRepairInstalledManifestDependenciesCore(
-        ManagedModuleInstallRequest request,
+    internal static bool WouldRepairInstalledManifestDependencies(
         string moduleName,
         string moduleRoot,
         string modulePath,
+        bool includePrerelease = false,
+        bool skipDependencyCheck = false)
+    {
+        if (skipDependencyCheck)
+            return false;
+
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return WouldRepairInstalledManifestDependenciesCore(moduleName, moduleRoot, modulePath, includePrerelease, visited);
+    }
+
+    private static bool WouldRepairInstalledManifestDependenciesCore(
+        string moduleName,
+        string moduleRoot,
+        string modulePath,
+        bool includePrerelease,
         ISet<string> visited)
     {
         if (!visited.Add(CreateManifestRepairVisitKey(moduleName, modulePath)))
@@ -529,13 +548,13 @@ public sealed partial class ManagedModuleInstallService
         {
             var range = ManagedModuleVersionRange.Parse(dependency.VersionRange);
             var installedVersion = GetInstalledVersions(moduleRoot, dependency.Id)
-                .Where(version => AllowsInstalledDependencyVersion(version, request, range))
+                .Where(version => AllowsInstalledDependencyVersion(version, includePrerelease, range))
                 .LastOrDefault();
             if (installedVersion is null)
                 return true;
 
             var dependencyPath = ResolveInstalledModulePath(moduleRoot, dependency.Id, installedVersion);
-            if (WouldRepairInstalledManifestDependenciesCore(request, dependency.Id, moduleRoot, dependencyPath, visited))
+            if (WouldRepairInstalledManifestDependenciesCore(dependency.Id, moduleRoot, dependencyPath, includePrerelease, visited))
                 return true;
         }
 

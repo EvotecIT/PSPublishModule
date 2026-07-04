@@ -458,4 +458,105 @@ public sealed class ModuleStateRepairPlannerTests
         Assert.Equal("=2.38.0", action.VersionPolicy);
         Assert.True(action.IsRepair);
     }
+
+    [Fact]
+    public void CreateRepairActions_PlansInstallRepairForBrokenManifestDependencyGraph()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var modulePath = WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            ("Company.Core", "1.0.0"));
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule(
+                "Company.Tools",
+                "1.0.0",
+                scope: "CurrentUser",
+                path: modulePath,
+                isEffectiveImportCandidate: true)
+        });
+        var existingActions = new[]
+        {
+            new ModuleStatePlanAction(
+                ModuleStatePlanActionKind.NoAction,
+                "Company.Tools",
+                "1.0.0",
+                "=1.0.0",
+                "Installed module version satisfies desired policy.",
+                targetScope: "CurrentUser",
+                targetRepository: "Local")
+        };
+
+        var action = Assert.Single(new ModuleStateRepairPlanner().CreateRepairActions(
+            inventory,
+            Array.Empty<ModuleStateMaintenanceReceipt>(),
+            existingActions));
+
+        Assert.Equal(ModuleStatePlanActionKind.Install, action.Kind);
+        Assert.Equal("Company.Tools", action.ModuleName);
+        Assert.Equal("1.0.0", action.InstalledVersion);
+        Assert.Equal("=1.0.0", action.VersionPolicy);
+        Assert.Equal("CurrentUser", action.TargetScope);
+        Assert.Equal(moduleRoot.Path, action.TargetPath);
+        Assert.Equal("Local", action.TargetRepository);
+        Assert.True(action.IsRepair);
+        Assert.False(action.Force);
+    }
+
+    [Fact]
+    public void CreateRepairActions_DoesNotPlanManifestRepairForExternalDependency()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var modulePath = WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            ("External.Tools", "9.0.0"));
+        File.WriteAllText(
+            Path.Combine(modulePath, "Company.Tools.psd1"),
+            "@{ ModuleVersion = '1.0.0'; RequiredModules = @(@{ ModuleName = 'External.Tools'; RequiredVersion = '9.0.0'; }); PrivateData = @{ PSData = @{ ExternalModuleDependencies = @('External.Tools') } } }");
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule("Company.Tools", "1.0.0", path: modulePath)
+        });
+        var existingActions = new[]
+        {
+            new ModuleStatePlanAction(
+                ModuleStatePlanActionKind.NoAction,
+                "Company.Tools",
+                "1.0.0",
+                "=1.0.0",
+                "Installed module version satisfies desired policy.")
+        };
+
+        var action = Assert.Single(new ModuleStateRepairPlanner().CreateRepairActions(
+            inventory,
+            Array.Empty<ModuleStateMaintenanceReceipt>(),
+            existingActions));
+
+        Assert.Equal(ModuleStatePlanActionKind.NoAction, action.Kind);
+        Assert.False(action.IsRepair);
+    }
+
+    private static string WriteInstalledModuleManifest(
+        string moduleRoot,
+        string moduleName,
+        string version,
+        params (string Name, string Version)[] dependencies)
+    {
+        var modulePath = Path.Combine(moduleRoot, moduleName, version);
+        Directory.CreateDirectory(modulePath);
+        var requiredModules = dependencies.Length == 0
+            ? string.Empty
+            : "; RequiredModules = @(" + string.Join(
+                ", ",
+                dependencies.Select(static dependency =>
+                    "@{ ModuleName = '" + dependency.Name + "'; RequiredVersion = '" + dependency.Version + "'; }")) + ")";
+        File.WriteAllText(
+            Path.Combine(modulePath, moduleName + ".psd1"),
+            "@{ ModuleVersion = '" + version + "'" + requiredModules + " }");
+        return modulePath;
+    }
 }

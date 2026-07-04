@@ -65,6 +65,10 @@ Install-ManagedModule -Name Company.Tools -Scope CurrentUser -Repository PSGalle
 Install-ManagedModule -Name Company.Tools -RequiredVersion 1.2.0 -ProfileName CompanyModules -AcceptLicense
 ```
 
+Default install is latest-first for broad requests. When the caller does not pin an exact version, `Install-ManagedModule` resolves the repository-selected version first, then compares that selected version with the target module root. If the repository has a newer version than the locally installed copy, the newer version is installed side-by-side. If the selected version is already installed, the command performs a cheap installed-manifest dependency health check. Missing or unsatisfied manifest `RequiredModules` are repaired automatically without forcing a healthy root-module reinstall.
+
+Exact-version installs keep the fast local no-op path. `-Version`, `-RequiredVersion`, or an exact `-VersionPolicy` can skip repository work when the selected installed version is already healthy. Use `-Force` only when the selected root module version itself should be replaced.
+
 ### Update
 
 ```powershell
@@ -80,6 +84,8 @@ Repair-ManagedModule -Latest -Repository PSGallery -Plan -ShowSummary
 Repair-ManagedModule -Family Graph -Repository PSGallery -Plan -ShowSummary
 Repair-ManagedModule -MaintenanceReceiptPath .\module-maintenance.json -Repository CompanyModules -Plan
 ```
+
+Repair plans include manifest dependency health. An installed module whose own version is otherwise fine can still receive an install-repair action when its manifest `RequiredModules` are missing or outside the declared version policy. External runtime dependencies declared through `PrivateData.PSData.ExternalModuleDependencies` are not treated as managed install dependencies.
 
 ### Installed Inventory
 
@@ -165,6 +171,8 @@ Those scenarios should continue through native provider commands until they have
 This checklist is the guardrail for replacing common PowerShellGet and PSResourceGet usage without surprises. Matching a parameter name is not enough; each item needs behavior proof, tests, and benchmark evidence when it can affect speed.
 
 - [x] `Install-ManagedModule` supports common `Install-Module` flows: `-Name`, `-Repository`, `-RequiredVersion`, `-MinimumVersion`, `-MaximumVersion`, `-Scope`, `-Force`, `-AllowClobber`, `-AcceptLicense`, `-Credential`, `-WhatIf`, and `-Confirm`.
+- [x] `Install-ManagedModule` resolves repository-selected latest versions for broad requests before treating a local install as satisfying the operation, matching PSResourceGet-style latest-first expectations without giving up exact-version no-op speed.
+- [x] `Install-ManagedModule` repairs missing or unsatisfied manifest dependencies when the selected installed version is already present and broken, without requiring `-Force`.
 - [x] `Update-ManagedModule` supports named updates and no-name estate updates from selected module roots, matching the common `Update-Module` operator habit.
 - [x] `Save-ManagedModule` supports dependency closure, explicit path, version policies, license acceptance, forced replacement, and import-validation benchmark proof.
 - [x] `Find-ManagedModule` supports repository/profile lookup, wildcard module names, all versions, prerelease inclusion, and fast latest-version lookup.
@@ -217,6 +225,8 @@ Cmdlets should map parameters into these models and write result objects. They s
 - Credentials are resolved before managed repository access. The core engine receives credential values or no credential; it does not call external credential helpers.
 - Retries, timeouts, cancellation, proxy behavior, endpoint selection, and HTTP error messages belong in the managed repository client. The public PowerShell Gallery default resolves read operations through its NuGet v2 endpoint to avoid slow or blocked v3 service-index probes.
 - Side-by-side versions are valid when version policies ask for exact or compatible copies. Forced replacement stages first and rolls back on promotion failure.
+- Broad install requests select from the repository first, then decide whether the selected version is already installed. This means `Install-ManagedModule -Name Microsoft.Graph` can install `2.38.0` side-by-side when `2.37.0` is present and `2.38.0` is the repository-selected version.
+- When the selected installed version is already present, install checks the installed manifest dependency graph and repairs missing or unsatisfied managed dependencies unless dependency checks are explicitly skipped.
 - Downgrades require a dedicated explicit downgrade policy; `-Force` alone is not a downgrade request.
 - Loaded modules can block unsafe updates unless the caller explicitly allows that risk.
 - Cross-scope repairs must target the requested scope and must not treat a satisfying copy in another scope as equivalent.
@@ -228,9 +238,11 @@ Cmdlets should map parameters into these models and write result objects. They s
 
 - `Install-ManagedModule -Force` and `Save-ManagedModule -Force` replace the exact selected module version when that version already exists in the target root.
 - Without `-Force`, installing or saving an exact version that already exists is a no-op plan and does not write files.
+- `-Force` is not required for dependency repair. If the repository-selected installed version is present but its managed manifest dependencies are missing or unsatisfied, install repairs those dependencies while leaving the healthy root module in place.
 - `Update-ManagedModule -Force` reinstalls the selected target version when the selected target is already the installed version.
 - `Update-ManagedModule -Force` does not silently downgrade a newer installed version to an older selected version. Downgrade behavior needs a separate explicit policy so stale-version repair and operator mistakes do not collapse into the same switch.
 - `Repair-ManagedModule -Force` marks prepared managed/private install, update, and save delivery commands as forced. In `-Plan` mode this is visible on the prepared command object and command arguments, but no mutation occurs.
+- `Repair-ManagedModule` can plan a non-forced install repair for an installed module whose manifest dependency graph is broken. The repair action targets the installed root module version so the managed installer can restore the dependency closure without replacing the healthy root module unless `-Force` is supplied.
 - `-Force` does not imply destructive old-version cleanup. Cleanup remains a separate maintenance/repair decision.
 - `Publish-ManagedModule -Force` bypasses managed preflight duplicate/version guards where the target repository supports replacement or accepts the pushed package. It does not guarantee that a remote feed will overwrite an existing package.
 
