@@ -437,6 +437,41 @@ public sealed class SaveManagedModuleCommandTests
     }
 
     [Fact]
+    public void SaveManagedModule_as_nupkg_plan_resolves_latest_when_existing_package_is_older()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateToolFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.2.0.0.nupkg"),
+            "Company.Tools",
+            "2.0.0",
+            files: CreateToolFiles("2.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("AsNupkg")
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedModuleInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.False(plan.ExistingVersionFound);
+        Assert.Equal("2.0.0", plan.Version);
+        Assert.Equal(ManagedModuleInstallPlanAction.Install, plan.Action);
+        Assert.Equal(Path.Combine(destination.Path, "Company.Tools.2.0.0.nupkg"), plan.ModulePath);
+        Assert.True(plan.WouldWriteFiles);
+    }
+
+    [Fact]
     public void SaveManagedModule_as_nupkg_does_not_treat_longer_package_id_as_existing_version()
     {
         using var feed = new TemporaryDirectory();

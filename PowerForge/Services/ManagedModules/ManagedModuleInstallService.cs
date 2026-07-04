@@ -459,13 +459,13 @@ public sealed partial class ManagedModuleInstallService
 
     private static bool CanSelectInstalledNoOpBeforeRepositoryResolution(ManagedModuleInstallRequest request)
     {
-        if (request.SaveAsNupkg)
-            return true;
-
         if (!string.IsNullOrWhiteSpace(request.Version))
             return true;
 
         var range = ResolveVersionRange(request.VersionPolicy, request.MinimumVersion, request.MaximumVersion);
+        if (request.SaveAsNupkg)
+            return !range.IsUnbounded;
+
         return range.ExactVersion is not null;
     }
 
