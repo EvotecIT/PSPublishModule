@@ -61,11 +61,15 @@ internal static class ManagedModuleCommandSupport
                 throw new InvalidOperationException("Specify either ProfileName or Repository, not both.");
 
             var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(profileName!);
+            var profileRepositoryName = ResolveProfileRepositoryName(profile, profileName!);
+            if (TryCreateScriptRepositoryFromProfileName(cmdlet, profile.RepositoryName, profileName!, out var scriptRepository))
+                return scriptRepository!;
+
             var source = FirstNonEmpty(profile.RepositoryUri, profile.RepositorySourceUri, profile.Repository, profile.RepositoryName, profileName)
                 ?? throw new InvalidOperationException($"Profile '{profileName}' does not define a repository source.");
             return CreateScriptRepositoryFromSource(
                 cmdlet,
-                ResolveProfileRepositoryName(profile, profileName!),
+                profileRepositoryName,
                 source,
                 profile.Trusted);
         }
@@ -228,6 +232,40 @@ internal static class ManagedModuleCommandSupport
             resolvedSource,
             ManagedModuleRepositoryKind.Auto,
             resolvedRegisteredRepositoryName is not null ? resolvedRegisteredRepositoryTrusted : trusted);
+    }
+
+    private static bool TryCreateScriptRepositoryFromProfileName(
+        PSCmdlet cmdlet,
+        string? repositoryName,
+        string profileName,
+        out ManagedModuleRepository? repository)
+    {
+        repository = null;
+        var sourceName = FirstNonEmpty(repositoryName, profileName);
+        if (string.IsNullOrWhiteSpace(sourceName))
+            return false;
+
+        try
+        {
+            var resolvedSource = ResolveScriptRepositorySource(
+                cmdlet,
+                sourceName!,
+                out var resolvedRegisteredRepositoryName,
+                out var resolvedRegisteredRepositoryTrusted);
+            if (string.IsNullOrWhiteSpace(resolvedRegisteredRepositoryName))
+                return false;
+
+            repository = new ManagedModuleRepository(
+                resolvedRegisteredRepositoryName!,
+                resolvedSource,
+                ManagedModuleRepositoryKind.Auto,
+                resolvedRegisteredRepositoryTrusted);
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     private static string ResolveRepositorySource(

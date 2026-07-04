@@ -4,6 +4,7 @@ using PSPublishModule;
 
 namespace PowerForge.Tests;
 
+[Collection("ModuleRepositoryProfileEnvironment")]
 public sealed class SaveManagedScriptCommandTests
 {
     [Fact]
@@ -227,6 +228,61 @@ public sealed class SaveManagedScriptCommandTests
     }
 
     [Fact]
+    public void SaveManagedScript_profile_name_prefers_registered_script_source_location()
+    {
+        using var moduleFeed = new TemporaryDirectory();
+        using var scriptFeed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        TestPackageFactory.Create(
+            Path.Combine(scriptFeed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            });
+        new ModuleRepositoryProfileStore().SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "Company",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "CompanyModules",
+            RepositoryUri = moduleFeed.Path,
+            Trusted = true
+        });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddScript($$"""
+            function Get-PSRepository {
+                param([string] $Name)
+                [pscustomobject]@{
+                    Name = $Name
+                    SourceLocation = '{{EscapePowerShellSingleQuoted(moduleFeed.Path)}}'
+                    ScriptSourceLocation = '{{EscapePowerShellSingleQuoted(scriptFeed.Path)}}'
+                    InstallationPolicy = 'Trusted'
+                }
+            }
+            """);
+        _ = ps.Invoke();
+        AssertNoPowerShellErrors(ps);
+        ps.Commands.Clear();
+
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("ProfileName", "Company")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptSaveResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptSaveStatus.Saved, result.Status);
+        Assert.Equal(scriptFeed.Path, result.RepositorySource);
+        Assert.True(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
+    }
+
+    [Fact]
     public void SaveManagedScript_rejects_package_without_script_metadata()
     {
         using var feed = new TemporaryDirectory();
@@ -283,9 +339,33 @@ public sealed class SaveManagedScriptCommandTests
     private static string EscapePowerShellSingleQuoted(string value)
         => value.Replace("'", "''", StringComparison.Ordinal);
 
+    private static IDisposable UseProfileStore(string root)
+    {
+        Directory.CreateDirectory(root);
+        return new TestEnvironmentVariable(
+            "POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH",
+            Path.Combine(root, "profiles.json"));
+    }
+
     private static void AssertNoPowerShellErrors(PowerShell ps)
     {
         if (ps.HadErrors)
             throw new InvalidOperationException(string.Join(Environment.NewLine, ps.Streams.Error.Select(error => error.ToString())));
+    }
+
+    private sealed class TestEnvironmentVariable : IDisposable
+    {
+        private readonly string _name;
+        private readonly string? _previousValue;
+
+        internal TestEnvironmentVariable(string name, string value)
+        {
+            _name = name;
+            _previousValue = Environment.GetEnvironmentVariable(name);
+            Environment.SetEnvironmentVariable(name, value);
+        }
+
+        public void Dispose()
+            => Environment.SetEnvironmentVariable(_name, _previousValue);
     }
 }
