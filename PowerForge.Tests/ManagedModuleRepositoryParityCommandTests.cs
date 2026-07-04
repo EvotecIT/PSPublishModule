@@ -152,6 +152,51 @@ public sealed class ManagedModuleRepositoryParityCommandTests
         Assert.Equal("/tmp/powerforge-feed", profile.RepositoryUri);
     }
 
+    [Theory]
+    [InlineData("Local", RepositoryApiVersion.Local)]
+    [InlineData("NugetServer", RepositoryApiVersion.NugetServer)]
+    public void RegisterManagedModuleRepository_accepts_psresourceget_api_version_spellings(string apiVersion, RepositoryApiVersion expected)
+    {
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        using var ps = CreatePowerShellWithModuleImported();
+
+        ps.AddCommand("Register-ManagedModuleRepository")
+            .AddParameter("Name", "Internal")
+            .AddParameter("Uri", "https://packages.example.test/nuget/v3/index.json")
+            .AddParameter("ApiVersion", apiVersion)
+            .AddParameter("PassThru");
+
+        var result = Assert.IsType<ModuleRepositoryProfileResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal(expected, result.ApiVersion);
+        Assert.Equal(expected, Assert.Single(new ModuleRepositoryProfileStore().GetProfiles()).ApiVersion);
+    }
+
+    [Fact]
+    public void RegisterManagedModuleRepository_repository_hashtable_accepts_psresourceget_api_version_spellings()
+    {
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        using var ps = CreatePowerShellWithModuleImported();
+        var repository = new Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Name"] = "Internal",
+            ["Uri"] = "https://packages.example.test/nuget/v3/index.json",
+            ["ApiVersion"] = "NugetServer"
+        };
+
+        ps.AddCommand("Register-ManagedModuleRepository")
+            .AddParameter("Repository", new[] { repository })
+            .AddParameter("PassThru");
+
+        var result = Assert.IsType<ModuleRepositoryProfileResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal(RepositoryApiVersion.NugetServer, result.ApiVersion);
+    }
+
     [Fact]
     public void RegisterManagedModuleRepository_detects_azure_artifacts_url_profiles()
     {

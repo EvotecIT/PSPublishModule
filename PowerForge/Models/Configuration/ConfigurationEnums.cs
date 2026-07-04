@@ -180,6 +180,10 @@ public enum RepositoryApiVersion
 {
     /// <summary>Automatic/default behavior (omit version unless required).</summary>
     Auto,
+    /// <summary>Local filesystem repository API.</summary>
+    Local,
+    /// <summary>NuGet.Server repository API.</summary>
+    NugetServer,
     /// <summary>NuGet v2 API.</summary>
     V2,
     /// <summary>NuGet v3 API.</summary>
