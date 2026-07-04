@@ -46,6 +46,12 @@ public sealed class ManagedScriptSavePlan
 
     /// <summary>Expected SHA256 hash supplied by the caller, when package integrity verification was requested.</summary>
     public string? ExpectedPackageSha256 { get; set; }
+
+    /// <summary>True when repository metadata indicates the selected package requires license acceptance.</summary>
+    public bool LicenseAcceptanceRequired { get; set; }
+
+    /// <summary>Reason the planned operation cannot write, when applicable.</summary>
+    public string? BlockReason { get; set; }
 }
 
 /// <summary>
@@ -60,5 +66,8 @@ public enum ManagedScriptSavePlanAction
     SkipExisting,
 
     /// <summary>Replace an existing script because force was requested.</summary>
-    Reinstall
+    Reinstall,
+
+    /// <summary>Cannot write because the target path already has another version or unreadable metadata and force was not requested.</summary>
+    BlockedExisting
 }

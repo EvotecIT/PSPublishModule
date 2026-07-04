@@ -64,8 +64,9 @@ public sealed class PowerShellRepositorySourceResolver
             return false;
 
         var name = repositoryName!.Trim();
-        var resolved = TryResolveWithCommand(cmdlet, "Get-PSResourceRepository", name, new[] { "Uri", "SourceLocation" }, out source, out trusted) ||
-                       TryResolveWithCommand(cmdlet, "Get-PSRepository", name, new[] { "ScriptSourceLocation", "SourceLocation" }, out source, out trusted);
+        var resolved = TryResolveWithCommand(cmdlet, "Get-PSRepository", name, new[] { "ScriptSourceLocation" }, out source, out trusted) ||
+                       TryResolveWithCommand(cmdlet, "Get-PSResourceRepository", name, new[] { "Uri", "SourceLocation" }, out source, out trusted) ||
+                       TryResolveWithCommand(cmdlet, "Get-PSRepository", name, new[] { "SourceLocation" }, out source, out trusted);
         if (resolved)
             source = NormalizePowerShellGetScriptSource(source);
 
@@ -150,7 +151,7 @@ public sealed class PowerShellRepositorySourceResolver
         if (string.IsNullOrWhiteSpace(source))
             return source;
 
-        var trimmed = source!.Trim();
+        var trimmed = source!.Trim().TrimEnd('/');
         const string scriptEndpoint = "/items/psscript";
         return trimmed.EndsWith(scriptEndpoint, StringComparison.OrdinalIgnoreCase)
             ? trimmed.Substring(0, trimmed.Length - scriptEndpoint.Length).TrimEnd('/')

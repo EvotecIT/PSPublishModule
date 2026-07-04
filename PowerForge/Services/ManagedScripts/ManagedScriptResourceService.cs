@@ -34,11 +34,34 @@ public sealed class ManagedScriptResourceService
         Validate(request);
         ManagedModuleTrustEvaluator.ThrowIfRepositoryRejected(request.Repository, request.TrustPolicy);
 
-        var versionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken).ConfigureAwait(false);
         var destinationPath = ResolveDestinationPath(request.DestinationPath);
         var scriptPath = ResolveScriptPath(destinationPath, request.Name);
         var existingVersion = TryReadExistingVersion(scriptPath);
-        var action = ResolvePlanAction(existingVersion, versionInfo.Version, request.Force);
+        var satisfiedExistingVersion = TryResolveSatisfiedExistingVersion(request, existingVersion);
+        if (satisfiedExistingVersion is not null)
+        {
+            return new ManagedScriptSavePlan
+            {
+                Name = request.Name.Trim(),
+                Version = satisfiedExistingVersion,
+                Action = ManagedScriptSavePlanAction.SkipExisting,
+                RepositoryName = request.Repository.Name,
+                RepositorySource = request.Repository.Source,
+                DestinationPath = destinationPath,
+                ScriptPath = scriptPath,
+                ExistingVersion = existingVersion,
+                WouldWriteFiles = false,
+                RequestedVersion = request.Version,
+                MinimumVersion = request.MinimumVersion,
+                MaximumVersion = request.MaximumVersion,
+                VersionPolicy = request.VersionPolicy,
+                ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256)
+            };
+        }
+
+        var versionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken).ConfigureAwait(false);
+        var action = ResolvePlanAction(File.Exists(scriptPath), existingVersion, versionInfo.Version, request.Force);
+        var wouldWriteFiles = action is ManagedScriptSavePlanAction.Save or ManagedScriptSavePlanAction.Reinstall;
 
         return new ManagedScriptSavePlan
         {
@@ -50,12 +73,14 @@ public sealed class ManagedScriptResourceService
             DestinationPath = destinationPath,
             ScriptPath = scriptPath,
             ExistingVersion = existingVersion,
-            WouldWriteFiles = action != ManagedScriptSavePlanAction.SkipExisting,
+            WouldWriteFiles = wouldWriteFiles,
             RequestedVersion = request.Version,
             MinimumVersion = request.MinimumVersion,
             MaximumVersion = request.MaximumVersion,
             VersionPolicy = request.VersionPolicy,
-            ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256)
+            ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
+            LicenseAcceptanceRequired = versionInfo.RequireLicenseAcceptance,
+            BlockReason = ResolvePlanBlockReason(action, scriptPath, existingVersion, versionInfo.Version)
         };
     }
 
@@ -70,13 +95,20 @@ public sealed class ManagedScriptResourceService
         ManagedModuleTrustEvaluator.ThrowIfRepositoryRejected(request.Repository, request.TrustPolicy);
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var destinationPath = ResolveDestinationPath(request.DestinationPath);
+        var scriptPath = ResolveScriptPath(destinationPath, request.Name);
+        var existingVersion = TryReadExistingVersion(scriptPath);
+        var satisfiedExistingVersion = TryResolveSatisfiedExistingVersion(request, existingVersion);
+        if (satisfiedExistingVersion is not null)
+        {
+            stopwatch.Stop();
+            return CreateSkippedResult(request, satisfiedExistingVersion, destinationPath, scriptPath, existingVersion, stopwatch.Elapsed, TimeSpan.Zero);
+        }
+
         var versionResolutionStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var versionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken).ConfigureAwait(false);
         versionResolutionStopwatch.Stop();
 
-        var destinationPath = ResolveDestinationPath(request.DestinationPath);
-        var scriptPath = ResolveScriptPath(destinationPath, request.Name);
-        var existingVersion = TryReadExistingVersion(scriptPath);
         var existingSelectedVersion = !string.IsNullOrWhiteSpace(existingVersion) &&
                                       ManagedModuleVersionComparer.Instance.Compare(existingVersion!, versionInfo.Version) == 0 &&
                                       !request.Force;
@@ -250,24 +282,76 @@ public sealed class ManagedScriptResourceService
         if (preferred is not null)
             return preferred.Entry;
 
-        if (candidates.Length == 1)
-            return candidates[0].Entry;
-
         if (candidates.Length == 0)
             throw new InvalidOperationException($"Package '{packagePath}' does not contain a PowerShell script resource.");
 
-        throw new InvalidOperationException($"Package '{packagePath}' contains multiple script files and no '{expectedName}' payload.");
+        throw new InvalidOperationException($"Package '{packagePath}' does not contain expected script payload '{expectedName}'.");
     }
 
-    private static ManagedScriptSavePlanAction ResolvePlanAction(string? existingVersion, string selectedVersion, bool force)
+    private static ManagedScriptSavePlanAction ResolvePlanAction(bool scriptExists, string? existingVersion, string selectedVersion, bool force)
     {
-        if (force && !string.IsNullOrWhiteSpace(existingVersion))
-            return ManagedScriptSavePlanAction.Reinstall;
-        if (!string.IsNullOrWhiteSpace(existingVersion) &&
-            ManagedModuleVersionComparer.Instance.Compare(existingVersion!, selectedVersion) == 0)
-            return ManagedScriptSavePlanAction.SkipExisting;
+        if (scriptExists)
+        {
+            if (force)
+                return ManagedScriptSavePlanAction.Reinstall;
+            if (!string.IsNullOrWhiteSpace(existingVersion) &&
+                ManagedModuleVersionComparer.Instance.Compare(existingVersion!, selectedVersion) == 0)
+            {
+                return ManagedScriptSavePlanAction.SkipExisting;
+            }
+
+            return ManagedScriptSavePlanAction.BlockedExisting;
+        }
 
         return ManagedScriptSavePlanAction.Save;
+    }
+
+    private static string? ResolvePlanBlockReason(
+        ManagedScriptSavePlanAction action,
+        string scriptPath,
+        string? existingVersion,
+        string selectedVersion)
+        => action == ManagedScriptSavePlanAction.BlockedExisting
+            ? $"Script '{scriptPath}' already exists with version '{existingVersion ?? "unknown"}'. Use Force to replace it with version '{selectedVersion}'."
+            : null;
+
+    private static string? TryResolveSatisfiedExistingVersion(ManagedScriptSaveRequest request, string? existingVersion)
+    {
+        if (request.Force ||
+            RequiresPackageVerificationBeforeSkip(request) ||
+            !HasConstrainedVersionRequest(request) ||
+            string.IsNullOrWhiteSpace(existingVersion))
+        {
+            return null;
+        }
+
+        return IsExistingVersionSatisfied(request, existingVersion!)
+            ? existingVersion
+            : null;
+    }
+
+    private static bool HasConstrainedVersionRequest(ManagedScriptSaveRequest request)
+        => !string.IsNullOrWhiteSpace(request.Version) ||
+           !string.IsNullOrWhiteSpace(request.MinimumVersion) ||
+           !string.IsNullOrWhiteSpace(request.MaximumVersion) ||
+           !string.IsNullOrWhiteSpace(request.VersionPolicy);
+
+    private static bool IsExistingVersionSatisfied(ManagedScriptSaveRequest request, string existingVersion)
+    {
+        if (!string.IsNullOrWhiteSpace(request.Version))
+            return ManagedModuleVersionComparer.Instance.Compare(existingVersion, request.Version!.Trim()) == 0;
+
+        var range = ResolveVersionRange(request.VersionPolicy, request.MinimumVersion, request.MaximumVersion);
+        if (range.IsUnbounded)
+            return false;
+        if (ManagedModuleVersionComparer.IsPrerelease(existingVersion) &&
+            !request.IncludePrerelease &&
+            !range.AllowsPrerelease)
+        {
+            return false;
+        }
+
+        return range.IsSatisfiedBy(existingVersion);
     }
 
     private string? TryReadExistingVersion(string scriptPath)

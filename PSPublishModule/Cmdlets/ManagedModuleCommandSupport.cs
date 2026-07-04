@@ -62,7 +62,7 @@ internal static class ManagedModuleCommandSupport
 
             var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(profileName!);
             var profileRepositoryName = ResolveProfileRepositoryName(profile, profileName!);
-            if (TryCreateScriptRepositoryFromProfileName(cmdlet, profile.RepositoryName, profileName!, out var scriptRepository))
+            if (TryCreateScriptRepositoryFromProfileName(cmdlet, profile.RepositoryName, profileName!, profile.Trusted, out var scriptRepository))
                 return scriptRepository!;
 
             var source = FirstNonEmpty(profile.RepositoryUri, profile.RepositorySourceUri, profile.Repository, profile.RepositoryName, profileName)
@@ -238,6 +238,7 @@ internal static class ManagedModuleCommandSupport
         PSCmdlet cmdlet,
         string? repositoryName,
         string profileName,
+        bool profileTrusted,
         out ManagedModuleRepository? repository)
     {
         repository = null;
@@ -259,7 +260,7 @@ internal static class ManagedModuleCommandSupport
                 resolvedRegisteredRepositoryName!,
                 resolvedSource,
                 ManagedModuleRepositoryKind.Auto,
-                resolvedRegisteredRepositoryTrusted);
+                profileTrusted);
             return true;
         }
         catch (InvalidOperationException)
@@ -334,9 +335,10 @@ internal static class ManagedModuleCommandSupport
     private static string NormalizePowerShellGetScriptSource(string source)
     {
         const string scriptEndpoint = "/items/psscript";
-        return source.EndsWith(scriptEndpoint, StringComparison.OrdinalIgnoreCase)
-            ? source.Substring(0, source.Length - scriptEndpoint.Length).TrimEnd('/')
-            : source;
+        var trimmed = source.Trim().TrimEnd('/');
+        return trimmed.EndsWith(scriptEndpoint, StringComparison.OrdinalIgnoreCase)
+            ? trimmed.Substring(0, trimmed.Length - scriptEndpoint.Length).TrimEnd('/')
+            : trimmed;
     }
 
     internal static bool HasWildcard(string value)
