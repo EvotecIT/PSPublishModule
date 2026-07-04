@@ -241,7 +241,7 @@ public sealed partial class ManagedModuleInstallService
             {
                 installLockWaitElapsed += initialLockWaitElapsed;
                 if (CanSelectInstalledNoOpBeforeRepositoryResolution(request) &&
-                    TrySelectInstalledNoOpVersion(request, moduleRoot, context, out var installedVersion))
+                    TrySelectInstalledNoOpVersion(request, moduleRoot, context, out var installedVersion, allowLicenseOnlySavedPackagePlan: request.SaveAsNupkg))
                 {
                     installedNoOpVersion = installedVersion;
                     installedNoOpModulePath = ResolveNoOpTargetPath(request, moduleRoot, request.Name, installedVersion);
@@ -471,7 +471,7 @@ public sealed partial class ManagedModuleInstallService
 
         var range = ResolveVersionRange(request.VersionPolicy, request.MinimumVersion, request.MaximumVersion);
         if (request.SaveAsNupkg)
-            return !range.IsUnbounded;
+            return range.ExactVersion is not null || range.MaximumVersion is not null;
 
         return range.ExactVersion is not null;
     }

@@ -439,7 +439,7 @@ public sealed class SaveManagedModuleCommandTests
     }
 
     [Fact]
-    public void SaveManagedModule_as_nupkg_plan_detects_existing_package_for_version_range()
+    public void SaveManagedModule_as_nupkg_plan_detects_existing_package_for_bounded_version_range()
     {
         using var destination = new TemporaryDirectory();
         var packagePath = Path.Combine(destination.Path, "Company.Tools.1.2.0.nupkg");
@@ -456,6 +456,7 @@ public sealed class SaveManagedModuleCommandTests
             .AddParameter("RepositoryName", "Local")
             .AddParameter("Path", destination.Path)
             .AddParameter("MinimumVersion", "1.0.0")
+            .AddParameter("MaximumVersion", "1.9.9")
             .AddParameter("AsNupkg")
             .AddParameter("Plan");
         var results = ps.Invoke();
@@ -570,6 +571,30 @@ public sealed class SaveManagedModuleCommandTests
     }
 
     [Fact]
+    public void SaveManagedModule_as_nupkg_surfaces_existing_license_requirement_offline()
+    {
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateToolFiles("1.0.0"),
+            requireLicenseAcceptance: true);
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", Path.Combine(destination.Path, "Unavailable"))
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AsNupkg");
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("requires license acceptance", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void SaveManagedModule_as_nupkg_plan_marks_existing_package_with_missing_dependencies_as_writing()
     {
         using var feed = new TemporaryDirectory();
@@ -598,6 +623,39 @@ public sealed class SaveManagedModuleCommandTests
         Assert.True(plan.ExistingVersionFound);
         Assert.Equal(ManagedModuleInstallPlanAction.SkipExisting, plan.Action);
         Assert.True(plan.WouldWriteFiles);
+    }
+
+    [Fact]
+    public void SaveManagedModule_as_nupkg_minimum_version_resolves_latest_before_skip()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateToolFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.2.0.0.nupkg"),
+            "Company.Tools",
+            "2.0.0",
+            files: CreateToolFiles("2.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("MinimumVersion", "1.0.0")
+            .AddParameter("AsNupkg");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal("2.0.0", result.Version);
+        Assert.Equal(Path.Combine(destination.Path, "Company.Tools.2.0.0.nupkg"), result.ModulePath);
+        Assert.True(File.Exists(Path.Combine(destination.Path, "Company.Tools.2.0.0.nupkg")));
     }
 
     [Fact]

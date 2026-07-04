@@ -138,11 +138,6 @@ public sealed partial class ManagedModuleInstallService
                             cacheDirectory,
                             context,
                             cancellationToken).ConfigureAwait(false);
-                        existing.DependencyResults = dependencyResults;
-                        existing.DependencyElapsed = dependencyStopwatch.Elapsed;
-                        existing.RepositoryRequestCount += SumRepositoryRequestCount(dependencyResults);
-                        existing.PackageRepositoryRequestCount += SumPackageRepositoryRequestCount(dependencyResults);
-                        existing.PackageRepositoryRedirectCount += SumPackageRepositoryRedirectCount(dependencyResults);
                         return existing;
                     }
 
@@ -166,11 +161,6 @@ public sealed partial class ManagedModuleInstallService
                             cacheDirectory,
                             context,
                             cancellationToken).ConfigureAwait(false);
-                        existing.DependencyResults = dependencyResults;
-                        existing.DependencyElapsed = dependencyStopwatch.Elapsed;
-                        existing.RepositoryRequestCount += SumRepositoryRequestCount(dependencyResults);
-                        existing.PackageRepositoryRequestCount += SumPackageRepositoryRequestCount(dependencyResults);
-                        existing.PackageRepositoryRedirectCount += SumPackageRepositoryRedirectCount(dependencyResults);
                         return existing;
                     }
                 }
