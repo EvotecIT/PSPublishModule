@@ -74,6 +74,9 @@ public abstract class BenchmarkDslCommand : PSCmdlet
         "comparison",
         "readme",
         "artifacts",
+        "input",
+        "inputInt",
+        "inputBool",
         "New-BenchmarkSuite",
         "Add-BenchmarkCases",
         "Add-BenchmarkCase",
@@ -91,7 +94,10 @@ public abstract class BenchmarkDslCommand : PSCmdlet
         "Add-BenchmarkMetric",
         "Add-BenchmarkComparison",
         "Add-BenchmarkReadmeBlock",
-        "Set-BenchmarkArtifacts"
+        "Set-BenchmarkArtifacts",
+        "Get-BenchmarkInput",
+        "Get-BenchmarkIntInput",
+        "Get-BenchmarkBoolInput"
     };
 }
 

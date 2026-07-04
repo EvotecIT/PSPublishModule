@@ -95,6 +95,9 @@ binding.
 | `comparison` | `Add-BenchmarkComparison` |
 | `readme` | `Add-BenchmarkReadmeBlock` |
 | `artifacts` | `Set-BenchmarkArtifacts` |
+| `input` | `Get-BenchmarkInput` |
+| `inputInt` | `Get-BenchmarkIntInput` |
+| `inputBool` | `Get-BenchmarkBoolInput` |
 
 The managed-module provider comparison in
 `Benchmarks/ManagedModules/managed-modules.benchmark.ps1` is intentionally a
@@ -102,6 +105,29 @@ normal benchmark spec. It keeps PSPublishModule-specific module scenarios,
 provider command mappings, native-provider install safety, validation, and
 managed-result metrics in the benchmark file while the reusable runner,
 artifact, comparison, profile, and README update mechanics stay in PowerForge.
+
+### Benchmark Inputs
+
+Use `input`, `inputInt`, and `inputBool` to read values supplied through
+`Invoke-BenchmarkSuite -Variable`. Specs should not parse `$BenchmarkVariables`
+or carry local string/int/bool helper functions.
+
+```powershell
+$server = input Server localhost
+$rows = inputInt RowCount 1000, 5000, 20000
+$keepTables = inputBool KeepTables
+
+benchmark 'sql-import' {
+    caseSource {
+        foreach ($rowCount in $rows) {
+            [pscustomobject]@{ Name = "$rowCount rows"; RowCount = $rowCount }
+        }
+    }
+}
+```
+
+Input helpers keep benchmark files focused on benchmark intent. Use `-Required`
+when a value has no safe default.
 
 ## Running A Suite
 

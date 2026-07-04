@@ -1,4 +1,8 @@
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
+$repositoryName = input RepositoryName PSGallery
+$repositoryUri = input RepositoryUri 'https://www.powershellgallery.com/api/v3/index.json'
+$moduleFastSource = input ModuleFastSource 'https://pwsh.gallery/index.json'
+$moduleFastModulePath = input ModuleFastPath
 
 benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\ManagedModules') {
     policy -Warmup 1 -Iterations 3 -Order Rotated -OutlierMode None
@@ -15,14 +19,10 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
     setup {
         param($case, $run)
 
-        $run.RepositoryName = $BenchmarkVariables['RepositoryName']
-        if (-not $run.RepositoryName) { $run.RepositoryName = 'PSGallery' }
-        $run.RepositoryUri = $BenchmarkVariables['RepositoryUri']
-        if (-not $run.RepositoryUri) { $run.RepositoryUri = 'https://www.powershellgallery.com/api/v3/index.json' }
-        $run.ModuleFastSource = $BenchmarkVariables['ModuleFastSource']
-        if (-not $run.ModuleFastSource) { $run.ModuleFastSource = 'https://pwsh.gallery/index.json' }
-        $run.ModuleFastModulePath = $BenchmarkVariables['ModuleFastPath']
-        if (-not $run.ModuleFastModulePath) { $run.ModuleFastModulePath = '' }
+        $run.RepositoryName = $repositoryName
+        $run.RepositoryUri = $repositoryUri
+        $run.ModuleFastSource = $moduleFastSource
+        $run.ModuleFastModulePath = $moduleFastModulePath
         $hashBytes = [System.Security.Cryptography.SHA1]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($run.OutputDirectory))
         $hash = [System.BitConverter]::ToString($hashBytes).Replace('-', '').Substring(0, 12).ToLowerInvariant()
         $run.WorkRoot = Join-Path ([System.IO.Path]::GetTempPath()) "pf-mm-$hash"

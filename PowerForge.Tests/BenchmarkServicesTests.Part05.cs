@@ -250,10 +250,11 @@ benchmark 'policy-suite' {
     public void DslRuntime_ExposesBenchmarkVariablesToSpecs()
     {
         var script = ScriptBlock.Create(@"
-$caseName = $BenchmarkVariables['CaseName']
-$rows = $BenchmarkVariable['Rows']
+$caseName = input CaseName DefaultCase
+$rows = inputInt Rows 1, 2
+$keep = inputBool KeepTables
 benchmark 'variables' {
-    caseSource { [pscustomobject]@{ Name = $caseName; Rows = $rows } }
+    caseSource { [pscustomobject]@{ Name = $caseName; Rows = ($rows -join ','); KeepTables = $keep } }
     axis Operation Run
     axis Engine Managed
     engine Managed { operation Run { param($case, $run) } }
@@ -270,6 +271,44 @@ benchmark 'variables' {
 
         Assert.Equal("FromVariable", item.Scenario);
         Assert.Equal("42", item.Values["Rows"]);
+        Assert.Equal(false, item.Values["KeepTables"]);
+    }
+
+    [Fact]
+    public void DslRuntime_BenchmarkInputHelpersUseDefaultsAndRejectMissingRequiredValues()
+    {
+        var script = ScriptBlock.Create(@"
+$caseName = input CaseName DefaultCase
+$rows = inputInt Rows 5, 10
+$enabled = inputBool Enabled $true
+benchmark 'defaults' {
+    caseSource { [pscustomobject]@{ Name = $caseName; Rows = ($rows -join ','); Enabled = $enabled } }
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var item = Assert.Single(new PowerShellBenchmarkRunner().Plan(Assert.Single(EvaluateBenchmarkDsl(script))));
+
+        Assert.Equal("DefaultCase", item.Scenario);
+        Assert.Equal("5,10", item.Values["Rows"]);
+        Assert.Equal(true, item.Values["Enabled"]);
+
+        var required = ScriptBlock.Create(@"
+$caseName = input CaseName -Required
+benchmark 'required' {
+    caseSource { [pscustomobject]@{ Name = $caseName } }
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var ex = Assert.ThrowsAny<Exception>(() => EvaluateBenchmarkDsl(required));
+
+        Assert.Contains("CaseName", ex.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("required", ex.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -707,10 +746,10 @@ benchmark 'bad' {
         var root = CreateTempRoot();
         var spec = Path.Combine(root, "variables.benchmark.ps1");
         File.WriteAllText(spec, @"
-$caseName = $BenchmarkVariables['CaseName']
-$rows = $BenchmarkVariables['Rows']
+$caseName = input CaseName
+$rows = inputInt Rows
 benchmark 'variables' {
-    caseSource { [pscustomobject]@{ Name = $caseName; Rows = $rows } }
+    caseSource { [pscustomobject]@{ Name = $caseName; Rows = ($rows -join ',') } }
     axis Operation Run
     axis Engine Managed
     engine Managed { operation Run { param($case, $run) } }
