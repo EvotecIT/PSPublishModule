@@ -133,6 +133,7 @@ internal sealed class ModuleStatePrivateDeliveryService
             request.JFrogBaseUri = profile.JFrogBaseUri;
             request.JFrogRepository = profile.JFrogRepository;
             request.Tool = profile.Tool;
+            request.ApiVersion = profile.ApiVersion;
             request.BootstrapMode = profile.BootstrapMode;
             request.Trusted = profile.Trusted;
             request.Priority = profile.Priority;

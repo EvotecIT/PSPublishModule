@@ -8,6 +8,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Collection("ModuleRepositoryProfileEnvironment")]
 public sealed class ModuleStatePrivateDeliveryServiceTests
 {
     [Fact]
@@ -167,6 +168,34 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
     }
 
     [Fact]
+    public void CreateRequest_PropagatesProfileApiVersion()
+    {
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        new ModuleRepositoryProfileStore(Path.Combine(profileRoot.Path, "profiles.json")).SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "Local",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "Local",
+            RepositoryUri = profileRoot.Path,
+            ApiVersion = RepositoryApiVersion.Local
+        });
+
+        var request = InvokeCreateRequest(
+            new[]
+            {
+                new ModuleStatePlanAction(ModuleStatePlanActionKind.Install, "Company.Tools", null, "1.2.0", "missing")
+            },
+            new ModuleStatePrivateDeliveryOptions
+            {
+                ProfileName = "Local"
+            },
+            repository: null);
+
+        Assert.Equal(RepositoryApiVersion.Local, request.ApiVersion);
+    }
+
+    [Fact]
     public void ResolveActionRepository_PreservesActionTargetOverGlobalRepository()
     {
         var action = new ModuleStatePlanAction(
@@ -303,6 +332,14 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
         return Assert.IsType<PrivateModuleWorkflowRequest>(result);
     }
 
+    private static IDisposable UseProfileStore(string root)
+    {
+        Directory.CreateDirectory(root);
+        return new CompositeDisposable(
+            new TestEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH", Path.Combine(root, "profiles.json")),
+            new TestEnvironmentVariable("POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH", Path.Combine(root, "machine-profiles.json")));
+    }
+
     private static string? InvokeResolveActionRepository(ModuleStatePlanAction action, ModuleStatePrivateDeliveryOptions options)
     {
         var method = typeof(ModuleStatePrivateDeliveryService).GetMethod(
@@ -358,5 +395,19 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
         var result = method!.Invoke(service, new object?[] { action, options });
 
         return Assert.IsType<ManagedModuleRepository>(result);
+    }
+
+    private sealed class CompositeDisposable : IDisposable
+    {
+        private readonly IDisposable[] _items;
+
+        internal CompositeDisposable(params IDisposable[] items)
+            => _items = items;
+
+        public void Dispose()
+        {
+            foreach (var item in _items.Reverse())
+                item.Dispose();
+        }
     }
 }

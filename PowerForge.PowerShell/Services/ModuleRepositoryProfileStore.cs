@@ -291,14 +291,19 @@ internal sealed class ModuleRepositoryProfileStore
             ? mode
             : provider == PrivateGalleryProvider.JFrog && mode == PrivateGalleryBootstrapMode.JFrogCli
                 ? PrivateGalleryBootstrapMode.JFrogCli
+                : provider == PrivateGalleryProvider.NuGet && mode == PrivateGalleryBootstrapMode.Auto
+                    ? PrivateGalleryBootstrapMode.Auto
                 : mode == PrivateGalleryBootstrapMode.Auto || mode == PrivateGalleryBootstrapMode.ExistingSession
                     ? PrivateGalleryBootstrapMode.CredentialPrompt
                     : mode;
 
     private static string GetDefaultAuthenticationMode(PrivateGalleryProvider provider)
-        => provider == PrivateGalleryProvider.AzureArtifacts
-            ? "AzureArtifactsCredentialProvider"
-            : "CredentialPrompt";
+        => provider switch
+        {
+            PrivateGalleryProvider.AzureArtifacts => "AzureArtifactsCredentialProvider",
+            PrivateGalleryProvider.NuGet => string.Empty,
+            _ => "CredentialPrompt"
+        };
 
     private static string ResolveAuthenticationMode(PrivateGalleryProvider provider, string? authenticationMode)
     {

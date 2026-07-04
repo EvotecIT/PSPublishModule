@@ -260,9 +260,7 @@ internal sealed class PrivateGalleryService
             jfrogRepository);
 
         var effectiveTool = tool;
-        var effectiveApiVersion = apiVersion == RepositoryApiVersion.Auto
-            ? RepositoryApiVersion.V3
-            : apiVersion;
+        var effectiveApiVersion = apiVersion;
         var result = new ModuleRepositoryRegistrationResult
         {
             RepositoryName = endpoint.RepositoryName,

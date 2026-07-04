@@ -527,6 +527,26 @@ public sealed class PublishConfigurationFactoryTests
         Assert.Contains("read-only", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData(RepositoryApiVersion.Local)]
+    [InlineData(RepositoryApiVersion.NugetServer)]
+    [InlineData(RepositoryApiVersion.ContainerRegistry)]
+    public void Create_rejects_azure_artifacts_with_non_feed_api_versions(RepositoryApiVersion apiVersion)
+    {
+        var factory = new PublishConfigurationFactory();
+
+        var ex = Assert.Throws<ArgumentException>(() => factory.Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "AzureArtifacts",
+            AzureDevOpsOrganization = "contoso",
+            AzureArtifactsFeed = "Modules",
+            RepositoryApiVersion = apiVersion,
+            Enabled = true
+        }));
+
+        Assert.Contains("Auto, V2, or V3", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Create_allows_repository_named_mar_without_verified_mar_uri()
     {

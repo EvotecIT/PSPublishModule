@@ -137,8 +137,8 @@ internal sealed class PublishConfigurationFactory
         if (isAzureArtifacts && anyRepositoryUriProvided)
             throw new ArgumentException("RepositoryUri/RepositorySourceUri/RepositoryPublishUri cannot be combined with the Azure Artifacts preset.", nameof(request));
 
-        if (isAzureArtifacts && request.RepositoryApiVersion == RepositoryApiVersion.ContainerRegistry)
-            throw new ArgumentException("RepositoryApiVersion ContainerRegistry cannot be used with the Azure Artifacts preset.", nameof(request));
+        if (isAzureArtifacts && request.RepositoryApiVersion is RepositoryApiVersion.ContainerRegistry or RepositoryApiVersion.Local or RepositoryApiVersion.NugetServer)
+            throw new ArgumentException("RepositoryApiVersion must be Auto, V2, or V3 when using the Azure Artifacts preset.", nameof(request));
 
         if (!isAzureArtifacts &&
             destination == PublishDestination.PowerShellGallery &&
