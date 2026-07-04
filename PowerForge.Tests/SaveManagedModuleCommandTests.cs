@@ -77,6 +77,118 @@ public sealed class SaveManagedModuleCommandTests
     }
 
     [Fact]
+    public void SaveManagedModule_as_nupkg_saves_dependency_closure_to_destination()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            files: CreateCoreFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[1.0.0]", null) },
+            files: CreateToolFiles("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AsNupkg");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(results).BaseObject);
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.True(result.SavedAsNupkg);
+        Assert.True(dependency.SavedAsNupkg);
+        Assert.Equal(Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg"), result.ModulePath);
+        Assert.Equal(result.ModulePath, result.Download?.PackagePath);
+        Assert.Null(result.ReceiptPath);
+        Assert.True(File.Exists(Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg")));
+        Assert.True(File.Exists(Path.Combine(destination.Path, "Company.Core.1.0.0.nupkg")));
+        Assert.False(Directory.Exists(Path.Combine(destination.Path, "Company.Tools")));
+        Assert.False(Directory.Exists(Path.Combine(destination.Path, "Company.Core")));
+    }
+
+    [Fact]
+    public void SaveManagedModule_as_nupkg_skip_dependency_check_saves_only_requested_package()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            files: CreateCoreFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[1.0.0]", null) },
+            files: CreateToolFiles("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AsNupkg")
+            .AddParameter("SkipDependencyCheck");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(results).BaseObject);
+        Assert.True(result.SavedAsNupkg);
+        Assert.Empty(result.DependencyResults);
+        Assert.True(File.Exists(Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg")));
+        Assert.False(File.Exists(Path.Combine(destination.Path, "Company.Core.1.0.0.nupkg")));
+        Assert.False(Directory.Exists(Path.Combine(destination.Path, "Company.Tools")));
+    }
+
+    [Fact]
+    public void SaveManagedModule_as_nupkg_plan_detects_existing_package()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateToolFiles("1.0.0"));
+        File.Copy(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AsNupkg")
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedModuleInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.True(plan.SaveAsNupkg);
+        Assert.True(plan.ExistingVersionFound);
+        Assert.Equal(ManagedModuleInstallPlanAction.SkipExisting, plan.Action);
+        Assert.Equal(Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg"), plan.ModulePath);
+        Assert.False(plan.WouldWriteFiles);
+    }
+
+    [Fact]
     public void SaveManagedModule_reuses_package_cache_when_exact_version_is_requested()
     {
         using var feed = new TemporaryDirectory();

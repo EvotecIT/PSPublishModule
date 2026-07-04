@@ -41,6 +41,11 @@ public sealed class ManagedModuleInstallPlan
     public string ModulePath { get; set; } = string.Empty;
 
     /// <summary>
+    /// True when the operation would save a .nupkg file instead of materializing an unpacked module directory.
+    /// </summary>
+    public bool SaveAsNupkg { get; set; }
+
+    /// <summary>
     /// True when the target module version already exists.
     /// </summary>
     public bool ExistingVersionFound { get; set; }

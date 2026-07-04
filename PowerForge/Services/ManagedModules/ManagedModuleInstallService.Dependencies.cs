@@ -285,6 +285,7 @@ public sealed partial class ManagedModuleInstallService
             PackageCacheDirectory = cacheDirectory,
             PackageCacheDirectoryIsOperationLocal = request.PackageCacheDirectoryIsOperationLocal ||
                                                     string.IsNullOrWhiteSpace(request.PackageCacheDirectory),
+            SaveAsNupkg = request.SaveAsNupkg,
             ExpectedPackageSha256 = null,
             TrustPolicy = dependencyTrustPolicy,
             Credential = request.Credential,
@@ -327,6 +328,7 @@ public sealed partial class ManagedModuleInstallService
                 AllowClobber = request.AllowClobber,
                 AcceptLicense = request.AcceptLicense,
                 AuthenticodeCheck = request.AuthenticodeCheck,
+                SaveAsNupkg = request.SaveAsNupkg,
                 RepairInstalledManifestDependencies = request.RepairInstalledManifestDependencies
             },
             installedVersion,
@@ -451,6 +453,7 @@ public sealed partial class ManagedModuleInstallService
             ModuleRoot = request.ModuleRoot,
             PackageCacheDirectory = request.PackageCacheDirectory,
             PackageCacheDirectoryIsOperationLocal = request.PackageCacheDirectoryIsOperationLocal,
+            SaveAsNupkg = request.SaveAsNupkg,
             DependencyConcurrency = request.DependencyConcurrency,
             ExpectedPackageSha256 = request.ExpectedPackageSha256,
             TrustPolicy = request.TrustPolicy,

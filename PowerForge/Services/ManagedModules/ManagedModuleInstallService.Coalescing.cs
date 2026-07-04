@@ -22,6 +22,7 @@ public sealed partial class ManagedModuleInstallService
             request.AllowClobber ? "clobber" : "no-clobber",
             request.AcceptLicense ? "license" : "no-license",
             request.AuthenticodeCheck ? "authenticode" : "no-authenticode",
+            request.SaveAsNupkg ? "nupkg" : "unpacked",
             NormalizeCoalescingValue(request.ExpectedPackageSha256),
             FingerprintTrustPolicy(request.TrustPolicy),
             request.SkipDependencyCheck ? "skip-deps" : "deps");
