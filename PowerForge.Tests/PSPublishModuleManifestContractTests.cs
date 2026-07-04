@@ -30,6 +30,7 @@ public sealed class PSPublishModuleManifestContractTests
 
     private static readonly string[] ManagedModuleCmdlets =
     {
+        "Compress-ManagedResource",
         "Find-ManagedModule",
         "Get-ManagedModule",
         "Get-ManagedModuleRepository",
