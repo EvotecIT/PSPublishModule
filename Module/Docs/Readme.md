@@ -511,6 +511,9 @@ Tests normalized benchmark summaries against a JSON baseline.
 ### [Test-IsolatedModuleProfile](Test-IsolatedModuleProfile.md)
 Validates a curated isolated module profile without importing it.
 
+### [Uninstall-ManagedModule](Uninstall-ManagedModule.md)
+Uninstalls installed PowerShell module versions through the managed module engine.
+
 ### [Update-BenchmarkDocument](Update-BenchmarkDocument.md)
 Updates a marker-delimited benchmark block in a Markdown document.
 

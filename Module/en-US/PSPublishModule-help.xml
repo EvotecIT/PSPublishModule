@@ -61745,6 +61745,325 @@ System.Boolean</maml:name>
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Uninstall-ManagedModule</command:name>
+      <command:verb>Uninstall</command:verb>
+      <command:noun>ManagedModule</command:noun>
+      <maml:description>
+        <maml:para>Uninstalls installed PowerShell module versions through the managed module engine.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>This command removes modules from the selected managed module root without invoking PowerShellGet or&#xD;
+PSResourceGet. It follows PSResourceGet-shaped uninstall selection semantics while adding managed&#xD;
+dependency and loaded-module safety checks.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Uninstall-ManagedModule</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AllowLoadedModuleUninstall</maml:name>
+          <maml:description>
+            <maml:para>Allow removal of module versions that appear loaded in the current PowerShell session.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>LoadedModule</maml:name>
+          <maml:description>
+            <maml:para>Loaded module evidence used to block risky in-session uninstalls.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ManagedModuleLoadedModule[]</command:parameterValue>
+          <dev:type>
+            <maml:name>ManagedModuleLoadedModule[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Path">
+          <maml:name>ModuleRoot</maml:name>
+          <maml:description>
+            <maml:para>Explicit module root. Use with Scope Custom.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Module names or wildcard patterns to uninstall.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Plan</maml:name>
+          <maml:description>
+            <maml:para>Return an inspectable uninstall plan without removing files.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="AllowPrerelease">
+          <maml:name>Prerelease</maml:name>
+          <maml:description>
+            <maml:para>Restrict matching to prerelease module versions.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Scope</maml:name>
+          <maml:description>
+            <maml:para>Install scope used when ModuleRoot is not supplied.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ManagedModuleInstallScope</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">CurrentUser</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AllUsers</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Custom</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ManagedModuleInstallScope</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ShellEdition</maml:name>
+          <maml:description>
+            <maml:para>PowerShell path family used when resolving default CurrentUser or AllUsers module roots.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ManagedModuleShellEdition</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Desktop</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Core</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ManagedModuleShellEdition</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="SkipDependenciesCheck">
+          <maml:name>SkipDependencyCheck</maml:name>
+          <maml:description>
+            <maml:para>Skip checking whether removed modules are still required by other installed modules.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="RequiredVersion">
+          <maml:name>Version</maml:name>
+          <maml:description>
+            <maml:para>Exact version or NuGet-style version range to uninstall. When omitted, the latest matching version is selected.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>AllowLoadedModuleUninstall</maml:name>
+        <maml:description>
+          <maml:para>Allow removal of module versions that appear loaded in the current PowerShell session.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>LoadedModule</maml:name>
+        <maml:description>
+          <maml:para>Loaded module evidence used to block risky in-session uninstalls.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ManagedModuleLoadedModule[]</command:parameterValue>
+        <dev:type>
+          <maml:name>ManagedModuleLoadedModule[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Path">
+        <maml:name>ModuleRoot</maml:name>
+        <maml:description>
+          <maml:para>Explicit module root. Use with Scope Custom.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
+        <maml:name>Name</maml:name>
+        <maml:description>
+          <maml:para>Module names or wildcard patterns to uninstall.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Plan</maml:name>
+        <maml:description>
+          <maml:para>Return an inspectable uninstall plan without removing files.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="AllowPrerelease">
+        <maml:name>Prerelease</maml:name>
+        <maml:description>
+          <maml:para>Restrict matching to prerelease module versions.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Scope</maml:name>
+        <maml:description>
+          <maml:para>Install scope used when ModuleRoot is not supplied.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ManagedModuleInstallScope</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">CurrentUser</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AllUsers</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Custom</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ManagedModuleInstallScope</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ShellEdition</maml:name>
+        <maml:description>
+          <maml:para>PowerShell path family used when resolving default CurrentUser or AllUsers module roots.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ManagedModuleShellEdition</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Desktop</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Core</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ManagedModuleShellEdition</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="SkipDependenciesCheck">
+        <maml:name>SkipDependencyCheck</maml:name>
+        <maml:description>
+          <maml:para>Skip checking whether removed modules are still required by other installed modules.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="RequiredVersion">
+        <maml:name>Version</maml:name>
+        <maml:description>
+          <maml:para>Exact version or NuGet-style version range to uninstall. When omitted, the latest matching version is selected.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>System.String[]</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.ManagedModuleUninstallResult&#xD;
+PowerForge.ManagedModuleUninstallPlan</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Uninstall the latest stable installed version of a module</maml:title>
+        <dev:code>Uninstall-ManagedModule -Name Company.Tools</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Preview every installed module version that matches a version range</maml:title>
+        <dev:code>Uninstall-ManagedModule -Name Company.Tools -Version '[1.0.0,2.0.0)' -Plan</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Update-BenchmarkDocument</command:name>
       <command:verb>Update</command:verb>
       <command:noun>BenchmarkDocument</command:noun>
