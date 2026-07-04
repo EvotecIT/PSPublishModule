@@ -346,10 +346,10 @@ try {
                 if ($null -ne $AddExportedAlias) {
                     foreach ($Alias in $InnerModule.ExportedAliases.Values) {
                         $AliasTarget = if ([string]::IsNullOrWhiteSpace($Alias.Definition)) {
-                            $Alias.ResolvedCommandName
+                            $Alias.ResolvedCommandName 
                         }
                         else {
-                            $Alias.Definition
+                            $Alias.Definition 
                         }
                         try {
                             # The alias must exist in this module scope before the private export table can reference it.
