@@ -312,6 +312,34 @@ benchmark 'required' {
     }
 
     [Fact]
+    public void DslRuntime_GetBenchmarkInputSupportsTypedParameterSets()
+    {
+        var script = ScriptBlock.Create(@"
+$caseName = Get-BenchmarkInput CaseName DefaultCase
+$rows = Get-BenchmarkInput Rows @(5, 10) -Int
+$enabled = Get-BenchmarkInput Enabled $true -Bool
+benchmark 'typed-inputs' {
+    caseSource { [pscustomobject]@{ Name = $caseName; Rows = ($rows -join ','); Enabled = $enabled } }
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+        var variables = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["CaseName"] = "FromVariable",
+            ["Rows"] = "42,84",
+            ["Enabled"] = "off"
+        };
+
+        var item = Assert.Single(new PowerShellBenchmarkRunner().Plan(Assert.Single(EvaluateBenchmarkDsl(script, benchmarkVariables: variables))));
+
+        Assert.Equal("FromVariable", item.Scenario);
+        Assert.Equal("42,84", item.Values["Rows"]);
+        Assert.Equal(false, item.Values["Enabled"]);
+    }
+
+    [Fact]
     public void DslRuntime_RejectsUnsupportedProfileNames()
     {
         var script = ScriptBlock.Create(@"

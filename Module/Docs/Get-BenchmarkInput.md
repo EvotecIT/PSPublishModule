@@ -6,16 +6,26 @@ schema: 2.0.0
 ---
 # Get-BenchmarkInput
 ## SYNOPSIS
-Gets a caller-supplied benchmark input variable as text.
+Gets a caller-supplied benchmark input variable.
 
 ## SYNTAX
-### __AllParameterSets
+### Text (Default)
 ```powershell
-Get-BenchmarkInput [-Name] <string> [[-Default] <string>] [-Required] [<CommonParameters>]
+Get-BenchmarkInput [-Name] <string> [[-Default] <Object>] [-Required] [<CommonParameters>]
+```
+
+### Int
+```powershell
+Get-BenchmarkInput [-Name] <string> [[-Default] <Object>] -Int [-Required] [<CommonParameters>]
+```
+
+### Bool
+```powershell
+Get-BenchmarkInput [-Name] <string> [[-Default] <Object>] -Bool [-Required] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Gets a caller-supplied benchmark input variable as text.
+Gets a caller-supplied benchmark input variable.
 
 ## EXAMPLES
 
@@ -25,14 +35,42 @@ Get-BenchmarkInput -Name 'Name'
 ```
 
 
+### EXAMPLE 2
+```powershell
+Get-BenchmarkInput -Bool
+```
+
+
+### EXAMPLE 3
+```powershell
+Get-BenchmarkInput -Int
+```
+
+
 ## PARAMETERS
+
+### -Bool
+Return the benchmark variable as a boolean.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Bool
+Aliases: None
+Possible values:
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
 
 ### -Default
 Default value used when the variable was not supplied.
 
 ```yaml
-Type: String
-Parameter Sets: __AllParameterSets
+Type: Object
+Parameter Sets: Text, Int, Bool
 Aliases: None
 Possible values:
 
@@ -43,12 +81,28 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -Int
+Return the benchmark variable as one or more integers.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Int
+Aliases: None
+Possible values:
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -Name
 Benchmark variable name.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Text, Int, Bool
 Aliases: None
 Possible values:
 
@@ -64,7 +118,7 @@ Fail when the variable was not supplied or is empty.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: Text, Int, Bool
 Aliases: None
 Possible values:
 
@@ -84,7 +138,9 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `System.String`
+- `System.String
+System.Int32
+System.Boolean`
 
 ## RELATED LINKS
 

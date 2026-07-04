@@ -100,14 +100,8 @@ Reads App Store version information from App Store Connect.
 ### [Get-AppStoreConnectVersionLocalization](Get-AppStoreConnectVersionLocalization.md)
 Reads App Store version localizations from App Store Connect.
 
-### [Get-BenchmarkBoolInput](Get-BenchmarkBoolInput.md)
-Gets a caller-supplied benchmark input variable as a boolean.
-
 ### [Get-BenchmarkInput](Get-BenchmarkInput.md)
-Gets a caller-supplied benchmark input variable as text.
-
-### [Get-BenchmarkIntInput](Get-BenchmarkIntInput.md)
-Gets a caller-supplied benchmark input variable as one or more integers.
+Gets a caller-supplied benchmark input variable.
 
 ### [Get-ConfigurationBoolean](Get-ConfigurationBoolean.md)
 Resolves a boolean configuration value from an environment variable with a script-defined default.

@@ -96,8 +96,8 @@ binding.
 | `readme` | `Add-BenchmarkReadmeBlock` |
 | `artifacts` | `Set-BenchmarkArtifacts` |
 | `input` | `Get-BenchmarkInput` |
-| `inputInt` | `Get-BenchmarkIntInput` |
-| `inputBool` | `Get-BenchmarkBoolInput` |
+| `inputInt` | `Get-BenchmarkInput -Int` |
+| `inputBool` | `Get-BenchmarkInput -Bool` |
 
 The managed-module provider comparison in
 `Benchmarks/ManagedModules/managed-modules.benchmark.ps1` is intentionally a

@@ -95,9 +95,7 @@ public abstract class BenchmarkDslCommand : PSCmdlet
         "Add-BenchmarkComparison",
         "Add-BenchmarkReadmeBlock",
         "Set-BenchmarkArtifacts",
-        "Get-BenchmarkInput",
-        "Get-BenchmarkIntInput",
-        "Get-BenchmarkBoolInput"
+        "Get-BenchmarkInput"
     };
 }
 
