@@ -340,7 +340,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             };
             repositoryTrusted = profile.Trusted;
             repositoryPriority = profile.Priority;
-            repositoryApiVersion = PowerForge.RepositoryApiVersion.V3;
+            repositoryApiVersion = profile.ApiVersion;
 
             if (profile.Provider == PowerForge.PrivateGalleryProvider.AzureArtifacts)
             {

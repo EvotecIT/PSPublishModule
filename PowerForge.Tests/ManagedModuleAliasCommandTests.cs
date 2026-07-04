@@ -933,6 +933,35 @@ public sealed class ManagedModuleAliasCommandTests
         Assert.Equal("https://packages.example.test/nuget/v3/index.json", segment.Configuration.RequiredModuleSourceRepositoryUri);
     }
 
+    [Fact]
+    public void NewConfigurationPublish_profile_preserves_repository_api_version()
+    {
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        new ModuleRepositoryProfileStore().SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "Internal",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "CompanyTarget",
+            RepositoryUri = "https://packages.example.test/nuget/v2",
+            RepositorySourceUri = "https://packages.example.test/nuget/v2",
+            RepositoryPublishUri = "https://packages.example.test/nuget/v2",
+            ApiVersion = RepositoryApiVersion.V2
+        });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ConfigurationPublish")
+            .AddParameter("ProfileName", "Internal")
+            .AddParameter("ApiKey", "token")
+            .AddParameter("Enabled");
+
+        var segment = Assert.IsType<ConfigurationPublishSegment>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.NotNull(segment.Configuration.Repository);
+        Assert.Equal(RepositoryApiVersion.V2, segment.Configuration.Repository.ApiVersion);
+    }
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();
