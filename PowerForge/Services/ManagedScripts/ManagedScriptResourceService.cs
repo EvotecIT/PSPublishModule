@@ -77,15 +77,16 @@ public sealed class ManagedScriptResourceService
         var destinationPath = ResolveDestinationPath(request.DestinationPath);
         var scriptPath = ResolveScriptPath(destinationPath, request.Name);
         var existingVersion = TryReadExistingVersion(scriptPath);
-        if (!string.IsNullOrWhiteSpace(existingVersion) &&
-            ManagedModuleVersionComparer.Instance.Compare(existingVersion!, versionInfo.Version) == 0 &&
-            !request.Force)
+        var existingSelectedVersion = !string.IsNullOrWhiteSpace(existingVersion) &&
+                                      ManagedModuleVersionComparer.Instance.Compare(existingVersion!, versionInfo.Version) == 0 &&
+                                      !request.Force;
+        if (existingSelectedVersion && !RequiresPackageVerificationBeforeSkip(request))
         {
             stopwatch.Stop();
             return CreateSkippedResult(request, versionInfo.Version, destinationPath, scriptPath, existingVersion, stopwatch.Elapsed, versionResolutionStopwatch.Elapsed);
         }
 
-        if (File.Exists(scriptPath) && !request.Force)
+        if (!existingSelectedVersion && File.Exists(scriptPath) && !request.Force)
             throw new InvalidOperationException($"Script '{scriptPath}' already exists with version '{existingVersion ?? "unknown"}'. Use Force to replace it.");
 
         var ownsCache = string.IsNullOrWhiteSpace(request.PackageCacheDirectory);
@@ -112,6 +113,21 @@ public sealed class ManagedScriptResourceService
             ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, download.Metadata, request.TrustPolicy);
             ThrowIfLicenseAcceptanceRequired(download.Metadata, request.AcceptLicense);
 
+            if (existingSelectedVersion)
+            {
+                stopwatch.Stop();
+                return CreateSkippedResult(
+                    request,
+                    versionInfo.Version,
+                    destinationPath,
+                    scriptPath,
+                    existingVersion,
+                    stopwatch.Elapsed,
+                    versionResolutionStopwatch.Elapsed,
+                    downloadStopwatch.Elapsed,
+                    download);
+            }
+
             var extractionStopwatch = System.Diagnostics.Stopwatch.StartNew();
             stageRoot = Path.Combine(cacheDirectory, "script-stage-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(stageRoot);
@@ -123,6 +139,7 @@ public sealed class ManagedScriptResourceService
 
             Directory.CreateDirectory(destinationPath);
             File.Copy(stagedScriptPath, scriptPath, overwrite: request.Force);
+            scriptInfo.Path = scriptPath;
             stopwatch.Stop();
 
             return new ManagedScriptSaveResult
@@ -286,7 +303,9 @@ public sealed class ManagedScriptResourceService
         string scriptPath,
         string? existingVersion,
         TimeSpan elapsed,
-        TimeSpan versionResolutionElapsed)
+        TimeSpan versionResolutionElapsed,
+        TimeSpan? downloadElapsed = null,
+        ManagedModuleDownloadResult? download = null)
         => new()
         {
             Name = request.Name.Trim(),
@@ -303,10 +322,16 @@ public sealed class ManagedScriptResourceService
             ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
             Elapsed = elapsed,
             VersionResolutionElapsed = versionResolutionElapsed,
+            DownloadElapsed = downloadElapsed ?? TimeSpan.Zero,
+            Download = download,
             ScriptInfo = string.IsNullOrWhiteSpace(existingVersion)
                 ? null
                 : new ManagedScriptFileInfo { Path = scriptPath, Version = existingVersion! }
         };
+
+    private static bool RequiresPackageVerificationBeforeSkip(ManagedScriptSaveRequest request)
+        => !string.IsNullOrWhiteSpace(request.ExpectedPackageSha256) ||
+           ManagedModuleTrustEvaluator.HasAllowedAuthorPolicy(request.TrustPolicy);
 
     private static string ResolveDestinationPath(string path)
     {

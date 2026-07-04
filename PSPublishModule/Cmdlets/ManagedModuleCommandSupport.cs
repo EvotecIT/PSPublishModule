@@ -48,6 +48,40 @@ internal static class ManagedModuleCommandSupport
             profile.Trusted);
     }
 
+    internal static ManagedModuleRepository CreateScriptRepository(
+        PSCmdlet cmdlet,
+        string repositoryName,
+        string repository,
+        string? profileName,
+        bool repositoryWasBound)
+    {
+        if (!string.IsNullOrWhiteSpace(profileName))
+        {
+            if (repositoryWasBound)
+                throw new InvalidOperationException("Specify either ProfileName or Repository, not both.");
+
+            var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(profileName!);
+            var source = FirstNonEmpty(profile.RepositoryUri, profile.RepositorySourceUri, profile.Repository, profile.RepositoryName, profileName)
+                ?? throw new InvalidOperationException($"Profile '{profileName}' does not define a repository source.");
+            return CreateScriptRepositoryFromSource(
+                cmdlet,
+                ResolveProfileRepositoryName(profile, profileName!),
+                source,
+                profile.Trusted);
+        }
+
+        var resolvedSource = ResolveScriptRepositorySource(cmdlet, repository, out var resolvedRegisteredRepositoryName, out var resolvedRegisteredRepositoryTrusted);
+        var name = !string.Equals(repositoryName, DefaultRepositoryName, StringComparison.OrdinalIgnoreCase)
+            ? repositoryName
+            : !string.IsNullOrWhiteSpace(resolvedRegisteredRepositoryName)
+                ? resolvedRegisteredRepositoryName!
+                : ResolveRepositoryName(repositoryName, resolvedSource);
+        var trusted = resolvedRegisteredRepositoryName is not null
+            ? resolvedRegisteredRepositoryTrusted
+            : IsBuiltInDefaultRepository(repositoryName, resolvedSource);
+        return new ManagedModuleRepository(name, resolvedSource, ManagedModuleRepositoryKind.Auto, trusted);
+    }
+
     internal static ManagedModuleRepository CreatePublishRepository(
         PSCmdlet cmdlet,
         string repositoryName,
@@ -168,6 +202,13 @@ internal static class ManagedModuleCommandSupport
     internal static string ResolveRepositoryPublishSource(PSCmdlet cmdlet, string repository, out string? resolvedRegisteredRepositoryName, out bool resolvedRegisteredRepositoryTrusted)
         => ResolveRepositorySource(cmdlet, repository, publish: true, out resolvedRegisteredRepositoryName, out resolvedRegisteredRepositoryTrusted);
 
+    internal static string ResolveScriptRepositorySource(
+        PSCmdlet cmdlet,
+        string repository,
+        out string? resolvedRegisteredRepositoryName,
+        out bool resolvedRegisteredRepositoryTrusted)
+        => ResolveRepositorySource(cmdlet, repository, publish: false, script: true, out resolvedRegisteredRepositoryName, out resolvedRegisteredRepositoryTrusted);
+
     internal static string ResolveRepositorySource(
         PSCmdlet cmdlet,
         string repository,
@@ -175,10 +216,33 @@ internal static class ManagedModuleCommandSupport
         out bool resolvedRegisteredRepositoryTrusted)
         => ResolveRepositorySource(cmdlet, repository, publish: false, out resolvedRegisteredRepositoryName, out resolvedRegisteredRepositoryTrusted);
 
+    private static ManagedModuleRepository CreateScriptRepositoryFromSource(
+        PSCmdlet cmdlet,
+        string repositoryName,
+        string source,
+        bool trusted)
+    {
+        var resolvedSource = ResolveScriptRepositorySource(cmdlet, source, out var resolvedRegisteredRepositoryName, out var resolvedRegisteredRepositoryTrusted);
+        return new ManagedModuleRepository(
+            !string.IsNullOrWhiteSpace(resolvedRegisteredRepositoryName) ? resolvedRegisteredRepositoryName! : repositoryName,
+            resolvedSource,
+            ManagedModuleRepositoryKind.Auto,
+            resolvedRegisteredRepositoryName is not null ? resolvedRegisteredRepositoryTrusted : trusted);
+    }
+
     private static string ResolveRepositorySource(
         PSCmdlet cmdlet,
         string repository,
         bool publish,
+        out string? resolvedRegisteredRepositoryName,
+        out bool resolvedRegisteredRepositoryTrusted)
+        => ResolveRepositorySource(cmdlet, repository, publish, script: false, out resolvedRegisteredRepositoryName, out resolvedRegisteredRepositoryTrusted);
+
+    private static string ResolveRepositorySource(
+        PSCmdlet cmdlet,
+        string repository,
+        bool publish,
+        bool script,
         out string? resolvedRegisteredRepositoryName,
         out bool resolvedRegisteredRepositoryTrusted)
     {
@@ -209,7 +273,9 @@ internal static class ManagedModuleCommandSupport
         var resolver = new PowerShellRepositorySourceResolver();
         string? registeredSource;
         bool registeredTrusted;
-        var resolved = publish
+        var resolved = script
+            ? resolver.TryResolveScriptSource(cmdlet, trimmed, out registeredSource, out registeredTrusted)
+            : publish
             ? resolver.TryResolvePublishSource(cmdlet, trimmed, out registeredSource, out registeredTrusted)
             : resolver.TryResolveSource(cmdlet, trimmed, out registeredSource, out registeredTrusted);
         if (resolved &&

@@ -33,8 +33,10 @@ public sealed class SaveManagedScriptCommandTests
         var result = Assert.IsType<ManagedScriptSaveResult>(Assert.Single(results).BaseObject);
         Assert.Equal(ManagedScriptSaveStatus.Saved, result.Status);
         Assert.Equal("1.0.0", result.Version);
-        Assert.True(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
+        var scriptPath = Path.Combine(destination.Path, "Invoke-CompanyTask.ps1");
+        Assert.True(File.Exists(scriptPath));
         Assert.Equal("1.0.0", result.ScriptInfo?.Version);
+        Assert.Equal(scriptPath, result.ScriptInfo?.Path);
     }
 
     [Fact]
@@ -99,6 +101,78 @@ public sealed class SaveManagedScriptCommandTests
     }
 
     [Fact]
+    public void SaveManagedScript_verifies_package_policy_before_skipping_existing_selected_version()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            });
+        File.WriteAllText(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1"), CreateScript("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("ExpectedPackageSha256", new string('0', 64));
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("SHA256", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SaveManagedScript_uses_script_source_location_for_registered_repository()
+    {
+        using var moduleFeed = new TemporaryDirectory();
+        using var scriptFeed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(scriptFeed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddScript($$"""
+            function Get-PSRepository {
+                param([string] $Name)
+                [pscustomobject]@{
+                    Name = $Name
+                    SourceLocation = '{{EscapePowerShellSingleQuoted(moduleFeed.Path)}}'
+                    ScriptSourceLocation = '{{EscapePowerShellSingleQuoted(scriptFeed.Path)}}'
+                    InstallationPolicy = 'Trusted'
+                }
+            }
+            """);
+        _ = ps.Invoke();
+        AssertNoPowerShellErrors(ps);
+        ps.Commands.Clear();
+
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", "PrivateRepo")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptSaveResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(scriptFeed.Path, result.RepositorySource);
+        Assert.True(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
+    }
+
+    [Fact]
     public void SaveManagedScript_rejects_package_without_script_metadata()
     {
         using var feed = new TemporaryDirectory();
@@ -151,6 +225,9 @@ public sealed class SaveManagedScriptCommandTests
            #>
            Write-Output 'ok'
            """;
+
+    private static string EscapePowerShellSingleQuoted(string value)
+        => value.Replace("'", "''", StringComparison.Ordinal);
 
     private static void AssertNoPowerShellErrors(PowerShell ps)
     {

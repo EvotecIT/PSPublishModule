@@ -46,6 +46,28 @@ public sealed class PowerShellRepositorySourceResolver
         return TryResolveRepositoryLocation(cmdlet, repositoryName, publish: true, out source, out trusted);
     }
 
+    /// <summary>
+    /// Attempts to resolve a registered repository name to a script source URI or local feed path and trust state.
+    /// </summary>
+    /// <param name="cmdlet">Cmdlet whose current runspace should be inspected.</param>
+    /// <param name="repositoryName">Repository name to resolve.</param>
+    /// <param name="source">Resolved script source URI or path when available.</param>
+    /// <param name="trusted">Registered trust state when available.</param>
+    /// <returns>True when a registered repository script source was found.</returns>
+    public bool TryResolveScriptSource(PSCmdlet cmdlet, string? repositoryName, out string? source, out bool trusted)
+    {
+        source = null;
+        trusted = false;
+        if (cmdlet is null)
+            throw new ArgumentNullException(nameof(cmdlet));
+        if (string.IsNullOrWhiteSpace(repositoryName))
+            return false;
+
+        var name = repositoryName!.Trim();
+        return TryResolveWithCommand(cmdlet, "Get-PSResourceRepository", name, new[] { "Uri", "SourceLocation" }, out source, out trusted) ||
+               TryResolveWithCommand(cmdlet, "Get-PSRepository", name, new[] { "ScriptSourceLocation", "SourceLocation" }, out source, out trusted);
+    }
+
     private static bool TryResolveRepositoryLocation(PSCmdlet cmdlet, string? repositoryName, bool publish, out string? source, out bool trusted)
     {
         source = null;

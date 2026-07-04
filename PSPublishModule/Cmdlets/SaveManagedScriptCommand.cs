@@ -140,7 +140,7 @@ public sealed class SaveManagedScriptCommand : AsyncPSCmdlet
     {
         var destinationPath = ManagedModuleCommandSupport.ResolveProviderPath(this, Path)!;
         var packageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory);
-        var repository = ManagedModuleCommandSupport.CreateRepository(
+        var repository = ManagedModuleCommandSupport.CreateScriptRepository(
             this,
             RepositoryName,
             Repository,
