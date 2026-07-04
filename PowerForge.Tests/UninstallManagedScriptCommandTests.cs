@@ -255,6 +255,27 @@ public sealed class UninstallManagedScriptCommandTests
     }
 
     [Fact]
+    public void UninstallManagedScript_ignores_installed_build_metadata_for_exact_version_match()
+    {
+        using var scriptRoot = new TemporaryDirectory();
+        var scriptPath = Path.Combine(scriptRoot.Path, "Invoke-CompanyTask.ps1");
+        File.WriteAllText(scriptPath, CreateScript("1.0.0+build.7"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("ScriptRoot", scriptRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptUninstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptUninstallStatus.Removed, result.Status);
+        Assert.Equal("1.0.0+build.7", result.ExistingVersion);
+        Assert.False(File.Exists(scriptPath));
+    }
+
+    [Fact]
     public void UninstallManagedScript_rejects_malformed_required_build_metadata_before_removing()
     {
         using var scriptRoot = new TemporaryDirectory();

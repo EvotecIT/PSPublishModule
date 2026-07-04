@@ -931,20 +931,7 @@ public sealed class ManagedScriptResourceService
         if (!IsValidScriptVersion(existing) || !IsValidScriptVersion(requested))
             return false;
 
-        var existingParts = SplitScriptVersionBuild(existing);
-        var requestedParts = SplitScriptVersionBuild(requested);
-        if (!string.Equals(existingParts.Build, requestedParts.Build, StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        return ManagedModuleVersionComparer.Instance.Compare(existingParts.Version, requestedParts.Version) == 0;
-    }
-
-    private static (string Version, string? Build) SplitScriptVersionBuild(string version)
-    {
-        var plusIndex = version.IndexOf('+');
-        return plusIndex < 0
-            ? (version, null)
-            : (version.Substring(0, plusIndex), version.Substring(plusIndex + 1));
+        return ManagedModuleVersionComparer.Instance.Compare(existing, requested) == 0;
     }
 
     private static ManagedScriptUninstallStatus MapUninstallStatus(ManagedScriptUninstallPlanAction action)
