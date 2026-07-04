@@ -216,6 +216,7 @@ public sealed partial class ManagedModuleRepositoryClient
             .ConfigureAwait(false);
 
         return versions
+            .Where(static version => version.Listed)
             .Where(version => range.IsSatisfiedBy(version.Version))
             .OrderBy(version => version.Version, ManagedModuleVersionComparer.Instance)
             .LastOrDefault();

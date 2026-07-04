@@ -1095,6 +1095,26 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task GetLatestDependencyVersionAsync_skips_unlisted_versions()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests, includeRegistrationBase: true));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+        var dependency = new ManagedModuleDependencyInfo
+        {
+            Id = "Unlisted.Tools",
+            VersionRange = "[1.0.0, )"
+        };
+
+        var result = await repositoryClient.GetLatestDependencyVersionAsync(repository, dependency);
+
+        Assert.NotNull(result);
+        Assert.Equal("2.0.0", result.Version);
+        Assert.True(result.Listed);
+    }
+
+    [Fact]
     public async Task SearchPackagesAsync_uses_powershellgallery_v2_read_api_for_canonical_default()
     {
         var requests = new List<RecordedRequest>();

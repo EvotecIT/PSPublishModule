@@ -317,6 +317,139 @@ public sealed class ManagedModuleAliasCommandTests
     }
 
     [Fact]
+    public void FindManagedModule_exact_name_with_tag_does_not_return_prefix_matches()
+    {
+        using var feed = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            tags: "automation");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.Extras.1.0.0.nupkg"),
+            "Company.Tools.Extras",
+            "1.0.0",
+            tags: "automation");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Find-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Tag", "automation");
+
+        var result = Assert.IsType<ManagedModuleVersionInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal("Company.Tools", result.Name);
+    }
+
+    [Fact]
+    public void FindManagedModule_broad_wildcard_tag_search_does_not_use_tag_as_name_query()
+    {
+        using var feed = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            tags: "automation");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Find-ManagedModule")
+            .AddParameter("Name", "*")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Tag", "automation");
+
+        var result = Assert.IsType<ManagedModuleVersionInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal("Company.Tools", result.Name);
+    }
+
+    [Fact]
+    public void FindManagedModule_requires_all_tag_filters_to_match()
+    {
+        using var feed = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            tags: "automation reporting");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Data.1.0.0.nupkg"),
+            "Company.Data",
+            "1.0.0",
+            tags: "automation database");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Find-ManagedModule")
+            .AddParameter("Name", "Company.*")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Tag", new[] { "automation", "reporting" });
+
+        var result = Assert.IsType<ManagedModuleVersionInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal("Company.Tools", result.Name);
+    }
+
+    [Fact]
+    public void FindManagedModule_applies_first_after_tag_filtering()
+    {
+        using var feed = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Audit.1.0.0.nupkg"),
+            "Company.Audit",
+            "1.0.0",
+            tags: "audit");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Reporting.1.0.0.nupkg"),
+            "Company.Reporting",
+            "1.0.0",
+            tags: "reporting");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Find-ManagedModule")
+            .AddParameter("Name", "Company.*")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Tag", "reporting")
+            .AddParameter("First", 1);
+
+        var result = Assert.IsType<ManagedModuleVersionInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal("Company.Reporting", result.Name);
+    }
+
+    [Fact]
+    public void FindManagedModule_all_versions_preserves_tags_before_filtering()
+    {
+        using var feed = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            tags: "automation");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            tags: "reporting");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Find-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("AllVersions")
+            .AddParameter("Tag", "automation");
+
+        var result = Assert.IsType<ManagedModuleVersionInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal("1.0.0", result.Version);
+        Assert.Contains("automation", result.Tags);
+    }
+
+    [Fact]
     public void FindManagedModule_include_dependencies_returns_satisfying_dependency_resources()
     {
         using var feed = new TemporaryDirectory();
@@ -342,6 +475,39 @@ public sealed class ManagedModuleAliasCommandTests
         AssertNoPowerShellErrors(ps);
         Assert.Equal(new[] { "Company.Core:2.1.0", "Company.Tools:1.0.0" },
             result.Select(static item => item.Name + ":" + item.Version));
+    }
+
+    [Fact]
+    public void FindManagedModule_include_dependencies_deduplicates_across_requested_names()
+    {
+        using var feed = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[2.0.0, )", null) });
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Reporting.1.0.0.nupkg"),
+            "Company.Reporting",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[2.0.0, )", null) });
+        TestPackageFactory.Create(Path.Combine(feed.Path, "Company.Core.2.1.0.nupkg"), "Company.Core", "2.1.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Find-ManagedModule")
+            .AddParameter("Name", new[] { "Company.Tools", "Company.Reporting" })
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("IncludeDependencies");
+
+        var result = ps.Invoke()
+            .Select(static item => Assert.IsType<ManagedModuleVersionInfo>(item.BaseObject))
+            .OrderBy(static item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal(new[] { "Company.Core:2.1.0", "Company.Reporting:1.0.0", "Company.Tools:1.0.0" },
+            result.Select(static item => item.Name + ":" + item.Version));
+        Assert.Equal(1, result.Count(static item => item.Name == "Company.Core"));
     }
 
     [Fact]
