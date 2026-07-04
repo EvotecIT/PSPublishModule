@@ -46,6 +46,7 @@ public sealed class RegisterManagedModuleRepositoryCommand : PSCmdlet
     /// <summary>Repository priority.</summary>
     [Parameter(ParameterSetName = ParameterSetByName)]
     [Parameter(ParameterSetName = ParameterSetPSGallery)]
+    [ValidateRange(0, 100)]
     public int? Priority { get; set; }
 
     /// <summary>Repository API version metadata. ContainerRegistry is handled by Microsoft Artifact Registry onboarding.</summary>

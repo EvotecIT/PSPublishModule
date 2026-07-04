@@ -126,6 +126,78 @@ public sealed class ManagedModuleRepositoryParityCommandTests
     }
 
     [Fact]
+    public void RegisterManagedModuleRepository_preserves_api_version_and_absolute_local_feed_path()
+    {
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        using var ps = CreatePowerShellWithModuleImported();
+
+        ps.AddCommand("Register-ManagedModuleRepository")
+            .AddParameter("Name", "LocalFeed")
+            .AddParameter("Uri", "/tmp/powerforge-feed")
+            .AddParameter("ApiVersion", RepositoryApiVersion.V2)
+            .AddParameter("PassThru");
+
+        var result = Assert.IsType<ModuleRepositoryProfileResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal(PrivateGalleryProvider.NuGet, result.Provider);
+        Assert.Equal(RepositoryApiVersion.V2, result.ApiVersion);
+        Assert.Equal("/tmp/powerforge-feed", result.RepositoryUri);
+        Assert.Equal("/tmp/powerforge-feed", result.RepositorySourceUri);
+        Assert.Equal(50, result.Priority);
+
+        var profile = Assert.Single(new ModuleRepositoryProfileStore().GetProfiles());
+        Assert.Equal(RepositoryApiVersion.V2, profile.ApiVersion);
+        Assert.Equal("/tmp/powerforge-feed", profile.RepositoryUri);
+    }
+
+    [Fact]
+    public void RegisterManagedModuleRepository_detects_azure_artifacts_url_profiles()
+    {
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        using var ps = CreatePowerShellWithModuleImported();
+
+        ps.AddCommand("Register-ManagedModuleRepository")
+            .AddParameter("Name", "AzModules")
+            .AddParameter("Uri", "https://pkgs.dev.azure.com/contoso/Platform/_packaging/Modules/nuget/v3/index.json")
+            .AddParameter("PassThru");
+
+        var result = Assert.IsType<ModuleRepositoryProfileResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal(PrivateGalleryProvider.AzureArtifacts, result.Provider);
+        Assert.Equal("contoso", result.AzureDevOpsOrganization);
+        Assert.Equal("Platform", result.AzureDevOpsProject);
+        Assert.Equal("Modules", result.AzureArtifactsFeed);
+        Assert.Equal("AzModules", result.RepositoryName);
+        Assert.Equal(PrivateGalleryBootstrapMode.ExistingSession, result.BootstrapMode);
+        Assert.Equal("AzureArtifactsCredentialProvider", result.AuthenticationMode);
+        Assert.Equal(50, result.Priority);
+    }
+
+    [Fact]
+    public void RegisterManagedModuleRepository_rejects_repository_hashtable_priority_outside_psresourceget_range()
+    {
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        using var ps = CreatePowerShellWithModuleImported();
+        var repository = new Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Name"] = "Internal",
+            ["Uri"] = "https://packages.example.test/nuget/v3/index.json",
+            ["Priority"] = 200
+        };
+
+        ps.AddCommand("Register-ManagedModuleRepository")
+            .AddParameter("Repository", new[] { repository });
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("priority", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ResetManagedModuleRepository_replaces_profiles_with_default_psgallery_profile()
     {
         using var profileRoot = new TemporaryDirectory();
@@ -205,6 +277,70 @@ public sealed class ManagedModuleRepositoryParityCommandTests
 
         Assert.True((bool)Assert.Single(ps.Invoke()).BaseObject);
         AssertNoPowerShellErrors(ps);
+        Assert.Empty(new ModuleRepositoryProfileStore().GetProfiles());
+    }
+
+    [Fact]
+    public void UnregisterManagedModuleRepository_accepts_multiple_names()
+    {
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        var store = new ModuleRepositoryProfileStore();
+        store.SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "One",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "One",
+            RepositoryUri = "https://packages.example.test/one/v3/index.json"
+        });
+        store.SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "Two",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "Two",
+            RepositoryUri = "https://packages.example.test/two/v3/index.json"
+        });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Unregister-ManagedModuleRepository")
+            .AddParameter("Name", new[] { "One", "Two" })
+            .AddParameter("PassThru");
+
+        var results = ps.Invoke().Select(result => Assert.IsType<bool>(result.BaseObject)).ToArray();
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal(new[] { true, true }, results);
+        Assert.Empty(new ModuleRepositoryProfileStore().GetProfiles());
+    }
+
+    [Fact]
+    public void UnregisterManagedModuleRepository_accepts_pipeline_property_names()
+    {
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        var store = new ModuleRepositoryProfileStore();
+        store.SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "PipeOne",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "PipeOne",
+            RepositoryUri = "https://packages.example.test/pipe-one/v3/index.json"
+        });
+        store.SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "PipeTwo",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "PipeTwo",
+            RepositoryUri = "https://packages.example.test/pipe-two/v3/index.json"
+        });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddScript("[pscustomobject]@{ Name = 'PipeOne' }, [pscustomobject]@{ Name = 'PipeTwo' } | Unregister-ManagedModuleRepository -PassThru");
+
+        var results = ps.Invoke().Select(result => Assert.IsType<bool>(result.BaseObject)).ToArray();
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal(new[] { true, true }, results);
         Assert.Empty(new ModuleRepositoryProfileStore().GetProfiles());
     }
 

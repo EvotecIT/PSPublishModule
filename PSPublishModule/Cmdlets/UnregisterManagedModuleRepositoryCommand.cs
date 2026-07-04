@@ -12,10 +12,10 @@ namespace PSPublishModule;
 public sealed class UnregisterManagedModuleRepositoryCommand : PSCmdlet
 {
     /// <summary>Profile name to unregister.</summary>
-    [Parameter(Mandatory = true, Position = 0)]
+    [Parameter(Mandatory = true, Position = 0, ValueFromPipeline = true, ValueFromPipelineByPropertyName = true)]
     [Alias("ProfileName")]
     [ValidateNotNullOrEmpty]
-    public string Name { get; set; } = string.Empty;
+    public string[] Name { get; set; } = Array.Empty<string>();
 
     /// <summary>Returns true when a profile was removed, otherwise false.</summary>
     [Parameter]
@@ -32,13 +32,16 @@ public sealed class UnregisterManagedModuleRepositoryCommand : PSCmdlet
             throw new ArgumentException("Unregister-ManagedModuleRepository requires User or Machine scope.", nameof(Scope));
 
         var store = new ModuleRepositoryProfileStore(Scope);
-        var normalizedName = ModuleRepositoryProfileStore.NormalizeName(Name);
+        foreach (var name in Name)
+        {
+            var normalizedName = ModuleRepositoryProfileStore.NormalizeName(name);
 
-        if (!ShouldProcess(normalizedName, "Unregister managed module repository profile"))
-            return;
+            if (!ShouldProcess(normalizedName, "Unregister managed module repository profile"))
+                continue;
 
-        var removed = store.RemoveProfile(normalizedName);
-        if (PassThru)
-            WriteObject(removed);
+            var removed = store.RemoveProfile(normalizedName);
+            if (PassThru)
+                WriteObject(removed);
+        }
     }
 }

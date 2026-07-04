@@ -271,6 +271,7 @@ internal sealed class ModuleRepositoryProfileStore
             JFrogRepository = endpoint.JFrogRepository ?? string.Empty,
             GitHubOwner = endpoint.GitHubOwner ?? string.Empty,
             Tool = profile.Tool,
+            ApiVersion = profile.ApiVersion,
             BootstrapMode = ResolveBootstrapMode(endpoint.Provider, profile.BootstrapMode),
             Trusted = profile.Trusted,
             Priority = profile.Priority ?? PrivateGalleryDefaults.AzureArtifactsRepositoryPriority,
