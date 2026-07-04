@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Runtime.InteropServices;
 
 namespace PowerForge;
 
@@ -24,6 +25,76 @@ public sealed class ManagedScriptResourceService
         _logger = logger ?? new NullLogger();
         _repositoryClient = repositoryClient ?? new ManagedModuleRepositoryClient(_logger);
         _scriptFileInfoService = scriptFileInfoService ?? new ManagedScriptFileInfoService();
+    }
+
+    /// <summary>
+    /// Creates a non-mutating plan for installing a script resource.
+    /// </summary>
+    public async Task<ManagedScriptInstallPlan> PlanInstallAsync(
+        ManagedScriptInstallRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateInstall(request);
+        var resolved = ResolveScriptInstallRoot(request);
+        var savePlan = await PlanSaveAsync(CreateSaveRequest(request, resolved.ScriptRoot), cancellationToken).ConfigureAwait(false);
+
+        return new ManagedScriptInstallPlan
+        {
+            Name = savePlan.Name,
+            Version = savePlan.Version,
+            Action = MapInstallAction(savePlan.Action),
+            RepositoryName = savePlan.RepositoryName,
+            RepositorySource = savePlan.RepositorySource,
+            Scope = resolved.Scope,
+            ShellEdition = resolved.ShellEdition,
+            ScriptRoot = savePlan.DestinationPath,
+            ScriptPath = savePlan.ScriptPath,
+            WouldWriteFiles = savePlan.WouldWriteFiles,
+            ExistingVersion = savePlan.ExistingVersion,
+            RequestedVersion = savePlan.RequestedVersion,
+            MinimumVersion = savePlan.MinimumVersion,
+            MaximumVersion = savePlan.MaximumVersion,
+            VersionPolicy = savePlan.VersionPolicy,
+            ExpectedPackageSha256 = savePlan.ExpectedPackageSha256
+        };
+    }
+
+    /// <summary>
+    /// Installs a script resource package into the requested script scope.
+    /// </summary>
+    public async Task<ManagedScriptInstallResult> InstallAsync(
+        ManagedScriptInstallRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateInstall(request);
+        var resolved = ResolveScriptInstallRoot(request);
+        var saveResult = await SaveAsync(CreateSaveRequest(request, resolved.ScriptRoot), cancellationToken).ConfigureAwait(false);
+
+        return new ManagedScriptInstallResult
+        {
+            Name = saveResult.Name,
+            Version = saveResult.Version,
+            Status = saveResult.Status == ManagedScriptSaveStatus.SkippedExisting
+                ? ManagedScriptInstallStatus.SkippedExisting
+                : ManagedScriptInstallStatus.Installed,
+            RepositoryName = saveResult.RepositoryName,
+            RepositorySource = saveResult.RepositorySource,
+            Scope = resolved.Scope,
+            ShellEdition = resolved.ShellEdition,
+            ScriptRoot = saveResult.DestinationPath,
+            ScriptPath = saveResult.ScriptPath,
+            RequestedVersion = saveResult.RequestedVersion,
+            MinimumVersion = saveResult.MinimumVersion,
+            MaximumVersion = saveResult.MaximumVersion,
+            VersionPolicy = saveResult.VersionPolicy,
+            ExpectedPackageSha256 = saveResult.ExpectedPackageSha256,
+            Elapsed = saveResult.Elapsed,
+            VersionResolutionElapsed = saveResult.VersionResolutionElapsed,
+            DownloadElapsed = saveResult.DownloadElapsed,
+            ExtractionElapsed = saveResult.ExtractionElapsed,
+            Download = saveResult.Download,
+            ScriptInfo = saveResult.ScriptInfo
+        };
     }
 
     /// <summary>
@@ -608,6 +679,99 @@ public sealed class ManagedScriptResourceService
         public string? RepositorySource { get; set; }
     }
 
+    private static ManagedScriptSaveRequest CreateSaveRequest(ManagedScriptInstallRequest request, string destinationPath)
+        => new()
+        {
+            Repository = request.Repository,
+            Name = request.Name,
+            DestinationPath = destinationPath,
+            Version = request.Version,
+            MinimumVersion = request.MinimumVersion,
+            MaximumVersion = request.MaximumVersion,
+            VersionPolicy = request.VersionPolicy,
+            IncludePrerelease = request.IncludePrerelease,
+            PackageCacheDirectory = request.PackageCacheDirectory,
+            ExpectedPackageSha256 = request.ExpectedPackageSha256,
+            TrustPolicy = request.TrustPolicy,
+            Credential = request.Credential,
+            Force = request.Force,
+            AcceptLicense = request.AcceptLicense
+        };
+
+    private static ManagedScriptInstallPlanAction MapInstallAction(ManagedScriptSavePlanAction action)
+        => action switch
+        {
+            ManagedScriptSavePlanAction.SkipExisting => ManagedScriptInstallPlanAction.SkipExisting,
+            ManagedScriptSavePlanAction.Reinstall => ManagedScriptInstallPlanAction.Reinstall,
+            _ => ManagedScriptInstallPlanAction.Install
+        };
+
+    private static ResolvedScriptInstallRoot ResolveScriptInstallRoot(ManagedScriptInstallRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.ScriptRoot))
+        {
+            return new ResolvedScriptInstallRoot(
+                Path.GetFullPath(request.ScriptRoot!.Trim().Trim('"')),
+                ManagedScriptInstallScope.Custom,
+                ResolveShellEdition(request.ShellEdition));
+        }
+
+        var shellEdition = ResolveShellEdition(request.ShellEdition);
+        var folderName = shellEdition == ManagedModuleShellEdition.Desktop ? "WindowsPowerShell" : "PowerShell";
+        var scope = request.Scope;
+        var scriptRoot = scope switch
+        {
+            ManagedScriptInstallScope.CurrentUser => ResolveCurrentUserScriptRoot(folderName),
+            ManagedScriptInstallScope.AllUsers => ResolveAllUsersScriptRoot(folderName),
+            ManagedScriptInstallScope.Custom => throw new ArgumentException("ScriptRoot is required when Scope is Custom.", nameof(request)),
+            _ => throw new ArgumentOutOfRangeException(nameof(request), request.Scope, "Unsupported script install scope.")
+        };
+
+        return new ResolvedScriptInstallRoot(scriptRoot, scope, shellEdition);
+    }
+
+    private static ManagedModuleShellEdition ResolveShellEdition(ManagedModuleShellEdition shellEdition)
+    {
+        if (shellEdition != ManagedModuleShellEdition.Auto)
+            return shellEdition;
+
+        return Environment.Version.Major <= 4
+            ? ManagedModuleShellEdition.Desktop
+            : ManagedModuleShellEdition.Core;
+    }
+
+    private static string ResolveCurrentUserScriptRoot(string folderName)
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            if (string.IsNullOrWhiteSpace(documents))
+                documents = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Documents");
+
+            return Path.Combine(documents, folderName, "Scripts");
+        }
+
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (string.IsNullOrWhiteSpace(home))
+            home = Environment.GetEnvironmentVariable("HOME") ?? ".";
+
+        return Path.Combine(home, ".local", "share", folderName.ToLowerInvariant(), "Scripts");
+    }
+
+    private static string ResolveAllUsersScriptRoot(string folderName)
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            if (string.IsNullOrWhiteSpace(programFiles))
+                programFiles = Environment.GetEnvironmentVariable("ProgramFiles") ?? @"C:\Program Files";
+
+            return Path.Combine(programFiles, folderName, "Scripts");
+        }
+
+        return Path.Combine(Path.DirectorySeparatorChar.ToString(), "usr", "local", "share", folderName.ToLowerInvariant(), "Scripts");
+    }
+
     private static string ResolveDestinationPath(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -870,6 +1034,20 @@ public sealed class ManagedScriptResourceService
         }
     }
 
+    private static void ValidateInstall(ManagedScriptInstallRequest request)
+    {
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+        if (request.Repository is null)
+            throw new ArgumentException("Repository is required.", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new ArgumentException("Script name is required.", nameof(request));
+        ValidateVersionSelectors(request.Version, request.MinimumVersion, request.MaximumVersion, request.VersionPolicy);
+
+        _ = ManagedModulePackageIdentity.RequireSafeId(request.Name.Trim(), nameof(request.Name));
+        _ = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256);
+    }
+
     private static void DeleteDirectoryQuietly(string path)
     {
         try
@@ -881,5 +1059,24 @@ public sealed class ManagedScriptResourceService
         {
             // best effort cleanup
         }
+    }
+
+    private sealed class ResolvedScriptInstallRoot
+    {
+        public ResolvedScriptInstallRoot(
+            string scriptRoot,
+            ManagedScriptInstallScope scope,
+            ManagedModuleShellEdition shellEdition)
+        {
+            ScriptRoot = scriptRoot;
+            Scope = scope;
+            ShellEdition = shellEdition;
+        }
+
+        public string ScriptRoot { get; }
+
+        public ManagedScriptInstallScope Scope { get; }
+
+        public ManagedModuleShellEdition ShellEdition { get; }
     }
 }
