@@ -209,9 +209,33 @@ public sealed partial class ManagedModuleInstallService
         satisfiedStopwatch.Stop();
         if (isSatisfied)
         {
-            satisfiedResult.Elapsed = satisfiedStopwatch.Elapsed;
-            satisfiedResult.DependencyVersionRange = dependency.VersionRange;
-            return satisfiedResult;
+            ManagedModuleInstallResult satisfiedInstallResult;
+            if (request.RepairInstalledManifestDependencies && context.IsActive(dependency.Id))
+            {
+                satisfiedInstallResult = satisfiedResult;
+                satisfiedInstallResult.Elapsed = satisfiedStopwatch.Elapsed;
+            }
+            else if (request.RepairInstalledManifestDependencies)
+            {
+                satisfiedInstallResult = await InstallAsync(
+                    CreateDependencyInstallRequest(
+                        request,
+                        dependency.Id,
+                        satisfiedResult.Version,
+                        cacheDirectory,
+                        dependencyTrustPolicy,
+                        range),
+                    context,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                satisfiedInstallResult = satisfiedResult;
+                satisfiedInstallResult.Elapsed = satisfiedStopwatch.Elapsed;
+            }
+
+            satisfiedInstallResult.DependencyVersionRange = dependency.VersionRange;
+            return satisfiedInstallResult;
         }
 
         var dependencyVersionStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -224,29 +248,13 @@ public sealed partial class ManagedModuleInstallService
         dependencyVersionStopwatch.Stop();
 
         var result = await InstallAsync(
-            new ManagedModuleInstallRequest
-            {
-                Repository = request.Repository,
-                Name = dependency.Id,
-                Version = dependencyVersion.Version,
-                VersionPolicy = null,
-                IncludePrerelease = request.IncludePrerelease || range.AllowsPrerelease,
-                Scope = request.Scope,
-                ShellEdition = request.ShellEdition,
-                ModuleRoot = request.ModuleRoot,
-                PackageCacheDirectory = cacheDirectory,
-                PackageCacheDirectoryIsOperationLocal = request.PackageCacheDirectoryIsOperationLocal ||
-                                                        string.IsNullOrWhiteSpace(request.PackageCacheDirectory),
-                ExpectedPackageSha256 = null,
-                TrustPolicy = dependencyTrustPolicy,
-                Credential = request.Credential,
-                Force = false,
-                AllowClobber = request.AllowClobber,
-                AcceptLicense = request.AcceptLicense,
-                AuthenticodeCheck = request.AuthenticodeCheck,
-                DependencyConcurrency = request.DependencyConcurrency,
-                SkipDependencyCheck = false
-            },
+            CreateDependencyInstallRequest(
+                request,
+                dependency.Id,
+                dependencyVersion.Version,
+                cacheDirectory,
+                dependencyTrustPolicy,
+                range),
             context,
             cancellationToken).ConfigureAwait(false);
         result.DependencyVersionRange = dependency.VersionRange;
@@ -256,6 +264,38 @@ public sealed partial class ManagedModuleInstallService
             result.VersionResolutionElapsed += dependencyVersionStopwatch.Elapsed;
         return result;
     }
+
+    private static ManagedModuleInstallRequest CreateDependencyInstallRequest(
+        ManagedModuleInstallRequest request,
+        string dependencyName,
+        string dependencyVersion,
+        string cacheDirectory,
+        ManagedModuleTrustPolicy? dependencyTrustPolicy,
+        ManagedModuleVersionRange range)
+        => new()
+        {
+            Repository = request.Repository,
+            Name = dependencyName,
+            Version = dependencyVersion,
+            VersionPolicy = null,
+            IncludePrerelease = request.IncludePrerelease || range.AllowsPrerelease,
+            Scope = request.Scope,
+            ShellEdition = request.ShellEdition,
+            ModuleRoot = request.ModuleRoot,
+            PackageCacheDirectory = cacheDirectory,
+            PackageCacheDirectoryIsOperationLocal = request.PackageCacheDirectoryIsOperationLocal ||
+                                                    string.IsNullOrWhiteSpace(request.PackageCacheDirectory),
+            ExpectedPackageSha256 = null,
+            TrustPolicy = dependencyTrustPolicy,
+            Credential = request.Credential,
+            Force = false,
+            AllowClobber = request.AllowClobber,
+            AcceptLicense = request.AcceptLicense,
+            AuthenticodeCheck = request.AuthenticodeCheck,
+            DependencyConcurrency = request.DependencyConcurrency,
+            SkipDependencyCheck = false,
+            RepairInstalledManifestDependencies = request.RepairInstalledManifestDependencies
+        };
 
     private static bool TryCreateSatisfiedDependencyResult(
         ManagedModuleInstallRequest request,
@@ -272,7 +312,7 @@ public sealed partial class ManagedModuleInstallService
         if (installedVersion is null)
             return false;
 
-        var modulePath = Path.Combine(moduleRoot, dependencyName.Trim(), installedVersion);
+        var modulePath = ResolveInstalledModulePath(moduleRoot, dependencyName, installedVersion);
         result = CreateAlreadyInstalledResult(
             new ManagedModuleInstallRequest
             {
@@ -286,7 +326,8 @@ public sealed partial class ManagedModuleInstallService
                 Force = false,
                 AllowClobber = request.AllowClobber,
                 AcceptLicense = request.AcceptLicense,
-                AuthenticodeCheck = request.AuthenticodeCheck
+                AuthenticodeCheck = request.AuthenticodeCheck,
+                RepairInstalledManifestDependencies = request.RepairInstalledManifestDependencies
             },
             installedVersion,
             moduleRoot,
@@ -322,6 +363,226 @@ public sealed partial class ManagedModuleInstallService
 
         return range.IsSatisfiedBy(version);
     }
+
+    private async Task<ManagedModuleInstallResult> CreateAlreadyInstalledResultWithManifestDependencyRepairAsync(
+        ManagedModuleInstallRequest request,
+        string version,
+        string moduleRoot,
+        string modulePath,
+        TimeSpan elapsed,
+        TimeSpan versionResolutionElapsed,
+        long repositoryRequestCount,
+        TimeSpan installLockWaitElapsed,
+        ManagedModuleInstallContext context,
+        CancellationToken cancellationToken,
+        TimeSpan coalescedWaitElapsed = default)
+    {
+        var result = CreateAlreadyInstalledResult(
+            request,
+            version,
+            moduleRoot,
+            modulePath,
+            elapsed,
+            versionResolutionElapsed,
+            repositoryRequestCount,
+            installLockWaitElapsed,
+            coalescedWaitElapsed);
+
+        if (request.SkipDependencyCheck)
+            return result;
+
+        var metadata = CreateInstalledManifestDependencyMetadata(request.Name, version, modulePath);
+        if (metadata is null)
+            return result;
+
+        var repairRequest = request.RepairInstalledManifestDependencies
+            ? request
+            : CopyForInstalledManifestDependencyRepair(request);
+
+        var dependencyStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var cacheDirectory = string.IsNullOrWhiteSpace(request.PackageCacheDirectory)
+            ? Path.Combine(Path.GetTempPath(), "PFMM.C", NewShortId())
+            : Path.GetFullPath(request.PackageCacheDirectory!.Trim().Trim('"'));
+        var ownsCache = string.IsNullOrWhiteSpace(request.PackageCacheDirectory);
+
+        try
+        {
+            var dependencyResults = await InstallDependenciesAsync(
+                repairRequest,
+                metadata,
+                cacheDirectory,
+                context,
+                cancellationToken).ConfigureAwait(false);
+            dependencyStopwatch.Stop();
+
+            result.DependencyElapsed = dependencyStopwatch.Elapsed;
+            result.DependencyResults = dependencyResults;
+            result.RepositoryRequestCount += SumRepositoryRequestCount(dependencyResults);
+            result.PackageRepositoryRequestCount += SumPackageRepositoryRequestCount(dependencyResults);
+            result.PackageRepositoryRedirectCount += SumPackageRepositoryRedirectCount(dependencyResults);
+            return result;
+        }
+        finally
+        {
+            dependencyStopwatch.Stop();
+            if (ownsCache)
+                ManagedModuleExtractedPackageCache.DeleteDirectoryQuietly(cacheDirectory);
+        }
+    }
+
+    private static ManagedModuleInstallRequest CopyForInstalledManifestDependencyRepair(ManagedModuleInstallRequest request)
+        => new()
+        {
+            Repository = request.Repository,
+            Name = request.Name,
+            Version = request.Version,
+            MinimumVersion = request.MinimumVersion,
+            MaximumVersion = request.MaximumVersion,
+            VersionPolicy = request.VersionPolicy,
+            IncludePrerelease = request.IncludePrerelease,
+            Scope = request.Scope,
+            ShellEdition = request.ShellEdition,
+            ModuleRoot = request.ModuleRoot,
+            PackageCacheDirectory = request.PackageCacheDirectory,
+            PackageCacheDirectoryIsOperationLocal = request.PackageCacheDirectoryIsOperationLocal,
+            DependencyConcurrency = request.DependencyConcurrency,
+            ExpectedPackageSha256 = request.ExpectedPackageSha256,
+            TrustPolicy = request.TrustPolicy,
+            Credential = request.Credential,
+            Force = request.Force,
+            AllowClobber = request.AllowClobber,
+            AcceptLicense = request.AcceptLicense,
+            AuthenticodeCheck = request.AuthenticodeCheck,
+            SkipDependencyCheck = request.SkipDependencyCheck,
+            RepairInstalledManifestDependencies = true
+        };
+
+    private static ManagedModulePackageMetadata? CreateInstalledManifestDependencyMetadata(
+        string moduleName,
+        string version,
+        string modulePath)
+    {
+        var manifestPath = ResolveInstalledManifestPath(moduleName, modulePath);
+        if (string.IsNullOrWhiteSpace(manifestPath))
+            return null;
+
+        var requiredModules = ModuleManifestValueReader.ReadRequiredModules(manifestPath!);
+        if (requiredModules.Length == 0)
+            return null;
+
+        var externalDependencies = ModuleManifestValueReader
+            .ReadPsDataStringOrArray(manifestPath!, "ExternalModuleDependencies")
+            .Where(static dependency => !string.IsNullOrWhiteSpace(dependency))
+            .Select(static dependency => dependency.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var dependencies = requiredModules
+            .Where(static module => !string.IsNullOrWhiteSpace(module.ModuleName))
+            .Where(module => !externalDependencies.Contains(module.ModuleName!.Trim()))
+            .Select(static module => new ManagedModuleDependencyInfo
+            {
+                Id = module.ModuleName.Trim(),
+                VersionRange = ToManagedDependencyVersionRange(module),
+                TargetFramework = null
+            })
+            .ToArray();
+        if (dependencies.Length == 0)
+            return null;
+
+        return new ManagedModulePackageMetadata
+        {
+            Id = moduleName.Trim(),
+            Version = version,
+            Dependencies = dependencies,
+            ManifestDependencies = dependencies,
+            ManifestExternalModuleDependencies = externalDependencies.ToArray(),
+            ModuleManifestPath = manifestPath
+        };
+    }
+
+    private static bool WouldRepairInstalledManifestDependencies(
+        ManagedModuleInstallRequest request,
+        string moduleRoot,
+        string modulePath)
+    {
+        if (request.SkipDependencyCheck)
+            return false;
+
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return WouldRepairInstalledManifestDependenciesCore(request, request.Name, moduleRoot, modulePath, visited);
+    }
+
+    private static bool WouldRepairInstalledManifestDependenciesCore(
+        ManagedModuleInstallRequest request,
+        string moduleName,
+        string moduleRoot,
+        string modulePath,
+        ISet<string> visited)
+    {
+        if (!visited.Add(CreateManifestRepairVisitKey(moduleName, modulePath)))
+            return false;
+
+        var metadata = CreateInstalledManifestDependencyMetadata(moduleName, string.Empty, modulePath);
+        if (metadata is null)
+            return false;
+
+        foreach (var dependency in SelectDependencies(metadata))
+        {
+            var range = ManagedModuleVersionRange.Parse(dependency.VersionRange);
+            var installedVersion = GetInstalledVersions(moduleRoot, dependency.Id)
+                .Where(version => AllowsInstalledDependencyVersion(version, request, range))
+                .LastOrDefault();
+            if (installedVersion is null)
+                return true;
+
+            var dependencyPath = ResolveInstalledModulePath(moduleRoot, dependency.Id, installedVersion);
+            if (WouldRepairInstalledManifestDependenciesCore(request, dependency.Id, moduleRoot, dependencyPath, visited))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string CreateManifestRepairVisitKey(string moduleName, string modulePath)
+        => string.Join("|", moduleName.Trim(), NormalizeManifestRepairPath(modulePath));
+
+    private static string NormalizeManifestRepairPath(string modulePath)
+        => Path.GetFullPath(modulePath.Trim().Trim('"')).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+    private static string? ResolveInstalledManifestPath(string moduleName, string modulePath)
+    {
+        if (!Directory.Exists(modulePath))
+            return null;
+
+        var expectedManifestPath = Path.Combine(modulePath, moduleName.Trim() + ".psd1");
+        if (File.Exists(expectedManifestPath))
+            return expectedManifestPath;
+
+        return Directory.EnumerateFiles(modulePath, "*.psd1", SearchOption.TopDirectoryOnly)
+            .FirstOrDefault();
+    }
+
+    private static string? ToManagedDependencyVersionRange(RequiredModuleReference module)
+    {
+        if (!string.IsNullOrWhiteSpace(module.RequiredVersion))
+            return "[" + module.RequiredVersion!.Trim() + "]";
+        if (!string.IsNullOrWhiteSpace(module.ModuleVersion) && !string.IsNullOrWhiteSpace(module.MaximumVersion))
+            return "[" + module.ModuleVersion!.Trim() + "," + module.MaximumVersion!.Trim() + "]";
+        if (!string.IsNullOrWhiteSpace(module.ModuleVersion))
+            return module.ModuleVersion!.Trim();
+        if (!string.IsNullOrWhiteSpace(module.MaximumVersion))
+            return "(," + module.MaximumVersion!.Trim() + "]";
+
+        return null;
+    }
+
+    private static long SumRepositoryRequestCount(IReadOnlyList<ManagedModuleInstallResult> dependencyResults)
+        => dependencyResults.Sum(static dependency => dependency.RepositoryRequestCount);
+
+    private static long SumPackageRepositoryRequestCount(IReadOnlyList<ManagedModuleInstallResult> dependencyResults)
+        => dependencyResults.Sum(static dependency => dependency.PackageRepositoryRequestCount);
+
+    private static long SumPackageRepositoryRedirectCount(IReadOnlyList<ManagedModuleInstallResult> dependencyResults)
+        => dependencyResults.Sum(static dependency => dependency.PackageRepositoryRedirectCount);
 
     private static IReadOnlyList<string> GetInstalledVersions(
         string moduleRoot,

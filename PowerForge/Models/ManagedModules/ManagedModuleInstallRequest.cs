@@ -106,4 +106,6 @@ public sealed class ManagedModuleInstallRequest
     /// Skip installing dependencies declared by the package.
     /// </summary>
     public bool SkipDependencyCheck { get; set; }
+
+    internal bool RepairInstalledManifestDependencies { get; set; }
 }

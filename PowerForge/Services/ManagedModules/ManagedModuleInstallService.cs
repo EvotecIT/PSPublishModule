@@ -60,17 +60,18 @@ public sealed partial class ManagedModuleInstallService
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
         if (TrySelectInstalledNoOpVersion(request, moduleRoot, context: null, out var installedVersion))
         {
-            var installedModulePath = Path.Combine(moduleRoot, request.Name.Trim(), installedVersion);
+            var installedModulePath = ResolveInstalledModulePath(moduleRoot, request.Name, installedVersion);
             return CreateInstallPlan(
                 request,
                 installedVersion,
                 moduleRoot,
                 installedModulePath,
-                exists: true);
+                exists: true,
+                wouldRepairDependencies: WouldRepairInstalledManifestDependencies(request, moduleRoot, installedModulePath));
         }
 
         var versionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken, resolveExactMetadata: true).ConfigureAwait(false);
-        var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), versionInfo.Version);
+        var modulePath = Path.Combine(moduleRoot, request.Name.Trim(), ResolveModuleDirectoryVersion(versionInfo.Version));
         return CreateInstallPlan(
             request,
             versionInfo.Version,
@@ -86,7 +87,8 @@ public sealed partial class ManagedModuleInstallService
         string moduleRoot,
         string modulePath,
         bool exists,
-        ManagedModuleVersionInfo? versionInfo = null)
+        ManagedModuleVersionInfo? versionInfo = null,
+        bool wouldRepairDependencies = false)
     {
         var requiresPackageDownloadBeforeNoOp = RequiresPackageDownloadBeforeNoOp(request);
         var action = exists
@@ -103,7 +105,7 @@ public sealed partial class ManagedModuleInstallService
             ModuleRoot = moduleRoot,
             ModulePath = modulePath,
             ExistingVersionFound = exists,
-            WouldWriteFiles = action != ManagedModuleInstallPlanAction.SkipExisting,
+            WouldWriteFiles = action != ManagedModuleInstallPlanAction.SkipExisting || wouldRepairDependencies,
             RequestedVersion = request.Version,
             MinimumVersion = request.MinimumVersion,
             MaximumVersion = request.MaximumVersion,
@@ -151,7 +153,7 @@ public sealed partial class ManagedModuleInstallService
 
         if (knownCoalescingKey is not null && context.TryGetCompletedInstall(knownCoalescingKey, out var completedInstall))
         {
-            var completedModulePath = Path.Combine(moduleRoot, request.Name.Trim(), completedInstall.Version);
+            var completedModulePath = ResolveInstalledModulePath(moduleRoot, request.Name, completedInstall.Version);
             _logger.Verbose($"Managed module install skipped operation-local completed target: {completedModulePath}");
             return CreateAlreadyInstalledResult(
                 request,
@@ -180,7 +182,7 @@ public sealed partial class ManagedModuleInstallService
                         }
 
                         coalescedWaitStopwatch.Stop();
-                        var completedModulePath = Path.Combine(moduleRoot, request.Name.Trim(), completed.Version);
+                        var completedModulePath = ResolveInstalledModulePath(moduleRoot, request.Name, completed.Version);
                         return CreateAlreadyInstalledResult(
                             request,
                             completed.Version,
@@ -200,26 +202,34 @@ public sealed partial class ManagedModuleInstallService
                 }
             }
 
+            string? installedNoOpVersion = null;
+            string? installedNoOpModulePath = null;
             using (AcquireInstallLock(moduleRoot, request.Name, cancellationToken, out var initialLockWaitElapsed))
             {
                 installLockWaitElapsed += initialLockWaitElapsed;
                 if (TrySelectInstalledNoOpVersion(request, moduleRoot, context, out var installedVersion))
                 {
-                    var installedModulePath = Path.Combine(moduleRoot, request.Name.Trim(), installedVersion);
-                    _logger.Verbose($"Managed module install skipped existing satisfying version: {installedModulePath}");
-                    var result = CreateAlreadyInstalledResult(
-                        request,
-                        installedVersion,
-                        moduleRoot,
-                        installedModulePath,
-                        stopwatch.Elapsed,
-                        TimeSpan.Zero,
-                        repositoryRequestCount: 0,
-                        installLockWaitElapsed);
-
-                    context.RecordInstalledVersion(moduleRoot, request.Name, installedVersion);
-                    return CompletePreResolvedInstall(result);
+                    installedNoOpVersion = installedVersion;
+                    installedNoOpModulePath = ResolveInstalledModulePath(moduleRoot, request.Name, installedVersion);
                 }
+            }
+
+            if (installedNoOpVersion is not null && installedNoOpModulePath is not null)
+            {
+                _logger.Verbose($"Managed module install skipped existing satisfying version: {installedNoOpModulePath}");
+                context.RecordInstalledVersion(moduleRoot, request.Name, installedNoOpVersion);
+                var result = await CreateAlreadyInstalledResultWithManifestDependencyRepairAsync(
+                    request,
+                    installedNoOpVersion,
+                    moduleRoot,
+                    installedNoOpModulePath,
+                    stopwatch.Elapsed,
+                    TimeSpan.Zero,
+                    repositoryRequestCount: 0,
+                    installLockWaitElapsed,
+                    context,
+                    cancellationToken).ConfigureAwait(false);
+                return CompletePreResolvedInstall(result);
             }
 
             using var requestScope = _repositoryClient.BeginRequestScope();
@@ -409,7 +419,7 @@ public sealed partial class ManagedModuleInstallService
                 {
                     _logger.Verbose($"Managed module install skipped existing version: {modulePath}");
                     context.RecordInstalledVersion(moduleRoot, request.Name, version);
-                    return CreateAlreadyInstalledResult(
+                    return await CreateAlreadyInstalledResultWithManifestDependencyRepairAsync(
                         request,
                         version,
                         moduleRoot,
@@ -417,7 +427,9 @@ public sealed partial class ManagedModuleInstallService
                         stopwatch.Elapsed,
                         versionResolutionElapsed,
                         requestScope.Count,
-                        installLockWaitElapsed);
+                        installLockWaitElapsed,
+                        context,
+                        cancellationToken).ConfigureAwait(false);
                 }
             }
 
@@ -586,7 +598,7 @@ public sealed partial class ManagedModuleInstallService
                     {
                         _logger.Verbose($"Managed module install skipped concurrently installed version: {modulePath}");
                         context.RecordInstalledVersion(moduleRoot, request.Name, version);
-                        return CreateAlreadyInstalledResult(
+                        return await CreateAlreadyInstalledResultWithManifestDependencyRepairAsync(
                             request,
                             version,
                             moduleRoot,
@@ -594,7 +606,9 @@ public sealed partial class ManagedModuleInstallService
                             stopwatch.Elapsed,
                             versionResolutionElapsed,
                             requestScope.Count,
-                            installLockWaitElapsed);
+                            installLockWaitElapsed,
+                            context,
+                            cancellationToken).ConfigureAwait(false);
                     }
 
                     if (directPayloadLease is not null && !Directory.Exists(modulePath))
@@ -851,6 +865,60 @@ public sealed partial class ManagedModuleInstallService
     private static string ResolveModuleDirectoryVersion(string version)
         => ManagedModulePackageIdentity.RequireSafeVersion(version, nameof(version));
 
+    private static string ResolveInstalledModulePath(string moduleRoot, string moduleName, string version)
+    {
+        var moduleFolder = Path.Combine(moduleRoot, moduleName.Trim());
+        var versionPath = Path.Combine(moduleFolder, ResolveModuleDirectoryVersion(version));
+        if (Directory.Exists(versionPath))
+            return versionPath;
+
+        var equivalentVersionPath = ResolveInstalledVersionDirectoryPath(moduleFolder, moduleName, version);
+        if (!string.IsNullOrWhiteSpace(equivalentVersionPath))
+            return equivalentVersionPath!;
+
+        var flatManifestPath = ResolveInstalledManifestPath(moduleName, moduleFolder);
+        if (!string.IsNullOrWhiteSpace(flatManifestPath) &&
+            IsInstalledModulePathSatisfied(moduleFolder, moduleName, version))
+        {
+            return moduleFolder;
+        }
+
+        return versionPath;
+    }
+
+    private static string? ResolveInstalledVersionDirectoryPath(string moduleFolder, string moduleName, string version)
+    {
+        if (!Directory.Exists(moduleFolder))
+            return null;
+
+        try
+        {
+            foreach (var directoryPath in Directory.EnumerateDirectories(moduleFolder))
+            {
+                var directoryName = Path.GetFileName(directoryPath);
+                if (string.IsNullOrWhiteSpace(directoryName) ||
+                    ManagedModuleInstallContext.IsManagedStageDirectory(directoryName!) ||
+                    !IsInstalledVersionDirectoryName(directoryName))
+                {
+                    continue;
+                }
+
+                if (IsInstalledModulePathSatisfied(directoryPath, moduleName, version))
+                    return directoryPath;
+            }
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        return null;
+    }
+
     private static bool IsInstalledModulePathSatisfied(string modulePath, string moduleName, string version)
     {
         if (!Directory.Exists(modulePath))
@@ -877,6 +945,26 @@ public sealed partial class ManagedModuleInstallService
         {
             return true;
         }
+    }
+
+    private static bool IsInstalledVersionDirectoryName(string? directoryName)
+    {
+        if (string.IsNullOrWhiteSpace(directoryName))
+            return false;
+
+        var value = directoryName!.Trim();
+        var plusIndex = value.IndexOf('+');
+        if (plusIndex >= 0)
+            value = value.Substring(0, plusIndex);
+
+        var dashIndex = value.IndexOf('-');
+        var numeric = dashIndex >= 0 ? value.Substring(0, dashIndex) : value;
+        if (numeric.Length == 0)
+            return false;
+
+        var parts = numeric.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length > 0 &&
+               parts.All(static part => part.Length > 0 && part.All(static character => character >= '0' && character <= '9'));
     }
 
     private static ManagedModuleVersionInfo CreateRequestedVersionInfo(ManagedModuleInstallRequest request, string version)

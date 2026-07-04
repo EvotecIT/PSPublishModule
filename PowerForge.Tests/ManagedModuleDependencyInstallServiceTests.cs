@@ -41,6 +41,307 @@ public sealed class ManagedModuleDependencyInstallServiceTests
     }
 
     [Fact]
+    public async Task InstallAsync_repairs_manifest_dependency_when_root_module_is_already_installed()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        WriteInstalledRootWithRequiredModule(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Core", "1.0.0");
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "marker.txt"), "keep-root");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            files: CreateCoreFiles("1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, result.Status);
+        Assert.Equal("keep-root", File.ReadAllText(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "marker.txt")));
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.Equal("Company.Core", dependency.Name);
+        Assert.Equal("1.0.0", dependency.Version);
+        Assert.Equal(ManagedModuleInstallStatus.Installed, dependency.Status);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "1.0.0", "Company.Core.psd1")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_does_not_repair_manifest_dependencies_marked_external()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var modulePath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(modulePath);
+        File.WriteAllText(
+            Path.Combine(modulePath, "Company.Tools.psd1"),
+            "@{ ModuleVersion = '1.0.0'; RequiredModules = @(@{ ModuleName = 'External.Tools'; RequiredVersion = '9.0.0'; }); PrivateData = @{ PSData = @{ ExternalModuleDependencies = @('external.tools') } } }");
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, result.Status);
+        Assert.Empty(result.DependencyResults);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "External.Tools")));
+    }
+
+    [Fact]
+    public async Task PlanInstallAsync_reports_manifest_dependency_repair_writes()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        WriteInstalledRootWithRequiredModule(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Core", "1.0.0");
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var plan = await service.PlanInstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(ManagedModuleInstallPlanAction.SkipExisting, plan.Action);
+        Assert.True(plan.ExistingVersionFound);
+        Assert.True(plan.WouldWriteFiles);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Core")));
+    }
+
+    [Fact]
+    public async Task PlanInstallAsync_reports_manifest_dependency_repair_from_normalized_version_directory()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0",
+            "1.0.0",
+            ("Company.Core", "1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var plan = await service.PlanInstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0"), plan.ModulePath);
+        Assert.Equal(ManagedModuleInstallPlanAction.SkipExisting, plan.Action);
+        Assert.True(plan.WouldWriteFiles);
+    }
+
+    [Fact]
+    public async Task InstallAsync_repairs_manifest_dependencies_below_already_installed_dependency()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        WriteInstalledRootWithRequiredModule(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Core", "1.0.0");
+        WriteInstalledRootWithRequiredModule(moduleRoot.Path, "Company.Core", "1.0.0", "Company.Leaf", "1.0.0");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Leaf.1.0.0.nupkg"),
+            "Company.Leaf",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Leaf.psd1"] = "@{ ModuleVersion = '1.0.0' }"
+            });
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        var directDependency = Assert.Single(result.DependencyResults);
+        Assert.Equal("Company.Core", directDependency.Name);
+        Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, directDependency.Status);
+        var transitiveDependency = Assert.Single(directDependency.DependencyResults);
+        Assert.Equal("Company.Leaf", transitiveDependency.Name);
+        Assert.Equal(ManagedModuleInstallStatus.Installed, transitiveDependency.Status);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Leaf", "1.0.0", "Company.Leaf.psd1")));
+    }
+
+    [Fact]
+    public async Task InstallAsync_repairs_manifest_dependency_from_normalized_version_directory()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var installedPath = WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0",
+            "1.0.0",
+            ("Company.Core", "1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            files: CreateCoreFiles("1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(installedPath, result.ModulePath);
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.Equal("Company.Core", dependency.Name);
+        Assert.Equal(ManagedModuleInstallStatus.Installed, dependency.Status);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "1.0.0", "Company.Core.psd1")));
+    }
+
+    [Fact]
+    public async Task PlanInstallAsync_inspects_same_dependency_name_at_different_installed_paths()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            "1.0.0",
+            ("Company.BranchA", "1.0.0"),
+            ("Company.BranchB", "1.0.0"));
+        WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.BranchA",
+            "1.0.0",
+            "1.0.0",
+            ("Company.Shared", "1.0.0"));
+        WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.BranchB",
+            "1.0.0",
+            "1.0.0",
+            ("Company.Shared", "2.0.0"));
+        WriteInstalledModuleManifest(moduleRoot.Path, "Company.Shared", "1.0.0", "1.0.0");
+        WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.Shared",
+            "2.0.0",
+            "2.0.0",
+            ("Company.Leaf", "1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var plan = await service.PlanInstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(ManagedModuleInstallPlanAction.SkipExisting, plan.Action);
+        Assert.True(plan.WouldWriteFiles);
+    }
+
+    [Fact]
+    public async Task InstallAsync_does_not_reenter_already_active_satisfied_dependency_during_manifest_repair()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            "1.0.0",
+            ("Company.Core", "1.0.0"));
+        WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.Core",
+            "1.0.0",
+            "1.0.0",
+            ("Company.Tools", "1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var plan = await service.PlanInstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.False(plan.WouldWriteFiles);
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.Equal("Company.Core", dependency.Name);
+        Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, dependency.Status);
+        var cycleDependency = Assert.Single(dependency.DependencyResults);
+        Assert.Equal("Company.Tools", cycleDependency.Name);
+        Assert.Equal(ManagedModuleInstallStatus.AlreadyInstalled, cycleDependency.Status);
+    }
+
+    [Fact]
+    public async Task InstallAsync_repairs_manifest_dependency_from_flat_root_module_layout()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var flatModulePath = Path.Combine(moduleRoot.Path, "Company.Tools");
+        Directory.CreateDirectory(flatModulePath);
+        File.WriteAllText(
+            Path.Combine(flatModulePath, "Company.Tools.psd1"),
+            "@{ ModuleVersion = '1.0.0'; RequiredModules = @(@{ ModuleName = 'Company.Core'; RequiredVersion = '1.0.0'; }) }");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            files: CreateCoreFiles("1.0.0"));
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path
+        });
+
+        Assert.Equal(flatModulePath, result.ModulePath);
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.Equal("Company.Core", dependency.Name);
+        Assert.Equal(ManagedModuleInstallStatus.Installed, dependency.Status);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "1.0.0", "Company.Core.psd1")));
+    }
+
+    [Fact]
     public async Task InstallAsync_skips_dependency_version_query_for_satisfied_dependency_when_only_repository_trust_is_required()
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -273,6 +574,35 @@ public sealed class ManagedModuleDependencyInstallServiceTests
         {
             ["Company.Core.psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
+
+    private static void WriteInstalledRootWithRequiredModule(
+        string moduleRoot,
+        string moduleName,
+        string version,
+        string dependencyName,
+        string dependencyVersion)
+        => WriteInstalledModuleManifest(moduleRoot, moduleName, version, version, (dependencyName, dependencyVersion));
+
+    private static string WriteInstalledModuleManifest(
+        string moduleRoot,
+        string moduleName,
+        string directoryName,
+        string moduleVersion,
+        params (string Name, string Version)[] dependencies)
+    {
+        var modulePath = Path.Combine(moduleRoot, moduleName, directoryName);
+        Directory.CreateDirectory(modulePath);
+        var requiredModules = dependencies.Length == 0
+            ? string.Empty
+            : "; RequiredModules = @(" + string.Join(
+                ", ",
+                dependencies.Select(static dependency =>
+                    "@{ ModuleName = '" + dependency.Name + "'; RequiredVersion = '" + dependency.Version + "'; }")) + ")";
+        File.WriteAllText(
+            Path.Combine(modulePath, moduleName + ".psd1"),
+            "@{ ModuleVersion = '" + moduleVersion + "'" + requiredModules + " }");
+        return modulePath;
+    }
 
     private sealed class SatisfiedDependencyTrustFeedHandler : HttpMessageHandler
     {
