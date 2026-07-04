@@ -451,8 +451,13 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("$TypeAccelerators.GetProperty('Get', [System.Reflection.BindingFlags] 'Static,Public,NonPublic')", bootstrapper);
             Assert.Contains("AssemblyLoadContext]::GetLoadContext($ModuleAssembly)", bootstrapper);
             Assert.Contains("$AddPowerForgeTypeAccelerator = {", bootstrapper);
-            Assert.Contains("Type accelerator '$Name' already exists", bootstrapper);
-            Assert.Contains("if ([object]::ReferenceEquals($Existing[$Name], $Type)) {", bootstrapper);
+            Assert.Contains("$ExistingType = $Existing[$Name]", bootstrapper);
+            Assert.Contains("$ExistingLoadContext = [System.Runtime.Loader.AssemblyLoadContext]::GetLoadContext($ExistingType.Assembly)", bootstrapper);
+            Assert.Contains("$TypeLoadContext = [System.Runtime.Loader.AssemblyLoadContext]::GetLoadContext($Type.Assembly)", bootstrapper);
+            Assert.Contains("[object]::ReferenceEquals($ExistingLoadContext, $TypeLoadContext) -and [object]::Equals($ExistingAssemblyName.FullName, $TypeAssemblyName.FullName)", bootstrapper);
+            Assert.Contains("Write-Verbose -Message \"Type accelerator '$Name' already exists in the same AssemblyLoadContext from the same assembly identity.", bootstrapper);
+            Assert.Contains("Write-Warning -Message \"Type accelerator '$Name' already exists from $($ExistingAssemblyName.FullName).", bootstrapper);
+            Assert.Contains("if ([object]::ReferenceEquals($ExistingType, $Type)) {", bootstrapper);
             Assert.Contains("return", bootstrapper);
             Assert.Contains("$PreviousPowerForgeOnRemove = $ExecutionContext.SessionState.Module.OnRemove", bootstrapper);
             Assert.Contains("& $PreviousPowerForgeOnRemove @args", bootstrapper);

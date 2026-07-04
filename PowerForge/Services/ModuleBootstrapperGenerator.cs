@@ -1270,10 +1270,19 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
         $Name = $Type.FullName
         $Existing = $GetTypeAccelerators.GetValue($null)
         if ($Existing.ContainsKey($Name)) {{
-            if ([object]::ReferenceEquals($Existing[$Name], $Type)) {{
+            $ExistingType = $Existing[$Name]
+            if ([object]::ReferenceEquals($ExistingType, $Type)) {{
                 return
             }} else {{
-                Write-Warning -Message ""Type accelerator '$Name' already exists. Keeping the existing accelerator and skipping the ALC type from $($Type.Assembly.GetName().Name).""
+                $ExistingAssemblyName = $ExistingType.Assembly.GetName()
+                $TypeAssemblyName = $Type.Assembly.GetName()
+                $ExistingLoadContext = [System.Runtime.Loader.AssemblyLoadContext]::GetLoadContext($ExistingType.Assembly)
+                $TypeLoadContext = [System.Runtime.Loader.AssemblyLoadContext]::GetLoadContext($Type.Assembly)
+                if ([object]::ReferenceEquals($ExistingLoadContext, $TypeLoadContext) -and [object]::Equals($ExistingAssemblyName.FullName, $TypeAssemblyName.FullName)) {{
+                    Write-Verbose -Message ""Type accelerator '$Name' already exists in the same AssemblyLoadContext from the same assembly identity. Keeping the existing accelerator and skipping the duplicate type from $($TypeAssemblyName.Name).""
+                }} else {{
+                    Write-Warning -Message ""Type accelerator '$Name' already exists from $($ExistingAssemblyName.FullName). Keeping the existing accelerator and skipping the ALC type from $($TypeAssemblyName.FullName).""
+                }}
             }}
             return
         }}
