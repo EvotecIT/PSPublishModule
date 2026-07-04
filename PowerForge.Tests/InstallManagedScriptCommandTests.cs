@@ -71,6 +71,104 @@ public sealed class InstallManagedScriptCommandTests
     }
 
     [Fact]
+    public void InstallManagedScript_plan_blocks_existing_different_version_without_force()
+    {
+        using var feed = new TemporaryDirectory();
+        using var scriptRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Invoke-CompanyTask.2.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "2.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("2.0.0")
+            });
+        File.WriteAllText(Path.Combine(scriptRoot.Path, "Invoke-CompanyTask.ps1"), CreateScript("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ScriptRoot", scriptRoot.Path)
+            .AddParameter("RequiredVersion", "2.0.0")
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedScriptInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptInstallPlanAction.BlockedExisting, plan.Action);
+        Assert.False(plan.WouldWriteFiles);
+        Assert.Equal("1.0.0", plan.ExistingVersion);
+        Assert.Contains("Use Force", plan.BlockReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void InstallManagedScript_plan_blocks_existing_unreadable_script_without_force()
+    {
+        using var feed = new TemporaryDirectory();
+        using var scriptRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            });
+        File.WriteAllText(Path.Combine(scriptRoot.Path, "Invoke-CompanyTask.ps1"), "Write-Output 'missing metadata'");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ScriptRoot", scriptRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedScriptInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptInstallPlanAction.BlockedExisting, plan.Action);
+        Assert.False(plan.WouldWriteFiles);
+        Assert.Null(plan.ExistingVersion);
+        Assert.Contains("Use Force", plan.BlockReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void InstallManagedScript_plan_reports_license_acceptance_requirement()
+    {
+        using var feed = new TemporaryDirectory();
+        using var scriptRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            },
+            requireLicenseAcceptance: true);
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ScriptRoot", scriptRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedScriptInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptInstallPlanAction.Install, plan.Action);
+        Assert.True(plan.LicenseAcceptanceRequired);
+        Assert.True(plan.WouldWriteFiles);
+    }
+
+    [Fact]
     public void InstallManagedScript_skips_existing_selected_version()
     {
         using var feed = new TemporaryDirectory();
@@ -97,6 +195,93 @@ public sealed class InstallManagedScriptCommandTests
         AssertNoPowerShellErrors(ps);
         var result = Assert.IsType<ManagedScriptInstallResult>(Assert.Single(results).BaseObject);
         Assert.Equal(ManagedScriptInstallStatus.SkippedExisting, result.Status);
+        Assert.Null(result.Download);
+    }
+
+    [Fact]
+    public void InstallManagedScript_skips_existing_required_version_without_repository_lookup()
+    {
+        using var feed = new TemporaryDirectory();
+        using var scriptRoot = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(scriptRoot.Path, "Invoke-CompanyTask.ps1"), CreateScript("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ScriptRoot", scriptRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptInstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptInstallStatus.SkippedExisting, result.Status);
+        Assert.Equal("1.0.0", result.Version);
+        Assert.Null(result.Download);
+    }
+
+    [Fact]
+    public void InstallManagedScript_does_not_skip_existing_when_repository_trust_is_rejected()
+    {
+        using var feed = new TemporaryDirectory();
+        using var scriptRoot = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(scriptRoot.Path, "Invoke-CompanyTask.ps1"), CreateScript("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ScriptRoot", scriptRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("RequireTrustedRepository");
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("not trusted", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void InstallManagedScript_does_not_satisfy_stable_range_with_existing_prerelease()
+    {
+        using var feed = new TemporaryDirectory();
+        using var scriptRoot = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(scriptRoot.Path, "Invoke-CompanyTask.ps1"), CreateScript("1.5.0-beta"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ScriptRoot", scriptRoot.Path)
+            .AddParameter("MinimumVersion", "1.0.0")
+            .AddParameter("MaximumVersion", "2.0.0");
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("No versions", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void InstallManagedScript_skips_existing_version_satisfying_range_without_repository_lookup()
+    {
+        using var feed = new TemporaryDirectory();
+        using var scriptRoot = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(scriptRoot.Path, "Invoke-CompanyTask.ps1"), CreateScript("1.5.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ScriptRoot", scriptRoot.Path)
+            .AddParameter("MinimumVersion", "1.0.0")
+            .AddParameter("MaximumVersion", "2.0.0");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptInstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptInstallStatus.SkippedExisting, result.Status);
+        Assert.Equal("1.5.0", result.Version);
         Assert.Null(result.Download);
     }
 
