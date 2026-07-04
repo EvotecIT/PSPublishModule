@@ -866,6 +866,7 @@ public sealed class ManagedScriptResourceService
 
         if (!string.IsNullOrWhiteSpace(requestedVersion) &&
             (string.IsNullOrWhiteSpace(existingVersion) ||
+             !ModuleStateVersion.TryParse(existingVersion, out _) ||
              ManagedModuleVersionComparer.Instance.Compare(existingVersion!, requestedVersion!.Trim()) != 0))
         {
             return ManagedScriptUninstallPlanAction.SkipVersionMismatch;

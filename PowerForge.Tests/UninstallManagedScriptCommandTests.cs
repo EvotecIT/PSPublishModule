@@ -104,6 +104,27 @@ public sealed class UninstallManagedScriptCommandTests
     }
 
     [Fact]
+    public void UninstallManagedScript_treats_malformed_installed_version_as_mismatch()
+    {
+        using var scriptRoot = new TemporaryDirectory();
+        var scriptPath = Path.Combine(scriptRoot.Path, "Invoke-CompanyTask.ps1");
+        File.WriteAllText(scriptPath, CreateScript("1.foo"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("ScriptRoot", scriptRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptUninstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptUninstallStatus.SkippedVersionMismatch, result.Status);
+        Assert.Equal("1.foo", result.ExistingVersion);
+        Assert.True(File.Exists(scriptPath));
+    }
+
+    [Fact]
     public void UninstallManagedScript_matches_installed_script_name_case_insensitively()
     {
         using var scriptRoot = new TemporaryDirectory();
