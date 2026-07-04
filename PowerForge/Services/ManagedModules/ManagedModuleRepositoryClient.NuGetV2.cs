@@ -258,6 +258,7 @@ public sealed partial class ManagedModuleRepositoryClient
         var license = ReadNuGetV2String(entry, data, "LicenseExpression") ??
                       ReadNuGetV2String(entry, data, "LicenseUrl");
         var dependencies = ReadNuGetV2Dependencies(entry, data);
+        var tags = SplitTags(ReadNuGetV2String(entry, data, "Tags"));
         return new ManagedModuleVersionInfo
         {
             Name = trimmedId,
@@ -269,7 +270,8 @@ public sealed partial class ManagedModuleRepositoryClient
             Listed = ReadNuGetV2Listed(entry, data),
             License = license,
             RequireLicenseAcceptance = ReadNuGetV2Boolean(entry, data, "RequireLicenseAcceptance"),
-            Dependencies = dependencies
+            Dependencies = dependencies,
+            Tags = tags
         };
     }
 

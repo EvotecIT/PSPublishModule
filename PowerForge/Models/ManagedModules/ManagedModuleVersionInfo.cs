@@ -54,4 +54,14 @@ public sealed class ManagedModuleVersionInfo
     /// Dependencies exposed by repository metadata when available.
     /// </summary>
     public IReadOnlyList<ManagedModuleDependencyInfo> Dependencies { get; set; } = Array.Empty<ManagedModuleDependencyInfo>();
+
+    /// <summary>
+    /// Package tags exposed by repository or package metadata when available.
+    /// </summary>
+    public IReadOnlyList<string> Tags { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Resource kind represented by this result.
+    /// </summary>
+    public string ResourceType { get; set; } = "Module";
 }

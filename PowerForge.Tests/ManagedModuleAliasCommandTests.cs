@@ -109,6 +109,23 @@ public sealed class ManagedModuleAliasCommandTests
         Assert.True(command.Parameters.ContainsKey("ProxyCredential"));
     }
 
+    [Fact]
+    public void FindManagedModule_exposes_psresourceget_search_parameters()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Get-Command")
+            .AddArgument("Find-ManagedModule");
+
+        var command = Assert.IsType<CmdletInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.True(command.Parameters.ContainsKey("Tag"));
+        Assert.True(command.Parameters.ContainsKey("ResourceType"));
+        Assert.True(command.Parameters.ContainsKey("IncludeDependencies"));
+        Assert.Contains("Tags", command.Parameters["Tag"].Aliases);
+        Assert.Contains("Type", command.Parameters["ResourceType"].Aliases);
+    }
+
     [Theory]
     [InlineData("Find-ManagedModule", "Name", "ModuleName")]
     [InlineData("Find-ManagedModule", "Repository", "Source")]
@@ -266,6 +283,64 @@ public sealed class ManagedModuleAliasCommandTests
 
         AssertNoPowerShellErrors(ps);
         Assert.Equal(new[] { "Company.Core:2.0.0", "Company.Tools:1.0.0", "Company.Tools:1.1.0" },
+            result.Select(static item => item.Name + ":" + item.Version));
+    }
+
+    [Fact]
+    public void FindManagedModule_filters_local_feed_by_tag()
+    {
+        using var feed = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            tags: "automation reporting");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Data.1.0.0.nupkg"),
+            "Company.Data",
+            "1.0.0",
+            tags: "database storage");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Find-ManagedModule")
+            .AddParameter("Name", "Company.*")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Tag", new[] { "auto*" })
+            .AddParameter("Type", "Module");
+
+        var result = Assert.IsType<ManagedModuleVersionInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal("Company.Tools", result.Name);
+        Assert.Equal("Module", result.ResourceType);
+        Assert.Contains("automation", result.Tags);
+    }
+
+    [Fact]
+    public void FindManagedModule_include_dependencies_returns_satisfying_dependency_resources()
+    {
+        using var feed = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[2.0.0, )", null) });
+        TestPackageFactory.Create(Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"), "Company.Core", "1.0.0");
+        TestPackageFactory.Create(Path.Combine(feed.Path, "Company.Core.2.1.0.nupkg"), "Company.Core", "2.1.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Find-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("IncludeDependencies");
+
+        var result = ps.Invoke()
+            .Select(static item => Assert.IsType<ManagedModuleVersionInfo>(item.BaseObject))
+            .OrderBy(static item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal(new[] { "Company.Core:2.1.0", "Company.Tools:1.0.0" },
             result.Select(static item => item.Name + ":" + item.Version));
     }
 

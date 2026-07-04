@@ -184,6 +184,44 @@ public sealed partial class ManagedModuleRepositoryClient
     }
 
     /// <summary>
+    /// Resolves the latest available package version satisfying dependency metadata.
+    /// </summary>
+    /// <param name="repository">Repository to query.</param>
+    /// <param name="dependency">Dependency metadata.</param>
+    /// <param name="includePrerelease">Include prerelease versions even when the dependency range does not require them.</param>
+    /// <param name="credential">Optional repository credential.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The latest satisfying dependency version, or <c>null</c> when none is available.</returns>
+    public async Task<ManagedModuleVersionInfo?> GetLatestDependencyVersionAsync(
+        ManagedModuleRepository repository,
+        ManagedModuleDependencyInfo dependency,
+        bool includePrerelease = false,
+        RepositoryCredential? credential = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (repository is null)
+            throw new ArgumentNullException(nameof(repository));
+        if (dependency is null)
+            throw new ArgumentNullException(nameof(dependency));
+        if (string.IsNullOrWhiteSpace(dependency.Id))
+            throw new ArgumentException("Dependency id is required.", nameof(dependency));
+
+        var range = ManagedModuleVersionRange.Parse(dependency.VersionRange);
+        var versions = await GetVersionsAsync(
+                repository,
+                dependency.Id,
+                includePrerelease || range.AllowsPrerelease,
+                credential,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return versions
+            .Where(version => range.IsSatisfiedBy(version.Version))
+            .OrderBy(version => version.Version, ManagedModuleVersionComparer.Instance)
+            .LastOrDefault();
+    }
+
+    /// <summary>
     /// Downloads or copies a package to a destination directory.
     /// </summary>
     /// <param name="repository">Repository to use.</param>
@@ -484,7 +522,8 @@ public sealed partial class ManagedModuleRepositoryClient
                 IsPrerelease = metadata.IsPrerelease,
                 License = metadata.License,
                 RequireLicenseAcceptance = metadata.RequireLicenseAcceptance,
-                Dependencies = metadata.Dependencies
+                Dependencies = metadata.Dependencies,
+                Tags = metadata.Tags
             });
         }
 
@@ -1084,8 +1123,32 @@ public sealed partial class ManagedModuleRepositoryClient
             License = ReadOptionalString(item, "licenseExpression") ??
                       ReadOptionalString(item, "licenseUrl"),
             RequireLicenseAcceptance = ReadOptionalBoolean(item, "requireLicenseAcceptance"),
-            Dependencies = ReadSearchDependencies(item)
+            Dependencies = ReadSearchDependencies(item),
+            Tags = ReadSearchTags(item)
         };
+    }
+
+    private static IReadOnlyList<string> ReadSearchTags(JsonElement item)
+    {
+        if (!item.TryGetProperty("tags", out var tags))
+            return Array.Empty<string>();
+
+        if (tags.ValueKind == JsonValueKind.Array)
+        {
+            var values = tags.EnumerateArray()
+                .Where(static tag => tag.ValueKind == JsonValueKind.String)
+                .Select(static tag => tag.GetString()?.Trim())
+                .Where(static tag => !string.IsNullOrWhiteSpace(tag))
+                .Select(static tag => tag!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            return values.Length == 0 ? Array.Empty<string>() : values;
+        }
+
+        if (tags.ValueKind == JsonValueKind.String)
+            return SplitTags(tags.GetString());
+
+        return Array.Empty<string>();
     }
 
     private static IReadOnlyList<ManagedModuleDependencyInfo> ReadSearchDependencies(JsonElement item)
@@ -1167,9 +1230,25 @@ public sealed partial class ManagedModuleRepositoryClient
                 PackageSource = file,
                 IsPrerelease = metadata.IsPrerelease,
                 License = metadata.License,
-                RequireLicenseAcceptance = metadata.RequireLicenseAcceptance
+                RequireLicenseAcceptance = metadata.RequireLicenseAcceptance,
+                Dependencies = metadata.Dependencies,
+                Tags = metadata.Tags
             };
         }
+    }
+
+    private static IReadOnlyList<string> SplitTags(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Array.Empty<string>();
+
+        var tags = value!
+            .Split(new[] { ' ', ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(static tag => tag.Trim())
+            .Where(static tag => tag.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return tags.Length == 0 ? Array.Empty<string>() : tags;
     }
 
     private static string? ReadOptionalString(JsonElement item, string propertyName)
