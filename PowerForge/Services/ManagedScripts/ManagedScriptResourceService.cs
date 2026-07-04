@@ -696,7 +696,14 @@ public sealed class ManagedScriptResourceService
         if (string.IsNullOrWhiteSpace(existingVersion) || !IsExistingVersionSatisfied(request, existingVersion!))
             return null;
 
-        return new ManagedScriptFileInfo { Path = scriptPath, Version = existingVersion! };
+        return ReadExistingScriptInfoForSkip(scriptPath);
+    }
+
+    private ManagedScriptFileInfo ReadExistingScriptInfoForSkip(string scriptPath)
+    {
+        var info = _scriptFileInfoService.Read(scriptPath);
+        ThrowIfScriptMetadataIncomplete(info, scriptPath);
+        return info;
     }
 
     private static bool HasConstrainedVersionRequest(ManagedScriptInstallRequest request)
