@@ -620,6 +620,7 @@ public sealed partial class ManagedModuleRepositoryClient
             if (rawPage.Length == 0)
                 break;
 
+            var totalHits = ReadSearchTotalHits(document.RootElement);
             var pageMatches = rawPage
                 .Select(item => ReadSearchResult(repository, item))
                 .Where(version => version is not null && ManagedModuleSearchMatcher.IsMatch(query, version.Name))
@@ -639,13 +640,30 @@ public sealed partial class ManagedModuleRepositoryClient
                     break;
             }
 
-            if (rawPage.Length < pageSize)
+            var nextServerSkip = serverSkip + rawPage.Length;
+            var serverHasMore = totalHits.HasValue
+                ? nextServerSkip < totalHits.Value
+                : rawPage.Length >= pageSize;
+            if (!serverHasMore)
                 break;
 
-            serverSkip += rawPage.Length;
+            serverSkip = nextServerSkip;
         }
 
         return matches;
+    }
+
+    private static int? ReadSearchTotalHits(JsonElement root)
+    {
+        if (!root.TryGetProperty("totalHits", out var totalHits))
+            return null;
+
+        return totalHits.ValueKind switch
+        {
+            JsonValueKind.Number when totalHits.TryGetInt32(out var value) => value,
+            JsonValueKind.String when int.TryParse(totalHits.GetString(), out var value) => value,
+            _ => null
+        };
     }
 
     private async Task<IReadOnlyDictionary<string, bool>> TryResolveVersionListingMapAsync(

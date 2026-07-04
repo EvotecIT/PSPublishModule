@@ -1119,6 +1119,22 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task SearchPackagesAsync_keeps_paging_when_nuget_v3_caps_search_page_size()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        var results = await repositoryClient.SearchPackagesAsync(repository, "Company.*", includePrerelease: false, take: 1000);
+
+        Assert.Contains(results, result => result.Name == "Company.Reporting");
+        Assert.Contains(requests, request => request.Url == "https://example.test/search?q=Company.&prerelease=false&take=1000&skip=0&semVerLevel=2.0.0");
+        Assert.Contains(requests, request => request.Url == "https://example.test/search?q=Company.&prerelease=false&take=1000&skip=1&semVerLevel=2.0.0");
+        Assert.Contains(requests, request => request.Url == "https://example.test/search?q=Company.&prerelease=false&take=1000&skip=2&semVerLevel=2.0.0");
+    }
+
+    [Fact]
     public async Task SearchPackagesAsync_preserves_positional_cancellation_token_overload()
     {
         var requests = new List<RecordedRequest>();
@@ -1558,6 +1574,15 @@ public sealed class ManagedModuleRepositoryClientTests
                             "{\"id\":\"Company.Core\",\"version\":\"2.0.0\",\"listed\":true}," +
                             "{\"id\":\"Other.Module\",\"version\":\"9.0.0\",\"listed\":true}" +
                             "]}");
+
+            if (uri.AbsoluteUri == "https://example.test/search?q=Company.&prerelease=false&take=1000&skip=0&semVerLevel=2.0.0")
+                return Json("{\"totalHits\":3,\"data\":[{\"id\":\"Company.Noise\",\"version\":\"1.0.0\",\"listed\":true}]}");
+
+            if (uri.AbsoluteUri == "https://example.test/search?q=Company.&prerelease=false&take=1000&skip=1&semVerLevel=2.0.0")
+                return Json("{\"totalHits\":3,\"data\":[{\"id\":\"Company.Reporting\",\"version\":\"1.0.0\",\"listed\":true}]}");
+
+            if (uri.AbsoluteUri == "https://example.test/search?q=Company.&prerelease=false&take=1000&skip=2&semVerLevel=2.0.0")
+                return Json("{\"totalHits\":3,\"data\":[{\"id\":\"Company.Final\",\"version\":\"1.0.0\",\"listed\":true}]}");
 
             if (uri.AbsoluteUri == "https://example.test/search?q=Company.Tools&prerelease=false&take=20&skip=0&semVerLevel=2.0.0")
                 return Json("{\"data\":[{\"id\":\"Company.Tools\",\"version\":\"1.1.0\",\"listed\":true}]}");
