@@ -46,6 +46,11 @@ public sealed class ManagedModuleUninstallRequest
     public bool AllowLoadedModuleUninstall { get; set; }
 
     /// <summary>
+    /// Defers loaded-module blocking until uninstall execution so callers can confirm or filter planned targets first.
+    /// </summary>
+    public bool DeferLoadedModuleCheck { get; set; }
+
+    /// <summary>
     /// Loaded module evidence from the host process.
     /// </summary>
     public IReadOnlyList<ManagedModuleLoadedModule> LoadedModules { get; set; } = Array.Empty<ManagedModuleLoadedModule>();

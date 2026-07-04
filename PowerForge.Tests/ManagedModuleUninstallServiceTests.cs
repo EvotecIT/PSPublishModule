@@ -163,6 +163,96 @@ public sealed class ManagedModuleUninstallServiceTests
     }
 
     [Fact]
+    public void Uninstall_deferred_loaded_check_allows_unloaded_confirmed_subset()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var loadedPath = CreateInstalledModule(moduleRoot.Path, "Company.Loaded", "1.0.0");
+        var safePath = CreateInstalledModule(moduleRoot.Path, "Company.Safe", "1.0.0");
+        var service = new ManagedModuleUninstallService();
+        var request = CreateRequest(moduleRoot.Path, "Company.*");
+        request.DeferLoadedModuleCheck = true;
+        request.LoadedModules = new[]
+        {
+            new ManagedModuleLoadedModule
+            {
+                Name = "Company.Loaded",
+                Version = "1.0.0",
+                ModuleBase = loadedPath
+            }
+        };
+        var plan = service.PlanUninstall(request);
+        var selectedPlan = new ManagedModuleUninstallPlan
+        {
+            Name = plan.Name,
+            Version = plan.Version,
+            ModuleRoot = plan.ModuleRoot,
+            SkipDependencyCheck = plan.SkipDependencyCheck,
+            AllowLoadedModuleUninstall = plan.AllowLoadedModuleUninstall,
+            Targets = plan.Targets.Where(static target => target.Name == "Company.Safe").ToArray()
+        };
+
+        var result = Assert.Single(service.Uninstall(selectedPlan));
+
+        Assert.Equal("Company.Safe", result.Name);
+        Assert.False(Directory.Exists(safePath));
+        Assert.True(Directory.Exists(loadedPath));
+    }
+
+    [Fact]
+    public void Uninstall_deferred_loaded_check_still_blocks_confirmed_loaded_target()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var loadedPath = CreateInstalledModule(moduleRoot.Path, "Company.Loaded", "1.0.0");
+        var service = new ManagedModuleUninstallService();
+        var request = CreateRequest(moduleRoot.Path, "Company.Loaded");
+        request.DeferLoadedModuleCheck = true;
+        request.LoadedModules = new[]
+        {
+            new ManagedModuleLoadedModule
+            {
+                Name = "Company.Loaded",
+                Version = "1.0.0",
+                ModuleBase = loadedPath
+            }
+        };
+        var plan = service.PlanUninstall(request);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Uninstall(plan));
+
+        Assert.Contains("AllowLoadedModuleUninstall", exception.Message, StringComparison.Ordinal);
+        Assert.True(Directory.Exists(loadedPath));
+    }
+
+    [Fact]
+    public void Uninstall_rejects_target_equal_to_module_root()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(moduleRoot.Path, "sentinel.txt"), "keep");
+        var service = new ManagedModuleUninstallService();
+        var plan = new ManagedModuleUninstallPlan
+        {
+            Name = new[] { "Company.Tools" },
+            ModuleRoot = moduleRoot.Path,
+            SkipDependencyCheck = true,
+            Targets = new[]
+            {
+                new ManagedModuleUninstallTarget
+                {
+                    Name = "Company.Tools",
+                    Version = "1.0.0",
+                    ModuleRoot = moduleRoot.Path,
+                    ModulePath = moduleRoot.Path
+                }
+            }
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Uninstall(plan));
+
+        Assert.Contains("module root", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "sentinel.txt")));
+    }
+
+    [Fact]
     public void Uninstall_empty_directory_cleanup_stays_inside_plan_root()
     {
         using var moduleRoot = new TemporaryDirectory();

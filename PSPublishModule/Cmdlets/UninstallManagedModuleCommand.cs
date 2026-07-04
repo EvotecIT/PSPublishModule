@@ -91,6 +91,7 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             ModuleRoot = moduleRoot,
             SkipDependencyCheck = SkipDependencyCheck.IsPresent,
             AllowLoadedModuleUninstall = AllowLoadedModuleUninstall.IsPresent,
+            DeferLoadedModuleCheck = true,
             LoadedModules = ResolveLoadedModules()
         };
         var plan = service.PlanUninstall(request);
@@ -121,6 +122,7 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             Version = plan.Version,
             ModuleRoot = plan.ModuleRoot,
             SkipDependencyCheck = plan.SkipDependencyCheck,
+            AllowLoadedModuleUninstall = plan.AllowLoadedModuleUninstall,
             Targets = targets,
             MissingNames = plan.MissingNames
         };
@@ -165,16 +167,24 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             return null;
 
         var selectedDirectory = new DirectoryInfo(path);
-        if (string.Equals(selectedDirectory.Name, moduleName, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(selectedDirectory.Name, moduleName, StringComparison.OrdinalIgnoreCase) &&
+            HasInstalledModuleManifest(selectedDirectory.FullName, moduleName))
+        {
             return selectedDirectory.Parent?.FullName;
+        }
 
         var moduleDirectory = selectedDirectory.Parent;
         if (moduleDirectory is null ||
-            !string.Equals(moduleDirectory.Name, moduleName, StringComparison.OrdinalIgnoreCase))
+            !string.Equals(moduleDirectory.Name, moduleName, StringComparison.OrdinalIgnoreCase) ||
+            !HasInstalledModuleManifest(selectedDirectory.FullName, moduleName))
         {
             return null;
         }
 
         return moduleDirectory.Parent?.FullName;
     }
+
+    private static bool HasInstalledModuleManifest(string modulePath, string moduleName)
+        => File.Exists(Path.Combine(modulePath, moduleName + ".psd1")) ||
+           Directory.GetFiles(modulePath, "*.psd1", SearchOption.TopDirectoryOnly).Length > 0;
 }

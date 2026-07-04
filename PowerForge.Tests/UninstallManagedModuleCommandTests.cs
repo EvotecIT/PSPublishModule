@@ -29,6 +29,27 @@ public sealed class UninstallManagedModuleCommandTests
     }
 
     [Fact]
+    public void UninstallManagedModule_preserves_explicit_custom_root_with_same_leaf_name()
+    {
+        using var parentRoot = new TemporaryDirectory();
+        var moduleRoot = Path.Combine(parentRoot.Path, "Company.Tools");
+        Directory.CreateDirectory(moduleRoot);
+        CreateInstalledModule(moduleRoot, "Company.Tools", "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Path", moduleRoot);
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleUninstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedModuleUninstallStatus.Uninstalled, result.Status);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot, "Company.Tools", "1.0.0")));
+        Assert.True(Directory.Exists(moduleRoot));
+    }
+
+    [Fact]
     public void UninstallManagedModule_plan_reports_targets_without_removing_files()
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -203,6 +224,29 @@ public sealed class UninstallManagedModuleCommandTests
         Assert.Equal(ManagedModuleUninstallStatus.Uninstalled, result.Status);
         Assert.False(File.Exists(flatManifest));
         Assert.True(File.Exists(siblingManifest));
+    }
+
+    [Fact]
+    public void UninstallManagedModule_flat_layout_ignores_version_named_resource_folders()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateFlatInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var resourcePath = Path.Combine(moduleRoot.Path, "Company.Tools", "2.0.0");
+        Directory.CreateDirectory(resourcePath);
+        File.WriteAllText(Path.Combine(resourcePath, "data.txt"), "resource");
+        var flatManifest = Path.Combine(moduleRoot.Path, "Company.Tools", "Company.Tools.psd1");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Path", moduleRoot.Path);
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleUninstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal("1.0.0", result.Version);
+        Assert.False(File.Exists(flatManifest));
+        Assert.True(File.Exists(Path.Combine(resourcePath, "data.txt")));
     }
 
     [Fact]

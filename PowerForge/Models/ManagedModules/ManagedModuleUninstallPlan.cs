@@ -26,6 +26,11 @@ public sealed class ManagedModuleUninstallPlan
     public bool SkipDependencyCheck { get; set; }
 
     /// <summary>
+    /// True when loaded-module uninstall safety has been explicitly overridden.
+    /// </summary>
+    public bool AllowLoadedModuleUninstall { get; set; }
+
+    /// <summary>
     /// Selected installed module versions.
     /// </summary>
     public IReadOnlyList<ManagedModuleUninstallTarget> Targets { get; set; } = Array.Empty<ManagedModuleUninstallTarget>();

@@ -32,7 +32,7 @@ public sealed class ManagedModuleUninstallService
             .Select(static pattern => pattern.Original)
             .ToArray();
 
-        if (!request.AllowLoadedModuleUninstall)
+        if (!request.AllowLoadedModuleUninstall && !request.DeferLoadedModuleCheck)
             ThrowIfLoaded(targets);
 
         if (!request.SkipDependencyCheck)
@@ -44,6 +44,7 @@ public sealed class ManagedModuleUninstallService
             Version = request.Version,
             ModuleRoot = moduleRoot,
             SkipDependencyCheck = request.SkipDependencyCheck,
+            AllowLoadedModuleUninstall = request.AllowLoadedModuleUninstall,
             Targets = targets,
             MissingNames = missingNames
         };
@@ -90,10 +91,14 @@ public sealed class ManagedModuleUninstallService
     {
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
-        if (plan.Targets.Count == 0 || plan.SkipDependencyCheck)
+        if (plan.Targets.Count == 0)
             return;
 
-        ThrowIfDependencyBlocked(EnumerateInstalledModules(plan.ModuleRoot), plan.Targets);
+        if (!plan.AllowLoadedModuleUninstall)
+            ThrowIfLoaded(plan.Targets);
+
+        if (!plan.SkipDependencyCheck)
+            ThrowIfDependencyBlocked(EnumerateInstalledModules(plan.ModuleRoot), plan.Targets);
     }
 
     private static ManagedModuleUninstallResult UninstallTarget(
@@ -349,13 +354,20 @@ public sealed class ManagedModuleUninstallService
                 var manifest = FindModuleManifest(versionDirectory, moduleName);
                 if (manifest is not null && TryReadManifestVersion(manifest, out var manifestVersion))
                     modules.Add(new InstalledModuleCandidate(moduleName, manifestVersion, versionDirectory, manifest, ReadManifestGuid(manifest), isFlatLayout: false));
-                else if (ModuleStateVersion.TryParse(versionName, out _))
+                else if (ModuleStateVersion.TryParse(versionName, out _) &&
+                         HasModulePayload(versionDirectory, moduleName))
+                {
                     modules.Add(new InstalledModuleCandidate(moduleName, versionName, versionDirectory, manifest, guid: null, isFlatLayout: false));
+                }
             }
         }
 
         return modules;
     }
+
+    private static bool HasModulePayload(string modulePath, string moduleName)
+        => File.Exists(Path.Combine(modulePath, moduleName + ".psm1")) ||
+           File.Exists(Path.Combine(modulePath, moduleName + ".dll"));
 
     private static bool TryReadManifestVersion(string manifestPath, out string version)
     {
@@ -490,8 +502,10 @@ public sealed class ManagedModuleUninstallService
     {
         var root = NormalizePath(moduleRoot);
         var target = NormalizePath(modulePath);
-        if (!string.Equals(root, target, PathStringComparison) &&
-            !target.StartsWith(root + Path.DirectorySeparatorChar, PathStringComparison) &&
+        if (string.Equals(root, target, PathStringComparison))
+            throw new InvalidOperationException($"Refusing to remove module root as a module target: {modulePath}");
+
+        if (!target.StartsWith(root + Path.DirectorySeparatorChar, PathStringComparison) &&
             !target.StartsWith(root + Path.AltDirectorySeparatorChar, PathStringComparison))
         {
             throw new InvalidOperationException($"Refusing to remove module path outside module root: {modulePath}");
