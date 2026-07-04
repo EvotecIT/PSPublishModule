@@ -110,7 +110,9 @@ internal static class BenchmarkInputReader
             return defaultValue;
         }
 
-        var values = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        var values = value!.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(item => item.Trim())
+            .Where(item => item.Length > 0)
             .Select(item => int.Parse(item, CultureInfo.InvariantCulture))
             .ToArray();
         if (values.Length > 0) return values;
@@ -127,7 +129,7 @@ internal static class BenchmarkInputReader
             return defaultValue;
         }
 
-        return value.Trim().ToLowerInvariant() switch
+        return value!.Trim().ToLowerInvariant() switch
         {
             "true" or "1" or "yes" or "on" => true,
             "false" or "0" or "no" or "off" => false,

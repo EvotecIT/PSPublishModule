@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.42
+Help Version: 3.0.43
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -99,6 +99,15 @@ Reads App Store version information from App Store Connect.
 
 ### [Get-AppStoreConnectVersionLocalization](Get-AppStoreConnectVersionLocalization.md)
 Reads App Store version localizations from App Store Connect.
+
+### [Get-BenchmarkBoolInput](Get-BenchmarkBoolInput.md)
+Gets a caller-supplied benchmark input variable as a boolean.
+
+### [Get-BenchmarkInput](Get-BenchmarkInput.md)
+Gets a caller-supplied benchmark input variable as text.
+
+### [Get-BenchmarkIntInput](Get-BenchmarkIntInput.md)
+Gets a caller-supplied benchmark input variable as one or more integers.
 
 ### [Get-ConfigurationBoolean](Get-ConfigurationBoolean.md)
 Resolves a boolean configuration value from an environment variable with a script-defined default.
