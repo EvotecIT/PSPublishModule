@@ -35,7 +35,7 @@ internal static class ManagedScriptFileInfoCommandSupport
         {
             Path = path,
             Version = version ?? string.Empty,
-            Author = author,
+            Author = ResolveAuthor(author),
             Description = description,
             Guid = guid,
             CompanyName = companyName,
@@ -71,14 +71,20 @@ internal static class ManagedScriptFileInfoCommandSupport
             var moduleName = ConvertToString(entry, "ModuleName");
             if (string.IsNullOrWhiteSpace(moduleName))
                 throw new ArgumentException("RequiredModules entries must include ModuleName.");
+            var moduleVersion = ConvertToString(entry, "ModuleVersion");
+            var requiredVersion = ConvertToString(entry, "RequiredVersion");
+            var maximumVersion = ConvertToString(entry, "MaximumVersion");
+            if (!string.IsNullOrWhiteSpace(requiredVersion) &&
+                (!string.IsNullOrWhiteSpace(moduleVersion) || !string.IsNullOrWhiteSpace(maximumVersion)))
+                throw new ArgumentException("RequiredModules entries cannot combine RequiredVersion with ModuleVersion or MaximumVersion.");
 
             modules.Add(new ManagedScriptRequiredModule
             {
                 ModuleName = moduleName!,
                 Guid = ConvertToString(entry, "Guid"),
-                ModuleVersion = ConvertToString(entry, "ModuleVersion"),
-                RequiredVersion = ConvertToString(entry, "RequiredVersion"),
-                MaximumVersion = ConvertToString(entry, "MaximumVersion")
+                ModuleVersion = moduleVersion,
+                RequiredVersion = requiredVersion,
+                MaximumVersion = maximumVersion
             });
         }
 
@@ -95,4 +101,9 @@ internal static class ManagedScriptFileInfoCommandSupport
 
         return null;
     }
+
+    private static string ResolveAuthor(string? author)
+        => string.IsNullOrWhiteSpace(author)
+            ? Environment.UserName
+            : author!.Trim();
 }

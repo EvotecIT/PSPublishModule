@@ -328,10 +328,26 @@ public sealed class ManagedScriptFileInfoService
                 continue;
             }
 
+            if (scriptHelp is null &&
+                TryReadLineCommentHelpBlock(remainder, index, out helpEnd, out var lineHelpBlock))
+            {
+                scriptHelp = lineHelpBlock;
+                description = ReadDescriptionFromHelp(scriptHelp) ?? string.Empty;
+                removeSpans.Add(new TextSpan(index, helpEnd - index));
+                index = helpEnd;
+                continue;
+            }
+
             if (!TryReadLine(remainder, index, out var line, out var nextIndex))
                 break;
 
             var trimmed = line.Trim();
+            if (IsSkippablePrefixComment(trimmed))
+            {
+                index = nextIndex;
+                continue;
+            }
+
             if (!trimmed.StartsWith("#Requires", StringComparison.OrdinalIgnoreCase))
                 break;
 
@@ -356,6 +372,10 @@ public sealed class ManagedScriptFileInfoService
             description,
             RemoveSpans(remainder, removeSpans).TrimStart('\r', '\n'));
     }
+
+    private static bool IsSkippablePrefixComment(string trimmedLine)
+        => trimmedLine.StartsWith("#", StringComparison.Ordinal) &&
+           !trimmedLine.StartsWith("#Requires", StringComparison.OrdinalIgnoreCase);
 
     private static void SkipBlankLines(string text, ref int index)
     {
@@ -405,6 +425,40 @@ public sealed class ManagedScriptFileInfoService
             helpBlock,
             $@"(?m)^\s*\.(?:{CommentHelpKeyPattern})\b",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static bool TryReadLineCommentHelpBlock(string text, int index, out int endIndex, out string helpBlock)
+    {
+        endIndex = index;
+        helpBlock = string.Empty;
+        var current = index;
+        var builder = new StringBuilder();
+        var readAnyComment = false;
+        while (TryReadLine(text, current, out var line, out var nextIndex))
+        {
+            var trimmed = line.TrimStart();
+            if (!trimmed.StartsWith("#", StringComparison.Ordinal) ||
+                trimmed.StartsWith("#Requires", StringComparison.OrdinalIgnoreCase))
+                break;
+
+            readAnyComment = true;
+            var content = trimmed.Length == 1
+                ? string.Empty
+                : trimmed.Substring(1).TrimStart();
+            builder.AppendLine(content);
+            current = nextIndex;
+        }
+
+        if (!readAnyComment)
+            return false;
+
+        var candidate = builder.ToString();
+        if (!IsCommentHelpBlock(candidate))
+            return false;
+
+        endIndex = current;
+        helpBlock = candidate;
+        return true;
+    }
 
     private static string? ReadDescriptionFromHelp(string helpBlock)
     {
@@ -504,6 +558,9 @@ public sealed class ManagedScriptFileInfoService
     {
         if (module is null || string.IsNullOrWhiteSpace(module.ModuleName))
             throw new InvalidOperationException("Required module entries must include ModuleName.");
+        if (!string.IsNullOrWhiteSpace(module.RequiredVersion) &&
+            (!string.IsNullOrWhiteSpace(module.ModuleVersion) || !string.IsNullOrWhiteSpace(module.MaximumVersion)))
+            throw new InvalidOperationException("Required module entries cannot combine RequiredVersion with ModuleVersion or MaximumVersion.");
 
         if (string.IsNullOrWhiteSpace(module.Guid) &&
             string.IsNullOrWhiteSpace(module.ModuleVersion) &&
@@ -557,7 +614,7 @@ public sealed class ManagedScriptFileInfoService
         {
             var openingIndex = helpBlock.IndexOf("<#", StringComparison.Ordinal);
             if (openingIndex < 0)
-                return RenderGeneratedDescription(normalizedDescription);
+                return EnsureScriptHelpSeparator(InsertDescriptionInLineHelp(helpBlock, normalizedDescription));
 
             var insertIndex = openingIndex + 2;
             return EnsureScriptHelpSeparator(helpBlock.Insert(insertIndex, Environment.NewLine + Environment.NewLine + ".DESCRIPTION" + Environment.NewLine + normalizedDescription + Environment.NewLine));
@@ -579,6 +636,9 @@ public sealed class ManagedScriptFileInfoService
         builder.AppendLine("#>");
         return EnsureScriptHelpSeparator(builder.ToString());
     }
+
+    private static string InsertDescriptionInLineHelp(string helpBlock, string description)
+        => ".DESCRIPTION" + Environment.NewLine + description + Environment.NewLine + Environment.NewLine + helpBlock.TrimStart('\r', '\n');
 
     private static string EnsureScriptHelpSeparator(string value)
         => value.TrimEnd('\r', '\n') + Environment.NewLine + Environment.NewLine + Environment.NewLine;

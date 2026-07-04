@@ -104,6 +104,50 @@ public sealed class ManagedScriptFileInfoCommandTests
         Assert.Empty(read.Tags);
     }
 
+    [Fact]
+    public void NewManagedScriptFileInfo_defaults_author_when_omitted()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ManagedScriptFileInfo")
+            .AddParameter("Path", path)
+            .AddParameter("Description", "Creates a company report.");
+        _ = ps.Invoke();
+        AssertNoPowerShellErrors(ps);
+
+        ps.Commands.Clear();
+        ps.AddCommand("Get-ManagedScriptFileInfo").AddParameter("Path", path);
+        var read = Assert.IsType<ManagedScriptFileInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.False(string.IsNullOrWhiteSpace(read.Author));
+    }
+
+    [Fact]
+    public void NewManagedScriptFileInfo_rejects_conflicting_required_module_versions()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ManagedScriptFileInfo")
+            .AddParameter("Path", path)
+            .AddParameter("Description", "Creates a company report.")
+            .AddParameter("RequiredModules", new[]
+            {
+                new Hashtable
+                {
+                    ["ModuleName"] = "Pester",
+                    ["RequiredVersion"] = "5.7.0",
+                    ["MaximumVersion"] = "6.0.0"
+                }
+            });
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+
+        Assert.Contains("cannot combine RequiredVersion", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();
