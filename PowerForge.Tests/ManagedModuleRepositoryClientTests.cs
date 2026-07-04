@@ -1080,6 +1080,26 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task SearchPackagesAsync_preserves_positional_cancellation_token_overload()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        var results = await repositoryClient.SearchPackagesAsync(
+            repository,
+            "Company.*",
+            false,
+            null,
+            100,
+            CancellationToken.None);
+
+        Assert.Equal(new[] { "Company.Core", "Company.Tools" }, results.Select(result => result.Name));
+        Assert.Contains(requests, request => request.Url == "https://example.test/search?q=Company.&prerelease=false&take=100&skip=0&semVerLevel=2.0.0");
+    }
+
+    [Fact]
     public async Task SearchPackagesAsync_rejects_flat_container_source_for_wildcards()
     {
         var requests = new List<RecordedRequest>();

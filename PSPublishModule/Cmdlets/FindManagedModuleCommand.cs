@@ -123,7 +123,9 @@ public sealed class FindManagedModuleCommand : PSCmdlet
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var client = ManagedModuleCommandSupport.CreateRepositoryClient(this, logger, Proxy, ProxyCredential);
 
-        var roots = new List<ManagedModuleVersionInfo>();
+        var roots = IncludeDependencies.IsPresent
+            ? new List<ManagedModuleVersionInfo>()
+            : null;
         foreach (var moduleName in Name)
         {
             var output = ManagedModuleCommandSupport.HasWildcard(moduleName)
@@ -133,10 +135,20 @@ public sealed class FindManagedModuleCommand : PSCmdlet
                 .GetAwaiter()
                 .GetResult();
             output = ApplyFindFilters(output, moduleName);
-            roots.AddRange(output);
+            if (roots is not null)
+            {
+                roots.AddRange(output);
+                continue;
+            }
+
+            foreach (var version in output)
+                WriteObject(version);
         }
 
-        var results = IncludeDependencies.IsPresent && roots.Count > 0
+        if (roots is null)
+            return;
+
+        var results = roots.Count > 0
             ? IncludeDependencyVersions(client, repository, roots, credential)
             : roots;
         foreach (var version in results)
@@ -204,13 +216,15 @@ public sealed class FindManagedModuleCommand : PSCmdlet
         var seenVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var seenPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        for (var skip = 0; !HasEnoughTagPagedMatches(results, seenPackages); skip += pageSize)
+        for (var skip = 0; !HasEnoughTagPagedMatches(results, seenPackages);)
         {
             var page = client.SearchPackagesAsync(repository, searchQuery, Prerelease.IsPresent, credential, pageSize, skip)
                 .GetAwaiter()
                 .GetResult();
             if (page.Count == 0)
                 break;
+
+            skip += page.Count;
 
             var candidates = AllVersions.IsPresent
                 ? ExpandAllVersions(client, repository, page, credential)
@@ -401,7 +415,7 @@ public sealed class FindManagedModuleCommand : PSCmdlet
         return metadata is null ? version : CopyVersionInfoWithPackageMetadata(version, metadata);
     }
 
-    private static ManagedModuleVersionInfo CopyVersionInfoWithPackageMetadata(
+    internal static ManagedModuleVersionInfo CopyVersionInfoWithPackageMetadata(
         ManagedModuleVersionInfo version,
         ManagedModulePackageMetadata metadata)
         => new()
@@ -413,7 +427,7 @@ public sealed class FindManagedModuleCommand : PSCmdlet
             PackageSource = version.PackageSource,
             IsPrerelease = version.IsPrerelease,
             Listed = version.Listed,
-            License = metadata.License,
+            License = metadata.License ?? version.License,
             RequireLicenseAcceptance = metadata.RequireLicenseAcceptance,
             Dependencies = metadata.Dependencies,
             Tags = metadata.Tags,

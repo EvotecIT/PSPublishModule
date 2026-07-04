@@ -605,6 +605,29 @@ public sealed class ManagedModuleAliasCommandTests
     }
 
     [Fact]
+    public void FindManagedModule_hydration_preserves_existing_license_metadata()
+    {
+        var version = new ManagedModuleVersionInfo
+        {
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            License = "https://licenses.example.test/company-tools",
+            Tags = new[] { "automation" }
+        };
+        var metadata = new ManagedModulePackageMetadata
+        {
+            Id = "Company.Tools",
+            Version = "1.0.0",
+            Tags = new[] { "automation" }
+        };
+
+        var hydrated = FindManagedModuleCommand.CopyVersionInfoWithPackageMetadata(version, metadata);
+
+        Assert.Equal("https://licenses.example.test/company-tools", hydrated.License);
+        Assert.Contains("automation", hydrated.Tags);
+    }
+
+    [Fact]
     public void InstallManagedModule_requires_trusted_repository_profile_when_requested()
     {
         using var feed = new TemporaryDirectory();

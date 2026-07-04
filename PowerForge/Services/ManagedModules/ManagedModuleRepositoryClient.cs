@@ -145,7 +145,6 @@ public sealed partial class ManagedModuleRepositoryClient
     /// <param name="includePrerelease">Include prerelease versions.</param>
     /// <param name="credential">Optional repository credential.</param>
     /// <param name="take">Maximum number of results.</param>
-    /// <param name="skip">Number of matching results to skip before returning a page.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Latest selected package versions.</returns>
     public async Task<IReadOnlyList<ManagedModuleVersionInfo>> SearchPackagesAsync(
@@ -154,7 +153,27 @@ public sealed partial class ManagedModuleRepositoryClient
         bool includePrerelease = false,
         RepositoryCredential? credential = null,
         int take = 100,
-        int skip = 0,
+        CancellationToken cancellationToken = default)
+        => await SearchPackagesAsync(repository, query, includePrerelease, credential, take, skip: 0, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>
+    /// Searches package ids from the repository and returns a page of latest selected versions per match.
+    /// </summary>
+    /// <param name="repository">Repository to query.</param>
+    /// <param name="query">Package id text or wildcard pattern.</param>
+    /// <param name="includePrerelease">Include prerelease versions.</param>
+    /// <param name="credential">Optional repository credential.</param>
+    /// <param name="take">Maximum number of results.</param>
+    /// <param name="skip">Number of matching results to skip before returning a page.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Latest selected package versions.</returns>
+    public async Task<IReadOnlyList<ManagedModuleVersionInfo>> SearchPackagesAsync(
+        ManagedModuleRepository repository,
+        string query,
+        bool includePrerelease,
+        RepositoryCredential? credential,
+        int take,
+        int skip,
         CancellationToken cancellationToken = default)
     {
         if (repository is null)
