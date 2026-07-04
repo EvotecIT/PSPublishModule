@@ -152,6 +152,28 @@ public sealed class UninstallManagedModuleCommandTests
     }
 
     [Fact]
+    public void UninstallManagedModule_whatif_defers_dependency_blocking_until_after_target_filtering()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Core", "1.0.0");
+        CreateInstalledModule(moduleRoot.Path, "Company.Safe", "1.0.0");
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Core", "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedModule")
+            .AddParameter("Name", "Company.*")
+            .AddParameter("Path", moduleRoot.Path)
+            .AddParameter("WhatIf");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Empty(results);
+        Assert.True(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Core", "1.0.0")));
+        Assert.True(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Safe", "1.0.0")));
+        Assert.True(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0")));
+    }
+
+    [Fact]
     public void UninstallManagedModule_range_excludes_prerelease_versions_by_default()
     {
         using var moduleRoot = new TemporaryDirectory();

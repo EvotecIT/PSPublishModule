@@ -92,6 +92,7 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             SkipDependencyCheck = SkipDependencyCheck.IsPresent,
             AllowLoadedModuleUninstall = AllowLoadedModuleUninstall.IsPresent,
             DeferLoadedModuleCheck = true,
+            DeferDependencyCheck = true,
             LoadedModules = ResolveLoadedModules()
         };
         var plan = service.PlanUninstall(request);

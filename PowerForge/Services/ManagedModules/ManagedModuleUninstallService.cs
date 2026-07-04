@@ -35,7 +35,7 @@ public sealed class ManagedModuleUninstallService
         if (!request.AllowLoadedModuleUninstall && !request.DeferLoadedModuleCheck)
             ThrowIfLoaded(targets);
 
-        if (!request.SkipDependencyCheck)
+        if (!request.SkipDependencyCheck && !request.DeferDependencyCheck)
             ThrowIfDependencyBlocked(candidates, targets);
 
         return new ManagedModuleUninstallPlan
@@ -477,6 +477,12 @@ public sealed class ManagedModuleUninstallService
             {
                 throw new ArgumentException($"Invalid version range syntax: '{value}'.", nameof(value));
             }
+        }
+        else if (trimmed.Contains(",", StringComparison.Ordinal) &&
+                 !trimmed.StartsWith("[", StringComparison.Ordinal) &&
+                 !trimmed.StartsWith("(", StringComparison.Ordinal))
+        {
+            throw new ArgumentException($"Invalid version range syntax: '{value}'.", nameof(value));
         }
 
         var startsBracketed = trimmed.StartsWith("[", StringComparison.Ordinal) || trimmed.StartsWith("(", StringComparison.Ordinal);

@@ -76,6 +76,7 @@ public sealed class ManagedModuleUninstallServiceTests
     [InlineData(">oops")]
     [InlineData(">=1.0.0 <oops")]
     [InlineData("[oops,2.0.0)")]
+    [InlineData("1.0.0,2.0.0")]
     public void PlanUninstall_rejects_non_version_range_operands(string versionRange)
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -148,6 +149,70 @@ public sealed class ManagedModuleUninstallServiceTests
         Assert.Equal(ManagedModuleUninstallStatus.Uninstalled, result.Status);
         Assert.True(result.DependencyCheckSkipped);
         Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Core")));
+    }
+
+    [Fact]
+    public void Uninstall_deferred_dependency_check_allows_safe_confirmed_subset()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var blockedPath = CreateInstalledModule(moduleRoot.Path, "Company.Core", "1.0.0");
+        var safePath = CreateInstalledModule(moduleRoot.Path, "Company.Safe", "1.0.0");
+        var dependentPath = CreateInstalledModule(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            requiredModules: "    RequiredModules = @(@{ ModuleName = 'Company.Core'; RequiredVersion = '1.0.0' })");
+        var service = new ManagedModuleUninstallService();
+        var request = CreateRequest(moduleRoot.Path, "Company.*");
+        request.DeferDependencyCheck = true;
+        var plan = service.PlanUninstall(request);
+        var selectedPlan = new ManagedModuleUninstallPlan
+        {
+            Name = plan.Name,
+            Version = plan.Version,
+            ModuleRoot = plan.ModuleRoot,
+            SkipDependencyCheck = plan.SkipDependencyCheck,
+            AllowLoadedModuleUninstall = plan.AllowLoadedModuleUninstall,
+            Targets = plan.Targets.Where(static target => target.Name == "Company.Safe").ToArray()
+        };
+
+        var result = Assert.Single(service.Uninstall(selectedPlan));
+
+        Assert.Equal("Company.Safe", result.Name);
+        Assert.False(Directory.Exists(safePath));
+        Assert.True(Directory.Exists(blockedPath));
+        Assert.True(Directory.Exists(dependentPath));
+    }
+
+    [Fact]
+    public void Uninstall_deferred_dependency_check_still_blocks_confirmed_dependency_target()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var blockedPath = CreateInstalledModule(moduleRoot.Path, "Company.Core", "1.0.0");
+        var dependentPath = CreateInstalledModule(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            requiredModules: "    RequiredModules = @(@{ ModuleName = 'Company.Core'; RequiredVersion = '1.0.0' })");
+        var service = new ManagedModuleUninstallService();
+        var request = CreateRequest(moduleRoot.Path, "Company.*");
+        request.DeferDependencyCheck = true;
+        var plan = service.PlanUninstall(request);
+        var selectedPlan = new ManagedModuleUninstallPlan
+        {
+            Name = plan.Name,
+            Version = plan.Version,
+            ModuleRoot = plan.ModuleRoot,
+            SkipDependencyCheck = plan.SkipDependencyCheck,
+            AllowLoadedModuleUninstall = plan.AllowLoadedModuleUninstall,
+            Targets = plan.Targets.Where(static target => target.Name == "Company.Core").ToArray()
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Uninstall(selectedPlan));
+
+        Assert.Contains("Company.Core 1.0.0 is required by Company.Tools 1.0.0", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(blockedPath));
+        Assert.True(Directory.Exists(dependentPath));
     }
 
     [Fact]
