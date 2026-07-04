@@ -433,6 +433,9 @@ public sealed class ManagedScriptResourceService
         }
         catch (ArgumentException)
         {
+            if (allowInvalidMetadata)
+                return null;
+
             throw;
         }
         catch (InvalidOperationException exception)
@@ -747,6 +750,7 @@ public sealed class ManagedScriptResourceService
     private static void ValidateScriptVersion(string? value, string parameterName)
     {
         if (string.IsNullOrWhiteSpace(value) ||
+            value!.TrimStart().StartsWith("+", StringComparison.Ordinal) ||
             !ModuleStateVersion.TryParse(value!.Trim(), out _))
         {
             throw new ArgumentException($"Script version '{value}' is not a valid version.", parameterName);

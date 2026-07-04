@@ -438,6 +438,37 @@ public sealed class SaveManagedScriptCommandTests
     }
 
     [Fact]
+    public void SaveManagedScript_force_replaces_existing_script_with_unsafe_version()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Invoke-CompanyTask.2.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "2.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("2.0.0")
+            });
+        File.WriteAllText(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1"), CreateScript("1.0.0-bad/evil"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "2.0.0")
+            .AddParameter("Force");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptSaveResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptSaveStatus.Saved, result.Status);
+        Assert.Equal("2.0.0", new ManagedScriptFileInfoService().Read(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")).Version);
+    }
+
+    [Fact]
     public void SaveManagedScript_verifies_package_policy_before_skipping_existing_selected_version()
     {
         using var feed = new TemporaryDirectory();
@@ -507,8 +538,10 @@ public sealed class SaveManagedScriptCommandTests
         using var scriptFeed = new TemporaryDirectory();
         using var destination = new TemporaryDirectory();
         var scriptSourceLocation = scriptFeed.Path.Replace('\\', '/') + "/items/psscript/";
+        var scriptEndpointPath = Path.Combine(scriptFeed.Path, "items", "psscript");
+        Directory.CreateDirectory(scriptEndpointPath);
         TestPackageFactory.Create(
-            Path.Combine(scriptFeed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            Path.Combine(scriptEndpointPath, "Invoke-CompanyTask.1.0.0.nupkg"),
             "Invoke-CompanyTask",
             "1.0.0",
             files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -549,12 +582,12 @@ public sealed class SaveManagedScriptCommandTests
 
         AssertNoPowerShellErrors(ps);
         var result = Assert.IsType<ManagedScriptSaveResult>(Assert.Single(results).BaseObject);
-        Assert.Equal(Path.GetFullPath(scriptFeed.Path), Path.GetFullPath(result.RepositorySource));
+        Assert.Equal(Path.GetFullPath(scriptEndpointPath), Path.GetFullPath(result.RepositorySource));
         Assert.True(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
     }
 
     [Fact]
-    public void ManagedModuleCommandSupport_normalizes_explicit_script_source_endpoint()
+    public void ManagedModuleCommandSupport_preserves_explicit_script_source_endpoint()
     {
         var source = ManagedModuleCommandSupport.ResolveScriptRepositorySource(
             null!,
@@ -562,7 +595,7 @@ public sealed class SaveManagedScriptCommandTests
             out var resolvedRegisteredRepositoryName,
             out var trusted);
 
-        Assert.Equal("https://packages.example.test/api/v2", source);
+        Assert.Equal("https://packages.example.test/api/v2/items/psscript", source);
         Assert.Null(resolvedRegisteredRepositoryName);
         Assert.False(trusted);
     }
@@ -682,6 +715,7 @@ public sealed class SaveManagedScriptCommandTests
     [InlineData("MinimumVersion", "garbage")]
     [InlineData("MaximumVersion", "garbage")]
     [InlineData("VersionPolicy", ">= 2.0.0")]
+    [InlineData("RequiredVersion", "+1.0.0")]
     public void SaveManagedScript_rejects_non_parseable_version_selectors(string parameterName, string parameterValue)
     {
         using var feed = new TemporaryDirectory();

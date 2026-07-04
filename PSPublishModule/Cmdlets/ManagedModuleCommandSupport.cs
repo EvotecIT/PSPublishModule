@@ -334,11 +334,7 @@ internal static class ManagedModuleCommandSupport
 
     private static string NormalizePowerShellGetScriptSource(string source)
     {
-        const string scriptEndpoint = "/items/psscript";
-        var trimmed = source.Trim().TrimEnd('/');
-        return trimmed.EndsWith(scriptEndpoint, StringComparison.OrdinalIgnoreCase)
-            ? trimmed.Substring(0, trimmed.Length - scriptEndpoint.Length).TrimEnd('/')
-            : trimmed;
+        return source.Trim().TrimEnd('/');
     }
 
     internal static bool HasWildcard(string value)

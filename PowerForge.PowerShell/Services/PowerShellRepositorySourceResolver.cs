@@ -151,11 +151,7 @@ public sealed class PowerShellRepositorySourceResolver
         if (string.IsNullOrWhiteSpace(source))
             return source;
 
-        var trimmed = source!.Trim().TrimEnd('/');
-        const string scriptEndpoint = "/items/psscript";
-        return trimmed.EndsWith(scriptEndpoint, StringComparison.OrdinalIgnoreCase)
-            ? trimmed.Substring(0, trimmed.Length - scriptEndpoint.Length).TrimEnd('/')
-            : trimmed;
+        return source!.Trim().TrimEnd('/');
     }
 
     private static bool ResolveTrust(PSObject result)
