@@ -201,9 +201,10 @@ public sealed class FindManagedModuleCommand : PSCmdlet
         const int pageSize = 1000;
         var searchQuery = ResolveSearchQuery(moduleName);
         var results = new List<ManagedModuleVersionInfo>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        for (var skip = 0; results.Count < First; skip += pageSize)
+        for (var skip = 0; !HasEnoughTagPagedMatches(results, seenPackages); skip += pageSize)
         {
             var page = client.SearchPackagesAsync(repository, searchQuery, Prerelease.IsPresent, credential, pageSize, skip)
                 .GetAwaiter()
@@ -220,24 +221,34 @@ public sealed class FindManagedModuleCommand : PSCmdlet
             candidates = ApplyFindFilters(candidates, moduleName, applyFirst: false);
             foreach (var candidate in candidates)
             {
-                if (!seen.Add(CreateResultKey(candidate)))
+                if (AllVersions.IsPresent &&
+                    !seenPackages.Contains(candidate.Name) &&
+                    seenPackages.Count >= First)
+                {
+                    break;
+                }
+
+                if (!seenVersions.Add(CreateResultKey(candidate)))
                     continue;
 
+                seenPackages.Add(candidate.Name);
                 results.Add(candidate);
-                if (results.Count >= First)
+                if (HasEnoughTagPagedMatches(results, seenPackages))
                     break;
             }
-
-            if (page.Count < pageSize)
-                break;
         }
 
-        return results
+        var ordered = results
             .OrderBy(static version => version.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static version => version.Version, ManagedModuleVersionComparer.Instance)
-            .Take(First)
             .ToArray();
+        return AllVersions.IsPresent ? ordered : ordered.Take(First).ToArray();
     }
+
+    private bool HasEnoughTagPagedMatches(
+        IReadOnlyCollection<ManagedModuleVersionInfo> results,
+        IReadOnlyCollection<string> packageNames)
+        => AllVersions.IsPresent ? packageNames.Count >= First : results.Count >= First;
 
     private IReadOnlyList<ManagedModuleVersionInfo> ExpandAllVersions(
         ManagedModuleRepositoryClient client,
@@ -275,7 +286,7 @@ public sealed class FindManagedModuleCommand : PSCmdlet
                 tagFilters.All(tag => version.Tags.Any(packageTag => TagsMatch(tag, packageTag))));
         }
 
-        if (applyFirst && hasWildcard)
+        if (applyFirst && hasWildcard && !AllVersions.IsPresent)
             filtered = filtered.Take(First);
 
         return filtered.ToArray();

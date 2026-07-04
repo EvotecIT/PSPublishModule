@@ -505,6 +505,45 @@ public sealed class ManagedModuleAliasCommandTests
     }
 
     [Fact]
+    public void FindManagedModule_all_versions_tag_search_caps_package_ids_not_version_rows()
+    {
+        using var feed = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Alpha.1.0.0.nupkg"),
+            "Company.Alpha",
+            "1.0.0",
+            tags: "reporting");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Alpha.1.1.0.nupkg"),
+            "Company.Alpha",
+            "1.1.0",
+            tags: "reporting");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Beta.2.0.0.nupkg"),
+            "Company.Beta",
+            "2.0.0",
+            tags: "reporting");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Find-ManagedModule")
+            .AddParameter("Name", "Company.*")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("AllVersions")
+            .AddParameter("Tag", "reporting")
+            .AddParameter("First", 2);
+
+        var results = ps.Invoke()
+            .Select(static item => Assert.IsType<ManagedModuleVersionInfo>(item.BaseObject))
+            .OrderBy(static item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static item => item.Version, ManagedModuleVersionComparer.Instance)
+            .ToArray();
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal(new[] { "Company.Alpha:1.0.0", "Company.Alpha:1.1.0", "Company.Beta:2.0.0" },
+            results.Select(static item => item.Name + ":" + item.Version));
+    }
+
+    [Fact]
     public void FindManagedModule_include_dependencies_returns_satisfying_dependency_resources()
     {
         using var feed = new TemporaryDirectory();
