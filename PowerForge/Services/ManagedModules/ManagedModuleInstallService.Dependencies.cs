@@ -391,7 +391,7 @@ public sealed partial class ManagedModuleInstallService
         string dependencyName,
         string version)
         => request.SaveAsNupkg
-            ? ResolveSavedPackagePath(moduleRoot, dependencyName, version)
+            ? ResolveExistingSavedPackagePath(moduleRoot, dependencyName, version) ?? ResolveSavedPackagePath(moduleRoot, dependencyName, version)
             : ResolveInstalledModulePath(moduleRoot, dependencyName, version);
 
     private static IReadOnlyList<string> GetSavedPackageVersions(
@@ -401,7 +401,7 @@ public sealed partial class ManagedModuleInstallService
     {
         var versions = GetInstalledVersions(moduleRoot, packageId, context)
             .Concat(EnumerateSavedPackageVersions(moduleRoot, packageId))
-            .Where(version => File.Exists(ResolveSavedPackagePath(moduleRoot, packageId, version)))
+            .Where(version => ResolveExistingSavedPackagePath(moduleRoot, packageId, version) is not null)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(static version => version, ManagedModuleVersionComparer.Instance)
             .ToArray();
@@ -420,7 +420,7 @@ public sealed partial class ManagedModuleInstallService
         var suffix = ".nupkg";
         try
         {
-            return Directory.EnumerateFiles(root, prefix + "*" + suffix, SearchOption.TopDirectoryOnly)
+            return Directory.EnumerateFiles(root, "*" + suffix, SearchOption.TopDirectoryOnly)
                 .Select(path => Path.GetFileName(path))
                 .Where(fileName => !string.IsNullOrWhiteSpace(fileName) &&
                                    fileName!.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
@@ -438,6 +438,43 @@ public sealed partial class ManagedModuleInstallService
         {
             return Array.Empty<string>();
         }
+    }
+
+    private static string? ResolveExistingSavedPackagePath(string moduleRoot, string packageId, string version)
+    {
+        var root = Path.GetFullPath(moduleRoot.Trim().Trim('"'));
+        var expectedPath = ResolveSavedPackagePath(moduleRoot, packageId, version);
+
+        var safePackageId = ManagedModulePackageIdentity.RequireSafeId(packageId, nameof(packageId));
+        var safeVersion = ManagedModulePackageIdentity.RequireSafeVersion(version, nameof(version));
+        var prefix = safePackageId + ".";
+        var suffix = "." + safeVersion + ".nupkg";
+        if (Directory.Exists(root))
+        {
+            try
+            {
+                var matchedPath = Directory.EnumerateFiles(root, "*.nupkg", SearchOption.TopDirectoryOnly)
+                    .FirstOrDefault(path =>
+                    {
+                        var fileName = Path.GetFileName(path);
+                        return !string.IsNullOrWhiteSpace(fileName) &&
+                               fileName!.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
+                               fileName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
+                    });
+                if (!string.IsNullOrWhiteSpace(matchedPath))
+                    return matchedPath;
+            }
+            catch (IOException)
+            {
+                return null;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+
+        return File.Exists(expectedPath) ? expectedPath : null;
     }
 
     private static bool AllowsInstalledDependencyVersion(
@@ -694,11 +731,11 @@ public sealed partial class ManagedModuleInstallService
             if (savedVersion is null)
                 return true;
 
-            var dependencyPath = ResolveSavedPackagePath(moduleRoot, dependency.Id, savedVersion);
-            if (!File.Exists(dependencyPath))
+            var dependencyPath = ResolveExistingSavedPackagePath(moduleRoot, dependency.Id, savedVersion);
+            if (string.IsNullOrWhiteSpace(dependencyPath))
                 return true;
 
-            if (WouldSavePackageDependenciesCore(request, dependency.Id, savedVersion, moduleRoot, dependencyPath, visited))
+            if (WouldSavePackageDependenciesCore(request, dependency.Id, savedVersion, moduleRoot, dependencyPath!, visited))
                 return true;
         }
 

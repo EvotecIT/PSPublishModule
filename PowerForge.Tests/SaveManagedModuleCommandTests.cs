@@ -261,6 +261,50 @@ public sealed class SaveManagedModuleCommandTests
     }
 
     [Fact]
+    public void SaveManagedModule_as_nupkg_matches_existing_dependency_package_id_case_insensitively()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(destination.Path, "company.core.1.0.0.nupkg"),
+            "company.core",
+            "1.0.0",
+            files: CreateCoreFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[1.0.0]", null) },
+            files: CreateToolFiles("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AsNupkg");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(results).BaseObject);
+        var dependency = Assert.Single(result.DependencyResults);
+        var dependencyPackagePath = Path.Combine(destination.Path, "company.core.1.0.0.nupkg");
+        Assert.Equal("Company.Core", dependency.Name);
+        Assert.True(File.Exists(dependency.ModulePath));
+        Assert.True(File.Exists(dependency.Download?.PackagePath));
+        if (Path.DirectorySeparatorChar != '\\')
+        {
+            Assert.Equal(dependencyPackagePath, dependency.ModulePath);
+            Assert.Equal(dependencyPackagePath, dependency.Download?.PackagePath);
+        }
+
+        Assert.True(File.Exists(dependencyPackagePath));
+        Assert.True(File.Exists(Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg")));
+    }
+
+    [Fact]
     public void SaveManagedModule_as_nupkg_skip_dependency_check_saves_only_requested_package()
     {
         using var feed = new TemporaryDirectory();
