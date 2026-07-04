@@ -86,6 +86,44 @@ public sealed class UninstallManagedScriptCommandTests
     }
 
     [Fact]
+    public void UninstallManagedScript_rejects_malformed_required_version_before_removing()
+    {
+        using var scriptRoot = new TemporaryDirectory();
+        var scriptPath = Path.Combine(scriptRoot.Path, "Invoke-CompanyTask.ps1");
+        File.WriteAllText(scriptPath, CreateScript("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("ScriptRoot", scriptRoot.Path)
+            .AddParameter("RequiredVersion", "1.foo");
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("Invalid script version", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(scriptPath));
+    }
+
+    [Fact]
+    public void UninstallManagedScript_matches_installed_script_name_case_insensitively()
+    {
+        using var scriptRoot = new TemporaryDirectory();
+        var scriptPath = Path.Combine(scriptRoot.Path, "invoke-companytask.ps1");
+        File.WriteAllText(scriptPath, CreateScript("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("ScriptRoot", scriptRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptUninstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptUninstallStatus.Removed, result.Status);
+        Assert.False(File.Exists(scriptPath));
+    }
+
+    [Fact]
     public void UninstallManagedScript_force_removes_script_without_metadata()
     {
         using var scriptRoot = new TemporaryDirectory();

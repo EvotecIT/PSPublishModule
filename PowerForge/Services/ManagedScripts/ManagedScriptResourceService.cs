@@ -117,7 +117,7 @@ public sealed class ManagedScriptResourceService
     {
         ValidateUninstall(request);
         var resolved = ResolveScriptInstallRoot(request);
-        var scriptPath = ResolveScriptPath(resolved.ScriptRoot, request.Name);
+        var scriptPath = ResolveInstalledScriptPath(resolved.ScriptRoot, request.Name);
         var scriptInfo = TryReadExistingInfo(scriptPath, request.Force);
         var action = ResolveUninstallAction(scriptPath, scriptInfo?.Version, request.Version);
 
@@ -950,6 +950,26 @@ public sealed class ManagedScriptResourceService
     private static string ResolveScriptPath(string destinationPath, string name)
         => Path.Combine(destinationPath, ManagedModulePackageIdentity.RequireSafeId(name.Trim(), nameof(name)) + ".ps1");
 
+    private static string ResolveInstalledScriptPath(string destinationPath, string name)
+    {
+        var safeName = ManagedModulePackageIdentity.RequireSafeId(name.Trim(), nameof(name));
+        var exactPath = Path.Combine(destinationPath, safeName + ".ps1");
+        if (File.Exists(exactPath) || !Directory.Exists(destinationPath))
+            return exactPath;
+
+        var matches = Directory.EnumerateFiles(destinationPath, "*.ps1", SearchOption.TopDirectoryOnly)
+            .Where(path => string.Equals(Path.GetFileNameWithoutExtension(path), safeName, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (matches.Length == 0)
+            return exactPath;
+        if (matches.Length == 1)
+            return matches[0];
+
+        throw new InvalidOperationException(
+            $"Multiple scripts in '{destinationPath}' match '{safeName}' case-insensitively. Remove the ambiguity before uninstalling.");
+    }
+
     private static void ThrowIfLicenseAcceptanceRequired(ManagedModulePackageMetadata? metadata, bool acceptLicense)
     {
         if (metadata?.RequireLicenseAcceptance != true || acceptLicense)
@@ -1229,6 +1249,11 @@ public sealed class ManagedScriptResourceService
             throw new ArgumentNullException(nameof(request));
         if (string.IsNullOrWhiteSpace(request.Name))
             throw new ArgumentException("Script name is required.", nameof(request));
+        if (!string.IsNullOrWhiteSpace(request.Version) &&
+            !ModuleStateVersion.TryParse(request.Version, out _))
+        {
+            throw new ArgumentException($"Invalid script version '{request.Version}'.", nameof(request));
+        }
 
         _ = ManagedModulePackageIdentity.RequireSafeId(request.Name.Trim(), nameof(request.Name));
     }
