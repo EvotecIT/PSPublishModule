@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.IO.Compression;
 using System.Management.Automation;
 using PowerForge;
 using PSPublishModule;
@@ -661,6 +662,37 @@ public sealed class SaveManagedModuleCommandTests
         Assert.True(plan.ExistingVersionFound);
         Assert.Equal(ManagedModuleInstallPlanAction.Reinstall, plan.Action);
         Assert.True(plan.WouldWriteFiles);
+    }
+
+    [Fact]
+    public void SaveManagedModule_as_nupkg_replaces_corrupt_existing_package()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        var packagePath = Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg");
+        File.WriteAllText(packagePath, "not a package");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateToolFiles("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AsNupkg");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(results).BaseObject);
+        Assert.True(result.SavedAsNupkg);
+        Assert.Equal(packagePath, result.ModulePath);
+        using var archive = ZipFile.OpenRead(packagePath);
+        Assert.Contains(archive.Entries, entry => entry.FullName.EndsWith("Company.Tools.psd1", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

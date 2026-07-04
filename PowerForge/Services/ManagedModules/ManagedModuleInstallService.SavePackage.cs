@@ -119,9 +119,11 @@ public sealed partial class ManagedModuleInstallService
                     promotionLockWaitElapsed += resolvedPromotionLockWaitElapsed;
                     installLockWaitElapsed += resolvedPromotionLockWaitElapsed;
 
-                    if (File.Exists(packagePath) &&
-                        !request.Force &&
-                        SavedPackageSatisfiesNoOpPolicy(request, moduleRoot, version))
+                    var hasExistingPackage = File.Exists(packagePath);
+                    var canReuseExistingPackage = hasExistingPackage &&
+                                                  !request.Force &&
+                                                  SavedPackageSatisfiesNoOpPolicy(request, moduleRoot, version);
+                    if (canReuseExistingPackage)
                     {
                         _logger.Verbose($"Managed module save skipped concurrently saved package: {packagePath}");
                         var existing = await CreateAlreadySavedPackageResultAsync(
@@ -144,9 +146,9 @@ public sealed partial class ManagedModuleInstallService
                         return existing;
                     }
 
-                    promotionHadExistingTarget = File.Exists(packagePath);
+                    promotionHadExistingTarget = hasExistingPackage;
                     var promotionMoveStopwatch = System.Diagnostics.Stopwatch.StartNew();
-                    var copiedPackage = CopyPackageToSavedPath(download.PackagePath, packagePath, overwrite: request.Force || RequiresPackageDownloadBeforeNoOp(request));
+                    var copiedPackage = CopyPackageToSavedPath(download.PackagePath, packagePath, overwrite: request.Force || !canReuseExistingPackage);
                     promotionMoveStopwatch.Stop();
                     promotionMoveElapsed = promotionMoveStopwatch.Elapsed;
                     if (!copiedPackage)

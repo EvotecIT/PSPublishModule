@@ -59,7 +59,7 @@ public sealed partial class ManagedModuleInstallService
 
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
         if (CanSelectInstalledNoOpBeforeRepositoryResolution(request) &&
-            TrySelectInstalledNoOpVersion(request, moduleRoot, context: null, out var installedVersion))
+            TrySelectInstalledNoOpVersion(request, moduleRoot, context: null, out var installedVersion, allowLicenseOnlySavedPackagePlan: true))
         {
             var installedModulePath = ResolveNoOpTargetPath(request, moduleRoot, request.Name, installedVersion);
             var installedVersionInfo = request.SaveAsNupkg
@@ -97,6 +97,10 @@ public sealed partial class ManagedModuleInstallService
         var exists = request.SaveAsNupkg
             ? File.Exists(modulePath)
             : IsInstalledModulePathSatisfied(modulePath, request.Name, versionInfo.Version);
+        var canProbeExistingTargetDependencies = ShouldProbeExistingTargetDependenciesForPlan(request) &&
+                                                 exists &&
+                                                 (!request.SaveAsNupkg ||
+                                                  SavedPackageSatisfiesNoOpPolicy(request, moduleRoot, versionInfo.Version, enforceLicenseAcceptance: false));
         return CreateInstallPlan(
             request,
             versionInfo.Version,
@@ -104,8 +108,7 @@ public sealed partial class ManagedModuleInstallService
             modulePath,
             exists,
             versionInfo,
-            wouldRepairDependencies: ShouldProbeExistingTargetDependenciesForPlan(request) &&
-                                      exists &&
+            wouldRepairDependencies: canProbeExistingTargetDependencies &&
                                       WouldWriteExistingTargetDependencies(request, moduleRoot, versionInfo.Version, modulePath));
     }
 
@@ -413,11 +416,12 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleInstallRequest request,
         string moduleRoot,
         ManagedModuleInstallContext? context,
-        out string version)
+        out string version,
+        bool allowLicenseOnlySavedPackagePlan = false)
     {
         version = string.Empty;
         if (request.SaveAsNupkg)
-            return TrySelectSavedPackageNoOpVersion(request, moduleRoot, out version);
+            return TrySelectSavedPackageNoOpVersion(request, moduleRoot, out version, allowLicenseOnlySavedPackagePlan);
         if (request.Force)
             return false;
         if (RequiresPackageDownloadBeforeNoOp(request))
@@ -475,7 +479,8 @@ public sealed partial class ManagedModuleInstallService
     private bool TrySelectSavedPackageNoOpVersion(
         ManagedModuleInstallRequest request,
         string moduleRoot,
-        out string version)
+        out string version,
+        bool allowLicenseOnlyPlan = false)
     {
         version = string.Empty;
         if (request.Force)
@@ -483,7 +488,7 @@ public sealed partial class ManagedModuleInstallService
 
         var savedVersion = GetSavedPackageVersions(moduleRoot, request.Name)
             .Where(candidate => AllowsInstalledNoOpVersion(candidate, request))
-            .Where(candidate => SavedPackageSatisfiesNoOpPolicy(request, moduleRoot, candidate))
+            .Where(candidate => SavedPackageSatisfiesNoOpPolicy(request, moduleRoot, candidate, enforceLicenseAcceptance: !allowLicenseOnlyPlan))
             .LastOrDefault();
         if (savedVersion is null)
             return false;
@@ -495,7 +500,8 @@ public sealed partial class ManagedModuleInstallService
     private bool SavedPackageSatisfiesNoOpPolicy(
         ManagedModuleInstallRequest request,
         string moduleRoot,
-        string version)
+        string version,
+        bool enforceLicenseAcceptance = true)
     {
         var packagePath = ResolveExistingSavedPackagePath(moduleRoot, request.Name, version);
         if (string.IsNullOrWhiteSpace(packagePath))
@@ -507,7 +513,8 @@ public sealed partial class ManagedModuleInstallService
             var download = CreateDownloadForExistingSavedPackage(request, version, packagePath!, metadata);
             ManagedModulePackageIntegrity.VerifyDownload(download, request.ExpectedPackageSha256);
             ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, metadata, request.TrustPolicy);
-            ThrowIfLicenseAcceptanceRequired(metadata, request);
+            if (enforceLicenseAcceptance)
+                ThrowIfLicenseAcceptanceRequired(metadata, request);
             return true;
         }
         catch (IOException)
