@@ -49,11 +49,12 @@ public sealed partial class ManagedModuleRepositoryClient
         bool includePrerelease,
         RepositoryCredential? credential,
         int take,
+        int skip,
         CancellationToken cancellationToken)
     {
         var document = await ReadNuGetV2XmlAsync(
                 repository,
-                BuildNuGetV2SearchUri(repository.Source, query, includePrerelease, take),
+                BuildNuGetV2SearchUri(repository.Source, query, includePrerelease, take, skip),
                 credential,
                 "Search",
                 $"Unable to search for '{query}'.",
@@ -325,7 +326,7 @@ public sealed partial class ManagedModuleRepositoryClient
         return new Uri(new Uri(EnsureTrailingSlash(source)), $"FindPackagesById()?id='{escapedId}'&semVerLevel=2.0.0");
     }
 
-    private static Uri BuildNuGetV2SearchUri(string source, string pattern, bool includePrerelease, int take)
+    private static Uri BuildNuGetV2SearchUri(string source, string pattern, bool includePrerelease, int take, int skip)
     {
         var searchText = ManagedModuleSearchMatcher.ToSearchText(pattern);
         var escapedSearch = Uri.EscapeDataString(searchText.Trim().Replace("'", "''"));
@@ -338,7 +339,7 @@ public sealed partial class ManagedModuleRepositoryClient
 
         return new Uri(
             new Uri(EnsureTrailingSlash(source)),
-            $"Packages()?$filter={filter}&$top={Math.Max(1, take)}&semVerLevel=2.0.0");
+            $"Packages()?$filter={filter}&$top={Math.Max(1, take)}&$skip={Math.Max(0, skip)}&semVerLevel=2.0.0");
     }
 
     private static Uri BuildNuGetV2LatestPackageUri(string source, string packageId, bool includePrerelease)

@@ -145,6 +145,7 @@ public sealed partial class ManagedModuleRepositoryClient
     /// <param name="includePrerelease">Include prerelease versions.</param>
     /// <param name="credential">Optional repository credential.</param>
     /// <param name="take">Maximum number of results.</param>
+    /// <param name="skip">Number of matching results to skip before returning a page.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Latest selected package versions.</returns>
     public async Task<IReadOnlyList<ManagedModuleVersionInfo>> SearchPackagesAsync(
@@ -153,32 +154,37 @@ public sealed partial class ManagedModuleRepositoryClient
         bool includePrerelease = false,
         RepositoryCredential? credential = null,
         int take = 100,
+        int skip = 0,
         CancellationToken cancellationToken = default)
     {
         if (repository is null)
             throw new ArgumentNullException(nameof(repository));
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Search query is required.", nameof(query));
+        if (skip < 0)
+            throw new ArgumentOutOfRangeException(nameof(skip), "Skip must not be negative.");
 
         return repository.Kind switch
         {
-            ManagedModuleRepositoryKind.LocalFolder => SearchLocalPackages(repository, query, includePrerelease, take),
+            ManagedModuleRepositoryKind.LocalFolder => SearchLocalPackages(repository, query, includePrerelease, take, skip),
             ManagedModuleRepositoryKind.NuGetV3 => await ExecuteCoalescedSearchQueryAsync(
                 repository,
                 query,
                 includePrerelease,
                 take,
+                skip,
                 credential,
                 cancellationToken,
-                token => SearchNuGetPackagesWithPowerShellGalleryReadApiAsync(repository, query, includePrerelease, credential, take, token)).ConfigureAwait(false),
+                token => SearchNuGetPackagesWithPowerShellGalleryReadApiAsync(repository, query, includePrerelease, credential, take, skip, token)).ConfigureAwait(false),
             ManagedModuleRepositoryKind.NuGetV2 => await ExecuteCoalescedSearchQueryAsync(
                 repository,
                 query,
                 includePrerelease,
                 take,
+                skip,
                 credential,
                 cancellationToken,
-                token => SearchNuGetV2PackagesAsync(repository, query, includePrerelease, credential, take, token)).ConfigureAwait(false),
+                token => SearchNuGetV2PackagesAsync(repository, query, includePrerelease, credential, take, skip, token)).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
     }
@@ -378,15 +384,16 @@ public sealed partial class ManagedModuleRepositoryClient
         bool includePrerelease,
         RepositoryCredential? credential,
         int take,
+        int skip,
         CancellationToken cancellationToken)
     {
         if (ShouldUsePowerShellGalleryV2ReadApi(repository))
         {
             var fallback = CreatePowerShellGalleryV2Fallback(repository);
-            return await SearchNuGetV2PackagesAsync(fallback, query, includePrerelease, credential, take, cancellationToken).ConfigureAwait(false);
+            return await SearchNuGetV2PackagesAsync(fallback, query, includePrerelease, credential, take, skip, cancellationToken).ConfigureAwait(false);
         }
 
-        return await SearchNuGetPackagesAsync(repository, query, includePrerelease, credential, take, cancellationToken).ConfigureAwait(false);
+        return await SearchNuGetPackagesAsync(repository, query, includePrerelease, credential, take, skip, cancellationToken).ConfigureAwait(false);
     }
 
     private ManagedModuleDownloadResult? TryUseCachedPackage(
@@ -537,7 +544,8 @@ public sealed partial class ManagedModuleRepositoryClient
         ManagedModuleRepository repository,
         string query,
         bool includePrerelease,
-        int take)
+        int take,
+        int skip)
     {
         var root = ResolveLocalFolder(repository.Source);
         if (!Directory.Exists(root))
@@ -548,6 +556,7 @@ public sealed partial class ManagedModuleRepositoryClient
             .GroupBy(version => version.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.OrderBy(version => version.Version, ManagedModuleVersionComparer.Instance).Last())
             .OrderBy(version => version.Name, StringComparer.OrdinalIgnoreCase)
+            .Skip(Math.Max(0, skip))
             .Take(Math.Max(1, take))
             .ToArray();
     }
@@ -558,13 +567,14 @@ public sealed partial class ManagedModuleRepositoryClient
         bool includePrerelease,
         RepositoryCredential? credential,
         int take,
+        int skip,
         CancellationToken cancellationToken)
     {
         var searchService = await ResolveSearchQueryServiceAsync(repository, credential, cancellationToken).ConfigureAwait(false);
         var searchText = ManagedModuleSearchMatcher.ToSearchText(query);
         var uri = BuildSearchQueryUri(
             searchService,
-            $"q={Uri.EscapeDataString(searchText)}&prerelease={includePrerelease.ToString().ToLowerInvariant()}&take={Math.Max(1, take)}&semVerLevel=2.0.0");
+            $"q={Uri.EscapeDataString(searchText)}&prerelease={includePrerelease.ToString().ToLowerInvariant()}&take={Math.Max(1, take)}&skip={Math.Max(0, skip)}&semVerLevel=2.0.0");
         using var response = await SendWithPolicyAsync(
             () => CreateRequest(HttpMethod.Get, uri, credential, "application/json"),
             cancellationToken).ConfigureAwait(false);

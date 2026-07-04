@@ -168,9 +168,11 @@ public sealed class FindManagedModuleCommand : PSCmdlet
         string moduleName,
         RepositoryCredential? credential)
     {
+        if (HasTagFilters())
+            return FindWildcardPackageVersionsWithTagPaging(client, repository, moduleName, credential);
+
         var searchQuery = ResolveSearchQuery(moduleName);
-        var searchTake = HasTagFilters() ? 1000 : First;
-        var matches = client.SearchPackagesAsync(repository, searchQuery, Prerelease.IsPresent, credential, searchTake)
+        var matches = client.SearchPackagesAsync(repository, searchQuery, Prerelease.IsPresent, credential, First)
             .GetAwaiter()
             .GetResult();
         if (!AllVersions.IsPresent || matches.Count == 0)
@@ -190,9 +192,77 @@ public sealed class FindManagedModuleCommand : PSCmdlet
             .ToArray();
     }
 
+    private IReadOnlyList<ManagedModuleVersionInfo> FindWildcardPackageVersionsWithTagPaging(
+        ManagedModuleRepositoryClient client,
+        ManagedModuleRepository repository,
+        string moduleName,
+        RepositoryCredential? credential)
+    {
+        const int pageSize = 1000;
+        var searchQuery = ResolveSearchQuery(moduleName);
+        var results = new List<ManagedModuleVersionInfo>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        for (var skip = 0; results.Count < First; skip += pageSize)
+        {
+            var page = client.SearchPackagesAsync(repository, searchQuery, Prerelease.IsPresent, credential, pageSize, skip)
+                .GetAwaiter()
+                .GetResult();
+            if (page.Count == 0)
+                break;
+
+            var candidates = AllVersions.IsPresent
+                ? ExpandAllVersions(client, repository, page, credential)
+                : page;
+            candidates = HydrateVersionsForFindAsync(client, repository, candidates, credential)
+                .GetAwaiter()
+                .GetResult();
+            candidates = ApplyFindFilters(candidates, moduleName, applyFirst: false);
+            foreach (var candidate in candidates)
+            {
+                if (!seen.Add(CreateResultKey(candidate)))
+                    continue;
+
+                results.Add(candidate);
+                if (results.Count >= First)
+                    break;
+            }
+
+            if (page.Count < pageSize)
+                break;
+        }
+
+        return results
+            .OrderBy(static version => version.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static version => version.Version, ManagedModuleVersionComparer.Instance)
+            .Take(First)
+            .ToArray();
+    }
+
+    private IReadOnlyList<ManagedModuleVersionInfo> ExpandAllVersions(
+        ManagedModuleRepositoryClient client,
+        ManagedModuleRepository repository,
+        IReadOnlyList<ManagedModuleVersionInfo> matches,
+        RepositoryCredential? credential)
+    {
+        var versions = new List<ManagedModuleVersionInfo>();
+        foreach (var match in matches)
+        {
+            versions.AddRange(client.GetVersionsAsync(repository, match.Name, Prerelease.IsPresent, credential)
+                .GetAwaiter()
+                .GetResult());
+        }
+
+        return versions
+            .OrderBy(static version => version.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static version => version.Version, ManagedModuleVersionComparer.Instance)
+            .ToArray();
+    }
+
     private IReadOnlyList<ManagedModuleVersionInfo> ApplyFindFilters(
         IReadOnlyList<ManagedModuleVersionInfo> output,
-        string moduleName)
+        string moduleName,
+        bool applyFirst = true)
     {
         var hasWildcard = ManagedModuleCommandSupport.HasWildcard(moduleName);
         var filtered = output.Where(version => MatchesRequestedName(moduleName, version.Name, hasWildcard));
@@ -202,10 +272,10 @@ public sealed class FindManagedModuleCommand : PSCmdlet
         {
             filtered = filtered.Where(version =>
                 version.Tags.Count > 0 &&
-                tagFilters.All(tag => version.Tags.Any(packageTag => ManagedModuleSearchMatcher.IsMatch(tag, packageTag))));
+                tagFilters.All(tag => version.Tags.Any(packageTag => TagsMatch(tag, packageTag))));
         }
 
-        if (hasWildcard)
+        if (applyFirst && hasWildcard)
             filtered = filtered.Take(First);
 
         return filtered.ToArray();
@@ -343,6 +413,9 @@ public sealed class FindManagedModuleCommand : PSCmdlet
         => hasWildcard
             ? ManagedModuleSearchMatcher.IsMatch(requestedName, packageName)
             : packageName.Equals(requestedName.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private static bool TagsMatch(string requestedTag, string packageTag)
+        => packageTag.Equals(requestedTag.Trim(), StringComparison.OrdinalIgnoreCase);
 
     private static bool IsBroadWildcard(string value)
     {

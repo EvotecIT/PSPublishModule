@@ -411,7 +411,7 @@ public sealed class ManagedModuleRepositoryClientTests
         });
         Assert.Contains(
             requests,
-            request => request.Url == "https://example.test/api/v2/Packages()?$filter=startswith(Id,'Company.')%20and%20IsLatestVersion&$top=10&semVerLevel=2.0.0");
+            request => request.Url == "https://example.test/api/v2/Packages()?$filter=startswith(Id,'Company.')%20and%20IsLatestVersion&$top=10&$skip=0&semVerLevel=2.0.0");
     }
 
     [Fact]
@@ -426,7 +426,7 @@ public sealed class ManagedModuleRepositoryClientTests
 
         Assert.Contains(
             requests,
-            request => request.Url == "https://example.test/api/v2/Packages()?$filter=startswith(Id,'Company.')%20and%20IsAbsoluteLatestVersion&$top=10&semVerLevel=2.0.0");
+            request => request.Url == "https://example.test/api/v2/Packages()?$filter=startswith(Id,'Company.')%20and%20IsAbsoluteLatestVersion&$top=10&$skip=0&semVerLevel=2.0.0");
     }
 
     [Fact]
@@ -1076,7 +1076,7 @@ public sealed class ManagedModuleRepositoryClientTests
         var results = await repositoryClient.SearchPackagesAsync(repository, "Company.*");
 
         Assert.Equal(new[] { "Company.Core", "Company.Tools" }, results.Select(result => result.Name));
-        Assert.Contains(requests, request => request.Url == "https://example.test/search?q=Company.&prerelease=false&take=100&semVerLevel=2.0.0");
+        Assert.Contains(requests, request => request.Url == "https://example.test/search?q=Company.&prerelease=false&take=100&skip=0&semVerLevel=2.0.0");
     }
 
     [Fact]
@@ -1136,7 +1136,7 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.DoesNotContain(requests, request => request.Url == "https://www.powershellgallery.com/api/v3/index.json");
         Assert.Contains(
             requests,
-            request => request.Url == "https://www.powershellgallery.com/api/v2/Packages()?$filter=substringof('Pester',Id)%20and%20IsLatestVersion&$top=100&semVerLevel=2.0.0");
+            request => request.Url == "https://www.powershellgallery.com/api/v2/Packages()?$filter=substringof('Pester',Id)%20and%20IsLatestVersion&$top=100&$skip=0&semVerLevel=2.0.0");
     }
 
     [Fact]
@@ -1380,7 +1380,7 @@ public sealed class ManagedModuleRepositoryClientTests
                     "<entry><content><m:properties xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\"><d:Version>2.38.0</d:Version></m:properties></content></entry>" +
                     "</feed>");
 
-            if (uri.AbsoluteUri == "https://example.test/api/v2/Packages()?$filter=startswith(Id,'Company.')%20and%20IsLatestVersion&$top=10&semVerLevel=2.0.0")
+            if (uri.AbsoluteUri == "https://example.test/api/v2/Packages()?$filter=startswith(Id,'Company.')%20and%20IsLatestVersion&$top=10&$skip=0&semVerLevel=2.0.0")
                 return Xml(
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
                     "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\">" +
@@ -1390,14 +1390,14 @@ public sealed class ManagedModuleRepositoryClientTests
                     "<entry><content><m:properties><d:Id>Other.Module</d:Id><d:Version>9.0.0</d:Version></m:properties></content></entry>" +
                     "</feed>");
 
-            if (uri.AbsoluteUri == "https://example.test/api/v2/Packages()?$filter=startswith(Id,'Company.')%20and%20IsAbsoluteLatestVersion&$top=10&semVerLevel=2.0.0")
+            if (uri.AbsoluteUri == "https://example.test/api/v2/Packages()?$filter=startswith(Id,'Company.')%20and%20IsAbsoluteLatestVersion&$top=10&$skip=0&semVerLevel=2.0.0")
                 return Xml(
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
                     "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\">" +
                     "<entry><content><m:properties><d:Id>Company.Tools</d:Id><d:Version>1.2.0-preview1</d:Version></m:properties></content></entry>" +
                     "</feed>");
 
-            if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v2/Packages()?$filter=substringof('Pester',Id)%20and%20IsLatestVersion&$top=100&semVerLevel=2.0.0")
+            if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v2/Packages()?$filter=substringof('Pester',Id)%20and%20IsLatestVersion&$top=100&$skip=0&semVerLevel=2.0.0")
                 return Xml(
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
                     "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\">" +
@@ -1493,17 +1493,17 @@ public sealed class ManagedModuleRepositoryClientTests
                 });
             }
 
-            if (uri.AbsoluteUri == "https://example.test/search?q=Company.&prerelease=false&take=100&semVerLevel=2.0.0")
+            if (uri.AbsoluteUri == "https://example.test/search?q=Company.&prerelease=false&take=100&skip=0&semVerLevel=2.0.0")
                 return Json("{\"data\":[" +
                             "{\"id\":\"Company.Tools\",\"version\":\"1.1.0\",\"listed\":true}," +
                             "{\"id\":\"Company.Core\",\"version\":\"2.0.0\",\"listed\":true}," +
                             "{\"id\":\"Other.Module\",\"version\":\"9.0.0\",\"listed\":true}" +
                             "]}");
 
-            if (uri.AbsoluteUri == "https://example.test/search?q=Company.Tools&prerelease=false&take=20&semVerLevel=2.0.0")
+            if (uri.AbsoluteUri == "https://example.test/search?q=Company.Tools&prerelease=false&take=20&skip=0&semVerLevel=2.0.0")
                 return Json("{\"data\":[{\"id\":\"Company.Tools\",\"version\":\"1.1.0\",\"listed\":true}]}");
 
-            if (uri.AbsoluteUri == "https://example.test/search?q=Unlisted.Tools&prerelease=false&take=20&semVerLevel=2.0.0")
+            if (uri.AbsoluteUri == "https://example.test/search?q=Unlisted.Tools&prerelease=false&take=20&skip=0&semVerLevel=2.0.0")
                 return Json("{\"data\":[{\"id\":\"Unlisted.Tools\",\"version\":\"1.5.0\",\"listed\":true}]}");
 
             if (uri.AbsoluteUri == "https://example.test/publish/" && request.Method == HttpMethod.Put)
