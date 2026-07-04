@@ -490,6 +490,8 @@ public sealed class ManagedScriptResourceService
 
     private static void ThrowIfScriptVersionDisagrees(ManagedScriptFileInfo info, string packageVersion, string packagePath)
     {
+        _ = ManagedModulePackageIdentity.RequireSafeVersion(info.Version, nameof(info.Version));
+
         if (ManagedModuleVersionComparer.Instance.Compare(info.Version, packageVersion) == 0)
             return;
 
@@ -562,6 +564,9 @@ public sealed class ManagedScriptResourceService
         {
             throw new ArgumentException("VersionPolicy cannot be combined with MinimumVersion or MaximumVersion.");
         }
+
+        if (!string.IsNullOrWhiteSpace(version))
+            _ = ManagedModulePackageIdentity.RequireSafeVersion(version!, nameof(version));
     }
 
     private static void DeleteDirectoryQuietly(string path)
