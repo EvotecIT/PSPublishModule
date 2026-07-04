@@ -111,6 +111,72 @@ public sealed class ManagedScriptResourceService
     }
 
     /// <summary>
+    /// Creates a non-mutating plan for uninstalling a script resource.
+    /// </summary>
+    public ManagedScriptUninstallPlan PlanUninstall(ManagedScriptUninstallRequest request)
+    {
+        ValidateUninstall(request);
+        var resolved = ResolveScriptInstallRoot(request);
+        var scriptPath = ResolveScriptPath(resolved.ScriptRoot, request.Name);
+        var scriptInfo = TryReadExistingInfo(scriptPath, request.Force);
+        var action = ResolveUninstallAction(scriptPath, scriptInfo?.Version, request.Version);
+
+        return new ManagedScriptUninstallPlan
+        {
+            Name = request.Name.Trim(),
+            Action = action,
+            Scope = resolved.Scope,
+            ShellEdition = resolved.ShellEdition,
+            ScriptRoot = resolved.ScriptRoot,
+            ScriptPath = scriptPath,
+            WouldRemoveFile = action == ManagedScriptUninstallPlanAction.Remove,
+            ExistingVersion = scriptInfo?.Version,
+            RequestedVersion = request.Version,
+            SkipReason = ResolveUninstallSkipReason(action, scriptInfo?.Version, request.Version)
+        };
+    }
+
+    /// <summary>
+    /// Uninstalls a script resource from the requested script scope.
+    /// </summary>
+    public ManagedScriptUninstallResult Uninstall(ManagedScriptUninstallRequest request)
+    {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var plan = PlanUninstall(request);
+        ManagedScriptFileInfo? scriptInfo = null;
+        if (File.Exists(plan.ScriptPath))
+        {
+            try
+            {
+                scriptInfo = _scriptFileInfoService.Read(plan.ScriptPath);
+            }
+            catch when (request.Force)
+            {
+                scriptInfo = null;
+            }
+        }
+
+        if (plan.Action == ManagedScriptUninstallPlanAction.Remove)
+            File.Delete(plan.ScriptPath);
+
+        stopwatch.Stop();
+        return new ManagedScriptUninstallResult
+        {
+            Name = plan.Name,
+            Status = MapUninstallStatus(plan.Action),
+            Scope = plan.Scope,
+            ShellEdition = plan.ShellEdition,
+            ScriptRoot = plan.ScriptRoot,
+            ScriptPath = plan.ScriptPath,
+            ExistingVersion = plan.ExistingVersion,
+            RequestedVersion = plan.RequestedVersion,
+            SkipReason = plan.SkipReason,
+            Elapsed = stopwatch.Elapsed,
+            ScriptInfo = scriptInfo
+        };
+    }
+
+    /// <summary>
     /// Creates a non-mutating plan for saving a script resource.
     /// </summary>
     public async Task<ManagedScriptSavePlan> PlanSaveAsync(
@@ -542,6 +608,21 @@ public sealed class ManagedScriptResourceService
         }
     }
 
+    private ManagedScriptFileInfo? TryReadExistingInfo(string scriptPath, bool force)
+    {
+        if (!File.Exists(scriptPath))
+            return null;
+
+        try
+        {
+            return _scriptFileInfoService.Read(scriptPath);
+        }
+        catch when (force)
+        {
+            return null;
+        }
+    }
+
     private static ManagedScriptSaveResult CreateSkippedResult(
         ManagedScriptSaveRequest request,
         string version,
@@ -753,6 +834,66 @@ public sealed class ManagedScriptResourceService
 
         return new ResolvedScriptInstallRoot(scriptRoot, scope, shellEdition);
     }
+
+    private static ResolvedScriptInstallRoot ResolveScriptInstallRoot(ManagedScriptUninstallRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.ScriptRoot))
+        {
+            return new ResolvedScriptInstallRoot(
+                Path.GetFullPath(request.ScriptRoot!.Trim().Trim('"')),
+                ManagedScriptInstallScope.Custom,
+                ResolveShellEdition(request.ShellEdition));
+        }
+
+        var shellEdition = ResolveShellEdition(request.ShellEdition);
+        var folderName = shellEdition == ManagedModuleShellEdition.Desktop ? "WindowsPowerShell" : "PowerShell";
+        var scope = request.Scope;
+        var scriptRoot = scope switch
+        {
+            ManagedScriptInstallScope.CurrentUser => ResolveCurrentUserScriptRoot(folderName),
+            ManagedScriptInstallScope.AllUsers => ResolveAllUsersScriptRoot(folderName),
+            ManagedScriptInstallScope.Custom => throw new ArgumentException("ScriptRoot is required when Scope is Custom.", nameof(request)),
+            _ => throw new ArgumentOutOfRangeException(nameof(request), request.Scope, "Unsupported script install scope.")
+        };
+
+        return new ResolvedScriptInstallRoot(scriptRoot, scope, shellEdition);
+    }
+
+    private static ManagedScriptUninstallPlanAction ResolveUninstallAction(string scriptPath, string? existingVersion, string? requestedVersion)
+    {
+        if (!File.Exists(scriptPath))
+            return ManagedScriptUninstallPlanAction.SkipMissing;
+
+        if (!string.IsNullOrWhiteSpace(requestedVersion) &&
+            (string.IsNullOrWhiteSpace(existingVersion) ||
+             ManagedModuleVersionComparer.Instance.Compare(existingVersion!, requestedVersion!.Trim()) != 0))
+        {
+            return ManagedScriptUninstallPlanAction.SkipVersionMismatch;
+        }
+
+        return ManagedScriptUninstallPlanAction.Remove;
+    }
+
+    private static string? ResolveUninstallSkipReason(
+        ManagedScriptUninstallPlanAction action,
+        string? existingVersion,
+        string? requestedVersion)
+        => action switch
+        {
+            ManagedScriptUninstallPlanAction.SkipMissing => "Script is not installed in the selected script root.",
+            ManagedScriptUninstallPlanAction.SkipVersionMismatch => string.IsNullOrWhiteSpace(existingVersion)
+                ? $"Installed script metadata could not be read, so requested version '{requestedVersion}' was not removed."
+                : $"Installed script version '{existingVersion}' does not match requested version '{requestedVersion}'.",
+            _ => null
+        };
+
+    private static ManagedScriptUninstallStatus MapUninstallStatus(ManagedScriptUninstallPlanAction action)
+        => action switch
+        {
+            ManagedScriptUninstallPlanAction.Remove => ManagedScriptUninstallStatus.Removed,
+            ManagedScriptUninstallPlanAction.SkipVersionMismatch => ManagedScriptUninstallStatus.SkippedVersionMismatch,
+            _ => ManagedScriptUninstallStatus.SkippedMissing
+        };
 
     private static ManagedModuleShellEdition ResolveShellEdition(ManagedModuleShellEdition shellEdition)
     {
@@ -1080,6 +1221,16 @@ public sealed class ManagedScriptResourceService
 
         _ = ManagedModulePackageIdentity.RequireSafeId(request.Name.Trim(), nameof(request.Name));
         _ = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256);
+    }
+
+    private static void ValidateUninstall(ManagedScriptUninstallRequest request)
+    {
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new ArgumentException("Script name is required.", nameof(request));
+
+        _ = ManagedModulePackageIdentity.RequireSafeId(request.Name.Trim(), nameof(request.Name));
     }
 
     private static void DeleteDirectoryQuietly(string path)

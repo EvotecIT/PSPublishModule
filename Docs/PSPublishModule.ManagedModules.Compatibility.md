@@ -26,6 +26,7 @@ Baseline references:
 | `Save-PSResource` | `Save-ManagedModule`, `Save-ManagedScript` | Partial | Module packages and script packages are supported. Other non-module resource kinds remain compatibility-path work. |
 | `Install-PSResource` | `Install-ManagedModule`, `Install-ManagedScript` | Partial | Module packages, script packages, version ranges, prerelease, repository priority, scope, and required-resource batch installs are supported. |
 | `Update-PSResource` | `Update-ManagedModule` | Partial | Module update workflows are supported. Non-module resources remain compatibility-path work. |
+| `Uninstall-PSResource` | `Uninstall-ManagedScript` | Partial | Script uninstall is supported. Module uninstall and other resource kinds remain compatibility-path work unless the managed module uninstall surface is included by a sibling PR. |
 | `Publish-PSResource` | `Publish-ManagedModule` | Partial | Module package publishing is supported. Script/resource publishing remains compatibility-path work. |
 
 ## Public Surface Decisions
@@ -173,9 +174,9 @@ PSResourceGet operator spellings are accepted where they map to the same managed
 
 ## PSResourceGet Resource-Kind Scope
 
-The managed engine started as a module lifecycle engine. It supports module packages for find, save, install, update, publish, and estate repair. Script packages now have first-class save/install support through the managed script resource surface. It does not currently claim support for the remaining PSResourceGet resource kinds or provider bootstrap behaviors. Those gaps are tracked by the broader [PSResourceGet Parity Plan](PSPublishModule.PSResourceGetParity.md), which keeps script/resource support isolated from the module hot path:
+The managed engine started as a module lifecycle engine. It supports module packages for find, save, install, update, publish, and estate repair. Script packages now have first-class save/install/uninstall support through the managed script resource surface. It does not currently claim support for the remaining PSResourceGet resource kinds or provider bootstrap behaviors. Those gaps are tracked by the broader [PSResourceGet Parity Plan](PSPublishModule.PSResourceGetParity.md), which keeps script/resource support isolated from the module hot path:
 
-- script find/update/publish/uninstall workflows
+- script find/update/publish workflows
 - DSC resources as a separate resource-kind search/install surface
 - command-name search across package contents
 - role capability search
@@ -209,6 +210,7 @@ This checklist is the guardrail for replacing common PowerShellGet and PSResourc
 - [x] Decide whether to add explicit `-TrustRepository` and `-SkipPublisherCheck` compatibility parameters. They are not aliases because repository trust and publisher checks are different safety concepts in the managed engine; use `-RequireTrustedRepository` and `-AuthenticodeCheck`/integrity policies instead.
 - [x] Document unsupported non-module resource use cases explicitly: remaining script lifecycle gaps, DSC resources as resource kinds, role capability search, command-name search, and provider-specific bootstrap behavior.
 - [x] Add initial managed script resource save/install support with PSScriptInfo validation and local-feed proof.
+- [x] Add managed script uninstall support with scope/path/version-match planning and local proof.
 - [x] Add repair/maintenance benchmark lanes for stale versions, source drift, scope drift, and family coherence.
 - [x] Add repair/maintenance benchmark lanes for loaded-module safety and cleanup planning, with command-level plan tests that prove loaded-module findings and cleanup actions remain visible without mutation.
 - [x] Add install/save/update no-op and force benchmark lanes so existing-target behavior is measured across managed, PowerShellGet, PSResourceGet, and the install-only speed gate where an equivalent operation exists.
