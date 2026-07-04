@@ -307,13 +307,16 @@ public sealed partial class ManagedModuleInstallService
     {
         result = null!;
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
-        var installedVersion = GetInstalledVersions(moduleRoot, dependencyName, context)
+        var installedVersion = GetSatisfiedDependencyVersions(request, moduleRoot, dependencyName, context)
             .Where(version => AllowsInstalledDependencyVersion(version, request, range))
             .LastOrDefault();
         if (installedVersion is null)
             return false;
 
-        var modulePath = ResolveInstalledModulePath(moduleRoot, dependencyName, installedVersion);
+        var modulePath = ResolveSatisfiedDependencyPath(request, moduleRoot, dependencyName, installedVersion);
+        if (!TargetExists(request, modulePath))
+            return false;
+
         result = CreateAlreadyInstalledResult(
             new ManagedModuleInstallRequest
             {
@@ -338,6 +341,12 @@ public sealed partial class ManagedModuleInstallService
             TimeSpan.Zero,
             repositoryRequestCount: 0,
             installLockWaitElapsed: TimeSpan.Zero);
+        if (request.SaveAsNupkg)
+        {
+            result.Download = CreateDownloadForSatisfiedSavedPackage(request, dependencyName, installedVersion, modulePath);
+            result.FileCount = 1;
+        }
+
         context.RecordInstalledVersion(moduleRoot, dependencyName, installedVersion);
         return true;
     }
@@ -349,8 +358,72 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleInstallContext context)
     {
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
-        return GetInstalledVersions(moduleRoot, dependencyName, context)
+        return GetSatisfiedDependencyVersions(request, moduleRoot, dependencyName, context)
             .Any(version => AllowsInstalledDependencyVersion(version, request, range));
+    }
+
+    private static IReadOnlyList<string> GetSatisfiedDependencyVersions(
+        ManagedModuleInstallRequest request,
+        string moduleRoot,
+        string dependencyName,
+        ManagedModuleInstallContext context)
+        => request.SaveAsNupkg
+            ? GetSavedPackageVersions(moduleRoot, dependencyName, context)
+            : GetInstalledVersions(moduleRoot, dependencyName, context);
+
+    private static string ResolveSatisfiedDependencyPath(
+        ManagedModuleInstallRequest request,
+        string moduleRoot,
+        string dependencyName,
+        string version)
+        => request.SaveAsNupkg
+            ? ResolveSavedPackagePath(moduleRoot, dependencyName, version)
+            : ResolveInstalledModulePath(moduleRoot, dependencyName, version);
+
+    private static IReadOnlyList<string> GetSavedPackageVersions(
+        string moduleRoot,
+        string packageId,
+        ManagedModuleInstallContext context)
+    {
+        var versions = GetInstalledVersions(moduleRoot, packageId, context)
+            .Concat(EnumerateSavedPackageVersions(moduleRoot, packageId))
+            .Where(version => File.Exists(ResolveSavedPackagePath(moduleRoot, packageId, version)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static version => version, ManagedModuleVersionComparer.Instance)
+            .ToArray();
+
+        return versions;
+    }
+
+    private static IEnumerable<string> EnumerateSavedPackageVersions(string moduleRoot, string packageId)
+    {
+        var root = Path.GetFullPath(moduleRoot.Trim().Trim('"'));
+        if (!Directory.Exists(root))
+            return Array.Empty<string>();
+
+        var safePackageId = ManagedModulePackageIdentity.RequireSafeId(packageId, nameof(packageId));
+        var prefix = safePackageId + ".";
+        var suffix = ".nupkg";
+        try
+        {
+            return Directory.EnumerateFiles(root, prefix + "*" + suffix, SearchOption.TopDirectoryOnly)
+                .Select(path => Path.GetFileName(path))
+                .Where(fileName => !string.IsNullOrWhiteSpace(fileName) &&
+                                   fileName!.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
+                                   fileName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                .Select(fileName => fileName!.Substring(prefix.Length, fileName.Length - prefix.Length - suffix.Length))
+                .Where(static version => !string.IsNullOrWhiteSpace(version))
+                .Where(static version => IsInstalledVersionDirectoryName(version))
+                .ToArray();
+        }
+        catch (IOException)
+        {
+            return Array.Empty<string>();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Array.Empty<string>();
+        }
     }
 
     private static bool AllowsInstalledDependencyVersion(
@@ -786,6 +859,23 @@ public sealed partial class ManagedModuleInstallService
 
         return trimmed.TrimEnd('/', '\\');
     }
+
+    private static ManagedModuleDownloadResult CreateDownloadForSatisfiedSavedPackage(
+        ManagedModuleInstallRequest request,
+        string packageId,
+        string version,
+        string packagePath)
+        => new()
+        {
+            Name = packageId.Trim(),
+            Version = version,
+            RepositoryName = request.Repository.Name,
+            Source = packagePath,
+            PackagePath = packagePath,
+            BytesWritten = 0,
+            FromCache = true,
+            PackageSha256 = ComputePackageSha256(packagePath)
+        };
 
     private static IEnumerable<ManagedModuleDependencyInfo> SelectDependencies(ManagedModulePackageMetadata? metadata)
     {

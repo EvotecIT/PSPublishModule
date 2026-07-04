@@ -72,4 +72,30 @@ public sealed class ManagedModuleBundleMetadataWriterTests
         Assert.Null(entry.PackagePath);
         Assert.Equal(new string('b', 64), entry.PackageSha256);
     }
+
+    [Fact]
+    public void Create_uses_package_parent_as_root_for_nupkg_saves()
+    {
+        var result = new ManagedModuleInstallResult
+        {
+            Name = "Company.Tools",
+            Version = "2.0.0",
+            Status = ManagedModuleInstallStatus.Installed,
+            RepositoryName = "Local",
+            RepositorySource = "C:\\Feed",
+            ModulePath = Path.Combine("C:\\Bundle", "Company.Tools.2.0.0.nupkg"),
+            SavedAsNupkg = true,
+            Download = new ManagedModuleDownloadResult
+            {
+                PackagePath = Path.Combine("C:\\Bundle", "Company.Tools.2.0.0.nupkg"),
+                PackageSha256 = new string('b', 64)
+            }
+        };
+
+        var metadata = new ManagedModuleBundleMetadataWriter().Create(new[] { result });
+
+        Assert.Equal("C:\\Bundle", metadata.ModuleRoot);
+        var entry = Assert.Single(metadata.Modules);
+        Assert.Equal(Path.Combine("C:\\Bundle", "Company.Tools.2.0.0.nupkg"), entry.ModulePath);
+    }
 }

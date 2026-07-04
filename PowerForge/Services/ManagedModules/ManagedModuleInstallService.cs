@@ -176,13 +176,11 @@ public sealed partial class ManagedModuleInstallService
 
         if (knownCoalescingKey is not null && context.TryGetCompletedInstall(knownCoalescingKey, out var completedInstall))
         {
-            var completedModulePath = ResolveInstalledModulePath(moduleRoot, request.Name, completedInstall.Version);
-            _logger.Verbose($"Managed module install skipped operation-local completed target: {completedModulePath}");
-            return CreateAlreadyInstalledResult(
+            _logger.Verbose($"Managed module install skipped operation-local completed target: {completedInstall.ModulePath}");
+            return CreateCoalescedCompletedResult(
                 request,
-                completedInstall.Version,
+                completedInstall,
                 moduleRoot,
-                completedModulePath,
                 stopwatch.Elapsed,
                 TimeSpan.Zero,
                 repositoryRequestCount: 0,
@@ -205,12 +203,10 @@ public sealed partial class ManagedModuleInstallService
                         }
 
                         coalescedWaitStopwatch.Stop();
-                        var completedModulePath = ResolveInstalledModulePath(moduleRoot, request.Name, completed.Version);
-                        return CreateAlreadyInstalledResult(
+                        return CreateCoalescedCompletedResult(
                             request,
-                            completed.Version,
+                            completed,
                             moduleRoot,
-                            completedModulePath,
                             stopwatch.Elapsed,
                             TimeSpan.Zero,
                             repositoryRequestCount: 0,
@@ -323,11 +319,10 @@ public sealed partial class ManagedModuleInstallService
                         }
 
                         coalescedWaitStopwatch.Stop();
-                        return CreateAlreadyInstalledResult(
+                        return CreateCoalescedCompletedResult(
                             request,
-                            completed.Version,
+                            completed,
                             moduleRoot,
-                            modulePath,
                             stopwatch.Elapsed,
                             versionResolutionStopwatch.Elapsed,
                             requestScope.Count,
@@ -1150,6 +1145,47 @@ public sealed partial class ManagedModuleInstallService
             CoalescedWaitElapsed = coalescedWaitElapsed,
             InstallLockWaitElapsed = installLockWaitElapsed,
             RepositoryRequestCount = repositoryRequestCount
+        };
+
+    private static ManagedModuleInstallResult CreateCoalescedCompletedResult(
+        ManagedModuleInstallRequest request,
+        ManagedModuleInstallResult completed,
+        string moduleRoot,
+        TimeSpan elapsed,
+        TimeSpan versionResolutionElapsed,
+        long repositoryRequestCount,
+        TimeSpan installLockWaitElapsed,
+        TimeSpan coalescedWaitElapsed = default)
+        => new()
+        {
+            Name = request.Name.Trim(),
+            Version = completed.Version,
+            Status = ManagedModuleInstallStatus.AlreadyInstalled,
+            RepositoryName = request.Repository.Name,
+            RepositorySource = request.Repository.Source,
+            RequestedVersion = request.Version,
+            MinimumVersion = request.MinimumVersion,
+            MaximumVersion = request.MaximumVersion,
+            VersionPolicy = request.VersionPolicy,
+            ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
+            RequireTrustedRepository = request.TrustPolicy?.RequireTrustedRepository == true,
+            AllowedAuthors = ManagedModuleTrustEvaluator.NormalizeAuthors(request.TrustPolicy?.AllowedAuthors),
+            ModuleRoot = moduleRoot,
+            ModulePath = completed.ModulePath,
+            SavedAsNupkg = completed.SavedAsNupkg,
+            Elapsed = elapsed,
+            VersionResolutionElapsed = versionResolutionElapsed,
+            CoalescedWaitElapsed = coalescedWaitElapsed,
+            InstallLockWaitElapsed = installLockWaitElapsed,
+            Download = completed.Download,
+            AuthenticodeVerification = completed.AuthenticodeVerification,
+            FileCount = completed.FileCount,
+            ExtractedBytes = completed.ExtractedBytes,
+            ExtractionFromCache = completed.ExtractionFromCache,
+            PackageRepositoryRequestCount = completed.PackageRepositoryRequestCount,
+            PackageRepositoryRedirectCount = completed.PackageRepositoryRedirectCount,
+            RepositoryRequestCount = repositoryRequestCount,
+            DependencyResults = completed.DependencyResults
         };
 
     private static ManagedModuleInstallLock AcquireInstallLock(

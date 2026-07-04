@@ -323,18 +323,20 @@ public sealed partial class ManagedModuleInstallService
         if (!string.IsNullOrWhiteSpace(directory))
             Directory.CreateDirectory(directory!);
 
-        if (File.Exists(fullDestinationPath))
-        {
-            if (!overwrite)
-                return;
-
-            File.Delete(fullDestinationPath);
-        }
-
         var tempPath = fullDestinationPath + ".tmp-" + NewShortId();
+        var backupPath = fullDestinationPath + ".bak-" + NewShortId();
         try
         {
             File.Copy(sourcePath, tempPath, overwrite: true);
+            if (File.Exists(fullDestinationPath))
+            {
+                if (!overwrite)
+                    return;
+
+                File.Replace(tempPath, fullDestinationPath, backupPath, ignoreMetadataErrors: true);
+                return;
+            }
+
             File.Move(tempPath, fullDestinationPath);
         }
         catch
@@ -349,6 +351,19 @@ public sealed partial class ManagedModuleInstallService
             }
 
             throw;
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(tempPath))
+                    File.Delete(tempPath);
+                if (File.Exists(backupPath))
+                    File.Delete(backupPath);
+            }
+            catch
+            {
+            }
         }
     }
 

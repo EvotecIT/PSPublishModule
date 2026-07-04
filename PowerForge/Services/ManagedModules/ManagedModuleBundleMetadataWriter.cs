@@ -29,7 +29,7 @@ public sealed class ManagedModuleBundleMetadataWriter
         return new ManagedModuleBundleMetadata
         {
             CreatedUtc = DateTimeOffset.UtcNow,
-            ModuleRoot = entries.Select(static entry => Path.GetDirectoryName(Path.GetDirectoryName(entry.ModulePath) ?? string.Empty))
+            ModuleRoot = entries.Select(static entry => ResolveModuleRoot(entry.ModulePath))
                 .FirstOrDefault(static root => !string.IsNullOrWhiteSpace(root)) ?? string.Empty,
             Modules = entries
         };
@@ -85,4 +85,15 @@ public sealed class ManagedModuleBundleMetadataWriter
         => !string.IsNullOrWhiteSpace(packagePath) && File.Exists(packagePath)
             ? packagePath
             : null;
+
+    private static string? ResolveModuleRoot(string modulePath)
+    {
+        if (string.IsNullOrWhiteSpace(modulePath))
+            return null;
+
+        if (modulePath.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase))
+            return Path.GetDirectoryName(modulePath);
+
+        return Path.GetDirectoryName(Path.GetDirectoryName(modulePath) ?? string.Empty);
+    }
 }

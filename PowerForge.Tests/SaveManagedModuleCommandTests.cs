@@ -118,6 +118,103 @@ public sealed class SaveManagedModuleCommandTests
     }
 
     [Fact]
+    public void SaveManagedModule_as_nupkg_does_not_treat_unpacked_dependency_as_saved_package()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            files: CreateCoreFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[1.0.0]", null) },
+            files: CreateToolFiles("1.0.0"));
+        var unpackedDependencyPath = Path.Combine(destination.Path, "Company.Core", "1.0.0");
+        Directory.CreateDirectory(unpackedDependencyPath);
+        File.WriteAllText(Path.Combine(unpackedDependencyPath, "Company.Core.psd1"), "@{ ModuleVersion = '1.0.0' }");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AsNupkg");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(results).BaseObject);
+        var dependency = Assert.Single(result.DependencyResults);
+        var dependencyPackagePath = Path.Combine(destination.Path, "Company.Core.1.0.0.nupkg");
+        Assert.True(dependency.SavedAsNupkg);
+        Assert.Equal(dependencyPackagePath, dependency.ModulePath);
+        Assert.Equal(dependencyPackagePath, dependency.Download?.PackagePath);
+        Assert.True(File.Exists(dependencyPackagePath));
+    }
+
+    [Fact]
+    public void SaveManagedModule_as_nupkg_reports_package_paths_for_shared_transitive_dependencies()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            files: CreateCoreFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.FeatureA.1.0.0.nupkg"),
+            "Company.FeatureA",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[1.0.0]", null) },
+            files: CreateFeatureFiles("Company.FeatureA", "1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.FeatureB.1.0.0.nupkg"),
+            "Company.FeatureB",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[1.0.0]", null) },
+            files: CreateFeatureFiles("Company.FeatureB", "1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[]
+            {
+                new TestDependency("Company.FeatureA", "[1.0.0]", null),
+                new TestDependency("Company.FeatureB", "[1.0.0]", null)
+            },
+            files: CreateToolFiles("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AsNupkg")
+            .AddParameter("DependencyConcurrency", 2);
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(results).BaseObject);
+        var flattened = Flatten(result).ToArray();
+        var coreResults = flattened.Where(item => item.Name == "Company.Core").ToArray();
+        Assert.NotEmpty(coreResults);
+        Assert.All(coreResults, item =>
+        {
+            Assert.True(item.SavedAsNupkg);
+            Assert.Equal(Path.Combine(destination.Path, "Company.Core.1.0.0.nupkg"), item.ModulePath);
+            Assert.Equal(item.ModulePath, item.Download?.PackagePath);
+        });
+    }
+
+    [Fact]
     public void SaveManagedModule_as_nupkg_skip_dependency_check_saves_only_requested_package()
     {
         using var feed = new TemporaryDirectory();
@@ -343,6 +440,51 @@ public sealed class SaveManagedModuleCommandTests
         Assert.All(metadata.Modules, entry => Assert.Equal(64, entry.PackageSha256?.Length));
     }
 
+    [Fact]
+    public void SaveManagedModule_as_nupkg_writes_offline_bundle_metadata_with_package_root()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            files: CreateCoreFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[1.0.0]", null) },
+            files: CreateToolFiles("1.0.0"));
+        var metadataPath = Path.Combine(destination.Path, "bundle.metadata.json");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AsNupkg")
+            .AddParameter("BundleMetadataPath", metadataPath);
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Single(results);
+        var metadata = JsonSerializer.Deserialize<ManagedModuleBundleMetadata>(File.ReadAllText(metadataPath));
+        Assert.NotNull(metadata);
+        Assert.Equal(destination.Path, metadata.ModuleRoot);
+        Assert.Contains(metadata.Modules, entry =>
+            entry.Name == "Company.Tools" &&
+            entry.ModulePath == Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg") &&
+            entry.PackagePath == entry.ModulePath);
+        Assert.Contains(metadata.Modules, entry =>
+            entry.Name == "Company.Core" &&
+            entry.DependencyOf == "Company.Tools" &&
+            entry.ModulePath == Path.Combine(destination.Path, "Company.Core.1.0.0.nupkg") &&
+            entry.PackagePath == entry.ModulePath);
+    }
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();
@@ -366,6 +508,22 @@ public sealed class SaveManagedModuleCommandTests
         {
             ["Company.Core.psd1"] = "@{ ModuleVersion = '" + version + "' }"
         };
+
+    private static IReadOnlyDictionary<string, string> CreateFeatureFiles(string name, string version)
+        => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [name + ".psd1"] = "@{ ModuleVersion = '" + version + "' }"
+        };
+
+    private static IEnumerable<ManagedModuleInstallResult> Flatten(ManagedModuleInstallResult result)
+    {
+        yield return result;
+        foreach (var dependency in result.DependencyResults)
+        {
+            foreach (var child in Flatten(dependency))
+                yield return child;
+        }
+    }
 
     private static void AssertNoPowerShellErrors(PowerShell ps)
     {
