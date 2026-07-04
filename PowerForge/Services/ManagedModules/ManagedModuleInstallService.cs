@@ -471,7 +471,7 @@ public sealed partial class ManagedModuleInstallService
 
         var range = ResolveVersionRange(request.VersionPolicy, request.MinimumVersion, request.MaximumVersion);
         if (request.SaveAsNupkg)
-            return range.ExactVersion is not null || range.MaximumVersion is not null;
+            return range.ExactVersion is not null;
 
         return range.ExactVersion is not null;
     }
@@ -565,7 +565,7 @@ public sealed partial class ManagedModuleInstallService
         => RequiresVerifiedPackage(request) || ManagedModuleTrustEvaluator.HasAllowedAuthorPolicy(request.TrustPolicy);
 
     private static bool ShouldProbeExistingTargetDependenciesForPlan(ManagedModuleInstallRequest request)
-        => !request.Force && !RequiresPackageDownloadBeforeNoOp(request);
+        => !request.Force && (request.SaveAsNupkg || !RequiresPackageDownloadBeforeNoOp(request));
 
     private async Task<ManagedModuleInstallResult> InstallResolvedAsync(
         ManagedModuleInstallRequest request,

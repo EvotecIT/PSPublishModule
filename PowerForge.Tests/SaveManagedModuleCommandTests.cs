@@ -440,7 +440,7 @@ public sealed class SaveManagedModuleCommandTests
     }
 
     [Fact]
-    public void SaveManagedModule_as_nupkg_plan_detects_existing_package_for_bounded_version_range()
+    public void SaveManagedModule_as_nupkg_plan_detects_existing_package_for_exact_version_offline()
     {
         using var destination = new TemporaryDirectory();
         var packagePath = Path.Combine(destination.Path, "Company.Tools.1.2.0.nupkg");
@@ -456,8 +456,7 @@ public sealed class SaveManagedModuleCommandTests
             .AddParameter("Repository", Path.Combine(destination.Path, "Unavailable"))
             .AddParameter("RepositoryName", "Local")
             .AddParameter("Path", destination.Path)
-            .AddParameter("MinimumVersion", "1.0.0")
-            .AddParameter("MaximumVersion", "1.9.9")
+            .AddParameter("RequiredVersion", "1.2.0")
             .AddParameter("AsNupkg")
             .AddParameter("Plan");
         var results = ps.Invoke();
@@ -469,6 +468,43 @@ public sealed class SaveManagedModuleCommandTests
         Assert.Equal(ManagedModuleInstallPlanAction.SkipExisting, plan.Action);
         Assert.Equal(packagePath, plan.ModulePath);
         Assert.False(plan.WouldWriteFiles);
+    }
+
+    [Fact]
+    public void SaveManagedModule_as_nupkg_plan_resolves_bounded_range_latest_before_skip()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateToolFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.5.0.nupkg"),
+            "Company.Tools",
+            "1.5.0",
+            files: CreateToolFiles("1.5.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("MinimumVersion", "1.0.0")
+            .AddParameter("MaximumVersion", "2.0.0")
+            .AddParameter("AsNupkg")
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedModuleInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.False(plan.ExistingVersionFound);
+        Assert.Equal("1.5.0", plan.Version);
+        Assert.Equal(ManagedModuleInstallPlanAction.Install, plan.Action);
+        Assert.Equal(Path.Combine(destination.Path, "Company.Tools.1.5.0.nupkg"), plan.ModulePath);
+        Assert.True(plan.WouldWriteFiles);
     }
 
     [Fact]
@@ -654,6 +690,41 @@ public sealed class SaveManagedModuleCommandTests
         Assert.True(plan.ExistingVersionFound);
         Assert.Equal(ManagedModuleInstallPlanAction.SkipExisting, plan.Action);
         Assert.True(plan.WouldWriteFiles);
+    }
+
+    [Fact]
+    public void SaveManagedModule_as_nupkg_plan_marks_policy_validated_existing_package_with_missing_dependencies_as_writing()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        var packagePath = Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[1.0.0]", null) },
+            files: CreateToolFiles("1.0.0"));
+        var expectedSha256 = TestHash.ComputeSha256(packagePath).ToUpperInvariant();
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", Path.Combine(feed.Path, "Unavailable"))
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AsNupkg")
+            .AddParameter("ExpectedPackageSha256", "sha256:" + expectedSha256)
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedModuleInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.True(plan.SaveAsNupkg);
+        Assert.True(plan.ExistingVersionFound);
+        Assert.Equal(ManagedModuleInstallPlanAction.SkipExisting, plan.Action);
+        Assert.True(plan.WouldWriteFiles);
+        Assert.Equal(expectedSha256.ToLowerInvariant(), plan.ExpectedPackageSha256);
     }
 
     [Fact]
