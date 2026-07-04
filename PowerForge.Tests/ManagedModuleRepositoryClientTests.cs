@@ -200,6 +200,29 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task GetLatestDependencyVersionAsync_allows_unlisted_exact_dependency_version()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests, includeRegistrationBase: true));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        var version = await repositoryClient.GetLatestDependencyVersionAsync(
+            repository,
+            new ManagedModuleDependencyInfo
+            {
+                Id = "Company.Core",
+                VersionRange = "[2.0.0]"
+            });
+
+        Assert.NotNull(version);
+        Assert.Equal("Company.Core", version!.Name);
+        Assert.Equal("2.0.0", version.Version);
+        Assert.False(version.Listed);
+        Assert.Contains(requests, request => request.Url == "https://example.test/registration/company.core/index.json");
+    }
+
+    [Fact]
     public async Task GetLatestVersionAsync_uses_nuget_v2_packages_latest_filter()
     {
         var requests = new List<RecordedRequest>();
@@ -1080,6 +1103,22 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task SearchPackagesAsync_keeps_paging_after_filtered_empty_nuget_v3_pages()
+    {
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/v3/index.json");
+
+        var results = await repositoryClient.SearchPackagesAsync(repository, "*Tools", includePrerelease: false, take: 1);
+
+        var result = Assert.Single(results);
+        Assert.Equal("Company.Tools", result.Name);
+        Assert.Contains(requests, request => request.Url == "https://example.test/search?q=Tools&prerelease=false&take=1&skip=0&semVerLevel=2.0.0");
+        Assert.Contains(requests, request => request.Url == "https://example.test/search?q=Tools&prerelease=false&take=1&skip=1&semVerLevel=2.0.0");
+    }
+
+    [Fact]
     public async Task SearchPackagesAsync_preserves_positional_cancellation_token_overload()
     {
         var requests = new List<RecordedRequest>();
@@ -1522,6 +1561,12 @@ public sealed class ManagedModuleRepositoryClientTests
 
             if (uri.AbsoluteUri == "https://example.test/search?q=Company.Tools&prerelease=false&take=20&skip=0&semVerLevel=2.0.0")
                 return Json("{\"data\":[{\"id\":\"Company.Tools\",\"version\":\"1.1.0\",\"listed\":true}]}");
+
+            if (uri.AbsoluteUri == "https://example.test/search?q=Tools&prerelease=false&take=1&skip=0&semVerLevel=2.0.0")
+                return Json("{\"data\":[{\"id\":\"Tools.Extras\",\"version\":\"1.0.0\",\"listed\":true}]}");
+
+            if (uri.AbsoluteUri == "https://example.test/search?q=Tools&prerelease=false&take=1&skip=1&semVerLevel=2.0.0")
+                return Json("{\"data\":[{\"id\":\"Company.Tools\",\"version\":\"1.0.0\",\"listed\":true}]}");
 
             if (uri.AbsoluteUri == "https://example.test/search?q=Unlisted.Tools&prerelease=false&take=20&skip=0&semVerLevel=2.0.0")
                 return Json("{\"data\":[{\"id\":\"Unlisted.Tools\",\"version\":\"1.5.0\",\"listed\":true}]}");

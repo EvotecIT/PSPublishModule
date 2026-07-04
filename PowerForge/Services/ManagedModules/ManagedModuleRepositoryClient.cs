@@ -241,8 +241,8 @@ public sealed partial class ManagedModuleRepositoryClient
             .ConfigureAwait(false);
 
         return versions
-            .Where(static version => version.Listed)
             .Where(version => range.IsSatisfiedBy(version.Version))
+            .Where(version => range.ExactVersion is not null || version.Listed)
             .OrderBy(version => version.Version, ManagedModuleVersionComparer.Instance)
             .LastOrDefault();
     }
@@ -589,33 +589,63 @@ public sealed partial class ManagedModuleRepositoryClient
         int skip,
         CancellationToken cancellationToken)
     {
+        var pageSize = Math.Max(1, take);
+        var matchingSkip = Math.Max(0, skip);
+        var matches = new List<ManagedModuleVersionInfo>();
+        var serverSkip = 0;
         var searchService = await ResolveSearchQueryServiceAsync(repository, credential, cancellationToken).ConfigureAwait(false);
         var searchText = ManagedModuleSearchMatcher.ToSearchText(query);
-        var uri = BuildSearchQueryUri(
-            searchService,
-            $"q={Uri.EscapeDataString(searchText)}&prerelease={includePrerelease.ToString().ToLowerInvariant()}&take={Math.Max(1, take)}&skip={Math.Max(0, skip)}&semVerLevel=2.0.0");
-        using var response = await SendWithPolicyAsync(
-            () => CreateRequest(HttpMethod.Get, uri, credential, "application/json"),
-            cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-            throw CreateRepositoryHttpException(repository, "Search", response.StatusCode, $"Unable to search for '{query}'.");
 
-        using var document = await ReadJsonDocumentAsync(
-            response.Content,
-            repository,
-            "Search",
-            $"Managed module search for '{query}' returned malformed JSON.",
-            cancellationToken).ConfigureAwait(false);
-        if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
-            throw CreateRepositoryContractException(repository, "Search", "Repository response did not include a search data array.");
+        while (matches.Count < pageSize)
+        {
+            var uri = BuildSearchQueryUri(
+                searchService,
+                $"q={Uri.EscapeDataString(searchText)}&prerelease={includePrerelease.ToString().ToLowerInvariant()}&take={pageSize}&skip={serverSkip}&semVerLevel=2.0.0");
+            using var response = await SendWithPolicyAsync(
+                () => CreateRequest(HttpMethod.Get, uri, credential, "application/json"),
+                cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                throw CreateRepositoryHttpException(repository, "Search", response.StatusCode, $"Unable to search for '{query}'.");
 
-        return data.EnumerateArray()
-            .Select(item => ReadSearchResult(repository, item))
-            .Where(version => version is not null && ManagedModuleSearchMatcher.IsMatch(query, version.Name))
-            .Select(static version => version!)
-            .OrderBy(static version => version.Name, StringComparer.OrdinalIgnoreCase)
-            .Take(Math.Max(1, take))
-            .ToArray();
+            using var document = await ReadJsonDocumentAsync(
+                response.Content,
+                repository,
+                "Search",
+                $"Managed module search for '{query}' returned malformed JSON.",
+                cancellationToken).ConfigureAwait(false);
+            if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
+                throw CreateRepositoryContractException(repository, "Search", "Repository response did not include a search data array.");
+
+            var rawPage = data.EnumerateArray().ToArray();
+            if (rawPage.Length == 0)
+                break;
+
+            var pageMatches = rawPage
+                .Select(item => ReadSearchResult(repository, item))
+                .Where(version => version is not null && ManagedModuleSearchMatcher.IsMatch(query, version.Name))
+                .Select(static version => version!)
+                .OrderBy(static version => version.Name, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var match in pageMatches)
+            {
+                if (matchingSkip > 0)
+                {
+                    matchingSkip--;
+                    continue;
+                }
+
+                matches.Add(match);
+                if (matches.Count >= pageSize)
+                    break;
+            }
+
+            if (rawPage.Length < pageSize)
+                break;
+
+            serverSkip += rawPage.Length;
+        }
+
+        return matches;
     }
 
     private async Task<IReadOnlyDictionary<string, bool>> TryResolveVersionListingMapAsync(

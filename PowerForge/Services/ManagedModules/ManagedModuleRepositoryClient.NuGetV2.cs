@@ -52,28 +52,57 @@ public sealed partial class ManagedModuleRepositoryClient
         int skip,
         CancellationToken cancellationToken)
     {
-        var document = await ReadNuGetV2XmlAsync(
-                repository,
-                BuildNuGetV2SearchUri(repository.Source, query, includePrerelease, take, skip),
-                credential,
-                "Search",
-                $"Unable to search for '{query}'.",
-                $"Managed module NuGet v2 search for '{query}' returned malformed XML.",
-                cancellationToken)
-            .ConfigureAwait(false);
-
         XNamespace atom = "http://www.w3.org/2005/Atom";
         XNamespace data = "http://schemas.microsoft.com/ado/2007/08/dataservices";
-        return document
-            .Descendants(atom + "entry")
-            .Select(entry => ReadNuGetV2SearchResult(repository, entry, data))
-            .Where(version => version is not null && ManagedModuleSearchMatcher.IsMatch(query, version.Name))
-            .Select(static version => version!)
-            .GroupBy(version => version.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.OrderBy(version => version.Version, ManagedModuleVersionComparer.Instance).Last())
-            .OrderBy(version => version.Name, StringComparer.OrdinalIgnoreCase)
-            .Take(Math.Max(1, take))
-            .ToArray();
+        var pageSize = Math.Max(1, take);
+        var matchingSkip = Math.Max(0, skip);
+        var matches = new List<ManagedModuleVersionInfo>();
+        var serverSkip = 0;
+
+        while (matches.Count < pageSize)
+        {
+            var document = await ReadNuGetV2XmlAsync(
+                    repository,
+                    BuildNuGetV2SearchUri(repository.Source, query, includePrerelease, pageSize, serverSkip),
+                    credential,
+                    "Search",
+                    $"Unable to search for '{query}'.",
+                    $"Managed module NuGet v2 search for '{query}' returned malformed XML.",
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            var entries = document.Descendants(atom + "entry").ToArray();
+            if (entries.Length == 0)
+                break;
+
+            var pageMatches = entries
+                .Select(entry => ReadNuGetV2SearchResult(repository, entry, data))
+                .Where(version => version is not null && ManagedModuleSearchMatcher.IsMatch(query, version.Name))
+                .Select(static version => version!)
+                .GroupBy(version => version.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.OrderBy(version => version.Version, ManagedModuleVersionComparer.Instance).Last())
+                .OrderBy(version => version.Name, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var match in pageMatches)
+            {
+                if (matchingSkip > 0)
+                {
+                    matchingSkip--;
+                    continue;
+                }
+
+                matches.Add(match);
+                if (matches.Count >= pageSize)
+                    break;
+            }
+
+            if (entries.Length < pageSize)
+                break;
+
+            serverSkip += entries.Length;
+        }
+
+        return matches;
     }
 
     private async Task<ManagedModuleVersionInfo?> GetLatestNuGetV2VersionAsync(

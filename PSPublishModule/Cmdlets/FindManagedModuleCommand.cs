@@ -235,9 +235,8 @@ public sealed class FindManagedModuleCommand : PSCmdlet
             candidates = ApplyFindFilters(candidates, moduleName, applyFirst: false);
             foreach (var candidate in candidates)
             {
-                if (AllVersions.IsPresent &&
-                    !seenPackages.Contains(candidate.Name) &&
-                    seenPackages.Count >= First)
+                var isNewPackage = !seenPackages.Contains(candidate.Name);
+                if (AllVersions.IsPresent && isNewPackage && seenPackages.Count >= First)
                 {
                     break;
                 }
@@ -247,7 +246,7 @@ public sealed class FindManagedModuleCommand : PSCmdlet
 
                 seenPackages.Add(candidate.Name);
                 results.Add(candidate);
-                if (HasEnoughTagPagedMatches(results, seenPackages))
+                if (!AllVersions.IsPresent && HasEnoughTagPagedMatches(results, seenPackages))
                     break;
             }
         }
