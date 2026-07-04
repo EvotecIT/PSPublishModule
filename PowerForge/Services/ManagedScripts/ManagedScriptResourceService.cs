@@ -192,19 +192,8 @@ public sealed class ManagedScriptResourceService
             if (exactMatch is not null)
                 return exactMatch;
 
-            if (RequiresExactVersionNormalization(exactVersion))
-                throw new InvalidOperationException(
-                    $"Version '{exactVersion}' of script '{request.Name}' was not found in repository '{request.Repository.Name}'.");
-
-            return new ManagedModuleVersionInfo
-            {
-                Name = request.Name.Trim(),
-                Version = exactVersion,
-                RepositoryName = request.Repository.Name,
-                RepositorySource = request.Repository.Source,
-                Listed = true,
-                IsPrerelease = ManagedModuleVersionComparer.IsPrerelease(exactVersion)
-            };
+            throw new InvalidOperationException(
+                $"Version '{exactVersion}' of script '{request.Name}' was not found in repository '{request.Repository.Name}'.");
         }
 
         var range = ResolveVersionRange(request.VersionPolicy, request.MinimumVersion, request.MaximumVersion);
@@ -402,9 +391,31 @@ public sealed class ManagedScriptResourceService
             throw new ArgumentException("Script name is required.", nameof(request));
         if (string.IsNullOrWhiteSpace(request.DestinationPath))
             throw new ArgumentException("Destination path is required.", nameof(request));
+        ValidateVersionSelectors(request.Version, request.MinimumVersion, request.MaximumVersion, request.VersionPolicy);
 
         _ = ManagedModulePackageIdentity.RequireSafeId(request.Name.Trim(), nameof(request.Name));
         _ = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256);
+    }
+
+    private static void ValidateVersionSelectors(
+        string? version,
+        string? minimumVersion,
+        string? maximumVersion,
+        string? versionPolicy)
+    {
+        if (!string.IsNullOrWhiteSpace(version) &&
+            (!string.IsNullOrWhiteSpace(minimumVersion) ||
+             !string.IsNullOrWhiteSpace(maximumVersion) ||
+             !string.IsNullOrWhiteSpace(versionPolicy)))
+        {
+            throw new ArgumentException("Version cannot be combined with MinimumVersion, MaximumVersion, or VersionPolicy.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(versionPolicy) &&
+            (!string.IsNullOrWhiteSpace(minimumVersion) || !string.IsNullOrWhiteSpace(maximumVersion)))
+        {
+            throw new ArgumentException("VersionPolicy cannot be combined with MinimumVersion or MaximumVersion.");
+        }
     }
 
     private static void DeleteDirectoryQuietly(string path)

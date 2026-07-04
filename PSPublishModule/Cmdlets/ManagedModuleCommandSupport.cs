@@ -257,7 +257,7 @@ internal static class ManagedModuleCommandSupport
             if (uri.IsFile)
                 return uri.LocalPath;
 
-            return trimmed;
+            return script ? NormalizePowerShellGetScriptSource(trimmed) : trimmed;
         }
 
         if (string.Equals(trimmed, DefaultRepositoryName, StringComparison.OrdinalIgnoreCase))
@@ -291,6 +291,14 @@ internal static class ManagedModuleCommandSupport
                 $"Repository '{trimmed}' looks like a registered PowerShell repository name, but no matching repository was found in the current session. Use Set-ManagedModuleRepository/Initialize-ManagedModuleRepository with -ProfileName, or pass a repository URL/local feed path.");
 
         return trimmed;
+    }
+
+    private static string NormalizePowerShellGetScriptSource(string source)
+    {
+        const string scriptEndpoint = "/items/psscript";
+        return source.EndsWith(scriptEndpoint, StringComparison.OrdinalIgnoreCase)
+            ? source.Substring(0, source.Length - scriptEndpoint.Length).TrimEnd('/')
+            : source;
     }
 
     internal static bool HasWildcard(string value)

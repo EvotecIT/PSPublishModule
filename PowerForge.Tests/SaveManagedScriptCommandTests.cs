@@ -71,6 +71,45 @@ public sealed class SaveManagedScriptCommandTests
     }
 
     [Fact]
+    public void SaveManagedScript_rejects_conflicting_version_selectors()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("MinimumVersion", "2.0.0");
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("Version cannot be combined", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SaveManagedScript_plan_rejects_missing_exact_version()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("Plan");
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("Version '1.0.0'", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("was not found", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void SaveManagedScript_skips_existing_selected_version()
     {
         using var feed = new TemporaryDirectory();
@@ -134,6 +173,7 @@ public sealed class SaveManagedScriptCommandTests
         using var moduleFeed = new TemporaryDirectory();
         using var scriptFeed = new TemporaryDirectory();
         using var destination = new TemporaryDirectory();
+        var scriptSourceLocation = scriptFeed.Path.Replace('\\', '/') + "/items/psscript";
         TestPackageFactory.Create(
             Path.Combine(scriptFeed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
             "Invoke-CompanyTask",
@@ -150,7 +190,7 @@ public sealed class SaveManagedScriptCommandTests
                 [pscustomobject]@{
                     Name = $Name
                     SourceLocation = '{{EscapePowerShellSingleQuoted(moduleFeed.Path)}}'
-                    ScriptSourceLocation = '{{EscapePowerShellSingleQuoted(scriptFeed.Path)}}'
+                    ScriptSourceLocation = '{{EscapePowerShellSingleQuoted(scriptSourceLocation)}}'
                     InstallationPolicy = 'Trusted'
                 }
             }
@@ -168,8 +208,22 @@ public sealed class SaveManagedScriptCommandTests
 
         AssertNoPowerShellErrors(ps);
         var result = Assert.IsType<ManagedScriptSaveResult>(Assert.Single(results).BaseObject);
-        Assert.Equal(scriptFeed.Path, result.RepositorySource);
+        Assert.Equal(Path.GetFullPath(scriptFeed.Path), Path.GetFullPath(result.RepositorySource));
         Assert.True(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
+    }
+
+    [Fact]
+    public void ManagedModuleCommandSupport_normalizes_explicit_script_source_endpoint()
+    {
+        var source = ManagedModuleCommandSupport.ResolveScriptRepositorySource(
+            null!,
+            "https://packages.example.test/api/v2/items/psscript",
+            out var resolvedRegisteredRepositoryName,
+            out var trusted);
+
+        Assert.Equal("https://packages.example.test/api/v2", source);
+        Assert.Null(resolvedRegisteredRepositoryName);
+        Assert.False(trusted);
     }
 
     [Fact]

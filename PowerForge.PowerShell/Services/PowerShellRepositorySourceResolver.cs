@@ -64,8 +64,12 @@ public sealed class PowerShellRepositorySourceResolver
             return false;
 
         var name = repositoryName!.Trim();
-        return TryResolveWithCommand(cmdlet, "Get-PSResourceRepository", name, new[] { "Uri", "SourceLocation" }, out source, out trusted) ||
-               TryResolveWithCommand(cmdlet, "Get-PSRepository", name, new[] { "ScriptSourceLocation", "SourceLocation" }, out source, out trusted);
+        var resolved = TryResolveWithCommand(cmdlet, "Get-PSResourceRepository", name, new[] { "Uri", "SourceLocation" }, out source, out trusted) ||
+                       TryResolveWithCommand(cmdlet, "Get-PSRepository", name, new[] { "ScriptSourceLocation", "SourceLocation" }, out source, out trusted);
+        if (resolved)
+            source = NormalizePowerShellGetScriptSource(source);
+
+        return resolved;
     }
 
     private static bool TryResolveRepositoryLocation(PSCmdlet cmdlet, string? repositoryName, bool publish, out string? source, out bool trusted)
@@ -139,6 +143,18 @@ public sealed class PowerShellRepositorySourceResolver
         }
 
         return null;
+    }
+
+    private static string? NormalizePowerShellGetScriptSource(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            return source;
+
+        var trimmed = source!.Trim();
+        const string scriptEndpoint = "/items/psscript";
+        return trimmed.EndsWith(scriptEndpoint, StringComparison.OrdinalIgnoreCase)
+            ? trimmed.Substring(0, trimmed.Length - scriptEndpoint.Length).TrimEnd('/')
+            : trimmed;
     }
 
     private static bool ResolveTrust(PSObject result)
