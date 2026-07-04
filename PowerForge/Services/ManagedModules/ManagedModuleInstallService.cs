@@ -93,7 +93,7 @@ public sealed partial class ManagedModuleInstallService
                 wouldRepairDependencies: WouldRepairInstalledManifestDependencies(request, moduleRoot, installedModulePath));
         }
 
-        var modulePath = ResolveTargetPath(request, moduleRoot, request.Name, versionInfo.Version);
+        var modulePath = ResolveWriteTargetPath(request, moduleRoot, request.Name, versionInfo.Version);
         var exists = request.SaveAsNupkg
             ? File.Exists(modulePath)
             : IsInstalledModulePathSatisfied(modulePath, request.Name, versionInfo.Version);
@@ -109,7 +109,7 @@ public sealed partial class ManagedModuleInstallService
                                       WouldWriteExistingTargetDependencies(request, moduleRoot, versionInfo.Version, modulePath));
     }
 
-    private static ManagedModuleInstallPlan CreateInstallPlan(
+    private ManagedModuleInstallPlan CreateInstallPlan(
         ManagedModuleInstallRequest request,
         string version,
         string moduleRoot,
@@ -118,9 +118,12 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleVersionInfo? versionInfo = null,
         bool wouldRepairDependencies = false)
     {
-        var requiresPackageDownloadBeforeNoOp = RequiresPackageDownloadBeforeNoOp(request) &&
-                                                (!request.SaveAsNupkg ||
-                                                 !string.Equals(versionInfo?.PackageSource, modulePath, StringComparison.OrdinalIgnoreCase));
+        var canSkipExistingSavedPackage = !request.SaveAsNupkg ||
+                                          !exists ||
+                                          (!request.Force && SavedPackageSatisfiesNoOpPolicy(request, moduleRoot, version));
+        var requiresPackageDownloadBeforeNoOp = request.SaveAsNupkg
+            ? !canSkipExistingSavedPackage
+            : RequiresPackageDownloadBeforeNoOp(request);
         var action = exists
             ? request.Force || requiresPackageDownloadBeforeNoOp ? ManagedModuleInstallPlanAction.Reinstall : ManagedModuleInstallPlanAction.SkipExisting
             : ManagedModuleInstallPlanAction.Install;
@@ -494,9 +497,6 @@ public sealed partial class ManagedModuleInstallService
         string moduleRoot,
         string version)
     {
-        if (!RequiresPackageDownloadBeforeNoOp(request))
-            return true;
-
         var packagePath = ResolveExistingSavedPackagePath(moduleRoot, request.Name, version);
         if (string.IsNullOrWhiteSpace(packagePath))
             return false;
@@ -507,6 +507,7 @@ public sealed partial class ManagedModuleInstallService
             var download = CreateDownloadForExistingSavedPackage(request, version, packagePath!, metadata);
             ManagedModulePackageIntegrity.VerifyDownload(download, request.ExpectedPackageSha256);
             ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, metadata, request.TrustPolicy);
+            ThrowIfLicenseAcceptanceRequired(metadata, request);
             return true;
         }
         catch (IOException)
@@ -1066,7 +1067,7 @@ public sealed partial class ManagedModuleInstallService
             : ResolveInstalledModulePath(moduleRoot, moduleName, version);
 
     private static string ResolveWriteTargetPath(ManagedModuleInstallRequest request, string moduleRoot, string moduleName, string version)
-        => request.SaveAsNupkg && (request.Force || RequiresPackageDownloadBeforeNoOp(request))
+        => request.SaveAsNupkg
             ? ResolveExistingSavedPackagePath(moduleRoot, moduleName, version) ?? ResolveTargetPath(request, moduleRoot, moduleName, version)
             : ResolveTargetPath(request, moduleRoot, moduleName, version);
 

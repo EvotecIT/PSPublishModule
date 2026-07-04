@@ -406,6 +406,38 @@ public sealed class SaveManagedModuleCommandTests
     }
 
     [Fact]
+    public void SaveManagedModule_as_nupkg_reuses_case_matched_package_after_latest_resolution()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.2.0.0.nupkg"),
+            "Company.Tools",
+            "2.0.0",
+            files: CreateToolFiles("2.0.0"));
+        var matchedPackagePath = Path.Combine(destination.Path, "company.tools.2.0.0.nupkg");
+        TestPackageFactory.Create(
+            matchedPackagePath,
+            "Company.Tools",
+            "2.0.0",
+            files: CreateToolFiles("2.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("AsNupkg");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(matchedPackagePath, result.ModulePath);
+        Assert.Single(Directory.EnumerateFiles(destination.Path, "*.nupkg", SearchOption.TopDirectoryOnly));
+    }
+
+    [Fact]
     public void SaveManagedModule_as_nupkg_plan_detects_existing_package_for_version_range()
     {
         using var destination = new TemporaryDirectory();
@@ -595,6 +627,37 @@ public sealed class SaveManagedModuleCommandTests
         AssertNoPowerShellErrors(ps);
         var plan = Assert.IsType<ManagedModuleInstallPlan>(Assert.Single(results).BaseObject);
         Assert.True(plan.SaveAsNupkg);
+        Assert.True(plan.ExistingVersionFound);
+        Assert.Equal(ManagedModuleInstallPlanAction.Reinstall, plan.Action);
+        Assert.True(plan.WouldWriteFiles);
+    }
+
+    [Fact]
+    public void SaveManagedModule_as_nupkg_plan_rejects_corrupt_existing_package_before_skip()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        var packagePath = Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg");
+        File.WriteAllText(packagePath, "not a package");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateToolFiles("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AsNupkg")
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedModuleInstallPlan>(Assert.Single(results).BaseObject);
         Assert.True(plan.ExistingVersionFound);
         Assert.Equal(ManagedModuleInstallPlanAction.Reinstall, plan.Action);
         Assert.True(plan.WouldWriteFiles);
@@ -825,6 +888,48 @@ public sealed class SaveManagedModuleCommandTests
     }
 
     [Fact]
+    public void SaveManagedModule_as_nupkg_resolves_dependency_range_when_saved_dependency_fails_policy()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(destination.Path, "Company.Core.1.0.0.nupkg"),
+            "Company.Core",
+            "1.0.0",
+            authors: "Contoso");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Core.1.1.0.nupkg"),
+            "Company.Core",
+            "1.1.0",
+            authors: "Evotec");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Core", "[1.0.0, )", null) },
+            files: CreateToolFiles("1.0.0"),
+            authors: "Evotec");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AsNupkg")
+            .AddParameter("AllowedAuthor", new[] { "Evotec" });
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(results).BaseObject);
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.Equal("Company.Core", dependency.Name);
+        Assert.Equal("1.1.0", dependency.Version);
+        Assert.Equal(Path.Combine(destination.Path, "Company.Core.1.1.0.nupkg"), dependency.ModulePath);
+    }
+
+    [Fact]
     public void SaveManagedModule_as_nupkg_refreshes_existing_package_when_author_policy_fails()
     {
         using var feed = new TemporaryDirectory();
@@ -930,6 +1035,36 @@ public sealed class SaveManagedModuleCommandTests
 
         AssertNoPowerShellErrors(ps);
         var plan = Assert.IsType<ManagedModuleInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.True(plan.WouldWriteFiles);
+    }
+
+    [Fact]
+    public void SaveManagedModule_as_nupkg_plan_does_not_skip_same_path_local_feed_policy_failure()
+    {
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateToolFiles("1.0.0"),
+            authors: "Contoso");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", destination.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AsNupkg")
+            .AddParameter("AllowedAuthor", new[] { "Evotec" })
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedModuleInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.True(plan.ExistingVersionFound);
+        Assert.Equal(ManagedModuleInstallPlanAction.Reinstall, plan.Action);
         Assert.True(plan.WouldWriteFiles);
     }
 

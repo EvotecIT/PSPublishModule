@@ -206,7 +206,13 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleInstallResult satisfiedResult = null!;
         var canUseSatisfiedDependency = request.SaveAsNupkg || dependencyTrustPolicy is null;
         var isSatisfied = canUseSatisfiedDependency &&
-                          TryCreateSatisfiedDependencyResult(request, dependency.Id, range, context, out satisfiedResult);
+                          TryCreateSatisfiedDependencyResult(
+                              request,
+                              dependency.Id,
+                              range,
+                              dependencyTrustPolicy,
+                              context,
+                              out satisfiedResult);
         satisfiedStopwatch.Stop();
         if (isSatisfied)
         {
@@ -313,10 +319,11 @@ public sealed partial class ManagedModuleInstallService
             RepairInstalledManifestDependencies = request.RepairInstalledManifestDependencies
         };
 
-    private static bool TryCreateSatisfiedDependencyResult(
+    private bool TryCreateSatisfiedDependencyResult(
         ManagedModuleInstallRequest request,
         string dependencyName,
         ManagedModuleVersionRange range,
+        ManagedModuleTrustPolicy? dependencyTrustPolicy,
         ManagedModuleInstallContext context,
         out ManagedModuleInstallResult result)
     {
@@ -324,6 +331,7 @@ public sealed partial class ManagedModuleInstallService
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
         var installedVersion = GetSatisfiedDependencyVersions(request, moduleRoot, dependencyName, context)
             .Where(version => AllowsInstalledDependencyVersion(version, request, range))
+            .Where(version => SavedDependencyPackageSatisfiesTrustPolicy(request, dependencyName, version, moduleRoot, dependencyTrustPolicy))
             .LastOrDefault();
         if (installedVersion is null)
             return false;
@@ -364,6 +372,28 @@ public sealed partial class ManagedModuleInstallService
 
         context.RecordInstalledVersion(moduleRoot, dependencyName, installedVersion);
         return true;
+    }
+
+    private bool SavedDependencyPackageSatisfiesTrustPolicy(
+        ManagedModuleInstallRequest request,
+        string dependencyName,
+        string version,
+        string moduleRoot,
+        ManagedModuleTrustPolicy? dependencyTrustPolicy)
+    {
+        if (!request.SaveAsNupkg)
+            return true;
+
+        var packagePath = ResolveExistingSavedPackagePath(moduleRoot, dependencyName, version);
+        if (string.IsNullOrWhiteSpace(packagePath))
+            return false;
+
+        return SavedDependencyPackageSatisfiesPlanPolicy(
+            request,
+            dependencyName,
+            version,
+            packagePath!,
+            dependencyTrustPolicy);
     }
 
     private static bool HasSatisfiedDependency(
@@ -781,7 +811,12 @@ public sealed partial class ManagedModuleInstallService
             if (string.IsNullOrWhiteSpace(dependencyPath))
                 return true;
 
-            if (!SavedDependencyPackageSatisfiesPlanPolicy(request, dependency.Id, savedVersion, dependencyPath!))
+            if (!SavedDependencyPackageSatisfiesPlanPolicy(
+                    request,
+                    dependency.Id,
+                    savedVersion,
+                    dependencyPath!,
+                    ResolveDependencyTrustPolicy(request.TrustPolicy)))
                 return true;
 
             if (WouldSavePackageDependenciesCore(request, dependency.Id, savedVersion, moduleRoot, dependencyPath!, visited))
@@ -795,12 +830,12 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleInstallRequest request,
         string dependencyId,
         string version,
-        string packagePath)
+        string packagePath,
+        ManagedModuleTrustPolicy? dependencyTrustPolicy)
     {
         try
         {
             var metadata = ReadSavedPackageMetadata(dependencyId, version, packagePath);
-            var dependencyTrustPolicy = ResolveDependencyTrustPolicy(request.TrustPolicy);
             ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, metadata, dependencyTrustPolicy);
             ThrowIfLicenseAcceptanceRequired(metadata, request);
             return true;

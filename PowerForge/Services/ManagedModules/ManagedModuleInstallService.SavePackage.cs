@@ -27,7 +27,7 @@ public sealed partial class ManagedModuleInstallService
                 installLockWaitElapsed += initialLockWaitElapsed;
                 if (File.Exists(packagePath) &&
                     !request.Force &&
-                    !RequiresPackageDownloadBeforeNoOp(request))
+                    SavedPackageSatisfiesNoOpPolicy(request, moduleRoot, version))
                 {
                     _logger.Verbose($"Managed module save skipped existing package: {packagePath}");
                     return await CreateAlreadySavedPackageResultAsync(
@@ -121,7 +121,7 @@ public sealed partial class ManagedModuleInstallService
 
                     if (File.Exists(packagePath) &&
                         !request.Force &&
-                        !RequiresPackageDownloadBeforeNoOp(request))
+                        SavedPackageSatisfiesNoOpPolicy(request, moduleRoot, version))
                     {
                         _logger.Verbose($"Managed module save skipped concurrently saved package: {packagePath}");
                         var existing = await CreateAlreadySavedPackageResultAsync(
