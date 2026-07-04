@@ -1261,16 +1261,42 @@ public sealed class ManagedScriptResourceService
 
     private static bool IsValidScriptVersion(string? version)
     {
-        if (!ModuleStateVersion.TryParse(version, out _))
+        if (string.IsNullOrWhiteSpace(version))
             return false;
 
         var trimmed = version!.Trim();
-        var prereleaseIndex = trimmed.IndexOf('-');
+        try
+        {
+            _ = ManagedModulePackageIdentity.RequireSafeVersion(trimmed, nameof(version));
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+
+        var plusIndex = trimmed.IndexOf('+');
+        var versionWithoutBuild = plusIndex >= 0 ? trimmed.Substring(0, plusIndex) : trimmed;
+        var build = plusIndex >= 0 ? trimmed.Substring(plusIndex + 1) : null;
+        if (plusIndex >= 0 &&
+            (string.IsNullOrWhiteSpace(build) || !HasValidSemVerIdentifiers(build!)))
+        {
+            return false;
+        }
+
+        if (!ModuleStateVersion.TryParse(versionWithoutBuild, out _))
+            return false;
+
+        var prereleaseIndex = versionWithoutBuild.IndexOf('-');
         if (prereleaseIndex < 0)
             return true;
 
-        var prerelease = trimmed.Substring(prereleaseIndex + 1);
-        var identifiers = prerelease.Split('.');
+        var prerelease = versionWithoutBuild.Substring(prereleaseIndex + 1);
+        return HasValidSemVerIdentifiers(prerelease);
+    }
+
+    private static bool HasValidSemVerIdentifiers(string value)
+    {
+        var identifiers = value.Split('.');
         return identifiers.Length > 0 &&
                identifiers.All(static identifier =>
                    identifier.Length > 0 &&
