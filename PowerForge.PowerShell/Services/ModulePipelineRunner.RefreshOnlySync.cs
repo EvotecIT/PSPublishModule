@@ -1,5 +1,6 @@
 using System.IO;
 using System.Linq;
+using System.Text;
 
 namespace PowerForge;
 
@@ -77,10 +78,52 @@ public sealed partial class ModulePipelineRunner
         var stagingPsm1Path = Path.Combine(buildResult.StagingPath, plan.ModuleName + ".psm1");
         if (File.Exists(stagingPsm1Path) && SourceCanUseGeneratedBuildBootstrapper(plan, sourcePsm1Path))
         {
-            File.Copy(stagingPsm1Path, sourcePsm1Path, overwrite: true);
+            CopyGeneratedBootstrapperWithoutSignature(stagingPsm1Path, sourcePsm1Path);
         }
 
         return true;
+    }
+
+    private static void CopyGeneratedBootstrapperWithoutSignature(string sourcePath, string destinationPath)
+    {
+        var content = File.ReadAllText(sourcePath);
+        var unsignedContent = RemoveAuthenticodeSignatureBlock(content);
+        File.WriteAllText(destinationPath, unsignedContent, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+    }
+
+    private static string RemoveAuthenticodeSignatureBlock(string content)
+    {
+        if (string.IsNullOrEmpty(content) ||
+            !content.Contains("# SIG # Begin signature block", StringComparison.Ordinal))
+        {
+            return content;
+        }
+
+        var lines = content.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+        var kept = new List<string>(lines.Length);
+        var inSignatureBlock = false;
+
+        foreach (var line in lines)
+        {
+            if (!inSignatureBlock &&
+                line.StartsWith("# SIG # Begin signature block", StringComparison.Ordinal))
+            {
+                inSignatureBlock = true;
+                continue;
+            }
+
+            if (inSignatureBlock)
+            {
+                if (line.StartsWith("# SIG # End signature block", StringComparison.Ordinal))
+                    inSignatureBlock = false;
+
+                continue;
+            }
+
+            kept.Add(line);
+        }
+
+        return string.Join(Environment.NewLine, kept).TrimEnd() + Environment.NewLine;
     }
 
     private static bool SourceCanUseGeneratedBuildBootstrapper(
