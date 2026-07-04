@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace PowerForge;
@@ -62,11 +63,26 @@ public sealed class ManagedModuleUninstallService
             }).ToArray();
         }
 
+        ValidateUninstallPlan(plan);
+
         var results = new List<ManagedModuleUninstallResult>(plan.Targets.Count);
         foreach (var target in plan.Targets)
             results.Add(UninstallTarget(plan, target));
 
         return results;
+    }
+
+    /// <summary>
+    /// Revalidates an uninstall plan before files are removed.
+    /// </summary>
+    public void ValidateUninstallPlan(ManagedModuleUninstallPlan plan)
+    {
+        if (plan is null)
+            throw new ArgumentNullException(nameof(plan));
+        if (plan.Targets.Count == 0 || plan.SkipDependencyCheck)
+            return;
+
+        ThrowIfDependencyBlocked(EnumerateInstalledModules(plan.ModuleRoot), plan.Targets);
     }
 
     private static ManagedModuleUninstallResult UninstallTarget(
@@ -75,8 +91,12 @@ public sealed class ManagedModuleUninstallService
     {
         var stopwatch = Stopwatch.StartNew();
         EnsureTargetUnderRoot(plan.ModuleRoot, target.ModulePath);
-        Directory.Delete(GetFileSystemPath(target.ModulePath), recursive: true);
-        TryDeleteEmptyModuleDirectory(target.ModuleRoot, target.Name);
+        using (ManagedModuleInstallLock.Acquire(plan.ModuleRoot, target.Name, CancellationToken.None))
+        {
+            Directory.Delete(GetFileSystemPath(target.ModulePath), recursive: true);
+            TryDeleteEmptyModuleDirectory(target.ModuleRoot, target.Name);
+        }
+
         stopwatch.Stop();
 
         return new ManagedModuleUninstallResult
@@ -114,7 +134,7 @@ public sealed class ManagedModuleUninstallService
             var range = ManagedModuleVersionRange.Parse(version);
             return candidates
                 .Where(candidate => range.IsSatisfiedBy(candidate.Version))
-                .Where(candidate => !request.Prerelease || candidate.IsPrerelease)
+                .Where(candidate => request.Prerelease || range.AllowsPrerelease || !candidate.IsPrerelease)
                 .ToArray();
         }
 
@@ -433,8 +453,8 @@ public sealed class ManagedModuleUninstallService
         public NamePattern(string original)
         {
             Original = original;
-            if (original.IndexOf('*') >= 0)
-                _regex = new Regex("^" + Regex.Escape(original).Replace("\\*", ".*") + "$", RegexOptions.IgnoreCase);
+            if (HasWildcardCharacters(original))
+                _regex = CreateWildcardRegex(original);
             else
                 ManagedModulePackageIdentity.RequireSafeId(original, nameof(original));
         }
@@ -445,6 +465,67 @@ public sealed class ManagedModuleUninstallService
             => _regex is null
                 ? string.Equals(Original, value, StringComparison.OrdinalIgnoreCase)
                 : _regex.IsMatch(value);
+
+        private static bool HasWildcardCharacters(string value)
+            => value.IndexOfAny(new[] { '*', '?', '[' }) >= 0;
+
+        private static Regex CreateWildcardRegex(string pattern)
+        {
+            var expression = new StringBuilder("^");
+            for (var index = 0; index < pattern.Length; index++)
+            {
+                var character = pattern[index];
+                switch (character)
+                {
+                    case '*':
+                        expression.Append(".*");
+                        break;
+                    case '?':
+                        expression.Append('.');
+                        break;
+                    case '[':
+                        var closingIndex = pattern.IndexOf(']', index + 1);
+                        if (closingIndex > index + 1)
+                        {
+                            expression.Append(ConvertWildcardCharacterClass(pattern.Substring(index + 1, closingIndex - index - 1)));
+                            index = closingIndex;
+                        }
+                        else
+                        {
+                            expression.Append("\\[");
+                        }
+
+                        break;
+                    default:
+                        expression.Append(Regex.Escape(character.ToString()));
+                        break;
+                }
+            }
+
+            expression.Append('$');
+            return new Regex(expression.ToString(), RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+
+        private static string ConvertWildcardCharacterClass(string body)
+        {
+            var expression = new StringBuilder("[");
+            for (var index = 0; index < body.Length; index++)
+            {
+                var character = body[index];
+                if (index == 0 && character == '!')
+                {
+                    expression.Append('^');
+                    continue;
+                }
+
+                if (character is '\\' or ']')
+                    expression.Append('\\');
+                expression.Append(character);
+            }
+
+            expression.Append(']');
+            return expression.ToString();
+        }
     }
 
     private readonly struct ModuleKey : IEquatable<ModuleKey>
