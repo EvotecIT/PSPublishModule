@@ -51,6 +51,7 @@ public sealed class PSPublishModuleManifestContractTests
     private static readonly string[] ManagedScriptFileInfoCmdlets =
     {
         "Get-ManagedScriptFileInfo",
+        "Install-ManagedScript",
         "New-ManagedScriptFileInfo",
         "Save-ManagedScript",
         "Test-ManagedScriptFileInfo",
