@@ -9,18 +9,6 @@ namespace PowerForge;
 /// </summary>
 public sealed class ManagedScriptFileInfoService
 {
-    private static readonly Regex PSScriptInfoRegex = new(
-        @"^\s*<#PSScriptInfo\s*(?<body>.*?)#>\s*",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant);
-
-    private static readonly Regex DescriptionRegex = new(
-        @"<#\s*(?<body>.*?\.DESCRIPTION\s*(?<description>.*?))#>",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant);
-
-    private static readonly Regex RequiresModuleRegex = new(
-        @"^\s*#Requires\s+-Module\s+(?<value>.+?)\s*$",
-        RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.CultureInvariant);
-
     private static readonly string[] MetadataKeys =
     [
         "VERSION",
@@ -38,6 +26,20 @@ public sealed class ManagedScriptFileInfoService
         "RELEASENOTES",
         "PRIVATEDATA"
     ];
+
+    private static readonly string MetadataKeyPattern = string.Join("|", MetadataKeys.Select(Regex.Escape));
+
+    private static readonly Regex PSScriptInfoRegex = new(
+        @"^\s*<#PSScriptInfo\s*(?<body>.*?)#>\s*",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant);
+
+    private static readonly Regex DescriptionRegex = new(
+        @"<#\s*(?<body>.*?\.DESCRIPTION\s*(?<description>.*?))#>",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant);
+
+    private static readonly Regex RequiresModuleRegex = new(
+        @"^\s*#Requires\s+-Modules?\s+(?<value>.+?)\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.CultureInvariant);
 
     /// <summary>
     /// Reads script metadata from a local <c>.ps1</c> file.
@@ -78,7 +80,7 @@ public sealed class ManagedScriptFileInfoService
             ExternalScriptDependencies = SplitWords(GetValue(values, "EXTERNALSCRIPTDEPENDENCIES")),
             ReleaseNotes = GetValue(values, "RELEASENOTES"),
             PrivateData = GetValue(values, "PRIVATEDATA"),
-            Description = ReadDescription(text),
+            Description = ReadDescription(text, match),
             RequiredModules = ReadRequiredModules(text),
             ScriptContent = RemoveMetadataPrefix(text, match)
         };
@@ -238,7 +240,7 @@ public sealed class ManagedScriptFileInfoService
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var matches = Regex.Matches(
             body,
-            @"(?ms)^\s*\.(?<key>[A-Z0-9]+)\s*(?<value>.*?)(?=^\s*\.[A-Z0-9]+\s*|\z)",
+            $@"(?ms)^\s*\.(?<key>{MetadataKeyPattern})\b\s*(?<value>.*?)(?=^\s*\.(?:{MetadataKeyPattern})\b\s*|\z)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         foreach (Match match in matches)
@@ -292,17 +294,25 @@ public sealed class ManagedScriptFileInfoService
         builder.AppendLine();
     }
 
-    private static string ReadDescription(string text)
+    private static string ReadDescription(string text, Match metadataMatch)
     {
-        var matches = DescriptionRegex.Matches(text);
-        if (matches.Count == 0)
+        var scriptHelpText = text.Substring(metadataMatch.Length);
+        while (true)
+        {
+            var previous = scriptHelpText;
+            scriptHelpText = RequiresModuleRegex.Replace(scriptHelpText, string.Empty, 1).TrimStart('\r', '\n', ' ', '\t');
+            if (string.Equals(previous, scriptHelpText, StringComparison.Ordinal))
+                break;
+        }
+
+        var match = Regex.Match(
+            scriptHelpText,
+            @"^\s*<#\s*(?<body>.*?\.DESCRIPTION\s*(?<description>.*?))#>",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant);
+        if (!match.Success)
             return string.Empty;
 
-        var description = matches
-            .Cast<Match>()
-            .Select(static match => match.Groups["description"].Value)
-            .LastOrDefault() ?? string.Empty;
-        return NormalizeDescription(description);
+        return NormalizeDescription(match.Groups["description"].Value);
     }
 
     private static string NormalizeDescription(string value)
@@ -337,7 +347,7 @@ public sealed class ManagedScriptFileInfoService
         var module = new ManagedScriptRequiredModule();
         foreach (Match match in Regex.Matches(
                      value,
-                     @"(?<key>ModuleName|Guid|ModuleVersion|RequiredVersion|MaximumVersion)\s*=\s*'(?<value>[^']*)'",
+                     @"(?<key>ModuleName|Guid|ModuleVersion|RequiredVersion|MaximumVersion)\s*=\s*(?<quote>['""])(?<value>.*?)\k<quote>",
                      RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
         {
             var key = match.Groups["key"].Value;
@@ -364,6 +374,12 @@ public sealed class ManagedScriptFileInfoService
     {
         if (module is null || string.IsNullOrWhiteSpace(module.ModuleName))
             throw new InvalidOperationException("Required module entries must include ModuleName.");
+
+        if (string.IsNullOrWhiteSpace(module.Guid) &&
+            string.IsNullOrWhiteSpace(module.ModuleVersion) &&
+            string.IsNullOrWhiteSpace(module.RequiredVersion) &&
+            string.IsNullOrWhiteSpace(module.MaximumVersion))
+            return string.Format(CultureInfo.InvariantCulture, "#Requires -Module {0}", module.ModuleName);
 
         var values = new List<string> { $"ModuleName = '{EscapeSingleQuoted(module.ModuleName)}'" };
         if (!string.IsNullOrWhiteSpace(module.Guid))

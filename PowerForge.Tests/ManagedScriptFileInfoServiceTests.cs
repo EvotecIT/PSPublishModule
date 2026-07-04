@@ -108,6 +108,124 @@ Demo script
     }
 
     [Fact]
+    public void Read_PrefersScriptLevelDescriptionOverLaterFunctionHelp()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        File.WriteAllText(path, """
+<#PSScriptInfo
+
+.VERSION 1.0.0.0
+
+.GUID 11111111-2222-3333-4444-555555555555
+
+#>
+
+<#
+.DESCRIPTION
+Script description.
+#>
+
+function Invoke-Company {
+<#
+.DESCRIPTION
+Function description.
+#>
+}
+""");
+
+        var result = new ManagedScriptFileInfoService().Read(path);
+
+        Assert.Equal("Script description.", result.Description);
+    }
+
+    [Fact]
+    public void Read_DoesNotTreatLaterFunctionHelpAsScriptDescription()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        File.WriteAllText(path, """
+<#PSScriptInfo
+
+.VERSION 1.0.0.0
+
+.GUID 11111111-2222-3333-4444-555555555555
+
+#>
+
+function Invoke-Company {
+<#
+.DESCRIPTION
+Function description.
+#>
+}
+""");
+
+        var result = new ManagedScriptFileInfoService().Read(path);
+
+        Assert.Equal(string.Empty, result.Description);
+    }
+
+    [Fact]
+    public void Read_PreservesDottedLinesInsideMultilineMetadataValues()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        File.WriteAllText(path, """
+<#PSScriptInfo
+
+.VERSION 1.0.0.0
+
+.GUID 11111111-2222-3333-4444-555555555555
+
+.RELEASENOTES
+Initial release.
+.NET support added.
+Another note.
+
+#>
+
+<#
+.DESCRIPTION
+Demo script
+#>
+""");
+
+        var result = new ManagedScriptFileInfoService().Read(path);
+
+        Assert.Contains(".NET support added.", result.ReleaseNotes, StringComparison.Ordinal);
+        Assert.Contains("Another note.", result.ReleaseNotes, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Read_ParsesPluralRequiresAndDoubleQuotedModuleHashtableValues()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        File.WriteAllText(path, """
+<#PSScriptInfo
+
+.VERSION 1.0.0.0
+
+.GUID 11111111-2222-3333-4444-555555555555
+
+#>
+
+#Requires -Modules @{ ModuleName = "Pester"; RequiredVersion = "5.7.0" }
+
+<#
+.DESCRIPTION
+Demo script
+#>
+""");
+
+        var module = Assert.Single(new ManagedScriptFileInfoService().Read(path).RequiredModules);
+
+        Assert.Equal("Pester", module.ModuleName);
+        Assert.Equal("5.7.0", module.RequiredVersion);
+    }
+
+    [Fact]
     public void Test_ReturnsFalseForScriptWithoutMetadata()
     {
         using var directory = new TemporaryDirectory();
@@ -145,5 +263,19 @@ Demo script
         Assert.Equal("After description", result.Description);
         Assert.Contains("\"body\"", text, StringComparison.Ordinal);
         Assert.Contains(".TAGS updated", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Render_WritesNameOnlyRequiredModulesAsSimpleStrings()
+    {
+        var text = new ManagedScriptFileInfoService().Render(new ManagedScriptFileInfo
+        {
+            Path = "Invoke-Company.ps1",
+            Guid = Guid.Parse("11111111-2222-3333-4444-555555555555"),
+            RequiredModules = [new ManagedScriptRequiredModule { ModuleName = "Pester" }]
+        });
+
+        Assert.Contains("#Requires -Module Pester", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("@{ ModuleName = 'Pester' }", text, StringComparison.Ordinal);
     }
 }
