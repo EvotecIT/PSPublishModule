@@ -57,6 +57,40 @@ public sealed class ManagedModuleUninstallServiceTests
     }
 
     [Fact]
+    public void PlanUninstall_exact_stable_version_with_prerelease_switch_keeps_stable_match()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.1.0-beta1");
+        var service = new ManagedModuleUninstallService();
+        var request = CreateRequest(moduleRoot.Path, "Company.Tools");
+        request.Version = "1.0.0";
+        request.Prerelease = true;
+
+        var plan = service.PlanUninstall(request);
+
+        Assert.Equal("1.0.0", Assert.Single(plan.Targets).Version);
+    }
+
+    [Theory]
+    [InlineData(">oops")]
+    [InlineData(">=1.0.0 <oops")]
+    [InlineData("[oops,2.0.0)")]
+    public void PlanUninstall_rejects_non_version_range_operands(string versionRange)
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var service = new ManagedModuleUninstallService();
+        var request = CreateRequest(moduleRoot.Path, "Company.Tools");
+        request.Version = versionRange;
+
+        var exception = Assert.Throws<ArgumentException>(() => service.PlanUninstall(request));
+
+        Assert.Contains("Invalid version range syntax", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0")));
+    }
+
+    [Fact]
     public void PlanUninstall_wildcard_and_range_selects_matching_versions()
     {
         using var moduleRoot = new TemporaryDirectory();

@@ -209,7 +209,6 @@ public sealed class ManagedModuleUninstallService
 
         return candidates
             .Where(candidate => VersionsEqual(candidate.Version, exact))
-            .Where(candidate => !request.Prerelease || candidate.IsPrerelease)
             .ToArray();
     }
 
@@ -474,7 +473,7 @@ public sealed class ManagedModuleUninstallService
         {
             var tokens = trimmed.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
             if (tokens.Length == 0 ||
-                tokens.Any(static token => !Regex.IsMatch(token, @"^(>=|>|<=|<)[^\s<>=,]+$", RegexOptions.CultureInvariant)))
+                tokens.Any(static token => !IsValidComparatorToken(token)))
             {
                 throw new ArgumentException($"Invalid version range syntax: '{value}'.", nameof(value));
             }
@@ -484,6 +483,26 @@ public sealed class ManagedModuleUninstallService
         var endsBracketed = trimmed.EndsWith("]", StringComparison.Ordinal) || trimmed.EndsWith(")", StringComparison.Ordinal);
         if (startsBracketed != endsBracketed)
             throw new ArgumentException($"Invalid version range syntax: '{value}'.", nameof(value));
+
+        if (startsBracketed)
+        {
+            var body = trimmed.Trim('[', ']', '(', ')').Trim();
+            foreach (var operand in body.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+                ValidateRangeOperand(value, operand);
+        }
+    }
+
+    private static bool IsValidComparatorToken(string token)
+    {
+        var match = Regex.Match(token, @"^(>=|>|<=|<)([^\s<>=,]+)$", RegexOptions.CultureInvariant);
+        return match.Success && ModuleStateVersion.TryParse(match.Groups[2].Value, out _);
+    }
+
+    private static void ValidateRangeOperand(string range, string operand)
+    {
+        var trimmedOperand = operand.Trim();
+        if (trimmedOperand.Length > 0 && !ModuleStateVersion.TryParse(trimmedOperand, out _))
+            throw new ArgumentException($"Invalid version range syntax: '{range}'.", nameof(range));
     }
 
     private static bool PathMatches(string modulePath, string? loadedPath)
