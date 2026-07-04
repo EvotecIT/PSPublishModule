@@ -1,0 +1,32 @@
+namespace PowerForge;
+
+/// <summary>
+/// Planned managed module uninstall operation.
+/// </summary>
+public sealed class ManagedModuleUninstallPlan
+{
+    /// <summary>
+    /// Module names or wildcard patterns requested by the caller.
+    /// </summary>
+    public string[] Name { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Version policy requested by the caller.
+    /// </summary>
+    public string? Version { get; set; }
+
+    /// <summary>
+    /// Module root inspected by the plan.
+    /// </summary>
+    public string ModuleRoot { get; set; } = string.Empty;
+
+    /// <summary>
+    /// True when dependency checks are skipped.
+    /// </summary>
+    public bool SkipDependencyCheck { get; set; }
+
+    /// <summary>
+    /// Selected installed module versions.
+    /// </summary>
+    public IReadOnlyList<ManagedModuleUninstallTarget> Targets { get; set; } = Array.Empty<ManagedModuleUninstallTarget>();
+}

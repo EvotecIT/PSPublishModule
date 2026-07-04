@@ -11,6 +11,7 @@ public sealed class ManagedModuleAliasCommandTests
     [InlineData("Install-PublicModule")]
     [InlineData("Publish-PublicModule")]
     [InlineData("Save-PublicModule")]
+    [InlineData("Uninstall-PublicModule")]
     [InlineData("Update-PublicModule")]
     public void Managed_module_public_aliases_are_not_exported(string aliasName)
     {
@@ -52,6 +53,20 @@ public sealed class ManagedModuleAliasCommandTests
         AssertNoPowerShellErrors(ps);
         Assert.True(command.Parameters.ContainsKey("LoadedModule"));
         Assert.True(command.Parameters.ContainsKey("AllowLoadedModuleUpdate"));
+    }
+
+    [Fact]
+    public void UninstallManagedModule_exposes_loaded_module_safety_parameters()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Get-Command")
+            .AddArgument("Uninstall-ManagedModule");
+
+        var command = Assert.IsType<CmdletInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.True(command.Parameters.ContainsKey("LoadedModule"));
+        Assert.True(command.Parameters.ContainsKey("AllowLoadedModuleUninstall"));
     }
 
     [Theory]
@@ -132,6 +147,11 @@ public sealed class ManagedModuleAliasCommandTests
     [InlineData("Update-ManagedModule", "Prerelease", "AllowPrerelease")]
     [InlineData("Update-ManagedModule", "ModuleRoot", "Path")]
     [InlineData("Update-ManagedModule", "SkipDependencyCheck", "SkipDependenciesCheck")]
+    [InlineData("Uninstall-ManagedModule", "Name", "ModuleName")]
+    [InlineData("Uninstall-ManagedModule", "Version", "RequiredVersion")]
+    [InlineData("Uninstall-ManagedModule", "Prerelease", "AllowPrerelease")]
+    [InlineData("Uninstall-ManagedModule", "ModuleRoot", "Path")]
+    [InlineData("Uninstall-ManagedModule", "SkipDependencyCheck", "SkipDependenciesCheck")]
     [InlineData("Repair-ManagedModule", "Version", "RequiredVersion")]
     [InlineData("Repair-ManagedModule", "Repository", "Source")]
     [InlineData("Repair-ManagedModule", "Repository", "RepositoryUri")]
@@ -159,6 +179,7 @@ public sealed class ManagedModuleAliasCommandTests
     [Theory]
     [InlineData("Install-ManagedModule")]
     [InlineData("Save-ManagedModule")]
+    [InlineData("Uninstall-ManagedModule")]
     [InlineData("Update-ManagedModule")]
     [InlineData("Repair-ManagedModule")]
     public void Managed_module_delivery_commands_do_not_expose_unsafe_migration_switches(string commandName)
