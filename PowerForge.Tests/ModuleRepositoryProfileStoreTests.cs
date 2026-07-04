@@ -69,6 +69,33 @@ public sealed class ModuleRepositoryProfileStoreTests
     }
 
     [Fact]
+    public void SaveProfile_KeepsGenericNuGetProfileNonPrompting()
+    {
+        var path = CreateTempFilePath();
+        try
+        {
+            var store = new ModuleRepositoryProfileStore(path);
+
+            var saved = store.SaveProfile(new ModuleRepositoryProfile
+            {
+                Name = "Local",
+                Provider = PrivateGalleryProvider.NuGet,
+                RepositoryName = "Local",
+                RepositoryUri = "/tmp/feed",
+                ApiVersion = RepositoryApiVersion.Local
+            });
+
+            Assert.Equal(PrivateGalleryBootstrapMode.Auto, saved.BootstrapMode);
+            Assert.Equal(string.Empty, saved.AuthenticationMode);
+            Assert.Equal(RepositoryApiVersion.Local, saved.ApiVersion);
+        }
+        finally
+        {
+            TryDelete(Path.GetDirectoryName(path));
+        }
+    }
+
+    [Fact]
     public void SaveProfile_NormalizesJFrogProfileWithCredentialPromptDefaults()
     {
         var path = CreateTempFilePath();

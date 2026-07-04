@@ -140,7 +140,8 @@ internal sealed class PrivateModuleWorkflowService
                 repositorySourceUri: request.RepositorySourceUri,
                 repositoryPublishUri: request.RepositoryPublishUri,
                 jfrogBaseUri: request.JFrogBaseUri,
-                jfrogRepository: request.JFrogRepository);
+                jfrogRepository: request.JFrogRepository,
+                apiVersion: request.ApiVersion);
             registration.InstalledPrerequisites = prerequisiteInstall.InstalledPrerequisites;
             registration.PrerequisiteInstallMessages = prerequisiteInstall.Messages;
 

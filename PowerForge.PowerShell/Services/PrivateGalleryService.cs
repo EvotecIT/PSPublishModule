@@ -243,7 +243,8 @@ internal sealed class PrivateGalleryService
         string? repositorySourceUri = null,
         string? repositoryPublishUri = null,
         string? jfrogBaseUri = null,
-        string? jfrogRepository = null)
+        string? jfrogRepository = null,
+        RepositoryApiVersion apiVersion = RepositoryApiVersion.Auto)
     {
         var endpoint = PrivateGalleryRepositoryEndpoints.Create(
             provider,
@@ -259,6 +260,7 @@ internal sealed class PrivateGalleryService
             jfrogRepository);
 
         var effectiveTool = tool;
+        var effectiveApiVersion = apiVersion;
         var result = new ModuleRepositoryRegistrationResult
         {
             RepositoryName = endpoint.RepositoryName,
@@ -328,10 +330,10 @@ internal sealed class PrivateGalleryService
                 var client = new PSResourceGetClient(runner, logger);
                 var created = client.EnsureRepositoryRegistered(
                     result.RepositoryName,
-                    endpoint.PSResourceGetUri,
+                    ResolvePSResourceGetRegistrationUri(endpoint, effectiveApiVersion),
                     trusted,
                     priority,
-                    apiVersion: RepositoryApiVersion.V3,
+                    apiVersion: effectiveApiVersion,
                     timeout: TimeSpan.FromMinutes(2));
 
                 result.PSResourceGetRegistered = true;
@@ -422,6 +424,11 @@ internal sealed class PrivateGalleryService
 
         return result;
     }
+
+    private static string ResolvePSResourceGetRegistrationUri(PrivateGalleryRepositoryEndpoint endpoint, RepositoryApiVersion apiVersion)
+        => apiVersion == RepositoryApiVersion.V2
+            ? endpoint.PowerShellGetSourceUri
+            : endpoint.PSResourceGetUri;
 
     public ModuleRepositoryRegistrationResult EnsureMicrosoftArtifactRegistryRegistered(
         string? repositoryName,

@@ -6,6 +6,7 @@ internal sealed class PublishConfigurationFactory
 {
     private const string AzureArtifactsApiKeyPlaceholder = "AzureDevOps";
     private const string PowerShellGalleryRepositoryName = "PSGallery";
+    private const string PowerShellGalleryRepositoryUri = "https://www.powershellgallery.com/api/v3/index.json";
 
     public ConfigurationPublishSegment Create(PublishConfigurationRequest request)
     {
@@ -137,8 +138,8 @@ internal sealed class PublishConfigurationFactory
         if (isAzureArtifacts && anyRepositoryUriProvided)
             throw new ArgumentException("RepositoryUri/RepositorySourceUri/RepositoryPublishUri cannot be combined with the Azure Artifacts preset.", nameof(request));
 
-        if (isAzureArtifacts && request.RepositoryApiVersion == RepositoryApiVersion.ContainerRegistry)
-            throw new ArgumentException("RepositoryApiVersion ContainerRegistry cannot be used with the Azure Artifacts preset.", nameof(request));
+        if (isAzureArtifacts && request.RepositoryApiVersion is RepositoryApiVersion.ContainerRegistry or RepositoryApiVersion.Local or RepositoryApiVersion.NugetServer)
+            throw new ArgumentException($"RepositoryApiVersion '{request.RepositoryApiVersion}' is not supported when using the Azure Artifacts preset. Use Auto, V2, or V3.", nameof(request));
 
         if (!isAzureArtifacts &&
             destination == PublishDestination.PowerShellGallery &&
@@ -153,8 +154,11 @@ internal sealed class PublishConfigurationFactory
             var resolvedRepositoryName = repositoryName?.Trim();
             if (string.IsNullOrWhiteSpace(resolvedRepositoryName))
                 throw new ArgumentException("RepositoryName is required when RepositoryUri/RepositorySourceUri/RepositoryPublishUri is provided.", nameof(request));
-            if (string.Equals(resolvedRepositoryName, PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(resolvedRepositoryName, PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase) &&
+                !IsBuiltInPowerShellGalleryRepository(repositoryUri, repositorySourceUri, repositoryPublishUri))
+            {
                 throw new ArgumentException("RepositoryName cannot be 'PSGallery' when RepositoryUri/RepositorySourceUri/RepositoryPublishUri is provided.", nameof(request));
+            }
         }
 
         if (repositorySecretSourceSpecified && string.IsNullOrWhiteSpace(repositorySecret))
@@ -333,6 +337,11 @@ internal sealed class PublishConfigurationFactory
         => MicrosoftArtifactRegistryRepository.IsDefaultUri(request.RepositoryUri) ||
            MicrosoftArtifactRegistryRepository.IsDefaultUri(request.RepositorySourceUri) ||
            MicrosoftArtifactRegistryRepository.IsDefaultUri(request.RepositoryPublishUri);
+
+    private static bool IsBuiltInPowerShellGalleryRepository(params string?[] uris)
+        => uris
+            .Where(uri => !string.IsNullOrWhiteSpace(uri))
+            .All(uri => string.Equals(uri!.Trim().TrimEnd('/'), PowerShellGalleryRepositoryUri, StringComparison.OrdinalIgnoreCase));
 
     private static bool IsPrivateRepositoryCredentialPublishTarget(
         PublishConfigurationRequest request,

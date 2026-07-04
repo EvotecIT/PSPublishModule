@@ -8,6 +8,9 @@ namespace PowerForge;
 /// </summary>
 public static class PrivateGalleryRepositoryEndpoints
 {
+    private const string PowerShellGalleryRepositoryName = "PSGallery";
+    private const string PowerShellGalleryRepositoryUri = "https://www.powershellgallery.com/api/v3/index.json";
+
     /// <summary>
     /// Resolves Azure Artifacts, JFrog, GitHub Packages, or generic NuGet private-gallery inputs into concrete repository endpoints.
     /// </summary>
@@ -55,10 +58,10 @@ public static class PrivateGalleryRepositoryEndpoints
             if (string.IsNullOrWhiteSpace(resolvedRepositoryName))
                 throw new ArgumentException("RepositoryName is required for JFrog when no repository id is provided.", nameof(repositoryName));
 
-            var sourceUri = NormalizeOptional(repositorySourceUri);
-            var publishUri = NormalizeOptional(repositoryPublishUri);
-            var psResourceUri = NormalizeOptional(repositoryUri);
-            var baseUri = NormalizeOptional(jfrogBaseUri);
+            var sourceUri = NormalizeEndpointValue(repositorySourceUri);
+            var publishUri = NormalizeEndpointValue(repositoryPublishUri);
+            var psResourceUri = NormalizeEndpointValue(repositoryUri);
+            var baseUri = NormalizeEndpointValue(jfrogBaseUri);
 
             if (!string.IsNullOrWhiteSpace(remoteRepository) && !string.IsNullOrWhiteSpace(baseUri))
             {
@@ -99,8 +102,8 @@ public static class PrivateGalleryRepositoryEndpoints
             if (string.IsNullOrWhiteSpace(githubName))
                 throw new ArgumentException("RepositoryName is required for GitHub Packages when no owner is provided.", nameof(repositoryName));
 
-            var serviceIndex = NormalizeOptional(repositoryUri) ?? $"https://nuget.pkg.github.com/{Uri.EscapeDataString(owner!)}/index.json";
-            var sourceUri = NormalizeOptional(repositorySourceUri) ?? serviceIndex;
+            var serviceIndex = NormalizeEndpointValue(repositoryUri) ?? $"https://nuget.pkg.github.com/{Uri.EscapeDataString(owner!)}/index.json";
+            var sourceUri = NormalizeEndpointValue(repositorySourceUri) ?? serviceIndex;
 
             return new PrivateGalleryRepositoryEndpoint(
                 PrivateGalleryProvider.GitHubPackages,
@@ -109,7 +112,7 @@ public static class PrivateGalleryRepositoryEndpoints
                 null,
                 owner!,
                 sourceUri,
-                NormalizeOptional(repositoryPublishUri) ?? sourceUri,
+                NormalizeEndpointValue(repositoryPublishUri) ?? sourceUri,
                 serviceIndex,
                 null,
                 null);
@@ -118,13 +121,30 @@ public static class PrivateGalleryRepositoryEndpoints
         if (provider != PrivateGalleryProvider.NuGet)
             throw new ArgumentException($"Provider '{provider}' is not supported. Supported values: AzureArtifacts, JFrog, GitHubPackages, NuGet.", nameof(provider));
 
+        var normalizedRepositoryUri = NormalizeEndpointValue(repositoryUri);
+        var candidateRepositoryName = NormalizeOptional(repositoryName) ?? NormalizeOptional(repository);
+        if (IsPowerShellGallery(candidateRepositoryName, normalizedRepositoryUri))
+        {
+            return new PrivateGalleryRepositoryEndpoint(
+                PrivateGalleryProvider.NuGet,
+                PowerShellGalleryRepositoryName,
+                null,
+                null,
+                PowerShellGalleryRepositoryName,
+                PowerShellGalleryRepositoryUri,
+                PowerShellGalleryRepositoryUri,
+                PowerShellGalleryRepositoryUri,
+                null,
+                null);
+        }
+
         var genericName = ResolveRepositoryName(repositoryName, repository);
         if (string.IsNullOrWhiteSpace(genericName))
             throw new ArgumentException("RepositoryName is required for generic NuGet private galleries.", nameof(repositoryName));
-        if (string.IsNullOrWhiteSpace(repositoryUri))
+        if (string.IsNullOrWhiteSpace(normalizedRepositoryUri))
             throw new ArgumentException("RepositoryUri is required for generic NuGet private galleries.", nameof(repositoryUri));
 
-        var genericSourceUri = NormalizeOptional(repositorySourceUri) ?? NormalizeOptional(repositoryUri)!;
+        var genericSourceUri = NormalizeEndpointValue(repositorySourceUri) ?? normalizedRepositoryUri!;
         return new PrivateGalleryRepositoryEndpoint(
             PrivateGalleryProvider.NuGet,
             genericName!,
@@ -132,11 +152,15 @@ public static class PrivateGalleryRepositoryEndpoints
             null,
             NormalizeOptional(repository) ?? genericName!,
             genericSourceUri,
-            NormalizeOptional(repositoryPublishUri) ?? genericSourceUri,
-            NormalizeOptional(repositoryUri)!,
+            NormalizeEndpointValue(repositoryPublishUri) ?? genericSourceUri,
+            normalizedRepositoryUri!,
             null,
             NormalizeOptional(repository));
     }
+
+    private static bool IsPowerShellGallery(string? repositoryName, string? repositoryUri)
+        => string.Equals(repositoryName, PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase) &&
+           string.Equals(repositoryUri, PowerShellGalleryRepositoryUri, StringComparison.OrdinalIgnoreCase);
 
     private static string? ResolveRepositoryName(string? repositoryName, string? repository)
     {
@@ -164,6 +188,14 @@ public static class PrivateGalleryRepositoryEndpoints
             throw new ArgumentException("GitHub owner must be a single GitHub user or organization name.", nameof(value));
 
         return owner;
+    }
+
+    private static string? NormalizeEndpointValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return value!.Trim().TrimEnd('/');
     }
 }
 

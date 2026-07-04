@@ -482,7 +482,8 @@ public sealed class InitializeManagedModuleRepositoryCommand : PSCmdlet
             repositorySourceUri: profile.RepositorySourceUri,
             repositoryPublishUri: profile.RepositoryPublishUri,
             jfrogBaseUri: profile.JFrogBaseUri,
-            jfrogRepository: profile.JFrogRepository);
+            jfrogRepository: profile.JFrogRepository,
+            apiVersion: profile.ApiVersion);
         registration.InstalledPrerequisites = prerequisiteInstall.InstalledPrerequisites;
         registration.PrerequisiteInstallMessages = prerequisiteInstall.Messages;
 

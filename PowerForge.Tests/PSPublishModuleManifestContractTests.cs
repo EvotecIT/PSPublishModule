@@ -35,12 +35,16 @@ public sealed class PSPublishModuleManifestContractTests
         "Get-ManagedModule",
         "Get-ManagedModuleRepository",
         "Initialize-ManagedModuleRepository",
+        "Import-ManagedModuleRepository",
         "Install-ManagedModule",
         "Publish-ManagedModule",
+        "Register-ManagedModuleRepository",
         "Remove-ManagedModuleRepository",
         "Repair-ManagedModule",
+        "Reset-ManagedModuleRepository",
         "Save-ManagedModule",
         "Set-ManagedModuleRepository",
+        "Unregister-ManagedModuleRepository",
         "Update-ManagedModule"
     };
 

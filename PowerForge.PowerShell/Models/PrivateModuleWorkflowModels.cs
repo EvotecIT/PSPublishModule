@@ -34,6 +34,7 @@ internal sealed class PrivateModuleWorkflowRequest
     internal string JFrogBaseUri { get; set; } = string.Empty;
     internal string JFrogRepository { get; set; } = string.Empty;
     internal RepositoryRegistrationTool Tool { get; set; } = RepositoryRegistrationTool.Auto;
+    internal RepositoryApiVersion ApiVersion { get; set; } = RepositoryApiVersion.Auto;
     internal PrivateGalleryBootstrapMode BootstrapMode { get; set; } = PrivateGalleryBootstrapMode.Auto;
     internal bool Trusted { get; set; } = true;
     internal int? Priority { get; set; }

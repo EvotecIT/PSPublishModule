@@ -732,6 +732,9 @@ internal static partial class Program
 
         var v = value.Trim();
         if (v.Equals("auto", StringComparison.OrdinalIgnoreCase)) return RepositoryApiVersion.Auto;
+        if (v.Equals("local", StringComparison.OrdinalIgnoreCase)) return RepositoryApiVersion.Local;
+        if (v.Equals("nugetserver", StringComparison.OrdinalIgnoreCase) ||
+            v.Equals("nuget-server", StringComparison.OrdinalIgnoreCase)) return RepositoryApiVersion.NugetServer;
         if (v.Equals("v2", StringComparison.OrdinalIgnoreCase) || v.Equals("2", StringComparison.OrdinalIgnoreCase))
             return RepositoryApiVersion.V2;
         if (v.Equals("v3", StringComparison.OrdinalIgnoreCase) || v.Equals("3", StringComparison.OrdinalIgnoreCase))

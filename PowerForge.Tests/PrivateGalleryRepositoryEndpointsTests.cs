@@ -118,6 +118,20 @@ public sealed class PrivateGalleryRepositoryEndpointsTests
     }
 
     [Fact]
+    public void Create_GenericNuGet_AllowsExplicitPowerShellGalleryDefault()
+    {
+        var endpoint = PrivateGalleryRepositoryEndpoints.Create(
+            PrivateGalleryProvider.NuGet,
+            repositoryName: "PSGallery",
+            repositoryUri: "https://www.powershellgallery.com/api/v3/index.json");
+
+        Assert.Equal(PrivateGalleryProvider.NuGet, endpoint.Provider);
+        Assert.Equal("PSGallery", endpoint.RepositoryName);
+        Assert.Equal("PSGallery", endpoint.Repository);
+        Assert.Equal("https://www.powershellgallery.com/api/v3/index.json", endpoint.PSResourceGetUri);
+    }
+
+    [Fact]
     public void Create_RejectsUnknownProviderValues()
     {
         var ex = Assert.Throws<ArgumentException>(() => PrivateGalleryRepositoryEndpoints.Create(

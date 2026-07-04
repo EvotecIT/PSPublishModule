@@ -50,6 +50,9 @@ public sealed class ModuleRepositoryProfileResult
     /// <summary>Registration tool selected for this profile.</summary>
     public RepositoryRegistrationTool Tool { get; set; } = RepositoryRegistrationTool.PSResourceGet;
 
+    /// <summary>PSResourceGet repository API version selected for this profile.</summary>
+    public RepositoryApiVersion ApiVersion { get; set; } = RepositoryApiVersion.Auto;
+
     /// <summary>Bootstrap/authentication mode selected for this profile.</summary>
     public PrivateGalleryBootstrapMode BootstrapMode { get; set; } = PrivateGalleryBootstrapMode.ExistingSession;
 

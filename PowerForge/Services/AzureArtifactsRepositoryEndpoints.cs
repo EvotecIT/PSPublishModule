@@ -73,7 +73,7 @@ public static class AzureArtifactsRepositoryEndpoints
     {
         var endpoint = Create(organization, project, feed, repositoryName);
         var resolvedApiVersion = apiVersion == RepositoryApiVersion.Auto ? RepositoryApiVersion.V3 : apiVersion;
-        if (resolvedApiVersion == RepositoryApiVersion.ContainerRegistry)
+        if (resolvedApiVersion is RepositoryApiVersion.ContainerRegistry or RepositoryApiVersion.Local or RepositoryApiVersion.NugetServer)
             throw new ArgumentException("Azure Artifacts repositories support only Auto, V2, or V3 API versions.", nameof(apiVersion));
 
         var repositoryUri = resolvedApiVersion == RepositoryApiVersion.V2

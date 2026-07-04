@@ -34,7 +34,7 @@
     },
     "RepositoryApiVersion": {
       "type": "string",
-      "enum": ["Auto", "V2", "V3", "ContainerRegistry"]
+      "enum": ["Auto", "Local", "NugetServer", "V2", "V3", "ContainerRegistry"]
     },
     "ModuleDependencyKind": {
       "type": "string",

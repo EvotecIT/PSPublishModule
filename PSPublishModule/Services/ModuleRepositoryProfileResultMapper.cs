@@ -25,6 +25,7 @@ internal static class ModuleRepositoryProfileResultMapper
             JFrogRepository = profile.JFrogRepository,
             GitHubOwner = profile.GitHubOwner,
             Tool = profile.Tool,
+            ApiVersion = profile.ApiVersion,
             BootstrapMode = profile.BootstrapMode,
             Trusted = profile.Trusted,
             Priority = profile.Priority,

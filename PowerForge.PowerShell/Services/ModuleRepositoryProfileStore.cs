@@ -174,6 +174,31 @@ internal sealed class ModuleRepositoryProfileStore
             .ToArray();
     }
 
+    public ModuleRepositoryProfile[] ReplaceProfiles(IEnumerable<ModuleRepositoryProfile> profiles)
+    {
+        if (profiles is null) throw new ArgumentNullException(nameof(profiles));
+
+        var normalizedProfiles = profiles
+            .Where(static profile => profile is not null)
+            .Select(Normalize)
+            .OrderBy(static profile => profile.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var profile in normalizedProfiles)
+        {
+            profile.CreatedAtUtc = profile.CreatedAtUtc == default ? now : profile.CreatedAtUtc;
+            profile.UpdatedAtUtc = now;
+        }
+
+        WriteDocument(new ModuleRepositoryProfileDocument
+        {
+            Profiles = normalizedProfiles
+        });
+
+        return normalizedProfiles;
+    }
+
     public void WriteProfilesFile(string path, IEnumerable<ModuleRepositoryProfile> profiles)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -246,6 +271,7 @@ internal sealed class ModuleRepositoryProfileStore
             JFrogRepository = endpoint.JFrogRepository ?? string.Empty,
             GitHubOwner = endpoint.GitHubOwner ?? string.Empty,
             Tool = profile.Tool,
+            ApiVersion = profile.ApiVersion,
             BootstrapMode = ResolveBootstrapMode(endpoint.Provider, profile.BootstrapMode),
             Trusted = profile.Trusted,
             Priority = profile.Priority ?? PrivateGalleryDefaults.AzureArtifactsRepositoryPriority,
@@ -265,14 +291,20 @@ internal sealed class ModuleRepositoryProfileStore
             ? mode
             : provider == PrivateGalleryProvider.JFrog && mode == PrivateGalleryBootstrapMode.JFrogCli
                 ? PrivateGalleryBootstrapMode.JFrogCli
+                : provider == PrivateGalleryProvider.NuGet &&
+                  (mode == PrivateGalleryBootstrapMode.Auto || mode == PrivateGalleryBootstrapMode.ExistingSession)
+                    ? PrivateGalleryBootstrapMode.Auto
                 : mode == PrivateGalleryBootstrapMode.Auto || mode == PrivateGalleryBootstrapMode.ExistingSession
                     ? PrivateGalleryBootstrapMode.CredentialPrompt
                     : mode;
 
     private static string GetDefaultAuthenticationMode(PrivateGalleryProvider provider)
-        => provider == PrivateGalleryProvider.AzureArtifacts
-            ? "AzureArtifactsCredentialProvider"
-            : "CredentialPrompt";
+        => provider switch
+        {
+            PrivateGalleryProvider.AzureArtifacts => "AzureArtifactsCredentialProvider",
+            PrivateGalleryProvider.NuGet => string.Empty,
+            _ => "CredentialPrompt"
+        };
 
     private static string ResolveAuthenticationMode(PrivateGalleryProvider provider, string? authenticationMode)
     {
