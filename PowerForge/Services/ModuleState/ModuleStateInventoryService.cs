@@ -54,11 +54,12 @@ internal sealed class ModuleStateInventoryService
                     .First()
                     .Module));
 
-        return new ModuleStateInventory(modules
+        var inventory = new ModuleStateInventory(modules
             .Select(module => MarkEffective(module.Module, effectiveModules.Contains(module.Module)))
             .OrderBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static module => module.Version, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static module => module.Path, StringComparer.OrdinalIgnoreCase));
+        return ModuleStateInventoryFilter.Apply(inventory, request);
     }
 
     private static ModuleStateInstalledModule MarkEffective(ModuleStateInstalledModule module, bool isEffective)

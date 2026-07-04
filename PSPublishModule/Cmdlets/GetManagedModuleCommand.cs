@@ -45,7 +45,7 @@ public sealed class GetManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string[] Name { get; set; } = Array.Empty<string>();
 
-    /// <summary>Path to a previously written inventory JSON artifact.</summary>
+    /// <summary>Path to a module install root or previously written inventory JSON artifact.</summary>
     [Parameter(ParameterSetName = ParameterSetPath, Mandatory = true)]
     [ValidateNotNullOrEmpty]
     public string? Path { get; set; }
@@ -54,6 +54,18 @@ public sealed class GetManagedModuleCommand : PSCmdlet
     [Parameter(ParameterSetName = ParameterSetLocal)]
     [ValidateNotNullOrEmpty]
     public string[]? ModulePath { get; set; }
+
+    /// <summary>Exact module version or explicit version range to return.</summary>
+    [Parameter(ParameterSetName = ParameterSetLocal)]
+    [Parameter(ParameterSetName = ParameterSetPath)]
+    [ValidateNotNullOrEmpty]
+    public string? Version { get; set; }
+
+    /// <summary>Module installation scope to return.</summary>
+    [Parameter(ParameterSetName = ParameterSetLocal)]
+    [Parameter(ParameterSetName = ParameterSetPath)]
+    [ValidateSet("CurrentUser", "AllUsers")]
+    public string? Scope { get; set; }
 
     /// <summary>Include modules loaded in the current runspace as inventory evidence.</summary>
     [Parameter]
@@ -77,8 +89,6 @@ public sealed class GetManagedModuleCommand : PSCmdlet
         try
         {
             var inventory = ResolveInventory();
-            inventory.InstalledModules = FilterModules(inventory.InstalledModules ?? Array.Empty<ModuleStateInstalledModuleResult>());
-
             if (ShowSummary.IsPresent)
                 ModuleStateConsoleRenderer.WriteInventory(inventory);
 
@@ -110,33 +120,29 @@ public sealed class GetManagedModuleCommand : PSCmdlet
             : null;
 
         if (string.Equals(ParameterSetName, ParameterSetPath, StringComparison.OrdinalIgnoreCase))
-            return ModuleStateInventoryCommandSupport.CreateInventoryResultFromFile(ResolveFilePath(Path!, nameof(Path)), loadedModules);
+        {
+            var resolvedPath = ResolveExistingPath(Path!, nameof(Path));
+            if (File.Exists(resolvedPath))
+                return ModuleStateInventoryCommandSupport.CreateInventoryResultFromFile(resolvedPath, loadedModules, Name, Version, Scope);
+
+            return ModuleStateInventoryCommandSupport.CreateInventoryResultFromModulePaths(new[] { resolvedPath }, loadedModules, Name, Version, Scope);
+        }
 
         return ModuleStateInventoryCommandSupport.CreateInventoryResultFromModulePaths(
             ModulePath is { Length: > 0 }
                 ? ModulePath
                 : ModuleStateInventoryCommandSupport.ResolveEnvironmentModulePaths(),
-            loadedModules);
+            loadedModules,
+            Name,
+            Version,
+            Scope);
     }
 
-    private ModuleStateInstalledModuleResult[] FilterModules(ModuleStateInstalledModuleResult[] modules)
-    {
-        if (Name.Length == 0)
-            return modules;
-
-        var filters = Name
-            .Select(static name => new WildcardPattern(name, WildcardOptions.IgnoreCase))
-            .ToArray();
-        return modules
-            .Where(module => filters.Any(filter => filter.IsMatch(module.Name)))
-            .ToArray();
-    }
-
-    private string ResolveFilePath(string path, string parameterName)
+    private string ResolveExistingPath(string path, string parameterName)
     {
         var resolved = SessionState.Path.GetUnresolvedProviderPathFromPSPath(path);
-        if (!File.Exists(resolved))
-            throw new FileNotFoundException($"The {parameterName} file was not found.", resolved);
+        if (!File.Exists(resolved) && !Directory.Exists(resolved))
+            throw new FileNotFoundException($"The {parameterName} path was not found.", resolved);
 
         return resolved;
     }

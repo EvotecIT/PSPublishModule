@@ -12,10 +12,21 @@ internal static class ModuleStateInventoryCommandSupport
 {
     internal static ModuleStateInventoryResult CreateInventoryResultFromFile(
         string inventoryPath,
-        IEnumerable<ModuleStateLoadedModuleEvidence>? loadedModules = null)
+        IEnumerable<ModuleStateLoadedModuleEvidence>? loadedModules = null,
+        IEnumerable<string>? names = null,
+        string? version = null,
+        string? scope = null)
     {
         var inventory = new ModuleStateJsonService().LoadInventory(inventoryPath);
         inventory = IncludeLoadedModulesCore(inventory, loadedModules);
+        inventory = ModuleStateInventoryFilter.Apply(inventory, new ModuleStateInventoryRequest(
+            inventory.InstalledModules
+                .Select(static module => module.Path)
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .Select(static path => new ModuleStateModulePath(path!)),
+            names,
+            version,
+            scope));
         return ModuleStateInventoryResultMapper.ToCmdletResult(
             inventory,
             inventoryPath,
@@ -24,15 +35,22 @@ internal static class ModuleStateInventoryCommandSupport
 
     internal static ModuleStateInventoryResult CreateInventoryResultFromModulePaths(
         IEnumerable<string> modulePaths,
-        IEnumerable<ModuleStateLoadedModuleEvidence>? loadedModules = null)
+        IEnumerable<ModuleStateLoadedModuleEvidence>? loadedModules = null,
+        IEnumerable<string>? names = null,
+        string? version = null,
+        string? scope = null)
     {
         var paths = NormalizeModulePaths(modulePaths);
         var request = new ModuleStateInventoryRequest(paths.Select(static path => new ModuleStateModulePath(
             path,
             InferPowerShellEdition(path),
-            InferScope(path))));
+            InferScope(path))),
+            names,
+            version,
+            scope);
         var inventory = new ModuleStateInventoryService().Collect(request);
         inventory = IncludeLoadedModulesCore(inventory, loadedModules);
+        inventory = ModuleStateInventoryFilter.Apply(inventory, request);
         return ModuleStateInventoryResultMapper.ToCmdletResult(inventory, "ModulePath", paths);
     }
 

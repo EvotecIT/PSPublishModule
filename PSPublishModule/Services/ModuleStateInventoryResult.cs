@@ -27,6 +27,11 @@ public sealed class ModuleStateInventoryResult
 public sealed class ModuleStateInstalledModuleResult
 {
     /// <summary>
+    /// Gets or sets the installed resource type.
+    /// </summary>
+    public string Type { get; set; } = "Module";
+
+    /// <summary>
     /// Gets or sets the module name.
     /// </summary>
     public string Name { get; set; } = string.Empty;
@@ -50,6 +55,15 @@ public sealed class ModuleStateInstalledModuleResult
     /// Gets or sets the discovered module path.
     /// </summary>
     public string? Path { get; set; }
+
+    /// <summary>
+    /// Gets or sets the PSResourceGet-compatible installed location.
+    /// </summary>
+    public string? InstalledLocation
+    {
+        get => Path;
+        set => Path = value;
+    }
 
     /// <summary>
     /// Gets or sets the repository that supplied the installed module when known.
