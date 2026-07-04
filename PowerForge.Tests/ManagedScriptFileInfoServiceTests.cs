@@ -194,7 +194,40 @@ Script description after requirements.
         var result = new ManagedScriptFileInfoService().Read(path);
 
         Assert.Equal("Script description after requirements.", result.Description);
-        Assert.Contains("#Requires -Version 6.0", result.ScriptContent, StringComparison.Ordinal);
+        Assert.Contains("#Requires -Version 6.0", result.ScriptHelp, StringComparison.Ordinal);
+        Assert.DoesNotContain("#Requires -Version 6.0", result.ScriptContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Read_SplitsCommaSeparatedListMetadataValues()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        File.WriteAllText(path, """
+<#PSScriptInfo
+
+.VERSION 1.0.0.0
+
+.GUID 11111111-2222-3333-4444-555555555555
+
+.AUTHOR Evotec
+
+.EXTERNALMODULEDEPENDENCIES Microsoft.Graph.Users, Microsoft.Graph.Identity.Governance
+
+.REQUIREDSCRIPTS Initialize-Company,Invoke-Other
+
+#>
+
+<#
+.DESCRIPTION
+Demo script
+#>
+""");
+
+        var result = new ManagedScriptFileInfoService().Read(path);
+
+        Assert.Equal(new[] { "Microsoft.Graph.Users", "Microsoft.Graph.Identity.Governance" }, result.ExternalModuleDependencies);
+        Assert.Equal(new[] { "Initialize-Company", "Invoke-Other" }, result.RequiredScripts);
     }
 
     [Fact]
@@ -658,6 +691,111 @@ function Invoke-Company { "ok" }
     }
 
     [Fact]
+    public void Update_ReplacesModuleRequiresThatAppearInsideFunctionBody()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        File.WriteAllText(path, """
+<#PSScriptInfo
+
+.VERSION 1.0.0.0
+
+.GUID 11111111-2222-3333-4444-555555555555
+
+#>
+
+<#
+.DESCRIPTION
+Script description.
+#>
+
+function Invoke-Company {
+    #Requires -Module Pester
+    "ok"
+}
+""");
+
+        var result = new ManagedScriptFileInfoService().Update(path, new ManagedScriptFileInfo
+        {
+            RequiredModules = [new ManagedScriptRequiredModule { ModuleName = "Az.Accounts" }],
+            RequiredModulesSpecified = true
+        }, removeSignature: false);
+        var text = File.ReadAllText(path);
+
+        Assert.Equal("Az.Accounts", Assert.Single(result.RequiredModules).ModuleName);
+        Assert.Contains("#Requires -Module Az.Accounts", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("#Requires -Module Pester", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Update_KeepsNonModuleRequiresBeforeScriptHelp()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        File.WriteAllText(path, """
+<#PSScriptInfo
+
+.VERSION 1.0.0.0
+
+.GUID 11111111-2222-3333-4444-555555555555
+
+#>
+
+#Requires -Version 6.0
+#Requires -PSEdition Core
+
+<#
+.DESCRIPTION
+Script description.
+#>
+
+function Invoke-Company { "ok" }
+""");
+
+        new ManagedScriptFileInfoService().Update(path, new ManagedScriptFileInfo { Version = "1.2.3" }, removeSignature: false);
+        var text = File.ReadAllText(path);
+
+        Assert.True(text.IndexOf("#Requires -Version 6.0", StringComparison.Ordinal) < text.IndexOf(".DESCRIPTION", StringComparison.Ordinal));
+        Assert.True(text.IndexOf("#Requires -PSEdition Core", StringComparison.Ordinal) < text.IndexOf(".DESCRIPTION", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Update_RefusesSignedScriptUnlessSignatureIsRemoved()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        File.WriteAllText(path, """
+<#PSScriptInfo
+
+.VERSION 1.0.0.0
+
+.GUID 11111111-2222-3333-4444-555555555555
+
+#>
+
+<#
+.DESCRIPTION
+Script description.
+#>
+
+"ok"
+# SIG # Begin signature block
+# signed
+# SIG # End signature block
+""");
+
+        var service = new ManagedScriptFileInfoService();
+
+        Assert.Throws<InvalidOperationException>(() => service.Update(path, new ManagedScriptFileInfo { Version = "1.2.3" }, removeSignature: false));
+
+        var result = service.Update(path, new ManagedScriptFileInfo { Version = "1.2.3" }, removeSignature: true);
+        var text = File.ReadAllText(path);
+
+        Assert.Equal("1.2.3", result.Version);
+        Assert.DoesNotContain("# SIG # Begin signature block", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Update_KeepsScriptHelpSeparatedFromFirstFunction()
     {
         using var directory = new TemporaryDirectory();
@@ -746,6 +884,43 @@ function Invoke-Company { "ok" }
         }));
 
         Assert.Contains("cannot combine RequiredVersion", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Render_RejectsGuidOnlyRequiredModuleHashtable()
+    {
+        var service = new ManagedScriptFileInfoService();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => service.Render(new ManagedScriptFileInfo
+        {
+            Path = "Invoke-Company.ps1",
+            Guid = Guid.Parse("11111111-2222-3333-4444-555555555555"),
+            RequiredModules =
+            [
+                new ManagedScriptRequiredModule
+                {
+                    ModuleName = "Pester",
+                    Guid = "11111111-2222-3333-4444-555555555555"
+                }
+            ]
+        }));
+
+        Assert.Contains("with Guid must include", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Render_RejectsInvalidScriptVersion()
+    {
+        var service = new ManagedScriptFileInfoService();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => service.Render(new ManagedScriptFileInfo
+        {
+            Path = "Invoke-Company.ps1",
+            Version = "banana",
+            Guid = Guid.Parse("11111111-2222-3333-4444-555555555555")
+        }));
+
+        Assert.Contains("not a valid version", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private static IReadOnlyList<int> IndexesOf(string text, string value)

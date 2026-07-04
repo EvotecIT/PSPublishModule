@@ -73,6 +73,7 @@ public sealed class ManagedScriptFileInfoService
         var guidText = GetValue(values, "GUID");
         if (string.IsNullOrWhiteSpace(version))
             throw new InvalidOperationException($"Script '{fullPath}' PSScriptInfo block is missing VERSION.");
+        ValidateScriptVersion(version!);
         if (!Guid.TryParse(guidText, out var guid))
             throw new InvalidOperationException($"Script '{fullPath}' PSScriptInfo block has an invalid GUID.");
 
@@ -155,6 +156,7 @@ public sealed class ManagedScriptFileInfoService
             info.Guid = Guid.NewGuid();
         if (string.IsNullOrWhiteSpace(info.Version))
             info.Version = "1.0.0.0";
+        ValidateScriptVersion(info.Version);
 
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
         File.WriteAllText(path, Render(info, info.ScriptContent));
@@ -178,6 +180,8 @@ public sealed class ManagedScriptFileInfoService
         var body = existing.ScriptContent ?? string.Empty;
         if (removeSignature)
             body = RemoveSignatureBlock(body);
+        else if (ContainsSignatureBlock(body))
+            throw new InvalidOperationException("Script contains an Authenticode signature block. Use RemoveSignature before updating metadata, then re-sign the script.");
         merged.Path = existing.Path;
         merged.ScriptContent = body;
         File.WriteAllText(existing.Path, Render(merged, body));
@@ -194,6 +198,7 @@ public sealed class ManagedScriptFileInfoService
     {
         if (info is null)
             throw new ArgumentNullException(nameof(info));
+        ValidateScriptVersion(DefaultIfBlank(info.Version, "1.0.0.0"));
 
         var builder = new StringBuilder();
         builder.AppendLine("<#PSScriptInfo");
@@ -282,7 +287,7 @@ public sealed class ManagedScriptFileInfoService
             return Array.Empty<string>();
 
         return value!
-            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+            .Split(new[] { ',', ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
             .Select(static entry => entry.Trim())
             .Where(static entry => entry.Length > 0)
             .ToArray();
@@ -312,6 +317,8 @@ public sealed class ManagedScriptFileInfoService
         var remainder = text.Substring(metadataMatch.Length);
         var requiredModules = new List<ManagedScriptRequiredModule>();
         var removeSpans = new List<TextSpan>();
+        var preHelpRequires = new List<string>();
+        var preHelpRequireSpans = new List<TextSpan>();
         var index = 0;
         string? scriptHelp = null;
         string description = string.Empty;
@@ -359,14 +366,25 @@ public sealed class ManagedScriptFileInfoService
                 @"^\s*#Requires\s+-(?<kind>[A-Za-z]+)\s+(?<value>.*?)\s*$",
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             if (match.Success &&
-                (string.Equals(match.Groups["kind"].Value, "Module", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(match.Groups["kind"].Value, "Modules", StringComparison.OrdinalIgnoreCase)))
+                IsModuleRequiresKind(match.Groups["kind"].Value))
             {
                 requiredModules.AddRange(ParseRequiredModuleList(match.Groups["value"].Value));
                 removeSpans.Add(new TextSpan(index, nextIndex - index));
             }
+            else if (match.Success && scriptHelp is null)
+            {
+                preHelpRequires.Add(line);
+                preHelpRequireSpans.Add(new TextSpan(index, nextIndex - index));
+            }
 
             index = nextIndex;
+        }
+
+        CollectActiveModuleRequires(remainder, requiredModules, removeSpans);
+        if (scriptHelp is not null && preHelpRequires.Count > 0)
+        {
+            removeSpans.AddRange(preHelpRequireSpans);
+            scriptHelp = string.Join(Environment.NewLine, preHelpRequires) + Environment.NewLine + Environment.NewLine + scriptHelp;
         }
 
         return new ScriptPrefixParts(
@@ -379,6 +397,35 @@ public sealed class ManagedScriptFileInfoService
     private static bool IsSkippablePrefixComment(string trimmedLine)
         => trimmedLine.StartsWith("#", StringComparison.Ordinal) &&
            !trimmedLine.StartsWith("#Requires", StringComparison.OrdinalIgnoreCase);
+
+    private static void CollectActiveModuleRequires(
+        string text,
+        ICollection<ManagedScriptRequiredModule> requiredModules,
+        ICollection<TextSpan> removeSpans)
+    {
+        var index = 0;
+        while (TryReadLine(text, index, out var line, out var nextIndex))
+        {
+            var match = Regex.Match(
+                line,
+                @"^\s*#Requires\s+-(?<kind>[A-Za-z]+)\s+(?<value>.*?)\s*$",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (match.Success &&
+                IsModuleRequiresKind(match.Groups["kind"].Value) &&
+                !removeSpans.Any(span => span.Overlaps(index, nextIndex - index)))
+            {
+                foreach (var requiredModule in ParseRequiredModuleList(match.Groups["value"].Value))
+                    requiredModules.Add(requiredModule);
+                removeSpans.Add(new TextSpan(index, nextIndex - index));
+            }
+
+            index = nextIndex;
+        }
+    }
+
+    private static bool IsModuleRequiresKind(string kind)
+        => string.Equals(kind, "Module", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(kind, "Modules", StringComparison.OrdinalIgnoreCase);
 
     private static void SkipBlankLines(string text, ref int index)
     {
@@ -573,6 +620,11 @@ public sealed class ManagedScriptFileInfoService
             string.IsNullOrWhiteSpace(module.RequiredVersion) &&
             string.IsNullOrWhiteSpace(module.MaximumVersion))
             return string.Format(CultureInfo.InvariantCulture, "#Requires -Module {0}", module.ModuleName);
+        if (!string.IsNullOrWhiteSpace(module.Guid) &&
+            string.IsNullOrWhiteSpace(module.ModuleVersion) &&
+            string.IsNullOrWhiteSpace(module.RequiredVersion) &&
+            string.IsNullOrWhiteSpace(module.MaximumVersion))
+            throw new InvalidOperationException("Required module entries with Guid must include ModuleVersion, RequiredVersion, or MaximumVersion.");
 
         var values = new List<string> { $"ModuleName = '{EscapeSingleQuoted(module.ModuleName)}'" };
         if (!string.IsNullOrWhiteSpace(module.Guid))
@@ -784,6 +836,15 @@ public sealed class ManagedScriptFileInfoService
         return index < 0 ? text : text.Substring(0, index).TrimEnd() + Environment.NewLine;
     }
 
+    private static bool ContainsSignatureBlock(string text)
+        => text.IndexOf("# SIG # Begin signature block", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    private static void ValidateScriptVersion(string version)
+    {
+        if (!ModuleStateVersion.TryParse(version, out _))
+            throw new InvalidOperationException($"Script version '{version}' is not a valid version.");
+    }
+
     private static ManagedScriptFileInfo Merge(ManagedScriptFileInfo existing, ManagedScriptFileInfo updates)
         => new()
         {
@@ -847,5 +908,8 @@ public sealed class ManagedScriptFileInfoService
         public int Start { get; }
 
         public int Length { get; }
+
+        public bool Overlaps(int start, int length)
+            => Start < start + length && start < Start + Length;
     }
 }
