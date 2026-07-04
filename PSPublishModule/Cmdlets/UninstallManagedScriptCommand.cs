@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Management.Automation;
 using PowerForge;
 
@@ -22,7 +23,7 @@ public sealed class UninstallManagedScriptCommand : PSCmdlet
     public string[] Name { get; set; } = Array.Empty<string>();
 
     /// <summary>Exact installed script version to uninstall. When omitted, any installed version is removed.</summary>
-    [Parameter]
+    [Parameter(ValueFromPipelineByPropertyName = true)]
     [Alias("RequiredVersion")]
     [ValidateNotNullOrEmpty]
     public string? Version { get; set; }
@@ -37,7 +38,7 @@ public sealed class UninstallManagedScriptCommand : PSCmdlet
 
     /// <summary>Explicit script root. When supplied, Scope is treated as Custom.</summary>
     [Parameter(ValueFromPipelineByPropertyName = true)]
-    [Alias("Path")]
+    [Alias("Path", "DestinationPath", "ScriptPath")]
     [ValidateNotNullOrEmpty]
     public string? ScriptRoot { get; set; }
 
@@ -52,7 +53,7 @@ public sealed class UninstallManagedScriptCommand : PSCmdlet
     /// <summary>Uninstalls requested scripts.</summary>
     protected override void ProcessRecord()
     {
-        var scriptRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ScriptRoot);
+        var scriptRoot = ResolveScriptRoot(this, ScriptRoot);
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var service = new ManagedScriptResourceService(logger);
 
@@ -79,5 +80,23 @@ public sealed class UninstallManagedScriptCommand : PSCmdlet
 
             WriteObject(service.Uninstall(request));
         }
+    }
+
+    private static string? ResolveScriptRoot(PSCmdlet cmdlet, string? scriptRootOrPath)
+    {
+        var resolved = ManagedModuleCommandSupport.ResolveProviderPath(cmdlet, scriptRootOrPath);
+        if (string.IsNullOrWhiteSpace(resolved))
+            return resolved;
+
+        if (File.Exists(resolved) ||
+            string.Equals(Path.GetExtension(resolved), ".ps1", StringComparison.OrdinalIgnoreCase))
+        {
+            var directory = Path.GetDirectoryName(resolved);
+            return string.IsNullOrWhiteSpace(directory)
+                ? resolved
+                : directory;
+        }
+
+        return resolved;
     }
 }
