@@ -175,6 +175,17 @@ public sealed class ManagedModuleRepositoryParityCommandTests
     }
 
     [Fact]
+    public void RepositoryApiVersion_preserves_existing_numeric_values()
+    {
+        Assert.Equal(0, (int)RepositoryApiVersion.Auto);
+        Assert.Equal(1, (int)RepositoryApiVersion.V2);
+        Assert.Equal(2, (int)RepositoryApiVersion.V3);
+        Assert.Equal(3, (int)RepositoryApiVersion.ContainerRegistry);
+        Assert.Equal(4, (int)RepositoryApiVersion.Local);
+        Assert.Equal(5, (int)RepositoryApiVersion.NugetServer);
+    }
+
+    [Fact]
     public void RegisterManagedModuleRepository_repository_hashtable_accepts_psresourceget_api_version_spellings()
     {
         using var profileRoot = new TemporaryDirectory();
@@ -220,6 +231,26 @@ public sealed class ManagedModuleRepositoryParityCommandTests
         Assert.Equal(PrivateGalleryBootstrapMode.ExistingSession, result.BootstrapMode);
         Assert.Equal("AzureArtifactsCredentialProvider", result.AuthenticationMode);
         Assert.Equal(50, result.Priority);
+    }
+
+    [Theory]
+    [InlineData("Local")]
+    [InlineData("NugetServer")]
+    public void RegisterManagedModuleRepository_rejects_local_api_versions_for_azure_artifacts_url(string apiVersion)
+    {
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        using var ps = CreatePowerShellWithModuleImported();
+
+        ps.AddCommand("Register-ManagedModuleRepository")
+            .AddParameter("Name", "AzModules")
+            .AddParameter("Uri", "https://pkgs.dev.azure.com/contoso/Platform/_packaging/Modules/nuget/v3/index.json")
+            .AddParameter("ApiVersion", apiVersion)
+            .AddParameter("PassThru");
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("not supported for Azure Artifacts", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(new ModuleRepositoryProfileStore().GetProfiles());
     }
 
     [Fact]

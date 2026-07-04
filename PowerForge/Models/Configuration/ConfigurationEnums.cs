@@ -179,17 +179,17 @@ public enum RequiredModulesSource
 public enum RepositoryApiVersion
 {
     /// <summary>Automatic/default behavior (omit version unless required).</summary>
-    Auto,
-    /// <summary>Local filesystem repository API.</summary>
-    Local,
-    /// <summary>NuGet.Server repository API.</summary>
-    NugetServer,
+    Auto = 0,
     /// <summary>NuGet v2 API.</summary>
-    V2,
+    V2 = 1,
     /// <summary>NuGet v3 API.</summary>
-    V3,
+    V3 = 2,
     /// <summary>OCI/container registry API (Azure Container Registry, Microsoft Artifact Registry).</summary>
-    ContainerRegistry
+    ContainerRegistry = 3,
+    /// <summary>Local filesystem repository API.</summary>
+    Local = 4,
+    /// <summary>NuGet.Server repository API.</summary>
+    NugetServer = 5
 }
 
 /// <summary>

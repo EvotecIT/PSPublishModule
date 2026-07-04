@@ -132,6 +132,9 @@ internal static class ManagedModuleRepositoryProfileFactory
     {
         if (TryParseAzureArtifactsUri(uri, out var organization, out var project, out var feed))
         {
+            if (apiVersion is RepositoryApiVersion.Local or RepositoryApiVersion.NugetServer)
+                throw new NotSupportedException($"Repository API version '{apiVersion}' is not supported for Azure Artifacts repositories. Use Auto, V2, or V3.");
+
             profile = ModuleRepositoryProfileStore.Normalize(new ModuleRepositoryProfile
             {
                 Name = name,
