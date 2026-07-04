@@ -820,9 +820,7 @@ public sealed class ManagedScriptResourceService
         }
 
         var shellEdition = ResolveShellEdition(request.ShellEdition);
-        var folderName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && shellEdition == ManagedModuleShellEdition.Desktop
-            ? "WindowsPowerShell"
-            : "PowerShell";
+        var folderName = ResolveScriptShellFolderName(shellEdition, RuntimeInformation.IsOSPlatform(OSPlatform.Windows));
         var scope = request.Scope;
         var scriptRoot = scope switch
         {
@@ -846,7 +844,7 @@ public sealed class ManagedScriptResourceService
         }
 
         var shellEdition = ResolveShellEdition(request.ShellEdition);
-        var folderName = shellEdition == ManagedModuleShellEdition.Desktop ? "WindowsPowerShell" : "PowerShell";
+        var folderName = ResolveScriptShellFolderName(shellEdition, RuntimeInformation.IsOSPlatform(OSPlatform.Windows));
         var scope = request.Scope;
         var scriptRoot = scope switch
         {
@@ -905,6 +903,11 @@ public sealed class ManagedScriptResourceService
             ? ManagedModuleShellEdition.Desktop
             : ManagedModuleShellEdition.Core;
     }
+
+    internal static string ResolveScriptShellFolderName(ManagedModuleShellEdition shellEdition, bool isWindows)
+        => isWindows && shellEdition == ManagedModuleShellEdition.Desktop
+            ? "WindowsPowerShell"
+            : "PowerShell";
 
     private static string ResolveCurrentUserScriptRoot(string folderName)
     {

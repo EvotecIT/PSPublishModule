@@ -241,6 +241,19 @@ public sealed class UninstallManagedScriptCommandTests
         Assert.False(File.Exists(scriptPath));
     }
 
+    [Theory]
+    [InlineData(ManagedModuleShellEdition.Desktop, true, "WindowsPowerShell")]
+    [InlineData(ManagedModuleShellEdition.Core, true, "PowerShell")]
+    [InlineData(ManagedModuleShellEdition.Desktop, false, "PowerShell")]
+    [InlineData(ManagedModuleShellEdition.Core, false, "PowerShell")]
+    public void Script_root_folder_name_matches_install_semantics(
+        ManagedModuleShellEdition shellEdition,
+        bool isWindows,
+        string expected)
+    {
+        Assert.Equal(expected, ManagedScriptResourceService.ResolveScriptShellFolderName(shellEdition, isWindows));
+    }
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();
