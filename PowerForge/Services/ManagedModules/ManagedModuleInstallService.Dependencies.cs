@@ -204,7 +204,8 @@ public sealed partial class ManagedModuleInstallService
         var dependencyTrustPolicy = ResolveDependencyTrustPolicy(request.TrustPolicy);
         var satisfiedStopwatch = System.Diagnostics.Stopwatch.StartNew();
         ManagedModuleInstallResult satisfiedResult = null!;
-        var isSatisfied = dependencyTrustPolicy is null &&
+        var canUseSatisfiedDependency = request.SaveAsNupkg || dependencyTrustPolicy is null;
+        var isSatisfied = canUseSatisfiedDependency &&
                           TryCreateSatisfiedDependencyResult(request, dependency.Id, range, context, out satisfiedResult);
         satisfiedStopwatch.Stop();
         if (isSatisfied)
@@ -753,11 +754,46 @@ public sealed partial class ManagedModuleInstallService
             if (string.IsNullOrWhiteSpace(dependencyPath))
                 return true;
 
+            if (!SavedDependencyPackageSatisfiesPlanPolicy(request, dependency.Id, savedVersion, dependencyPath!))
+                return true;
+
             if (WouldSavePackageDependenciesCore(request, dependency.Id, savedVersion, moduleRoot, dependencyPath!, visited))
                 return true;
         }
 
         return false;
+    }
+
+    private bool SavedDependencyPackageSatisfiesPlanPolicy(
+        ManagedModuleInstallRequest request,
+        string dependencyId,
+        string version,
+        string packagePath)
+    {
+        try
+        {
+            var metadata = ReadSavedPackageMetadata(dependencyId, version, packagePath);
+            var dependencyTrustPolicy = ResolveDependencyTrustPolicy(request.TrustPolicy);
+            ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, metadata, dependencyTrustPolicy);
+            ThrowIfLicenseAcceptanceRequired(metadata, request);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (InvalidDataException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private static string CreateSavedPackageRepairVisitKey(string packageId, string packagePath)

@@ -117,7 +117,9 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleVersionInfo? versionInfo = null,
         bool wouldRepairDependencies = false)
     {
-        var requiresPackageDownloadBeforeNoOp = !request.SaveAsNupkg && RequiresPackageDownloadBeforeNoOp(request);
+        var requiresPackageDownloadBeforeNoOp = RequiresPackageDownloadBeforeNoOp(request) &&
+                                                (!request.SaveAsNupkg ||
+                                                 !string.Equals(versionInfo?.PackageSource, modulePath, StringComparison.OrdinalIgnoreCase));
         var action = exists
             ? request.Force || requiresPackageDownloadBeforeNoOp ? ManagedModuleInstallPlanAction.Reinstall : ManagedModuleInstallPlanAction.SkipExisting
             : ManagedModuleInstallPlanAction.Install;
@@ -302,7 +304,7 @@ public sealed partial class ManagedModuleInstallService
                 }
             }
 
-            var modulePath = ResolveTargetPath(request, moduleRoot, request.Name, version);
+            var modulePath = ResolveWriteTargetPath(request, moduleRoot, request.Name, version);
 
             var coalescingKey = preResolvedCoalescingKey ?? TryCreateInstallCoalescingKey(request, version, moduleRoot);
             if (preResolvedPendingInstall is not null && coalescingKey is not null)
@@ -403,7 +405,7 @@ public sealed partial class ManagedModuleInstallService
         }
     }
 
-    private static bool TrySelectInstalledNoOpVersion(
+    private bool TrySelectInstalledNoOpVersion(
         ManagedModuleInstallRequest request,
         string moduleRoot,
         ManagedModuleInstallContext? context,
@@ -463,7 +465,7 @@ public sealed partial class ManagedModuleInstallService
         return range.ExactVersion is not null;
     }
 
-    private static bool TrySelectSavedPackageNoOpVersion(
+    private bool TrySelectSavedPackageNoOpVersion(
         ManagedModuleInstallRequest request,
         string moduleRoot,
         out string version)
@@ -474,12 +476,51 @@ public sealed partial class ManagedModuleInstallService
 
         var savedVersion = GetSavedPackageVersions(moduleRoot, request.Name)
             .Where(candidate => AllowsInstalledNoOpVersion(candidate, request))
+            .Where(candidate => SavedPackageSatisfiesNoOpPolicy(request, moduleRoot, candidate))
             .LastOrDefault();
         if (savedVersion is null)
             return false;
 
         version = savedVersion;
         return true;
+    }
+
+    private bool SavedPackageSatisfiesNoOpPolicy(
+        ManagedModuleInstallRequest request,
+        string moduleRoot,
+        string version)
+    {
+        if (!RequiresPackageDownloadBeforeNoOp(request))
+            return true;
+
+        var packagePath = ResolveExistingSavedPackagePath(moduleRoot, request.Name, version);
+        if (string.IsNullOrWhiteSpace(packagePath))
+            return false;
+
+        try
+        {
+            var metadata = ReadSavedPackageMetadata(request, version, packagePath!);
+            var download = CreateDownloadForExistingSavedPackage(request, version, packagePath!, metadata);
+            ManagedModulePackageIntegrity.VerifyDownload(download, request.ExpectedPackageSha256);
+            ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, metadata, request.TrustPolicy);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (InvalidDataException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private static string ResolveNoOpTargetPath(
@@ -1016,6 +1057,11 @@ public sealed partial class ManagedModuleInstallService
         => request.SaveAsNupkg
             ? ResolveSavedPackagePath(moduleRoot, moduleName, version)
             : ResolveInstalledModulePath(moduleRoot, moduleName, version);
+
+    private static string ResolveWriteTargetPath(ManagedModuleInstallRequest request, string moduleRoot, string moduleName, string version)
+        => request.SaveAsNupkg && request.Force
+            ? ResolveExistingSavedPackagePath(moduleRoot, moduleName, version) ?? ResolveTargetPath(request, moduleRoot, moduleName, version)
+            : ResolveTargetPath(request, moduleRoot, moduleName, version);
 
     private static string ResolveSavedPackagePath(string moduleRoot, string packageId, string version)
     {
