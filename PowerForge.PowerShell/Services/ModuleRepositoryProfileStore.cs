@@ -291,7 +291,8 @@ internal sealed class ModuleRepositoryProfileStore
             ? mode
             : provider == PrivateGalleryProvider.JFrog && mode == PrivateGalleryBootstrapMode.JFrogCli
                 ? PrivateGalleryBootstrapMode.JFrogCli
-                : provider == PrivateGalleryProvider.NuGet && mode == PrivateGalleryBootstrapMode.Auto
+                : provider == PrivateGalleryProvider.NuGet &&
+                  (mode == PrivateGalleryBootstrapMode.Auto || mode == PrivateGalleryBootstrapMode.ExistingSession)
                     ? PrivateGalleryBootstrapMode.Auto
                 : mode == PrivateGalleryBootstrapMode.Auto || mode == PrivateGalleryBootstrapMode.ExistingSession
                     ? PrivateGalleryBootstrapMode.CredentialPrompt

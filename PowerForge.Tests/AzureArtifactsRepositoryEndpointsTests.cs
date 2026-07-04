@@ -62,7 +62,6 @@ public sealed class AzureArtifactsRepositoryEndpointsTests
         Assert.Equal("https://pkgs.dev.azure.com/contoso/Platform/_packaging/Modules/nuget/v2", repository.Uri);
     }
 
-    [Fact]
     [Theory]
     [InlineData(RepositoryApiVersion.ContainerRegistry)]
     [InlineData(RepositoryApiVersion.Local)]
