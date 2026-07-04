@@ -94,6 +94,8 @@ public sealed class ManagedModuleUninstallService
         if (plan.Targets.Count == 0)
             return;
 
+        EnsureModuleRootSpecified(plan.ModuleRoot);
+
         if (!plan.AllowLoadedModuleUninstall)
             ThrowIfLoaded(plan.Targets);
 
@@ -473,10 +475,30 @@ public sealed class ManagedModuleUninstallService
             trimmed.StartsWith("<", StringComparison.Ordinal))
         {
             var tokens = trimmed.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
-            if (tokens.Length == 0 ||
-                tokens.Any(static token => !IsValidComparatorToken(token)))
+            if (tokens.Length == 0)
             {
                 throw new ArgumentException($"Invalid version range syntax: '{value}'.", nameof(value));
+            }
+
+            var hasMinimum = false;
+            var hasMaximum = false;
+            foreach (var token in tokens)
+            {
+                if (!TryParseComparatorToken(token, out var comparator))
+                    throw new ArgumentException($"Invalid version range syntax: '{value}'.", nameof(value));
+
+                if (comparator.StartsWith(">", StringComparison.Ordinal))
+                {
+                    if (hasMinimum)
+                        throw new ArgumentException($"Invalid version range syntax: '{value}'.", nameof(value));
+                    hasMinimum = true;
+                }
+                else
+                {
+                    if (hasMaximum)
+                        throw new ArgumentException($"Invalid version range syntax: '{value}'.", nameof(value));
+                    hasMaximum = true;
+                }
             }
         }
         else if (trimmed.Contains(",", StringComparison.Ordinal) &&
@@ -494,18 +516,27 @@ public sealed class ManagedModuleUninstallService
         if (startsBracketed)
         {
             var body = trimmed.Trim('[', ']', '(', ')').Trim();
-            if (body.Count(static character => character == ',') != 1)
+            var commaCount = body.Count(static character => character == ',');
+            if (commaCount > 1 || (commaCount == 0 && body.Length == 0))
                 throw new ArgumentException($"Invalid version range syntax: '{value}'.", nameof(value));
 
-            foreach (var operand in body.Split(new[] { ',' }, StringSplitOptions.None))
+            var operands = commaCount == 0
+                ? new[] { body }
+                : body.Split(new[] { ',' }, StringSplitOptions.None);
+            foreach (var operand in operands)
                 ValidateRangeOperand(value, operand);
         }
     }
 
-    private static bool IsValidComparatorToken(string token)
+    private static bool TryParseComparatorToken(string token, out string comparator)
     {
+        comparator = string.Empty;
         var match = Regex.Match(token, @"^(>=|>|<=|<)([^\s<>=,]+)$", RegexOptions.CultureInvariant);
-        return match.Success && ModuleStateVersion.TryParse(match.Groups[2].Value, out _);
+        if (!match.Success || !ModuleStateVersion.TryParse(match.Groups[2].Value, out _))
+            return false;
+
+        comparator = match.Groups[1].Value;
+        return true;
     }
 
     private static void ValidateRangeOperand(string range, string operand)
@@ -529,6 +560,7 @@ public sealed class ManagedModuleUninstallService
 
     private static void EnsureTargetUnderRoot(string moduleRoot, string modulePath)
     {
+        EnsureModuleRootSpecified(moduleRoot);
         var root = NormalizePath(moduleRoot);
         var target = NormalizePath(modulePath);
         if (string.Equals(root, target, PathStringComparison))
@@ -539,6 +571,12 @@ public sealed class ManagedModuleUninstallService
         {
             throw new InvalidOperationException($"Refusing to remove module path outside module root: {modulePath}");
         }
+    }
+
+    private static void EnsureModuleRootSpecified(string moduleRoot)
+    {
+        if (string.IsNullOrWhiteSpace(moduleRoot))
+            throw new InvalidOperationException("Refusing to remove modules when the module root is empty.");
     }
 
     private static StringComparison PathStringComparison

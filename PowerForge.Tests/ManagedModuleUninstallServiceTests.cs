@@ -77,6 +77,9 @@ public sealed class ManagedModuleUninstallServiceTests
     [InlineData(">=1.0.0 <oops")]
     [InlineData("[oops,2.0.0)")]
     [InlineData("1.0.0,2.0.0")]
+    [InlineData(">=1.0.0 >1.1.0")]
+    [InlineData("<=2.0.0 <3.0.0")]
+    [InlineData("[1.0.0,2.0.0,3.0.0]")]
     public void PlanUninstall_rejects_non_version_range_operands(string versionRange)
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -89,6 +92,21 @@ public sealed class ManagedModuleUninstallServiceTests
 
         Assert.Contains("Invalid version range syntax", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.True(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0")));
+    }
+
+    [Fact]
+    public void PlanUninstall_exact_bracket_range_selects_requested_version()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.1.0");
+        var service = new ManagedModuleUninstallService();
+        var request = CreateRequest(moduleRoot.Path, "Company.Tools");
+        request.Version = "[1.0.0]";
+
+        var plan = service.PlanUninstall(request);
+
+        Assert.Equal("1.0.0", Assert.Single(plan.Targets).Version);
     }
 
     [Fact]
@@ -349,6 +367,35 @@ public sealed class ManagedModuleUninstallServiceTests
 
         Assert.Contains("module root", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "sentinel.txt")));
+    }
+
+    [Fact]
+    public void Uninstall_rejects_empty_module_root_before_target_cleanup()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var targetPath = CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var service = new ManagedModuleUninstallService();
+        var plan = new ManagedModuleUninstallPlan
+        {
+            Name = new[] { "Company.Tools" },
+            ModuleRoot = string.Empty,
+            SkipDependencyCheck = true,
+            Targets = new[]
+            {
+                new ManagedModuleUninstallTarget
+                {
+                    Name = "Company.Tools",
+                    Version = "1.0.0",
+                    ModuleRoot = moduleRoot.Path,
+                    ModulePath = targetPath
+                }
+            }
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Uninstall(plan));
+
+        Assert.Contains("module root is empty", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(targetPath));
     }
 
     [Fact]
