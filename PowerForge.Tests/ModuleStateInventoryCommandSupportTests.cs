@@ -88,6 +88,31 @@ public sealed class ModuleStateInventoryCommandSupportTests
     }
 
     [Fact]
+    public void CreateInventoryResultFromModulePaths_AppliesNameFilterAfterLoadedMerge()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var result = ModuleStateInventoryCommandSupport.CreateInventoryResultFromModulePaths(
+                new[] { root.FullName },
+                new[]
+                {
+                    new ModuleStateLoadedModuleEvidence("Microsoft.Graph.Users", "2.38.0", Path.Combine(root.FullName, "Microsoft.Graph.Users.psm1")),
+                    new ModuleStateLoadedModuleEvidence("Company.Runtime", "1.0.0", Path.Combine(root.FullName, "Company.Runtime.psm1"))
+                },
+                new[] { "Microsoft.Graph.*" });
+
+            var module = Assert.Single(result.InstalledModules);
+            Assert.Equal("Microsoft.Graph.Users", module.Name);
+            Assert.True(module.IsLoaded);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void CreateInventoryResultFromFile_AddsLoadedOnlyModule()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

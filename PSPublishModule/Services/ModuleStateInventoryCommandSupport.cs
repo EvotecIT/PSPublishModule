@@ -50,6 +50,7 @@ internal static class ModuleStateInventoryCommandSupport
             scope);
         var inventory = new ModuleStateInventoryService().Collect(request);
         inventory = IncludeLoadedModulesCore(inventory, loadedModules);
+        inventory = ModuleStateInventoryFilter.Apply(inventory, request);
         return ModuleStateInventoryResultMapper.ToCmdletResult(inventory, "ModulePath", paths);
     }
 
