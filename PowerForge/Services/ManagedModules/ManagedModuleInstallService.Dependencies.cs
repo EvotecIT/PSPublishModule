@@ -210,10 +210,24 @@ public sealed partial class ManagedModuleInstallService
         if (isSatisfied)
         {
             ManagedModuleInstallResult satisfiedInstallResult;
-            if (request.RepairInstalledManifestDependencies && context.IsActive(dependency.Id))
+            if ((request.SaveAsNupkg || request.RepairInstalledManifestDependencies) &&
+                context.IsActive(dependency.Id))
             {
                 satisfiedInstallResult = satisfiedResult;
                 satisfiedInstallResult.Elapsed = satisfiedStopwatch.Elapsed;
+            }
+            else if (request.SaveAsNupkg)
+            {
+                satisfiedInstallResult = await InstallAsync(
+                    CreateDependencyInstallRequest(
+                        request,
+                        dependency.Id,
+                        satisfiedResult.Version,
+                        cacheDirectory,
+                        dependencyTrustPolicy,
+                        range),
+                    context,
+                    cancellationToken).ConfigureAwait(false);
             }
             else if (request.RepairInstalledManifestDependencies)
             {
@@ -383,7 +397,7 @@ public sealed partial class ManagedModuleInstallService
     private static IReadOnlyList<string> GetSavedPackageVersions(
         string moduleRoot,
         string packageId,
-        ManagedModuleInstallContext context)
+        ManagedModuleInstallContext? context = null)
     {
         var versions = GetInstalledVersions(moduleRoot, packageId, context)
             .Concat(EnumerateSavedPackageVersions(moduleRoot, packageId))
@@ -636,6 +650,66 @@ public sealed partial class ManagedModuleInstallService
 
         return false;
     }
+
+    private bool WouldWriteExistingTargetDependencies(
+        ManagedModuleInstallRequest request,
+        string moduleRoot,
+        string version,
+        string modulePath)
+        => request.SaveAsNupkg
+            ? WouldSavePackageDependencies(request, moduleRoot, version, modulePath)
+            : WouldRepairInstalledManifestDependencies(request, moduleRoot, modulePath);
+
+    private bool WouldSavePackageDependencies(
+        ManagedModuleInstallRequest request,
+        string moduleRoot,
+        string version,
+        string packagePath)
+    {
+        if (request.SkipDependencyCheck)
+            return false;
+
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return WouldSavePackageDependenciesCore(request, request.Name, version, moduleRoot, packagePath, visited);
+    }
+
+    private bool WouldSavePackageDependenciesCore(
+        ManagedModuleInstallRequest request,
+        string packageId,
+        string version,
+        string moduleRoot,
+        string packagePath,
+        ISet<string> visited)
+    {
+        if (!visited.Add(CreateSavedPackageRepairVisitKey(packageId, packagePath)))
+            return false;
+
+        var metadata = ReadSavedPackageMetadata(packageId, version, packagePath);
+        foreach (var dependency in SelectDependencies(metadata))
+        {
+            var range = ManagedModuleVersionRange.Parse(dependency.VersionRange);
+            var savedVersion = GetSavedPackageVersions(moduleRoot, dependency.Id)
+                .Where(candidate => AllowsInstalledDependencyVersion(candidate, request, range))
+                .LastOrDefault();
+            if (savedVersion is null)
+                return true;
+
+            var dependencyPath = ResolveSavedPackagePath(moduleRoot, dependency.Id, savedVersion);
+            if (!File.Exists(dependencyPath))
+                return true;
+
+            if (WouldSavePackageDependenciesCore(request, dependency.Id, savedVersion, moduleRoot, dependencyPath, visited))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string CreateSavedPackageRepairVisitKey(string packageId, string packagePath)
+        => string.Join("|", packageId.Trim(), NormalizeSavedPackageRepairPath(packagePath));
+
+    private static string NormalizeSavedPackageRepairPath(string packagePath)
+        => Path.GetFullPath(packagePath.Trim().Trim('"')).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
     private static string CreateManifestRepairVisitKey(string moduleName, string modulePath)
         => string.Join("|", moduleName.Trim(), NormalizeManifestRepairPath(modulePath));

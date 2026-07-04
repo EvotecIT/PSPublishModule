@@ -254,19 +254,64 @@ public sealed partial class ManagedModuleInstallService
         return result;
     }
 
+    private async Task<ManagedModuleInstallResult> CreateAlreadySavedPackageNoOpResultAsync(
+        ManagedModuleInstallRequest request,
+        string version,
+        string moduleRoot,
+        string packagePath,
+        TimeSpan elapsed,
+        TimeSpan versionResolutionElapsed,
+        long repositoryRequestCount,
+        TimeSpan installLockWaitElapsed,
+        ManagedModuleInstallContext context,
+        CancellationToken cancellationToken)
+    {
+        var ownsCache = string.IsNullOrWhiteSpace(request.PackageCacheDirectory);
+        var cacheDirectory = ownsCache
+            ? Path.Combine(Path.GetTempPath(), "PFMM.C", NewShortId())
+            : Path.GetFullPath(request.PackageCacheDirectory!.Trim().Trim('"'));
+
+        try
+        {
+            return await CreateAlreadySavedPackageResultAsync(
+                request,
+                version,
+                moduleRoot,
+                packagePath,
+                elapsed,
+                versionResolutionElapsed,
+                repositoryRequestCount,
+                installLockWaitElapsed,
+                cacheDirectory,
+                context,
+                cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (ownsCache)
+                ManagedModuleExtractedPackageCache.DeleteDirectoryQuietly(cacheDirectory);
+        }
+    }
+
     private ManagedModulePackageMetadata ReadSavedPackageMetadata(
         ManagedModuleInstallRequest request,
+        string version,
+        string packagePath)
+        => ReadSavedPackageMetadata(request.Name, version, packagePath);
+
+    private ManagedModulePackageMetadata ReadSavedPackageMetadata(
+        string packageId,
         string version,
         string packagePath)
     {
         try
         {
             var metadata = _repositoryClient.ReadPackageMetadata(packagePath);
-            if (!metadata.Id.Equals(request.Name.Trim(), StringComparison.OrdinalIgnoreCase) ||
+            if (!metadata.Id.Equals(packageId.Trim(), StringComparison.OrdinalIgnoreCase) ||
                 ManagedModuleVersionComparer.Instance.Compare(metadata.Version, version) != 0)
             {
                 throw new InvalidOperationException(
-                    $"Existing saved package '{packagePath}' does not match '{request.Name}' version '{version}'. Use Force to replace it.");
+                    $"Existing saved package '{packagePath}' does not match '{packageId}' version '{version}'. Use Force to replace it.");
             }
 
             return metadata;
@@ -274,7 +319,7 @@ public sealed partial class ManagedModuleInstallService
         catch (Exception ex) when (ex is not InvalidOperationException)
         {
             throw new InvalidOperationException(
-                $"Existing saved package '{packagePath}' could not be read as '{request.Name}' version '{version}'. Use Force to replace it.",
+                $"Existing saved package '{packagePath}' could not be read as '{packageId}' version '{version}'. Use Force to replace it.",
                 ex);
         }
     }

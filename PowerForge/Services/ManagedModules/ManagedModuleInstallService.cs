@@ -61,14 +61,14 @@ public sealed partial class ManagedModuleInstallService
         if (CanSelectInstalledNoOpBeforeRepositoryResolution(request) &&
             TrySelectInstalledNoOpVersion(request, moduleRoot, context: null, out var installedVersion))
         {
-            var installedModulePath = ResolveInstalledModulePath(moduleRoot, request.Name, installedVersion);
+            var installedModulePath = ResolveNoOpTargetPath(request, moduleRoot, request.Name, installedVersion);
             return CreateInstallPlan(
                 request,
                 installedVersion,
                 moduleRoot,
                 installedModulePath,
                 exists: true,
-                wouldRepairDependencies: WouldRepairInstalledManifestDependencies(request, moduleRoot, installedModulePath));
+                wouldRepairDependencies: WouldWriteExistingTargetDependencies(request, moduleRoot, installedVersion, installedModulePath));
         }
 
         var versionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken, resolveExactMetadata: true).ConfigureAwait(false);
@@ -100,7 +100,8 @@ public sealed partial class ManagedModuleInstallService
             modulePath,
             exists,
             versionInfo,
-            !request.SaveAsNupkg && exists && WouldRepairInstalledManifestDependencies(request, moduleRoot, modulePath));
+            wouldRepairDependencies: exists &&
+                                      WouldWriteExistingTargetDependencies(request, moduleRoot, versionInfo.Version, modulePath));
     }
 
     private static ManagedModuleInstallPlan CreateInstallPlan(
@@ -230,7 +231,7 @@ public sealed partial class ManagedModuleInstallService
                     TrySelectInstalledNoOpVersion(request, moduleRoot, context, out var installedVersion))
                 {
                     installedNoOpVersion = installedVersion;
-                    installedNoOpModulePath = ResolveInstalledModulePath(moduleRoot, request.Name, installedVersion);
+                    installedNoOpModulePath = ResolveNoOpTargetPath(request, moduleRoot, request.Name, installedVersion);
                 }
             }
 
@@ -238,17 +239,29 @@ public sealed partial class ManagedModuleInstallService
             {
                 _logger.Verbose($"Managed module install skipped existing satisfying version: {installedNoOpModulePath}");
                 context.RecordInstalledVersion(moduleRoot, request.Name, installedNoOpVersion);
-                var result = await CreateAlreadyInstalledResultWithManifestDependencyRepairAsync(
-                    request,
-                    installedNoOpVersion,
-                    moduleRoot,
-                    installedNoOpModulePath,
-                    stopwatch.Elapsed,
-                    TimeSpan.Zero,
-                    repositoryRequestCount: 0,
-                    installLockWaitElapsed,
-                    context,
-                    cancellationToken).ConfigureAwait(false);
+                var result = request.SaveAsNupkg
+                    ? await CreateAlreadySavedPackageNoOpResultAsync(
+                        request,
+                        installedNoOpVersion,
+                        moduleRoot,
+                        installedNoOpModulePath,
+                        stopwatch.Elapsed,
+                        TimeSpan.Zero,
+                        repositoryRequestCount: 0,
+                        installLockWaitElapsed,
+                        context,
+                        cancellationToken).ConfigureAwait(false)
+                    : await CreateAlreadyInstalledResultWithManifestDependencyRepairAsync(
+                        request,
+                        installedNoOpVersion,
+                        moduleRoot,
+                        installedNoOpModulePath,
+                        stopwatch.Elapsed,
+                        TimeSpan.Zero,
+                        repositoryRequestCount: 0,
+                        installLockWaitElapsed,
+                        context,
+                        cancellationToken).ConfigureAwait(false);
                 return CompletePreResolvedInstall(result);
             }
 
@@ -394,7 +407,7 @@ public sealed partial class ManagedModuleInstallService
     {
         version = string.Empty;
         if (request.SaveAsNupkg)
-            return false;
+            return TrySelectSavedPackageNoOpVersion(request, moduleRoot, out version);
         if (request.Force)
             return false;
         if (RequiresPackageDownloadBeforeNoOp(request))
@@ -445,6 +458,37 @@ public sealed partial class ManagedModuleInstallService
         var range = ResolveVersionRange(request.VersionPolicy, request.MinimumVersion, request.MaximumVersion);
         return range.ExactVersion is not null;
     }
+
+    private static bool TrySelectSavedPackageNoOpVersion(
+        ManagedModuleInstallRequest request,
+        string moduleRoot,
+        out string version)
+    {
+        version = string.Empty;
+        if (request.Force)
+            return false;
+        if (RequiresPackageDownloadBeforeNoOp(request))
+            return false;
+        if (string.IsNullOrWhiteSpace(request.Version))
+            return false;
+
+        var requestedVersion = request.Version!.Trim();
+        var packagePath = ResolveSavedPackagePath(moduleRoot, request.Name, requestedVersion);
+        if (!File.Exists(packagePath))
+            return false;
+
+        version = requestedVersion;
+        return true;
+    }
+
+    private static string ResolveNoOpTargetPath(
+        ManagedModuleInstallRequest request,
+        string moduleRoot,
+        string name,
+        string version)
+        => request.SaveAsNupkg
+            ? ResolveTargetPath(request, moduleRoot, name, version)
+            : ResolveInstalledModulePath(moduleRoot, name, version);
 
     private static bool AllowsInstalledNoOpVersion(string version, ManagedModuleInstallRequest request)
     {
