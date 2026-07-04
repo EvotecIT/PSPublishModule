@@ -182,7 +182,7 @@ public sealed class ManagedScriptResourceService
             extractionStopwatch.Stop();
 
             Directory.CreateDirectory(destinationPath);
-            File.Copy(stagedScriptPath, scriptPath, overwrite: request.Force);
+            ReplaceScriptFile(stagedScriptPath, scriptPath, request.Force);
             scriptInfo.Path = scriptPath;
             stopwatch.Stop();
 
@@ -393,10 +393,7 @@ public sealed class ManagedScriptResourceService
     }
 
     private static bool HasConstrainedVersionRequest(ManagedScriptSaveRequest request)
-        => !string.IsNullOrWhiteSpace(request.Version) ||
-           !string.IsNullOrWhiteSpace(request.MinimumVersion) ||
-           !string.IsNullOrWhiteSpace(request.MaximumVersion) ||
-           !string.IsNullOrWhiteSpace(request.VersionPolicy);
+        => !string.IsNullOrWhiteSpace(request.Version);
 
     private static bool IsExistingVersionSatisfied(ManagedScriptSaveRequest request, string existingVersion)
     {
@@ -423,7 +420,14 @@ public sealed class ManagedScriptResourceService
 
         try
         {
-            return _scriptFileInfoService.Read(scriptPath).Version;
+            var version = _scriptFileInfoService.Read(scriptPath).Version;
+            return string.IsNullOrWhiteSpace(version)
+                ? null
+                : ManagedModulePackageIdentity.RequireSafeVersion(version, nameof(version));
+        }
+        catch (ArgumentException)
+        {
+            throw;
         }
         catch
         {
@@ -500,9 +504,52 @@ public sealed class ManagedScriptResourceService
     }
 
     private static ManagedModuleVersionRange ResolveVersionRange(string? versionPolicy, string? minimumVersion, string? maximumVersion)
-        => string.IsNullOrWhiteSpace(versionPolicy)
+    {
+        var range = string.IsNullOrWhiteSpace(versionPolicy)
             ? ManagedModuleVersionRange.FromBounds(minimumVersion, maximumVersion)
             : ManagedModuleVersionRange.Parse(versionPolicy);
+        ValidateVersionRangeVersions(range);
+        return range;
+    }
+
+    private static void ValidateVersionRangeVersions(ManagedModuleVersionRange range)
+    {
+        if (!string.IsNullOrWhiteSpace(range.ExactVersion))
+            _ = ManagedModulePackageIdentity.RequireSafeVersion(range.ExactVersion!, nameof(range.ExactVersion));
+        if (!string.IsNullOrWhiteSpace(range.MinimumVersion))
+            _ = ManagedModulePackageIdentity.RequireSafeVersion(range.MinimumVersion!, nameof(range.MinimumVersion));
+        if (!string.IsNullOrWhiteSpace(range.MaximumVersion))
+            _ = ManagedModulePackageIdentity.RequireSafeVersion(range.MaximumVersion!, nameof(range.MaximumVersion));
+    }
+
+    private static void ReplaceScriptFile(string stagedScriptPath, string scriptPath, bool force)
+    {
+        var destinationDirectory = Path.GetDirectoryName(scriptPath);
+        if (string.IsNullOrWhiteSpace(destinationDirectory))
+            throw new InvalidOperationException($"Unable to resolve destination directory for script '{scriptPath}'.");
+
+        var tempPath = Path.Combine(
+            destinationDirectory,
+            "." + Path.GetFileName(scriptPath) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+        var backupPath = tempPath + ".backup";
+        try
+        {
+            File.Copy(stagedScriptPath, tempPath, overwrite: false);
+            if (force && File.Exists(scriptPath))
+            {
+                File.Replace(tempPath, scriptPath, backupPath, ignoreMetadataErrors: true);
+                DeleteFileQuietly(backupPath);
+                return;
+            }
+
+            File.Move(tempPath, scriptPath);
+        }
+        finally
+        {
+            DeleteFileQuietly(tempPath);
+            DeleteFileQuietly(backupPath);
+        }
+    }
 
     private static bool RequiresExactVersionNormalization(string version)
     {
@@ -567,6 +614,20 @@ public sealed class ManagedScriptResourceService
 
         if (!string.IsNullOrWhiteSpace(version))
             _ = ManagedModulePackageIdentity.RequireSafeVersion(version!, nameof(version));
+        _ = ResolveVersionRange(versionPolicy, minimumVersion, maximumVersion);
+    }
+
+    private static void DeleteFileQuietly(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch
+        {
+            // best effort cleanup
+        }
     }
 
     private static void DeleteDirectoryQuietly(string path)
