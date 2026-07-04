@@ -23,6 +23,8 @@ public sealed class GetManagedModuleCommandTests
         Assert.Equal("Company.Tools", result.Name);
         Assert.Equal("1.2.0", result.Version);
         Assert.Equal(Path.Combine(moduleRoot.Path, "Company.Tools", "1.2.0"), result.Path);
+        Assert.Equal("Module", result.Type);
+        Assert.Equal(result.Path, result.InstalledLocation);
     }
 
     [Fact]
@@ -44,6 +46,87 @@ public sealed class GetManagedModuleCommandTests
         var result = Assert.Single(inventory.InstalledModules);
         Assert.Equal("Company.Tools", result.Name);
         Assert.Equal(moduleRoot.Path, Assert.Single(inventory.ModulePaths));
+    }
+
+    [Fact]
+    public void GetManagedModule_PathDirectoryScansInstalledModules()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.2.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Get-ManagedModule")
+            .AddParameter("Path", moduleRoot.Path)
+            .AddParameter("Name", "Company.Tools");
+
+        var result = Assert.IsType<ModuleStateInstalledModuleResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal("Company.Tools", result.Name);
+        Assert.Equal(Path.Combine(moduleRoot.Path, "Company.Tools", "1.2.0"), result.InstalledLocation);
+    }
+
+    [Fact]
+    public void GetManagedModule_PathFileStillReadsInventoryJson()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var inventoryPath = Path.Combine(moduleRoot.Path, "inventory.json");
+        File.WriteAllText(inventoryPath, """{ "installedModules": [ { "name": "Company.Json", "version": "1.0.0", "scope": "CurrentUser" } ] }""");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Get-ManagedModule")
+            .AddParameter("Path", inventoryPath);
+
+        var result = Assert.IsType<ModuleStateInstalledModuleResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal("Company.Json", result.Name);
+    }
+
+    [Fact]
+    public void GetManagedModule_VersionUsesExactMatchForPlainVersion()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.2.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Get-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Version", "1.0");
+
+        var result = Assert.IsType<ModuleStateInstalledModuleResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal("1.0.0", result.Version);
+    }
+
+    [Fact]
+    public void GetManagedModule_ScopeFiltersInventoryRows()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var inventoryPath = Path.Combine(moduleRoot.Path, "inventory.json");
+        File.WriteAllText(inventoryPath, """
+{
+  "installedModules": [
+    { "name": "Company.Tools", "version": "1.0.0", "scope": "CurrentUser" },
+    { "name": "Company.Tools", "version": "2.0.0", "scope": "AllUsers" }
+  ]
+}
+""");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Get-ManagedModule")
+            .AddParameter("Path", inventoryPath)
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Scope", "AllUsers");
+
+        var result = Assert.IsType<ModuleStateInstalledModuleResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal("2.0.0", result.Version);
+        Assert.Equal("AllUsers", result.Scope);
     }
 
     private static void CreateInstalledModule(string moduleRoot, string name, string version)
