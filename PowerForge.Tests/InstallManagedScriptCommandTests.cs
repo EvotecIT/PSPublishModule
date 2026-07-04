@@ -223,6 +223,25 @@ public sealed class InstallManagedScriptCommandTests
     }
 
     [Fact]
+    public void InstallManagedScript_rejects_incomplete_existing_metadata_before_fast_skip()
+    {
+        using var feed = new TemporaryDirectory();
+        using var scriptRoot = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(scriptRoot.Path, "Invoke-CompanyTask.ps1"), CreateScriptWithMinimalMetadata("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ScriptRoot", scriptRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0");
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("metadata is incomplete", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void InstallManagedScript_does_not_skip_existing_when_repository_trust_is_rejected()
     {
         using var feed = new TemporaryDirectory();
@@ -426,6 +445,16 @@ public sealed class InstallManagedScriptCommandTests
            .DESCRIPTION
            Test script.
            #>
+           Write-Output 'ok'
+           """;
+
+    private static string CreateScriptWithMinimalMetadata(string version)
+        => $$"""
+           <#PSScriptInfo
+           .VERSION {{version}}
+           .GUID 00000000-0000-0000-0000-000000000001
+           #>
+
            Write-Output 'ok'
            """;
 
