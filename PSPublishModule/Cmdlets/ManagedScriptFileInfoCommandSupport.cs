@@ -25,7 +25,12 @@ internal static class ManagedScriptFileInfoCommandSupport
         string? licenseUri,
         string? iconUri,
         string? releaseNotes,
-        string? privateData)
+        string? privateData,
+        bool requiredModulesSpecified = false,
+        bool externalModuleDependenciesSpecified = false,
+        bool requiredScriptsSpecified = false,
+        bool externalScriptDependenciesSpecified = false,
+        bool tagsSpecified = false)
         => new()
         {
             Path = path,
@@ -36,10 +41,15 @@ internal static class ManagedScriptFileInfoCommandSupport
             CompanyName = companyName,
             Copyright = copyright,
             RequiredModules = ConvertRequiredModules(requiredModules),
+            RequiredModulesSpecified = requiredModulesSpecified,
             ExternalModuleDependencies = externalModuleDependencies ?? Array.Empty<string>(),
+            ExternalModuleDependenciesSpecified = externalModuleDependenciesSpecified,
             RequiredScripts = requiredScripts ?? Array.Empty<string>(),
+            RequiredScriptsSpecified = requiredScriptsSpecified,
             ExternalScriptDependencies = externalScriptDependencies ?? Array.Empty<string>(),
+            ExternalScriptDependenciesSpecified = externalScriptDependenciesSpecified,
             Tags = tags ?? Array.Empty<string>(),
+            TagsSpecified = tagsSpecified,
             ProjectUri = projectUri,
             LicenseUri = licenseUri,
             IconUri = iconUri,

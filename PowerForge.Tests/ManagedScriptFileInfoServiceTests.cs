@@ -167,6 +167,69 @@ Function description.
     }
 
     [Fact]
+    public void Read_SkipsNonModuleRequiresBeforeScriptHelp()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        File.WriteAllText(path, """
+<#PSScriptInfo
+
+.VERSION 1.0.0.0
+
+.GUID 11111111-2222-3333-4444-555555555555
+
+#>
+
+#Requires -Version 6.0
+#Requires -RunAsAdministrator
+
+<#
+.DESCRIPTION
+Script description after requirements.
+#>
+
+"ok"
+""");
+
+        var result = new ManagedScriptFileInfoService().Read(path);
+
+        Assert.Equal("Script description after requirements.", result.Description);
+        Assert.Contains("#Requires -Version 6.0", result.ScriptContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Read_PreservesDottedLinesInsideScriptDescription()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        File.WriteAllText(path, """
+<#PSScriptInfo
+
+.VERSION 1.0.0.0
+
+.GUID 11111111-2222-3333-4444-555555555555
+
+#>
+
+<#
+.DESCRIPTION
+First line.
+.NET support added.
+Final line.
+
+.EXAMPLE
+Invoke-Company
+#>
+""");
+
+        var result = new ManagedScriptFileInfoService().Read(path);
+
+        Assert.Contains(".NET support added.", result.Description, StringComparison.Ordinal);
+        Assert.Contains("Final line.", result.Description, StringComparison.Ordinal);
+        Assert.DoesNotContain(".EXAMPLE", result.Description, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Read_PreservesDottedLinesInsideMultilineMetadataValues()
     {
         using var directory = new TemporaryDirectory();
@@ -226,6 +289,60 @@ Demo script
     }
 
     [Fact]
+    public void Read_SplitsCommaSeparatedRequiresModuleNames()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        File.WriteAllText(path, """
+<#PSScriptInfo
+
+.VERSION 1.0.0.0
+
+.GUID 11111111-2222-3333-4444-555555555555
+
+#>
+
+#Requires -Modules AzureRM.Netcore, PowerShellGet
+""");
+
+        var modules = new ManagedScriptFileInfoService().Read(path).RequiredModules;
+
+        Assert.Equal(new[] { "AzureRM.Netcore", "PowerShellGet" }, modules.Select(static module => module.ModuleName));
+    }
+
+    [Fact]
+    public void Read_IgnoresCommentedRequiresExamples()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        File.WriteAllText(path, """
+<#PSScriptInfo
+
+.VERSION 1.0.0.0
+
+.GUID 11111111-2222-3333-4444-555555555555
+
+.RELEASENOTES
+Example:
+#Requires -Module Pester
+
+#>
+
+<#
+.DESCRIPTION
+Demo script.
+
+.EXAMPLE
+#Requires -Module Az.Accounts
+#>
+""");
+
+        var result = new ManagedScriptFileInfoService().Read(path);
+
+        Assert.Empty(result.RequiredModules);
+    }
+
+    [Fact]
     public void Test_ReturnsFalseForScriptWithoutMetadata()
     {
         using var directory = new TemporaryDirectory();
@@ -263,6 +380,97 @@ Demo script
         Assert.Equal("After description", result.Description);
         Assert.Contains("\"body\"", text, StringComparison.Ordinal);
         Assert.Contains(".TAGS updated", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Update_PreservesFunctionHelpWhenScriptHelpIsAbsent()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        File.WriteAllText(path, """
+<#PSScriptInfo
+
+.VERSION 1.0.0.0
+
+.GUID 11111111-2222-3333-4444-555555555555
+
+#>
+
+function Invoke-Company {
+<#
+.DESCRIPTION
+Function description.
+#>
+}
+""");
+
+        new ManagedScriptFileInfoService().Update(path, new ManagedScriptFileInfo { Version = "1.2.3" }, removeSignature: false);
+        var text = File.ReadAllText(path);
+
+        Assert.Contains("Function description.", text, StringComparison.Ordinal);
+        Assert.Contains("function Invoke-Company", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Update_PreservesExistingScriptHelpSections()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        File.WriteAllText(path, """
+<#PSScriptInfo
+
+.VERSION 1.0.0.0
+
+.GUID 11111111-2222-3333-4444-555555555555
+
+#>
+
+<#
+.DESCRIPTION
+Script description.
+
+.PARAMETER Name
+Company name.
+
+.EXAMPLE
+Invoke-Company -Name Evotec
+#>
+
+param([string] $Name)
+""");
+
+        new ManagedScriptFileInfoService().Update(path, new ManagedScriptFileInfo { Version = "1.2.3" }, removeSignature: false);
+        var text = File.ReadAllText(path);
+
+        Assert.Contains(".PARAMETER Name", text, StringComparison.Ordinal);
+        Assert.Contains("Company name.", text, StringComparison.Ordinal);
+        Assert.Contains(".EXAMPLE", text, StringComparison.Ordinal);
+        Assert.Contains("Invoke-Company -Name Evotec", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Update_CanClearListMetadataWhenExplicitlySpecified()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        var service = new ManagedScriptFileInfoService();
+        service.Create(new ManagedScriptFileInfo
+        {
+            Path = path,
+            Tags = new[] { "company", "report" },
+            RequiredModules = [new ManagedScriptRequiredModule { ModuleName = "Pester" }]
+        }, overwrite: false);
+
+        var result = service.Update(path, new ManagedScriptFileInfo
+        {
+            Tags = Array.Empty<string>(),
+            TagsSpecified = true,
+            RequiredModules = Array.Empty<ManagedScriptRequiredModule>(),
+            RequiredModulesSpecified = true
+        }, removeSignature: false);
+
+        Assert.Empty(result.Tags);
+        Assert.Empty(result.RequiredModules);
     }
 
     [Fact]

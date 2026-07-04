@@ -112,7 +112,12 @@ public sealed class UpdateManagedScriptFileInfoCommand : PSCmdlet
                 LicenseUri,
                 IconUri,
                 ReleaseNotes,
-                PrivateData);
+                PrivateData,
+                MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModules)),
+                MyInvocation.BoundParameters.ContainsKey(nameof(ExternalModuleDependencies)),
+                MyInvocation.BoundParameters.ContainsKey(nameof(RequiredScripts)),
+                MyInvocation.BoundParameters.ContainsKey(nameof(ExternalScriptDependencies)),
+                MyInvocation.BoundParameters.ContainsKey(nameof(Tags)));
 
             _ = new ManagedScriptFileInfoService().Update(resolvedPath, updates, RemoveSignature.IsPresent);
         }

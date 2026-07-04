@@ -29,17 +29,30 @@ public sealed class ManagedScriptFileInfoService
 
     private static readonly string MetadataKeyPattern = string.Join("|", MetadataKeys.Select(Regex.Escape));
 
+    private static readonly string[] CommentHelpKeys =
+    [
+        "SYNOPSIS",
+        "DESCRIPTION",
+        "PARAMETER",
+        "EXAMPLE",
+        "INPUTS",
+        "OUTPUTS",
+        "NOTES",
+        "LINK",
+        "COMPONENT",
+        "ROLE",
+        "FUNCTIONALITY",
+        "FORWARDHELPTARGETNAME",
+        "FORWARDHELPCATEGORY",
+        "REMOTEHELPRUNSPACE",
+        "EXTERNALHELP"
+    ];
+
+    private static readonly string CommentHelpKeyPattern = string.Join("|", CommentHelpKeys.Select(Regex.Escape));
+
     private static readonly Regex PSScriptInfoRegex = new(
         @"^\s*<#PSScriptInfo\s*(?<body>.*?)#>\s*",
         RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant);
-
-    private static readonly Regex DescriptionRegex = new(
-        @"<#\s*(?<body>.*?\.DESCRIPTION\s*(?<description>.*?))#>",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant);
-
-    private static readonly Regex RequiresModuleRegex = new(
-        @"^\s*#Requires\s+-Modules?\s+(?<value>.+?)\s*$",
-        RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.CultureInvariant);
 
     /// <summary>
     /// Reads script metadata from a local <c>.ps1</c> file.
@@ -55,6 +68,7 @@ public sealed class ManagedScriptFileInfoService
             throw new InvalidOperationException($"Script '{fullPath}' does not contain a PSScriptInfo metadata block.");
 
         var values = ParseMetadata(match.Groups["body"].Value);
+        var prefix = AnalyzeScriptPrefix(text, match);
         var version = GetValue(values, "VERSION");
         var guidText = GetValue(values, "GUID");
         if (string.IsNullOrWhiteSpace(version))
@@ -80,9 +94,11 @@ public sealed class ManagedScriptFileInfoService
             ExternalScriptDependencies = SplitWords(GetValue(values, "EXTERNALSCRIPTDEPENDENCIES")),
             ReleaseNotes = GetValue(values, "RELEASENOTES"),
             PrivateData = GetValue(values, "PRIVATEDATA"),
-            Description = ReadDescription(text, match),
-            RequiredModules = ReadRequiredModules(text),
-            ScriptContent = RemoveMetadataPrefix(text, match)
+            Description = prefix.Description,
+            RequiredModules = prefix.RequiredModules,
+            RequiredModulesSpecified = true,
+            ScriptHelp = prefix.ScriptHelp,
+            ScriptContent = prefix.ScriptContent
         };
     }
 
@@ -202,13 +218,7 @@ public sealed class ManagedScriptFileInfoService
         if (info.RequiredModules.Count > 0)
             builder.AppendLine();
 
-        builder.AppendLine("<#");
-        builder.AppendLine();
-        builder.AppendLine(".DESCRIPTION");
-        builder.AppendLine(DefaultIfBlank(info.Description, string.Empty));
-        builder.AppendLine();
-        builder.AppendLine("#>");
-        builder.AppendLine();
+        builder.Append(RenderScriptHelp(info));
 
         if (!string.IsNullOrEmpty(scriptContent))
             builder.Append(scriptContent!.TrimStart('\r', '\n'));
@@ -294,52 +304,170 @@ public sealed class ManagedScriptFileInfoService
         builder.AppendLine();
     }
 
-    private static string ReadDescription(string text, Match metadataMatch)
+    private static ScriptPrefixParts AnalyzeScriptPrefix(string text, Match metadataMatch)
     {
-        var scriptHelpText = text.Substring(metadataMatch.Length);
-        while (true)
+        var remainder = text.Substring(metadataMatch.Length);
+        var requiredModules = new List<ManagedScriptRequiredModule>();
+        var removeSpans = new List<TextSpan>();
+        var index = 0;
+
+        SkipBlankLines(remainder, ref index);
+        while (TryReadLine(remainder, index, out var line, out var nextIndex))
         {
-            var previous = scriptHelpText;
-            scriptHelpText = RequiresModuleRegex.Replace(scriptHelpText, string.Empty, 1).TrimStart('\r', '\n', ' ', '\t');
-            if (string.Equals(previous, scriptHelpText, StringComparison.Ordinal))
+            var trimmed = line.Trim();
+            if (trimmed.Length == 0)
+            {
+                index = nextIndex;
+                continue;
+            }
+
+            if (!trimmed.StartsWith("#Requires", StringComparison.OrdinalIgnoreCase))
                 break;
+
+            var match = Regex.Match(
+                line,
+                @"^\s*#Requires\s+-(?<kind>[A-Za-z]+)\s+(?<value>.*?)\s*$",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (match.Success &&
+                (string.Equals(match.Groups["kind"].Value, "Module", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(match.Groups["kind"].Value, "Modules", StringComparison.OrdinalIgnoreCase)))
+            {
+                requiredModules.AddRange(ParseRequiredModuleList(match.Groups["value"].Value));
+                removeSpans.Add(new TextSpan(index, nextIndex - index));
+            }
+
+            index = nextIndex;
+            SkipBlankLines(remainder, ref index);
         }
 
-        var match = Regex.Match(
-            scriptHelpText,
-            @"^\s*<#\s*(?<body>.*?\.DESCRIPTION\s*(?<description>.*?))#>",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant);
-        if (!match.Success)
-            return string.Empty;
+        var helpStart = index;
+        SkipBlankLines(remainder, ref helpStart);
+        var scriptHelp = TryReadCommentBlock(remainder, helpStart, out var helpEnd) &&
+                         ReadDescriptionFromHelp(remainder.Substring(helpStart, helpEnd - helpStart)) is not null
+            ? remainder.Substring(helpStart, helpEnd - helpStart)
+            : null;
+        if (scriptHelp is not null)
+            removeSpans.Add(new TextSpan(helpStart, helpEnd - helpStart));
 
-        return NormalizeDescription(match.Groups["description"].Value);
+        var description = scriptHelp is null
+            ? string.Empty
+            : ReadDescriptionFromHelp(scriptHelp) ?? string.Empty;
+        return new ScriptPrefixParts(
+            requiredModules,
+            scriptHelp,
+            description,
+            RemoveSpans(remainder, removeSpans).TrimStart('\r', '\n'));
     }
 
-    private static string NormalizeDescription(string value)
+    private static void SkipBlankLines(string text, ref int index)
     {
-        var index = value.IndexOf("\n.", StringComparison.Ordinal);
-        if (index >= 0)
-            value = value.Substring(0, index);
-        return value.Replace("\r\n", "\n").Trim('\n', '\r', ' ', '\t');
+        while (TryReadLine(text, index, out var line, out var nextIndex) &&
+               string.IsNullOrWhiteSpace(line))
+        {
+            index = nextIndex;
+        }
     }
 
-    private static IReadOnlyList<ManagedScriptRequiredModule> ReadRequiredModules(string text)
+    private static bool TryReadLine(string text, int index, out string line, out int nextIndex)
+    {
+        line = string.Empty;
+        nextIndex = index;
+        if (index >= text.Length)
+            return false;
+
+        var newlineIndex = text.IndexOf('\n', index);
+        if (newlineIndex < 0)
+        {
+            line = text.Substring(index).TrimEnd('\r');
+            nextIndex = text.Length;
+            return true;
+        }
+
+        line = text.Substring(index, newlineIndex - index).TrimEnd('\r');
+        nextIndex = newlineIndex + 1;
+        return true;
+    }
+
+    private static bool TryReadCommentBlock(string text, int index, out int endIndex)
+    {
+        endIndex = index;
+        if (index >= text.Length || !text.Substring(index).StartsWith("<#", StringComparison.Ordinal))
+            return false;
+
+        var closeIndex = text.IndexOf("#>", index + 2, StringComparison.Ordinal);
+        if (closeIndex < 0)
+            return false;
+
+        endIndex = closeIndex + 2;
+        while (endIndex < text.Length && (text[endIndex] == '\r' || text[endIndex] == '\n'))
+            endIndex++;
+        return true;
+    }
+
+    private static string? ReadDescriptionFromHelp(string helpBlock)
+    {
+        var match = Regex.Match(
+            helpBlock,
+            $@"(?ms)^\s*\.DESCRIPTION\b\s*(?<description>.*?)(?=^\s*\.(?:{CommentHelpKeyPattern})\b\s*|\s*#>\s*\z)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success
+            ? NormalizeBlockValue(match.Groups["description"].Value)
+            : null;
+    }
+
+    private static IReadOnlyList<ManagedScriptRequiredModule> ParseRequiredModuleList(string value)
     {
         var modules = new List<ManagedScriptRequiredModule>();
-        foreach (Match match in RequiresModuleRegex.Matches(text))
+        foreach (var entry in SplitTopLevelComma(value))
         {
-            var value = match.Groups["value"].Value.Trim();
-            if (value.StartsWith("@{", StringComparison.Ordinal))
-            {
-                modules.Add(ParseRequiredModuleHashtable(value));
-            }
+            var trimmed = entry.Trim();
+            if (trimmed.Length == 0)
+                continue;
+
+            if (trimmed.StartsWith("@{", StringComparison.Ordinal))
+                modules.Add(ParseRequiredModuleHashtable(trimmed));
             else
-            {
-                modules.Add(new ManagedScriptRequiredModule { ModuleName = value.Trim('\'', '"') });
-            }
+                modules.Add(new ManagedScriptRequiredModule { ModuleName = trimmed.Trim('\'', '"') });
         }
 
         return modules;
+    }
+
+    private static IReadOnlyList<string> SplitTopLevelComma(string value)
+    {
+        var values = new List<string>();
+        var start = 0;
+        var braceDepth = 0;
+        var quote = '\0';
+        for (var i = 0; i < value.Length; i++)
+        {
+            var character = value[i];
+            if (quote != '\0')
+            {
+                if (character == quote)
+                    quote = '\0';
+                continue;
+            }
+
+            if (character == '\'' || character == '"')
+            {
+                quote = character;
+                continue;
+            }
+
+            if (character == '{')
+                braceDepth++;
+            else if (character == '}' && braceDepth > 0)
+                braceDepth--;
+            else if (character == ',' && braceDepth == 0)
+            {
+                values.Add(value.Substring(start, i - start));
+                start = i + 1;
+            }
+        }
+
+        values.Add(value.Substring(start));
+        return values;
     }
 
     private static ManagedScriptRequiredModule ParseRequiredModuleHashtable(string value)
@@ -397,12 +525,84 @@ public sealed class ManagedScriptFileInfoService
     private static string EscapeSingleQuoted(string value)
         => value.Replace("'", "''");
 
-    private static string RemoveMetadataPrefix(string text, Match metadataMatch)
+    private static string RenderScriptHelp(ManagedScriptFileInfo info)
     {
-        var remainder = text.Substring(metadataMatch.Length);
-        remainder = RequiresModuleRegex.Replace(remainder, string.Empty);
-        remainder = DescriptionRegex.Replace(remainder, string.Empty, 1);
-        return remainder.TrimStart('\r', '\n');
+        if (!string.IsNullOrWhiteSpace(info.ScriptHelp))
+            return UpdateDescriptionInHelp(info.ScriptHelp!, info.Description);
+
+        var builder = new StringBuilder();
+        builder.AppendLine("<#");
+        builder.AppendLine();
+        builder.AppendLine(".DESCRIPTION");
+        builder.AppendLine(DefaultIfBlank(info.Description, string.Empty));
+        builder.AppendLine();
+        builder.AppendLine("#>");
+        builder.AppendLine();
+        return builder.ToString();
+    }
+
+    private static string UpdateDescriptionInHelp(string helpBlock, string? description)
+    {
+        var existingDescription = ReadDescriptionFromHelp(helpBlock);
+        var normalizedDescription = NormalizeBlockValue(description ?? string.Empty);
+        if (string.Equals(existingDescription, normalizedDescription, StringComparison.Ordinal))
+            return EnsureTrailingBlankLine(helpBlock);
+
+        var match = Regex.Match(
+            helpBlock,
+            $@"(?ms)^\s*\.DESCRIPTION\b\s*(?<description>.*?)(?=^\s*\.(?:{CommentHelpKeyPattern})\b\s*|\s*#>\s*\z)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (!match.Success)
+        {
+            var openingIndex = helpBlock.IndexOf("<#", StringComparison.Ordinal);
+            if (openingIndex < 0)
+                return RenderGeneratedDescription(normalizedDescription);
+
+            var insertIndex = openingIndex + 2;
+            return EnsureTrailingBlankLine(helpBlock.Insert(insertIndex, Environment.NewLine + Environment.NewLine + ".DESCRIPTION" + Environment.NewLine + normalizedDescription + Environment.NewLine));
+        }
+
+        var group = match.Groups["description"];
+        var replacement = Environment.NewLine + normalizedDescription + Environment.NewLine + Environment.NewLine;
+        return EnsureTrailingBlankLine(helpBlock.Remove(group.Index, group.Length).Insert(group.Index, replacement));
+    }
+
+    private static string RenderGeneratedDescription(string description)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("<#");
+        builder.AppendLine();
+        builder.AppendLine(".DESCRIPTION");
+        builder.AppendLine(description);
+        builder.AppendLine();
+        builder.AppendLine("#>");
+        builder.AppendLine();
+        return builder.ToString();
+    }
+
+    private static string EnsureTrailingBlankLine(string value)
+        => value.TrimEnd('\r', '\n') + Environment.NewLine + Environment.NewLine;
+
+    private static string RemoveSpans(string text, IReadOnlyList<TextSpan> spans)
+    {
+        if (spans.Count == 0)
+            return text;
+
+        var builder = new StringBuilder(text.Length);
+        var index = 0;
+        foreach (var span in spans.OrderBy(static span => span.Start))
+        {
+            if (span.Start < index)
+                continue;
+
+            builder.Append(text, index, span.Start - index);
+            index = span.Start + span.Length;
+        }
+
+        if (index < text.Length)
+            builder.Append(text, index, text.Length - index);
+
+        return builder.ToString();
     }
 
     private static string RemoveSignatureBlock(string text)
@@ -422,17 +622,58 @@ public sealed class ManagedScriptFileInfoService
             Author = updates.Author ?? existing.Author,
             CompanyName = updates.CompanyName ?? existing.CompanyName,
             Copyright = updates.Copyright ?? existing.Copyright,
-            Tags = updates.Tags.Count == 0 ? existing.Tags : updates.Tags,
+            Tags = MergeList(existing.Tags, updates.Tags, updates.TagsSpecified),
             LicenseUri = updates.LicenseUri ?? existing.LicenseUri,
             ProjectUri = updates.ProjectUri ?? existing.ProjectUri,
             IconUri = updates.IconUri ?? existing.IconUri,
-            ExternalModuleDependencies = updates.ExternalModuleDependencies.Count == 0 ? existing.ExternalModuleDependencies : updates.ExternalModuleDependencies,
-            RequiredScripts = updates.RequiredScripts.Count == 0 ? existing.RequiredScripts : updates.RequiredScripts,
-            ExternalScriptDependencies = updates.ExternalScriptDependencies.Count == 0 ? existing.ExternalScriptDependencies : updates.ExternalScriptDependencies,
+            ExternalModuleDependencies = MergeList(existing.ExternalModuleDependencies, updates.ExternalModuleDependencies, updates.ExternalModuleDependenciesSpecified),
+            RequiredScripts = MergeList(existing.RequiredScripts, updates.RequiredScripts, updates.RequiredScriptsSpecified),
+            ExternalScriptDependencies = MergeList(existing.ExternalScriptDependencies, updates.ExternalScriptDependencies, updates.ExternalScriptDependenciesSpecified),
             ReleaseNotes = updates.ReleaseNotes ?? existing.ReleaseNotes,
             PrivateData = updates.PrivateData ?? existing.PrivateData,
             Description = updates.Description ?? existing.Description,
-            RequiredModules = updates.RequiredModules.Count == 0 ? existing.RequiredModules : updates.RequiredModules,
+            RequiredModules = MergeList(existing.RequiredModules, updates.RequiredModules, updates.RequiredModulesSpecified),
+            RequiredModulesSpecified = existing.RequiredModulesSpecified,
+            ScriptHelp = existing.ScriptHelp,
             ScriptContent = existing.ScriptContent
         };
+
+    private static IReadOnlyList<T> MergeList<T>(IReadOnlyList<T> existing, IReadOnlyList<T> updates, bool specified)
+        => specified || updates.Count > 0 ? updates : existing;
+
+    private sealed class ScriptPrefixParts
+    {
+        public ScriptPrefixParts(
+            IReadOnlyList<ManagedScriptRequiredModule> requiredModules,
+            string? scriptHelp,
+            string description,
+            string scriptContent)
+        {
+            RequiredModules = requiredModules;
+            ScriptHelp = scriptHelp;
+            Description = description;
+            ScriptContent = scriptContent;
+        }
+
+        public IReadOnlyList<ManagedScriptRequiredModule> RequiredModules { get; }
+
+        public string? ScriptHelp { get; }
+
+        public string Description { get; }
+
+        public string ScriptContent { get; }
+    }
+
+    private readonly struct TextSpan
+    {
+        public TextSpan(int start, int length)
+        {
+            Start = start;
+            Length = length;
+        }
+
+        public int Start { get; }
+
+        public int Length { get; }
+    }
 }

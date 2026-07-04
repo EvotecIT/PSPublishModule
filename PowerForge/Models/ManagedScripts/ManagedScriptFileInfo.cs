@@ -29,6 +29,9 @@ public sealed class ManagedScriptFileInfo
     /// <summary>Search tags.</summary>
     public IReadOnlyList<string> Tags { get; set; } = Array.Empty<string>();
 
+    /// <summary>When used as update input, indicates that <see cref="Tags"/> was explicitly supplied.</summary>
+    public bool TagsSpecified { get; set; }
+
     /// <summary>License URI.</summary>
     public string? LicenseUri { get; set; }
 
@@ -41,11 +44,20 @@ public sealed class ManagedScriptFileInfo
     /// <summary>External module dependencies declared in the metadata block.</summary>
     public IReadOnlyList<string> ExternalModuleDependencies { get; set; } = Array.Empty<string>();
 
+    /// <summary>When used as update input, indicates that <see cref="ExternalModuleDependencies"/> was explicitly supplied.</summary>
+    public bool ExternalModuleDependenciesSpecified { get; set; }
+
     /// <summary>Required scripts declared in the metadata block.</summary>
     public IReadOnlyList<string> RequiredScripts { get; set; } = Array.Empty<string>();
 
+    /// <summary>When used as update input, indicates that <see cref="RequiredScripts"/> was explicitly supplied.</summary>
+    public bool RequiredScriptsSpecified { get; set; }
+
     /// <summary>External script dependencies declared in the metadata block.</summary>
     public IReadOnlyList<string> ExternalScriptDependencies { get; set; } = Array.Empty<string>();
+
+    /// <summary>When used as update input, indicates that <see cref="ExternalScriptDependencies"/> was explicitly supplied.</summary>
+    public bool ExternalScriptDependenciesSpecified { get; set; }
 
     /// <summary>Release notes text.</summary>
     public string? ReleaseNotes { get; set; }
@@ -58,6 +70,12 @@ public sealed class ManagedScriptFileInfo
 
     /// <summary>Required modules declared as <c>#Requires -Module</c> statements.</summary>
     public IReadOnlyList<ManagedScriptRequiredModule> RequiredModules { get; set; } = Array.Empty<ManagedScriptRequiredModule>();
+
+    /// <summary>When used as update input, indicates that <see cref="RequiredModules"/> was explicitly supplied.</summary>
+    public bool RequiredModulesSpecified { get; set; }
+
+    /// <summary>Original script-level comment-based help block, when present.</summary>
+    public string? ScriptHelp { get; set; }
 
     /// <summary>Script body after metadata, requires, and help blocks.</summary>
     public string? ScriptContent { get; set; }

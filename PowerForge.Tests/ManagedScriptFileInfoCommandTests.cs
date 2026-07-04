@@ -76,6 +76,34 @@ public sealed class ManagedScriptFileInfoCommandTests
         Assert.Equal("Microsoft.Graph", Assert.Single(read.RequiredModules).ModuleName);
     }
 
+    [Fact]
+    public void UpdateManagedScriptFileInfo_can_clear_tags_with_empty_array()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "Invoke-Company.ps1");
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ManagedScriptFileInfo")
+            .AddParameter("Path", path)
+            .AddParameter("Description", "Creates a company report.")
+            .AddParameter("Tags", new[] { "company", "report" });
+        _ = ps.Invoke();
+        AssertNoPowerShellErrors(ps);
+
+        ps.Commands.Clear();
+        ps.AddCommand("Update-ManagedScriptFileInfo")
+            .AddParameter("Path", path)
+            .AddParameter("Tags", Array.Empty<string>());
+        _ = ps.Invoke();
+        AssertNoPowerShellErrors(ps);
+
+        ps.Commands.Clear();
+        ps.AddCommand("Get-ManagedScriptFileInfo").AddParameter("Path", path);
+        var read = Assert.IsType<ManagedScriptFileInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Empty(read.Tags);
+    }
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();
