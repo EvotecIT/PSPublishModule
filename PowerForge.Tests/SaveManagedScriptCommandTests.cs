@@ -710,6 +710,38 @@ public sealed class SaveManagedScriptCommandTests
         Assert.False(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
     }
 
+    [Fact]
+    public void SaveManagedScript_allows_stale_script_metadata_version()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Invoke-CompanyTask.1.2.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.2.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.2.0");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptSaveResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptSaveStatus.Saved, result.Status);
+        Assert.Equal("1.2.0", result.Version);
+        var scriptInfo = Assert.IsType<ManagedScriptFileInfo>(result.ScriptInfo);
+        Assert.Equal("1.0.0", scriptInfo.Version);
+        Assert.True(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
+    }
+
     [Theory]
     [InlineData("RequiredVersion", "garbage")]
     [InlineData("MinimumVersion", "garbage")]

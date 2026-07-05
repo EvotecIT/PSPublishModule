@@ -182,7 +182,7 @@ public sealed class ManagedScriptResourceService
             ExtractScriptPayload(download.PackagePath, request.Name, stagedScriptPath);
             var scriptInfo = _scriptFileInfoService.Read(stagedScriptPath);
             ThrowIfScriptMetadataIncomplete(scriptInfo, download.PackagePath);
-            ThrowIfScriptVersionDisagrees(scriptInfo, versionInfo.Version, download.PackagePath);
+            ThrowIfScriptVersionInvalid(scriptInfo);
             extractionStopwatch.Stop();
 
             Directory.CreateDirectory(destinationPath);
@@ -520,18 +520,10 @@ public sealed class ManagedScriptResourceService
             $"Package '{metadata.Id}' {metadata.Version} requires license acceptance. Use AcceptLicense to continue.");
     }
 
-    private static void ThrowIfScriptVersionDisagrees(ManagedScriptFileInfo info, string packageVersion, string packagePath)
+    private static void ThrowIfScriptVersionInvalid(ManagedScriptFileInfo info)
     {
         _ = ManagedModulePackageIdentity.RequireSafeVersion(info.Version, nameof(info.Version));
-        _ = ManagedModulePackageIdentity.RequireSafeVersion(packageVersion, nameof(packageVersion));
         ValidateScriptVersion(info.Version, nameof(info.Version));
-        ValidateScriptVersion(packageVersion, nameof(packageVersion));
-
-        if (ManagedModuleVersionComparer.Instance.Compare(info.Version, packageVersion) == 0)
-            return;
-
-        throw new InvalidOperationException(
-            $"Package '{packagePath}' version '{packageVersion}' does not match script metadata version '{info.Version}'.");
     }
 
     private static void ThrowIfScriptMetadataIncomplete(ManagedScriptFileInfo info, string packagePath)
