@@ -63,6 +63,11 @@ public sealed class ManagedModuleInstallRequest
     internal bool PackageCacheDirectoryIsOperationLocal { get; set; }
 
     /// <summary>
+    /// Save the selected packages as .nupkg files instead of unpacking them into module folders.
+    /// </summary>
+    public bool SaveAsNupkg { get; set; }
+
+    /// <summary>
     /// Maximum number of dependency branches to install concurrently. A value of 0 uses the engine default.
     /// </summary>
     public int DependencyConcurrency { get; set; }

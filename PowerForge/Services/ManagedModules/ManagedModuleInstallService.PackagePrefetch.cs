@@ -89,6 +89,7 @@ public sealed partial class ManagedModuleInstallService
 
     private static bool ShouldUseDependencyPackagePrefetch(ManagedModuleInstallRequest request)
         => !request.SkipDependencyCheck &&
+           !request.SaveAsNupkg &&
            !request.AuthenticodeCheck &&
            request.Credential is null &&
            (string.IsNullOrWhiteSpace(request.PackageCacheDirectory) || request.PackageCacheDirectoryIsOperationLocal) &&

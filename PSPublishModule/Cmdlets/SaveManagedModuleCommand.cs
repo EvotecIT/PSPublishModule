@@ -88,6 +88,10 @@ public sealed class SaveManagedModuleCommand : AsyncPSCmdlet
     [ValidateNotNullOrEmpty]
     public string? PackageCacheDirectory { get; set; }
 
+    /// <summary>Save the selected packages as .nupkg files instead of unpacked module folders.</summary>
+    [Parameter]
+    public SwitchParameter AsNupkg { get; set; }
+
     /// <summary>Maximum number of dependency branches to save concurrently. Omit to use the managed engine default.</summary>
     [Parameter]
     [ValidateRange(1, 256)]
@@ -212,6 +216,7 @@ public sealed class SaveManagedModuleCommand : AsyncPSCmdlet
                 Scope = ManagedModuleInstallScope.Custom,
                 ModuleRoot = moduleRoot,
                 PackageCacheDirectory = packageCacheDirectory,
+                SaveAsNupkg = AsNupkg.IsPresent,
                 DependencyConcurrency = DependencyConcurrency,
                 ExpectedPackageSha256 = ExpectedPackageSha256,
                 TrustPolicy = trustPolicy,

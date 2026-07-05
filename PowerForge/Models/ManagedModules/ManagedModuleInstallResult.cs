@@ -81,6 +81,11 @@ public sealed class ManagedModuleInstallResult
     public string ModulePath { get; set; } = string.Empty;
 
     /// <summary>
+    /// True when the operation saved a .nupkg file instead of materializing an unpacked module directory.
+    /// </summary>
+    public bool SavedAsNupkg { get; set; }
+
+    /// <summary>
     /// Elapsed time spent by this install operation.
     /// </summary>
     public TimeSpan Elapsed { get; set; }
