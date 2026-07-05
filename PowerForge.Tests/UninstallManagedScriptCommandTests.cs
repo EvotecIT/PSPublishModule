@@ -311,6 +311,28 @@ public sealed class UninstallManagedScriptCommandTests
         Assert.True(File.Exists(scriptPath));
     }
 
+    [Theory]
+    [InlineData("1.0.0 +build")]
+    [InlineData("1.0.0+ build")]
+    [InlineData("1.0.0 -beta")]
+    [InlineData("1.0.0- beta")]
+    public void UninstallManagedScript_rejects_separator_padded_required_version_before_removing(string requiredVersion)
+    {
+        using var scriptRoot = new TemporaryDirectory();
+        var scriptPath = Path.Combine(scriptRoot.Path, "Invoke-CompanyTask.ps1");
+        File.WriteAllText(scriptPath, CreateScript("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("ScriptRoot", scriptRoot.Path)
+            .AddParameter("RequiredVersion", requiredVersion);
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("Invalid script version", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(scriptPath));
+    }
+
     [Fact]
     public void UninstallManagedScript_treats_malformed_installed_prerelease_as_mismatch()
     {

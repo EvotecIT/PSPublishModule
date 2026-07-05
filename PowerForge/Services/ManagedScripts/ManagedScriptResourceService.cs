@@ -1316,6 +1316,9 @@ public sealed class ManagedScriptResourceService
             return false;
 
         var trimmed = version!.Trim();
+        if (HasWhitespaceAroundSemVerSeparator(trimmed))
+            return false;
+
         try
         {
             _ = ManagedModulePackageIdentity.RequireSafeVersion(trimmed, nameof(version));
@@ -1343,6 +1346,23 @@ public sealed class ManagedScriptResourceService
 
         var prerelease = versionWithoutBuild.Substring(prereleaseIndex + 1);
         return HasValidSemVerIdentifiers(prerelease);
+    }
+
+    private static bool HasWhitespaceAroundSemVerSeparator(string value)
+    {
+        for (var index = 0; index < value.Length; index++)
+        {
+            var character = value[index];
+            if (character != '+' && character != '-')
+                continue;
+
+            if (index > 0 && char.IsWhiteSpace(value[index - 1]))
+                return true;
+            if (index + 1 < value.Length && char.IsWhiteSpace(value[index + 1]))
+                return true;
+        }
+
+        return false;
     }
 
     private static bool HasValidSemVerIdentifiers(string value)
