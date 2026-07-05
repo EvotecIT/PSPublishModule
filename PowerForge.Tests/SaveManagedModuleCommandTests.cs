@@ -603,6 +603,8 @@ public sealed class SaveManagedModuleCommandTests
         AssertNoPowerShellErrors(ps);
         var plan = Assert.IsType<ManagedModuleInstallPlan>(Assert.Single(results).BaseObject);
         Assert.True(plan.ExistingVersionFound);
+        Assert.Equal(ManagedModuleInstallPlanAction.SkipExisting, plan.Action);
+        Assert.False(plan.WouldWriteFiles);
         Assert.True(plan.LicenseAcceptanceRequired);
         Assert.False(plan.LicenseAccepted);
     }
@@ -659,6 +661,37 @@ public sealed class SaveManagedModuleCommandTests
         var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(results).BaseObject);
         Assert.NotNull(result.AuthenticodeVerification);
         Assert.Equal(0, result.AuthenticodeVerification.CheckedFiles);
+    }
+
+    [Fact]
+    public void SaveManagedModule_as_nupkg_plan_does_not_skip_existing_package_when_authenticode_check_is_requested()
+    {
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateToolFiles("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", Path.Combine(destination.Path, "Unavailable"))
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AsNupkg")
+            .AddParameter("AuthenticodeCheck")
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedModuleInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.True(plan.SaveAsNupkg);
+        Assert.True(plan.ExistingVersionFound);
+        Assert.Equal(ManagedModuleInstallPlanAction.Reinstall, plan.Action);
+        Assert.True(plan.WouldWriteFiles);
+        Assert.True(plan.AuthenticodeCheck);
     }
 
     [Fact]

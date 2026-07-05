@@ -72,7 +72,8 @@ public sealed partial class ManagedModuleInstallService
                 installedModulePath,
                 exists: true,
                 installedVersionInfo,
-                wouldRepairDependencies: WouldWriteExistingTargetDependencies(request, moduleRoot, installedVersion, installedModulePath));
+                wouldRepairDependencies: WouldWriteExistingTargetDependencies(request, moduleRoot, installedVersion, installedModulePath),
+                allowLicenseOnlySavedPackagePlan: true);
         }
 
         var versionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken, resolveExactMetadata: true).ConfigureAwait(false);
@@ -119,11 +120,18 @@ public sealed partial class ManagedModuleInstallService
         string modulePath,
         bool exists,
         ManagedModuleVersionInfo? versionInfo = null,
-        bool wouldRepairDependencies = false)
+        bool wouldRepairDependencies = false,
+        bool allowLicenseOnlySavedPackagePlan = false)
     {
         var canSkipExistingSavedPackage = !request.SaveAsNupkg ||
                                           !exists ||
-                                          (!request.Force && SavedPackageSatisfiesNoOpPolicy(request, moduleRoot, version));
+                                          (!request.Force &&
+                                           !request.AuthenticodeCheck &&
+                                           SavedPackageSatisfiesNoOpPolicy(
+                                               request,
+                                               moduleRoot,
+                                               version,
+                                               enforceLicenseAcceptance: !allowLicenseOnlySavedPackagePlan));
         var requiresPackageDownloadBeforeNoOp = request.SaveAsNupkg
             ? !canSkipExistingSavedPackage
             : RequiresPackageDownloadBeforeNoOp(request);
