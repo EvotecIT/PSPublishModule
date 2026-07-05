@@ -91,6 +91,7 @@ public sealed class ManagedModuleRepository
     {
         var normalized = (path ?? string.Empty).TrimEnd('/');
         return normalized.EndsWith("/api/v2", StringComparison.OrdinalIgnoreCase) ||
+               normalized.EndsWith("/api/v2/items/psscript", StringComparison.OrdinalIgnoreCase) ||
                normalized.EndsWith("/nuget/v2", StringComparison.OrdinalIgnoreCase) ||
                normalized.EndsWith("/v2", StringComparison.OrdinalIgnoreCase);
     }

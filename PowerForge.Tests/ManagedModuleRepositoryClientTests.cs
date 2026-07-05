@@ -20,6 +20,7 @@ public sealed class ManagedModuleRepositoryClientTests
 
     [Theory]
     [InlineData("https://example.test/api/v2")]
+    [InlineData("https://example.test/api/v2/items/psscript")]
     [InlineData("https://pkgs.dev.azure.com/org/_packaging/feed/nuget/v2")]
     [InlineData("https://example.test/packages/v2")]
     public void ManagedModuleRepository_infers_common_v2_feed_paths(string source)
