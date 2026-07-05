@@ -39,7 +39,9 @@ public sealed class ManagedScriptResourceService
         var destinationPath = ResolveDestinationPath(request.DestinationPath);
         var scriptPath = ResolveScriptPath(destinationPath, request.Name);
         var existingVersion = TryReadExistingVersion(scriptPath, allowInvalidMetadata: request.Force);
-        var satisfiedExistingVersion = TryResolveSatisfiedExistingVersion(request, scriptPath, existingVersion);
+        var existingPackageVersion = TryReadInstalledPackageVersion(scriptPath);
+        var existingComparableVersion = existingPackageVersion ?? existingVersion;
+        var satisfiedExistingVersion = TryResolveSatisfiedExistingVersion(request, scriptPath, existingComparableVersion);
         if (satisfiedExistingVersion is not null)
         {
             return new ManagedScriptSavePlan
@@ -64,7 +66,7 @@ public sealed class ManagedScriptResourceService
 
         var versionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken).ConfigureAwait(false);
         ThrowIfSelectedVersionInvalid(versionInfo);
-        var action = ResolvePlanAction(File.Exists(scriptPath), scriptPath, existingVersion, versionInfo.Version, request.Force, RequiresPackageVerificationBeforeSkip(request));
+        var action = ResolvePlanAction(File.Exists(scriptPath), scriptPath, existingComparableVersion, versionInfo.Version, request.Force, RequiresPackageVerificationBeforeSkip(request));
         if (RequiresPlanPackageMetadata(action, versionInfo))
         {
             versionInfo = await EnrichVersionInfoWithPackageMetadataAsync(
@@ -73,6 +75,8 @@ public sealed class ManagedScriptResourceService
                 request.Credential,
                 cancellationToken).ConfigureAwait(false);
         }
+        if (RequiresPlanPackageVerification(action, request))
+            await VerifySelectedPackageForPlanAsync(request, versionInfo.Version, cancellationToken).ConfigureAwait(false);
 
         var wouldWriteFiles = action is ManagedScriptSavePlanAction.Save or ManagedScriptSavePlanAction.Reinstall or ManagedScriptSavePlanAction.VerifyExisting;
         var wouldVerifyPackage = action is ManagedScriptSavePlanAction.VerifyExisting;
@@ -113,7 +117,9 @@ public sealed class ManagedScriptResourceService
         var destinationPath = ResolveDestinationPath(request.DestinationPath);
         var scriptPath = ResolveScriptPath(destinationPath, request.Name);
         var existingVersion = TryReadExistingVersion(scriptPath, allowInvalidMetadata: request.Force);
-        var satisfiedExistingVersion = TryResolveSatisfiedExistingVersion(request, scriptPath, existingVersion);
+        var existingPackageVersion = TryReadInstalledPackageVersion(scriptPath);
+        var existingComparableVersion = existingPackageVersion ?? existingVersion;
+        var satisfiedExistingVersion = TryResolveSatisfiedExistingVersion(request, scriptPath, existingComparableVersion);
         if (satisfiedExistingVersion is not null)
         {
             stopwatch.Stop();
@@ -125,8 +131,8 @@ public sealed class ManagedScriptResourceService
         versionResolutionStopwatch.Stop();
         ThrowIfSelectedVersionInvalid(versionInfo);
 
-        var existingSelectedVersion = !string.IsNullOrWhiteSpace(existingVersion) &&
-                                      ManagedModuleVersionComparer.Instance.Compare(existingVersion!, versionInfo.Version) == 0 &&
+        var existingSelectedVersion = !string.IsNullOrWhiteSpace(existingComparableVersion) &&
+                                      ManagedModuleVersionComparer.Instance.Compare(existingComparableVersion!, versionInfo.Version) == 0 &&
                                       ExistingScriptCanSkip(scriptPath) &&
                                       !request.Force;
         if (existingSelectedVersion && !RequiresPackageVerificationBeforeSkip(request))
@@ -388,6 +394,40 @@ public sealed class ManagedScriptResourceService
            !versionInfo.RequireLicenseAcceptance &&
            string.IsNullOrWhiteSpace(versionInfo.License);
 
+    private static bool RequiresPlanPackageVerification(ManagedScriptSavePlanAction action, ManagedScriptSaveRequest request)
+        => (action is ManagedScriptSavePlanAction.Save or ManagedScriptSavePlanAction.Reinstall or ManagedScriptSavePlanAction.VerifyExisting) &&
+           RequiresPackageVerificationBeforeSkip(request);
+
+    private async Task VerifySelectedPackageForPlanAsync(
+        ManagedScriptSaveRequest request,
+        string version,
+        CancellationToken cancellationToken)
+    {
+        var ownsCache = string.IsNullOrWhiteSpace(request.PackageCacheDirectory);
+        var cacheDirectory = ownsCache
+            ? Path.Combine(Path.GetTempPath(), "PowerForge", "managed-script-plan-cache", Guid.NewGuid().ToString("N"))
+            : Path.GetFullPath(request.PackageCacheDirectory!.Trim().Trim('"'));
+
+        try
+        {
+            Directory.CreateDirectory(cacheDirectory);
+            var download = await _repositoryClient.DownloadPackageAsync(
+                request.Repository,
+                request.Name,
+                version,
+                cacheDirectory,
+                request.Credential,
+                cancellationToken).ConfigureAwait(false);
+            ManagedModulePackageIntegrity.VerifyDownload(download, request.ExpectedPackageSha256);
+            ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, download.Metadata, request.TrustPolicy);
+        }
+        finally
+        {
+            if (ownsCache)
+                DeleteDirectoryQuietly(cacheDirectory);
+        }
+    }
+
     private string? TryResolveSatisfiedExistingVersion(ManagedScriptSaveRequest request, string scriptPath, string? existingVersion)
     {
         if (request.Force ||
@@ -428,10 +468,6 @@ public sealed class ManagedScriptResourceService
     {
         if (!File.Exists(scriptPath))
             return null;
-
-        var installedPackageVersion = TryReadInstalledPackageVersion(scriptPath);
-        if (!string.IsNullOrWhiteSpace(installedPackageVersion))
-            return installedPackageVersion;
 
         try
         {
@@ -518,7 +554,7 @@ public sealed class ManagedScriptResourceService
         return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
     }
 
-    private static ManagedScriptSaveResult CreateSkippedResult(
+    private ManagedScriptSaveResult CreateSkippedResult(
         ManagedScriptSaveRequest request,
         string version,
         string destinationPath,
@@ -550,7 +586,7 @@ public sealed class ManagedScriptResourceService
             Download = download,
             ScriptInfo = string.IsNullOrWhiteSpace(existingVersion)
                 ? null
-                : new ManagedScriptFileInfo { Path = scriptPath, Version = existingVersion! }
+                : _scriptFileInfoService.Read(scriptPath)
         };
 
     private static bool RequiresPackageVerificationBeforeSkip(ManagedScriptSaveRequest request)

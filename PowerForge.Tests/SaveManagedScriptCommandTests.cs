@@ -537,8 +537,9 @@ public sealed class SaveManagedScriptCommandTests
     {
         using var feed = new TemporaryDirectory();
         using var destination = new TemporaryDirectory();
+        var packagePath = Path.Combine(feed.Path, "Invoke-CompanyTask.1.0.0.nupkg");
         TestPackageFactory.Create(
-            Path.Combine(feed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            packagePath,
             "Invoke-CompanyTask",
             "1.0.0",
             files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -555,7 +556,7 @@ public sealed class SaveManagedScriptCommandTests
             .AddParameter("RepositoryName", "Local")
             .AddParameter("Path", destination.Path)
             .AddParameter("RequiredVersion", "1.0.0")
-            .AddParameter("ExpectedPackageSha256", new string('0', 64))
+            .AddParameter("ExpectedPackageSha256", TestHash.ComputeSha256(packagePath))
             .AddParameter("Plan");
         var results = ps.Invoke();
 
@@ -565,6 +566,66 @@ public sealed class SaveManagedScriptCommandTests
         Assert.True(plan.WouldWriteFiles);
         Assert.True(plan.WouldVerifyPackage);
         Assert.True(plan.LicenseAcceptanceRequired);
+    }
+
+    [Fact]
+    public void SaveManagedScript_plan_verifies_package_hash_before_fresh_save()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("ExpectedPackageSha256", new string('0', 64))
+            .AddParameter("Plan");
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("SHA256", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
+    }
+
+    [Fact]
+    public void SaveManagedScript_plan_verifies_author_policy_before_forced_reinstall()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            },
+            authors: "Unexpected");
+        File.WriteAllText(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1"), CreateScript("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("AllowedAuthor", new[] { "Evotec" })
+            .AddParameter("Force")
+            .AddParameter("Plan");
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("allowed author", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -858,6 +919,8 @@ public sealed class SaveManagedScriptCommandTests
         var skipped = Assert.IsType<ManagedScriptSaveResult>(Assert.Single(skippedResults).BaseObject);
         Assert.Equal(ManagedScriptSaveStatus.SkippedExisting, skipped.Status);
         Assert.Equal("1.2.0", skipped.Version);
+        Assert.NotNull(skipped.ScriptInfo);
+        Assert.Equal("1.0.0", skipped.ScriptInfo.Version);
         Assert.Null(skipped.Download);
 
         TestPackageFactory.Create(
