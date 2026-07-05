@@ -483,7 +483,9 @@ public sealed class ManagedScriptResourceService
                 return null;
             }
 
-            return ManagedModulePackageIdentity.RequireSafeVersion(version!, nameof(ManagedScriptInstallRecord.Version));
+            var safeVersion = ManagedModulePackageIdentity.RequireSafeVersion(version!, nameof(ManagedScriptInstallRecord.Version));
+            ValidateScriptVersion(safeVersion, nameof(ManagedScriptInstallRecord.Version));
+            return safeVersion;
         }
         catch
         {

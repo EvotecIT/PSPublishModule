@@ -882,6 +882,33 @@ public sealed class SaveManagedScriptCommandTests
         Assert.Contains("already exists with version '1.0.0'", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void SaveManagedScript_ignores_non_parseable_install_record_version_before_skip()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        var scriptPath = Path.Combine(destination.Path, "Invoke-CompanyTask.ps1");
+        File.WriteAllText(scriptPath, CreateScript("0.0.0"));
+        File.WriteAllText(
+            scriptPath + ".powerforge.json",
+            $$"""{"Name":"Invoke-CompanyTask","Version":"bad","ScriptSha256":"{{TestHash.ComputeSha256(scriptPath)}}","RepositoryName":"Local","RepositorySource":"{{feed.Path.Replace("\\", "\\\\", StringComparison.Ordinal)}}"}""");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "0.0.0");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptSaveResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptSaveStatus.SkippedExisting, result.Status);
+        Assert.Equal("0.0.0", result.Version);
+        Assert.Null(result.Download);
+    }
+
     [Theory]
     [InlineData("RequiredVersion", "garbage")]
     [InlineData("MinimumVersion", "garbage")]
