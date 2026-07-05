@@ -486,19 +486,6 @@ public sealed partial class ModulePipelineRunner
         return cleanup;
     }
 
-    private void CleanReplaceSingleFileStagedBinaryPayload(ModulePipelinePlan plan, string stagingPath)
-    {
-        if (!ShouldCleanReplaceSingleFileBinaryPayload(plan))
-            return;
-
-        var stagePath = Path.GetFullPath(stagingPath);
-        var libPath = Path.GetFullPath(Path.Combine(stagePath, "Lib"));
-        if (!IsDirectChildPath(libPath, stagePath, "Lib"))
-            return;
-
-        DeleteReplaceSingleFileBinaryPayload(stagePath, plan.ModuleName, "staged");
-    }
-
     private static bool ShouldCleanReplaceSingleFileBinaryPayload(ModulePipelinePlan plan)
         => plan.BuildSpec.DevelopmentBinariesMode != ModuleDevelopmentBinaryMode.Off &&
            plan.BuildSpec.DevelopmentSourceBootstrapperMode == ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile &&

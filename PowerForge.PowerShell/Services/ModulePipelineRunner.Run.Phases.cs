@@ -35,7 +35,6 @@ public sealed partial class ModulePipelineRunner
             state.StagingPathForCleanup = staged.StagingPath;
             ExecuteExternalAssets(plan, session, state);
             SyncExternalAssetsToStaging(plan, state);
-            CleanReplaceSingleFileStagedBinaryPayload(plan, staged.StagingPath);
             session.Done(session.StageStep);
         }
         catch (Exception ex)
