@@ -9,9 +9,19 @@ schema: 2.0.0
 Installs PowerShell modules through the managed C# module engine.
 
 ## SYNTAX
-### __AllParameterSets
+### NameParameterSet (Default)
 ```powershell
-Install-ManagedModule [-Name] <string[]> [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-PackageCacheDirectory <string>] [-DependencyConcurrency <int>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [-Force] [-AllowClobber] [-AcceptLicense] [-AuthenticodeCheck] [-SkipDependencyCheck] [-Plan] [-ShowSummary] [-WhatIf] [-Confirm] [<CommonParameters>]
+Install-ManagedModule [-Name] <string[]> [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-PackageCacheDirectory <string>] [-DependencyConcurrency <int>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [-Force] [-Reinstall] [-AllowClobber] [-NoClobber] [-AcceptLicense] [-AuthenticodeCheck] [-SkipDependencyCheck] [-Plan] [-ShowSummary] [-Quiet] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
+### RequiredResourceParameterSet
+```powershell
+Install-ManagedModule -RequiredResource <Object> [-RepositoryName <string>] [-ProfileName <string>] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-PackageCacheDirectory <string>] [-DependencyConcurrency <int>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [-Force] [-Reinstall] [-AllowClobber] [-NoClobber] [-AcceptLicense] [-AuthenticodeCheck] [-SkipDependencyCheck] [-Plan] [-ShowSummary] [-Quiet] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
+### RequiredResourceFileParameterSet
+```powershell
+Install-ManagedModule -RequiredResourceFile <string> [-RepositoryName <string>] [-ProfileName <string>] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-PackageCacheDirectory <string>] [-DependencyConcurrency <int>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [-Force] [-Reinstall] [-AllowClobber] [-NoClobber] [-AcceptLicense] [-AuthenticodeCheck] [-SkipDependencyCheck] [-Plan] [-ShowSummary] [-Quiet] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -39,7 +49,7 @@ Accept package licenses when packages declare license acceptance is required.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: None
 Possible values:
 
@@ -55,7 +65,7 @@ Allow command exports to overlap with other modules in the target root.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: None
 Possible values:
 
@@ -71,7 +81,7 @@ Allowed package author values from package metadata.
 
 ```yaml
 Type: String[]
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: RequiredAuthor, TrustedAuthor
 Possible values:
 
@@ -87,7 +97,7 @@ Validate Authenticode signatures for signable package files before promotion.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: None
 Possible values:
 
@@ -103,7 +113,7 @@ Optional repository credential.
 
 ```yaml
 Type: PSCredential
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: None
 Possible values:
 
@@ -119,7 +129,7 @@ Optional repository credential secret.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: Password, Token
 Possible values:
 
@@ -135,7 +145,7 @@ Optional path to a file containing the repository credential secret.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: CredentialPath, TokenPath
 Possible values:
 
@@ -151,7 +161,7 @@ Optional repository credential username.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: UserName
 Possible values:
 
@@ -167,7 +177,7 @@ Maximum number of dependency branches to install concurrently. Omit to use the m
 
 ```yaml
 Type: Int32
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: None
 Possible values:
 
@@ -183,7 +193,7 @@ Expected SHA256 hash of the root package before it is extracted and promoted.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: PackageSha256, Sha256
 Possible values:
 
@@ -199,7 +209,7 @@ Reinstall the module version when it already exists.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: None
 Possible values:
 
@@ -215,7 +225,7 @@ Maximum package version to install when Version is omitted.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: None
 Possible values:
 
@@ -231,7 +241,7 @@ Minimum package version to install when Version is omitted.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: None
 Possible values:
 
@@ -247,7 +257,7 @@ Explicit module root. Use with Scope Custom.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: Path
 Possible values:
 
@@ -263,7 +273,7 @@ Module names to install.
 
 ```yaml
 Type: String[]
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: ModuleName
 Possible values:
 
@@ -274,12 +284,28 @@ Accept pipeline input: True (ByPropertyName)
 Accept wildcard characters: True
 ```
 
+### -NoClobber
+PSResourceGet-compatible spelling for the managed default that rejects command export conflicts.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -PackageCacheDirectory
 Optional package cache directory.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: None
 Possible values:
 
@@ -295,7 +321,7 @@ Return an inspectable install plan without writing files.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: None
 Possible values:
 
@@ -311,7 +337,7 @@ Include prerelease versions when resolving the latest version.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: AllowPrerelease
 Possible values:
 
@@ -327,7 +353,7 @@ Saved repository profile name.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: None
 Possible values:
 
@@ -343,7 +369,7 @@ Optional HTTP proxy used for repository requests.
 
 ```yaml
 Type: Uri
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: None
 Possible values:
 
@@ -359,7 +385,39 @@ Optional proxy credential used with Proxy.
 
 ```yaml
 Type: PSCredential
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Quiet
+Suppress optional host summaries and progress-style output without changing pipeline result objects.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Reinstall
+PSResourceGet-compatible spelling for reinstalling the selected module version when it already exists.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: None
 Possible values:
 
@@ -375,7 +433,7 @@ Repository URL, NuGet v3 service index, flat-container URL, or local folder feed
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: Source, RepositoryUri
 Possible values:
 
@@ -391,11 +449,43 @@ Friendly repository name used in output.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: None
 Possible values:
 
 Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RequiredResource
+PSResourceGet-style required resource map to install.
+
+```yaml
+Type: Object
+Parameter Sets: RequiredResourceParameterSet
+Aliases: None
+Possible values:
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RequiredResourceFile
+Path to a PowerShell data file containing a PSResourceGet-style required resource map.
+
+```yaml
+Type: String
+Parameter Sets: RequiredResourceFileParameterSet
+Aliases: None
+Possible values:
+
+Required: True
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -407,7 +497,7 @@ Require the selected repository profile to be marked trusted.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: None
 Possible values:
 
@@ -423,7 +513,7 @@ Install scope used when ModuleRoot is not supplied.
 
 ```yaml
 Type: ManagedModuleInstallScope
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: None
 Possible values: CurrentUser, AllUsers, Custom
 
@@ -439,7 +529,7 @@ PowerShell path family used when resolving default CurrentUser or AllUsers modul
 
 ```yaml
 Type: ManagedModuleShellEdition
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: None
 Possible values: Auto, Desktop, Core
 
@@ -455,7 +545,7 @@ Write a compact Spectre.Console summary for each plan or result.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: None
 Possible values:
 
@@ -471,7 +561,7 @@ Skip installing dependencies declared by the package.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: SkipDependenciesCheck
 Possible values:
 
@@ -487,7 +577,7 @@ Optional typed repository/package trust policy.
 
 ```yaml
 Type: ManagedModuleTrustPolicy
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet, RequiredResourceParameterSet, RequiredResourceFileParameterSet
 Aliases: None
 Possible values:
 
@@ -503,7 +593,7 @@ Exact package version to install. When omitted, the latest repository version is
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: RequiredVersion
 Possible values:
 
@@ -519,7 +609,7 @@ NuGet-style version range policy used when Version is omitted.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: None
 Possible values:
 

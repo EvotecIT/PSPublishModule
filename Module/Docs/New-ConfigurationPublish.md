@@ -447,7 +447,7 @@ Repository API version for PSResourceGet registration (v2/v3).
 Type: RepositoryApiVersion
 Parameter Sets: ApiFromFile, ApiKey, JFrog, AzureArtifacts
 Aliases: None
-Possible values: Auto, V2, V3, ContainerRegistry
+Possible values: Auto, V2, V3, ContainerRegistry, Local, NugetServer
 
 Required: False
 Position: named

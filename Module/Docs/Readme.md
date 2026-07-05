@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.43
+Help Version: 3.0.44
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -54,6 +54,9 @@ Asserts that a benchmark path exists or does not exist.
 
 ### [Assert-BenchmarkValue](Assert-BenchmarkValue.md)
 Asserts a benchmark value condition.
+
+### [Compress-ManagedResource](Compress-ManagedResource.md)
+Compresses a managed PowerShell resource folder into a NuGet package.
 
 ### [Convert-ProjectConsistency](Convert-ProjectConsistency.md)
 Converts a project to a consistent encoding/line ending policy and reports the results.
@@ -112,6 +115,9 @@ Gets installed PowerShell modules from managed module inventory.
 ### [Get-ManagedModuleRepository](Get-ManagedModuleRepository.md)
 Gets, tests, or exports saved managed module repository profiles.
 
+### [Get-ManagedScriptFileInfo](Get-ManagedScriptFileInfo.md)
+Reads PSResourceGet-compatible PSScriptInfo metadata from a local script file.
+
 ### [Get-MissingFunctions](Get-MissingFunctions.md)
 Analyzes a script or scriptblock and reports functions/commands it calls that are not present.
 
@@ -150,6 +156,9 @@ Imports a PowerShell-authored project release object from JSON.
 ### [Import-IsolatedModule](Import-IsolatedModule.md)
 Imports a known PowerShell module through a curated AssemblyLoadContext isolation profile.
 
+### [Import-ManagedModuleRepository](Import-ManagedModuleRepository.md)
+Imports managed module repository profiles from a non-secret profile file.
+
 ### [Import-ModuleDependency](Import-ModuleDependency.md)
 Imports a module runtime by exact paths, with dependencies loaded before the root module.
 
@@ -161,6 +170,9 @@ Installs a built Apple .app bundle on a physical device.
 
 ### [Install-ManagedModule](Install-ManagedModule.md)
 Installs PowerShell modules through the managed C# module engine.
+
+### [Install-ManagedScript](Install-ManagedScript.md)
+Installs script resources through the managed C# resource engine.
 
 ### [Install-ModuleDependency](Install-ModuleDependency.md)
 Installs a module and its embedded dependencies to an explicit private runtime folder.
@@ -381,6 +393,9 @@ Creates configuration for updating Xcode project version values during a build p
 ### [New-DotNetPublishConfig](New-DotNetPublishConfig.md)
 Scaffolds a starter powerforge.dotnetpublish.json configuration file.
 
+### [New-ManagedScriptFileInfo](New-ManagedScriptFileInfo.md)
+Creates a PowerShell script file with PSResourceGet-compatible PSScriptInfo metadata.
+
 ### [New-ModuleAboutTopic](New-ModuleAboutTopic.md)
 Creates an about_*.help.txt template source file for module documentation.
 
@@ -417,6 +432,9 @@ Pushes NuGet packages to a feed using dotnet nuget push.
 ### [Register-Certificate](Register-Certificate.md)
 Signs files in a path using a code-signing certificate (Windows and PowerShell Core supported).
 
+### [Register-ManagedModuleRepository](Register-ManagedModuleRepository.md)
+Registers a managed module repository profile using PSResourceGet-shaped parameters.
+
 ### [Remove-Comments](Remove-Comments.md)
 Removes PowerShell comments from a script file or provided content, with optional empty-line normalization.
 
@@ -429,8 +447,14 @@ Removes specific files and folders from a project directory with safety features
 ### [Repair-ManagedModule](Repair-ManagedModule.md)
 Repairs installed PowerShell modules through the managed module-state engine.
 
+### [Reset-ManagedModuleRepository](Reset-ManagedModuleRepository.md)
+Resets managed module repository profiles to PSPublishModule defaults.
+
 ### [Save-ManagedModule](Save-ManagedModule.md)
 Saves modules from a managed repository to an explicit module root.
+
+### [Save-ManagedScript](Save-ManagedScript.md)
+Saves script resources from a managed repository to an explicit script directory.
 
 ### [Send-GitHubRelease](Send-GitHubRelease.md)
 Creates a new release for the given GitHub repository and optionally uploads assets.
@@ -511,14 +535,23 @@ Tests normalized benchmark summaries against a JSON baseline.
 ### [Test-IsolatedModuleProfile](Test-IsolatedModuleProfile.md)
 Validates a curated isolated module profile without importing it.
 
+### [Test-ManagedScriptFileInfo](Test-ManagedScriptFileInfo.md)
+Tests whether a script file contains readable PSResourceGet-compatible PSScriptInfo metadata.
+
 ### [Uninstall-ManagedModule](Uninstall-ManagedModule.md)
 Uninstalls installed PowerShell module versions through the managed module engine.
+
+### [Unregister-ManagedModuleRepository](Unregister-ManagedModuleRepository.md)
+Unregisters a saved managed module repository profile.
 
 ### [Update-BenchmarkDocument](Update-BenchmarkDocument.md)
 Updates a marker-delimited benchmark block in a Markdown document.
 
 ### [Update-ManagedModule](Update-ManagedModule.md)
 Updates installed PowerShell modules through the managed C# module engine.
+
+### [Update-ManagedScriptFileInfo](Update-ManagedScriptFileInfo.md)
+Updates PSResourceGet-compatible PSScriptInfo metadata in an existing script file.
 
 ## About Topics
 

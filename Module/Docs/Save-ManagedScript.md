@@ -4,48 +4,52 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# Find-ManagedModule
+# Save-ManagedScript
 ## SYNOPSIS
-Finds module versions from a managed module repository.
+Saves script resources from a managed repository to an explicit script directory.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Find-ManagedModule [-Name] <string[]> [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-AllVersions] [-First <int>] [-Tag <string[]>] [-ResourceType <string[]>] [-IncludeDependencies] [-Prerelease] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [<CommonParameters>]
+Save-ManagedScript [-Name] <string[]> [-Path] <string> [-Repository <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-PackageCacheDirectory <string>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [-Force] [-AcceptLicense] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-This command queries NuGet v3 or local-folder repositories through the managed C# repository client.
+Saves script resources from a managed repository to an explicit script directory.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-Find-ManagedModule -Name Company.Tools
-```
-
-
-### EXAMPLE 2
-```powershell
-Find-ManagedModule -Name Company.* -Repository C:\Packages
-```
-
-
-### EXAMPLE 3
-```powershell
-Find-ManagedModule -Name Company.Tools -Repository C:\Packages -AllVersions -AllowPrerelease
+Save-ManagedScript -Name Invoke-CompanyTask -Path C:\Scripts
 ```
 
 
 ## PARAMETERS
 
-### -AllVersions
-Return all matching versions instead of only the latest selected version.
+### -AcceptLicense
+Accept package licenses when packages declare license acceptance is required.
 
 ```yaml
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -AllowedAuthor
+Allowed package author values from package metadata.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: RequiredAuthor, TrustedAuthor
 Possible values:
 
 Required: False
@@ -119,13 +123,13 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -First
-Maximum search results returned for wildcard name queries.
+### -ExpectedPackageSha256
+Expected SHA256 hash of the script package before it is extracted and saved.
 
 ```yaml
-Type: Int32
+Type: String
 Parameter Sets: __AllParameterSets
-Aliases: None
+Aliases: PackageSha256, Sha256
 Possible values:
 
 Required: False
@@ -135,8 +139,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -IncludeDependencies
-Include dependency resources exposed by repository metadata.
+### -Force
+Overwrite an existing saved script.
 
 ```yaml
 Type: SwitchParameter
@@ -151,13 +155,45 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -MaximumVersion
+Maximum package version to save when Version is omitted.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -MinimumVersion
+Minimum package version to save when Version is omitted.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -Name
-Module names to find.
+Script resource names to save.
 
 ```yaml
 Type: String[]
 Parameter Sets: __AllParameterSets
-Aliases: ModuleName
+Aliases: ScriptName
 Possible values:
 
 Required: True
@@ -167,8 +203,56 @@ Accept pipeline input: True (ByPropertyName)
 Accept wildcard characters: True
 ```
 
+### -PackageCacheDirectory
+Optional package cache directory.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Path
+Destination directory for saved scripts.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: DestinationPath
+Possible values:
+
+Required: True
+Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Plan
+Return an inspectable save plan without writing files.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -Prerelease
-Include prerelease versions.
+Include prerelease versions when resolving the latest version.
 
 ```yaml
 Type: SwitchParameter
@@ -184,7 +268,7 @@ Accept wildcard characters: True
 ```
 
 ### -ProfileName
-Saved module repository profile to use instead of Repository.
+Saved repository profile name.
 
 ```yaml
 Type: String
@@ -241,7 +325,7 @@ Aliases: Source, RepositoryUri
 Possible values:
 
 Required: False
-Position: 1
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: True
@@ -263,14 +347,14 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ResourceType
-Resource kind to find. Find-ManagedModule currently returns module resources.
+### -RequireTrustedRepository
+Require the selected repository profile to be marked trusted.
 
 ```yaml
-Type: String[]
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
-Aliases: Type
-Possible values: Module
+Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -279,13 +363,45 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Tag
-Filter results by package tag metadata.
+### -TrustPolicy
+Optional typed repository/package trust policy.
 
 ```yaml
-Type: String[]
+Type: ManagedModuleTrustPolicy
 Parameter Sets: __AllParameterSets
-Aliases: Tags
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Version
+Exact package version to save. When omitted, the latest repository version is used.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: RequiredVersion
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -VersionPolicy
+NuGet-style version range policy used when Version is omitted.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
 Possible values:
 
 Required: False
@@ -304,7 +420,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.ManagedModuleVersionInfo`
+- `PowerForge.ManagedScriptSaveResult
+PowerForge.ManagedScriptSavePlan`
 
 ## RELATED LINKS
 

@@ -11,12 +11,12 @@ Gets installed PowerShell modules from managed module inventory.
 ## SYNTAX
 ### Local (Default)
 ```powershell
-Get-ManagedModule [[-Name] <string[]>] [-ModulePath <string[]>] [-IncludeLoaded] [-AsInventory] [-AsJson] [-ShowSummary] [<CommonParameters>]
+Get-ManagedModule [[-Name] <string[]>] [-ModulePath <string[]>] [-Version <string>] [-Scope <string>] [-IncludeLoaded] [-AsInventory] [-AsJson] [-ShowSummary] [<CommonParameters>]
 ```
 
 ### Path
 ```powershell
-Get-ManagedModule [[-Name] <string[]>] -Path <string> [-IncludeLoaded] [-AsInventory] [-AsJson] [-ShowSummary] [<CommonParameters>]
+Get-ManagedModule [[-Name] <string[]>] -Path <string> [-Version <string>] [-Scope <string>] [-IncludeLoaded] [-AsInventory] [-AsJson] [-ShowSummary] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -121,7 +121,7 @@ Accept wildcard characters: True
 ```
 
 ### -Path
-Path to a previously written inventory JSON artifact.
+Path to a module install root or previously written inventory JSON artifact.
 
 ```yaml
 Type: String
@@ -136,11 +136,43 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -Scope
+Module installation scope to return.
+
+```yaml
+Type: String
+Parameter Sets: Local, Path
+Aliases: None
+Possible values: CurrentUser, AllUsers
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -ShowSummary
 Write a compact Spectre.Console inventory summary.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: Local, Path
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Version
+Exact module version or explicit version range to return.
+
+```yaml
+Type: String
 Parameter Sets: Local, Path
 Aliases: None
 Possible values:

@@ -4,80 +4,36 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# Find-ManagedModule
+# Update-ManagedScriptFileInfo
 ## SYNOPSIS
-Finds module versions from a managed module repository.
+Updates PSResourceGet-compatible PSScriptInfo metadata in an existing script file.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Find-ManagedModule [-Name] <string[]> [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-AllVersions] [-First <int>] [-Tag <string[]>] [-ResourceType <string[]>] [-IncludeDependencies] [-Prerelease] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [<CommonParameters>]
+Update-ManagedScriptFileInfo [-Path] <string> [-Version <string>] [-Author <string>] [-Description <string>] [-Guid <guid>] [-CompanyName <string>] [-Copyright <string>] [-RequiredModules <hashtable[]>] [-ExternalModuleDependencies <string[]>] [-RequiredScripts <string[]>] [-ExternalScriptDependencies <string[]>] [-Tags <string[]>] [-ProjectUri <string>] [-LicenseUri <string>] [-IconUri <string>] [-ReleaseNotes <string>] [-PrivateData <string>] [-RemoveSignature] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-This command queries NuGet v3 or local-folder repositories through the managed C# repository client.
+Updates PSResourceGet-compatible PSScriptInfo metadata in an existing script file.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-Find-ManagedModule -Name Company.Tools
-```
-
-
-### EXAMPLE 2
-```powershell
-Find-ManagedModule -Name Company.* -Repository C:\Packages
-```
-
-
-### EXAMPLE 3
-```powershell
-Find-ManagedModule -Name Company.Tools -Repository C:\Packages -AllVersions -AllowPrerelease
+Update-ManagedScriptFileInfo -Path 'C:\Path'
 ```
 
 
 ## PARAMETERS
 
-### -AllVersions
-Return all matching versions instead of only the latest selected version.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Credential
-Optional repository credential.
-
-```yaml
-Type: PSCredential
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -CredentialSecret
-Optional repository credential secret.
+### -Author
+Script author.
 
 ```yaml
 Type: String
 Parameter Sets: __AllParameterSets
-Aliases: Password, Token
+Aliases: None
 Possible values:
 
 Required: False
@@ -87,43 +43,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -CredentialSecretFilePath
-Optional path to a file containing the repository credential secret.
+### -CompanyName
+Company name.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
-Aliases: CredentialPath, TokenPath
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -CredentialUserName
-Optional repository credential username.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: UserName
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -First
-Maximum search results returned for wildcard name queries.
-
-```yaml
-Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -135,11 +59,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -IncludeDependencies
-Include dependency resources exposed by repository metadata.
+### -Copyright
+Copyright text.
 
 ```yaml
-Type: SwitchParameter
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -151,29 +75,173 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Name
-Module names to find.
+### -Description
+Script description stored in comment-based help.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ExternalModuleDependencies
+External module dependencies.
 
 ```yaml
 Type: String[]
 Parameter Sets: __AllParameterSets
-Aliases: ModuleName
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ExternalScriptDependencies
+External script dependencies.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Guid
+Script metadata GUID.
+
+```yaml
+Type: Guid
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IconUri
+Icon URI.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -LicenseUri
+License URI.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Path
+Path to the script file.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
 Possible values:
 
 Required: True
 Position: 0
 Default value: None
-Accept pipeline input: True (ByPropertyName)
+Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Prerelease
-Include prerelease versions.
+### -PrivateData
+Private data text.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProjectUri
+Project URI.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ReleaseNotes
+Release notes text.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RemoveSignature
+Remove an existing Authenticode signature block from the script body.
 
 ```yaml
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
-Aliases: AllowPrerelease
+Aliases: None
 Possible values:
 
 Required: False
@@ -183,11 +251,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ProfileName
-Saved module repository profile to use instead of Repository.
+### -RequiredModules
+Required modules as PSResourceGet-style hashtables.
 
 ```yaml
-Type: String
+Type: Hashtable[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -199,78 +267,14 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Proxy
-Optional HTTP proxy used for repository requests.
-
-```yaml
-Type: Uri
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -ProxyCredential
-Optional proxy credential used with Proxy.
-
-```yaml
-Type: PSCredential
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Repository
-Repository URL, NuGet v3 service index, flat-container URL, or local folder feed.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: Source, RepositoryUri
-Possible values:
-
-Required: False
-Position: 1
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -RepositoryName
-Friendly repository name used in output.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -ResourceType
-Resource kind to find. Find-ManagedModule currently returns module resources.
+### -RequiredScripts
+Required script dependencies.
 
 ```yaml
 Type: String[]
 Parameter Sets: __AllParameterSets
-Aliases: Type
-Possible values: Module
+Aliases: None
+Possible values:
 
 Required: False
 Position: named
@@ -279,13 +283,29 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Tag
-Filter results by package tag metadata.
+### -Tags
+Search tags.
 
 ```yaml
 Type: String[]
 Parameter Sets: __AllParameterSets
-Aliases: Tags
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Version
+Script version.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
 Possible values:
 
 Required: False
@@ -300,11 +320,11 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-- `System.String[]`
+- `None`
 
 ## OUTPUTS
 
-- `PowerForge.ManagedModuleVersionInfo`
+- `System.Object`
 
 ## RELATED LINKS
 

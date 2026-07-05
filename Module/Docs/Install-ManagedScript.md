@@ -4,31 +4,24 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# Update-ManagedModule
+# Install-ManagedScript
 ## SYNOPSIS
-Updates installed PowerShell modules through the managed C# module engine.
+Installs script resources through the managed C# resource engine.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Update-ManagedModule [[-Name] <string[]>] [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-PackageCacheDirectory <string>] [-DependencyConcurrency <int>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [-Force] [-AllowClobber] [-AcceptLicense] [-AuthenticodeCheck] [-SkipDependencyCheck] [-LoadedModule <ManagedModuleLoadedModule[]>] [-FamilyPolicy <ManagedModuleFamilyPolicy>] [-FamilyName <string>] [-FamilyModuleNamePrefix <string>] [-FamilyModuleName <string[]>] [-SourcePolicy <ManagedModuleSourcePolicy>] [-RequireSourceMatch] [-AllowLoadedModuleUpdate] [-Plan] [-ShowSummary] [-Quiet] [-WhatIf] [-Confirm] [<CommonParameters>]
+Install-ManagedScript [-Name] <string[]> [[-Repository] <string>] [-RepositoryName <string>] [-ProfileName <string>] [-Version <string>] [-MinimumVersion <string>] [-MaximumVersion <string>] [-VersionPolicy <string>] [-Prerelease] [-Scope <ManagedScriptInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ScriptRoot <string>] [-PackageCacheDirectory <string>] [-ExpectedPackageSha256 <string>] [-TrustPolicy <ManagedModuleTrustPolicy>] [-RequireTrustedRepository] [-AllowedAuthor <string[]>] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-Proxy <uri>] [-ProxyCredential <pscredential>] [-Force] [-AcceptLicense] [-Plan] [-NoPathUpdate] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-This command inspects the selected module root and updates only when the repository contains a newer selected
-version, or installs the target when the selected scope has no copy.
+Installs script resources through the managed C# resource engine.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-Update-ManagedModule -Name Company.Tools
-```
-
-
-### EXAMPLE 2
-```powershell
-Update-ManagedModule -Name Company.Tools -Repository C:\Packages -Path C:\Modules
+Install-ManagedScript -Name Invoke-CompanyTask -Scope CurrentUser
 ```
 
 
@@ -50,22 +43,6 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -AllowClobber
-Allow command exports to overlap with other modules in the target root.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
 ### -AllowedAuthor
 Allowed package author values from package metadata.
 
@@ -73,38 +50,6 @@ Allowed package author values from package metadata.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: RequiredAuthor, TrustedAuthor
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -AllowLoadedModuleUpdate
-Allow updating even when matching loaded module evidence is supplied.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -AuthenticodeCheck
-Validate Authenticode signatures for signable package files before promotion.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
 Possible values:
 
 Required: False
@@ -178,24 +123,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -DependencyConcurrency
-Maximum number of dependency branches to install concurrently during update delivery. Omit to use the managed engine default.
-
-```yaml
-Type: Int32
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
 ### -ExpectedPackageSha256
-Expected SHA256 hash of the requested module package before it is extracted and promoted.
+Expected SHA256 hash of the script package before it is extracted and installed.
 
 ```yaml
 Type: String
@@ -210,72 +139,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -FamilyModuleName
-Exact installed module names that belong to the family.
-
-```yaml
-Type: String[]
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -FamilyModuleNamePrefix
-Module name prefix used to discover installed family members.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -FamilyName
-Friendly family policy name used in plans and diagnostics.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -FamilyPolicy
-Typed family policy used to keep related installed modules version-coherent.
-
-```yaml
-Type: ManagedModuleFamilyPolicy
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
 ### -Force
-Reinstall the target version when it is already installed.
+Reinstall the script version when it already exists.
 
 ```yaml
 Type: SwitchParameter
@@ -290,24 +155,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -LoadedModule
-Loaded module evidence used to block risky in-session updates.
-
-```yaml
-Type: ManagedModuleLoadedModule[]
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
 ### -MaximumVersion
-Maximum target version when Version is omitted.
+Maximum package version to install when Version is omitted.
 
 ```yaml
 Type: String
@@ -323,7 +172,7 @@ Accept wildcard characters: True
 ```
 
 ### -MinimumVersion
-Minimum target version when Version is omitted.
+Minimum package version to install when Version is omitted.
 
 ```yaml
 Type: String
@@ -338,35 +187,35 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ModuleRoot
-Explicit module root. When supplied, the command updates that root.
+### -Name
+Script resource names to install.
 
 ```yaml
-Type: String
+Type: String[]
 Parameter Sets: __AllParameterSets
-Aliases: Path
+Aliases: ScriptName
+Possible values:
+
+Required: True
+Position: 0
+Default value: None
+Accept pipeline input: True (ByPropertyName)
+Accept wildcard characters: True
+```
+
+### -NoPathUpdate
+Do not add the resolved script root to the current process PATH after installation.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
 Possible values:
 
 Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Name
-Module names to update.
-
-```yaml
-Type: String[]
-Parameter Sets: __AllParameterSets
-Aliases: ModuleName
-Possible values:
-
-Required: False
-Position: 0
-Default value: None
-Accept pipeline input: True (ByPropertyName)
 Accept wildcard characters: True
 ```
 
@@ -387,7 +236,7 @@ Accept wildcard characters: True
 ```
 
 ### -Plan
-Return an inspectable update plan without writing files.
+Return an inspectable install plan without writing files.
 
 ```yaml
 Type: SwitchParameter
@@ -466,22 +315,6 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Quiet
-Suppress optional host summaries and progress-style output without changing pipeline result objects.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
 ### -Repository
 Repository URL, NuGet v3 service index, flat-container URL, or local folder feed.
 
@@ -514,22 +347,6 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -RequireSourceMatch
-Require installed source evidence to match the requested repository before reporting up to date.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
 ### -RequireTrustedRepository
 Require the selected repository profile to be marked trusted.
 
@@ -547,10 +364,10 @@ Accept wildcard characters: True
 ```
 
 ### -Scope
-Scope to inspect and update when ModuleRoot is not supplied.
+Install scope used when ScriptRoot is not supplied.
 
 ```yaml
-Type: ManagedModuleInstallScope
+Type: ManagedScriptInstallScope
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: CurrentUser, AllUsers, Custom
@@ -562,62 +379,30 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -ScriptRoot
+Explicit script root. When supplied, Scope is treated as Custom.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: Path
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -ShellEdition
-PowerShell path family used when resolving default CurrentUser or AllUsers module roots.
+PowerShell path family used when resolving default CurrentUser or AllUsers script roots.
 
 ```yaml
 Type: ManagedModuleShellEdition
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: Auto, Desktop, Core
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -ShowSummary
-Write a compact Spectre.Console summary for each plan or result.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -SkipDependencyCheck
-Skip installing dependencies declared by the package.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: SkipDependenciesCheck
-Possible values:
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -SourcePolicy
-Typed source policy used to require managed receipt evidence from the requested repository.
-
-```yaml
-Type: ManagedModuleSourcePolicy
-Parameter Sets: __AllParameterSets
-Aliases: None
-Possible values:
 
 Required: False
 Position: named
@@ -643,7 +428,7 @@ Accept wildcard characters: True
 ```
 
 ### -Version
-Exact target version. When omitted, the latest repository version is used.
+Exact package version to install. When omitted, the latest repository version is used.
 
 ```yaml
 Type: String
@@ -683,8 +468,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.ManagedModuleUpdateResult
-PowerForge.ManagedModuleUpdatePlan`
+- `PowerForge.ManagedScriptInstallResult
+PowerForge.ManagedScriptInstallPlan`
 
 ## RELATED LINKS
 
