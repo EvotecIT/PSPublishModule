@@ -478,7 +478,7 @@ public sealed partial class ModulePipelineRunner
             return null;
 
         var librariesPath = Path.Combine(sourcePath, plan.ModuleName + ".Libraries.ps1");
-        var cleanup = SourceBinaryPayloadCleanup.Begin(libPath, librariesPath);
+        var cleanup = SourceBinaryPayloadCleanup.Begin(sourcePath, libPath, librariesPath);
         if (cleanup is null)
             return null;
 
@@ -537,14 +537,18 @@ public sealed partial class ModulePipelineRunner
             _backupLibrariesPath = backupLibrariesPath;
         }
 
-        public static SourceBinaryPayloadCleanup? Begin(string libPath, string librariesPath)
+        public static SourceBinaryPayloadCleanup? Begin(string sourcePath, string libPath, string librariesPath)
         {
             var hasLib = Directory.Exists(libPath);
             var hasLibraries = File.Exists(librariesPath);
             if (!hasLib && !hasLibraries)
                 return null;
 
-            var tempRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "ReplaceSingleFileCleanup", Guid.NewGuid().ToString("N"));
+            var sourceRoot = Path.GetFullPath(sourcePath);
+            var sourceParent = Directory.GetParent(sourceRoot)?.FullName;
+            var tempRoot = string.IsNullOrWhiteSpace(sourceParent)
+                ? Path.Combine(Path.GetTempPath(), "PowerForge", "ReplaceSingleFileCleanup", Guid.NewGuid().ToString("N"))
+                : Path.Combine(sourceParent!, ".PowerForge.ReplaceSingleFileCleanup." + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempRoot);
 
             string? backupLibPath = null;

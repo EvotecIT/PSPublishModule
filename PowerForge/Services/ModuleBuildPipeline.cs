@@ -321,7 +321,8 @@ public sealed class ModuleBuildPipeline
     }
 
     private static bool ShouldCleanReplaceSingleFileBinaryPayload(ModuleBuildSpec spec)
-        => spec.DevelopmentBinariesMode != ModuleDevelopmentBinaryMode.Off &&
+        => !spec.RefreshManifestOnly &&
+           spec.DevelopmentBinariesMode != ModuleDevelopmentBinaryMode.Off &&
            spec.DevelopmentSourceBootstrapperMode == ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile &&
            !string.IsNullOrWhiteSpace(ResolveDevelopmentBinaryRoot(spec));
 
