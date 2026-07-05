@@ -416,6 +416,8 @@ public sealed partial class ModulePipelineRunner
                 return;
             }
 
+            TryCleanReplaceSingleFileSourceBinaryPayload(plan);
+
             var exports = ModuleManifestExportReader.ReadExports(buildResult.ManifestPath);
             var conditionalExportDependencies = ResolveConditionalExportDependencies(
                 plan,
@@ -460,6 +462,48 @@ public sealed partial class ModulePipelineRunner
             _logger.Warn($"Failed to update source development bootstrapper for '{plan.ModuleName}'. Error: {ex.Message}");
             if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
         }
+    }
+
+    private void TryCleanReplaceSingleFileSourceBinaryPayload(ModulePipelinePlan plan)
+    {
+        if (plan.BuildSpec.DevelopmentSourceBootstrapperMode != ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile)
+            return;
+
+        if (string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath))
+            return;
+
+        var sourcePath = Path.GetFullPath(plan.BuildSpec.SourcePath);
+        var libPath = Path.GetFullPath(Path.Combine(sourcePath, "Lib"));
+        if (!IsDirectChildPath(libPath, sourcePath, "Lib"))
+            return;
+
+        try
+        {
+            if (Directory.Exists(libPath))
+            {
+                Directory.Delete(libPath, recursive: true);
+                _logger.Info($"Removed source development Lib payload before regenerating '{plan.ModuleName}' bootstrapper: {libPath}");
+            }
+
+            var librariesPath = Path.Combine(sourcePath, plan.ModuleName + ".Libraries.ps1");
+            if (File.Exists(librariesPath))
+            {
+                File.Delete(librariesPath);
+                _logger.Info($"Removed source development libraries script before regenerating '{plan.ModuleName}' bootstrapper: {librariesPath}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Failed to clean source development binary payload for '{plan.ModuleName}'. Error: {ex.Message}");
+            if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+        }
+    }
+
+    private static bool IsDirectChildPath(string candidatePath, string parentPath, string childName)
+    {
+        var parent = Path.GetFullPath(parentPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var candidate = Path.GetFullPath(candidatePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return string.Equals(candidate, Path.Combine(parent, childName), StringComparison.OrdinalIgnoreCase);
     }
 
     private void TryClearSourceDevelopmentBootstrapper(
