@@ -407,6 +407,7 @@ public sealed partial class ModulePipelineRunner
             return;
         }
 
+        SourceBinaryPayloadCleanup? sourceBinaryPayloadCleanup = null;
         try
         {
             var binaryRoot = ResolveDevelopmentBinaryRoot(plan.BuildSpec);
@@ -416,7 +417,7 @@ public sealed partial class ModulePipelineRunner
                 return;
             }
 
-            TryCleanReplaceSingleFileSourceBinaryPayload(plan);
+            sourceBinaryPayloadCleanup = TryBeginReplaceSingleFileSourceBinaryPayloadCleanup(plan);
 
             var exports = ModuleManifestExportReader.ReadExports(buildResult.ManifestPath);
             var conditionalExportDependencies = ResolveConditionalExportDependencies(
@@ -455,47 +456,42 @@ public sealed partial class ModulePipelineRunner
                 targetFrameworks: plan.BuildSpec.Frameworks,
                 log: message => _logger.Info(message));
 
+            sourceBinaryPayloadCleanup?.Complete(_logger);
             _logger.Info($"Updated source development bootstrapper: {Path.Combine(plan.BuildSpec.SourcePath, plan.ModuleName + ".psm1")}");
         }
         catch (Exception ex)
         {
+            sourceBinaryPayloadCleanup?.Rollback(_logger);
             _logger.Warn($"Failed to update source development bootstrapper for '{plan.ModuleName}'. Error: {ex.Message}");
             if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
         }
     }
 
-    private void TryCleanReplaceSingleFileSourceBinaryPayload(ModulePipelinePlan plan)
+    private SourceBinaryPayloadCleanup? TryBeginReplaceSingleFileSourceBinaryPayloadCleanup(ModulePipelinePlan plan)
     {
         if (plan.BuildSpec.DevelopmentSourceBootstrapperMode != ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile)
-            return;
-
-        if (string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath))
-            return;
+            return null;
 
         var sourcePath = Path.GetFullPath(plan.BuildSpec.SourcePath);
         var libPath = Path.GetFullPath(Path.Combine(sourcePath, "Lib"));
         if (!IsDirectChildPath(libPath, sourcePath, "Lib"))
-            return;
+            return null;
 
         try
         {
-            if (Directory.Exists(libPath))
-            {
-                Directory.Delete(libPath, recursive: true);
-                _logger.Info($"Removed source development Lib payload before regenerating '{plan.ModuleName}' bootstrapper: {libPath}");
-            }
-
             var librariesPath = Path.Combine(sourcePath, plan.ModuleName + ".Libraries.ps1");
-            if (File.Exists(librariesPath))
-            {
-                File.Delete(librariesPath);
-                _logger.Info($"Removed source development libraries script before regenerating '{plan.ModuleName}' bootstrapper: {librariesPath}");
-            }
+            var cleanup = SourceBinaryPayloadCleanup.Begin(sourcePath, libPath, librariesPath);
+            if (cleanup is null)
+                return null;
+
+            _logger.Info($"Temporarily moved source development binary payload before regenerating '{plan.ModuleName}' bootstrapper.");
+            return cleanup;
         }
         catch (Exception ex)
         {
-            _logger.Warn($"Failed to clean source development binary payload for '{plan.ModuleName}'. Error: {ex.Message}");
+            _logger.Warn($"Failed to prepare source development binary payload cleanup for '{plan.ModuleName}'. Error: {ex.Message}");
             if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+            return null;
         }
     }
 
@@ -504,6 +500,116 @@ public sealed partial class ModulePipelineRunner
         var parent = Path.GetFullPath(parentPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var candidate = Path.GetFullPath(candidatePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return string.Equals(candidate, Path.Combine(parent, childName), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class SourceBinaryPayloadCleanup
+    {
+        private readonly string _tempRoot;
+        private readonly string _libPath;
+        private readonly string? _backupLibPath;
+        private readonly string _librariesPath;
+        private readonly string? _backupLibrariesPath;
+
+        private SourceBinaryPayloadCleanup(
+            string tempRoot,
+            string libPath,
+            string? backupLibPath,
+            string librariesPath,
+            string? backupLibrariesPath)
+        {
+            _tempRoot = tempRoot;
+            _libPath = libPath;
+            _backupLibPath = backupLibPath;
+            _librariesPath = librariesPath;
+            _backupLibrariesPath = backupLibrariesPath;
+        }
+
+        public static SourceBinaryPayloadCleanup? Begin(string sourcePath, string libPath, string librariesPath)
+        {
+            var hasLib = Directory.Exists(libPath);
+            var hasLibraries = File.Exists(librariesPath);
+            if (!hasLib && !hasLibraries)
+                return null;
+
+            var tempRoot = Path.Combine(sourcePath, ".PowerForge.ReplaceSingleFileCleanup." + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempRoot);
+
+            string? backupLibPath = null;
+            string? backupLibrariesPath = null;
+            try
+            {
+                if (hasLib)
+                {
+                    backupLibPath = Path.Combine(tempRoot, "Lib");
+                    Directory.Move(libPath, backupLibPath);
+                }
+
+                if (hasLibraries)
+                {
+                    backupLibrariesPath = Path.Combine(tempRoot, Path.GetFileName(librariesPath));
+                    File.Move(librariesPath, backupLibrariesPath);
+                }
+
+                return new SourceBinaryPayloadCleanup(tempRoot, libPath, backupLibPath, librariesPath, backupLibrariesPath);
+            }
+            catch
+            {
+                RestoreDirectory(backupLibPath, libPath);
+                RestoreFile(backupLibrariesPath, librariesPath);
+                TryDeleteDirectory(tempRoot);
+                throw;
+            }
+        }
+
+        public void Complete(ILogger logger)
+        {
+            try
+            {
+                TryDeleteDirectory(_tempRoot);
+            }
+            catch (Exception ex)
+            {
+                logger.Warn($"Updated source development bootstrapper, but failed to delete old binary payload backup '{_tempRoot}'. Error: {ex.Message}");
+                if (logger.IsVerbose) logger.Verbose(ex.ToString());
+            }
+        }
+
+        public void Rollback(ILogger logger)
+        {
+            try
+            {
+                RestoreDirectory(_backupLibPath, _libPath);
+                RestoreFile(_backupLibrariesPath, _librariesPath);
+                TryDeleteDirectory(_tempRoot);
+            }
+            catch (Exception ex)
+            {
+                logger.Warn($"Failed to restore source development binary payload backup '{_tempRoot}'. Error: {ex.Message}");
+                if (logger.IsVerbose) logger.Verbose(ex.ToString());
+            }
+        }
+
+        private static void RestoreDirectory(string? sourcePath, string destinationPath)
+        {
+            if (string.IsNullOrWhiteSpace(sourcePath) || !Directory.Exists(sourcePath) || Directory.Exists(destinationPath))
+                return;
+
+            Directory.Move(sourcePath, destinationPath);
+        }
+
+        private static void RestoreFile(string? sourcePath, string destinationPath)
+        {
+            if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath) || File.Exists(destinationPath))
+                return;
+
+            File.Move(sourcePath, destinationPath);
+        }
+
+        private static void TryDeleteDirectory(string path)
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, recursive: true);
+        }
     }
 
     private void TryClearSourceDevelopmentBootstrapper(

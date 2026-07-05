@@ -449,6 +449,85 @@ public sealed class ModulePipelineDevelopmentBootstrapperTests
     }
 
     [Fact]
+    public void SourceRefresh_WithExplicitDevelopmentBinariesAndReplaceSingleFileSource_CleansStaleSourceLibPayload()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "DemoModule";
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "repo"));
+            ModulePipelineMissingAnalysisServiceTests.WriteMinimalModule(projectRoot.FullName, moduleName, "1.0.0");
+            var libCore = Directory.CreateDirectory(Path.Combine(projectRoot.FullName, "Lib", "Core"));
+            File.WriteAllText(Path.Combine(libCore.FullName, "Humanizer.dll"), string.Empty);
+            File.WriteAllText(Path.Combine(projectRoot.FullName, moduleName + ".Libraries.ps1"), "Lib\\Core\\Humanizer.dll");
+            var psm1Path = Path.Combine(projectRoot.FullName, moduleName + ".psm1");
+            File.WriteAllText(psm1Path, "# local binary-only source module\r\n");
+
+            var spec = CreateDevelopmentBinarySpec(
+                projectRoot.FullName,
+                moduleName,
+                ModuleDevelopmentBinaryMode.Environment,
+                sourceBootstrapperMode: ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile,
+                includeProjectPath: false);
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            InvokeSourceBootstrapperRefresh(runner, spec, projectRoot.FullName, moduleName);
+
+            var bootstrapper = File.ReadAllText(psm1Path);
+            Assert.Contains("# Source development binary loader", bootstrapper);
+            Assert.False(Directory.Exists(Path.Combine(projectRoot.FullName, "Lib")));
+            Assert.False(File.Exists(Path.Combine(projectRoot.FullName, moduleName + ".Libraries.ps1")));
+            Assert.DoesNotContain("$LibraryName = 'DemoModule'", bootstrapper);
+            Assert.DoesNotContain("Humanizer.dll", bootstrapper);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void SourceRefresh_WithDevelopmentBinariesAndReplaceSingleFileSource_RestoresStalePayloadWhenRefreshFails()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "DemoModule";
+            const string librariesContent = "Lib\\Core\\Humanizer.dll";
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "repo"));
+            ModulePipelineMissingAnalysisServiceTests.WriteMinimalModule(projectRoot.FullName, moduleName, "1.0.0");
+            var libCore = Directory.CreateDirectory(Path.Combine(projectRoot.FullName, "Lib", "Core"));
+            var staleLibraryPath = Path.Combine(libCore.FullName, "Humanizer.dll");
+            File.WriteAllText(staleLibraryPath, "stale");
+            var librariesPath = Path.Combine(projectRoot.FullName, moduleName + ".Libraries.ps1");
+            File.WriteAllText(librariesPath, librariesContent);
+            var psm1Path = Path.Combine(projectRoot.FullName, moduleName + ".psm1");
+            File.Delete(psm1Path);
+            Directory.CreateDirectory(psm1Path);
+            WriteDemoCsproj(projectRoot.FullName, "<TargetFrameworks>net8.0;net472</TargetFrameworks>");
+
+            var spec = CreateDevelopmentBinarySpec(
+                projectRoot.FullName,
+                moduleName,
+                ModuleDevelopmentBinaryMode.Environment,
+                sourceBootstrapperMode: ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile);
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            InvokeSourceBootstrapperRefresh(runner, spec, projectRoot.FullName, moduleName);
+
+            Assert.True(Directory.Exists(Path.Combine(projectRoot.FullName, "Lib")));
+            Assert.Equal("stale", File.ReadAllText(staleLibraryPath));
+            Assert.Equal(librariesContent, File.ReadAllText(librariesPath));
+            Assert.True(Directory.Exists(psm1Path));
+            Assert.Empty(Directory.GetDirectories(projectRoot.FullName, ".PowerForge.ReplaceSingleFileCleanup.*"));
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void SourceRefresh_WithDevelopmentBinariesAndReplaceSingleFileSource_DoesNotOverwriteCustomIncludeSourceModule()
     {
         var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -592,7 +671,8 @@ public sealed class ModulePipelineDevelopmentBootstrapperTests
         string sourcePath,
         string moduleName,
         ModuleDevelopmentBinaryMode mode,
-        ModuleDevelopmentSourceBootstrapperMode sourceBootstrapperMode = ModuleDevelopmentSourceBootstrapperMode.PreserveSingleFile)
+        ModuleDevelopmentSourceBootstrapperMode sourceBootstrapperMode = ModuleDevelopmentSourceBootstrapperMode.PreserveSingleFile,
+        bool includeProjectPath = true)
         => new()
         {
             Build = new ModuleBuildSpec
@@ -609,7 +689,7 @@ public sealed class ModulePipelineDevelopmentBootstrapperTests
                 {
                     BuildLibraries = new BuildLibrariesConfiguration
                     {
-                        NETProjectPath = "Sources/Demo/Demo.csproj",
+                        NETProjectPath = includeProjectPath ? "Sources/Demo/Demo.csproj" : null,
                         DevelopmentBinaries = mode != ModuleDevelopmentBinaryMode.Off,
                         DevelopmentBinariesMode = mode,
                         DevelopmentBinariesPath = "Sources/Demo/bin",
