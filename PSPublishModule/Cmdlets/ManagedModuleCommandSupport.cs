@@ -265,7 +265,7 @@ internal static class ManagedModuleCommandSupport
                 resolvedRegisteredRepositoryName!,
                 resolvedSource,
                 ManagedModuleRepositoryKind.Auto,
-                resolvedRegisteredRepositoryTrusted);
+                profile.Trusted && resolvedRegisteredRepositoryTrusted);
             return true;
         }
         catch (InvalidOperationException)

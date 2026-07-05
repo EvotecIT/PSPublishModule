@@ -32,7 +32,7 @@ public sealed class SaveManagedScriptCommand : AsyncPSCmdlet
     [Parameter]
     [Alias("Source", "RepositoryUri")]
     [ValidateNotNullOrEmpty]
-    public string Repository { get; set; } = ManagedModuleCommandSupport.DefaultRepositorySource;
+    public string Repository { get; set; } = ManagedModuleCommandSupport.DefaultScriptRepositorySource;
 
     /// <summary>Friendly repository name used in output.</summary>
     [Parameter]

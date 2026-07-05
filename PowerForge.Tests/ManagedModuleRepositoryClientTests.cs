@@ -820,6 +820,25 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task DownloadPackageAsync_uses_v2_package_endpoint_for_script_items_source()
+    {
+        var requests = new List<RecordedRequest>();
+        using var temp = new TemporaryDirectory();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository(
+            "Scripts",
+            "https://example.test/api/v2/items/psscript");
+
+        var result = await repositoryClient.DownloadPackageAsync(repository, "Company.Tools", "1.1.0", temp.Path);
+
+        Assert.True(File.Exists(result.PackagePath));
+        Assert.Equal("https://example.test/api/v2/package/Company.Tools/1.1.0", result.Source);
+        Assert.Contains(requests, request => request.Url == "https://example.test/api/v2/package/Company.Tools/1.1.0");
+        Assert.DoesNotContain(requests, request => request.Url == "https://example.test/api/v2/items/psscript/package/Company.Tools/1.1.0");
+    }
+
+    [Fact]
     public async Task DownloadPackageAsync_reuses_matching_cache_without_repository_request()
     {
         var requests = new List<RecordedRequest>();
