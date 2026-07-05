@@ -801,10 +801,12 @@ public sealed class ManagedScriptResourceService
         }
 
         var existingVersion = TryReadExistingVersion(scriptPath);
-        if (string.IsNullOrWhiteSpace(existingVersion) || !IsExistingVersionSatisfied(request, existingVersion!))
+        var existingPackageVersion = TryReadInstalledPackageVersion(scriptPath);
+        var existingComparableVersion = existingPackageVersion ?? existingVersion;
+        if (string.IsNullOrWhiteSpace(existingComparableVersion) || !IsExistingVersionSatisfied(request, existingComparableVersion!))
             return null;
 
-        return new SatisfiedExistingScriptInstall(existingVersion!, ReadExistingScriptInfoForSkip(scriptPath));
+        return new SatisfiedExistingScriptInstall(existingComparableVersion!, ReadExistingScriptInfoForSkip(scriptPath));
     }
 
     private ManagedScriptFileInfo ReadExistingScriptInfoForSkip(string scriptPath)

@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using PowerForge;
 
@@ -235,7 +236,7 @@ public sealed class InstallManagedScriptCommand : AsyncPSCmdlet
                 }
             });
 
-        if (parts.Any(part => string.Equals(part, resolved, StringComparison.OrdinalIgnoreCase)))
+        if (parts.Any(part => string.Equals(part, resolved, PathComparison)))
             return false;
 
         var updated = string.IsNullOrWhiteSpace(current)
@@ -244,4 +245,9 @@ public sealed class InstallManagedScriptCommand : AsyncPSCmdlet
         Environment.SetEnvironmentVariable("PATH", updated);
         return true;
     }
+
+    internal static StringComparison PathComparison
+        => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
 }

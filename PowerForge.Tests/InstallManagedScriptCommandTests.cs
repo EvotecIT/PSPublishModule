@@ -59,7 +59,32 @@ public sealed class InstallManagedScriptCommandTests
             Assert.Contains(pathEntries, entry => string.Equals(
                 Path.GetFullPath(entry).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
                 Path.GetFullPath(scriptRoot.Path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                StringComparison.OrdinalIgnoreCase));
+                InstallManagedScriptCommand.PathComparison));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PATH", previousPath);
+        }
+    }
+
+    [Fact]
+    public void InstallManagedScript_adds_case_distinct_script_root_to_process_path_on_unix()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return;
+
+        var previousPath = Environment.GetEnvironmentVariable("PATH");
+        using var root = new TemporaryDirectory();
+        var existing = Path.Combine(root.Path, "scripts");
+        var requested = Path.Combine(root.Path, "Scripts");
+        try
+        {
+            Environment.SetEnvironmentVariable("PATH", existing);
+
+            Assert.True(InstallManagedScriptCommand.EnsureProcessPathContains(requested));
+            var pathEntries = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+                .Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries);
+            Assert.Contains(Path.GetFullPath(requested), pathEntries.Select(Path.GetFullPath));
         }
         finally
         {
@@ -310,6 +335,35 @@ public sealed class InstallManagedScriptCommandTests
             .AddParameter("RepositoryName", "Local")
             .AddParameter("ScriptRoot", scriptRoot.Path)
             .AddParameter("RequiredVersion", "1.2.0");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptInstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptInstallStatus.SkippedExisting, result.Status);
+        Assert.Equal("1.2.0", result.Version);
+        Assert.Equal("1.0.0", result.ScriptInfo?.Version);
+        Assert.Null(result.Download);
+    }
+
+    [Fact]
+    public void InstallManagedScript_uses_sidecar_package_version_for_range_fast_skip()
+    {
+        using var feed = new TemporaryDirectory();
+        using var scriptRoot = new TemporaryDirectory();
+        var scriptPath = Path.Combine(scriptRoot.Path, "Invoke-CompanyTask.ps1");
+        File.WriteAllText(scriptPath, CreateScript("1.0.0"));
+        File.WriteAllText(
+            scriptPath + ".powerforge.json",
+            $$"""{"Name":"Invoke-CompanyTask","Version":"1.2.0","ScriptSha256":"{{TestHash.ComputeSha256(scriptPath)}}","RepositoryName":"Local","RepositorySource":"{{feed.Path.Replace("\\", "\\\\", StringComparison.Ordinal)}}"}""");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ScriptRoot", scriptRoot.Path)
+            .AddParameter("MinimumVersion", "1.1.0")
+            .AddParameter("MaximumVersion", "2.0.0");
         var results = ps.Invoke();
 
         AssertNoPowerShellErrors(ps);
