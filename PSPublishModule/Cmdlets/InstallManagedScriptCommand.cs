@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Linq;
 using System.Management.Automation;
 using System.Threading.Tasks;
 using PowerForge;
@@ -26,7 +28,7 @@ public sealed class InstallManagedScriptCommand : AsyncPSCmdlet
     [Parameter(Position = 1)]
     [Alias("Source", "RepositoryUri")]
     [ValidateNotNullOrEmpty]
-    public string Repository { get; set; } = ManagedModuleCommandSupport.DefaultRepositorySource;
+    public string Repository { get; set; } = ManagedModuleCommandSupport.DefaultScriptRepositorySource;
 
     /// <summary>Friendly repository name used in output.</summary>
     [Parameter]
@@ -143,10 +145,15 @@ public sealed class InstallManagedScriptCommand : AsyncPSCmdlet
     [Parameter]
     public SwitchParameter Plan { get; set; }
 
+    /// <summary>Do not add the resolved script root to the current process PATH after installation.</summary>
+    [Parameter]
+    public SwitchParameter NoPathUpdate { get; set; }
+
     /// <summary>Installs requested scripts.</summary>
     protected override async Task ProcessRecordAsync()
     {
         var scriptRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ScriptRoot);
+        var scriptRootWasBound = MyInvocation.BoundParameters.ContainsKey(nameof(ScriptRoot));
         var packageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory);
         var repository = ManagedModuleCommandSupport.CreateScriptRepository(
             this,
@@ -192,7 +199,49 @@ public sealed class InstallManagedScriptCommand : AsyncPSCmdlet
             if (!ShouldProcess(scriptName, $"Install managed script from repository '{repository.Name}'"))
                 continue;
 
-            WriteObject(await service.InstallAsync(request, CancelToken).ConfigureAwait(false));
+            var result = await service.InstallAsync(request, CancelToken).ConfigureAwait(false);
+            if (ShouldUpdateProcessPath(scriptRootWasBound, NoPathUpdate.IsPresent, result))
+                EnsureProcessPathContains(result.ScriptRoot);
+            WriteObject(result);
         }
+    }
+
+    internal static bool ShouldUpdateProcessPath(bool scriptRootWasBound, bool noPathUpdate, ManagedScriptInstallResult result)
+        => !scriptRootWasBound &&
+           !noPathUpdate &&
+           result is not null &&
+           !string.IsNullOrWhiteSpace(result.ScriptRoot);
+
+    internal static bool EnsureProcessPathContains(string scriptRoot)
+    {
+        if (string.IsNullOrWhiteSpace(scriptRoot))
+            return false;
+
+        var resolved = Path.GetFullPath(scriptRoot.Trim().Trim('"'))
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var current = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        var parts = current.Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(static part => part.Trim().Trim('"'))
+            .Where(static part => !string.IsNullOrWhiteSpace(part))
+            .Select(part =>
+            {
+                try
+                {
+                    return Path.GetFullPath(part).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                }
+                catch
+                {
+                    return part.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                }
+            });
+
+        if (parts.Any(part => string.Equals(part, resolved, StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        var updated = string.IsNullOrWhiteSpace(current)
+            ? resolved
+            : current.TrimEnd(Path.PathSeparator) + Path.PathSeparator + resolved;
+        Environment.SetEnvironmentVariable("PATH", updated);
+        return true;
     }
 }

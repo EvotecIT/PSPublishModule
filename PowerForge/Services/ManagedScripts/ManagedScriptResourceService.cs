@@ -782,11 +782,11 @@ public sealed class ManagedScriptResourceService
             VersionPolicy = request.VersionPolicy,
             ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
             Elapsed = stopwatch.Elapsed,
-            ScriptInfo = existing
+            ScriptInfo = existing.ScriptInfo
         };
     }
 
-    private ManagedScriptFileInfo? TryReadSatisfiedExistingInstall(
+    private SatisfiedExistingScriptInstall? TryReadSatisfiedExistingInstall(
         ManagedScriptInstallRequest request,
         string scriptRoot,
         ManagedScriptSaveRequest saveRequest,
@@ -804,7 +804,7 @@ public sealed class ManagedScriptResourceService
         if (string.IsNullOrWhiteSpace(existingVersion) || !IsExistingVersionSatisfied(request, existingVersion!))
             return null;
 
-        return ReadExistingScriptInfoForSkip(scriptPath);
+        return new SatisfiedExistingScriptInstall(existingVersion!, ReadExistingScriptInfoForSkip(scriptPath));
     }
 
     private ManagedScriptFileInfo ReadExistingScriptInfoForSkip(string scriptPath)
@@ -1212,5 +1212,17 @@ public sealed class ManagedScriptResourceService
         public ManagedScriptInstallScope Scope { get; }
 
         public ManagedModuleShellEdition ShellEdition { get; }
+    }
+
+    private sealed class SatisfiedExistingScriptInstall
+    {
+        public SatisfiedExistingScriptInstall(string version, ManagedScriptFileInfo scriptInfo)
+        {
+            Version = version;
+            ScriptInfo = scriptInfo;
+        }
+
+        public string Version { get; }
+        public ManagedScriptFileInfo ScriptInfo { get; }
     }
 }

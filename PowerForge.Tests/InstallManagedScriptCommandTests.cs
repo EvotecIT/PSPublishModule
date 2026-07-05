@@ -8,6 +8,49 @@ namespace PowerForge.Tests;
 public sealed class InstallManagedScriptCommandTests
 {
     [Fact]
+    public void InstallManagedScript_defaults_to_public_script_feed()
+    {
+        var command = new InstallManagedScriptCommand();
+
+        Assert.Equal(ManagedModuleCommandSupport.DefaultScriptRepositorySource, command.Repository);
+    }
+
+    [Fact]
+    public void InstallManagedScript_adds_default_script_root_to_process_path_once()
+    {
+        var previousPath = Environment.GetEnvironmentVariable("PATH");
+        using var scriptRoot = new TemporaryDirectory();
+        try
+        {
+            Environment.SetEnvironmentVariable("PATH", Path.GetTempPath());
+
+            Assert.True(InstallManagedScriptCommand.EnsureProcessPathContains(scriptRoot.Path));
+            Assert.False(InstallManagedScriptCommand.EnsureProcessPathContains(scriptRoot.Path));
+
+            var pathEntries = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+                .Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries);
+            Assert.Contains(pathEntries, entry => string.Equals(
+                Path.GetFullPath(entry).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                Path.GetFullPath(scriptRoot.Path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PATH", previousPath);
+        }
+    }
+
+    [Fact]
+    public void InstallManagedScript_skips_path_update_for_custom_roots_and_no_path_update()
+    {
+        var result = new ManagedScriptInstallResult { ScriptRoot = Path.GetTempPath() };
+
+        Assert.False(InstallManagedScriptCommand.ShouldUpdateProcessPath(scriptRootWasBound: true, noPathUpdate: false, result));
+        Assert.False(InstallManagedScriptCommand.ShouldUpdateProcessPath(scriptRootWasBound: false, noPathUpdate: true, result));
+        Assert.True(InstallManagedScriptCommand.ShouldUpdateProcessPath(scriptRootWasBound: false, noPathUpdate: false, result));
+    }
+
+    [Fact]
     public void InstallManagedScript_installs_script_resource_to_custom_root()
     {
         using var feed = new TemporaryDirectory();
@@ -219,6 +262,34 @@ public sealed class InstallManagedScriptCommandTests
         var result = Assert.IsType<ManagedScriptInstallResult>(Assert.Single(results).BaseObject);
         Assert.Equal(ManagedScriptInstallStatus.SkippedExisting, result.Status);
         Assert.Equal("1.0.0", result.Version);
+        Assert.Null(result.Download);
+    }
+
+    [Fact]
+    public void InstallManagedScript_reports_sidecar_package_version_for_stale_metadata_skip()
+    {
+        using var feed = new TemporaryDirectory();
+        using var scriptRoot = new TemporaryDirectory();
+        var scriptPath = Path.Combine(scriptRoot.Path, "Invoke-CompanyTask.ps1");
+        File.WriteAllText(scriptPath, CreateScript("1.0.0"));
+        File.WriteAllText(
+            scriptPath + ".powerforge.json",
+            $$"""{"Name":"Invoke-CompanyTask","Version":"1.2.0","ScriptSha256":"{{TestHash.ComputeSha256(scriptPath)}}","RepositoryName":"Local","RepositorySource":"{{feed.Path.Replace("\\", "\\\\", StringComparison.Ordinal)}}"}""");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("ScriptRoot", scriptRoot.Path)
+            .AddParameter("RequiredVersion", "1.2.0");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptInstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptInstallStatus.SkippedExisting, result.Status);
+        Assert.Equal("1.2.0", result.Version);
+        Assert.Equal("1.0.0", result.ScriptInfo?.Version);
         Assert.Null(result.Download);
     }
 

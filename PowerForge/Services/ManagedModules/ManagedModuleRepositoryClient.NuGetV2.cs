@@ -346,16 +346,32 @@ public sealed partial class ManagedModuleRepositoryClient
 
     private static Uri BuildNuGetV2PackageUri(string source, string packageId, string version)
         => new(
-            new Uri(EnsureTrailingSlash(NormalizeNuGetV2PackageSource(source))),
+            new Uri(EnsureTrailingSlash(ResolveNuGetV2PackageSource(source))),
             $"package/{Uri.EscapeDataString(packageId.Trim())}/{Uri.EscapeDataString(version.Trim())}");
 
-    private static string NormalizeNuGetV2PackageSource(string source)
+    private static string ResolveNuGetV2PackageSource(string source)
     {
-        var trimmed = source.Trim().TrimEnd('/');
-        const string scriptItemsSuffix = "/items/psscript";
-        return trimmed.EndsWith(scriptItemsSuffix, StringComparison.OrdinalIgnoreCase)
-            ? trimmed.Substring(0, trimmed.Length - scriptItemsSuffix.Length)
-            : source;
+        var original = source ?? string.Empty;
+        var trimmed = original.Trim().TrimEnd('/');
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) ||
+            !uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+            !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            return original;
+        }
+
+        const string scriptEndpointSuffix = "/items/psscript";
+        var path = uri.AbsolutePath.TrimEnd('/');
+        if (!path.EndsWith("/api/v2/items/psscript", StringComparison.OrdinalIgnoreCase))
+            return original;
+
+        var builder = new UriBuilder(uri)
+        {
+            Path = path.Substring(0, path.Length - scriptEndpointSuffix.Length),
+            Query = string.Empty,
+            Fragment = string.Empty
+        };
+        return builder.Uri.ToString().TrimEnd('/');
     }
 
     private static Uri BuildNuGetV2FindPackagesByIdUri(string source, string packageId)
