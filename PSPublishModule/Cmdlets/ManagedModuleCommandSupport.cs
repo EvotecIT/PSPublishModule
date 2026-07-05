@@ -62,7 +62,7 @@ internal static class ManagedModuleCommandSupport
 
             var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(profileName!);
             var profileRepositoryName = ResolveProfileRepositoryName(profile, profileName!);
-            if (TryCreateScriptRepositoryFromProfileName(cmdlet, profile.RepositoryName, profileName!, profile.Trusted, out var scriptRepository))
+            if (TryCreateScriptRepositoryFromProfileName(cmdlet, profile, profileName!, out var scriptRepository))
                 return scriptRepository!;
 
             var source = FirstNonEmpty(profile.RepositoryUri, profile.RepositorySourceUri, profile.Repository, profile.RepositoryName, profileName)
@@ -236,12 +236,12 @@ internal static class ManagedModuleCommandSupport
 
     private static bool TryCreateScriptRepositoryFromProfileName(
         PSCmdlet cmdlet,
-        string? repositoryName,
+        ModuleRepositoryProfile profile,
         string profileName,
-        bool profileTrusted,
         out ManagedModuleRepository? repository)
     {
         repository = null;
+        var repositoryName = profile.RepositoryName;
         var sourceName = FirstNonEmpty(repositoryName, profileName);
         if (string.IsNullOrWhiteSpace(sourceName))
             return false;
@@ -255,18 +255,63 @@ internal static class ManagedModuleCommandSupport
                 out var resolvedRegisteredRepositoryTrusted);
             if (string.IsNullOrWhiteSpace(resolvedRegisteredRepositoryName))
                 return false;
+            if (!RegisteredSourceMatchesProfile(cmdlet, sourceName!, profile))
+                return false;
 
             repository = new ManagedModuleRepository(
                 resolvedRegisteredRepositoryName!,
                 resolvedSource,
                 ManagedModuleRepositoryKind.Auto,
-                profileTrusted);
+                profile.Trusted);
             return true;
         }
         catch (InvalidOperationException)
         {
             return false;
         }
+    }
+
+    private static bool RegisteredSourceMatchesProfile(PSCmdlet cmdlet, string repositoryName, ModuleRepositoryProfile profile)
+    {
+        var profileSource = FirstNonEmpty(profile.RepositoryUri, profile.RepositorySourceUri, profile.Repository);
+        if (string.IsNullOrWhiteSpace(profileSource))
+            return false;
+
+        var resolver = new PowerShellRepositorySourceResolver();
+        return resolver.TryResolveSource(cmdlet, repositoryName, out var registeredSource, out _) &&
+               SourcesEqual(profileSource!, registeredSource);
+    }
+
+    private static bool SourcesEqual(string expected, string? actual)
+    {
+        if (string.IsNullOrWhiteSpace(actual))
+            return false;
+
+        return string.Equals(
+            NormalizeSourceForComparison(expected),
+            NormalizeSourceForComparison(actual!),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeSourceForComparison(string source)
+    {
+        var trimmed = source.Trim().Trim('"');
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+            trimmed = uri.IsFile ? uri.LocalPath : trimmed.TrimEnd('/');
+
+        if (Path.IsPathRooted(trimmed) || LooksLikeLocalPath(trimmed))
+        {
+            try
+            {
+                return Path.GetFullPath(trimmed).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            }
+            catch
+            {
+                return trimmed.TrimEnd('/', '\\');
+            }
+        }
+
+        return trimmed.TrimEnd('/', '\\');
     }
 
     private static string ResolveRepositorySource(
