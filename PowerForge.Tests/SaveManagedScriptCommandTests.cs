@@ -826,6 +826,67 @@ public sealed class SaveManagedScriptCommandTests
     }
 
     [Fact]
+    public void SaveManagedScript_prefers_psresourceget_psgallery_source_over_default_powershellget_script_source()
+    {
+        using var mirrorFeed = new TemporaryDirectory();
+        using var ignoredScriptFeed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(mirrorFeed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            });
+        TestPackageFactory.Create(
+            Path.Combine(ignoredScriptFeed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddScript($$"""
+            function Get-PSResourceRepository {
+                param([string] $Name)
+                [pscustomobject]@{
+                    Name = $Name
+                    Uri = '{{EscapePowerShellSingleQuoted(mirrorFeed.Path)}}'
+                    Trusted = $true
+                }
+            }
+            function Get-PSRepository {
+                param([string] $Name)
+                [pscustomobject]@{
+                    Name = $Name
+                    SourceLocation = 'https://www.powershellgallery.com/api/v2'
+                    ScriptSourceLocation = 'https://www.powershellgallery.com/api/v2'
+                    InstallationPolicy = 'Trusted'
+                }
+            }
+            """);
+        _ = ps.Invoke();
+        AssertNoPowerShellErrors(ps);
+        ps.Commands.Clear();
+
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", "PSGallery")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("RequireTrustedRepository");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptSaveResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(mirrorFeed.Path, result.RepositorySource);
+        Assert.True(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
+    }
+
+    [Fact]
     public void ManagedModuleCommandSupport_preserves_explicit_script_source_endpoint()
     {
         var source = ManagedModuleCommandSupport.ResolveScriptRepositorySource(
@@ -845,6 +906,24 @@ public sealed class SaveManagedScriptCommandTests
         var source = ManagedModuleCommandSupport.ResolveScriptRepositorySource(
             null!,
             "PSGallery",
+            out var resolvedRegisteredRepositoryName,
+            out var trusted);
+
+        Assert.Equal("https://www.powershellgallery.com/api/v2/items/psscript", source);
+        Assert.Null(resolvedRegisteredRepositoryName);
+        Assert.False(trusted);
+    }
+
+    [Theory]
+    [InlineData("https://www.powershellgallery.com/api/v2")]
+    [InlineData("https://www.powershellgallery.com/api/v2/")]
+    [InlineData("https://www.powershellgallery.com/api/v3/index.json")]
+    [InlineData("https://www.powershellgallery.com/api/v3/index.json/")]
+    public void ManagedModuleCommandSupport_maps_explicit_psgallery_urls_to_script_feed(string repository)
+    {
+        var source = ManagedModuleCommandSupport.ResolveScriptRepositorySource(
+            null!,
+            repository,
             out var resolvedRegisteredRepositoryName,
             out var trusted);
 
@@ -965,6 +1044,33 @@ public sealed class SaveManagedScriptCommandTests
         Assert.Equal(ManagedScriptSaveStatus.Saved, result.Status);
         Assert.Equal(scriptFeed.Path, result.RepositorySource);
         Assert.True(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
+    }
+
+    [Fact]
+    public void SaveManagedScript_psgallery_profile_maps_saved_module_source_to_script_feed()
+    {
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        new ModuleRepositoryProfileStore().SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "PSGallery",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "PSGallery",
+            RepositoryUri = "https://www.powershellgallery.com/api/v3/index.json",
+            RepositorySourceUri = "https://www.powershellgallery.com/api/v3/index.json",
+            Trusted = true
+        });
+
+        var repository = ManagedModuleCommandSupport.CreateScriptRepository(
+            null!,
+            "PSGallery",
+            ManagedModuleCommandSupport.DefaultScriptRepositorySource,
+            "PSGallery",
+            repositoryWasBound: false);
+
+        Assert.Equal("PSGallery", repository.Name);
+        Assert.Equal("https://www.powershellgallery.com/api/v2/items/psscript", repository.Source);
+        Assert.True(repository.Trusted);
     }
 
     [Fact]

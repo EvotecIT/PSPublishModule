@@ -407,8 +407,15 @@ internal static class ManagedModuleCommandSupport
 
     private static string NormalizePowerShellGetScriptSource(string source)
     {
-        return source.Trim().TrimEnd('/');
+        var normalized = source.Trim().TrimEnd('/');
+        return IsPowerShellGalleryModuleSource(normalized)
+            ? DefaultScriptRepositorySource
+            : normalized;
     }
+
+    private static bool IsPowerShellGalleryModuleSource(string source)
+        => string.Equals(source, "https://www.powershellgallery.com/api/v2", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(source, DefaultRepositorySource, StringComparison.OrdinalIgnoreCase);
 
     internal static bool HasWildcard(string value)
         => value.IndexOf('*') >= 0 || value.IndexOf('?') >= 0;

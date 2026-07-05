@@ -69,13 +69,21 @@ public sealed class PowerShellRepositorySourceResolver
             return false;
 
         var name = repositoryName!.Trim();
-        if (TryResolveWithCommand(cmdlet, "Get-PSRepository", name, new[] { "ScriptSourceLocation" }, out source, out trusted))
+        if (string.Equals(name, PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase) &&
+            TryResolveWithCommand(cmdlet, "Get-PSResourceRepository", name, new[] { "Uri", "SourceLocation" }, out source, out trusted))
         {
-            source = NormalizePowerShellGetScriptSource(source);
+            source = NormalizeRegisteredScriptSource(name, source);
             return true;
         }
 
-        if (TryResolveWithCommand(cmdlet, "Get-PSResourceRepository", name, new[] { "Uri", "SourceLocation" }, out source, out trusted))
+        if (TryResolveWithCommand(cmdlet, "Get-PSRepository", name, new[] { "ScriptSourceLocation" }, out source, out trusted))
+        {
+            source = NormalizeRegisteredScriptSource(name, source);
+            return true;
+        }
+
+        if (!string.Equals(name, PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase) &&
+            TryResolveWithCommand(cmdlet, "Get-PSResourceRepository", name, new[] { "Uri", "SourceLocation" }, out source, out trusted))
         {
             source = NormalizeRegisteredScriptSource(name, source);
             return true;
