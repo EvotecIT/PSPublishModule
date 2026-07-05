@@ -31,6 +31,22 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task DownloadPackageAsync_uses_v2_package_endpoint_for_script_feed_sources()
+    {
+        using var destination = new TemporaryDirectory();
+        var requests = new List<RecordedRequest>();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("ScriptFeed", "https://example.test/api/v2/items/psscript");
+
+        var result = await repositoryClient.DownloadPackageAsync(repository, "Company.Tools", "1.1.0", destination.Path);
+
+        Assert.Equal("https://example.test/api/v2/package/Company.Tools/1.1.0", result.Source);
+        Assert.Contains(requests, request => request.Url == "https://example.test/api/v2/package/Company.Tools/1.1.0");
+        Assert.DoesNotContain(requests, request => request.Url.Contains("/items/psscript/package/", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task GetVersionsAsync_uses_nuget_v3_package_base_address()
     {
         var requests = new List<RecordedRequest>();

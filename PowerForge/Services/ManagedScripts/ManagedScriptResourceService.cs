@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Runtime.InteropServices;
 
 namespace PowerForge;
 
@@ -24,6 +25,91 @@ public sealed class ManagedScriptResourceService
         _logger = logger ?? new NullLogger();
         _repositoryClient = repositoryClient ?? new ManagedModuleRepositoryClient(_logger);
         _scriptFileInfoService = scriptFileInfoService ?? new ManagedScriptFileInfoService();
+    }
+
+    /// <summary>
+    /// Creates a non-mutating plan for installing a script resource.
+    /// </summary>
+    public async Task<ManagedScriptInstallPlan> PlanInstallAsync(
+        ManagedScriptInstallRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateInstall(request);
+        var resolved = ResolveScriptInstallRoot(request);
+        var saveRequest = CreateSaveRequest(request, resolved.ScriptRoot);
+        ManagedModuleTrustEvaluator.ThrowIfRepositoryRejected(saveRequest.Repository, saveRequest.TrustPolicy);
+        var satisfiedPlan = TryCreateSatisfiedExistingInstallPlan(request, resolved, saveRequest);
+        if (satisfiedPlan is not null)
+            return satisfiedPlan;
+
+        var savePlan = await PlanSaveAsync(saveRequest, cancellationToken).ConfigureAwait(false);
+
+        return new ManagedScriptInstallPlan
+        {
+            Name = savePlan.Name,
+            Version = savePlan.Version,
+            Action = MapInstallAction(savePlan.Action),
+            RepositoryName = savePlan.RepositoryName,
+            RepositorySource = savePlan.RepositorySource,
+            Scope = resolved.Scope,
+            ShellEdition = resolved.ShellEdition,
+            ScriptRoot = savePlan.DestinationPath,
+            ScriptPath = savePlan.ScriptPath,
+            WouldWriteFiles = savePlan.WouldWriteFiles,
+            WouldVerifyPackage = savePlan.WouldVerifyPackage,
+            ExistingVersion = savePlan.ExistingVersion,
+            RequestedVersion = savePlan.RequestedVersion,
+            MinimumVersion = savePlan.MinimumVersion,
+            MaximumVersion = savePlan.MaximumVersion,
+            VersionPolicy = savePlan.VersionPolicy,
+            ExpectedPackageSha256 = savePlan.ExpectedPackageSha256,
+            LicenseAcceptanceRequired = savePlan.LicenseAcceptanceRequired,
+            BlockReason = savePlan.BlockReason
+        };
+    }
+
+    /// <summary>
+    /// Installs a script resource package into the requested script scope.
+    /// </summary>
+    public async Task<ManagedScriptInstallResult> InstallAsync(
+        ManagedScriptInstallRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateInstall(request);
+        var resolved = ResolveScriptInstallRoot(request);
+        var saveRequest = CreateSaveRequest(request, resolved.ScriptRoot);
+        ManagedModuleTrustEvaluator.ThrowIfRepositoryRejected(saveRequest.Repository, saveRequest.TrustPolicy);
+        var satisfiedResult = TryCreateSatisfiedExistingInstallResult(request, resolved, saveRequest);
+        if (satisfiedResult is not null)
+            return satisfiedResult;
+
+        var saveResult = await SaveAsync(saveRequest, cancellationToken).ConfigureAwait(false);
+
+        return new ManagedScriptInstallResult
+        {
+            Name = saveResult.Name,
+            Version = saveResult.Version,
+            Status = saveResult.Status == ManagedScriptSaveStatus.SkippedExisting
+                ? ManagedScriptInstallStatus.SkippedExisting
+                : ManagedScriptInstallStatus.Installed,
+            RepositoryName = saveResult.RepositoryName,
+            RepositorySource = saveResult.RepositorySource,
+            Scope = resolved.Scope,
+            ShellEdition = resolved.ShellEdition,
+            ScriptRoot = saveResult.DestinationPath,
+            ScriptPath = saveResult.ScriptPath,
+            RequestedVersion = saveResult.RequestedVersion,
+            MinimumVersion = saveResult.MinimumVersion,
+            MaximumVersion = saveResult.MaximumVersion,
+            VersionPolicy = saveResult.VersionPolicy,
+            ExpectedPackageSha256 = saveResult.ExpectedPackageSha256,
+            Elapsed = saveResult.Elapsed,
+            VersionResolutionElapsed = saveResult.VersionResolutionElapsed,
+            DownloadElapsed = saveResult.DownloadElapsed,
+            ExtractionElapsed = saveResult.ExtractionElapsed,
+            Download = saveResult.Download,
+            ScriptInfo = saveResult.ScriptInfo
+        };
     }
 
     /// <summary>
@@ -608,6 +694,220 @@ public sealed class ManagedScriptResourceService
         public string? RepositorySource { get; set; }
     }
 
+    private static ManagedScriptSaveRequest CreateSaveRequest(ManagedScriptInstallRequest request, string destinationPath)
+        => new()
+        {
+            Repository = request.Repository,
+            Name = request.Name,
+            DestinationPath = destinationPath,
+            Version = request.Version,
+            MinimumVersion = request.MinimumVersion,
+            MaximumVersion = request.MaximumVersion,
+            VersionPolicy = request.VersionPolicy,
+            IncludePrerelease = request.IncludePrerelease,
+            PackageCacheDirectory = request.PackageCacheDirectory,
+            ExpectedPackageSha256 = request.ExpectedPackageSha256,
+            TrustPolicy = request.TrustPolicy,
+            Credential = request.Credential,
+            Force = request.Force,
+            AcceptLicense = request.AcceptLicense
+        };
+
+    private static ManagedScriptInstallPlanAction MapInstallAction(ManagedScriptSavePlanAction action)
+        => action switch
+        {
+            ManagedScriptSavePlanAction.SkipExisting => ManagedScriptInstallPlanAction.SkipExisting,
+            ManagedScriptSavePlanAction.Reinstall => ManagedScriptInstallPlanAction.Reinstall,
+            ManagedScriptSavePlanAction.VerifyExisting => ManagedScriptInstallPlanAction.VerifyExisting,
+            ManagedScriptSavePlanAction.BlockedExisting => ManagedScriptInstallPlanAction.BlockedExisting,
+            _ => ManagedScriptInstallPlanAction.Install
+        };
+
+    private ManagedScriptInstallPlan? TryCreateSatisfiedExistingInstallPlan(
+        ManagedScriptInstallRequest request,
+        ResolvedScriptInstallRoot resolved,
+        ManagedScriptSaveRequest saveRequest)
+    {
+        var existing = TryReadSatisfiedExistingInstall(request, resolved.ScriptRoot, saveRequest, out var scriptPath);
+        if (existing is null)
+            return null;
+
+        return new ManagedScriptInstallPlan
+        {
+            Name = request.Name.Trim(),
+            Version = existing.Version,
+            Action = ManagedScriptInstallPlanAction.SkipExisting,
+            RepositoryName = request.Repository.Name,
+            RepositorySource = request.Repository.Source,
+            Scope = resolved.Scope,
+            ShellEdition = resolved.ShellEdition,
+            ScriptRoot = resolved.ScriptRoot,
+            ScriptPath = scriptPath,
+            WouldWriteFiles = false,
+            WouldVerifyPackage = false,
+            ExistingVersion = existing.Version,
+            RequestedVersion = request.Version,
+            MinimumVersion = request.MinimumVersion,
+            MaximumVersion = request.MaximumVersion,
+            VersionPolicy = request.VersionPolicy,
+            ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256)
+        };
+    }
+
+    private ManagedScriptInstallResult? TryCreateSatisfiedExistingInstallResult(
+        ManagedScriptInstallRequest request,
+        ResolvedScriptInstallRoot resolved,
+        ManagedScriptSaveRequest saveRequest)
+    {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var existing = TryReadSatisfiedExistingInstall(request, resolved.ScriptRoot, saveRequest, out var scriptPath);
+        if (existing is null)
+            return null;
+
+        stopwatch.Stop();
+        return new ManagedScriptInstallResult
+        {
+            Name = request.Name.Trim(),
+            Version = existing.Version,
+            Status = ManagedScriptInstallStatus.SkippedExisting,
+            RepositoryName = request.Repository.Name,
+            RepositorySource = request.Repository.Source,
+            Scope = resolved.Scope,
+            ShellEdition = resolved.ShellEdition,
+            ScriptRoot = resolved.ScriptRoot,
+            ScriptPath = scriptPath,
+            RequestedVersion = request.Version,
+            MinimumVersion = request.MinimumVersion,
+            MaximumVersion = request.MaximumVersion,
+            VersionPolicy = request.VersionPolicy,
+            ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256),
+            Elapsed = stopwatch.Elapsed,
+            ScriptInfo = existing.ScriptInfo
+        };
+    }
+
+    private SatisfiedExistingScriptInstall? TryReadSatisfiedExistingInstall(
+        ManagedScriptInstallRequest request,
+        string scriptRoot,
+        ManagedScriptSaveRequest saveRequest,
+        out string scriptPath)
+    {
+        scriptPath = ResolveScriptPath(scriptRoot, request.Name);
+        if (request.Force ||
+            RequiresPackageVerificationBeforeSkip(saveRequest) ||
+            !HasConstrainedVersionRequest(request))
+        {
+            return null;
+        }
+
+        var existingVersion = TryReadExistingVersion(scriptPath);
+        var existingPackageVersion = TryReadInstalledPackageVersion(scriptPath);
+        var existingComparableVersion = existingPackageVersion ?? existingVersion;
+        if (string.IsNullOrWhiteSpace(existingComparableVersion) || !IsExistingVersionSatisfied(request, existingComparableVersion!))
+            return null;
+
+        return new SatisfiedExistingScriptInstall(existingComparableVersion!, ReadExistingScriptInfoForSkip(scriptPath));
+    }
+
+    private ManagedScriptFileInfo ReadExistingScriptInfoForSkip(string scriptPath)
+    {
+        var info = _scriptFileInfoService.Read(scriptPath);
+        ThrowIfScriptMetadataIncomplete(info, scriptPath);
+        return info;
+    }
+
+    private static bool HasConstrainedVersionRequest(ManagedScriptInstallRequest request)
+        => !string.IsNullOrWhiteSpace(request.Version) ||
+           !string.IsNullOrWhiteSpace(request.MinimumVersion) ||
+           !string.IsNullOrWhiteSpace(request.MaximumVersion) ||
+           !string.IsNullOrWhiteSpace(request.VersionPolicy);
+
+    private static bool IsExistingVersionSatisfied(ManagedScriptInstallRequest request, string existingVersion)
+    {
+        if (!string.IsNullOrWhiteSpace(request.Version))
+            return ManagedModuleVersionComparer.Instance.Compare(existingVersion, request.Version!.Trim()) == 0;
+
+        var range = ResolveVersionRange(request.VersionPolicy, request.MinimumVersion, request.MaximumVersion);
+        if (ManagedModuleVersionComparer.IsPrerelease(existingVersion) &&
+            !request.IncludePrerelease &&
+            !range.AllowsPrerelease)
+        {
+            return false;
+        }
+
+        return !range.IsUnbounded && range.IsSatisfiedBy(existingVersion);
+    }
+
+    private static ResolvedScriptInstallRoot ResolveScriptInstallRoot(ManagedScriptInstallRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.ScriptRoot))
+        {
+            return new ResolvedScriptInstallRoot(
+                Path.GetFullPath(request.ScriptRoot!.Trim().Trim('"')),
+                ManagedScriptInstallScope.Custom,
+                ResolveShellEdition(request.ShellEdition));
+        }
+
+        var shellEdition = ResolveShellEdition(request.ShellEdition);
+        var folderName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && shellEdition == ManagedModuleShellEdition.Desktop
+            ? "WindowsPowerShell"
+            : "PowerShell";
+        var scope = request.Scope;
+        var scriptRoot = scope switch
+        {
+            ManagedScriptInstallScope.CurrentUser => ResolveCurrentUserScriptRoot(folderName),
+            ManagedScriptInstallScope.AllUsers => ResolveAllUsersScriptRoot(folderName),
+            ManagedScriptInstallScope.Custom => throw new ArgumentException("ScriptRoot is required when Scope is Custom.", nameof(request)),
+            _ => throw new ArgumentOutOfRangeException(nameof(request), request.Scope, "Unsupported script install scope.")
+        };
+
+        return new ResolvedScriptInstallRoot(scriptRoot, scope, shellEdition);
+    }
+
+    private static ManagedModuleShellEdition ResolveShellEdition(ManagedModuleShellEdition shellEdition)
+    {
+        if (shellEdition != ManagedModuleShellEdition.Auto)
+            return shellEdition;
+
+        return Environment.Version.Major <= 4
+            ? ManagedModuleShellEdition.Desktop
+            : ManagedModuleShellEdition.Core;
+    }
+
+    private static string ResolveCurrentUserScriptRoot(string folderName)
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            if (string.IsNullOrWhiteSpace(documents))
+                documents = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Documents");
+
+            return Path.Combine(documents, folderName, "Scripts");
+        }
+
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (string.IsNullOrWhiteSpace(home))
+            home = Environment.GetEnvironmentVariable("HOME");
+        if (string.IsNullOrWhiteSpace(home))
+            throw new InvalidOperationException("Unable to resolve the current user home directory for script installation.");
+
+        return Path.Combine(home, ".local", "share", folderName.ToLowerInvariant(), "Scripts");
+    }
+
+    private static string ResolveAllUsersScriptRoot(string folderName)
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            if (string.IsNullOrWhiteSpace(programFiles))
+                programFiles = Environment.GetEnvironmentVariable("ProgramFiles") ?? @"C:\Program Files";
+
+            return Path.Combine(programFiles, folderName, "Scripts");
+        }
+
+        return Path.Combine(Path.DirectorySeparatorChar.ToString(), "usr", "local", "share", folderName.ToLowerInvariant(), "Scripts");
+    }
+
     private static string ResolveDestinationPath(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -870,6 +1170,20 @@ public sealed class ManagedScriptResourceService
         }
     }
 
+    private static void ValidateInstall(ManagedScriptInstallRequest request)
+    {
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+        if (request.Repository is null)
+            throw new ArgumentException("Repository is required.", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new ArgumentException("Script name is required.", nameof(request));
+        ValidateVersionSelectors(request.Version, request.MinimumVersion, request.MaximumVersion, request.VersionPolicy);
+
+        _ = ManagedModulePackageIdentity.RequireSafeId(request.Name.Trim(), nameof(request.Name));
+        _ = ManagedModulePackageIntegrity.NormalizeSha256(request.ExpectedPackageSha256);
+    }
+
     private static void DeleteDirectoryQuietly(string path)
     {
         try
@@ -881,5 +1195,36 @@ public sealed class ManagedScriptResourceService
         {
             // best effort cleanup
         }
+    }
+
+    private sealed class ResolvedScriptInstallRoot
+    {
+        public ResolvedScriptInstallRoot(
+            string scriptRoot,
+            ManagedScriptInstallScope scope,
+            ManagedModuleShellEdition shellEdition)
+        {
+            ScriptRoot = scriptRoot;
+            Scope = scope;
+            ShellEdition = shellEdition;
+        }
+
+        public string ScriptRoot { get; }
+
+        public ManagedScriptInstallScope Scope { get; }
+
+        public ManagedModuleShellEdition ShellEdition { get; }
+    }
+
+    private sealed class SatisfiedExistingScriptInstall
+    {
+        public SatisfiedExistingScriptInstall(string version, ManagedScriptFileInfo scriptInfo)
+        {
+            Version = version;
+            ScriptInfo = scriptInfo;
+        }
+
+        public string Version { get; }
+        public ManagedScriptFileInfo ScriptInfo { get; }
     }
 }
