@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace PowerForge;
@@ -472,9 +473,15 @@ public sealed class ManagedScriptResourceService
         {
             var record = JsonSerializer.Deserialize<ManagedScriptInstallRecord>(File.ReadAllText(installRecordPath));
             var version = record?.Version;
-            return string.IsNullOrWhiteSpace(version)
-                ? null
-                : ManagedModulePackageIdentity.RequireSafeVersion(version!, nameof(ManagedScriptInstallRecord.Version));
+            var scriptSha256 = record?.ScriptSha256;
+            if (string.IsNullOrWhiteSpace(version) ||
+                string.IsNullOrWhiteSpace(scriptSha256) ||
+                !string.Equals(scriptSha256, ComputeFileSha256(scriptPath), StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            return ManagedModulePackageIdentity.RequireSafeVersion(version!, nameof(ManagedScriptInstallRecord.Version));
         }
         catch
         {
@@ -488,6 +495,7 @@ public sealed class ManagedScriptResourceService
         {
             Name = request.Name.Trim(),
             Version = packageVersion,
+            ScriptSha256 = ComputeFileSha256(scriptPath),
             RepositoryName = request.Repository.Name,
             RepositorySource = request.Repository.Source
         };
@@ -497,6 +505,14 @@ public sealed class ManagedScriptResourceService
 
     private static string ResolveInstallRecordPath(string scriptPath)
         => scriptPath + ".powerforge.json";
+
+    private static string ComputeFileSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var sha256 = SHA256.Create();
+        var hash = sha256.ComputeHash(stream);
+        return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+    }
 
     private static ManagedScriptSaveResult CreateSkippedResult(
         ManagedScriptSaveRequest request,
@@ -546,6 +562,7 @@ public sealed class ManagedScriptResourceService
     {
         public string? Name { get; set; }
         public string? Version { get; set; }
+        public string? ScriptSha256 { get; set; }
         public string? RepositoryName { get; set; }
         public string? RepositorySource { get; set; }
     }

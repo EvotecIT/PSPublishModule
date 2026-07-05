@@ -758,6 +758,27 @@ public sealed class SaveManagedScriptCommandTests
         Assert.Equal(ManagedScriptSaveStatus.SkippedExisting, skipped.Status);
         Assert.Equal("1.2.0", skipped.Version);
         Assert.Null(skipped.Download);
+
+        TestPackageFactory.Create(
+            packagePath,
+            "Invoke-CompanyTask",
+            "1.2.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            });
+        File.WriteAllText(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1"), CreateScript("1.0.0") + Environment.NewLine + "Write-Output 'tampered'");
+
+        ps.Commands.Clear();
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.2.0");
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("already exists with version '1.0.0'", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
