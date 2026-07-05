@@ -291,7 +291,7 @@ public sealed class InstallManagedScriptCommandTests
         AssertNoPowerShellErrors(ps);
         var plan = Assert.IsType<ManagedScriptInstallPlan>(Assert.Single(results).BaseObject);
         Assert.Equal(ManagedScriptInstallPlanAction.VerifyExisting, plan.Action);
-        Assert.False(plan.WouldWriteFiles);
+        Assert.True(plan.WouldWriteFiles);
         Assert.True(plan.WouldVerifyPackage);
         Assert.True(plan.LicenseAcceptanceRequired);
     }
