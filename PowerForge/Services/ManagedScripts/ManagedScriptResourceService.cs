@@ -1260,9 +1260,11 @@ public sealed class ManagedScriptResourceService
 
     private static void ValidateScriptVersion(string? value, string parameterName)
     {
-        if (string.IsNullOrWhiteSpace(value) ||
-            value!.TrimStart().StartsWith("+", StringComparison.Ordinal) ||
-            !ModuleStateVersion.TryParse(value!.Trim(), out _))
+        var trimmed = value?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) ||
+            trimmed!.StartsWith("+", StringComparison.Ordinal) ||
+            HasWhitespaceAroundSemVerSeparator(trimmed) ||
+            !ModuleStateVersion.TryParse(trimmed, out _))
         {
             throw new ArgumentException($"Script version '{value}' is not a valid version.", parameterName);
         }
@@ -1353,7 +1355,7 @@ public sealed class ManagedScriptResourceService
         for (var index = 0; index < value.Length; index++)
         {
             var character = value[index];
-            if (character != '+' && character != '-')
+            if (character != '+' && character != '-' && character != '.')
                 continue;
 
             if (index > 0 && char.IsWhiteSpace(value[index - 1]))

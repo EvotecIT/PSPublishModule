@@ -841,6 +841,9 @@ public sealed class ManagedScriptFileInfoService
 
     private static void ValidateScriptVersion(string version)
     {
+        if (HasWhitespaceAroundSemVerSeparator(version))
+            throw new InvalidOperationException($"Script version '{version}' is not a valid version.");
+
         var plusIndex = version.IndexOf('+');
         var versionWithoutBuild = plusIndex >= 0 ? version.Substring(0, plusIndex) : version;
         var build = plusIndex >= 0 ? version.Substring(plusIndex + 1) : null;
@@ -860,6 +863,23 @@ public sealed class ManagedScriptFileInfoService
         var prerelease = versionWithoutBuild.Substring(prereleaseIndex + 1);
         if (!HasValidSemVerIdentifiers(prerelease))
             throw new InvalidOperationException($"Script version '{version}' is not a valid version.");
+    }
+
+    private static bool HasWhitespaceAroundSemVerSeparator(string value)
+    {
+        for (var index = 0; index < value.Length; index++)
+        {
+            var character = value[index];
+            if (character != '+' && character != '-' && character != '.')
+                continue;
+
+            if (index > 0 && char.IsWhiteSpace(value[index - 1]))
+                return true;
+            if (index + 1 < value.Length && char.IsWhiteSpace(value[index + 1]))
+                return true;
+        }
+
+        return false;
     }
 
     private static bool HasValidSemVerIdentifiers(string value)

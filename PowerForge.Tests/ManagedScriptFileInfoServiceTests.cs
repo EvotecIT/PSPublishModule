@@ -923,6 +923,25 @@ function Invoke-Company { "ok" }
         Assert.Contains("not a valid version", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("1.0.0 +build")]
+    [InlineData("1.0.0+ build")]
+    [InlineData("1 .0.0")]
+    [InlineData("1. 0.0")]
+    public void Render_RejectsSeparatorPaddedScriptVersion(string version)
+    {
+        var service = new ManagedScriptFileInfoService();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => service.Render(new ManagedScriptFileInfo
+        {
+            Path = "Invoke-Company.ps1",
+            Version = version,
+            Guid = Guid.Parse("11111111-2222-3333-4444-555555555555")
+        }));
+
+        Assert.Contains("not a valid version", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static IReadOnlyList<int> IndexesOf(string text, string value)
     {
         var indexes = new List<int>();

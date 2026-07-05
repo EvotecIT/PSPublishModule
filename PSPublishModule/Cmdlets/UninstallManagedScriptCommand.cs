@@ -24,7 +24,7 @@ public sealed class UninstallManagedScriptCommand : PSCmdlet
 
     /// <summary>Exact installed script version to uninstall. When omitted, any installed version is removed.</summary>
     [Parameter(ValueFromPipelineByPropertyName = true)]
-    [Alias("RequiredVersion")]
+    [Alias("RequiredVersion", "RequestedVersion")]
     [ValidateNotNullOrEmpty]
     public string? Version { get; set; }
 

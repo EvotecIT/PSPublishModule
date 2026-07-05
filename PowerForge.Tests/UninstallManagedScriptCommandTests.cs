@@ -138,6 +138,35 @@ public sealed class UninstallManagedScriptCommandTests
     }
 
     [Fact]
+    public void UninstallManagedScript_binds_requested_version_from_plan_pipeline_object()
+    {
+        using var scriptRoot = new TemporaryDirectory();
+        var scriptPath = Path.Combine(scriptRoot.Path, "Invoke-CompanyTask.ps1");
+        File.WriteAllText(scriptPath, CreateScript("1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("ScriptRoot", scriptRoot.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("Plan");
+        var planned = ps.Invoke();
+        AssertNoPowerShellErrors(ps);
+
+        File.WriteAllText(scriptPath, CreateScript("2.0.0"));
+
+        ps.Commands.Clear();
+        ps.AddCommand("Uninstall-ManagedScript");
+        var results = ps.Invoke(planned);
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptUninstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptUninstallStatus.SkippedVersionMismatch, result.Status);
+        Assert.Equal("2.0.0", result.ExistingVersion);
+        Assert.True(File.Exists(scriptPath));
+    }
+
+    [Fact]
     public void UninstallManagedScript_plan_does_not_remove_script()
     {
         using var scriptRoot = new TemporaryDirectory();
@@ -316,6 +345,8 @@ public sealed class UninstallManagedScriptCommandTests
     [InlineData("1.0.0+ build")]
     [InlineData("1.0.0 -beta")]
     [InlineData("1.0.0- beta")]
+    [InlineData("1 .0.0")]
+    [InlineData("1. 0.0")]
     public void UninstallManagedScript_rejects_separator_padded_required_version_before_removing(string requiredVersion)
     {
         using var scriptRoot = new TemporaryDirectory();
