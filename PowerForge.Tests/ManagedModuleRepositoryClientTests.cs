@@ -20,6 +20,7 @@ public sealed class ManagedModuleRepositoryClientTests
 
     [Theory]
     [InlineData("https://example.test/api/v2")]
+    [InlineData("https://example.test/api/v2/items/psscript")]
     [InlineData("https://pkgs.dev.azure.com/org/_packaging/feed/nuget/v2")]
     [InlineData("https://example.test/packages/v2")]
     public void ManagedModuleRepository_infers_common_v2_feed_paths(string source)
@@ -816,6 +817,25 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.DoesNotContain(requests, request => request.Url == "https://www.powershellgallery.com/api/v3/index.json");
         Assert.Contains(requests, request => request.Url == "https://cdn.powershellgallery.com/packages/pester.5.7.0.nupkg");
         Assert.Contains(requests, request => request.Url == "https://www.powershellgallery.com/api/v2/package/Pester/5.7.0");
+    }
+
+    [Fact]
+    public async Task DownloadPackageAsync_uses_v2_package_endpoint_for_script_items_source()
+    {
+        var requests = new List<RecordedRequest>();
+        using var temp = new TemporaryDirectory();
+        using var client = new HttpClient(new ManagedModuleHandler(requests));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository(
+            "Scripts",
+            "https://example.test/api/v2/items/psscript");
+
+        var result = await repositoryClient.DownloadPackageAsync(repository, "Company.Tools", "1.1.0", temp.Path);
+
+        Assert.True(File.Exists(result.PackagePath));
+        Assert.Equal("https://example.test/api/v2/package/Company.Tools/1.1.0", result.Source);
+        Assert.Contains(requests, request => request.Url == "https://example.test/api/v2/package/Company.Tools/1.1.0");
+        Assert.DoesNotContain(requests, request => request.Url == "https://example.test/api/v2/items/psscript/package/Company.Tools/1.1.0");
     }
 
     [Fact]

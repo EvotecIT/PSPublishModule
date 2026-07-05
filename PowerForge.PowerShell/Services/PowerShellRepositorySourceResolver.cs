@@ -10,6 +10,11 @@ namespace PowerForge;
 /// </summary>
 public sealed class PowerShellRepositorySourceResolver
 {
+    private const string PowerShellGalleryRepositoryName = "PSGallery";
+    private const string PowerShellGalleryV2Source = "https://www.powershellgallery.com/api/v2";
+    private const string PowerShellGalleryV3Source = "https://www.powershellgallery.com/api/v3/index.json";
+    private const string PowerShellGalleryScriptSource = "https://www.powershellgallery.com/api/v2/items/psscript";
+
     /// <summary>
     /// Attempts to resolve a registered repository name to a source URI or local feed path.
     /// </summary>
@@ -44,6 +49,53 @@ public sealed class PowerShellRepositorySourceResolver
     public bool TryResolvePublishSource(PSCmdlet cmdlet, string? repositoryName, out string? source, out bool trusted)
     {
         return TryResolveRepositoryLocation(cmdlet, repositoryName, publish: true, out source, out trusted);
+    }
+
+    /// <summary>
+    /// Attempts to resolve a registered repository name to a script source URI or local feed path and trust state.
+    /// </summary>
+    /// <param name="cmdlet">Cmdlet whose current runspace should be inspected.</param>
+    /// <param name="repositoryName">Repository name to resolve.</param>
+    /// <param name="source">Resolved script source URI or path when available.</param>
+    /// <param name="trusted">Registered trust state when available.</param>
+    /// <returns>True when a registered repository script source was found.</returns>
+    public bool TryResolveScriptSource(PSCmdlet cmdlet, string? repositoryName, out string? source, out bool trusted)
+    {
+        source = null;
+        trusted = false;
+        if (cmdlet is null)
+            throw new ArgumentNullException(nameof(cmdlet));
+        if (string.IsNullOrWhiteSpace(repositoryName))
+            return false;
+
+        var name = repositoryName!.Trim();
+        if (string.Equals(name, PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase) &&
+            TryResolveWithCommand(cmdlet, "Get-PSResourceRepository", name, new[] { "Uri", "SourceLocation" }, out source, out trusted))
+        {
+            source = NormalizeRegisteredScriptSource(name, source);
+            return true;
+        }
+
+        if (TryResolveWithCommand(cmdlet, "Get-PSRepository", name, new[] { "ScriptSourceLocation" }, out source, out trusted))
+        {
+            source = NormalizeRegisteredScriptSource(name, source);
+            return true;
+        }
+
+        if (!string.Equals(name, PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase) &&
+            TryResolveWithCommand(cmdlet, "Get-PSResourceRepository", name, new[] { "Uri", "SourceLocation" }, out source, out trusted))
+        {
+            source = NormalizeRegisteredScriptSource(name, source);
+            return true;
+        }
+
+        if (TryResolveWithCommand(cmdlet, "Get-PSRepository", name, new[] { "SourceLocation" }, out source, out trusted))
+        {
+            source = NormalizeRegisteredScriptSource(name, source);
+            return true;
+        }
+
+        return false;
     }
 
     private static bool TryResolveRepositoryLocation(PSCmdlet cmdlet, string? repositoryName, bool publish, out string? source, out bool trusted)
@@ -118,6 +170,32 @@ public sealed class PowerShellRepositorySourceResolver
 
         return null;
     }
+
+    private static string? NormalizePowerShellGetScriptSource(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            return source;
+
+        return source!.Trim().TrimEnd('/');
+    }
+
+    private static string? NormalizeRegisteredScriptSource(string repositoryName, string? source)
+    {
+        var normalized = NormalizePowerShellGetScriptSource(source);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return normalized;
+
+        if (!string.Equals(repositoryName, PowerShellGalleryRepositoryName, StringComparison.OrdinalIgnoreCase))
+            return normalized;
+
+        return IsPowerShellGalleryModuleSource(normalized!)
+            ? PowerShellGalleryScriptSource
+            : normalized;
+    }
+
+    private static bool IsPowerShellGalleryModuleSource(string source)
+        => string.Equals(source, PowerShellGalleryV2Source, StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(source, PowerShellGalleryV3Source, StringComparison.OrdinalIgnoreCase);
 
     private static bool ResolveTrust(PSObject result)
     {

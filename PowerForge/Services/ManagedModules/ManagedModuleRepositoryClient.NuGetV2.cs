@@ -346,8 +346,17 @@ public sealed partial class ManagedModuleRepositoryClient
 
     private static Uri BuildNuGetV2PackageUri(string source, string packageId, string version)
         => new(
-            new Uri(EnsureTrailingSlash(source)),
+            new Uri(EnsureTrailingSlash(NormalizeNuGetV2PackageSource(source))),
             $"package/{Uri.EscapeDataString(packageId.Trim())}/{Uri.EscapeDataString(version.Trim())}");
+
+    private static string NormalizeNuGetV2PackageSource(string source)
+    {
+        var trimmed = source.Trim().TrimEnd('/');
+        const string scriptItemsSuffix = "/items/psscript";
+        return trimmed.EndsWith(scriptItemsSuffix, StringComparison.OrdinalIgnoreCase)
+            ? trimmed.Substring(0, trimmed.Length - scriptItemsSuffix.Length)
+            : source;
+    }
 
     private static Uri BuildNuGetV2FindPackagesByIdUri(string source, string packageId)
     {
