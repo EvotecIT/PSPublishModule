@@ -598,6 +598,40 @@ public sealed class SaveManagedScriptCommandTests
     }
 
     [Fact]
+    public void SaveManagedScript_plan_does_not_write_to_caller_package_cache_when_verifying_policy()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        using var packageCache = new TemporaryDirectory();
+        var packagePath = Path.Combine(feed.Path, "Invoke-CompanyTask.1.0.0.nupkg");
+        TestPackageFactory.Create(
+            packagePath,
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("ExpectedPackageSha256", TestHash.ComputeSha256(packagePath))
+            .AddParameter("PackageCacheDirectory", packageCache.Path)
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        _ = Assert.IsType<ManagedScriptSavePlan>(Assert.Single(results).BaseObject);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(packageCache.Path));
+        Assert.False(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
+    }
+
+    [Fact]
     public void SaveManagedScript_plan_verifies_author_policy_before_forced_reinstall()
     {
         using var feed = new TemporaryDirectory();
@@ -684,6 +718,51 @@ public sealed class SaveManagedScriptCommandTests
     }
 
     [Fact]
+    public void SaveManagedScript_uses_registered_psgallery_script_source_location()
+    {
+        using var moduleFeed = new TemporaryDirectory();
+        using var scriptFeed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(scriptFeed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddScript($$"""
+            function Get-PSRepository {
+                param([string] $Name)
+                [pscustomobject]@{
+                    Name = $Name
+                    SourceLocation = '{{EscapePowerShellSingleQuoted(moduleFeed.Path)}}'
+                    ScriptSourceLocation = '{{EscapePowerShellSingleQuoted(scriptFeed.Path)}}'
+                    InstallationPolicy = 'Trusted'
+                }
+            }
+            """);
+        _ = ps.Invoke();
+        AssertNoPowerShellErrors(ps);
+        ps.Commands.Clear();
+
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", "PSGallery")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("RequireTrustedRepository");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptSaveResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(scriptFeed.Path, result.RepositorySource);
+        Assert.True(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
+    }
+
+    [Fact]
     public void ManagedModuleCommandSupport_preserves_explicit_script_source_endpoint()
     {
         var source = ManagedModuleCommandSupport.ResolveScriptRepositorySource(
@@ -730,7 +809,7 @@ public sealed class SaveManagedScriptCommandTests
                     Name = $Name
                     SourceLocation = '{{EscapePowerShellSingleQuoted(moduleFeed.Path)}}'
                     ScriptSourceLocation = '{{EscapePowerShellSingleQuoted(scriptFeed.Path)}}'
-                    InstallationPolicy = 'Untrusted'
+                    InstallationPolicy = 'Trusted'
                 }
             }
             """);
@@ -750,6 +829,70 @@ public sealed class SaveManagedScriptCommandTests
         var result = Assert.IsType<ManagedScriptSaveResult>(Assert.Single(results).BaseObject);
         Assert.Equal(ManagedScriptSaveStatus.Saved, result.Status);
         Assert.Equal(scriptFeed.Path, result.RepositorySource);
+        Assert.True(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
+    }
+
+    [Fact]
+    public void SaveManagedScript_profile_name_falls_back_to_saved_source_when_registered_script_source_is_untrusted()
+    {
+        using var trustedFeed = new TemporaryDirectory();
+        using var otherScriptFeed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        TestPackageFactory.Create(
+            Path.Combine(trustedFeed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            });
+        TestPackageFactory.Create(
+            Path.Combine(otherScriptFeed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            });
+        new ModuleRepositoryProfileStore().SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "Company",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "CompanyModules",
+            RepositoryUri = trustedFeed.Path,
+            Trusted = true
+        });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddScript($$"""
+            function Get-PSRepository {
+                param([string] $Name)
+                [pscustomobject]@{
+                    Name = $Name
+                    SourceLocation = '{{EscapePowerShellSingleQuoted(trustedFeed.Path)}}'
+                    ScriptSourceLocation = '{{EscapePowerShellSingleQuoted(otherScriptFeed.Path)}}'
+                    InstallationPolicy = 'Untrusted'
+                }
+            }
+            """);
+        _ = ps.Invoke();
+        AssertNoPowerShellErrors(ps);
+        ps.Commands.Clear();
+
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("ProfileName", "Company")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("RequireTrustedRepository");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptSaveResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptSaveStatus.Saved, result.Status);
+        Assert.Equal(trustedFeed.Path, result.RepositorySource);
         Assert.True(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
     }
 

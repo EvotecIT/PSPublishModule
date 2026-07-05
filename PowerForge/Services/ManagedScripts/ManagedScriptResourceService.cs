@@ -403,10 +403,7 @@ public sealed class ManagedScriptResourceService
         string version,
         CancellationToken cancellationToken)
     {
-        var ownsCache = string.IsNullOrWhiteSpace(request.PackageCacheDirectory);
-        var cacheDirectory = ownsCache
-            ? Path.Combine(Path.GetTempPath(), "PowerForge", "managed-script-plan-cache", Guid.NewGuid().ToString("N"))
-            : Path.GetFullPath(request.PackageCacheDirectory!.Trim().Trim('"'));
+        var cacheDirectory = Path.Combine(Path.GetTempPath(), "PowerForge", "managed-script-plan-cache", Guid.NewGuid().ToString("N"));
 
         try
         {
@@ -423,8 +420,7 @@ public sealed class ManagedScriptResourceService
         }
         finally
         {
-            if (ownsCache)
-                DeleteDirectoryQuietly(cacheDirectory);
+            DeleteDirectoryQuietly(cacheDirectory);
         }
     }
 

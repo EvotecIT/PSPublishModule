@@ -257,12 +257,14 @@ internal static class ManagedModuleCommandSupport
                 return false;
             if (!RegisteredSourceMatchesProfile(cmdlet, sourceName!, profile))
                 return false;
+            if (!resolvedRegisteredRepositoryTrusted)
+                return false;
 
             repository = new ManagedModuleRepository(
                 resolvedRegisteredRepositoryName!,
                 resolvedSource,
                 ManagedModuleRepositoryKind.Auto,
-                profile.Trusted);
+                resolvedRegisteredRepositoryTrusted);
             return true;
         }
         catch (InvalidOperationException)
@@ -344,26 +346,27 @@ internal static class ManagedModuleCommandSupport
             return script ? NormalizePowerShellGetScriptSource(trimmed) : trimmed;
         }
 
+        if (script &&
+            cmdlet is not null &&
+            TryResolveRegisteredRepositorySource(cmdlet, trimmed, publish, script, out var scriptRegisteredSource, out var scriptRegisteredTrusted))
+        {
+            resolvedRegisteredRepositoryName = trimmed;
+            resolvedRegisteredRepositoryTrusted = scriptRegisteredTrusted;
+            return scriptRegisteredSource!;
+        }
+
         if (string.Equals(trimmed, DefaultRepositoryName, StringComparison.OrdinalIgnoreCase))
             return DefaultRepositorySource;
 
-        var providerPath = ResolveProviderPath(cmdlet, trimmed);
+        var providerPath = cmdlet is null ? null : ResolveProviderPath(cmdlet, trimmed);
         if (!string.IsNullOrWhiteSpace(providerPath) && Directory.Exists(providerPath))
             return providerPath!;
 
         if (Path.IsPathRooted(trimmed) || trimmed.StartsWith(".", StringComparison.Ordinal) || LooksLikeLocalPath(trimmed))
             return providerPath ?? trimmed;
 
-        var resolver = new PowerShellRepositorySourceResolver();
-        string? registeredSource;
-        bool registeredTrusted;
-        var resolved = script
-            ? resolver.TryResolveScriptSource(cmdlet, trimmed, out registeredSource, out registeredTrusted)
-            : publish
-            ? resolver.TryResolvePublishSource(cmdlet, trimmed, out registeredSource, out registeredTrusted)
-            : resolver.TryResolveSource(cmdlet, trimmed, out registeredSource, out registeredTrusted);
-        if (resolved &&
-            !string.IsNullOrWhiteSpace(registeredSource))
+        if (cmdlet is not null &&
+            TryResolveRegisteredRepositorySource(cmdlet, trimmed, publish, script, out var registeredSource, out var registeredTrusted))
         {
             resolvedRegisteredRepositoryName = trimmed;
             resolvedRegisteredRepositoryTrusted = registeredTrusted;
@@ -375,6 +378,28 @@ internal static class ManagedModuleCommandSupport
                 $"Repository '{trimmed}' looks like a registered PowerShell repository name, but no matching repository was found in the current session. Use Set-ManagedModuleRepository/Initialize-ManagedModuleRepository with -ProfileName, or pass a repository URL/local feed path.");
 
         return trimmed;
+    }
+
+    private static bool TryResolveRegisteredRepositorySource(
+        PSCmdlet cmdlet,
+        string repositoryName,
+        bool publish,
+        bool script,
+        out string? registeredSource,
+        out bool registeredTrusted)
+    {
+        registeredSource = null;
+        registeredTrusted = false;
+        if (cmdlet is null)
+            return false;
+
+        var resolver = new PowerShellRepositorySourceResolver();
+        var resolved = script
+            ? resolver.TryResolveScriptSource(cmdlet, repositoryName, out registeredSource, out registeredTrusted)
+            : publish
+            ? resolver.TryResolvePublishSource(cmdlet, repositoryName, out registeredSource, out registeredTrusted)
+            : resolver.TryResolveSource(cmdlet, repositoryName, out registeredSource, out registeredTrusted);
+        return resolved && !string.IsNullOrWhiteSpace(registeredSource);
     }
 
     private static string NormalizePowerShellGetScriptSource(string source)
