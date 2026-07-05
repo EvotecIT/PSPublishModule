@@ -497,6 +497,42 @@ public sealed class SaveManagedScriptCommandTests
     }
 
     [Fact]
+    public void SaveManagedScript_repairs_existing_selected_version_when_verified_payload_differs()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        var packagePath = Path.Combine(feed.Path, "Invoke-CompanyTask.1.0.0.nupkg");
+        var cleanScript = CreateScript("1.0.0");
+        TestPackageFactory.Create(
+            packagePath,
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = cleanScript
+            });
+        var scriptPath = Path.Combine(destination.Path, "Invoke-CompanyTask.ps1");
+        File.WriteAllText(scriptPath, cleanScript + Environment.NewLine + "Write-Output 'tampered'");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("ExpectedPackageSha256", TestHash.ComputeSha256(packagePath));
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptSaveResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptSaveStatus.Saved, result.Status);
+        Assert.Equal("1.0.0", result.Version);
+        Assert.NotNull(result.Download);
+        Assert.DoesNotContain("tampered", File.ReadAllText(scriptPath), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void SaveManagedScript_plan_verifies_existing_selected_version_when_package_policy_is_requested()
     {
         using var feed = new TemporaryDirectory();
@@ -526,7 +562,7 @@ public sealed class SaveManagedScriptCommandTests
         AssertNoPowerShellErrors(ps);
         var plan = Assert.IsType<ManagedScriptSavePlan>(Assert.Single(results).BaseObject);
         Assert.Equal(ManagedScriptSavePlanAction.VerifyExisting, plan.Action);
-        Assert.False(plan.WouldWriteFiles);
+        Assert.True(plan.WouldWriteFiles);
         Assert.True(plan.WouldVerifyPackage);
         Assert.True(plan.LicenseAcceptanceRequired);
     }

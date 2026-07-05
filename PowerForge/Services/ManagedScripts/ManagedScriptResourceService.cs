@@ -74,7 +74,7 @@ public sealed class ManagedScriptResourceService
                 cancellationToken).ConfigureAwait(false);
         }
 
-        var wouldWriteFiles = action is ManagedScriptSavePlanAction.Save or ManagedScriptSavePlanAction.Reinstall;
+        var wouldWriteFiles = action is ManagedScriptSavePlanAction.Save or ManagedScriptSavePlanAction.Reinstall or ManagedScriptSavePlanAction.VerifyExisting;
         var wouldVerifyPackage = action is ManagedScriptSavePlanAction.VerifyExisting;
 
         return new ManagedScriptSavePlan
@@ -162,7 +162,18 @@ public sealed class ManagedScriptResourceService
             ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, download.Metadata, request.TrustPolicy);
             ThrowIfLicenseAcceptanceRequired(download.Metadata, request.AcceptLicense);
 
-            if (existingSelectedVersion)
+            var extractionStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            stageRoot = Path.Combine(cacheDirectory, "script-stage-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(stageRoot);
+            var stagedScriptPath = Path.Combine(stageRoot, Path.GetFileName(scriptPath));
+            ExtractScriptPayload(download.PackagePath, request.Name, stagedScriptPath);
+            var scriptInfo = _scriptFileInfoService.Read(stagedScriptPath);
+            ThrowIfScriptMetadataIncomplete(scriptInfo, download.PackagePath);
+            ThrowIfScriptVersionInvalid(scriptInfo);
+            extractionStopwatch.Stop();
+
+            if (existingSelectedVersion &&
+                string.Equals(ComputeFileSha256(scriptPath), ComputeFileSha256(stagedScriptPath), StringComparison.OrdinalIgnoreCase))
             {
                 stopwatch.Stop();
                 return CreateSkippedResult(
@@ -174,21 +185,12 @@ public sealed class ManagedScriptResourceService
                     stopwatch.Elapsed,
                     versionResolutionStopwatch.Elapsed,
                     downloadStopwatch.Elapsed,
+                    extractionStopwatch.Elapsed,
                     download);
             }
 
-            var extractionStopwatch = System.Diagnostics.Stopwatch.StartNew();
-            stageRoot = Path.Combine(cacheDirectory, "script-stage-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(stageRoot);
-            var stagedScriptPath = Path.Combine(stageRoot, Path.GetFileName(scriptPath));
-            ExtractScriptPayload(download.PackagePath, request.Name, stagedScriptPath);
-            var scriptInfo = _scriptFileInfoService.Read(stagedScriptPath);
-            ThrowIfScriptMetadataIncomplete(scriptInfo, download.PackagePath);
-            ThrowIfScriptVersionInvalid(scriptInfo);
-            extractionStopwatch.Stop();
-
             Directory.CreateDirectory(destinationPath);
-            ReplaceScriptFile(stagedScriptPath, scriptPath, request.Force);
+            ReplaceScriptFile(stagedScriptPath, scriptPath, request.Force || existingSelectedVersion);
             WriteInstallRecord(scriptPath, request, versionInfo.Version);
             scriptInfo.Path = scriptPath;
             stopwatch.Stop();
@@ -523,6 +525,7 @@ public sealed class ManagedScriptResourceService
         TimeSpan elapsed,
         TimeSpan versionResolutionElapsed,
         TimeSpan? downloadElapsed = null,
+        TimeSpan? extractionElapsed = null,
         ManagedModuleDownloadResult? download = null)
         => new()
         {
@@ -541,6 +544,7 @@ public sealed class ManagedScriptResourceService
             Elapsed = elapsed,
             VersionResolutionElapsed = versionResolutionElapsed,
             DownloadElapsed = downloadElapsed ?? TimeSpan.Zero,
+            ExtractionElapsed = extractionElapsed ?? TimeSpan.Zero,
             Download = download,
             ScriptInfo = string.IsNullOrWhiteSpace(existingVersion)
                 ? null
