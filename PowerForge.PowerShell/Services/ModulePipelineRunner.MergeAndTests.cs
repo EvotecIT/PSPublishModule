@@ -469,7 +469,7 @@ public sealed partial class ModulePipelineRunner
 
     private SourceBinaryPayloadCleanup? TryBeginReplaceSingleFileSourceBinaryPayloadCleanup(ModulePipelinePlan plan)
     {
-        if (plan.BuildSpec.DevelopmentSourceBootstrapperMode != ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile)
+        if (!ShouldCleanReplaceSingleFileBinaryPayload(plan))
             return null;
 
         var sourcePath = Path.GetFullPath(plan.BuildSpec.SourcePath);
@@ -477,21 +477,47 @@ public sealed partial class ModulePipelineRunner
         if (!IsDirectChildPath(libPath, sourcePath, "Lib"))
             return null;
 
-        try
-        {
-            var librariesPath = Path.Combine(sourcePath, plan.ModuleName + ".Libraries.ps1");
-            var cleanup = SourceBinaryPayloadCleanup.Begin(sourcePath, libPath, librariesPath);
-            if (cleanup is null)
-                return null;
-
-            _logger.Info($"Temporarily moved source development binary payload before regenerating '{plan.ModuleName}' bootstrapper.");
-            return cleanup;
-        }
-        catch (Exception ex)
-        {
-            _logger.Warn($"Failed to prepare source development binary payload cleanup for '{plan.ModuleName}'. Error: {ex.Message}");
-            if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+        var librariesPath = Path.Combine(sourcePath, plan.ModuleName + ".Libraries.ps1");
+        var cleanup = SourceBinaryPayloadCleanup.Begin(libPath, librariesPath);
+        if (cleanup is null)
             return null;
+
+        _logger.Info($"Temporarily moved source development binary payload before regenerating '{plan.ModuleName}' bootstrapper.");
+        return cleanup;
+    }
+
+    private void CleanReplaceSingleFileStagedBinaryPayload(ModulePipelinePlan plan, string stagingPath)
+    {
+        if (!ShouldCleanReplaceSingleFileBinaryPayload(plan))
+            return;
+
+        var stagePath = Path.GetFullPath(stagingPath);
+        var libPath = Path.GetFullPath(Path.Combine(stagePath, "Lib"));
+        if (!IsDirectChildPath(libPath, stagePath, "Lib"))
+            return;
+
+        DeleteReplaceSingleFileBinaryPayload(stagePath, plan.ModuleName, "staged");
+    }
+
+    private static bool ShouldCleanReplaceSingleFileBinaryPayload(ModulePipelinePlan plan)
+        => plan.BuildSpec.DevelopmentBinariesMode != ModuleDevelopmentBinaryMode.Off &&
+           plan.BuildSpec.DevelopmentSourceBootstrapperMode == ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile &&
+           !string.IsNullOrWhiteSpace(ResolveDevelopmentBinaryRoot(plan.BuildSpec));
+
+    private void DeleteReplaceSingleFileBinaryPayload(string rootPath, string moduleName, string context)
+    {
+        var libPath = Path.Combine(rootPath, "Lib");
+        if (Directory.Exists(libPath))
+        {
+            Directory.Delete(libPath, recursive: true);
+            _logger.Info($"Removed {context} development Lib payload before regenerating '{moduleName}' bootstrapper: {libPath}");
+        }
+
+        var librariesPath = Path.Combine(rootPath, moduleName + ".Libraries.ps1");
+        if (File.Exists(librariesPath))
+        {
+            File.Delete(librariesPath);
+            _logger.Info($"Removed {context} development libraries script before regenerating '{moduleName}' bootstrapper: {librariesPath}");
         }
     }
 
@@ -524,14 +550,14 @@ public sealed partial class ModulePipelineRunner
             _backupLibrariesPath = backupLibrariesPath;
         }
 
-        public static SourceBinaryPayloadCleanup? Begin(string sourcePath, string libPath, string librariesPath)
+        public static SourceBinaryPayloadCleanup? Begin(string libPath, string librariesPath)
         {
             var hasLib = Directory.Exists(libPath);
             var hasLibraries = File.Exists(librariesPath);
             if (!hasLib && !hasLibraries)
                 return null;
 
-            var tempRoot = Path.Combine(sourcePath, ".PowerForge.ReplaceSingleFileCleanup." + Guid.NewGuid().ToString("N"));
+            var tempRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "ReplaceSingleFileCleanup", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempRoot);
 
             string? backupLibPath = null;
