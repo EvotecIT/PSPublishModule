@@ -16,6 +16,33 @@ public sealed class InstallManagedScriptCommandTests
     }
 
     [Fact]
+    public void InstallManagedScript_resolves_psgallery_name_to_public_script_feed()
+    {
+        var source = ManagedModuleCommandSupport.ResolveScriptRepositorySource(
+            null!,
+            ManagedModuleCommandSupport.DefaultRepositoryName,
+            out var resolvedRegisteredRepositoryName,
+            out var trusted);
+
+        Assert.Equal(ManagedModuleCommandSupport.DefaultScriptRepositorySource, source);
+        Assert.Null(resolvedRegisteredRepositoryName);
+        Assert.False(trusted);
+    }
+
+    [Fact]
+    public void InstallManagedScript_marks_default_script_feed_as_trusted()
+    {
+        var repository = ManagedModuleCommandSupport.CreateScriptRepository(
+            null!,
+            ManagedModuleCommandSupport.DefaultRepositoryName,
+            ManagedModuleCommandSupport.DefaultScriptRepositorySource,
+            profileName: null,
+            repositoryWasBound: true);
+
+        Assert.True(repository.Trusted);
+    }
+
+    [Fact]
     public void InstallManagedScript_adds_default_script_root_to_process_path_once()
     {
         var previousPath = Environment.GetEnvironmentVariable("PATH");
@@ -337,8 +364,9 @@ public sealed class InstallManagedScriptCommandTests
     {
         using var feed = new TemporaryDirectory();
         using var scriptRoot = new TemporaryDirectory();
+        var packagePath = Path.Combine(feed.Path, "Invoke-CompanyTask.1.0.0.nupkg");
         TestPackageFactory.Create(
-            Path.Combine(feed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            packagePath,
             "Invoke-CompanyTask",
             "1.0.0",
             files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -355,7 +383,7 @@ public sealed class InstallManagedScriptCommandTests
             .AddParameter("RepositoryName", "Local")
             .AddParameter("ScriptRoot", scriptRoot.Path)
             .AddParameter("RequiredVersion", "1.0.0")
-            .AddParameter("ExpectedPackageSha256", new string('0', 64))
+            .AddParameter("ExpectedPackageSha256", TestHash.ComputeSha256(packagePath))
             .AddParameter("Plan");
         var results = ps.Invoke();
 

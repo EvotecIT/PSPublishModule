@@ -428,7 +428,8 @@ internal static class ManagedModuleCommandSupport
 
     private static bool IsBuiltInDefaultRepository(string repositoryName, string source)
         => string.Equals(repositoryName, DefaultRepositoryName, StringComparison.OrdinalIgnoreCase) &&
-           string.Equals(source, DefaultRepositorySource, StringComparison.OrdinalIgnoreCase);
+           (string.Equals(source, DefaultRepositorySource, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(source, DefaultScriptRepositorySource, StringComparison.OrdinalIgnoreCase));
 
     private static bool IsBuiltInDefaultScriptRepository(string repositoryName, string source)
         => string.Equals(repositoryName, DefaultRepositoryName, StringComparison.OrdinalIgnoreCase) &&
