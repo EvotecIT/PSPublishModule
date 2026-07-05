@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text.Json;
 
 namespace PowerForge;
 
@@ -187,6 +188,7 @@ public sealed class ManagedScriptResourceService
 
             Directory.CreateDirectory(destinationPath);
             ReplaceScriptFile(stagedScriptPath, scriptPath, request.Force);
+            WriteInstallRecord(scriptPath, request, versionInfo.Version);
             scriptInfo.Path = scriptPath;
             stopwatch.Stop();
 
@@ -424,6 +426,10 @@ public sealed class ManagedScriptResourceService
         if (!File.Exists(scriptPath))
             return null;
 
+        var installedPackageVersion = TryReadInstalledPackageVersion(scriptPath);
+        if (!string.IsNullOrWhiteSpace(installedPackageVersion))
+            return installedPackageVersion;
+
         try
         {
             var version = _scriptFileInfoService.Read(scriptPath).Version;
@@ -455,6 +461,42 @@ public sealed class ManagedScriptResourceService
             return null;
         }
     }
+
+    private static string? TryReadInstalledPackageVersion(string scriptPath)
+    {
+        var installRecordPath = ResolveInstallRecordPath(scriptPath);
+        if (!File.Exists(installRecordPath))
+            return null;
+
+        try
+        {
+            var record = JsonSerializer.Deserialize<ManagedScriptInstallRecord>(File.ReadAllText(installRecordPath));
+            var version = record?.Version;
+            return string.IsNullOrWhiteSpace(version)
+                ? null
+                : ManagedModulePackageIdentity.RequireSafeVersion(version!, nameof(ManagedScriptInstallRecord.Version));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void WriteInstallRecord(string scriptPath, ManagedScriptSaveRequest request, string packageVersion)
+    {
+        var record = new ManagedScriptInstallRecord
+        {
+            Name = request.Name.Trim(),
+            Version = packageVersion,
+            RepositoryName = request.Repository.Name,
+            RepositorySource = request.Repository.Source
+        };
+        var json = JsonSerializer.Serialize(record);
+        File.WriteAllText(ResolveInstallRecordPath(scriptPath), json);
+    }
+
+    private static string ResolveInstallRecordPath(string scriptPath)
+        => scriptPath + ".powerforge.json";
 
     private static ManagedScriptSaveResult CreateSkippedResult(
         ManagedScriptSaveRequest request,
@@ -498,6 +540,14 @@ public sealed class ManagedScriptResourceService
         var info = _scriptFileInfoService.Read(scriptPath);
         ThrowIfScriptMetadataIncomplete(info, scriptPath);
         return true;
+    }
+
+    private sealed class ManagedScriptInstallRecord
+    {
+        public string? Name { get; set; }
+        public string? Version { get; set; }
+        public string? RepositoryName { get; set; }
+        public string? RepositorySource { get; set; }
     }
 
     private static string ResolveDestinationPath(string path)

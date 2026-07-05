@@ -715,8 +715,9 @@ public sealed class SaveManagedScriptCommandTests
     {
         using var feed = new TemporaryDirectory();
         using var destination = new TemporaryDirectory();
+        var packagePath = Path.Combine(feed.Path, "Invoke-CompanyTask.1.2.0.nupkg");
         TestPackageFactory.Create(
-            Path.Combine(feed.Path, "Invoke-CompanyTask.1.2.0.nupkg"),
+            packagePath,
             "Invoke-CompanyTask",
             "1.2.0",
             files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -740,6 +741,23 @@ public sealed class SaveManagedScriptCommandTests
         var scriptInfo = Assert.IsType<ManagedScriptFileInfo>(result.ScriptInfo);
         Assert.Equal("1.0.0", scriptInfo.Version);
         Assert.True(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
+
+        File.Delete(packagePath);
+
+        ps.Commands.Clear();
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.2.0");
+        var skippedResults = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var skipped = Assert.IsType<ManagedScriptSaveResult>(Assert.Single(skippedResults).BaseObject);
+        Assert.Equal(ManagedScriptSaveStatus.SkippedExisting, skipped.Status);
+        Assert.Equal("1.2.0", skipped.Version);
+        Assert.Null(skipped.Download);
     }
 
     [Theory]
