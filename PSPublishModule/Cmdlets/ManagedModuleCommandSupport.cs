@@ -10,6 +10,7 @@ namespace PSPublishModule;
 internal static class ManagedModuleCommandSupport
 {
     internal const string DefaultRepositorySource = "https://www.powershellgallery.com/api/v3/index.json";
+    internal const string DefaultScriptRepositorySource = "https://www.powershellgallery.com/api/v2/items/psscript";
     internal const string DefaultRepositoryName = "PSGallery";
 
     internal static ManagedModuleRepository CreateRepository(PSCmdlet cmdlet, string repositoryName, string repository)
@@ -82,7 +83,7 @@ internal static class ManagedModuleCommandSupport
                 : ResolveRepositoryName(repositoryName, resolvedSource);
         var trusted = resolvedRegisteredRepositoryName is not null
             ? resolvedRegisteredRepositoryTrusted
-            : IsBuiltInDefaultRepository(repositoryName, resolvedSource);
+            : IsBuiltInDefaultScriptRepository(repositoryName, resolvedSource);
         return new ManagedModuleRepository(name, resolvedSource, ManagedModuleRepositoryKind.Auto, trusted);
     }
 
@@ -275,13 +276,15 @@ internal static class ManagedModuleCommandSupport
 
     private static bool RegisteredSourceMatchesProfile(PSCmdlet cmdlet, string repositoryName, ModuleRepositoryProfile profile)
     {
-        var profileSource = FirstNonEmpty(profile.RepositoryUri, profile.RepositorySourceUri, profile.Repository);
-        if (string.IsNullOrWhiteSpace(profileSource))
+        var profileSources = new[] { profile.RepositoryUri, profile.RepositorySourceUri, profile.Repository }
+            .Where(static source => !string.IsNullOrWhiteSpace(source))
+            .ToArray();
+        if (profileSources.Length == 0)
             return false;
 
         var resolver = new PowerShellRepositorySourceResolver();
         return resolver.TryResolveSource(cmdlet, repositoryName, out var registeredSource, out _) &&
-               SourcesEqual(profileSource!, registeredSource);
+               profileSources.Any(profileSource => SourcesEqual(profileSource!, registeredSource));
     }
 
     private static bool SourcesEqual(string expected, string? actual)
@@ -356,7 +359,7 @@ internal static class ManagedModuleCommandSupport
         }
 
         if (string.Equals(trimmed, DefaultRepositoryName, StringComparison.OrdinalIgnoreCase))
-            return DefaultRepositorySource;
+            return script ? DefaultScriptRepositorySource : DefaultRepositorySource;
 
         var providerPath = cmdlet is null ? null : ResolveProviderPath(cmdlet, trimmed);
         if (!string.IsNullOrWhiteSpace(providerPath) && Directory.Exists(providerPath))
@@ -419,6 +422,10 @@ internal static class ManagedModuleCommandSupport
     private static bool IsBuiltInDefaultRepository(string repositoryName, string source)
         => string.Equals(repositoryName, DefaultRepositoryName, StringComparison.OrdinalIgnoreCase) &&
            string.Equals(source, DefaultRepositorySource, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsBuiltInDefaultScriptRepository(string repositoryName, string source)
+        => string.Equals(repositoryName, DefaultRepositoryName, StringComparison.OrdinalIgnoreCase) &&
+           string.Equals(source, DefaultScriptRepositorySource, StringComparison.OrdinalIgnoreCase);
 
     internal static string? ResolveProviderPath(PSCmdlet cmdlet, string? path)
     {

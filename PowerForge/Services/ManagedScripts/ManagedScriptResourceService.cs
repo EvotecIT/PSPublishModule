@@ -133,8 +133,8 @@ public sealed class ManagedScriptResourceService
 
         var existingSelectedVersion = !string.IsNullOrWhiteSpace(existingComparableVersion) &&
                                       ManagedModuleVersionComparer.Instance.Compare(existingComparableVersion!, versionInfo.Version) == 0 &&
-                                      ExistingScriptCanSkip(scriptPath) &&
-                                      !request.Force;
+                                      !request.Force &&
+                                      ExistingScriptCanSkip(scriptPath);
         if (existingSelectedVersion && !RequiresPackageVerificationBeforeSkip(request))
         {
             stopwatch.Stop();
@@ -468,9 +468,12 @@ public sealed class ManagedScriptResourceService
         try
         {
             var version = _scriptFileInfoService.Read(scriptPath).Version;
-            return string.IsNullOrWhiteSpace(version)
-                ? null
-                : ManagedModulePackageIdentity.RequireSafeVersion(version, nameof(version));
+            if (string.IsNullOrWhiteSpace(version))
+                return null;
+
+            var safeVersion = ManagedModulePackageIdentity.RequireSafeVersion(version, nameof(version));
+            ValidateScriptVersion(safeVersion, nameof(version));
+            return safeVersion;
         }
         catch (ArgumentException)
         {

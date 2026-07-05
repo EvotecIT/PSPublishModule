@@ -226,6 +226,25 @@ public sealed class SaveManagedScriptCommandTests
         Assert.Contains("not a valid", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void SaveManagedScript_rejects_plus_prefixed_existing_version_before_fast_skip()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1"), CreateScript("+1.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "0.0.0");
+
+        var ex = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Contains("not a valid", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData("MinimumVersion", "../bad")]
     [InlineData("MaximumVersion", "1.0.0/bad")]
@@ -435,6 +454,41 @@ public sealed class SaveManagedScriptCommandTests
         var result = Assert.IsType<ManagedScriptSaveResult>(Assert.Single(results).BaseObject);
         Assert.Equal(ManagedScriptSaveStatus.Saved, result.Status);
         Assert.Equal("2.0.0", new ManagedScriptFileInfoService().Read(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")).Version);
+    }
+
+    [Fact]
+    public void SaveManagedScript_force_replaces_existing_script_with_matching_sidecar_and_incomplete_metadata()
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            });
+        var scriptPath = Path.Combine(destination.Path, "Invoke-CompanyTask.ps1");
+        File.WriteAllText(scriptPath, "Write-Output 'missing metadata'");
+        File.WriteAllText(
+            scriptPath + ".powerforge.json",
+            $$"""{"Name":"Invoke-CompanyTask","Version":"1.0.0","ScriptSha256":"{{TestHash.ComputeSha256(scriptPath)}}","RepositoryName":"Local","RepositorySource":"{{feed.Path.Replace("\\", "\\\\", StringComparison.Ordinal)}}"}""");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("Force");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptSaveResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptSaveStatus.Saved, result.Status);
+        Assert.Equal("1.0.0", new ManagedScriptFileInfoService().Read(scriptPath).Version);
     }
 
     [Fact]
@@ -777,6 +831,20 @@ public sealed class SaveManagedScriptCommandTests
     }
 
     [Fact]
+    public void ManagedModuleCommandSupport_defaults_psgallery_script_repository_to_script_feed()
+    {
+        var source = ManagedModuleCommandSupport.ResolveScriptRepositorySource(
+            null!,
+            "PSGallery",
+            out var resolvedRegisteredRepositoryName,
+            out var trusted);
+
+        Assert.Equal("https://www.powershellgallery.com/api/v2/items/psscript", source);
+        Assert.Null(resolvedRegisteredRepositoryName);
+        Assert.False(trusted);
+    }
+
+    [Fact]
     public void SaveManagedScript_profile_name_prefers_registered_script_source_location()
     {
         using var moduleFeed = new TemporaryDirectory();
@@ -808,6 +876,64 @@ public sealed class SaveManagedScriptCommandTests
                 [pscustomobject]@{
                     Name = $Name
                     SourceLocation = '{{EscapePowerShellSingleQuoted(moduleFeed.Path)}}'
+                    ScriptSourceLocation = '{{EscapePowerShellSingleQuoted(scriptFeed.Path)}}'
+                    InstallationPolicy = 'Trusted'
+                }
+            }
+            """);
+        _ = ps.Invoke();
+        AssertNoPowerShellErrors(ps);
+        ps.Commands.Clear();
+
+        ps.AddCommand("Save-ManagedScript")
+            .AddParameter("Name", "Invoke-CompanyTask")
+            .AddParameter("ProfileName", "Company")
+            .AddParameter("Path", destination.Path)
+            .AddParameter("RequiredVersion", "1.0.0")
+            .AddParameter("RequireTrustedRepository");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedScriptSaveResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedScriptSaveStatus.Saved, result.Status);
+        Assert.Equal(scriptFeed.Path, result.RepositorySource);
+        Assert.True(File.Exists(Path.Combine(destination.Path, "Invoke-CompanyTask.ps1")));
+    }
+
+    [Fact]
+    public void SaveManagedScript_profile_name_matches_registered_repository_source_uri()
+    {
+        using var psResourceFeed = new TemporaryDirectory();
+        using var powerShellGetFeed = new TemporaryDirectory();
+        using var scriptFeed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        TestPackageFactory.Create(
+            Path.Combine(scriptFeed.Path, "Invoke-CompanyTask.1.0.0.nupkg"),
+            "Invoke-CompanyTask",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Invoke-CompanyTask.ps1"] = CreateScript("1.0.0")
+            });
+        new ModuleRepositoryProfileStore().SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "Company",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "CompanyModules",
+            RepositoryUri = psResourceFeed.Path,
+            RepositorySourceUri = powerShellGetFeed.Path,
+            Trusted = true
+        });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddScript($$"""
+            function Get-PSRepository {
+                param([string] $Name)
+                [pscustomobject]@{
+                    Name = $Name
+                    SourceLocation = '{{EscapePowerShellSingleQuoted(powerShellGetFeed.Path)}}'
                     ScriptSourceLocation = '{{EscapePowerShellSingleQuoted(scriptFeed.Path)}}'
                     InstallationPolicy = 'Trusted'
                 }
