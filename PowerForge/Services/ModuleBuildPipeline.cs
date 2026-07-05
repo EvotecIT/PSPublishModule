@@ -98,6 +98,7 @@ public sealed class ModuleBuildPipeline
 
         _logger.Info($"Staging module '{spec.Name}' from '{source}' to '{staging}'");
         CopyDirectoryFiltered(source, staging, excluded, excludedFiles);
+        CleanReplaceSingleFileStagedBinaryPayload(spec, staging);
         var normalization = NormalizeMixedPowerShellLineEndings(staging, excluded, excludedFiles);
 
         return new StagingResult(
@@ -168,6 +169,7 @@ public sealed class ModuleBuildPipeline
         // This keeps artefacts and installs aligned with historical PSPublishModule behavior for binary/mixed modules.
         if (!spec.RefreshManifestOnly)
         {
+            var forceBootstrapperWrite = ShouldCleanReplaceSingleFileBinaryPayload(spec);
             ModuleBootstrapperGenerator.Generate(
                 staging,
                 spec.Name,
@@ -180,6 +182,7 @@ public sealed class ModuleBuildPipeline
                 spec.AssemblyTypeAcceleratorAssemblies,
                 spec.IgnoreLibraryOnLoad,
                 targetFrameworks: spec.Frameworks,
+                forceBootstrapperWrite: forceBootstrapperWrite,
                 log: message => _logger.Info(message));
         }
         else
@@ -291,6 +294,57 @@ public sealed class ModuleBuildPipeline
                 stack.Push(dir);
             }
         }
+    }
+
+    private void CleanReplaceSingleFileStagedBinaryPayload(ModuleBuildSpec spec, string stagingPath)
+    {
+        if (!ShouldCleanReplaceSingleFileBinaryPayload(spec))
+            return;
+
+        var stagePath = Path.GetFullPath(stagingPath);
+        var libPath = Path.GetFullPath(Path.Combine(stagePath, "Lib"));
+        if (!IsDirectChildPath(libPath, stagePath, "Lib"))
+            return;
+
+        if (Directory.Exists(libPath))
+        {
+            Directory.Delete(libPath, recursive: true);
+            _logger.Info($"Removed staged development Lib payload before regenerating '{spec.Name}' bootstrapper: {libPath}");
+        }
+
+        var librariesPath = Path.Combine(stagePath, spec.Name + ".Libraries.ps1");
+        if (File.Exists(librariesPath))
+        {
+            File.Delete(librariesPath);
+            _logger.Info($"Removed staged development libraries script before regenerating '{spec.Name}' bootstrapper: {librariesPath}");
+        }
+    }
+
+    private static bool ShouldCleanReplaceSingleFileBinaryPayload(ModuleBuildSpec spec)
+        => !spec.RefreshManifestOnly &&
+           spec.DevelopmentBinariesMode != ModuleDevelopmentBinaryMode.Off &&
+           spec.DevelopmentSourceBootstrapperMode == ModuleDevelopmentSourceBootstrapperMode.ReplaceSingleFile &&
+           !string.IsNullOrWhiteSpace(ResolveDevelopmentBinaryRoot(spec));
+
+    private static string? ResolveDevelopmentBinaryRoot(ModuleBuildSpec spec)
+    {
+        if (!string.IsNullOrWhiteSpace(spec.DevelopmentBinariesPath))
+            return PathValueResolver.Resolve(spec.SourcePath, spec.DevelopmentBinariesPath!);
+
+        if (string.IsNullOrWhiteSpace(spec.CsprojPath))
+            return null;
+
+        var projectDirectory = Path.GetDirectoryName(Path.GetFullPath(spec.CsprojPath));
+        return string.IsNullOrWhiteSpace(projectDirectory)
+            ? null
+            : Path.Combine(projectDirectory!, "bin");
+    }
+
+    private static bool IsDirectChildPath(string candidatePath, string parentPath, string childName)
+    {
+        var parent = Path.GetFullPath(parentPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var candidate = Path.GetFullPath(candidatePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return string.Equals(candidate, Path.Combine(parent, childName), StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ComputeRelativePath(string baseDir, string fullPath)
