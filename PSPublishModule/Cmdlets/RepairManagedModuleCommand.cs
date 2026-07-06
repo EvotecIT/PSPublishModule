@@ -161,6 +161,11 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
     [Parameter]
     public SwitchParameter AcceptLicense { get; set; }
 
+    /// <summary>Skip installing dependencies declared by repaired packages.</summary>
+    [Parameter]
+    [Alias("SkipDependenciesCheck")]
+    public SwitchParameter SkipDependencyCheck { get; set; }
+
     /// <summary>Allow apply preparation to continue when the plan contains error findings.</summary>
     [Parameter]
     public SwitchParameter AllowConflict { get; set; }
@@ -302,11 +307,21 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
                 };
                 var targetRepository = string.IsNullOrWhiteSpace(target.Repository)
                     ? desiredRepository
-                    : target.Repository;
+                    : ResolveRepositoryName(target.Repository);
                 if (!string.IsNullOrWhiteSpace(targetRepository))
                     module["Repository"] = targetRepository!;
-                if (target.Scope != ManagedModuleInstallScope.CurrentUser || !string.IsNullOrWhiteSpace(Scope))
+                if (target.ScopeSpecified || !string.IsNullOrWhiteSpace(Scope))
                     module["Scope"] = target.Scope.ToString();
+                if (target.IncludePrerelease)
+                    module["Prerelease"] = true;
+                if (target.Reinstall)
+                    module["Reinstall"] = true;
+                if (target.AllowClobber)
+                    module["AllowClobber"] = true;
+                if (target.AcceptLicense)
+                    module["AcceptLicense"] = true;
+                if (target.SkipDependencyCheck)
+                    module["SkipDependencyCheck"] = true;
 
                 modules.Add(module);
             }
@@ -345,6 +360,16 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
                 module["Repository"] = desiredRepository!;
             if (!string.IsNullOrWhiteSpace(Scope))
                 module["Scope"] = Scope!;
+            if (Prerelease.IsPresent)
+                module["Prerelease"] = true;
+            if (Force.IsPresent)
+                module["Reinstall"] = true;
+            if (AllowClobber.IsPresent)
+                module["AllowClobber"] = true;
+            if (AcceptLicense.IsPresent)
+                module["AcceptLicense"] = true;
+            if (SkipDependencyCheck.IsPresent)
+                module["SkipDependencyCheck"] = true;
 
             modules.Add(module);
         }
@@ -369,7 +394,7 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             Force.IsPresent,
             AllowClobber.IsPresent,
             AcceptLicense.IsPresent,
-            skipDependencyCheck: false);
+            SkipDependencyCheck.IsPresent);
         return ManagedModuleRequiredResourceSupport.Parse(resource, defaults);
     }
 
@@ -541,6 +566,7 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             acceptLicense: AcceptLicense.IsPresent,
             allowErrorFindings: AllowConflict.IsPresent,
             allowClobber: AllowClobber.IsPresent,
+            skipDependencyCheck: SkipDependencyCheck.IsPresent,
             moduleRoot: deliveryModuleRoot,
             transport: Transport,
             profileRepository: ResolveProfileRepositoryName());
@@ -679,6 +705,7 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             Force = Force.IsPresent,
             AllowClobber = AllowClobber.IsPresent,
             AcceptLicense = AcceptLicense.IsPresent,
+            SkipDependencyCheck = SkipDependencyCheck.IsPresent,
             ModuleRoot = moduleRoot,
             Credential = credential,
             LoadedModules = ResolveLoadedModules(inventory)
@@ -795,11 +822,16 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
     private string? ResolveRepositoryName()
     {
         if (!string.IsNullOrWhiteSpace(Repository))
-            return ModuleStateManagedRepositoryResolver.ResolveRepositoryIdentity(this, Repository);
+            return ResolveRepositoryName(Repository);
         if (!string.IsNullOrWhiteSpace(ProfileName))
             return ModuleRepositoryProfileCommandSupport.TryResolve(ProfileName)?.RepositoryName;
         return null;
     }
+
+    private string? ResolveRepositoryName(string? repository)
+        => string.IsNullOrWhiteSpace(repository)
+            ? null
+            : ModuleStateManagedRepositoryResolver.ResolveRepositoryIdentity(this, repository!);
 
     private string? ResolveProfileRepositoryName()
         => string.IsNullOrWhiteSpace(ProfileName)

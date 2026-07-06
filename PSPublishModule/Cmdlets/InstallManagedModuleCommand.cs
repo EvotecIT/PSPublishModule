@@ -234,6 +234,8 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
                 Repository = repository,
                 Name = target.Name,
                 Version = target.Version,
+                MinimumVersion = target.MinimumVersion,
+                MaximumVersion = target.MaximumVersion,
                 VersionPolicy = target.VersionPolicy,
                 IncludePrerelease = target.IncludePrerelease,
                 Scope = string.IsNullOrWhiteSpace(moduleRoot) ? target.Scope : ManagedModuleInstallScope.Custom,
@@ -292,28 +294,17 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
         return Name.Select(moduleName => new ManagedModuleRequiredResourceTarget(
             moduleName,
             Version,
-            CreateVersionPolicy(MinimumVersion, MaximumVersion, VersionPolicy),
+            MinimumVersion,
+            MaximumVersion,
+            VersionPolicy,
             Prerelease.IsPresent,
             Scope,
+            MyInvocation.BoundParameters.ContainsKey(nameof(Scope)),
             null,
             defaults.Reinstall,
             defaults.AllowClobber,
             AcceptLicense.IsPresent,
             SkipDependencyCheck.IsPresent));
-    }
-
-    private static string? CreateVersionPolicy(string? minimumVersion, string? maximumVersion, string? versionPolicy)
-    {
-        if (!string.IsNullOrWhiteSpace(versionPolicy))
-            return versionPolicy;
-        if (!string.IsNullOrWhiteSpace(minimumVersion) && !string.IsNullOrWhiteSpace(maximumVersion))
-            return ">=" + minimumVersion!.Trim() + " <=" + maximumVersion!.Trim();
-        if (!string.IsNullOrWhiteSpace(minimumVersion))
-            return ">=" + minimumVersion!.Trim();
-        if (!string.IsNullOrWhiteSpace(maximumVersion))
-            return "<=" + maximumVersion!.Trim();
-
-        return null;
     }
 
 }

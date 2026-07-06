@@ -13,6 +13,7 @@ internal sealed class ModuleStateDeliveryOptions
         bool acceptLicense = false,
         bool allowErrorFindings = false,
         bool allowClobber = false,
+        bool skipDependencyCheck = false,
         string? moduleRoot = null,
         ModuleStateDeliveryTransport transport = ModuleStateDeliveryTransport.PrivateModule,
         string? profileRepository = null)
@@ -25,6 +26,7 @@ internal sealed class ModuleStateDeliveryOptions
         AcceptLicense = acceptLicense;
         AllowErrorFindings = allowErrorFindings;
         AllowClobber = allowClobber;
+        SkipDependencyCheck = skipDependencyCheck;
         ModuleRoot = NormalizeOptional(moduleRoot);
         Transport = transport;
         ProfileRepository = NormalizeOptional(profileRepository);
@@ -47,6 +49,8 @@ internal sealed class ModuleStateDeliveryOptions
     internal bool AllowErrorFindings { get; }
 
     internal bool AllowClobber { get; }
+
+    internal bool SkipDependencyCheck { get; }
 
     internal string? ModuleRoot { get; }
 

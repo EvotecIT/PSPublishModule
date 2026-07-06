@@ -174,20 +174,26 @@ internal sealed class ModuleStateManagedDeliveryService
         ModuleStateManagedDeliveryOptions options)
     {
         var versionPolicy = ResolveVersionPolicy(action.VersionPolicy);
+        var effectivePrerelease = options.Prerelease || action.IncludePrerelease;
+        var effectiveForce = options.Force || action.Force;
+        var effectiveAllowClobber = options.AllowClobber || action.AllowClobber;
+        var effectiveAcceptLicense = options.AcceptLicense || action.AcceptLicense;
+        var effectiveSkipDependencyCheck = options.SkipDependencyCheck || action.SkipDependencyCheck;
         return new ManagedModuleInstallRequest
         {
             Repository = repository,
             Name = action.ModuleName,
             Version = versionPolicy.ExactVersion,
             VersionPolicy = versionPolicy.RangePolicy,
-            IncludePrerelease = options.Prerelease,
+            IncludePrerelease = effectivePrerelease,
             Scope = ResolveScope(action.TargetScope, action.TargetPath, options.ModuleRoot),
             ModuleRoot = ResolveModuleRoot(action, options),
             ExpectedPackageSha256 = action.ExpectedPackageSha256,
             Credential = options.Credential,
-            Force = options.Force || action.Force,
-            AllowClobber = options.AllowClobber,
-            AcceptLicense = options.AcceptLicense
+            Force = effectiveForce,
+            AllowClobber = effectiveAllowClobber,
+            AcceptLicense = effectiveAcceptLicense,
+            SkipDependencyCheck = effectiveSkipDependencyCheck
         };
     }
 
@@ -197,20 +203,26 @@ internal sealed class ModuleStateManagedDeliveryService
         ModuleStateManagedDeliveryOptions options)
     {
         var versionPolicy = ResolveVersionPolicy(action.VersionPolicy);
+        var effectivePrerelease = options.Prerelease || action.IncludePrerelease;
+        var effectiveForce = options.Force || action.Force;
+        var effectiveAllowClobber = options.AllowClobber || action.AllowClobber;
+        var effectiveAcceptLicense = options.AcceptLicense || action.AcceptLicense;
+        var effectiveSkipDependencyCheck = options.SkipDependencyCheck || action.SkipDependencyCheck;
         return new ManagedModuleUpdateRequest
         {
             Repository = repository,
             Name = action.ModuleName,
             Version = versionPolicy.ExactVersion,
             VersionPolicy = versionPolicy.RangePolicy,
-            IncludePrerelease = options.Prerelease,
+            IncludePrerelease = effectivePrerelease,
             Scope = ResolveScope(action.TargetScope, action.TargetPath, options.ModuleRoot),
             ModuleRoot = ResolveModuleRoot(action, options),
             ExpectedPackageSha256 = action.ExpectedPackageSha256,
             Credential = options.Credential,
-            Force = options.Force || action.Force,
-            AllowClobber = options.AllowClobber,
-            AcceptLicense = options.AcceptLicense,
+            Force = effectiveForce,
+            AllowClobber = effectiveAllowClobber,
+            AcceptLicense = effectiveAcceptLicense,
+            SkipDependencyCheck = effectiveSkipDependencyCheck,
             LoadedModules = options.LoadedModules,
             SourcePolicy = action.IsRepair ? new ManagedModuleSourcePolicy() : null
         };
@@ -222,6 +234,11 @@ internal sealed class ModuleStateManagedDeliveryService
         ModuleStateManagedDeliveryOptions options)
     {
         var versionPolicy = ResolveVersionPolicy(action.VersionPolicy);
+        var effectivePrerelease = options.Prerelease || action.IncludePrerelease;
+        var effectiveForce = options.Force || action.Force;
+        var effectiveAllowClobber = options.AllowClobber || action.AllowClobber;
+        var effectiveAcceptLicense = options.AcceptLicense || action.AcceptLicense;
+        var effectiveSkipDependencyCheck = options.SkipDependencyCheck || action.SkipDependencyCheck;
         var moduleRoot = ResolveModuleRoot(action, options)
             ?? throw new InvalidOperationException("Managed module save delivery requires an action target path.");
         return new ManagedModuleInstallRequest
@@ -230,14 +247,15 @@ internal sealed class ModuleStateManagedDeliveryService
             Name = action.ModuleName,
             Version = versionPolicy.ExactVersion,
             VersionPolicy = versionPolicy.RangePolicy,
-            IncludePrerelease = options.Prerelease,
+            IncludePrerelease = effectivePrerelease,
             Scope = ManagedModuleInstallScope.Custom,
             ModuleRoot = moduleRoot,
             ExpectedPackageSha256 = action.ExpectedPackageSha256,
             Credential = options.Credential,
-            Force = options.Force || action.Force,
-            AllowClobber = options.AllowClobber,
-            AcceptLicense = options.AcceptLicense
+            Force = effectiveForce,
+            AllowClobber = effectiveAllowClobber,
+            AcceptLicense = effectiveAcceptLicense,
+            SkipDependencyCheck = effectiveSkipDependencyCheck
         };
     }
 
@@ -323,6 +341,8 @@ internal sealed class ModuleStateManagedDeliveryOptions
     internal bool AllowClobber { get; set; }
 
     internal bool AcceptLicense { get; set; }
+
+    internal bool SkipDependencyCheck { get; set; }
 
     internal string? ModuleRoot { get; set; }
 

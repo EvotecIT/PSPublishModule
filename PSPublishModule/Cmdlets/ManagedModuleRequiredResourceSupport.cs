@@ -64,6 +64,7 @@ internal static class ManagedModuleRequiredResourceSupport
             "Quiet",
             "Reinstall",
             "TrustRepository",
+            "AllowClobber",
             "NoClobber",
             "SkipDependencyCheck"
         };
@@ -79,20 +80,27 @@ internal static class ManagedModuleRequiredResourceSupport
         var prerelease = GetBool(options, "Prerelease") ?? defaults.IncludePrerelease;
         var reinstall = GetBool(options, "Reinstall") ?? defaults.Reinstall;
         var noClobber = GetBool(options, "NoClobber") ?? false;
+        var allowClobber = GetBool(options, "AllowClobber") ?? defaults.AllowClobber;
+        if (allowClobber && noClobber)
+            throw new InvalidOperationException("RequiredResource parameters 'AllowClobber' and 'NoClobber' cannot both be true.");
         var acceptLicense = GetBool(options, "AcceptLicense") ?? defaults.AcceptLicense;
         var skipDependencyCheck = GetBool(options, "SkipDependencyCheck") ?? defaults.SkipDependencyCheck;
         var scope = GetScope(options, "Scope") ?? defaults.Scope;
+        var scopeSpecified = TryGetOption(options, "Scope", out _);
         var version = GetString(options, "Version");
         SplitRequiredResourceVersion(version, out var exactVersion, out var versionPolicy);
         return new ManagedModuleRequiredResourceTarget(
             name,
             exactVersion,
+            minimumVersion: null,
+            maximumVersion: null,
             versionPolicy,
             prerelease,
             scope,
+            scopeSpecified,
             repository,
             reinstall,
-            defaults.AllowClobber && !noClobber,
+            allowClobber && !noClobber,
             acceptLicense,
             skipDependencyCheck);
     }
@@ -212,9 +220,12 @@ internal sealed class ManagedModuleRequiredResourceTarget
     internal ManagedModuleRequiredResourceTarget(
         string name,
         string? version,
+        string? minimumVersion,
+        string? maximumVersion,
         string? versionPolicy,
         bool includePrerelease,
         ManagedModuleInstallScope scope,
+        bool scopeSpecified,
         string? repository,
         bool reinstall,
         bool allowClobber,
@@ -223,9 +234,12 @@ internal sealed class ManagedModuleRequiredResourceTarget
     {
         Name = name;
         Version = version;
+        MinimumVersion = minimumVersion;
+        MaximumVersion = maximumVersion;
         VersionPolicy = versionPolicy;
         IncludePrerelease = includePrerelease;
         Scope = scope;
+        ScopeSpecified = scopeSpecified;
         Repository = repository;
         Reinstall = reinstall;
         AllowClobber = allowClobber;
@@ -237,11 +251,17 @@ internal sealed class ManagedModuleRequiredResourceTarget
 
     internal string? Version { get; }
 
+    internal string? MinimumVersion { get; }
+
+    internal string? MaximumVersion { get; }
+
     internal string? VersionPolicy { get; }
 
     internal bool IncludePrerelease { get; }
 
     internal ManagedModuleInstallScope Scope { get; }
+
+    internal bool ScopeSpecified { get; }
 
     internal string? Repository { get; }
 

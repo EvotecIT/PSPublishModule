@@ -45,6 +45,132 @@ public sealed class RepairManagedModuleRequiredResourceCommandTests
     }
 
     [Fact]
+    public void RepairManagedModule_RequiredResourcePreservesPerResourceDeliveryOptions()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var requiredResource = new Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools"] = new Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Version"] = "1.1.0",
+                ["Prerelease"] = true,
+                ["Reinstall"] = true,
+                ["AcceptLicense"] = true,
+                ["AllowClobber"] = true,
+                ["SkipDependencyCheck"] = true
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("RequiredResource", requiredResource)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions);
+        Assert.Equal("Install", action.Kind);
+        Assert.True(action.IncludePrerelease);
+        Assert.True(action.Force);
+        Assert.True(action.AcceptLicense);
+        Assert.True(action.AllowClobber);
+        Assert.True(action.SkipDependencyCheck);
+        var command = Assert.Single(result.Apply.Commands);
+        Assert.Contains("-Prerelease", command.Arguments);
+        Assert.Contains("-Force", command.Arguments);
+        Assert.Contains("-AllowClobber", command.Arguments);
+        Assert.Contains("-SkipDependencyCheck", command.Arguments);
+    }
+
+    [Fact]
+    public void RepairManagedModule_RequiredResourceHonorsExplicitCurrentUserScope()
+    {
+        using var feed = new TemporaryDirectory();
+        var inventory = new ModuleStateInventoryResult
+        {
+            InstalledModules = new[]
+            {
+                new ModuleStateInstalledModuleResult
+                {
+                    Name = "Company.Tools",
+                    Version = "1.1.0",
+                    Scope = "AllUsers",
+                    Path = @"C:\Program Files\WindowsPowerShell\Modules\Company.Tools\1.1.0",
+                    IsEffectiveImportCandidate = true
+                }
+            }
+        };
+        var requiredResource = new Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools"] = new Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Version"] = "1.1.0",
+                ["Scope"] = "CurrentUser"
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("Inventory", inventory)
+            .AddParameter("RequiredResource", requiredResource)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions);
+        Assert.Equal("Install", action.Kind);
+        Assert.Equal("CurrentUser", action.TargetScope);
+    }
+
+    [Fact]
+    public void RepairManagedModule_RequiredResourceNormalizesPerResourceRepository()
+    {
+        using var feed = new TemporaryDirectory();
+        var inventory = new ModuleStateInventoryResult
+        {
+            InstalledModules = new[]
+            {
+                new ModuleStateInstalledModuleResult
+                {
+                    Name = "Company.Tools",
+                    Version = "1.1.0",
+                    Scope = "CurrentUser",
+                    SourceRepository = "Local",
+                    Path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Modules", "Company.Tools", "1.1.0"),
+                    IsEffectiveImportCandidate = true
+                }
+            }
+        };
+        var requiredResource = new Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools"] = new Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Version"] = "1.1.0",
+                ["Repository"] = feed.Path
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("Inventory", inventory)
+            .AddParameter("RequiredResource", requiredResource)
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions);
+        Assert.Equal("NoAction", action.Kind);
+        Assert.Equal("Local", action.TargetRepository);
+    }
+
+    [Fact]
     public void RepairManagedModule_RequiredResourceAppliesMissingInstallToInventoriedRoot()
     {
         using var feed = new TemporaryDirectory();

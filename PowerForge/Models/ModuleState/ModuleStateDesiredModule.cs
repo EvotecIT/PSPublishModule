@@ -12,7 +12,12 @@ internal sealed class ModuleStateDesiredModule
         IEnumerable<string>? allowedSources = null,
         string? scope = null,
         string? targetPath = null,
-        string? expectedPackageSha256 = null)
+        string? expectedPackageSha256 = null,
+        bool includePrerelease = false,
+        bool force = false,
+        bool acceptLicense = false,
+        bool allowClobber = false,
+        bool skipDependencyCheck = false)
     {
         Name = string.IsNullOrWhiteSpace(name)
             ? throw new ArgumentException("Desired module name is required.", nameof(name))
@@ -26,6 +31,11 @@ internal sealed class ModuleStateDesiredModule
         Scope = string.IsNullOrWhiteSpace(scope) ? null : scope!.Trim();
         TargetPath = string.IsNullOrWhiteSpace(targetPath) ? null : targetPath!.Trim();
         ExpectedPackageSha256 = ManagedModulePackageIntegrity.NormalizeSha256(expectedPackageSha256);
+        IncludePrerelease = includePrerelease;
+        Force = force;
+        AcceptLicense = acceptLicense;
+        AllowClobber = allowClobber;
+        SkipDependencyCheck = skipDependencyCheck;
     }
 
     internal string Name { get; }
@@ -39,4 +49,14 @@ internal sealed class ModuleStateDesiredModule
     internal string? TargetPath { get; }
 
     internal string? ExpectedPackageSha256 { get; }
+
+    internal bool IncludePrerelease { get; }
+
+    internal bool Force { get; }
+
+    internal bool AcceptLicense { get; }
+
+    internal bool AllowClobber { get; }
+
+    internal bool SkipDependencyCheck { get; }
 }

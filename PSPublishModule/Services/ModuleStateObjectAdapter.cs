@@ -60,7 +60,18 @@ internal static class ModuleStateObjectAdapter
             GetString(value, "PackageSha256") ??
             GetString(value, "Sha256");
 
-        return new ModuleStateDesiredModule(moduleName, versionPolicy, sources, scope, targetPath, expectedPackageSha256);
+        return new ModuleStateDesiredModule(
+            moduleName,
+            versionPolicy,
+            sources,
+            scope,
+            targetPath,
+            expectedPackageSha256,
+            GetBool(value, "Prerelease") || GetBool(value, "IncludePrerelease"),
+            GetBool(value, "Reinstall") || GetBool(value, "Force"),
+            GetBool(value, "AcceptLicense"),
+            GetBool(value, "AllowClobber"),
+            GetBool(value, "SkipDependencyCheck"));
     }
 
     private static ModuleStateFamilyPolicy ToFamilyPolicy(object input)
@@ -102,6 +113,21 @@ internal static class ModuleStateObjectAdapter
 
     private static string? GetString(object value, string propertyName)
         => ConvertToString(GetPropertyValue(value, propertyName));
+
+    private static bool GetBool(object value, string propertyName)
+    {
+        var propertyValue = GetPropertyValue(value, propertyName);
+        if (propertyValue is null)
+            return false;
+
+        propertyValue = Unwrap(propertyValue);
+        if (propertyValue is bool boolean)
+            return boolean;
+        if (bool.TryParse(ConvertToString(propertyValue), out var parsed))
+            return parsed;
+
+        throw new ArgumentException($"Desired module property '{propertyName}' must be a Boolean value.", propertyName);
+    }
 
     private static string[]? GetStringArray(object value, string propertyName)
     {

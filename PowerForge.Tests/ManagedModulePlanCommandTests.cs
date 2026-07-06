@@ -36,6 +36,47 @@ public sealed class ManagedModulePlanCommandTests
     }
 
     [Fact]
+    public void InstallManagedModule_plan_preserves_minimum_and_maximum_request_bounds()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: CreateModuleFiles("1.0.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.5.0.nupkg"),
+            "Company.Tools",
+            "1.5.0",
+            files: CreateModuleFiles("1.5.0"));
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.2.0.0.nupkg"),
+            "Company.Tools",
+            "2.0.0",
+            files: CreateModuleFiles("2.0.0"));
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Install-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", moduleRoot.Path)
+            .AddParameter("MinimumVersion", "1.1.0")
+            .AddParameter("MaximumVersion", "1.9.0")
+            .AddParameter("Plan");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var plan = Assert.IsType<ManagedModuleInstallPlan>(Assert.Single(results).BaseObject);
+        Assert.Equal(ManagedModuleInstallPlanAction.Install, plan.Action);
+        Assert.Equal("1.5.0", plan.Version);
+        Assert.Equal("1.1.0", plan.MinimumVersion);
+        Assert.Equal("1.9.0", plan.MaximumVersion);
+        Assert.Null(plan.VersionPolicy);
+    }
+
+    [Fact]
     public void UpdateManagedModule_plan_outputs_update_plan_without_writing_files()
     {
         using var feed = new TemporaryDirectory();

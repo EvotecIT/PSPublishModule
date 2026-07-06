@@ -170,11 +170,18 @@ internal sealed class ModuleStateApplyService
             return "Plan includes save actions but no target path was supplied.";
 
         if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
-            !deliveryOptions.AcceptLicense &&
-            plan.Actions.Any(static action => action.LicenseAcceptanceRequired && IsDeliveryAction(action.Kind)))
+            plan.Actions.Any(action =>
+                action.LicenseAcceptanceRequired &&
+                !deliveryOptions.AcceptLicense &&
+                !action.AcceptLicense &&
+                IsDeliveryAction(action.Kind)))
         {
             var modules = plan.Actions
-                .Where(static action => action.LicenseAcceptanceRequired && IsDeliveryAction(action.Kind))
+                .Where(action =>
+                    action.LicenseAcceptanceRequired &&
+                    !deliveryOptions.AcceptLicense &&
+                    !action.AcceptLicense &&
+                    IsDeliveryAction(action.Kind))
                 .Select(static action => action.ModuleName)
                 .Distinct(StringComparer.OrdinalIgnoreCase);
             return "Planned managed delivery requires license acceptance for " + string.Join(", ", modules) + ".";
@@ -256,7 +263,12 @@ internal sealed class ModuleStateApplyService
             arguments.Add(deliveryOptions.Repository!);
         }
 
-        if (deliveryOptions.Prerelease)
+        var effectivePrerelease = deliveryOptions.Prerelease || action.IncludePrerelease;
+        var effectiveAcceptLicense = deliveryOptions.AcceptLicense || action.AcceptLicense;
+        var effectiveAllowClobber = deliveryOptions.AllowClobber || action.AllowClobber;
+        var effectiveSkipDependencyCheck = deliveryOptions.SkipDependencyCheck || action.SkipDependencyCheck;
+
+        if (effectivePrerelease)
             arguments.Add("-Prerelease");
         if (deliveryOptions.Transport != ModuleStateDeliveryTransport.ManagedModule)
         {
@@ -278,7 +290,7 @@ internal sealed class ModuleStateApplyService
         }
 
         if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
-            deliveryOptions.AcceptLicense &&
+            effectiveAcceptLicense &&
             action.LicenseAcceptanceRequired &&
             IsDeliveryAction(action.Kind))
         {
@@ -286,10 +298,17 @@ internal sealed class ModuleStateApplyService
         }
 
         if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
-            deliveryOptions.AllowClobber &&
+            effectiveAllowClobber &&
             IsDeliveryAction(action.Kind))
         {
             arguments.Add("-AllowClobber");
+        }
+
+        if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
+            effectiveSkipDependencyCheck &&
+            IsDeliveryAction(action.Kind))
+        {
+            arguments.Add("-SkipDependencyCheck");
         }
 
         return new ModuleStateDeliveryCommand(

@@ -77,6 +77,26 @@ public sealed class ModuleStatePlanActionResult
     public bool Force { get; set; }
 
     /// <summary>
+    /// Gets or sets whether prerelease versions may satisfy this action.
+    /// </summary>
+    public bool IncludePrerelease { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether license acceptance was supplied for this action.
+    /// </summary>
+    public bool AcceptLicense { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether managed delivery may overwrite exported command conflicts for this action.
+    /// </summary>
+    public bool AllowClobber { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether dependency installation should be skipped for this action.
+    /// </summary>
+    public bool SkipDependencyCheck { get; set; }
+
+    /// <summary>
     /// Gets or sets the scope targeted by this action when applicable.
     /// </summary>
     public string? TargetScope { get; set; }

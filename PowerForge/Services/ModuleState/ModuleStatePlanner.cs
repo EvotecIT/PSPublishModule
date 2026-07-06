@@ -36,7 +36,7 @@ internal sealed class ModuleStatePlanner
         {
             var installedModules = SelectInstalledModules(request.Inventory, desiredModule.Name);
             var installedModule = SelectInstalledModule(installedModules, desiredModule.Scope, desiredModule.TargetPath);
-            var versionPolicy = ModuleStateVersionPolicy.Parse(desiredModule.VersionPolicy);
+            var versionPolicy = ModuleStateVersionPolicy.Parse(desiredModule.VersionPolicy, desiredModule.IncludePrerelease);
             var targetRepository = ResolveTargetRepository(desiredModule);
             if (installedModule is null)
             {
@@ -50,10 +50,15 @@ internal sealed class ModuleStatePlanner
                         : string.IsNullOrWhiteSpace(desiredModule.Scope)
                         ? "Module is not installed."
                         : "Module is not installed in desired scope.",
+                    force: desiredModule.Force,
                     targetScope: desiredModule.Scope,
                     targetPath: desiredModule.TargetPath,
                     targetRepository: targetRepository,
-                    expectedPackageSha256: desiredModule.ExpectedPackageSha256));
+                    expectedPackageSha256: desiredModule.ExpectedPackageSha256,
+                    includePrerelease: desiredModule.IncludePrerelease,
+                    acceptLicense: desiredModule.AcceptLicense,
+                    allowClobber: desiredModule.AllowClobber,
+                    skipDependencyCheck: desiredModule.SkipDependencyCheck));
                 continue;
             }
 
@@ -65,10 +70,15 @@ internal sealed class ModuleStatePlanner
                     installedModule.Version,
                     desiredModule.VersionPolicy,
                     "Installed module version does not satisfy desired policy.",
+                    force: desiredModule.Force,
                     targetScope: desiredModule.Scope,
                     targetPath: desiredModule.TargetPath,
                     targetRepository: targetRepository,
-                    expectedPackageSha256: desiredModule.ExpectedPackageSha256));
+                    expectedPackageSha256: desiredModule.ExpectedPackageSha256,
+                    includePrerelease: desiredModule.IncludePrerelease,
+                    acceptLicense: desiredModule.AcceptLicense,
+                    allowClobber: desiredModule.AllowClobber,
+                    skipDependencyCheck: desiredModule.SkipDependencyCheck));
                 continue;
             }
 
@@ -84,7 +94,11 @@ internal sealed class ModuleStatePlanner
                     targetScope: string.IsNullOrWhiteSpace(desiredModule.Scope) ? installedModule.Scope : desiredModule.Scope,
                     targetPath: desiredModule.TargetPath,
                     targetRepository: targetRepository,
-                    expectedPackageSha256: desiredModule.ExpectedPackageSha256));
+                    expectedPackageSha256: desiredModule.ExpectedPackageSha256,
+                    includePrerelease: desiredModule.IncludePrerelease,
+                    acceptLicense: desiredModule.AcceptLicense,
+                    allowClobber: desiredModule.AllowClobber,
+                    skipDependencyCheck: desiredModule.SkipDependencyCheck));
                 continue;
             }
 
@@ -100,7 +114,31 @@ internal sealed class ModuleStatePlanner
                     targetScope: string.IsNullOrWhiteSpace(desiredModule.Scope) ? installedModule.Scope : desiredModule.Scope,
                     targetPath: desiredModule.TargetPath,
                     targetRepository: targetRepository,
-                    expectedPackageSha256: desiredModule.ExpectedPackageSha256));
+                    expectedPackageSha256: desiredModule.ExpectedPackageSha256,
+                    includePrerelease: desiredModule.IncludePrerelease,
+                    acceptLicense: desiredModule.AcceptLicense,
+                    allowClobber: desiredModule.AllowClobber,
+                    skipDependencyCheck: desiredModule.SkipDependencyCheck));
+                continue;
+            }
+
+            if (desiredModule.Force)
+            {
+                actions.Add(new ModuleStatePlanAction(
+                    ResolveSourceDeliveryActionKind(desiredModule),
+                    desiredModule.Name,
+                    installedModule.Version,
+                    desiredModule.VersionPolicy,
+                    "Desired state requested reinstall of the selected module version.",
+                    force: true,
+                    targetScope: string.IsNullOrWhiteSpace(desiredModule.Scope) ? installedModule.Scope : desiredModule.Scope,
+                    targetPath: desiredModule.TargetPath,
+                    targetRepository: targetRepository,
+                    expectedPackageSha256: desiredModule.ExpectedPackageSha256,
+                    includePrerelease: desiredModule.IncludePrerelease,
+                    acceptLicense: desiredModule.AcceptLicense,
+                    allowClobber: desiredModule.AllowClobber,
+                    skipDependencyCheck: desiredModule.SkipDependencyCheck));
                 continue;
             }
 
@@ -113,7 +151,11 @@ internal sealed class ModuleStatePlanner
                 targetScope: desiredModule.Scope,
                 targetPath: desiredModule.TargetPath,
                 targetRepository: targetRepository,
-                expectedPackageSha256: desiredModule.ExpectedPackageSha256));
+                expectedPackageSha256: desiredModule.ExpectedPackageSha256,
+                includePrerelease: desiredModule.IncludePrerelease,
+                acceptLicense: desiredModule.AcceptLicense,
+                allowClobber: desiredModule.AllowClobber,
+                skipDependencyCheck: desiredModule.SkipDependencyCheck));
         }
 
         var plannedActions = request.Repair

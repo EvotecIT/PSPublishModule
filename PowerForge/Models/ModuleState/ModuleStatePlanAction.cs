@@ -16,7 +16,11 @@ internal sealed class ModuleStatePlanAction
         string? expectedPackageSha256 = null,
         string? license = null,
         bool licenseAcceptanceRequired = false,
-        bool licenseAccepted = false)
+        bool licenseAccepted = false,
+        bool includePrerelease = false,
+        bool acceptLicense = false,
+        bool allowClobber = false,
+        bool skipDependencyCheck = false)
     {
         Kind = kind;
         ModuleName = moduleName;
@@ -32,6 +36,10 @@ internal sealed class ModuleStatePlanAction
         License = string.IsNullOrWhiteSpace(license) ? null : license!.Trim();
         LicenseAcceptanceRequired = licenseAcceptanceRequired;
         LicenseAccepted = licenseAccepted;
+        IncludePrerelease = includePrerelease;
+        AcceptLicense = acceptLicense;
+        AllowClobber = allowClobber;
+        SkipDependencyCheck = skipDependencyCheck;
     }
 
     internal ModuleStatePlanActionKind Kind { get; }
@@ -61,6 +69,14 @@ internal sealed class ModuleStatePlanAction
     internal bool LicenseAcceptanceRequired { get; }
 
     internal bool LicenseAccepted { get; }
+
+    internal bool IncludePrerelease { get; }
+
+    internal bool AcceptLicense { get; }
+
+    internal bool AllowClobber { get; }
+
+    internal bool SkipDependencyCheck { get; }
 }
 
 internal enum ModuleStatePlanActionKind

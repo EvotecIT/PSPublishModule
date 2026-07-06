@@ -132,7 +132,7 @@ internal sealed class ModuleStateRepairPlanner
                     continue;
                 }
 
-                var targetRepository = FindCoveredAction(existing, moduleName, selectedModule.Scope)?.TargetRepository;
+                var coveredAction = FindCoveredAction(existing, moduleName, selectedModule.Scope);
                 yield return new ModuleStatePlanAction(
                     ModuleStatePlanActionKind.Update,
                     moduleName,
@@ -141,7 +141,11 @@ internal sealed class ModuleStateRepairPlanner
                     $"Family repair: align '{policy.Name}' modules to the highest installed family version.",
                     isRepair: true,
                     targetScope: selectedModule.Scope,
-                    targetRepository: targetRepository);
+                    targetRepository: coveredAction?.TargetRepository,
+                    includePrerelease: coveredAction?.IncludePrerelease ?? false,
+                    acceptLicense: coveredAction?.AcceptLicense ?? false,
+                    allowClobber: coveredAction?.AllowClobber ?? false,
+                    skipDependencyCheck: coveredAction?.SkipDependencyCheck ?? false);
             }
         }
     }
@@ -181,7 +185,11 @@ internal sealed class ModuleStateRepairPlanner
                 isRepair: true,
                 targetScope: installedModule.Scope,
                 targetPath: moduleRoot,
-                targetRepository: action.TargetRepository);
+                targetRepository: action.TargetRepository,
+                includePrerelease: action.IncludePrerelease,
+                acceptLicense: action.AcceptLicense,
+                allowClobber: action.AllowClobber,
+                skipDependencyCheck: action.SkipDependencyCheck);
         }
     }
 

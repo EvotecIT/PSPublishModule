@@ -158,7 +158,7 @@ Repair-ManagedModule -Inventory $inventory -Latest -Repository PSGallery -ShowSu
 | Prerelease | Supported | `-Prerelease`, `-AllowPrerelease` alias where useful |
 | Scope | Supported | CurrentUser, AllUsers, Custom module root |
 | Dependency handling | Supported | Dependency closure, skip dependency check, package dependency mirroring during managed publish |
-| Required resource batch install | Supported for module resources | `-RequiredResource`, `-RequiredResourceFile`, and PSResourceGet-style nested hashtable values with `Name`, `Version`, `Repository`, `AcceptLicense`, `Prerelease`, `Scope`, `Quiet`, `Reinstall`, `TrustRepository`, `NoClobber`, and `SkipDependencyCheck` keys |
+| Required resource batch install and repair | Supported for module resources | `-RequiredResource`, `-RequiredResourceFile`, and PSResourceGet-style nested hashtable values with `Name`, `Version`, `Repository`, `AcceptLicense`, `Prerelease`, `Scope`, `Quiet`, `Reinstall`, `TrustRepository`, `AllowClobber`, `NoClobber`, and `SkipDependencyCheck` keys |
 | Trust/integrity | Supported | Trusted repository requirement, allowed author policy, expected package SHA256 |
 | WhatIf/Confirm | Supported | Mutating cmdlets use PowerShell `ShouldProcess` |
 | Summaries | Supported | Spectre.Console summaries remain host-side; result objects are still pipeline-friendly |
