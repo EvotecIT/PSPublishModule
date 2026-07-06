@@ -219,6 +219,12 @@ internal sealed class ModuleStateApplyService
             arguments.Add(action.VersionPolicy);
         }
 
+        if (deliveryOptions.Transport != ModuleStateDeliveryTransport.ManagedModule &&
+            action.Kind == ModuleStatePlanActionKind.Install)
+        {
+            arguments.Add("-InstallMissing");
+        }
+
         if (!string.IsNullOrWhiteSpace(action.TargetScope) && action.Kind != ModuleStatePlanActionKind.Save)
         {
             arguments.Add("-Scope");
@@ -291,7 +297,7 @@ internal sealed class ModuleStateApplyService
         }
 
         if (effectiveAcceptLicense &&
-            action.LicenseAcceptanceRequired &&
+            (action.LicenseAcceptanceRequired || deliveryOptions.Transport != ModuleStateDeliveryTransport.ManagedModule) &&
             IsDeliveryAction(action.Kind))
         {
             arguments.Add("-AcceptLicense");

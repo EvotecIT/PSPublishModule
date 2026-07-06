@@ -618,6 +618,30 @@ public sealed class RepairManagedModuleRequiredResourceCommandTests
         Assert.True(action.IncludePrerelease);
     }
 
+    [Fact]
+    public void RepairManagedModule_RequiredResourceJsonStringCanPlanMissingInstall()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var requiredResource = "{ \"Company.Tools\": { \"Version\": \"1.1.0\", \"Prerelease\": true } }";
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("RequiredResource", requiredResource)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions);
+        Assert.Equal("Install", action.Kind);
+        Assert.Equal("Company.Tools", action.ModuleName);
+        Assert.Equal("=1.1.0", action.VersionPolicy);
+        Assert.True(action.IncludePrerelease);
+    }
+
     private static string CreateInstalledModule(string moduleRoot, string name, string version)
     {
         var modulePath = Path.Combine(moduleRoot, name, version);

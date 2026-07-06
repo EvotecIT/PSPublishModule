@@ -317,7 +317,7 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
                     : ResolveRepositoryName(target.Repository);
                 var targetRepositorySource = string.IsNullOrWhiteSpace(target.Repository)
                     ? desiredRepositorySource
-                    : target.Repository;
+                    : ResolveRepositorySource(target.Repository);
                 if (!string.IsNullOrWhiteSpace(targetRepository))
                     module["Repository"] = targetRepository!;
                 if (!string.IsNullOrWhiteSpace(targetRepositorySource))
@@ -887,6 +887,12 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
 
     private string? ResolveRepositorySource()
         => string.IsNullOrWhiteSpace(Repository) ? null : Repository!.Trim();
+
+    private static string? ResolveRepositorySource(string? repository)
+        => !string.IsNullOrWhiteSpace(repository) &&
+           ModuleStateManagedRepositoryResolver.IsRepositorySource(repository!)
+            ? repository!.Trim()
+            : null;
 
     private string? ResolveRepositoryName(string? repository)
         => string.IsNullOrWhiteSpace(repository)

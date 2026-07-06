@@ -47,7 +47,7 @@ internal static class ManagedModuleRequiredResourceSupport
         object? resource,
         ManagedModuleRequiredResourceDefaults defaults)
     {
-        var table = AsDictionary(resource)
+        var table = AsDictionary(NormalizeRequiredResourceInput(resource))
             ?? throw new InvalidOperationException("RequiredResource must be a hashtable whose keys are resource names and whose values are resource option hashtables.");
 
         foreach (DictionaryEntry entry in table)
@@ -60,6 +60,24 @@ internal static class ManagedModuleRequiredResourceSupport
                 ?? throw new InvalidOperationException($"RequiredResource input with name '{keyName}' does not have a valid value; the value must be a hashtable.");
             yield return ParseEntry(keyName!, options, defaults);
         }
+    }
+
+    private static object? NormalizeRequiredResourceInput(object? resource)
+    {
+        if (resource is PSObject psObject)
+            resource = psObject.BaseObject;
+        if (resource is not string json)
+            return resource;
+
+        var trimmed = json.Trim();
+        if (!trimmed.StartsWith("{", StringComparison.Ordinal))
+            return resource;
+
+        using var document = JsonDocument.Parse(trimmed);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException("RequiredResource JSON string must contain a JSON object.");
+
+        return ConvertJsonElement(document.RootElement);
     }
 
     private static ManagedModuleRequiredResourceTarget ParseEntry(
