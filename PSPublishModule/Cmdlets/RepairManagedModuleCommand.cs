@@ -227,11 +227,11 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
                 Family);
             ApplySelectedInventoryTargets(plan, selectedModules);
             ApplyLatestUpdateIntent(plan);
-            ApplyForceRepairIntent(plan);
+            ApplyForceRepairIntent(plan, inheritGlobalForce: !requiredResourceInputSupplied);
             var managedDeliveryOptions = CreateManagedDeliveryOptions(
                 inventory,
                 deliveryModuleRoot,
-                inheritAllowClobber: !requiredResourceInputSupplied);
+                inheritResourceDefaults: !requiredResourceInputSupplied);
             var repositoriesResolved = PreResolveManagedDeliveryRepositories(
                 plan,
                 managedDeliveryOptions,
@@ -300,11 +300,12 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
         bool requiredResourceInputSupplied)
     {
         var desiredRepository = ResolveRepositoryName();
+        var desiredRepositorySource = ResolveRepositorySource();
         var modules = new ArrayList();
 
         if (requiredResourceInputSupplied)
         {
-            foreach (var target in requiredResourceTargets)
+            foreach (var target in FilterRequiredResourceTargets(requiredResourceTargets))
             {
                 var module = new Hashtable(StringComparer.OrdinalIgnoreCase)
                 {
@@ -314,10 +315,13 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
                 var targetRepository = string.IsNullOrWhiteSpace(target.Repository)
                     ? desiredRepository
                     : ResolveRepositoryName(target.Repository);
+                var targetRepositorySource = string.IsNullOrWhiteSpace(target.Repository)
+                    ? desiredRepositorySource
+                    : target.Repository;
                 if (!string.IsNullOrWhiteSpace(targetRepository))
                     module["Repository"] = targetRepository!;
-                if (!string.IsNullOrWhiteSpace(target.Repository))
-                    module["RepositorySource"] = target.Repository!;
+                if (!string.IsNullOrWhiteSpace(targetRepositorySource))
+                    module["RepositorySource"] = targetRepositorySource!;
                 if (target.ScopeSpecified || !string.IsNullOrWhiteSpace(Scope))
                     module["Scope"] = target.Scope.ToString();
                 if (target.IncludePrerelease)
@@ -349,6 +353,8 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             };
             if (!string.IsNullOrWhiteSpace(desiredRepository))
                 module["Repository"] = desiredRepository!;
+            if (!string.IsNullOrWhiteSpace(desiredRepositorySource))
+                module["RepositorySource"] = desiredRepositorySource!;
             if (!string.IsNullOrWhiteSpace(Scope))
                 module["Scope"] = Scope!;
             else if (!string.IsNullOrWhiteSpace(selected.Scope))
@@ -366,6 +372,8 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             };
             if (!string.IsNullOrWhiteSpace(desiredRepository))
                 module["Repository"] = desiredRepository!;
+            if (!string.IsNullOrWhiteSpace(desiredRepositorySource))
+                module["RepositorySource"] = desiredRepositorySource!;
             if (!string.IsNullOrWhiteSpace(Scope))
                 module["Scope"] = Scope!;
             if (Prerelease.IsPresent)
@@ -456,6 +464,24 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
         }
     }
 
+    private ManagedModuleRequiredResourceTarget[] FilterRequiredResourceTargets(
+        ManagedModuleRequiredResourceTarget[] requiredResourceTargets)
+    {
+        var filters = CreateNameFilters();
+        if (filters.Length == 0)
+            return requiredResourceTargets;
+
+        return requiredResourceTargets
+            .Where(target => filters.Any(filter => filter.IsMatch(target.Name)))
+            .ToArray();
+    }
+
+    private WildcardPattern[] CreateNameFilters()
+        => Name
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Select(static name => new WildcardPattern(name.Trim(), WildcardOptions.IgnoreCase))
+            .ToArray();
+
     private static string CreateSelectedActionKey(string moduleName, string? scope)
         => string.Join("|", moduleName, scope ?? string.Empty);
 
@@ -480,10 +506,7 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
     private ModuleStateInstalledModuleResult[] SelectBaselineModules(ModuleStateInventoryResult inventory)
     {
         var modules = inventory.InstalledModules ?? Array.Empty<ModuleStateInstalledModuleResult>();
-        var filters = Name
-            .Where(static name => !string.IsNullOrWhiteSpace(name))
-            .Select(static name => new WildcardPattern(name.Trim(), WildcardOptions.IgnoreCase))
-            .ToArray();
+        var filters = CreateNameFilters();
 
         if (filters.Length > 0)
             modules = modules.Where(module => filters.Any(filter => filter.IsMatch(module.Name))).ToArray();
@@ -576,12 +599,12 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             ProfileName,
             Repository,
             installPrerequisites: false,
-            prerelease: Prerelease.IsPresent,
-            force: Force.IsPresent,
-            acceptLicense: AcceptLicense.IsPresent,
+            prerelease: !requiredResourceInputSupplied && Prerelease.IsPresent,
+            force: !requiredResourceInputSupplied && Force.IsPresent,
+            acceptLicense: !requiredResourceInputSupplied && AcceptLicense.IsPresent,
             allowErrorFindings: AllowConflict.IsPresent,
             allowClobber: !requiredResourceInputSupplied && AllowClobber.IsPresent,
-            skipDependencyCheck: SkipDependencyCheck.IsPresent,
+            skipDependencyCheck: !requiredResourceInputSupplied && SkipDependencyCheck.IsPresent,
             moduleRoot: deliveryModuleRoot,
             transport: Transport,
             profileRepository: ResolveProfileRepositoryName());
@@ -631,8 +654,8 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
                 ProfileName = ProfileName,
                 Repository = Repository,
                 InstallPrerequisites = false,
-                Prerelease = Prerelease.IsPresent,
-                Force = Force.IsPresent,
+                Prerelease = !requiredResourceInputSupplied && Prerelease.IsPresent,
+                Force = !requiredResourceInputSupplied && Force.IsPresent,
                 DeliveryTransport = Transport,
                 CredentialUserName = Credential?.UserName ?? CredentialUserName,
                 CredentialSecret = Credential?.GetNetworkCredential().Password ?? CredentialSecret,
@@ -640,7 +663,8 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
                 PromptForCredential = false,
                 ManagedModuleRoot = deliveryModuleRoot,
                 ManagedAllowClobber = !requiredResourceInputSupplied && AllowClobber.IsPresent,
-                ManagedAcceptLicense = AcceptLicense.IsPresent,
+                ManagedAcceptLicense = !requiredResourceInputSupplied && AcceptLicense.IsPresent,
+                ManagedSkipDependencyCheck = !requiredResourceInputSupplied && SkipDependencyCheck.IsPresent,
                 LoadedModules = ResolveLoadedModules(inventory)
             });
     }
@@ -715,16 +739,16 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
         ModuleStateInventoryResult? inventory = null,
         string? moduleRoot = null,
         RepositoryCredential? credential = null,
-        bool inheritAllowClobber = true)
+        bool inheritResourceDefaults = true)
         => new()
         {
             ProfileName = ProfileName,
             Repository = Repository,
-            Prerelease = Prerelease.IsPresent,
-            Force = Force.IsPresent,
-            AllowClobber = inheritAllowClobber && AllowClobber.IsPresent,
-            AcceptLicense = AcceptLicense.IsPresent,
-            SkipDependencyCheck = SkipDependencyCheck.IsPresent,
+            Prerelease = inheritResourceDefaults && Prerelease.IsPresent,
+            Force = inheritResourceDefaults && Force.IsPresent,
+            AllowClobber = inheritResourceDefaults && AllowClobber.IsPresent,
+            AcceptLicense = inheritResourceDefaults && AcceptLicense.IsPresent,
+            SkipDependencyCheck = inheritResourceDefaults && SkipDependencyCheck.IsPresent,
             ModuleRoot = moduleRoot,
             Credential = credential,
             LoadedModules = ResolveLoadedModules(inventory)
@@ -816,9 +840,9 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             ? action.TargetRepository
             : action.TargetRepositorySource;
 
-    private void ApplyForceRepairIntent(ModuleStatePlanResult plan)
+    private void ApplyForceRepairIntent(ModuleStatePlanResult plan, bool inheritGlobalForce = true)
     {
-        if (!Force.IsPresent || Latest.IsPresent || plan.Actions is null)
+        if (!inheritGlobalForce || !Force.IsPresent || Latest.IsPresent || plan.Actions is null)
             return;
         if (plan.Actions.Any(static action => string.Equals(action.Kind, ModuleStatePlanActionKind.Remove.ToString(), StringComparison.OrdinalIgnoreCase)))
             return;
@@ -857,6 +881,9 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             return ModuleRepositoryProfileCommandSupport.TryResolve(ProfileName)?.RepositoryName;
         return null;
     }
+
+    private string? ResolveRepositorySource()
+        => string.IsNullOrWhiteSpace(Repository) ? null : Repository!.Trim();
 
     private string? ResolveRepositoryName(string? repository)
         => string.IsNullOrWhiteSpace(repository)

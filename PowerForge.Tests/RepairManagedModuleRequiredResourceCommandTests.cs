@@ -315,6 +315,111 @@ public sealed class RepairManagedModuleRequiredResourceCommandTests
     }
 
     [Fact]
+    public void RepairManagedModule_RequiredResourceFiltersBaselineByName()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var requiredResource = new Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools"] = new Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Version"] = "1.1.0"
+            },
+            ["Company.Other"] = new Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Version"] = "2.0.0"
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("RequiredResource", requiredResource)
+            .AddParameter("Name", new[] { "Company.Tools" })
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions);
+        Assert.Equal("Company.Tools", action.ModuleName);
+    }
+
+    [Fact]
+    public void RepairManagedModule_RequiredResourceOptOutsOverrideGlobalDefaults()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.1.0");
+        var requiredResource = new Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools"] = new Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Version"] = "1.1.0",
+                ["Reinstall"] = false,
+                ["SkipDependencyCheck"] = false
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("RequiredResource", requiredResource)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Force")
+            .AddParameter("SkipDependencyCheck")
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions);
+        Assert.Equal("NoAction", action.Kind);
+        Assert.False(action.Force);
+        Assert.False(action.SkipDependencyCheck);
+        Assert.Empty(result.Apply.Commands);
+    }
+
+    [Fact]
+    public void RepairManagedModule_RequiredResourcePrivateTransportUsesRepositorySourceAndOptions()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var requiredResource = new Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools"] = new Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Version"] = "1.1.0",
+                ["Repository"] = feed.Path,
+                ["Prerelease"] = true,
+                ["Reinstall"] = true,
+                ["AllowClobber"] = true,
+                ["SkipDependencyCheck"] = true
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("RequiredResource", requiredResource)
+            .AddParameter("Transport", "PrivateModule")
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var command = Assert.Single(result.Apply.Commands);
+        Assert.Equal("Repair-ManagedModule", command.CommandName);
+        Assert.Contains("-Repository", command.Arguments);
+        Assert.Contains(feed.Path, command.Arguments);
+        Assert.Contains("-Prerelease", command.Arguments);
+        Assert.Contains("-Force", command.Arguments);
+        Assert.Contains("-AllowClobber", command.Arguments);
+        Assert.Contains("-SkipDependencyCheck", command.Arguments);
+    }
+
+    [Fact]
     public void RepairManagedModule_RequiredResourceAppliesMissingInstallToInventoriedRoot()
     {
         using var feed = new TemporaryDirectory();

@@ -290,23 +290,20 @@ internal sealed class ModuleStateApplyService
             arguments.Add("-Force");
         }
 
-        if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
-            effectiveAcceptLicense &&
+        if (effectiveAcceptLicense &&
             action.LicenseAcceptanceRequired &&
             IsDeliveryAction(action.Kind))
         {
             arguments.Add("-AcceptLicense");
         }
 
-        if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
-            effectiveAllowClobber &&
+        if (effectiveAllowClobber &&
             IsDeliveryAction(action.Kind))
         {
             arguments.Add("-AllowClobber");
         }
 
-        if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
-            effectiveSkipDependencyCheck &&
+        if (effectiveSkipDependencyCheck &&
             IsDeliveryAction(action.Kind))
         {
             arguments.Add("-SkipDependencyCheck");

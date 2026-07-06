@@ -32,9 +32,12 @@ public sealed class RepairManagedModuleInstallMissingCommandTests
         Assert.Equal("Install", missingAction.Kind);
         Assert.Equal("*", missingAction.VersionPolicy);
         Assert.Equal("Local", missingAction.TargetRepository);
+        Assert.Equal(feed.Path, missingAction.TargetRepositorySource);
         var missingCommand = Assert.Single(result.Apply.Commands, static command =>
             string.Equals(command.ModuleName, "Company.Missing", StringComparison.OrdinalIgnoreCase));
         Assert.Equal("Install-ManagedModule", missingCommand.CommandName);
+        Assert.Contains("-Repository", missingCommand.Arguments);
+        Assert.Contains(feed.Path, missingCommand.Arguments);
         Assert.Contains("-ModuleRoot", missingCommand.Arguments);
         Assert.Contains(moduleRoot.Path, missingCommand.Arguments);
         Assert.False(result.Apply.ExecutionRequested);
