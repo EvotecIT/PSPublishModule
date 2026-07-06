@@ -20,7 +20,8 @@ internal sealed class ModuleStatePlanAction
         bool includePrerelease = false,
         bool acceptLicense = false,
         bool allowClobber = false,
-        bool skipDependencyCheck = false)
+        bool skipDependencyCheck = false,
+        string? targetRepositorySource = null)
     {
         Kind = kind;
         ModuleName = moduleName;
@@ -40,6 +41,7 @@ internal sealed class ModuleStatePlanAction
         AcceptLicense = acceptLicense;
         AllowClobber = allowClobber;
         SkipDependencyCheck = skipDependencyCheck;
+        TargetRepositorySource = string.IsNullOrWhiteSpace(targetRepositorySource) ? null : targetRepositorySource!.Trim();
     }
 
     internal ModuleStatePlanActionKind Kind { get; }
@@ -77,6 +79,8 @@ internal sealed class ModuleStatePlanAction
     internal bool AllowClobber { get; }
 
     internal bool SkipDependencyCheck { get; }
+
+    internal string? TargetRepositorySource { get; }
 }
 
 internal enum ModuleStatePlanActionKind

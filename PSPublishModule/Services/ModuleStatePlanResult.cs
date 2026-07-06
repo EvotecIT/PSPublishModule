@@ -112,6 +112,11 @@ public sealed class ModuleStatePlanActionResult
     public string? TargetRepository { get; set; }
 
     /// <summary>
+    /// Gets or sets the repository source used for delivery when it differs from the normalized target repository identity.
+    /// </summary>
+    public string? TargetRepositorySource { get; set; }
+
+    /// <summary>
     /// Gets or sets the expected SHA256 hash for the root package when package integrity is required.
     /// </summary>
     public string? ExpectedPackageSha256 { get; set; }

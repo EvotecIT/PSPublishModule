@@ -17,7 +17,8 @@ internal sealed class ModuleStateDesiredModule
         bool force = false,
         bool acceptLicense = false,
         bool allowClobber = false,
-        bool skipDependencyCheck = false)
+        bool skipDependencyCheck = false,
+        string? targetRepositorySource = null)
     {
         Name = string.IsNullOrWhiteSpace(name)
             ? throw new ArgumentException("Desired module name is required.", nameof(name))
@@ -36,6 +37,7 @@ internal sealed class ModuleStateDesiredModule
         AcceptLicense = acceptLicense;
         AllowClobber = allowClobber;
         SkipDependencyCheck = skipDependencyCheck;
+        TargetRepositorySource = string.IsNullOrWhiteSpace(targetRepositorySource) ? null : targetRepositorySource!.Trim();
     }
 
     internal string Name { get; }
@@ -59,4 +61,6 @@ internal sealed class ModuleStateDesiredModule
     internal bool AllowClobber { get; }
 
     internal bool SkipDependencyCheck { get; }
+
+    internal string? TargetRepositorySource { get; }
 }

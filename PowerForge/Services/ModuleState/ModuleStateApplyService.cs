@@ -200,6 +200,7 @@ internal sealed class ModuleStateApplyService
         ModuleStateDeliveryOptions deliveryOptions)
     {
         var commandName = ResolveCommandName(action.Kind, deliveryOptions.Transport);
+        var actionRepository = ResolveActionDeliveryRepository(action);
         var arguments = new List<string>
         {
             "-Name",
@@ -247,10 +248,10 @@ internal sealed class ModuleStateApplyService
             arguments.Add("-ProfileName");
             arguments.Add(deliveryOptions.ProfileName!);
         }
-        else if (!string.IsNullOrWhiteSpace(action.TargetRepository))
+        else if (!string.IsNullOrWhiteSpace(actionRepository))
         {
             arguments.Add("-Repository");
-            arguments.Add(action.TargetRepository!);
+            arguments.Add(actionRepository!);
         }
         else if (!string.IsNullOrWhiteSpace(deliveryOptions.ProfileName))
         {
@@ -379,9 +380,15 @@ internal sealed class ModuleStateApplyService
 
     private static bool IsActionTargetCoveredByProfile(ModuleStatePlanAction action, ModuleStateDeliveryOptions deliveryOptions)
         => !string.IsNullOrWhiteSpace(deliveryOptions.ProfileName) &&
+           string.IsNullOrWhiteSpace(action.TargetRepositorySource) &&
            !string.IsNullOrWhiteSpace(action.TargetRepository) &&
            !string.IsNullOrWhiteSpace(deliveryOptions.ProfileRepository) &&
            string.Equals(action.TargetRepository, deliveryOptions.ProfileRepository, StringComparison.OrdinalIgnoreCase);
+
+    private static string? ResolveActionDeliveryRepository(ModuleStatePlanAction action)
+        => string.IsNullOrWhiteSpace(action.TargetRepositorySource)
+            ? action.TargetRepository
+            : action.TargetRepositorySource;
 
     private static bool IsDeliveryAction(ModuleStatePlanActionKind kind)
         => kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update or ModuleStatePlanActionKind.Save;

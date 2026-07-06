@@ -38,6 +38,7 @@ internal sealed class ModuleStatePlanner
             var installedModule = SelectInstalledModule(installedModules, desiredModule.Scope, desiredModule.TargetPath);
             var versionPolicy = ModuleStateVersionPolicy.Parse(desiredModule.VersionPolicy, desiredModule.IncludePrerelease);
             var targetRepository = ResolveTargetRepository(desiredModule);
+            var targetRepositorySource = desiredModule.TargetRepositorySource;
             if (installedModule is null)
             {
                 actions.Add(new ModuleStatePlanAction(
@@ -58,7 +59,8 @@ internal sealed class ModuleStatePlanner
                     includePrerelease: desiredModule.IncludePrerelease,
                     acceptLicense: desiredModule.AcceptLicense,
                     allowClobber: desiredModule.AllowClobber,
-                    skipDependencyCheck: desiredModule.SkipDependencyCheck));
+                    skipDependencyCheck: desiredModule.SkipDependencyCheck,
+                    targetRepositorySource: targetRepositorySource));
                 continue;
             }
 
@@ -78,7 +80,8 @@ internal sealed class ModuleStatePlanner
                     includePrerelease: desiredModule.IncludePrerelease,
                     acceptLicense: desiredModule.AcceptLicense,
                     allowClobber: desiredModule.AllowClobber,
-                    skipDependencyCheck: desiredModule.SkipDependencyCheck));
+                    skipDependencyCheck: desiredModule.SkipDependencyCheck,
+                    targetRepositorySource: targetRepositorySource));
                 continue;
             }
 
@@ -98,7 +101,8 @@ internal sealed class ModuleStatePlanner
                     includePrerelease: desiredModule.IncludePrerelease,
                     acceptLicense: desiredModule.AcceptLicense,
                     allowClobber: desiredModule.AllowClobber,
-                    skipDependencyCheck: desiredModule.SkipDependencyCheck));
+                    skipDependencyCheck: desiredModule.SkipDependencyCheck,
+                    targetRepositorySource: targetRepositorySource));
                 continue;
             }
 
@@ -118,7 +122,8 @@ internal sealed class ModuleStatePlanner
                     includePrerelease: desiredModule.IncludePrerelease,
                     acceptLicense: desiredModule.AcceptLicense,
                     allowClobber: desiredModule.AllowClobber,
-                    skipDependencyCheck: desiredModule.SkipDependencyCheck));
+                    skipDependencyCheck: desiredModule.SkipDependencyCheck,
+                    targetRepositorySource: targetRepositorySource));
                 continue;
             }
 
@@ -138,7 +143,8 @@ internal sealed class ModuleStatePlanner
                     includePrerelease: desiredModule.IncludePrerelease,
                     acceptLicense: desiredModule.AcceptLicense,
                     allowClobber: desiredModule.AllowClobber,
-                    skipDependencyCheck: desiredModule.SkipDependencyCheck));
+                    skipDependencyCheck: desiredModule.SkipDependencyCheck,
+                    targetRepositorySource: targetRepositorySource));
                 continue;
             }
 
@@ -155,7 +161,8 @@ internal sealed class ModuleStatePlanner
                 includePrerelease: desiredModule.IncludePrerelease,
                 acceptLicense: desiredModule.AcceptLicense,
                 allowClobber: desiredModule.AllowClobber,
-                skipDependencyCheck: desiredModule.SkipDependencyCheck));
+                skipDependencyCheck: desiredModule.SkipDependencyCheck,
+                targetRepositorySource: targetRepositorySource));
         }
 
         var plannedActions = request.Repair

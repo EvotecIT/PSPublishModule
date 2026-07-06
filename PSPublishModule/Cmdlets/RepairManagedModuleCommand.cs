@@ -213,13 +213,14 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             ValidateVersionPolicy();
             var deliveryModuleRoot = ResolveManagedDeliveryModuleRoot();
             var credentialSecretFilePath = ResolveCredentialSecretFilePath();
+            var requiredResourceInputSupplied = RequiredResource is not null || !string.IsNullOrWhiteSpace(RequiredResourceFile);
             var requiredResourceTargets = ResolveRequiredResourceTargets().ToArray();
 
             var inventory = ResolveInventory();
             var selectedModules = SelectBaselineModules(inventory).ToArray();
             var plan = ModuleStatePlanCommandSupport.CreatePlanResult(
                 inventory,
-                CreateDesiredState(selectedModules, requiredResourceTargets),
+                CreateDesiredState(selectedModules, requiredResourceTargets, requiredResourceInputSupplied),
                 ResolveOptionalFilePaths(MaintenanceReceiptPath, nameof(MaintenanceReceiptPath)),
                 repair: true,
                 ParseCleanupMode(Cleanup),
@@ -227,7 +228,10 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             ApplySelectedInventoryTargets(plan, selectedModules);
             ApplyLatestUpdateIntent(plan);
             ApplyForceRepairIntent(plan);
-            var managedDeliveryOptions = CreateManagedDeliveryOptions(inventory, deliveryModuleRoot);
+            var managedDeliveryOptions = CreateManagedDeliveryOptions(
+                inventory,
+                deliveryModuleRoot,
+                inheritAllowClobber: !requiredResourceInputSupplied);
             var repositoriesResolved = PreResolveManagedDeliveryRepositories(
                 plan,
                 managedDeliveryOptions,
@@ -243,7 +247,8 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
                 inventory,
                 deliveryModuleRoot,
                 credentialSecretFilePath,
-                managedDeliveryOptions).ConfigureAwait(false);
+                managedDeliveryOptions,
+                requiredResourceInputSupplied).ConfigureAwait(false);
             var workflow = new ModuleStateWorkflowResult
             {
                 Inventory = inventory,
@@ -291,12 +296,13 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
 
     private object CreateDesiredState(
         ModuleStateInstalledModuleResult[] selectedModules,
-        ManagedModuleRequiredResourceTarget[] requiredResourceTargets)
+        ManagedModuleRequiredResourceTarget[] requiredResourceTargets,
+        bool requiredResourceInputSupplied)
     {
         var desiredRepository = ResolveRepositoryName();
         var modules = new ArrayList();
 
-        if (requiredResourceTargets.Length > 0)
+        if (requiredResourceInputSupplied)
         {
             foreach (var target in requiredResourceTargets)
             {
@@ -310,6 +316,8 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
                     : ResolveRepositoryName(target.Repository);
                 if (!string.IsNullOrWhiteSpace(targetRepository))
                     module["Repository"] = targetRepository!;
+                if (!string.IsNullOrWhiteSpace(target.Repository))
+                    module["RepositorySource"] = target.Repository!;
                 if (target.ScopeSpecified || !string.IsNullOrWhiteSpace(Scope))
                     module["Scope"] = target.Scope.ToString();
                 if (target.IncludePrerelease)
@@ -546,6 +554,12 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             return "=" + target.Version!.Trim();
         if (!string.IsNullOrWhiteSpace(target.VersionPolicy))
             return target.VersionPolicy!.Trim();
+        if (!string.IsNullOrWhiteSpace(Version))
+            return "=" + Version!.Trim();
+        if (!string.IsNullOrWhiteSpace(MinimumVersion))
+            return ">=" + MinimumVersion!.Trim();
+        if (!string.IsNullOrWhiteSpace(VersionPolicy))
+            return VersionPolicy!.Trim();
 
         return "*";
     }
@@ -555,7 +569,8 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
         ModuleStateInventoryResult inventory,
         string? deliveryModuleRoot,
         string? credentialSecretFilePath,
-        ModuleStateManagedDeliveryOptions managedDeliveryOptions)
+        ModuleStateManagedDeliveryOptions managedDeliveryOptions,
+        bool requiredResourceInputSupplied)
     {
         var deliveryOptions = new ModuleStateDeliveryOptions(
             ProfileName,
@@ -565,7 +580,7 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             force: Force.IsPresent,
             acceptLicense: AcceptLicense.IsPresent,
             allowErrorFindings: AllowConflict.IsPresent,
-            allowClobber: AllowClobber.IsPresent,
+            allowClobber: !requiredResourceInputSupplied && AllowClobber.IsPresent,
             skipDependencyCheck: SkipDependencyCheck.IsPresent,
             moduleRoot: deliveryModuleRoot,
             transport: Transport,
@@ -581,7 +596,8 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
                 inventory,
                 deliveryModuleRoot,
                 credentialSecretFilePath,
-                managedDeliveryOptions).ConfigureAwait(false);
+                managedDeliveryOptions,
+                requiredResourceInputSupplied).ConfigureAwait(false);
 
         return ModuleStateApplyResultMapper.ToCmdletResult(
             result,
@@ -597,7 +613,8 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
         ModuleStateInventoryResult inventory,
         string? deliveryModuleRoot,
         string? credentialSecretFilePath,
-        ModuleStateManagedDeliveryOptions managedDeliveryOptions)
+        ModuleStateManagedDeliveryOptions managedDeliveryOptions,
+        bool requiredResourceInputSupplied)
     {
         if (Transport == ModuleStateDeliveryTransport.ManagedModule)
         {
@@ -622,7 +639,7 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
                 CredentialSecretFilePath = credentialSecretFilePath,
                 PromptForCredential = false,
                 ManagedModuleRoot = deliveryModuleRoot,
-                ManagedAllowClobber = AllowClobber.IsPresent,
+                ManagedAllowClobber = !requiredResourceInputSupplied && AllowClobber.IsPresent,
                 ManagedAcceptLicense = AcceptLicense.IsPresent,
                 LoadedModules = ResolveLoadedModules(inventory)
             });
@@ -666,7 +683,8 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
         {
             foreach (var action in actions)
             {
-                var key = ModuleStateManagedRepositoryResolver.CreateRepositoryKey(action.TargetRepository);
+                var actionRepository = ResolveActionDeliveryRepository(action);
+                var key = ModuleStateManagedRepositoryResolver.CreateRepositoryKey(actionRepository);
                 if (!seen.Add(key))
                     continue;
                 if (key.Length == 0 &&
@@ -678,7 +696,7 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
 
                 options.ResolvedRepositories[key] = ModuleStateManagedRepositoryResolver.ResolveRepositoryForAction(
                     this,
-                    action.TargetRepository,
+                    actionRepository,
                     options,
                     "Managed module delivery requires Repository, ProfileName, or action target repository.");
             }
@@ -696,14 +714,15 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
     private ModuleStateManagedDeliveryOptions CreateManagedDeliveryOptions(
         ModuleStateInventoryResult? inventory = null,
         string? moduleRoot = null,
-        RepositoryCredential? credential = null)
+        RepositoryCredential? credential = null,
+        bool inheritAllowClobber = true)
         => new()
         {
             ProfileName = ProfileName,
             Repository = Repository,
             Prerelease = Prerelease.IsPresent,
             Force = Force.IsPresent,
-            AllowClobber = AllowClobber.IsPresent,
+            AllowClobber = inheritAllowClobber && AllowClobber.IsPresent,
             AcceptLicense = AcceptLicense.IsPresent,
             SkipDependencyCheck = SkipDependencyCheck.IsPresent,
             ModuleRoot = moduleRoot,
@@ -780,11 +799,22 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
         {
             if (!string.Equals(action.Kind, ModuleStatePlanActionKind.NoAction.ToString(), StringComparison.OrdinalIgnoreCase))
                 continue;
+            if (IsExactVersionPolicy(action.VersionPolicy))
+                continue;
 
             action.Kind = ModuleStatePlanActionKind.Update.ToString();
             action.Reason = "Latest requested; update delivery will keep the module unchanged when the repository has no newer version.";
         }
     }
+
+    private static bool IsExactVersionPolicy(string? versionPolicy)
+        => !string.IsNullOrWhiteSpace(versionPolicy) &&
+           versionPolicy!.Trim().StartsWith("=", StringComparison.Ordinal);
+
+    private static string? ResolveActionDeliveryRepository(ModuleStatePlanActionResult action)
+        => string.IsNullOrWhiteSpace(action.TargetRepositorySource)
+            ? action.TargetRepository
+            : action.TargetRepositorySource;
 
     private void ApplyForceRepairIntent(ModuleStatePlanResult plan)
     {

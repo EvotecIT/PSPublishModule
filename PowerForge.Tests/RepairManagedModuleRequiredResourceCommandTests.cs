@@ -168,6 +168,150 @@ public sealed class RepairManagedModuleRequiredResourceCommandTests
         var action = Assert.Single(result.Plan.Actions);
         Assert.Equal("NoAction", action.Kind);
         Assert.Equal("Local", action.TargetRepository);
+        Assert.Equal(feed.Path, action.TargetRepositorySource);
+    }
+
+    [Fact]
+    public void RepairManagedModule_RequiredResourceUsesPerResourceRepositorySourceForDelivery()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var requiredResource = new Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools"] = new Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Version"] = "1.1.0",
+                ["Repository"] = feed.Path
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("RequiredResource", requiredResource)
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions);
+        Assert.Equal("Install", action.Kind);
+        Assert.Equal("Local", action.TargetRepository);
+        Assert.Equal(feed.Path, action.TargetRepositorySource);
+        var command = Assert.Single(result.Apply.Commands);
+        Assert.Contains("-Repository", command.Arguments);
+        Assert.Contains(feed.Path, command.Arguments);
+    }
+
+    [Fact]
+    public void RepairManagedModule_EmptyRequiredResourceDoesNotFallBackToInstalledModules()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("RequiredResource", new Hashtable(StringComparer.OrdinalIgnoreCase))
+            .AddParameter("Latest")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Empty(result.Plan.Actions);
+        Assert.Empty(result.Apply.Commands);
+    }
+
+    [Fact]
+    public void RepairManagedModule_RequiredResourceLatestDoesNotUpdateExactPinnedResource()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.1.0");
+        var requiredResource = new Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools"] = new Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Version"] = "1.1.0"
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("RequiredResource", requiredResource)
+            .AddParameter("Latest")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions);
+        Assert.Equal("NoAction", action.Kind);
+        Assert.Equal("=1.1.0", action.VersionPolicy);
+        Assert.Empty(result.Apply.Commands);
+    }
+
+    [Fact]
+    public void RepairManagedModule_RequiredResourceUsesTopLevelConstraintWhenEntryOmitsVersion()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var requiredResource = new Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools"] = new Hashtable(StringComparer.OrdinalIgnoreCase)
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("RequiredResource", requiredResource)
+            .AddParameter("MinimumVersion", "2.0.0")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions);
+        Assert.Equal("Update", action.Kind);
+        Assert.Equal(">=2.0.0", action.VersionPolicy);
+    }
+
+    [Fact]
+    public void RepairManagedModule_RequiredResourceNoClobberOverridesGlobalAllowClobber()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var requiredResource = new Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools"] = new Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Version"] = "1.1.0",
+                ["NoClobber"] = true
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("RequiredResource", requiredResource)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("AllowClobber")
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions);
+        Assert.False(action.AllowClobber);
+        var command = Assert.Single(result.Apply.Commands);
+        Assert.DoesNotContain("-AllowClobber", command.Arguments);
     }
 
     [Fact]

@@ -80,9 +80,12 @@ internal static class ManagedModuleRequiredResourceSupport
         var prerelease = GetBool(options, "Prerelease") ?? defaults.IncludePrerelease;
         var reinstall = GetBool(options, "Reinstall") ?? defaults.Reinstall;
         var noClobber = GetBool(options, "NoClobber") ?? false;
+        var allowClobberSpecified = TryGetOption(options, "AllowClobber", out _);
         var allowClobber = GetBool(options, "AllowClobber") ?? defaults.AllowClobber;
-        if (allowClobber && noClobber)
+        if (allowClobberSpecified && allowClobber && noClobber)
             throw new InvalidOperationException("RequiredResource parameters 'AllowClobber' and 'NoClobber' cannot both be true.");
+        if (noClobber)
+            allowClobber = false;
         var acceptLicense = GetBool(options, "AcceptLicense") ?? defaults.AcceptLicense;
         var skipDependencyCheck = GetBool(options, "SkipDependencyCheck") ?? defaults.SkipDependencyCheck;
         var scope = GetScope(options, "Scope") ?? defaults.Scope;
@@ -100,7 +103,7 @@ internal static class ManagedModuleRequiredResourceSupport
             scopeSpecified,
             repository,
             reinstall,
-            allowClobber && !noClobber,
+            allowClobber,
             acceptLicense,
             skipDependencyCheck);
     }

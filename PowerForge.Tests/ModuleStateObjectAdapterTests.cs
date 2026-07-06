@@ -18,6 +18,7 @@ public sealed class ModuleStateObjectAdapterTests
                     ["Name"] = "Company.Tools",
                     ["Version"] = "=1.2.0",
                     ["Repository"] = "CompanyModules",
+                    ["RepositorySource"] = @"C:\Feeds\Company",
                     ["Scope"] = "CurrentUser",
                     ["Path"] = @"C:\OfflineModules",
                     ["ExpectedPackageSha256"] = new string('A', 64)
@@ -40,6 +41,7 @@ public sealed class ModuleStateObjectAdapterTests
         Assert.Equal("Company.Tools", module.Name);
         Assert.Equal("=1.2.0", module.VersionPolicy);
         Assert.Equal("CompanyModules", Assert.Single(module.AllowedSources));
+        Assert.Equal(@"C:\Feeds\Company", module.TargetRepositorySource);
         Assert.Equal("CurrentUser", module.Scope);
         Assert.Equal(@"C:\OfflineModules", module.TargetPath);
         Assert.Equal(new string('a', 64), module.ExpectedPackageSha256);

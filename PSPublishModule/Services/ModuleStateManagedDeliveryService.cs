@@ -264,9 +264,14 @@ internal sealed class ModuleStateManagedDeliveryService
         ModuleStateManagedDeliveryOptions options)
         => ModuleStateManagedRepositoryResolver.ResolveRepositoryForAction(
             _cmdlet,
-            action.TargetRepository,
+            ResolveActionDeliveryRepository(action),
             options,
             "Managed module delivery requires Repository, ProfileName, or action target repository.");
+
+    private static string? ResolveActionDeliveryRepository(ModuleStatePlanAction action)
+        => string.IsNullOrWhiteSpace(action.TargetRepositorySource)
+            ? action.TargetRepository
+            : action.TargetRepositorySource;
 
     private static string? ResolveModuleRoot(ModuleStatePlanAction action, ModuleStateManagedDeliveryOptions options)
         => string.IsNullOrWhiteSpace(action.TargetPath) ? options.ModuleRoot : action.TargetPath;

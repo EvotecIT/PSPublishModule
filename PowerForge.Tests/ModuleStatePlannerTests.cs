@@ -540,6 +540,25 @@ public sealed class ModuleStatePlannerTests
     }
 
     [Fact]
+    public void CreatePlan_WithCleanupAndPrereleaseDesiredState_KeepsHighestPrereleaseCandidate()
+    {
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[]
+            {
+                new ModuleStateInstalledModule("Company.Tools", "1.1.0", scope: "CurrentUser", path: @"C:\Modules\Company.Tools\1.1.0"),
+                new ModuleStateInstalledModule("Company.Tools", "1.2.0-preview", scope: "CurrentUser", path: @"C:\Modules\Company.Tools\1.2.0-preview")
+            }),
+            new[] { new ModuleStateDesiredModule("Company.Tools", "*", includePrerelease: true) },
+            cleanupMode: ModuleStateCleanupMode.OldVersions);
+
+        var plan = new ModuleStatePlanner().CreatePlan(request);
+        var cleanupAction = Assert.Single(plan.Actions, static action => action.Kind == ModuleStatePlanActionKind.Remove);
+
+        Assert.Equal("1.1.0", cleanupAction.InstalledVersion);
+        Assert.Equal(@"C:\Modules\Company.Tools\1.1.0", cleanupAction.TargetPath);
+    }
+
+    [Fact]
     public void CreatePlan_WithCleanupAndSaveTarget_DoesNotRemoveCopiesOutsideTargetPath()
     {
         var request = new ModuleStatePlanRequest(

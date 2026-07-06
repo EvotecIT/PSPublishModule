@@ -82,7 +82,8 @@ internal sealed class ModuleStateJsonService
                 module.Reinstall || module.Force,
                 module.AcceptLicense,
                 module.AllowClobber,
-                module.SkipDependencyCheck));
+                module.SkipDependencyCheck,
+                module.RepositorySource ?? module.DeliveryRepository ?? module.RepositoryUri));
         }
 
         var families = new List<ModuleStateFamilyPolicy>();
@@ -169,6 +170,12 @@ internal sealed class ModuleStateJsonService
         public string[]? Repositories { get; set; }
 
         public string? Repository { get; set; }
+
+        public string? RepositorySource { get; set; }
+
+        public string? DeliveryRepository { get; set; }
+
+        public string? RepositoryUri { get; set; }
 
         public string? Scope { get; set; }
 

@@ -22,6 +22,7 @@ public sealed class ModuleStatePlanResultMapperTests
                     TargetScope = "CurrentUser",
                     TargetPath = "C:/Modules/Company.Tools/1.0.0",
                     TargetRepository = "CompanyModules",
+                    TargetRepositorySource = "C:/Feeds/Company",
                     ExpectedPackageSha256 = new string('A', 64)
                 }
             },
@@ -49,6 +50,7 @@ public sealed class ModuleStatePlanResultMapperTests
         Assert.Equal("CurrentUser", action.TargetScope);
         Assert.Equal("C:/Modules/Company.Tools/1.0.0", action.TargetPath);
         Assert.Equal("CompanyModules", action.TargetRepository);
+        Assert.Equal("C:/Feeds/Company", action.TargetRepositorySource);
         Assert.Equal(new string('a', 64), action.ExpectedPackageSha256);
 
         var finding = Assert.Single(plan.Findings);

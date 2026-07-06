@@ -49,6 +49,10 @@ internal static class ModuleStateObjectAdapter
             GetStringArray(value, "AllowedSources") ??
             GetStringArray(value, "Repositories") ??
             GetStringArray(value, "Repository");
+        var targetRepositorySource =
+            GetString(value, "RepositorySource") ??
+            GetString(value, "DeliveryRepository") ??
+            GetString(value, "RepositoryUri");
         var scope = GetString(value, "Scope");
         var targetPath =
             GetString(value, "TargetPath") ??
@@ -71,7 +75,8 @@ internal static class ModuleStateObjectAdapter
             GetBool(value, "Reinstall") || GetBool(value, "Force"),
             GetBool(value, "AcceptLicense"),
             GetBool(value, "AllowClobber"),
-            GetBool(value, "SkipDependencyCheck"));
+            GetBool(value, "SkipDependencyCheck"),
+            targetRepositorySource);
     }
 
     private static ModuleStateFamilyPolicy ToFamilyPolicy(object input)

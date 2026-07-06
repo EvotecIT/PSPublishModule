@@ -37,6 +37,7 @@ internal static class ModuleStatePlanResultMapper
                 TargetScope = action.TargetScope,
                 TargetPath = action.TargetPath,
                 TargetRepository = action.TargetRepository,
+                TargetRepositorySource = action.TargetRepositorySource,
                 ExpectedPackageSha256 = action.ExpectedPackageSha256,
                 License = action.License,
                 LicenseAcceptanceRequired = action.LicenseAcceptanceRequired,
@@ -78,7 +79,8 @@ internal static class ModuleStatePlanResultMapper
                 includePrerelease: action.IncludePrerelease,
                 acceptLicense: action.AcceptLicense,
                 allowClobber: action.AllowClobber,
-                skipDependencyCheck: action.SkipDependencyCheck)).ToArray(),
+                skipDependencyCheck: action.SkipDependencyCheck,
+                targetRepositorySource: action.TargetRepositorySource)).ToArray(),
             (result.Findings ?? Array.Empty<ModuleStateConflictFindingResult>()).Select(static finding => new ModuleStateConflictFinding(
                 ParseEnum<ModuleStateConflictSeverity>(finding.Severity, nameof(finding.Severity)),
                 finding.Code,
