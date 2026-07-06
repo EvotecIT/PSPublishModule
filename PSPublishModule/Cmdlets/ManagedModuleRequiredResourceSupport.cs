@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
+using System.Text.Json;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -17,6 +18,9 @@ internal static class ManagedModuleRequiredResourceSupport
         if (!File.Exists(path))
             throw new FileNotFoundException("RequiredResourceFile was not found.", path);
 
+        if (string.Equals(Path.GetExtension(path), ".json", StringComparison.OrdinalIgnoreCase))
+            return ImportRequiredResourceJsonFile(path);
+
         using var ps = PowerShell.Create(RunspaceMode.CurrentRunspace);
         ps.AddCommand("Microsoft.PowerShell.Utility\\Import-PowerShellDataFile")
             .AddParameter("LiteralPath", path);
@@ -27,6 +31,16 @@ internal static class ManagedModuleRequiredResourceSupport
             throw new InvalidOperationException($"RequiredResourceFile '{path}' did not return a single hashtable.");
 
         return output[0].BaseObject;
+    }
+
+    private static object ImportRequiredResourceJsonFile(string path)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException($"RequiredResourceFile '{path}' did not contain a JSON object.");
+
+        return ConvertJsonElement(document.RootElement)
+            ?? throw new InvalidOperationException($"RequiredResourceFile '{path}' did not contain a JSON object.");
     }
 
     internal static IEnumerable<ManagedModuleRequiredResourceTarget> Parse(
@@ -175,6 +189,18 @@ internal static class ManagedModuleRequiredResourceSupport
             return;
         }
 
+        if (TryConvertWildcardVersionPolicy(trimmed, out var wildcardVersionPolicy))
+        {
+            versionPolicy = wildcardVersionPolicy;
+            return;
+        }
+
+        if (ManagedModuleCommandSupport.HasWildcard(trimmed))
+        {
+            versionPolicy = trimmed;
+            return;
+        }
+
         if (trimmed.StartsWith("[", StringComparison.Ordinal) &&
             trimmed.EndsWith("]", StringComparison.Ordinal) &&
             trimmed.IndexOf(",", StringComparison.Ordinal) < 0)
@@ -184,6 +210,66 @@ internal static class ManagedModuleRequiredResourceSupport
         }
 
         exactVersion = trimmed;
+    }
+
+    private static bool TryConvertWildcardVersionPolicy(string value, out string? versionPolicy)
+    {
+        versionPolicy = null;
+        if (string.Equals(value, "*", StringComparison.Ordinal))
+        {
+            versionPolicy = "*";
+            return true;
+        }
+
+        var parts = value.Split('.');
+        if (parts.Length is < 2 or > 4 ||
+            !string.Equals(parts[^1], "*", StringComparison.Ordinal))
+            return false;
+
+        var specified = new int[parts.Length - 1];
+        for (var i = 0; i < specified.Length; i++)
+        {
+            if (!int.TryParse(parts[i], out var part) || part < 0)
+                return false;
+
+            specified[i] = part;
+        }
+
+        var segmentCount = Math.Max(3, specified.Length + 1);
+        var lower = new int[segmentCount];
+        var upper = new int[segmentCount];
+        Array.Copy(specified, lower, specified.Length);
+        Array.Copy(specified, upper, specified.Length);
+        upper[specified.Length - 1]++;
+        versionPolicy = "[" + string.Join(".", lower) + "," + string.Join(".", upper) + ")";
+        return true;
+    }
+
+    private static object? ConvertJsonElement(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                var table = new Hashtable(StringComparer.OrdinalIgnoreCase);
+                foreach (var property in element.EnumerateObject())
+                    table[property.Name] = ConvertJsonElement(property.Value);
+                return table;
+            case JsonValueKind.Array:
+                return element.EnumerateArray().Select(ConvertJsonElement).ToArray();
+            case JsonValueKind.String:
+                return element.GetString();
+            case JsonValueKind.Number:
+                return element.GetRawText();
+            case JsonValueKind.True:
+                return true;
+            case JsonValueKind.False:
+                return false;
+            case JsonValueKind.Null:
+            case JsonValueKind.Undefined:
+                return null;
+            default:
+                throw new InvalidOperationException($"Unsupported JSON value kind '{element.ValueKind}' in RequiredResourceFile.");
+        }
     }
 }
 

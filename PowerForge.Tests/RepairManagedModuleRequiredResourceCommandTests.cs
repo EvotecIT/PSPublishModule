@@ -126,6 +126,7 @@ public sealed class RepairManagedModuleRequiredResourceCommandTests
         var action = Assert.Single(result.Plan.Actions);
         Assert.Equal("Install", action.Kind);
         Assert.Equal("CurrentUser", action.TargetScope);
+        Assert.Null(action.TargetPath);
     }
 
     [Fact]
@@ -281,6 +282,68 @@ public sealed class RepairManagedModuleRequiredResourceCommandTests
         var action = Assert.Single(result.Plan.Actions);
         Assert.Equal("Update", action.Kind);
         Assert.Equal(">=2.0.0", action.VersionPolicy);
+    }
+
+    [Fact]
+    public void RepairManagedModule_RequiredResourceWildcardVersionUsesAnyPolicy()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var requiredResource = new Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools"] = new Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Version"] = "*"
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("RequiredResource", requiredResource)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions);
+        Assert.Equal("Install", action.Kind);
+        Assert.Equal("*", action.VersionPolicy);
+        var command = Assert.Single(result.Apply.Commands);
+        Assert.DoesNotContain("-RequiredVersion", command.Arguments);
+        Assert.DoesNotContain("-VersionPolicy", command.Arguments);
+    }
+
+    [Fact]
+    public void RepairManagedModule_RequiredResourceTrailingWildcardVersionUsesRangePolicy()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var requiredResource = new Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools"] = new Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Version"] = "1.*"
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("RequiredResource", requiredResource)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions);
+        Assert.Equal("Install", action.Kind);
+        Assert.Equal("[1.0.0,2.0.0)", action.VersionPolicy);
+        var command = Assert.Single(result.Apply.Commands);
+        Assert.Contains("-VersionPolicy", command.Arguments);
+        Assert.Contains("[1.0.0,2.0.0)", command.Arguments);
     }
 
     [Fact]
@@ -526,6 +589,33 @@ public sealed class RepairManagedModuleRequiredResourceCommandTests
         Assert.True(Directory.Exists(currentPath));
         Assert.False(result.Apply.ExecutionRequested);
         Assert.Empty(result.Apply.ExecutionResults);
+    }
+
+    [Fact]
+    public void RepairManagedModule_RequiredResourceJsonFileCanPlanMissingInstall()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var resourceFile = Path.Combine(moduleRoot.Path, "required-resources.json");
+        File.WriteAllText(
+            resourceFile,
+            "{ \"Company.Tools\": { \"Version\": \"1.1.0\", \"Prerelease\": true } }");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("RequiredResourceFile", resourceFile)
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions);
+        Assert.Equal("Install", action.Kind);
+        Assert.Equal("Company.Tools", action.ModuleName);
+        Assert.Equal("=1.1.0", action.VersionPolicy);
+        Assert.True(action.IncludePrerelease);
     }
 
     private static string CreateInstalledModule(string moduleRoot, string name, string version)

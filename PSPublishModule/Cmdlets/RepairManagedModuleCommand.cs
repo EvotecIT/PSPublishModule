@@ -454,9 +454,12 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
                 continue;
 
             var actionKey = CreateSelectedActionKey(action.ModuleName, action.TargetScope);
-            if (!selectedByActionKey.TryGetValue(actionKey, out var selected) &&
-                !selectedByName.TryGetValue(action.ModuleName, out selected))
-                continue;
+            if (!selectedByActionKey.TryGetValue(actionKey, out var selected))
+            {
+                if (!string.IsNullOrWhiteSpace(action.TargetScope) ||
+                    !selectedByName.TryGetValue(action.ModuleName, out selected))
+                    continue;
+            }
 
             var moduleRoot = ResolveSelectedModuleRoot(selected);
             if (!string.IsNullOrWhiteSpace(moduleRoot))
