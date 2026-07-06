@@ -223,7 +223,7 @@ internal static class ManagedModuleRequiredResourceSupport
 
         var parts = value.Split('.');
         if (parts.Length is < 2 or > 4 ||
-            !string.Equals(parts[^1], "*", StringComparison.Ordinal))
+            !string.Equals(parts[parts.Length - 1], "*", StringComparison.Ordinal))
             return false;
 
         var specified = new int[parts.Length - 1];
