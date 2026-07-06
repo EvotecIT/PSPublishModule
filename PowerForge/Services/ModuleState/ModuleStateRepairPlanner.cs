@@ -173,7 +173,9 @@ internal sealed class ModuleStateRepairPlanner
                 !ManagedModuleInstallService.WouldRepairInstalledManifestDependencies(
                     installedModule.Name,
                     moduleRoot!,
-                    installedModule.Path!))
+                    installedModule.Path!,
+                    action.IncludePrerelease,
+                    action.SkipDependencyCheck))
             {
                 continue;
             }

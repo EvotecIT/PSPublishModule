@@ -236,14 +236,12 @@ internal sealed class ModuleStateApplyService
             arguments.Add("-Path");
             arguments.Add(action.TargetPath!);
         }
-        else if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
-                 !string.IsNullOrWhiteSpace(action.TargetPath))
+        else if (!string.IsNullOrWhiteSpace(action.TargetPath))
         {
             arguments.Add("-ModuleRoot");
             arguments.Add(action.TargetPath!);
         }
-        else if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
-                 !string.IsNullOrWhiteSpace(deliveryOptions.ModuleRoot))
+        else if (!string.IsNullOrWhiteSpace(deliveryOptions.ModuleRoot))
         {
             arguments.Add(action.Kind == ModuleStatePlanActionKind.Save ? "-Path" : "-ModuleRoot");
             arguments.Add(deliveryOptions.ModuleRoot!);

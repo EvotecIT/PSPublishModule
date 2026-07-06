@@ -375,6 +375,32 @@ public sealed class ModuleStateApplyServiceTests
     }
 
     [Fact]
+    public void Prepare_PrivateInstallRepairCommandPreservesTargetRoot()
+    {
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(
+                    ModuleStatePlanActionKind.Install,
+                    "Company.Tools",
+                    null,
+                    "*",
+                    "missing repair",
+                    isRepair: true,
+                    targetPath: @"C:\SelectedRoot",
+                    targetRepository: "CompanyModules")
+            },
+            Array.Empty<ModuleStateConflictFinding>());
+
+        var result = new ModuleStateApplyService().Prepare(plan, new ModuleStateDeliveryOptions());
+
+        Assert.True(result.Receipt.CanApply);
+        var command = Assert.Single(result.Receipt.Commands);
+        Assert.Equal("Repair-ManagedModule", command.CommandName);
+        Assert.Equal(new[] { "-Name", "Company.Tools", "-InstallMissing", "-ModuleRoot", @"C:\SelectedRoot", "-Repository", "CompanyModules", "-Transport", "PrivateModule" }, command.Arguments);
+    }
+
+    [Fact]
     public void Prepare_PrivateTransportPreservesExplicitAcceptLicenseWithoutLicenseMetadata()
     {
         var plan = new ModuleStatePlan(
