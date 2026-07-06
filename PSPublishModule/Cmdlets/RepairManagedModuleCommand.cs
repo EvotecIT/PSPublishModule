@@ -886,18 +886,31 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
     }
 
     private string? ResolveRepositorySource()
-        => string.IsNullOrWhiteSpace(Repository) ? null : Repository!.Trim();
+        => ResolveRepositorySource(Repository);
 
-    private static string? ResolveRepositorySource(string? repository)
-        => !string.IsNullOrWhiteSpace(repository) &&
-           ModuleStateManagedRepositoryResolver.IsRepositorySource(repository!)
-            ? repository!.Trim()
+    private string? ResolveRepositorySource(string? repository)
+    {
+        if (string.IsNullOrWhiteSpace(repository))
+            return null;
+
+        var trimmed = repository!.Trim();
+        if (ModuleStateManagedRepositoryResolver.IsRepositorySource(trimmed))
+            return trimmed;
+
+        var providerPath = ManagedModuleCommandSupport.ResolveProviderPath(this, trimmed);
+        return !string.IsNullOrWhiteSpace(providerPath) && Directory.Exists(providerPath)
+            ? providerPath
             : null;
+    }
 
     private string? ResolveRepositoryName(string? repository)
-        => string.IsNullOrWhiteSpace(repository)
-            ? null
-            : ModuleStateManagedRepositoryResolver.ResolveRepositoryIdentity(this, repository!);
+    {
+        if (string.IsNullOrWhiteSpace(repository))
+            return null;
+
+        var source = ResolveRepositorySource(repository);
+        return ModuleStateManagedRepositoryResolver.ResolveRepositoryIdentity(this, source ?? repository!);
+    }
 
     private string? ResolveProfileRepositoryName()
         => string.IsNullOrWhiteSpace(ProfileName)

@@ -322,6 +322,21 @@ public sealed class ModuleStateConflictAnalyzerTests
     }
 
     [Fact]
+    public void Analyze_AllowsLoadedPrereleaseWhenDesiredPolicyIncludesPrerelease()
+    {
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule("Company.Tools", "1.2.0-preview1", isLoaded: true)
+        });
+        var desired = new[]
+        {
+            new ModuleStateDesiredModule("Company.Tools", ">=1.2.0-preview1", includePrerelease: true)
+        };
+
+        Assert.Empty(new ModuleStateConflictAnalyzer().Analyze(inventory, desired));
+    }
+
+    [Fact]
     public void Analyze_ReportsCrossScopeCommandConflictsOnlyWhenRepairScopeIsRequested()
     {
         var inventory = new ModuleStateInventory(new[]

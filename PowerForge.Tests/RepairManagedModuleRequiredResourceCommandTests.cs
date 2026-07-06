@@ -173,6 +173,58 @@ public sealed class RepairManagedModuleRequiredResourceCommandTests
     }
 
     [Fact]
+    public void RepairManagedModule_RequiredResourceNormalizesBareRelativeRepositoryPath()
+    {
+        using var root = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        var feed = Path.Combine(root.Path, "feed");
+        Directory.CreateDirectory(feed);
+        var inventory = new ModuleStateInventoryResult
+        {
+            InstalledModules = new[]
+            {
+                new ModuleStateInstalledModuleResult
+                {
+                    Name = "Company.Tools",
+                    Version = "1.1.0",
+                    Scope = "CurrentUser",
+                    SourceRepository = "Local",
+                    Path = Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0"),
+                    IsEffectiveImportCandidate = true
+                }
+            }
+        };
+        var requiredResource = new Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools"] = new Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Version"] = "1.1.0",
+                ["Repository"] = "feed"
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Set-Location")
+            .AddParameter("LiteralPath", root.Path);
+        _ = ps.Invoke();
+        AssertNoPowerShellErrors(ps);
+        ps.Commands.Clear();
+
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("Inventory", inventory)
+            .AddParameter("RequiredResource", requiredResource)
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions);
+        Assert.Equal("NoAction", action.Kind);
+        Assert.Equal("Local", action.TargetRepository);
+        Assert.Equal(feed, action.TargetRepositorySource);
+    }
+
+    [Fact]
     public void RepairManagedModule_RequiredResourceUsesPerResourceRepositorySourceForDelivery()
     {
         using var feed = new TemporaryDirectory();
