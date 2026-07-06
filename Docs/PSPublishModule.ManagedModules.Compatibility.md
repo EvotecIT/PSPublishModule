@@ -95,9 +95,13 @@ Update-ManagedModule -Name Company.Tools -VersionPolicy '>=1.2.0 <2.0.0' -Profil
 Repair-ManagedModule -Latest -Repository PSGallery -Plan -ShowSummary
 Repair-ManagedModule -Family Graph -Repository PSGallery -Plan -ShowSummary
 Repair-ManagedModule -MaintenanceReceiptPath .\module-maintenance.json -Repository CompanyModules -Plan
+Repair-ManagedModule -Name Company.Tools,Company.Web -InstallMissing -Latest -Repository PSGallery -Plan -ShowSummary
+Repair-ManagedModule -RequiredResourceFile .\required-resources.psd1 -Latest -Repository PSGallery -Plan -ShowSummary
 ```
 
 Repair plans include manifest dependency health. An installed module whose own version is otherwise fine can still receive an install-repair action when its manifest `RequiredModules` are missing or outside the declared version policy. External runtime dependencies declared through `PrivateData.PSData.ExternalModuleDependencies` are not treated as managed install dependencies.
+
+Use `-InstallMissing` with literal `-Name` values when a named baseline should also seed modules that are not installed yet. Required-resource repair is the richer form for repeatable baselines with per-module options; it treats the resource map as desired module state. Missing modules are planned as managed installs, installed modules can be updated when `-Latest` or a version policy requires it, and cleanup remains explicit through `-Cleanup OldVersions`.
 
 ### Installed Inventory
 

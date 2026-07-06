@@ -29,6 +29,14 @@ namespace PSPublishModule;
 /// <code>Repair-ManagedModule -Family Graph -Repository PSGallery -Plan -ShowSummary</code>
 /// </example>
 /// <example>
+/// <summary>Preview baseline enforcement from a list of module names</summary>
+/// <code>Repair-ManagedModule -Name Company.Tools,Company.Web -InstallMissing -Latest -Repository PSGallery -Plan -ShowSummary</code>
+/// </example>
+/// <example>
+/// <summary>Preview baseline enforcement from a PSResourceGet-style resource file</summary>
+/// <code>Repair-ManagedModule -RequiredResourceFile .\required-resources.psd1 -Latest -Repository PSGallery -Plan -ShowSummary</code>
+/// </example>
+/// <example>
 /// <summary>Apply receipt-drift repair through a managed repository profile</summary>
 /// <code>Repair-ManagedModule -MaintenanceReceiptPath .\module-maintenance.json -ProfileName CompanyModules -AcceptLicense</code>
 /// </example>
@@ -41,6 +49,20 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
     [Alias("ModuleName")]
     [ValidateNotNullOrEmpty]
     public string[] Name { get; set; } = Array.Empty<string>();
+
+    /// <summary>Plan installs for literal names that are not present in the selected inventory.</summary>
+    [Parameter]
+    public SwitchParameter InstallMissing { get; set; }
+
+    /// <summary>PSResourceGet-style required resource map used as desired module state.</summary>
+    [Parameter]
+    [ValidateNotNull]
+    public object? RequiredResource { get; set; }
+
+    /// <summary>Path to a PowerShell data file containing a PSResourceGet-style required resource map.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? RequiredResourceFile { get; set; }
 
     /// <summary>Existing inventory object. When omitted, local module paths are inventoried.</summary>
     [Parameter(ValueFromPipeline = true)]
@@ -179,15 +201,20 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
                 throw new InvalidOperationException("Specify either ProfileName or Repository, not both.");
             if (!string.IsNullOrWhiteSpace(InventoryPath) && Inventory is not null)
                 throw new InvalidOperationException("Specify either Inventory or InventoryPath, not both.");
+            if (RequiredResource is not null && !string.IsNullOrWhiteSpace(RequiredResourceFile))
+                throw new InvalidOperationException("Specify either RequiredResource or RequiredResourceFile, not both.");
+            if (InstallMissing.IsPresent && Name.Length == 0 && RequiredResource is null && string.IsNullOrWhiteSpace(RequiredResourceFile))
+                throw new InvalidOperationException("InstallMissing requires Name, RequiredResource, or RequiredResourceFile.");
             ValidateVersionPolicy();
             var deliveryModuleRoot = ResolveManagedDeliveryModuleRoot();
             var credentialSecretFilePath = ResolveCredentialSecretFilePath();
+            var requiredResourceTargets = ResolveRequiredResourceTargets().ToArray();
 
             var inventory = ResolveInventory();
             var selectedModules = SelectBaselineModules(inventory).ToArray();
             var plan = ModuleStatePlanCommandSupport.CreatePlanResult(
                 inventory,
-                CreateDesiredState(selectedModules),
+                CreateDesiredState(selectedModules, requiredResourceTargets),
                 ResolveOptionalFilePaths(MaintenanceReceiptPath, nameof(MaintenanceReceiptPath)),
                 repair: true,
                 ParseCleanupMode(Cleanup),
@@ -257,10 +284,38 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             loadedModules);
     }
 
-    private object CreateDesiredState(ModuleStateInstalledModuleResult[] selectedModules)
+    private object CreateDesiredState(
+        ModuleStateInstalledModuleResult[] selectedModules,
+        ManagedModuleRequiredResourceTarget[] requiredResourceTargets)
     {
         var desiredRepository = ResolveRepositoryName();
         var modules = new ArrayList();
+
+        if (requiredResourceTargets.Length > 0)
+        {
+            foreach (var target in requiredResourceTargets)
+            {
+                var module = new Hashtable(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Name"] = target.Name,
+                    ["VersionPolicy"] = ResolveVersionPolicy(target)
+                };
+                var targetRepository = string.IsNullOrWhiteSpace(target.Repository)
+                    ? desiredRepository
+                    : target.Repository;
+                if (!string.IsNullOrWhiteSpace(targetRepository))
+                    module["Repository"] = targetRepository!;
+                if (target.Scope != ManagedModuleInstallScope.CurrentUser || !string.IsNullOrWhiteSpace(Scope))
+                    module["Scope"] = target.Scope.ToString();
+
+                modules.Add(module);
+            }
+
+            return new Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Modules"] = modules
+            };
+        }
 
         foreach (var selected in selectedModules)
         {
@@ -279,10 +334,63 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             modules.Add(module);
         }
 
+        foreach (var missingName in ResolveMissingRequestedNames(selectedModules))
+        {
+            var module = new Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Name"] = missingName,
+                ["VersionPolicy"] = ResolveMissingVersionPolicy()
+            };
+            if (!string.IsNullOrWhiteSpace(desiredRepository))
+                module["Repository"] = desiredRepository!;
+            if (!string.IsNullOrWhiteSpace(Scope))
+                module["Scope"] = Scope!;
+
+            modules.Add(module);
+        }
+
         return new Hashtable(StringComparer.OrdinalIgnoreCase)
         {
             ["Modules"] = modules
         };
+    }
+
+    private IEnumerable<ManagedModuleRequiredResourceTarget> ResolveRequiredResourceTargets()
+    {
+        var resource = RequiredResource;
+        if (resource is null && !string.IsNullOrWhiteSpace(RequiredResourceFile))
+            resource = ManagedModuleRequiredResourceSupport.ImportRequiredResourceFile(this, RequiredResourceFile);
+        if (resource is null)
+            return Array.Empty<ManagedModuleRequiredResourceTarget>();
+
+        var defaults = new ManagedModuleRequiredResourceDefaults(
+            Prerelease.IsPresent,
+            ParseInstallScope(Scope),
+            Force.IsPresent,
+            AllowClobber.IsPresent,
+            AcceptLicense.IsPresent,
+            skipDependencyCheck: false);
+        return ManagedModuleRequiredResourceSupport.Parse(resource, defaults);
+    }
+
+    private string[] ResolveMissingRequestedNames(IReadOnlyList<ModuleStateInstalledModuleResult> selectedModules)
+    {
+        if (!InstallMissing.IsPresent || Name.Length == 0)
+            return Array.Empty<string>();
+
+        var installed = selectedModules
+            .Select(static module => module.Name)
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return Name
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Select(static name => name.Trim())
+            .Where(static name => !ManagedModuleCommandSupport.HasWildcard(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(name => !installed.Contains(name))
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private void ApplySelectedInventoryTargets(
@@ -391,6 +499,30 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
         return string.IsNullOrWhiteSpace(selected.Version)
             ? "*"
             : "=" + selected.Version.Trim();
+    }
+
+    private string ResolveMissingVersionPolicy()
+    {
+        if (Latest.IsPresent)
+            return "*";
+        if (!string.IsNullOrWhiteSpace(Version))
+            return "=" + Version!.Trim();
+        if (!string.IsNullOrWhiteSpace(MinimumVersion))
+            return ">=" + MinimumVersion!.Trim();
+        if (!string.IsNullOrWhiteSpace(VersionPolicy))
+            return VersionPolicy!.Trim();
+
+        return "*";
+    }
+
+    private string ResolveVersionPolicy(ManagedModuleRequiredResourceTarget target)
+    {
+        if (!string.IsNullOrWhiteSpace(target.Version))
+            return "=" + target.Version!.Trim();
+        if (!string.IsNullOrWhiteSpace(target.VersionPolicy))
+            return target.VersionPolicy!.Trim();
+
+        return "*";
     }
 
     private async Task<ModuleStateApplyResult> PrepareApplyAsync(
@@ -678,4 +810,14 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
         => string.Equals(cleanup, "OldVersions", StringComparison.OrdinalIgnoreCase)
             ? ModuleStateCleanupMode.OldVersions
             : ModuleStateCleanupMode.None;
+
+    private static ManagedModuleInstallScope ParseInstallScope(string? scope)
+    {
+        if (string.IsNullOrWhiteSpace(scope))
+            return ManagedModuleInstallScope.CurrentUser;
+        if (Enum.TryParse<ManagedModuleInstallScope>(scope, ignoreCase: true, out var parsed))
+            return parsed;
+
+        throw new InvalidOperationException($"Unsupported scope '{scope}'.");
+    }
 }

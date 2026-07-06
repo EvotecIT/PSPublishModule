@@ -19,6 +19,9 @@ public sealed class RepairManagedModuleCommandTests
         AssertNoPowerShellErrors(ps);
         Assert.True(command.Parameters.ContainsKey("Plan"));
         Assert.True(command.Parameters.ContainsKey("Latest"));
+        Assert.True(command.Parameters.ContainsKey("InstallMissing"));
+        Assert.True(command.Parameters.ContainsKey("RequiredResource"));
+        Assert.True(command.Parameters.ContainsKey("RequiredResourceFile"));
         Assert.True(command.Parameters.ContainsKey("Family"));
         Assert.True(command.Parameters.ContainsKey("Cleanup"));
         Assert.True(command.Parameters.ContainsKey("MaintenanceReceiptPath"));
