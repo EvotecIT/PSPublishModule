@@ -77,7 +77,13 @@ internal sealed class ModuleStateJsonService
                 module.AllowedSources ?? module.Repositories ?? ToArray(module.Repository),
                 module.Scope,
                 module.TargetPath ?? module.Path ?? module.ModuleRoot ?? module.DestinationPath,
-                module.ExpectedPackageSha256 ?? module.PackageSha256 ?? module.Sha256));
+                module.ExpectedPackageSha256 ?? module.PackageSha256 ?? module.Sha256,
+                module.Prerelease || module.IncludePrerelease,
+                module.Reinstall || module.Force,
+                module.AcceptLicense,
+                module.AllowClobber,
+                module.SkipDependencyCheck,
+                module.RepositorySource ?? module.DeliveryRepository ?? module.RepositoryUri));
         }
 
         var families = new List<ModuleStateFamilyPolicy>();
@@ -165,6 +171,12 @@ internal sealed class ModuleStateJsonService
 
         public string? Repository { get; set; }
 
+        public string? RepositorySource { get; set; }
+
+        public string? DeliveryRepository { get; set; }
+
+        public string? RepositoryUri { get; set; }
+
         public string? Scope { get; set; }
 
         public string? TargetPath { get; set; }
@@ -180,6 +192,20 @@ internal sealed class ModuleStateJsonService
         public string? PackageSha256 { get; set; }
 
         public string? Sha256 { get; set; }
+
+        public bool Prerelease { get; set; }
+
+        public bool IncludePrerelease { get; set; }
+
+        public bool Reinstall { get; set; }
+
+        public bool Force { get; set; }
+
+        public bool AcceptLicense { get; set; }
+
+        public bool AllowClobber { get; set; }
+
+        public bool SkipDependencyCheck { get; set; }
     }
 
     private static string[]? ToArray(string? value)

@@ -113,7 +113,7 @@ internal sealed class ModuleStateCleanupPlanner
             if (!string.Equals(desiredModule.Name, moduleName, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var policy = ModuleStateVersionPolicy.Parse(desiredModule.VersionPolicy);
+            var policy = ModuleStateVersionPolicy.Parse(desiredModule.VersionPolicy, desiredModule.IncludePrerelease);
             var candidates = installedModules
                 .Where(module =>
                     (string.IsNullOrWhiteSpace(desiredModule.Scope) ||

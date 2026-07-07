@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Management.Automation;
 using System.Text.Json;
 using PSPublishModule;
@@ -19,6 +20,9 @@ public sealed class RepairManagedModuleCommandTests
         AssertNoPowerShellErrors(ps);
         Assert.True(command.Parameters.ContainsKey("Plan"));
         Assert.True(command.Parameters.ContainsKey("Latest"));
+        Assert.True(command.Parameters.ContainsKey("InstallMissing"));
+        Assert.True(command.Parameters.ContainsKey("RequiredResource"));
+        Assert.True(command.Parameters.ContainsKey("RequiredResourceFile"));
         Assert.True(command.Parameters.ContainsKey("Family"));
         Assert.True(command.Parameters.ContainsKey("Cleanup"));
         Assert.True(command.Parameters.ContainsKey("MaintenanceReceiptPath"));
@@ -193,6 +197,50 @@ public sealed class RepairManagedModuleCommandTests
         Assert.Equal("CompanyModules", action.TargetRepository);
         var command = Assert.Single(result.Apply.Commands);
         Assert.Equal("Update-ManagedModule", command.CommandName);
+        Assert.Contains("-ProfileName", command.Arguments);
+        Assert.Contains("Company", command.Arguments);
+        Assert.DoesNotContain("-Repository", command.Arguments);
+    }
+
+    [Fact]
+    public void RepairManagedModule_RequiredResourceRepositoryNameUsesProfileDeliveryTarget()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        new ModuleRepositoryProfileStore().SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "Company",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "CompanyModules",
+            RepositoryUri = feed.Path
+        });
+        var requiredResource = new Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Tools"] = new Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Version"] = "1.1.0",
+                ["Repository"] = "CompanyModules"
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot.Path })
+            .AddParameter("RequiredResource", requiredResource)
+            .AddParameter("ProfileName", "Company")
+            .AddParameter("Transport", "PrivateModule")
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions);
+        Assert.Equal("CompanyModules", action.TargetRepository);
+        Assert.Null(action.TargetRepositorySource);
+        var command = Assert.Single(result.Apply.Commands);
+        Assert.Equal("Repair-ManagedModule", command.CommandName);
         Assert.Contains("-ProfileName", command.Arguments);
         Assert.Contains("Company", command.Arguments);
         Assert.DoesNotContain("-Repository", command.Arguments);

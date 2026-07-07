@@ -75,6 +75,7 @@ public sealed class ModuleStateJsonServiceTests
       "name": "Company.Tools",
       "versionPolicy": ">=1.2.0",
       "allowedSources": [ "CompanyModules" ],
+      "repositorySource": "C:/Feeds/Company",
       "scope": "AllUsers",
       "targetPath": "C:/OfflineModules",
       "expectedPackageSha256": "sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
@@ -97,6 +98,7 @@ public sealed class ModuleStateJsonServiceTests
         Assert.Equal("Company.Tools", module.Name);
         Assert.Equal(">=1.2.0", module.VersionPolicy);
         Assert.Equal(new[] { "CompanyModules" }, module.AllowedSources);
+        Assert.Equal("C:/Feeds/Company", module.TargetRepositorySource);
         Assert.Equal("AllUsers", module.Scope);
         Assert.Equal("C:/OfflineModules", module.TargetPath);
         Assert.Equal(new string('a', 64), module.ExpectedPackageSha256);

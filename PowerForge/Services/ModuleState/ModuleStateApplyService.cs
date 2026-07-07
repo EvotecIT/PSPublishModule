@@ -170,11 +170,18 @@ internal sealed class ModuleStateApplyService
             return "Plan includes save actions but no target path was supplied.";
 
         if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
-            !deliveryOptions.AcceptLicense &&
-            plan.Actions.Any(static action => action.LicenseAcceptanceRequired && IsDeliveryAction(action.Kind)))
+            plan.Actions.Any(action =>
+                action.LicenseAcceptanceRequired &&
+                !deliveryOptions.AcceptLicense &&
+                !action.AcceptLicense &&
+                IsDeliveryAction(action.Kind)))
         {
             var modules = plan.Actions
-                .Where(static action => action.LicenseAcceptanceRequired && IsDeliveryAction(action.Kind))
+                .Where(action =>
+                    action.LicenseAcceptanceRequired &&
+                    !deliveryOptions.AcceptLicense &&
+                    !action.AcceptLicense &&
+                    IsDeliveryAction(action.Kind))
                 .Select(static action => action.ModuleName)
                 .Distinct(StringComparer.OrdinalIgnoreCase);
             return "Planned managed delivery requires license acceptance for " + string.Join(", ", modules) + ".";
@@ -193,6 +200,7 @@ internal sealed class ModuleStateApplyService
         ModuleStateDeliveryOptions deliveryOptions)
     {
         var commandName = ResolveCommandName(action.Kind, deliveryOptions.Transport);
+        var actionRepository = ResolveActionDeliveryRepository(action);
         var arguments = new List<string>
         {
             "-Name",
@@ -211,6 +219,12 @@ internal sealed class ModuleStateApplyService
             arguments.Add(action.VersionPolicy);
         }
 
+        if (deliveryOptions.Transport != ModuleStateDeliveryTransport.ManagedModule &&
+            action.Kind == ModuleStatePlanActionKind.Install)
+        {
+            arguments.Add("-InstallMissing");
+        }
+
         if (!string.IsNullOrWhiteSpace(action.TargetScope) && action.Kind != ModuleStatePlanActionKind.Save)
         {
             arguments.Add("-Scope");
@@ -222,14 +236,12 @@ internal sealed class ModuleStateApplyService
             arguments.Add("-Path");
             arguments.Add(action.TargetPath!);
         }
-        else if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
-                 !string.IsNullOrWhiteSpace(action.TargetPath))
+        else if (!string.IsNullOrWhiteSpace(action.TargetPath))
         {
             arguments.Add("-ModuleRoot");
             arguments.Add(action.TargetPath!);
         }
-        else if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
-                 !string.IsNullOrWhiteSpace(deliveryOptions.ModuleRoot))
+        else if (!string.IsNullOrWhiteSpace(deliveryOptions.ModuleRoot))
         {
             arguments.Add(action.Kind == ModuleStatePlanActionKind.Save ? "-Path" : "-ModuleRoot");
             arguments.Add(deliveryOptions.ModuleRoot!);
@@ -240,10 +252,10 @@ internal sealed class ModuleStateApplyService
             arguments.Add("-ProfileName");
             arguments.Add(deliveryOptions.ProfileName!);
         }
-        else if (!string.IsNullOrWhiteSpace(action.TargetRepository))
+        else if (!string.IsNullOrWhiteSpace(actionRepository))
         {
             arguments.Add("-Repository");
-            arguments.Add(action.TargetRepository!);
+            arguments.Add(actionRepository!);
         }
         else if (!string.IsNullOrWhiteSpace(deliveryOptions.ProfileName))
         {
@@ -256,7 +268,12 @@ internal sealed class ModuleStateApplyService
             arguments.Add(deliveryOptions.Repository!);
         }
 
-        if (deliveryOptions.Prerelease)
+        var effectivePrerelease = deliveryOptions.Prerelease || action.IncludePrerelease;
+        var effectiveAcceptLicense = deliveryOptions.AcceptLicense || action.AcceptLicense;
+        var effectiveAllowClobber = deliveryOptions.AllowClobber || action.AllowClobber;
+        var effectiveSkipDependencyCheck = deliveryOptions.SkipDependencyCheck || action.SkipDependencyCheck;
+
+        if (effectivePrerelease)
             arguments.Add("-Prerelease");
         if (deliveryOptions.Transport != ModuleStateDeliveryTransport.ManagedModule)
         {
@@ -277,19 +294,23 @@ internal sealed class ModuleStateApplyService
             arguments.Add("-Force");
         }
 
-        if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
-            deliveryOptions.AcceptLicense &&
-            action.LicenseAcceptanceRequired &&
+        if (effectiveAcceptLicense &&
+            (action.LicenseAcceptanceRequired || deliveryOptions.Transport != ModuleStateDeliveryTransport.ManagedModule) &&
             IsDeliveryAction(action.Kind))
         {
             arguments.Add("-AcceptLicense");
         }
 
-        if (deliveryOptions.Transport == ModuleStateDeliveryTransport.ManagedModule &&
-            deliveryOptions.AllowClobber &&
+        if (effectiveAllowClobber &&
             IsDeliveryAction(action.Kind))
         {
             arguments.Add("-AllowClobber");
+        }
+
+        if (effectiveSkipDependencyCheck &&
+            IsDeliveryAction(action.Kind))
+        {
+            arguments.Add("-SkipDependencyCheck");
         }
 
         return new ModuleStateDeliveryCommand(
@@ -360,9 +381,15 @@ internal sealed class ModuleStateApplyService
 
     private static bool IsActionTargetCoveredByProfile(ModuleStatePlanAction action, ModuleStateDeliveryOptions deliveryOptions)
         => !string.IsNullOrWhiteSpace(deliveryOptions.ProfileName) &&
+           string.IsNullOrWhiteSpace(action.TargetRepositorySource) &&
            !string.IsNullOrWhiteSpace(action.TargetRepository) &&
            !string.IsNullOrWhiteSpace(deliveryOptions.ProfileRepository) &&
            string.Equals(action.TargetRepository, deliveryOptions.ProfileRepository, StringComparison.OrdinalIgnoreCase);
+
+    private static string? ResolveActionDeliveryRepository(ModuleStatePlanAction action)
+        => string.IsNullOrWhiteSpace(action.TargetRepositorySource)
+            ? action.TargetRepository
+            : action.TargetRepositorySource;
 
     private static bool IsDeliveryAction(ModuleStatePlanActionKind kind)
         => kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update or ModuleStatePlanActionKind.Save;

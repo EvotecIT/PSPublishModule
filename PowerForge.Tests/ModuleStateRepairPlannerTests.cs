@@ -506,6 +506,47 @@ public sealed class ModuleStateRepairPlannerTests
     }
 
     [Fact]
+    public void CreateRepairActions_DoesNotPlanManifestDependencyRepairWhenDependenciesAreSkipped()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var modulePath = WriteInstalledModuleManifest(
+            moduleRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            ("Company.Core", "1.0.0"));
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule(
+                "Company.Tools",
+                "1.0.0",
+                scope: "CurrentUser",
+                path: modulePath,
+                isEffectiveImportCandidate: true)
+        });
+        var existingActions = new[]
+        {
+            new ModuleStatePlanAction(
+                ModuleStatePlanActionKind.NoAction,
+                "Company.Tools",
+                "1.0.0",
+                "=1.0.0",
+                "Installed module version satisfies desired policy.",
+                targetScope: "CurrentUser",
+                targetRepository: "Local",
+                skipDependencyCheck: true)
+        };
+
+        var action = Assert.Single(new ModuleStateRepairPlanner().CreateRepairActions(
+            inventory,
+            Array.Empty<ModuleStateMaintenanceReceipt>(),
+            existingActions));
+
+        Assert.Equal(ModuleStatePlanActionKind.NoAction, action.Kind);
+        Assert.True(action.SkipDependencyCheck);
+        Assert.False(action.IsRepair);
+    }
+
+    [Fact]
     public void CreateRepairActions_DoesNotPlanManifestRepairForExternalDependency()
     {
         using var moduleRoot = new TemporaryDirectory();

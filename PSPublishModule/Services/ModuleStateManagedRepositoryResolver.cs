@@ -96,7 +96,7 @@ internal static class ModuleStateManagedRepositoryResolver
             : null;
     }
 
-    private static bool IsRepositorySource(string repository)
+    internal static bool IsRepositorySource(string repository)
     {
         var value = repository.Trim().Trim('"');
         if (Uri.TryCreate(value, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Scheme))

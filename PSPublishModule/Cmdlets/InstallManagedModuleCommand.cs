@@ -1,7 +1,5 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Management.Automation;
 using System.Threading.Tasks;
@@ -275,17 +273,25 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
         }
     }
 
-    private IEnumerable<RequiredResourceTarget> ResolveTargets()
+    private IEnumerable<ManagedModuleRequiredResourceTarget> ResolveTargets()
     {
+        var defaults = new ManagedModuleRequiredResourceDefaults(
+            Prerelease.IsPresent,
+            Scope,
+            ManagedModuleCommandSupport.ResolveForce(Force.IsPresent, Reinstall.IsPresent),
+            AllowClobber.IsPresent && !NoClobber.IsPresent,
+            AcceptLicense.IsPresent,
+            SkipDependencyCheck.IsPresent);
+
         if (ParameterSetName == RequiredResourceParameterSet)
-            return ParseRequiredResource(RequiredResource);
+            return ManagedModuleRequiredResourceSupport.Parse(RequiredResource, defaults);
 
         if (ParameterSetName == RequiredResourceFileParameterSet)
-            return ParseRequiredResource(ImportRequiredResourceFile());
+            return ManagedModuleRequiredResourceSupport.Parse(
+                ManagedModuleRequiredResourceSupport.ImportRequiredResourceFile(this, RequiredResourceFile),
+                defaults);
 
-        var force = ManagedModuleCommandSupport.ResolveForce(Force.IsPresent, Reinstall.IsPresent);
-        var allowClobber = AllowClobber.IsPresent && !NoClobber.IsPresent;
-        return Name.Select(moduleName => new RequiredResourceTarget(
+        return Name.Select(moduleName => new ManagedModuleRequiredResourceTarget(
             moduleName,
             Version,
             MinimumVersion,
@@ -293,217 +299,12 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
             VersionPolicy,
             Prerelease.IsPresent,
             Scope,
+            MyInvocation.BoundParameters.ContainsKey(nameof(Scope)),
             null,
-            force,
-            allowClobber,
+            defaults.Reinstall,
+            defaults.AllowClobber,
             AcceptLicense.IsPresent,
             SkipDependencyCheck.IsPresent));
-    }
-
-    private object ImportRequiredResourceFile()
-    {
-        var path = ManagedModuleCommandSupport.ResolveProviderPath(this, RequiredResourceFile)
-            ?? throw new InvalidOperationException("RequiredResourceFile path is required.");
-        if (!File.Exists(path))
-            throw new FileNotFoundException("RequiredResourceFile was not found.", path);
-
-        using var ps = PowerShell.Create(RunspaceMode.CurrentRunspace);
-        ps.AddCommand("Microsoft.PowerShell.Utility\\Import-PowerShellDataFile")
-            .AddParameter("LiteralPath", path);
-        var output = ps.Invoke();
-        if (ps.HadErrors)
-            throw new InvalidOperationException(string.Join(Environment.NewLine, ps.Streams.Error.Select(static error => error.ToString())));
-        if (output.Count != 1)
-            throw new InvalidOperationException($"RequiredResourceFile '{path}' did not return a single hashtable.");
-
-        return output[0].BaseObject;
-    }
-
-    private IEnumerable<RequiredResourceTarget> ParseRequiredResource(object? resource)
-    {
-        var table = AsDictionary(resource)
-            ?? throw new InvalidOperationException("RequiredResource must be a hashtable whose keys are resource names and whose values are resource option hashtables.");
-
-        foreach (DictionaryEntry entry in table)
-        {
-            var keyName = Convert.ToString(entry.Key)?.Trim();
-            if (string.IsNullOrWhiteSpace(keyName))
-                throw new InvalidOperationException("RequiredResource contains an empty resource name.");
-
-            var options = AsDictionary(entry.Value)
-                ?? throw new InvalidOperationException($"RequiredResource input with name '{keyName}' does not have a valid value; the value must be a hashtable.");
-            yield return ParseRequiredResourceEntry(keyName!, options);
-        }
-    }
-
-    private RequiredResourceTarget ParseRequiredResourceEntry(string fallbackName, IDictionary options)
-    {
-        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "Name",
-            "Version",
-            "Repository",
-            "AcceptLicense",
-            "Prerelease",
-            "Scope",
-            "Quiet",
-            "Reinstall",
-            "TrustRepository",
-            "NoClobber",
-            "SkipDependencyCheck"
-        };
-        foreach (DictionaryEntry option in options)
-        {
-            var key = Convert.ToString(option.Key)?.Trim();
-            if (string.IsNullOrWhiteSpace(key) || !allowed.Contains(key!))
-                throw new InvalidOperationException($"The parameter '{key}' provided is not a recognized or valid required resource parameter.");
-        }
-
-        var name = GetString(options, "Name") ?? fallbackName;
-        var repository = GetString(options, "Repository");
-        var prerelease = GetBool(options, "Prerelease") ?? Prerelease.IsPresent;
-        var reinstall = GetBool(options, "Reinstall") ?? ManagedModuleCommandSupport.ResolveForce(Force.IsPresent, Reinstall.IsPresent);
-        var noClobber = GetBool(options, "NoClobber") ?? false;
-        var acceptLicense = GetBool(options, "AcceptLicense") ?? AcceptLicense.IsPresent;
-        var skipDependencyCheck = GetBool(options, "SkipDependencyCheck") ?? SkipDependencyCheck.IsPresent;
-        var scope = GetScope(options, "Scope") ?? Scope;
-        var version = GetString(options, "Version");
-        SplitRequiredResourceVersion(version, out var exactVersion, out var versionPolicy);
-        return new RequiredResourceTarget(
-            name,
-            exactVersion,
-            null,
-            null,
-            versionPolicy,
-            prerelease,
-            scope,
-            repository,
-            reinstall,
-            AllowClobber.IsPresent && !NoClobber.IsPresent && !noClobber,
-            acceptLicense,
-            skipDependencyCheck);
-    }
-
-    private static IDictionary? AsDictionary(object? value)
-    {
-        if (value is null)
-            return null;
-        if (value is PSObject psObject)
-            value = psObject.BaseObject;
-        return value as IDictionary;
-    }
-
-    private static string? GetString(IDictionary options, string key)
-        => TryGetOption(options, key, out var value) && value is not null
-            ? Convert.ToString(value)?.Trim()
-            : null;
-
-    private static bool? GetBool(IDictionary options, string key)
-    {
-        if (!TryGetOption(options, key, out var value) || value is null)
-            return null;
-        if (value is bool boolean)
-            return boolean;
-        if (bool.TryParse(Convert.ToString(value), out var parsed))
-            return parsed;
-
-        throw new InvalidOperationException($"RequiredResource parameter '{key}' must be a Boolean value.");
-    }
-
-    private static ManagedModuleInstallScope? GetScope(IDictionary options, string key)
-    {
-        var value = GetString(options, key);
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
-        if (Enum.TryParse<ManagedModuleInstallScope>(value, ignoreCase: true, out var scope))
-            return scope;
-
-        throw new InvalidOperationException($"RequiredResource parameter '{key}' has unsupported value '{value}'.");
-    }
-
-    private static bool TryGetOption(IDictionary options, string key, out object? value)
-    {
-        foreach (DictionaryEntry option in options)
-        {
-            if (string.Equals(Convert.ToString(option.Key), key, StringComparison.OrdinalIgnoreCase))
-            {
-                value = option.Value is PSObject psObject ? psObject.BaseObject : option.Value;
-                return true;
-            }
-        }
-
-        value = null;
-        return false;
-    }
-
-    private static void SplitRequiredResourceVersion(string? version, out string? exactVersion, out string? versionPolicy)
-    {
-        exactVersion = null;
-        versionPolicy = null;
-        if (string.IsNullOrWhiteSpace(version))
-            return;
-
-        var trimmed = version!.Trim();
-        if ((trimmed.StartsWith("[", StringComparison.Ordinal) || trimmed.StartsWith("(", StringComparison.Ordinal)) &&
-            trimmed.IndexOf(",", StringComparison.Ordinal) >= 0)
-        {
-            versionPolicy = trimmed;
-            return;
-        }
-
-        if (trimmed.StartsWith("[", StringComparison.Ordinal) &&
-            trimmed.EndsWith("]", StringComparison.Ordinal) &&
-            trimmed.IndexOf(",", StringComparison.Ordinal) < 0)
-        {
-            exactVersion = trimmed.Substring(1, trimmed.Length - 2).Trim();
-            return;
-        }
-
-        exactVersion = trimmed;
-    }
-
-    private sealed class RequiredResourceTarget
-    {
-        public RequiredResourceTarget(
-            string name,
-            string? version,
-            string? minimumVersion,
-            string? maximumVersion,
-            string? versionPolicy,
-            bool includePrerelease,
-            ManagedModuleInstallScope scope,
-            string? repository,
-            bool reinstall,
-            bool allowClobber,
-            bool acceptLicense,
-            bool skipDependencyCheck)
-        {
-            Name = name;
-            Version = version;
-            MinimumVersion = minimumVersion;
-            MaximumVersion = maximumVersion;
-            VersionPolicy = versionPolicy;
-            IncludePrerelease = includePrerelease;
-            Scope = scope;
-            Repository = repository;
-            Reinstall = reinstall;
-            AllowClobber = allowClobber;
-            AcceptLicense = acceptLicense;
-            SkipDependencyCheck = skipDependencyCheck;
-        }
-
-        public string Name { get; }
-        public string? Version { get; }
-        public string? MinimumVersion { get; }
-        public string? MaximumVersion { get; }
-        public string? VersionPolicy { get; }
-        public bool IncludePrerelease { get; }
-        public ManagedModuleInstallScope Scope { get; }
-        public string? Repository { get; }
-        public bool Reinstall { get; }
-        public bool AllowClobber { get; }
-        public bool AcceptLicense { get; }
-        public bool SkipDependencyCheck { get; }
     }
 
 }

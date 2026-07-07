@@ -57,10 +57,11 @@ internal sealed class ModuleStateRepairPlanner
             action.ModuleName,
             action.TargetScope ?? string.Empty,
             action.IsRepair ? action.VersionPolicy ?? string.Empty : string.Empty,
-            action.IsRepair ? action.TargetRepository ?? string.Empty : string.Empty);
+            action.IsRepair ? action.TargetRepository ?? string.Empty : string.Empty,
+            action.IsRepair ? action.TargetRepositorySource ?? string.Empty : string.Empty);
 
     private static string CreateBaseActionKey(ModuleStatePlanAction action)
-        => string.Join("|", action.ModuleName, action.TargetScope ?? string.Empty, string.Empty, string.Empty);
+        => string.Join("|", action.ModuleName, action.TargetScope ?? string.Empty, string.Empty, string.Empty, string.Empty);
 
     private static void RemoveActionKeysForModuleScope(
         IDictionary<string, ModuleStatePlanAction> actionsByModule,
@@ -132,7 +133,7 @@ internal sealed class ModuleStateRepairPlanner
                     continue;
                 }
 
-                var targetRepository = FindCoveredAction(existing, moduleName, selectedModule.Scope)?.TargetRepository;
+                var coveredAction = FindCoveredAction(existing, moduleName, selectedModule.Scope);
                 yield return new ModuleStatePlanAction(
                     ModuleStatePlanActionKind.Update,
                     moduleName,
@@ -141,7 +142,12 @@ internal sealed class ModuleStateRepairPlanner
                     $"Family repair: align '{policy.Name}' modules to the highest installed family version.",
                     isRepair: true,
                     targetScope: selectedModule.Scope,
-                    targetRepository: targetRepository);
+                    targetRepository: coveredAction?.TargetRepository,
+                    targetRepositorySource: coveredAction?.TargetRepositorySource,
+                    includePrerelease: coveredAction?.IncludePrerelease ?? false,
+                    acceptLicense: coveredAction?.AcceptLicense ?? false,
+                    allowClobber: coveredAction?.AllowClobber ?? false,
+                    skipDependencyCheck: coveredAction?.SkipDependencyCheck ?? false);
             }
         }
     }
@@ -167,7 +173,9 @@ internal sealed class ModuleStateRepairPlanner
                 !ManagedModuleInstallService.WouldRepairInstalledManifestDependencies(
                     installedModule.Name,
                     moduleRoot!,
-                    installedModule.Path!))
+                    installedModule.Path!,
+                    action.IncludePrerelease,
+                    action.SkipDependencyCheck))
             {
                 continue;
             }
@@ -181,7 +189,12 @@ internal sealed class ModuleStateRepairPlanner
                 isRepair: true,
                 targetScope: installedModule.Scope,
                 targetPath: moduleRoot,
-                targetRepository: action.TargetRepository);
+                targetRepository: action.TargetRepository,
+                targetRepositorySource: action.TargetRepositorySource,
+                includePrerelease: action.IncludePrerelease,
+                acceptLicense: action.AcceptLicense,
+                allowClobber: action.AllowClobber,
+                skipDependencyCheck: action.SkipDependencyCheck);
         }
     }
 

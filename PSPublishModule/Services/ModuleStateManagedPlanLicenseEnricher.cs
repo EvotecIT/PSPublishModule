@@ -77,20 +77,26 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
         ModuleStateManagedDeliveryOptions options)
     {
         var versionPolicy = ResolveVersionPolicy(action.VersionPolicy);
+        var effectivePrerelease = options.Prerelease || action.IncludePrerelease;
+        var effectiveForce = options.Force || action.Force;
+        var effectiveAllowClobber = options.AllowClobber || action.AllowClobber;
+        var effectiveAcceptLicense = options.AcceptLicense || action.AcceptLicense;
+        var effectiveSkipDependencyCheck = options.SkipDependencyCheck || action.SkipDependencyCheck;
         return new ManagedModuleInstallRequest
         {
             Repository = repository,
             Name = action.ModuleName,
             Version = versionPolicy.ExactVersion,
             VersionPolicy = versionPolicy.RangePolicy,
-            IncludePrerelease = options.Prerelease,
+            IncludePrerelease = effectivePrerelease,
             Scope = ResolveScope(action.TargetScope, action.TargetPath, options.ModuleRoot),
             ModuleRoot = ResolveModuleRoot(action, options),
             ExpectedPackageSha256 = action.ExpectedPackageSha256,
             Credential = options.Credential,
-            Force = options.Force || action.Force,
-            AllowClobber = options.AllowClobber,
-            AcceptLicense = options.AcceptLicense
+            Force = effectiveForce,
+            AllowClobber = effectiveAllowClobber,
+            AcceptLicense = effectiveAcceptLicense,
+            SkipDependencyCheck = effectiveSkipDependencyCheck
         };
     }
 
@@ -100,20 +106,26 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
         ModuleStateManagedDeliveryOptions options)
     {
         var versionPolicy = ResolveVersionPolicy(action.VersionPolicy);
+        var effectivePrerelease = options.Prerelease || action.IncludePrerelease;
+        var effectiveForce = options.Force || action.Force;
+        var effectiveAllowClobber = options.AllowClobber || action.AllowClobber;
+        var effectiveAcceptLicense = options.AcceptLicense || action.AcceptLicense;
+        var effectiveSkipDependencyCheck = options.SkipDependencyCheck || action.SkipDependencyCheck;
         return new ManagedModuleUpdateRequest
         {
             Repository = repository,
             Name = action.ModuleName,
             Version = versionPolicy.ExactVersion,
             VersionPolicy = versionPolicy.RangePolicy,
-            IncludePrerelease = options.Prerelease,
+            IncludePrerelease = effectivePrerelease,
             Scope = ResolveScope(action.TargetScope, action.TargetPath, options.ModuleRoot),
             ModuleRoot = ResolveModuleRoot(action, options),
             ExpectedPackageSha256 = action.ExpectedPackageSha256,
             Credential = options.Credential,
-            Force = options.Force || action.Force,
-            AllowClobber = options.AllowClobber,
-            AcceptLicense = options.AcceptLicense,
+            Force = effectiveForce,
+            AllowClobber = effectiveAllowClobber,
+            AcceptLicense = effectiveAcceptLicense,
+            SkipDependencyCheck = effectiveSkipDependencyCheck,
             SourcePolicy = action.IsRepair ? new ManagedModuleSourcePolicy() : null
         };
     }
@@ -123,9 +135,14 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
         ModuleStateManagedDeliveryOptions options)
         => ModuleStateManagedRepositoryResolver.ResolveRepositoryForAction(
             _cmdlet,
-            action.TargetRepository,
+            ResolveActionDeliveryRepository(action),
             options,
             "Managed module license preflight requires Repository, ProfileName, or action target repository.");
+
+    private static string? ResolveActionDeliveryRepository(ModuleStatePlanActionResult action)
+        => string.IsNullOrWhiteSpace(action.TargetRepositorySource)
+            ? action.TargetRepository
+            : action.TargetRepositorySource;
 
     private static string? ResolveModuleRoot(ModuleStatePlanActionResult action, ModuleStateManagedDeliveryOptions options)
         => string.IsNullOrWhiteSpace(action.TargetPath) ? options.ModuleRoot : action.TargetPath;

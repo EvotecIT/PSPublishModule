@@ -154,6 +154,34 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
     }
 
     [Fact]
+    public void CreateRequest_ForwardsActionManagedOptionsForAutoDelivery()
+    {
+        var request = InvokeCreateRequest(
+            new[]
+            {
+                new ModuleStatePlanAction(
+                    ModuleStatePlanActionKind.Update,
+                    "Company.Tools",
+                    "1.0.0",
+                    "*",
+                    "resource baseline",
+                    includePrerelease: true,
+                    acceptLicense: true,
+                    allowClobber: true,
+                    skipDependencyCheck: true)
+            },
+            new ModuleStatePrivateDeliveryOptions
+            {
+                DeliveryTransport = ModuleStateDeliveryTransport.Auto
+            });
+
+        Assert.True(request.Prerelease);
+        Assert.True(request.ManagedAllowClobber);
+        Assert.True(request.ManagedAcceptLicense);
+        Assert.True(request.ManagedSkipDependencyCheck);
+    }
+
+    [Fact]
     public void CreateRequest_PopulatesManagedRepositorySourceForPathRepository()
     {
         var request = InvokeCreateRequest(
@@ -216,6 +244,27 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
     }
 
     [Fact]
+    public void ResolveActionRepository_PreservesActionRepositorySourceOverTargetIdentity()
+    {
+        var action = new ModuleStatePlanAction(
+            ModuleStatePlanActionKind.Install,
+            "Company.Tools",
+            installedVersion: null,
+            ">=1.2.0",
+            "missing",
+            targetRepository: "Local",
+            targetRepositorySource: @"C:\Feed");
+        var options = new ModuleStatePrivateDeliveryOptions
+        {
+            Repository = "FallbackGallery"
+        };
+
+        var repository = InvokeResolveActionRepository(action, options);
+
+        Assert.Equal(@"C:\Feed", repository);
+    }
+
+    [Fact]
     public void CreateRequest_RejectsConflictingDuplicateModulePolicies()
     {
         var exception = Assert.Throws<TargetInvocationException>(() => InvokeCreateRequest(new[]
@@ -232,8 +281,8 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
     public void DeliveryGroupKey_DistinguishesSameModuleAcrossScopes()
     {
         var comparer = DeliveryGroupKeyComparer.Instance;
-        var currentUser = new DeliveryGroupKey(ModuleStatePlanActionKind.Install, "Company", false, "Company.Tools", "CurrentUser", null);
-        var allUsers = new DeliveryGroupKey(ModuleStatePlanActionKind.Install, "Company", false, "Company.Tools", "AllUsers", null);
+        var currentUser = new DeliveryGroupKey(ModuleStatePlanActionKind.Install, "Company", false, false, false, false, "Company.Tools", "CurrentUser", null);
+        var allUsers = new DeliveryGroupKey(ModuleStatePlanActionKind.Install, "Company", false, false, false, false, "Company.Tools", "AllUsers", null);
 
         Assert.False(comparer.Equals(currentUser, allUsers));
     }
@@ -318,15 +367,19 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
             BindingFlags.Static | BindingFlags.NonPublic);
         Assert.NotNull(method);
 
+        var effectiveOptions = options ?? new ModuleStatePrivateDeliveryOptions();
         var result = method!.Invoke(
             null,
             new object?[]
             {
                 ModuleStatePlanActionKind.Install,
                 repository,
-                actions.Any(static action => action.Force),
+                actions.Any(static action => action.Force) || effectiveOptions.Force,
+                actions.Any(static action => action.AllowClobber) || effectiveOptions.ManagedAllowClobber,
+                actions.Any(static action => action.AcceptLicense) || effectiveOptions.ManagedAcceptLicense,
+                actions.Any(static action => action.SkipDependencyCheck) || effectiveOptions.ManagedSkipDependencyCheck,
                 actions,
-                options ?? new ModuleStatePrivateDeliveryOptions()
+                effectiveOptions
             });
 
         return Assert.IsType<PrivateModuleWorkflowRequest>(result);

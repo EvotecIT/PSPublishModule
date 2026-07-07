@@ -22,7 +22,7 @@ internal sealed class ModuleStateConflictAnalyzer
                 .Where(module => string.Equals(module.Name, desiredModule.Name, StringComparison.OrdinalIgnoreCase))
                 .Where(module => string.IsNullOrWhiteSpace(desiredModule.TargetPath) || IsUnderTargetPath(module.Path, desiredModule.TargetPath!))
                 .ToArray();
-            var policy = ModuleStateVersionPolicy.Parse(desiredModule.VersionPolicy);
+            var policy = ModuleStateVersionPolicy.Parse(desiredModule.VersionPolicy, desiredModule.IncludePrerelease);
 
             if (installedModules.Length == 0)
                 continue;

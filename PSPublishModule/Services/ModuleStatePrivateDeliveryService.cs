@@ -28,6 +28,9 @@ internal sealed class ModuleStatePrivateDeliveryService
                 action.Kind,
                 ResolveActionRepository(action, options),
                 ResolveActionForce(action, options),
+                ResolveManagedAllowClobber(action, options),
+                ResolveManagedAcceptLicense(action, options),
+                ResolveManagedSkipDependencyCheck(action, options),
                 action.ModuleName,
                 action.TargetScope,
                 action.TargetPath),
@@ -45,7 +48,15 @@ internal sealed class ModuleStatePrivateDeliveryService
         foreach (var group in actionable)
         {
             var groupActions = group.ToArray();
-            var request = CreateRequest(group.Key.Kind, group.Key.Repository, group.Key.Force, groupActions, options);
+            var request = CreateRequest(
+                group.Key.Kind,
+                group.Key.Repository,
+                group.Key.Force,
+                group.Key.ManagedAllowClobber,
+                group.Key.ManagedAcceptLicense,
+                group.Key.ManagedSkipDependencyCheck,
+                groupActions,
+                options);
             var workflowResult = service.Execute(request, ShouldProcess);
             results.Add(new ModuleStateDeliveryExecutionResult
             {
@@ -80,6 +91,9 @@ internal sealed class ModuleStatePrivateDeliveryService
         ModuleStatePlanActionKind actionKind,
         string? repository,
         bool force,
+        bool managedAllowClobber,
+        bool managedAcceptLicense,
+        bool managedSkipDependencyCheck,
         IReadOnlyList<ModuleStatePlanAction> actions,
         ModuleStatePrivateDeliveryOptions options)
     {
@@ -111,7 +125,13 @@ internal sealed class ModuleStatePrivateDeliveryService
             CredentialSecretFilePath = options.CredentialSecretFilePath,
             PromptForCredential = options.PromptForCredential
         };
-        ApplyManagedDeliveryOptions(request, actions, options);
+        ApplyManagedDeliveryOptions(
+            request,
+            actions,
+            options,
+            managedAllowClobber,
+            managedAcceptLicense,
+            managedSkipDependencyCheck);
 
         if (!string.IsNullOrWhiteSpace(options.ProfileName))
         {
@@ -145,10 +165,14 @@ internal sealed class ModuleStatePrivateDeliveryService
     private static void ApplyManagedDeliveryOptions(
         PrivateModuleWorkflowRequest request,
         IReadOnlyList<ModuleStatePlanAction> actions,
-        ModuleStatePrivateDeliveryOptions options)
+        ModuleStatePrivateDeliveryOptions options,
+        bool managedAllowClobber,
+        bool managedAcceptLicense,
+        bool managedSkipDependencyCheck)
     {
-        request.ManagedAllowClobber = options.ManagedAllowClobber;
-        request.ManagedAcceptLicense = options.ManagedAcceptLicense;
+        request.ManagedAllowClobber = managedAllowClobber;
+        request.ManagedAcceptLicense = managedAcceptLicense;
+        request.ManagedSkipDependencyCheck = managedSkipDependencyCheck;
         request.ManagedModuleRoot = ResolveManagedModuleRoot(actions, options);
         request.ManagedScope = ResolveManagedScope(actions);
         request.ManagedLoadedModules = options.LoadedModules;
@@ -213,6 +237,8 @@ internal sealed class ModuleStatePrivateDeliveryService
 
     private static string? ResolveActionRepository(ModuleStatePlanAction action, ModuleStatePrivateDeliveryOptions options)
     {
+        if (!string.IsNullOrWhiteSpace(action.TargetRepositorySource))
+            return action.TargetRepositorySource;
         if (!string.IsNullOrWhiteSpace(action.TargetRepository))
             return action.TargetRepository;
         if (!string.IsNullOrWhiteSpace(options.ProfileName))
@@ -228,7 +254,18 @@ internal sealed class ModuleStatePrivateDeliveryService
            (options.Force && action.Kind is ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update);
 
     private static bool RequiresPrereleaseDelivery(IEnumerable<ModuleStatePlanAction> actions)
-        => actions.Any(static action => ConstraintHasPrerelease(ParseVersionConstraint(action.ModuleName, action.VersionPolicy)));
+        => actions.Any(static action =>
+            action.IncludePrerelease ||
+            ConstraintHasPrerelease(ParseVersionConstraint(action.ModuleName, action.VersionPolicy)));
+
+    private static bool ResolveManagedAllowClobber(ModuleStatePlanAction action, ModuleStatePrivateDeliveryOptions options)
+        => options.ManagedAllowClobber || action.AllowClobber;
+
+    private static bool ResolveManagedAcceptLicense(ModuleStatePlanAction action, ModuleStatePrivateDeliveryOptions options)
+        => options.ManagedAcceptLicense || action.AcceptLicense;
+
+    private static bool ResolveManagedSkipDependencyCheck(ModuleStatePlanAction action, ModuleStatePrivateDeliveryOptions options)
+        => options.ManagedSkipDependencyCheck || action.SkipDependencyCheck;
 
     private static bool ConstraintHasPrerelease(ModuleStateVersionConstraint constraint)
         => ContainsPrereleaseBoundary(constraint.RequiredVersion) ||
@@ -376,6 +413,9 @@ internal readonly struct DeliveryGroupKey
         ModuleStatePlanActionKind kind,
         string? repository,
         bool force,
+        bool managedAllowClobber,
+        bool managedAcceptLicense,
+        bool managedSkipDependencyCheck,
         string moduleName,
         string? targetScope,
         string? targetPath)
@@ -383,6 +423,9 @@ internal readonly struct DeliveryGroupKey
         Kind = kind;
         Repository = string.IsNullOrWhiteSpace(repository) ? null : repository!.Trim();
         Force = force;
+        ManagedAllowClobber = managedAllowClobber;
+        ManagedAcceptLicense = managedAcceptLicense;
+        ManagedSkipDependencyCheck = managedSkipDependencyCheck;
         ModuleName = moduleName;
         TargetScope = string.IsNullOrWhiteSpace(targetScope) ? null : targetScope!.Trim();
         TargetPath = string.IsNullOrWhiteSpace(targetPath) ? null : targetPath!.Trim();
@@ -393,6 +436,12 @@ internal readonly struct DeliveryGroupKey
     internal string? Repository { get; }
 
     internal bool Force { get; }
+
+    internal bool ManagedAllowClobber { get; }
+
+    internal bool ManagedAcceptLicense { get; }
+
+    internal bool ManagedSkipDependencyCheck { get; }
 
     internal string ModuleName { get; }
 
@@ -408,6 +457,9 @@ internal sealed class DeliveryGroupKeyComparer : IEqualityComparer<DeliveryGroup
     public bool Equals(DeliveryGroupKey x, DeliveryGroupKey y)
         => x.Kind == y.Kind &&
             x.Force == y.Force &&
+            x.ManagedAllowClobber == y.ManagedAllowClobber &&
+            x.ManagedAcceptLicense == y.ManagedAcceptLicense &&
+            x.ManagedSkipDependencyCheck == y.ManagedSkipDependencyCheck &&
             string.Equals(x.Repository, y.Repository, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(x.ModuleName, y.ModuleName, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(x.TargetScope, y.TargetScope, StringComparison.OrdinalIgnoreCase) &&
@@ -419,6 +471,9 @@ internal sealed class DeliveryGroupKeyComparer : IEqualityComparer<DeliveryGroup
         {
             var hash = ((int)obj.Kind * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Repository ?? string.Empty);
             hash = (hash * 397) ^ obj.Force.GetHashCode();
+            hash = (hash * 397) ^ obj.ManagedAllowClobber.GetHashCode();
+            hash = (hash * 397) ^ obj.ManagedAcceptLicense.GetHashCode();
+            hash = (hash * 397) ^ obj.ManagedSkipDependencyCheck.GetHashCode();
             hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.ModuleName ?? string.Empty);
             hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.TargetScope ?? string.Empty);
             return (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.TargetPath ?? string.Empty);
@@ -453,6 +508,8 @@ internal sealed class ModuleStatePrivateDeliveryOptions
     internal bool ManagedAllowClobber { get; set; }
 
     internal bool ManagedAcceptLicense { get; set; }
+
+    internal bool ManagedSkipDependencyCheck { get; set; }
 
     internal IReadOnlyList<ManagedModuleLoadedModule> LoadedModules { get; set; } = Array.Empty<ManagedModuleLoadedModule>();
 }
