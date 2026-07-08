@@ -90,7 +90,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
             try
             {
-                var includePatterns = ResolveAssemblySigningIncludePatterns(project, spec);
+                var includePatterns = ResolveAssemblySigningIncludePatterns(project, spec, csprojDir, configuration, logger);
                 var resolveOutputWatch = Stopwatch.StartNew();
                 var outputDirectories = ResolveBuildOutputDirectories(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns);
                 var signingPlan = BuildAssemblySigningPlan(outputDirectories, includePatterns);
@@ -349,7 +349,7 @@ public sealed partial class DotNetRepositoryReleaseService
             foreach (var project in projects)
             {
                 var csprojDir = Path.GetDirectoryName(project.CsprojPath) ?? string.Empty;
-                var includePatterns = ResolveAssemblySigningIncludePatterns(project, spec);
+                var includePatterns = ResolveAssemblySigningIncludePatterns(project, spec, csprojDir, configuration, logger);
                 var outputDirectories = ResolveBuildOutputDirectories(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns);
                 var signingPlan = BuildAssemblySigningPlan(outputDirectories, includePatterns);
                 if (signingPlan.Files.Length == 0 && !spec.SignDependencyAssemblies)
@@ -636,8 +636,7 @@ public sealed partial class DotNetRepositoryReleaseService
             if (string.IsNullOrWhiteSpace(includePattern))
                 continue;
 
-            if (Directory.EnumerateFiles(directory, includePattern, SearchOption.AllDirectories)
-                    .Any(static file => !IsInternalsPath(file)))
+            if (Directory.EnumerateFiles(directory, includePattern, SearchOption.AllDirectories).Any())
                 return true;
         }
 
@@ -654,7 +653,8 @@ public sealed partial class DotNetRepositoryReleaseService
         if (spec.SignDependencyAssemblies)
             return new[] { "*.dll", "*.exe" };
 
-        var assemblyNames = new[] { ResolveAssemblyName(project.CsprojPath, project.ProjectName, workingDirectory, configuration, logger), project.ProjectName }
+        var assemblyNames = ResolveAssemblyNames(project.CsprojPath, project.ProjectName, workingDirectory, configuration, logger)
+            .Concat(new[] { project.ProjectName })
             .Where(static name => !string.IsNullOrWhiteSpace(name))
             .Select(static name => name!.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -688,8 +688,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 if (string.IsNullOrWhiteSpace(includePattern))
                     continue;
 
-                files.AddRange(Directory.EnumerateFiles(outputDirectory, includePattern, SearchOption.AllDirectories)
-                    .Where(static file => !IsInternalsPath(file)));
+                files.AddRange(Directory.EnumerateFiles(outputDirectory, includePattern, SearchOption.AllDirectories));
             }
         }
 
@@ -709,44 +708,46 @@ public sealed partial class DotNetRepositoryReleaseService
             .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
             .SequenceEqual(right.OrderBy(static value => value, StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
 
-    private static bool IsInternalsPath(string filePath)
-    {
-        return filePath.IndexOf($"{Path.DirectorySeparatorChar}Internals{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               filePath.IndexOf("/Internals/", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               filePath.IndexOf("\\Internals\\", StringComparison.OrdinalIgnoreCase) >= 0;
-    }
-
-    private static string ResolveAssemblyName(
+    private static string[] ResolveAssemblyNames(
         string csproj,
         string projectName,
         string? workingDirectory = null,
         string? configuration = null,
         ILogger? logger = null)
     {
-        var evaluatedAssemblyName = ResolveEvaluatedAssemblyName(csproj, workingDirectory, configuration, projectName, logger);
-        if (IsUsableAssemblyName(evaluatedAssemblyName))
-            return evaluatedAssemblyName!.Trim();
+        var assemblyNames = new List<string>();
+        var evaluatedAssemblyNames = ResolveEvaluatedAssemblyNames(csproj, workingDirectory, configuration, projectName, logger);
+        assemblyNames.AddRange(evaluatedAssemblyNames);
 
-        try
+        if (evaluatedAssemblyNames.Length == 0)
         {
-            var document = XDocument.Load(csproj);
-            var assemblyName = document.Descendants()
-                .FirstOrDefault(element => string.Equals(element.Name.LocalName, "AssemblyName", StringComparison.OrdinalIgnoreCase))
-                ?.Value;
-            if (IsUsableAssemblyName(assemblyName))
-                return assemblyName!.Trim();
-        }
-        catch
-        {
-            // Project file metadata is best-effort here; the csproj name is the SDK default.
+            try
+            {
+                var document = XDocument.Load(csproj);
+                assemblyNames.AddRange(document.Descendants()
+                    .Where(element => string.Equals(element.Name.LocalName, "AssemblyName", StringComparison.OrdinalIgnoreCase))
+                    .Select(static element => element.Value)
+                    .Where(IsUsableAssemblyName)
+                    .Select(static assemblyName => assemblyName!.Trim()));
+            }
+            catch
+            {
+                // Project file metadata is best-effort here; the csproj name is the SDK default.
+            }
         }
 
-        return string.IsNullOrWhiteSpace(projectName)
+        assemblyNames.Add(string.IsNullOrWhiteSpace(projectName)
             ? Path.GetFileNameWithoutExtension(csproj) ?? "Project"
-            : projectName.Trim();
+            : projectName.Trim());
+
+        return assemblyNames
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Select(static name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
-    private static string? ResolveEvaluatedAssemblyName(
+    private static string[] ResolveEvaluatedAssemblyNames(
         string csproj,
         string? workingDirectory,
         string? configuration,
@@ -754,8 +755,9 @@ public sealed partial class DotNetRepositoryReleaseService
         ILogger? logger)
     {
         if (string.IsNullOrWhiteSpace(workingDirectory) || string.IsNullOrWhiteSpace(configuration) || logger is null)
-            return null;
+            return Array.Empty<string>();
 
+        var assemblyNames = new List<string>();
         foreach (var targetFramework in ReadTargetFrameworks(csproj))
         {
             var exitCode = RunDotnetMsBuildGetProperty(
@@ -772,10 +774,12 @@ public sealed partial class DotNetRepositoryReleaseService
                 out _);
 
             if (exitCode == 0 && IsUsableAssemblyName(value))
-                return value!.Trim();
+                assemblyNames.Add(value!.Trim());
         }
 
-        return null;
+        return assemblyNames
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static bool IsUsableAssemblyName(string? assemblyName)

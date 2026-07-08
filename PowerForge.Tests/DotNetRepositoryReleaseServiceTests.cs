@@ -685,6 +685,127 @@ public sealed class DotNetRepositoryReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_WithAssemblySigning_IncludesOwnAssemblyUnderInternalsDirectory()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Src", "Internals", "Sample.Package"));
+            File.WriteAllText(Path.Combine(projectDir.FullName, "Sample.Package.csproj"), string.Join(Environment.NewLine, new[]
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <TargetFramework>net8.0</TargetFramework>",
+                "    <PackageId>Sample.Package</PackageId>",
+                "    <VersionPrefix>1.2.3</VersionPrefix>",
+                "    <IsPackable>true</IsPackable>",
+                "  </PropertyGroup>",
+                "</Project>"
+            }));
+            File.WriteAllText(Path.Combine(projectDir.FullName, "Class1.cs"), "namespace Sample.Package; public static class Class1 { public static string Value => \"signed\"; }");
+
+            var signedPath = string.Empty;
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Configuration = "Release",
+                OutputPath = Path.Combine(root.FullName, "packages"),
+                Pack = true,
+                Publish = false,
+                UpdateVersions = false,
+                CreateReleaseZip = false,
+                CertificateThumbprint = "ABC123",
+                SignAssemblies = true,
+                SignPackages = false
+            };
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(
+                spec,
+                request =>
+                {
+                    var filePaths = Assert.IsType<string[]>(request.FilePaths);
+                    signedPath = filePaths.Single(path => path.EndsWith("Sample.Package.dll", StringComparison.OrdinalIgnoreCase));
+                    Assert.Contains($"{Path.DirectorySeparatorChar}Internals{Path.DirectorySeparatorChar}", signedPath, StringComparison.OrdinalIgnoreCase);
+                },
+                _ => { });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.False(string.IsNullOrWhiteSpace(signedPath));
+            Assert.True(File.Exists(signedPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Execute_WithAssemblySigning_IncludesEveryEvaluatedTargetFrameworkAssemblyName()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Src", "Sample.Package"));
+            File.WriteAllText(Path.Combine(projectDir.FullName, "Sample.Package.csproj"), string.Join(Environment.NewLine, new[]
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>",
+                "    <PackageId>Sample.Package</PackageId>",
+                "    <VersionPrefix>1.2.3</VersionPrefix>",
+                "    <IsPackable>true</IsPackable>",
+                "  </PropertyGroup>",
+                "  <PropertyGroup Condition=\"'$(TargetFramework)' == 'net8.0'\">",
+                "    <AssemblyName>Sample.Net8</AssemblyName>",
+                "  </PropertyGroup>",
+                "  <PropertyGroup Condition=\"'$(TargetFramework)' == 'net10.0'\">",
+                "    <AssemblyName>Sample.Net10</AssemblyName>",
+                "  </PropertyGroup>",
+                "</Project>"
+            }));
+            File.WriteAllText(Path.Combine(projectDir.FullName, "Class1.cs"), "namespace Sample.Package; public static class Class1 { public static string Value => \"signed\"; }");
+
+            string[]? includePatterns = null;
+            string[]? signedPaths = null;
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Configuration = "Release",
+                OutputPath = Path.Combine(root.FullName, "packages"),
+                Pack = true,
+                Publish = false,
+                UpdateVersions = false,
+                CreateReleaseZip = false,
+                CertificateThumbprint = "ABC123",
+                SignAssemblies = true,
+                SignPackages = false
+            };
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(
+                spec,
+                request =>
+                {
+                    includePatterns = request.IncludePatterns;
+                    signedPaths = Assert.IsType<string[]>(request.FilePaths);
+                },
+                _ => { });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.NotNull(includePatterns);
+            Assert.Contains("Sample.Net8.dll", includePatterns!);
+            Assert.Contains("Sample.Net10.dll", includePatterns!);
+            Assert.DoesNotContain("*.dll", includePatterns!);
+            Assert.NotNull(signedPaths);
+            Assert.Contains(signedPaths!, path => path.EndsWith("Sample.Net8.dll", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(signedPaths!, path => path.EndsWith("Sample.Net10.dll", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Execute_WithAssemblySigningDependencyOptIn_UsesBroadIncludePatterns()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
