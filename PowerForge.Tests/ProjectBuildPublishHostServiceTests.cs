@@ -24,6 +24,7 @@ public sealed class ProjectBuildPublishHostServiceTests
               "GitHubUsername": "EvotecIT",
               "GitHubRepositoryName": "PSPublishModule",
               "GitHubReleaseMode": "PerProject",
+              "PublishFailFast": false,
             }
             """);
 
@@ -42,6 +43,7 @@ public sealed class ProjectBuildPublishHostServiceTests
             Assert.Equal("EvotecIT", configuration.GitHubUsername);
             Assert.Equal("PSPublishModule", configuration.GitHubRepositoryName);
             Assert.Equal("PerProject", configuration.GitHubReleaseMode);
+            Assert.False(configuration.PublishFailFast);
         }
         finally
         {
@@ -110,7 +112,8 @@ public sealed class ProjectBuildPublishHostServiceTests
             GitHubTagName = "v1.2.3",
             GitHubTagTemplate = "{Project}-v{Version}",
             GitHubPrimaryProject = "PSPublishModule",
-            GitHubTagConflictPolicy = "AppendUtcTimestamp"
+            GitHubTagConflictPolicy = "AppendUtcTimestamp",
+            PublishFailFast = false
         };
 
         var release = new DotNetRepositoryReleaseResult {
@@ -142,6 +145,7 @@ public sealed class ProjectBuildPublishHostServiceTests
         Assert.Equal("{Project}-v{Version}", captured.TagTemplate);
         Assert.Equal("PSPublishModule", captured.PrimaryProject);
         Assert.Equal("AppendUtcTimestamp", captured.TagConflictPolicy);
+        Assert.False(captured.PublishFailFast);
     }
 
     private sealed class EnvironmentScope : IDisposable

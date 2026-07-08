@@ -60,6 +60,48 @@ public sealed class ProjectBuildGitHubPreflightTests
         Assert.Null(advisory);
     }
 
+    [Fact]
+    public void Validate_SkipsReleaseProbe_WhenTagTemplateContainsTimestamp()
+    {
+        var probeCalls = 0;
+        var service = new ProjectBuildGitHubPreflightService(
+            new NullLogger(),
+            probeRelease: (_, _, _, _) =>
+            {
+                probeCalls++;
+                return new ProjectBuildGitHubPreflightService.GitHubReleaseProbeResult { Exists = true };
+            });
+
+        var plan = new DotNetRepositoryReleaseResult
+        {
+            Success = true,
+            Projects =
+            {
+                new DotNetRepositoryProjectResult
+                {
+                    ProjectName = "OfficeIMO.Word",
+                    IsPackable = true,
+                    NewVersion = "1.0.75",
+                    ReleaseZipPath = "OfficeIMO.Word.1.0.75.zip"
+                }
+            }
+        };
+
+        var result = service.Validate(
+            new ProjectBuildConfiguration
+            {
+                GitHubReleaseMode = "Single",
+                GitHubUsername = "EvotecIT",
+                GitHubRepositoryName = "OfficeIMO",
+                GitHubTagTemplate = "{Repo}-v{UtcTimestamp}"
+            },
+            plan,
+            "token");
+
+        Assert.Null(result);
+        Assert.Equal(0, probeCalls);
+    }
+
     private static List<DotNetRepositoryProjectResult> CreateProjects() =>
         new()
         {

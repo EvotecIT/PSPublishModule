@@ -43,6 +43,7 @@ internal sealed class ProjectBuildConfiguration
     public string? CertificateStore { get; set; }
     public string? TimeStampServer { get; set; }
     public bool? SignAssemblies { get; set; }
+    public bool? SignDependencyAssemblies { get; set; }
     public bool? SignPackages { get; set; }
     public string? NugetCredentialUserName { get; set; }
     public string? NugetCredentialSecret { get; set; }

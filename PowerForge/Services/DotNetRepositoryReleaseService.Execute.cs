@@ -318,9 +318,7 @@ public sealed partial class DotNetRepositoryReleaseService
             {
                 DotNetPackResult? batchPackResult = null;
                 HashSet<DotNetRepositoryProjectResult>? batchCandidateSet = null;
-                var batchPackRequested = spec.PackStrategy == DotNetRepositoryPackStrategy.MSBuild && !spec.WhatIf && !signAssemblyOutputs;
-                if (spec.PackStrategy == DotNetRepositoryPackStrategy.MSBuild && !spec.WhatIf && signAssemblyOutputs)
-                    _logger.Info("Assembly signing enabled; using per-project pack so build outputs can be signed before packages are created.");
+                var batchPackRequested = spec.PackStrategy == DotNetRepositoryPackStrategy.MSBuild && !spec.WhatIf;
                 if (batchPackRequested)
                 {
                     var batchCandidates = packable
@@ -350,7 +348,7 @@ public sealed partial class DotNetRepositoryReleaseService
                     else if (batchCandidates.Length > 0)
                     {
                         _logger.Info($"Packing {batchCandidates.Length} project(s) with MSBuild batch strategy...");
-                        batchPackResult = PackProjectsWithMsBuild(batchCandidates, spec, _logger);
+                        batchPackResult = PackProjectsWithMsBuild(batchCandidates, spec, _logger, signAssemblyOutputs ? signAssemblies : null);
                         if (!batchPackResult.Success)
                         {
                             var batchError = $"{batchPackResult.ErrorMessage ?? "MSBuild batch pack failed."} (MSBuild batch failed; enable verbose logging to see per-project MSBuild output.)";
@@ -434,37 +432,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         var packTiming = batchPackResult is null
                             ? $" in {FormatDuration(packResult.Duration)}"
                             : " from MSBuild batch";
-                        _logger.Success($"{project.ProjectName}: packed {filtered.Count} package(s){packTiming}.");
-                    }
-
-                    if (signNuGetPackages && signingSha256 is not null)
-                    {
-                        if (project.Packages.Count == 0)
-                        {
-                            project.ErrorMessage = "No packages to sign.";
-                            _logger.Warn($"{project.ProjectName}: {project.ErrorMessage}");
-                            result.Success = false;
-                            if (spec.PublishFailFast)
-                                return result;
-                            continue;
-                        }
-
-                        _logger.Info($"Signing {project.ProjectName} package(s)...");
-                        var signingWatch = Stopwatch.StartNew();
-                        if (!SignPackages(project.Packages, spec, signingSha256, out var signError))
-                        {
-                            signingWatch.Stop();
-                            project.ErrorMessage = signError;
-                            _logger.Warn($"{project.ProjectName}: {signError}");
-                            result.Success = false;
-                            if (spec.PublishFailFast)
-                                return result;
-                        }
-                        else
-                        {
-                            signingWatch.Stop();
-                            _logger.Success($"{project.ProjectName}: signed {project.Packages.Count} package(s) in {FormatDuration(signingWatch.Elapsed)}.");
-                        }
+                        _logger.Success($"{project.ProjectName}: package workflow produced {filtered.Count} package(s){packTiming}.");
                     }
 
                     if (spec.CreateReleaseZip && !string.IsNullOrWhiteSpace(project.NewVersion))
@@ -490,6 +458,36 @@ public sealed partial class DotNetRepositoryReleaseService
                                 var zipSize = File.Exists(zipPath) ? new FileInfo(zipPath).Length : 0;
                                 _logger.Success($"{project.ProjectName}: release zip created in {FormatDuration(zipWatch.Elapsed)} ({zippedFiles} file(s), {FormatBytes(zippedBytes)} input, {FormatBytes(zipSize)} zip).");
                             }
+                        }
+                    }
+                }
+
+                if (!spec.WhatIf && signNuGetPackages && signingSha256 is not null)
+                {
+                    var packagesToSign = packable
+                        .Where(project => string.IsNullOrWhiteSpace(project.ErrorMessage))
+                        .SelectMany(project => project.Packages)
+                        .Where(package => !string.IsNullOrWhiteSpace(package))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+
+                    if (packagesToSign.Length > 0)
+                    {
+                        _logger.Info($"Signing {packagesToSign.Length} NuGet package(s)...");
+                        var signingWatch = Stopwatch.StartNew();
+                        if (!SignPackages(packagesToSign, spec, signingSha256, out var signError))
+                        {
+                            signingWatch.Stop();
+                            result.ErrorMessage = signError;
+                            _logger.Warn(signError);
+                            result.Success = false;
+                            if (spec.PublishFailFast)
+                                return result;
+                        }
+                        else
+                        {
+                            signingWatch.Stop();
+                            _logger.Success($"Signed {packagesToSign.Length} NuGet package(s) in {FormatDuration(signingWatch.Elapsed)}.");
                         }
                     }
                 }
@@ -527,6 +525,7 @@ public sealed partial class DotNetRepositoryReleaseService
                     .GroupBy(x => x.Package, StringComparer.OrdinalIgnoreCase)
                     .ToDictionary(g => g.Key, g => g.First().Project, StringComparer.OrdinalIgnoreCase);
 
+                var publishWatch = Stopwatch.StartNew();
                 foreach (var pkg in packages)
                 {
                     if (spec.WhatIf)
@@ -536,18 +535,20 @@ public sealed partial class DotNetRepositoryReleaseService
                     }
 
                     _logger.Info($"Publishing {Path.GetFileName(pkg)}...");
+                    var packagePublishWatch = Stopwatch.StartNew();
                     var push = PushPackage(pkg, spec.PublishApiKey!, source, spec.SkipDuplicate, out var pushResult);
+                    packagePublishWatch.Stop();
                     if (push)
                     {
                         if (pushResult.Outcome == PackagePushOutcome.SkippedDuplicate)
                         {
                             result.SkippedDuplicatePackages.Add(pkg);
-                            _logger.Info($"Skipped duplicate {Path.GetFileName(pkg)}; package already exists in the feed.");
+                            _logger.Info($"Skipped duplicate {Path.GetFileName(pkg)} in {FormatDuration(packagePublishWatch.Elapsed)}; package already exists in the feed.");
                         }
                         else
                         {
                             result.PublishedPackages.Add(pkg);
-                            _logger.Success($"Published {Path.GetFileName(pkg)}.");
+                            _logger.Success($"Published {Path.GetFileName(pkg)} in {FormatDuration(packagePublishWatch.Elapsed)}.");
                         }
                     }
                     else
@@ -555,7 +556,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         result.Success = false;
                         result.FailedPackages.Add(pkg);
                         var error = pushResult.Message;
-                        _logger.Warn($"NuGet push failed for {pkg}: {error}");
+                        _logger.Warn($"NuGet push failed for {pkg} after {FormatDuration(packagePublishWatch.Elapsed)}: {error}");
                         if (packageLookup.TryGetValue(pkg, out var project) && string.IsNullOrWhiteSpace(project.ErrorMessage))
                             project.ErrorMessage = $"Publish failed for {Path.GetFileName(pkg)}: {error}";
                         if (spec.PublishFailFast)
@@ -566,6 +567,12 @@ public sealed partial class DotNetRepositoryReleaseService
                         }
                     }
                 }
+                publishWatch.Stop();
+                var publishSummary = $"NuGet publish phase completed in {FormatDuration(publishWatch.Elapsed)} ({result.PublishedPackages.Count} published, {result.SkippedDuplicatePackages.Count} skipped duplicate, {result.FailedPackages.Count} failed).";
+                if (result.FailedPackages.Count == 0)
+                    _logger.Success(publishSummary);
+                else
+                    _logger.Warn(publishSummary);
             }
 
             if (result.ResolvedVersionsByProject.Count > 0)

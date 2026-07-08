@@ -25,8 +25,44 @@ public sealed class DotNetNuGetSignRequest
         bool overwrite = true,
         string? workingDirectory = null,
         TimeSpan? timeout = null)
+        : this(
+            new[] { packagePath },
+            certificateFingerprint,
+            certificateStoreLocation,
+            timeStampServer,
+            certificateStoreName,
+            overwrite,
+            workingDirectory,
+            timeout)
     {
-        PackagePath = packagePath;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DotNetNuGetSignRequest"/> class.
+    /// </summary>
+    /// <param name="packagePaths">Package paths to sign.</param>
+    /// <param name="certificateFingerprint">SHA256 certificate fingerprint.</param>
+    /// <param name="certificateStoreLocation">Certificate store location.</param>
+    /// <param name="timeStampServer">Timestamp server URL.</param>
+    /// <param name="certificateStoreName">Certificate store name. Defaults to <c>My</c>.</param>
+    /// <param name="overwrite">When true, passes <c>--overwrite</c>.</param>
+    /// <param name="workingDirectory">Optional working directory override.</param>
+    /// <param name="timeout">Optional timeout override.</param>
+    public DotNetNuGetSignRequest(
+        IEnumerable<string> packagePaths,
+        string certificateFingerprint,
+        string certificateStoreLocation,
+        string timeStampServer,
+        string certificateStoreName = "My",
+        bool overwrite = true,
+        string? workingDirectory = null,
+        TimeSpan? timeout = null)
+    {
+        PackagePaths = (packagePaths ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         CertificateFingerprint = certificateFingerprint;
         CertificateStoreLocation = certificateStoreLocation;
         CertificateStoreName = certificateStoreName;
@@ -39,7 +75,12 @@ public sealed class DotNetNuGetSignRequest
     /// <summary>
     /// Gets the package path to sign.
     /// </summary>
-    public string PackagePath { get; }
+    public string PackagePath => PackagePaths.FirstOrDefault() ?? string.Empty;
+
+    /// <summary>
+    /// Gets the package paths to sign.
+    /// </summary>
+    public string[] PackagePaths { get; }
 
     /// <summary>
     /// Gets the SHA256 certificate fingerprint.

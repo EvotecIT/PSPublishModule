@@ -69,7 +69,8 @@ public sealed class ProjectBuildPublishHostService
             GitHubTagTemplate = TrimOrNull(config.GitHubTagTemplate),
             GitHubReleaseMode = releaseMode,
             GitHubPrimaryProject = TrimOrNull(config.GitHubPrimaryProject),
-            GitHubTagConflictPolicy = TrimOrNull(config.GitHubTagConflictPolicy)
+            GitHubTagConflictPolicy = TrimOrNull(config.GitHubTagConflictPolicy),
+            PublishFailFast = config.PublishFailFast ?? true
         };
     }
 
@@ -94,7 +95,8 @@ public sealed class ProjectBuildPublishHostService
             TagName = configuration.GitHubTagName,
             TagTemplate = configuration.GitHubTagTemplate,
             PrimaryProject = configuration.GitHubPrimaryProject,
-            TagConflictPolicy = configuration.GitHubTagConflictPolicy
+            TagConflictPolicy = configuration.GitHubTagConflictPolicy,
+            PublishFailFast = configuration.PublishFailFast
         };
 
         return (_publishGitHub ?? (publishRequest => new ProjectBuildGitHubPublisher(_logger).Publish(publishRequest)))(request);

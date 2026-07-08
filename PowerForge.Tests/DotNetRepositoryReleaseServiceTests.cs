@@ -246,6 +246,13 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.Equal("Pack", msbuildTasks[2].Attribute("Targets")?.Value);
             Assert.Equal("Configuration=Release", msbuildTasks[0].Attribute("Properties")?.Value);
             Assert.Equal("Configuration=Release", msbuildTasks[1].Attribute("Properties")?.Value);
+            Assert.Equal("RestoreSelected", msbuildTasks[0].Parent?.Attribute("Name")?.Value);
+            Assert.Equal("BuildSelected", msbuildTasks[1].Parent?.Attribute("Name")?.Value);
+            Assert.Equal("PackOnlySelected", msbuildTasks[2].Parent?.Attribute("Name")?.Value);
+            Assert.Equal("RestoreSelected", msbuildTasks[1].Parent?.Attribute("DependsOnTargets")?.Value);
+            Assert.Equal("BuildSelected;PackOnlySelected", document.Descendants("Target")
+                .Single(target => string.Equals(target.Attribute("Name")?.Value, "PackSelected", StringComparison.Ordinal))
+                .Attribute("DependsOnTargets")?.Value);
             Assert.Equal(
                 $"Configuration=Release;PackageOutputPath={outputPath.Replace("%", "%25").Replace(";", "%3B").Replace("=", "%3D").Replace("$", "%24").Replace("@", "%40")};NoBuild=true;BuildProjectReferences=false",
                 msbuildTasks[2].Attribute("Properties")?.Value);
@@ -324,6 +331,88 @@ public sealed class DotNetRepositoryReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_MsBuildBatchPack_WithAssemblySigning_SignsBuildOutputsBeforeNoBuildPack()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var sharedDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Shared"));
+            File.WriteAllText(Path.Combine(sharedDir.FullName, "Shared.csproj"), string.Join(Environment.NewLine, new[]
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <TargetFramework>net8.0</TargetFramework>",
+                "    <PackageId>Sample.Shared</PackageId>",
+                "    <VersionPrefix>1.0.0</VersionPrefix>",
+                "    <IsPackable>true</IsPackable>",
+                "  </PropertyGroup>",
+                "</Project>"
+            }));
+            File.WriteAllText(Path.Combine(sharedDir.FullName, "Greeter.cs"), "namespace Sample.Shared; public static class Greeter { public static string Hello() => \"hello\"; }");
+
+            var consumerDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Consumer"));
+            File.WriteAllText(Path.Combine(consumerDir.FullName, "Consumer.csproj"), string.Join(Environment.NewLine, new[]
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <TargetFramework>net8.0</TargetFramework>",
+                "    <PackageId>Sample.Consumer</PackageId>",
+                "    <VersionPrefix>1.0.0</VersionPrefix>",
+                "    <IsPackable>true</IsPackable>",
+                "  </PropertyGroup>",
+                "  <ItemGroup>",
+                "    <ProjectReference Include=\"..\\Shared\\Shared.csproj\" />",
+                "  </ItemGroup>",
+                "</Project>"
+            }));
+            File.WriteAllText(Path.Combine(consumerDir.FullName, "Consumer.cs"), "namespace Sample.Consumer; public static class Consumer { public static string Hello() => Sample.Shared.Greeter.Hello(); }");
+
+            var signedAssemblies = 0;
+            var outputPath = Path.Combine(root.FullName, "packages");
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Configuration = "Release",
+                OutputPath = outputPath,
+                Pack = true,
+                PackStrategy = DotNetRepositoryPackStrategy.MSBuild,
+                Publish = false,
+                UpdateVersions = false,
+                CreateReleaseZip = false,
+                CertificateThumbprint = "ABC123",
+                SignAssemblies = true,
+                SignPackages = false
+            };
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(
+                spec,
+                request =>
+                {
+                    Assert.Equal("ABC123", request.CertificateThumbprint);
+                    var filePaths = Assert.IsType<string[]>(request.FilePaths);
+                    signedAssemblies += filePaths.Count(path => path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
+                    Assert.Contains(filePaths, path => path.EndsWith(Path.Combine("Shared", "bin", "Release", "net8.0", "Shared.dll"), StringComparison.OrdinalIgnoreCase));
+                    Assert.Contains(filePaths, path => path.EndsWith(Path.Combine("Consumer", "bin", "Release", "net8.0", "Consumer.dll"), StringComparison.OrdinalIgnoreCase));
+                },
+                _ => { });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(2, signedAssemblies);
+            Assert.True(File.Exists(Path.Combine(outputPath, "Sample.Shared.1.0.0.nupkg")));
+            Assert.True(File.Exists(Path.Combine(outputPath, "Sample.Consumer.1.0.0.nupkg")));
+            Assert.All(result.Projects.Where(project => project.IsPackable), project =>
+            {
+                Assert.Single(project.Packages);
+                Assert.True(string.IsNullOrWhiteSpace(project.ErrorMessage), project.ErrorMessage);
+            });
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Execute_WithAssemblySigning_SignsBuildOutputsBeforePacking()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -367,8 +456,11 @@ public sealed class DotNetRepositoryReleaseServiceTests
                     signingCalls++;
                     Assert.Equal(CertificateStoreLocation.CurrentUser, request.LocalStore);
                     Assert.Equal("ABC123", request.CertificateThumbprint);
-                    var assembly = Directory.EnumerateFiles(request.ReleasePath, "Sample.Package.dll", SearchOption.AllDirectories)
-                        .SingleOrDefault();
+                    Assert.Contains("Sample.Package.dll", request.IncludePatterns);
+                    Assert.Contains("Sample.Package.exe", request.IncludePatterns);
+                    Assert.DoesNotContain("*.dll", request.IncludePatterns);
+                    var filePaths = Assert.IsType<string[]>(request.FilePaths);
+                    var assembly = filePaths.SingleOrDefault(path => path.EndsWith("Sample.Package.dll", StringComparison.OrdinalIgnoreCase));
                     Assert.False(string.IsNullOrWhiteSpace(assembly));
                     signedMarker = Path.Combine(Path.GetDirectoryName(assembly!)!, "signed.marker");
                     File.WriteAllText(signedMarker, "signed-before-pack");
@@ -386,6 +478,122 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.Single(project.Packages);
             Assert.True(File.Exists(project.Packages[0]));
             Assert.True(File.Exists(project.ReleaseZipPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Execute_WithAssemblySigning_UsesEvaluatedAssemblyNameWhenImported()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            File.WriteAllText(Path.Combine(root.FullName, "Directory.Build.props"), string.Join(Environment.NewLine, new[]
+            {
+                "<Project>",
+                "  <PropertyGroup>",
+                "    <AssemblyName>Signed.Sample</AssemblyName>",
+                "  </PropertyGroup>",
+                "</Project>"
+            }));
+
+            var projectDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Src", "Sample.Package"));
+            File.WriteAllText(Path.Combine(projectDir.FullName, "Sample.Package.csproj"), string.Join(Environment.NewLine, new[]
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <TargetFramework>net8.0</TargetFramework>",
+                "    <PackageId>Sample.Package</PackageId>",
+                "    <VersionPrefix>1.2.3</VersionPrefix>",
+                "    <IsPackable>true</IsPackable>",
+                "  </PropertyGroup>",
+                "</Project>"
+            }));
+            File.WriteAllText(Path.Combine(projectDir.FullName, "Class1.cs"), "namespace Sample.Package; public static class Class1 { public static string Value => \"signed\"; }");
+
+            var signedPath = string.Empty;
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Configuration = "Release",
+                OutputPath = Path.Combine(root.FullName, "packages"),
+                Pack = true,
+                Publish = false,
+                UpdateVersions = false,
+                CreateReleaseZip = false,
+                CertificateThumbprint = "ABC123",
+                SignAssemblies = true,
+                SignPackages = false
+            };
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(
+                spec,
+                request =>
+                {
+                    Assert.Contains("Signed.Sample.dll", request.IncludePatterns);
+                    Assert.DoesNotContain("*.dll", request.IncludePatterns);
+                    var filePaths = Assert.IsType<string[]>(request.FilePaths);
+                    signedPath = filePaths.Single(path => path.EndsWith("Signed.Sample.dll", StringComparison.OrdinalIgnoreCase));
+                },
+                _ => { });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.False(string.IsNullOrWhiteSpace(signedPath));
+            Assert.True(File.Exists(signedPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Execute_WithAssemblySigningDependencyOptIn_UsesBroadIncludePatterns()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Src", "Sample.Package"));
+            File.WriteAllText(Path.Combine(projectDir.FullName, "Sample.Package.csproj"), string.Join(Environment.NewLine, new[]
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <TargetFramework>net8.0</TargetFramework>",
+                "    <PackageId>Sample.Package</PackageId>",
+                "    <VersionPrefix>1.2.3</VersionPrefix>",
+                "    <IsPackable>true</IsPackable>",
+                "  </PropertyGroup>",
+                "</Project>"
+            }));
+            File.WriteAllText(Path.Combine(projectDir.FullName, "Class1.cs"), "namespace Sample.Package; public static class Class1 { public static string Value => \"signed\"; }");
+
+            string[]? includePatterns = null;
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Configuration = "Release",
+                OutputPath = Path.Combine(root.FullName, "packages"),
+                Pack = true,
+                Publish = false,
+                UpdateVersions = false,
+                CertificateThumbprint = "ABC123",
+                SignAssemblies = true,
+                SignDependencyAssemblies = true,
+                SignPackages = false
+            };
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(
+                spec,
+                request => includePatterns = request.IncludePatterns,
+                _ => { });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.NotNull(includePatterns);
+            Assert.Contains("*.dll", includePatterns!);
+            Assert.Contains("*.exe", includePatterns!);
         }
         finally
         {
@@ -433,10 +641,10 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 spec,
                 request =>
                 {
-                    Assert.Contains("custom-output", request.ReleasePath, StringComparison.OrdinalIgnoreCase);
-                    var assembly = Directory.EnumerateFiles(request.ReleasePath, "Sample.Package.dll", SearchOption.AllDirectories)
-                        .SingleOrDefault();
+                    var filePaths = Assert.IsType<string[]>(request.FilePaths);
+                    var assembly = filePaths.SingleOrDefault(path => path.EndsWith("Sample.Package.dll", StringComparison.OrdinalIgnoreCase));
                     Assert.False(string.IsNullOrWhiteSpace(assembly));
+                    Assert.Contains("custom-output", assembly, StringComparison.OrdinalIgnoreCase);
                     signedPath = assembly!;
                 },
                 _ => { });

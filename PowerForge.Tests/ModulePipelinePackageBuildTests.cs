@@ -584,7 +584,13 @@ public sealed partial class ModulePipelinePackageBuildTests
                         Success = true,
                         ConfigPath = configPath ?? request.ConfigPath,
                         RootPath = root.FullName,
-                        Result = new ProjectBuildResult { Success = true }
+                        Result = new ProjectBuildResult
+                        {
+                            Success = true,
+                            Release = request.Build == true
+                                ? new DotNetRepositoryReleaseResult { Success = true }
+                                : null
+                        }
                     };
                 });
 

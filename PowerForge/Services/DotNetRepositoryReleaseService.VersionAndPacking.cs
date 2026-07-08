@@ -78,6 +78,7 @@ public sealed partial class DotNetRepositoryReleaseService
         var shouldSignAssemblies = signAssemblies is not null && !string.IsNullOrWhiteSpace(spec.CertificateThumbprint);
         if (shouldSignAssemblies)
         {
+            logger.Info($"{project.ProjectName}: building assemblies before pack signing...");
             var buildExitCode = RunDotnetBuild(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, out var buildStdErr, out var buildStdOut, out var buildDuration);
             result.Duration += buildDuration;
             if (buildExitCode != 0)
@@ -85,21 +86,45 @@ public sealed partial class DotNetRepositoryReleaseService
                 result.ErrorMessage = $"dotnet build failed for {project.ProjectName} (exit {buildExitCode}). {SummarizeProcessFailureOutput(buildStdErr, buildStdOut)}".Trim();
                 return result;
             }
+            logger.Success($"{project.ProjectName}: build before pack signing completed in {FormatDuration(buildDuration)}.");
 
             try
             {
-                var outputDirectories = ResolveBuildOutputDirectories(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger);
-                foreach (var outputDirectory in outputDirectories)
+                var includePatterns = ResolveAssemblySigningIncludePatterns(project, spec);
+                var resolveOutputWatch = Stopwatch.StartNew();
+                var outputDirectories = ResolveBuildOutputDirectories(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns);
+                var signingPlan = BuildAssemblySigningPlan(outputDirectories, includePatterns);
+                if (signingPlan.Files.Length == 0 && !spec.SignDependencyAssemblies)
+                {
+                    var evaluatedIncludePatterns = ResolveAssemblySigningIncludePatterns(project, spec, csprojDir, configuration, logger);
+                    if (!SamePatterns(includePatterns, evaluatedIncludePatterns))
+                    {
+                        includePatterns = evaluatedIncludePatterns;
+                        outputDirectories = ResolveBuildOutputDirectories(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns);
+                        signingPlan = BuildAssemblySigningPlan(outputDirectories, includePatterns);
+                    }
+                }
+                resolveOutputWatch.Stop();
+                result.Duration += resolveOutputWatch.Elapsed;
+                logger.Success($"{project.ProjectName}: resolved {outputDirectories.Length} signing output directorie(s) in {FormatDuration(resolveOutputWatch.Elapsed)}.");
+
+                var assemblySigningWatch = Stopwatch.StartNew();
+                logger.Info($"{project.ProjectName}: assembly signing include pattern(s): {string.Join(", ", includePatterns)}.");
+                if (signingPlan.Files.Length > 0)
                 {
                     signAssemblies!(new DotNetReleaseBuildAssemblySigningRequest
                     {
-                        ReleasePath = outputDirectory,
+                        ReleasePath = outputDirectories.Length == 1 ? outputDirectories[0] : csprojDir,
                         LocalStore = spec.CertificateStore,
                         CertificateThumbprint = spec.CertificateThumbprint!.Trim(),
                         TimeStampServer = string.IsNullOrWhiteSpace(spec.TimeStampServer) ? "http://timestamp.digicert.com" : spec.TimeStampServer!.Trim(),
-                        IncludePatterns = new[] { "*.dll", "*.exe" }
+                        IncludePatterns = includePatterns,
+                        FilePaths = signingPlan.Files
                     });
                 }
+                assemblySigningWatch.Stop();
+                result.Duration += assemblySigningWatch.Elapsed;
+                logger.Success($"{project.ProjectName}: assembly signing completed for {signingPlan.OutputDirectoryCount} output directorie(s), {signingPlan.Files.Length} file(s), in {FormatDuration(assemblySigningWatch.Elapsed)}.");
             }
             catch (Exception ex)
             {
@@ -115,7 +140,9 @@ public sealed partial class DotNetRepositoryReleaseService
             result.ErrorMessage = $"dotnet pack failed for {project.ProjectName} (exit {exitCode}). {SummarizeProcessFailureOutput(stdErr, stdOut)}".Trim();
             return result;
         }
+        logger.Success($"{project.ProjectName}: dotnet pack completed in {FormatDuration(duration)}.");
 
+        var packageDiscoveryWatch = Stopwatch.StartNew();
         if (Directory.Exists(packageRoot))
         {
             var pkgs = Directory.EnumerateFiles(packageRoot, "*.nupkg", SearchOption.AllDirectories)
@@ -124,6 +151,9 @@ public sealed partial class DotNetRepositoryReleaseService
                 .ToArray();
             result.Packages.AddRange(pkgs);
         }
+        packageDiscoveryWatch.Stop();
+        result.Duration += packageDiscoveryWatch.Elapsed;
+        logger.Success($"{project.ProjectName}: package discovery found {result.Packages.Count} package(s) in {FormatDuration(packageDiscoveryWatch.Elapsed)}.");
 
         result.Success = true;
         return result;
@@ -132,7 +162,8 @@ public sealed partial class DotNetRepositoryReleaseService
     private static DotNetPackResult PackProjectsWithMsBuild(
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         DotNetRepositoryReleaseSpec spec,
-        ILogger logger)
+        ILogger logger,
+        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies)
     {
         var result = new DotNetPackResult();
         if (projects.Count == 0)
@@ -161,15 +192,69 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             WritePackTraversalProject(traversalPath, projects, spec, outputPath);
 
-            var exitCode = RunDotnetMsBuildPack(
-                traversalPath,
-                tempRoot,
-                projects.Count,
-                logger,
-                out var stdErr,
-                out var stdOut,
-                out var duration);
-            result.Duration = duration;
+            var shouldSignAssemblies = signAssemblies is not null && !string.IsNullOrWhiteSpace(spec.CertificateThumbprint);
+            int exitCode;
+            string stdErr;
+            string stdOut;
+            TimeSpan duration;
+
+            if (shouldSignAssemblies)
+            {
+                exitCode = RunDotnetMsBuildTarget(
+                    traversalPath,
+                    tempRoot,
+                    "BuildSelected",
+                    "build",
+                    "dotnet msbuild build",
+                    projects.Count,
+                    logger,
+                    out stdErr,
+                    out stdOut,
+                    out duration);
+                result.Duration += duration;
+
+                if (exitCode != 0)
+                {
+                    result.ErrorMessage = $"dotnet msbuild batch build failed (exit {exitCode}). {SummarizeProcessFailureOutput(stdErr, stdOut)}".Trim();
+                    return result;
+                }
+
+                var signing = SignBatchBuildOutputs(projects, spec, logger, signAssemblies!);
+                result.Duration += signing.Duration;
+                if (!signing.Success)
+                {
+                    result.ErrorMessage = signing.ErrorMessage;
+                    return result;
+                }
+
+                exitCode = RunDotnetMsBuildTarget(
+                    traversalPath,
+                    tempRoot,
+                    "PackOnlySelected",
+                    "pack",
+                    "dotnet msbuild pack",
+                    projects.Count,
+                    logger,
+                    out stdErr,
+                    out stdOut,
+                    out duration);
+                result.Duration += duration;
+            }
+            else
+            {
+                exitCode = RunDotnetMsBuildTarget(
+                    traversalPath,
+                    tempRoot,
+                    "PackSelected",
+                    "pack",
+                    "dotnet msbuild pack",
+                    projects.Count,
+                    logger,
+                    out stdErr,
+                    out stdOut,
+                    out duration);
+                result.Duration += duration;
+            }
 
             if (exitCode != 0)
             {
@@ -213,7 +298,7 @@ public sealed partial class DotNetRepositoryReleaseService
                     projects.Select(project => new XElement("PackProject",
                         new XAttribute("Include", Path.GetFullPath(project.CsprojPath))))),
                 new XElement("Target",
-                    new XAttribute("Name", "PackSelected"),
+                    new XAttribute("Name", "RestoreSelected"),
                     new XElement("MSBuild",
                         new XAttribute("Projects", "@(PackProject)"),
                         // Restore and build all selected projects first, then pack without walking project
@@ -221,21 +306,94 @@ public sealed partial class DotNetRepositoryReleaseService
                         new XAttribute("Targets", "Restore"),
                         new XAttribute("BuildInParallel", "true"),
                         new XAttribute("StopOnFirstFailure", "true"),
-                        new XAttribute("Properties", buildProperties)),
+                        new XAttribute("Properties", buildProperties))),
+                new XElement("Target",
+                    new XAttribute("Name", "BuildSelected"),
+                    new XAttribute("DependsOnTargets", "RestoreSelected"),
                     new XElement("MSBuild",
                         new XAttribute("Projects", "@(PackProject)"),
                         new XAttribute("Targets", "Build"),
                         new XAttribute("BuildInParallel", "true"),
                         new XAttribute("StopOnFirstFailure", "true"),
-                        new XAttribute("Properties", buildProperties)),
+                        new XAttribute("Properties", buildProperties))),
+                new XElement("Target",
+                    new XAttribute("Name", "PackOnlySelected"),
                     new XElement("MSBuild",
                         new XAttribute("Projects", "@(PackProject)"),
                         new XAttribute("Targets", "Pack"),
                         new XAttribute("BuildInParallel", "true"),
                         new XAttribute("StopOnFirstFailure", "true"),
-                        new XAttribute("Properties", packProperties)))));
+                        new XAttribute("Properties", packProperties))),
+                new XElement("Target",
+                    new XAttribute("Name", "PackSelected"),
+                    new XAttribute("DependsOnTargets", "BuildSelected;PackOnlySelected"))));
 
         document.Save(traversalPath);
+    }
+
+    private static DotNetPackResult SignBatchBuildOutputs(
+        IReadOnlyList<DotNetRepositoryProjectResult> projects,
+        DotNetRepositoryReleaseSpec spec,
+        ILogger logger,
+        Action<DotNetReleaseBuildAssemblySigningRequest> signAssemblies)
+    {
+        var result = new DotNetPackResult();
+        var watch = Stopwatch.StartNew();
+
+        try
+        {
+            var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
+            var signedOutputCount = 0;
+            var files = new List<string>();
+
+            foreach (var project in projects)
+            {
+                var csprojDir = Path.GetDirectoryName(project.CsprojPath) ?? string.Empty;
+                var includePatterns = ResolveAssemblySigningIncludePatterns(project, spec);
+                var outputDirectories = ResolveBuildOutputDirectories(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns);
+                var signingPlan = BuildAssemblySigningPlan(outputDirectories, includePatterns);
+                if (signingPlan.Files.Length == 0 && !spec.SignDependencyAssemblies)
+                {
+                    var evaluatedIncludePatterns = ResolveAssemblySigningIncludePatterns(project, spec, csprojDir, configuration, logger);
+                    if (!SamePatterns(includePatterns, evaluatedIncludePatterns))
+                    {
+                        includePatterns = evaluatedIncludePatterns;
+                        outputDirectories = ResolveBuildOutputDirectories(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns);
+                        signingPlan = BuildAssemblySigningPlan(outputDirectories, includePatterns);
+                    }
+                }
+                logger.Info($"{project.ProjectName}: assembly signing include pattern(s): {string.Join(", ", includePatterns)}.");
+                files.AddRange(signingPlan.Files);
+                signedOutputCount += signingPlan.OutputDirectoryCount;
+            }
+
+            var filePaths = files
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (filePaths.Length > 0)
+                signAssemblies(new DotNetReleaseBuildAssemblySigningRequest
+                {
+                    ReleasePath = spec.RootPath,
+                    LocalStore = spec.CertificateStore,
+                    CertificateThumbprint = spec.CertificateThumbprint!.Trim(),
+                    TimeStampServer = string.IsNullOrWhiteSpace(spec.TimeStampServer) ? "http://timestamp.digicert.com" : spec.TimeStampServer!.Trim(),
+                    IncludePatterns = Array.Empty<string>(),
+                    FilePaths = filePaths
+                });
+
+            watch.Stop();
+            result.Duration = watch.Elapsed;
+            result.Success = true;
+            logger.Success($"MSBuild batch assembly signing completed for {signedOutputCount} output directorie(s), {filePaths.Length} file(s), in {FormatDuration(watch.Elapsed)}.");
+            return result;
+        }
+        catch (Exception ex)
+        {
+            watch.Stop();
+            result.Duration = watch.Elapsed;
+            result.ErrorMessage = $"MSBuild batch assembly signing failed. {ex.Message}";
+            return result;
+        }
     }
 
     private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotNetRepositoryProjectResult project, string version)
@@ -364,9 +522,27 @@ public sealed partial class DotNetRepositoryReleaseService
         string workingDirectory,
         string configuration,
         string projectName,
-        ILogger logger)
+        ILogger logger,
+        IReadOnlyList<string>? includePatterns = null)
     {
         var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var directory in ResolveConventionalBuildOutputDirectories(csproj, workingDirectory, configuration))
+        {
+            if (!Directory.Exists(directory))
+                continue;
+
+            if (includePatterns is { Count: > 0 } && !ContainsSignableFiles(directory, includePatterns))
+                continue;
+
+            directories.Add(Path.GetFullPath(directory));
+        }
+
+        if (directories.Count > 0)
+        {
+            logger.Verbose($"{projectName}: resolved {directories.Count} signing output directorie(s) from conventional build paths.");
+            return directories.ToArray();
+        }
+
         foreach (var targetFramework in ReadTargetFrameworks(csproj))
         {
             var exitCode = RunDotnetMsBuildGetProperty(
@@ -407,6 +583,196 @@ public sealed partial class DotNetRepositoryReleaseService
         return directories.ToArray();
     }
 
+    private static string[] ResolveConventionalBuildOutputDirectories(
+        string csproj,
+        string workingDirectory,
+        string configuration)
+    {
+        var directories = new List<string>();
+        var targetFrameworks = ReadTargetFrameworks(csproj)
+            .Where(static framework => !string.IsNullOrWhiteSpace(framework))
+            .Select(static framework => framework!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        foreach (var targetFramework in targetFrameworks)
+            directories.Add(Path.Combine(workingDirectory, "bin", configuration, targetFramework));
+
+        foreach (var outputPath in ReadOutputPaths(csproj))
+        {
+            var resolved = Path.IsPathRooted(outputPath)
+                ? outputPath
+                : Path.GetFullPath(Path.Combine(workingDirectory, outputPath));
+            directories.Add(resolved);
+
+            foreach (var targetFramework in targetFrameworks)
+                directories.Add(Path.Combine(resolved, targetFramework));
+        }
+
+        if (targetFrameworks.Length == 0)
+            directories.Add(Path.Combine(workingDirectory, "bin", configuration));
+
+        return directories
+            .Where(static directory => !string.IsNullOrWhiteSpace(directory))
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool ContainsSignableFiles(string directory, IReadOnlyList<string> includePatterns)
+    {
+        foreach (var includePattern in includePatterns)
+        {
+            if (string.IsNullOrWhiteSpace(includePattern))
+                continue;
+
+            if (Directory.EnumerateFiles(directory, includePattern, SearchOption.AllDirectories)
+                    .Any(static file => !IsInternalsPath(file)))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string[] ResolveAssemblySigningIncludePatterns(
+        DotNetRepositoryProjectResult project,
+        DotNetRepositoryReleaseSpec spec,
+        string? workingDirectory = null,
+        string? configuration = null,
+        ILogger? logger = null)
+    {
+        if (spec.SignDependencyAssemblies)
+            return new[] { "*.dll", "*.exe" };
+
+        var assemblyNames = new[] { ResolveAssemblyName(project.CsprojPath, project.ProjectName, workingDirectory, configuration, logger), project.ProjectName }
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Select(static name => name!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return assemblyNames
+            .SelectMany(static assemblyName => new[]
+            {
+                $"{assemblyName}.dll",
+                $"{assemblyName}.exe"
+            })
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static AssemblySigningPlan BuildAssemblySigningPlan(
+        IReadOnlyList<string> outputDirectories,
+        IReadOnlyList<string> includePatterns)
+    {
+        var files = new List<string>();
+        var outputDirectoryCount = 0;
+
+        foreach (var outputDirectory in outputDirectories)
+        {
+            if (string.IsNullOrWhiteSpace(outputDirectory) || !Directory.Exists(outputDirectory))
+                continue;
+
+            outputDirectoryCount++;
+            foreach (var includePattern in includePatterns)
+            {
+                if (string.IsNullOrWhiteSpace(includePattern))
+                    continue;
+
+                files.AddRange(Directory.EnumerateFiles(outputDirectory, includePattern, SearchOption.AllDirectories)
+                    .Where(static file => !IsInternalsPath(file)));
+            }
+        }
+
+        return new AssemblySigningPlan
+        {
+            IncludePatterns = includePatterns.ToArray(),
+            Files = files
+                .Select(Path.GetFullPath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
+            OutputDirectoryCount = outputDirectoryCount
+        };
+    }
+
+    private static bool SamePatterns(IReadOnlyList<string> left, IReadOnlyList<string> right)
+        => left.Count == right.Count && left
+            .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
+            .SequenceEqual(right.OrderBy(static value => value, StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
+
+    private static bool IsInternalsPath(string filePath)
+    {
+        return filePath.IndexOf($"{Path.DirectorySeparatorChar}Internals{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               filePath.IndexOf("/Internals/", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               filePath.IndexOf("\\Internals\\", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static string ResolveAssemblyName(
+        string csproj,
+        string projectName,
+        string? workingDirectory = null,
+        string? configuration = null,
+        ILogger? logger = null)
+    {
+        try
+        {
+            var document = XDocument.Load(csproj);
+            var assemblyName = document.Descendants()
+                .FirstOrDefault(element => string.Equals(element.Name.LocalName, "AssemblyName", StringComparison.OrdinalIgnoreCase))
+                ?.Value;
+            if (IsUsableAssemblyName(assemblyName))
+                return assemblyName!.Trim();
+        }
+        catch
+        {
+            // Project file metadata is best-effort here; the csproj name is the SDK default.
+        }
+
+        var evaluatedAssemblyName = ResolveEvaluatedAssemblyName(csproj, workingDirectory, configuration, projectName, logger);
+        if (IsUsableAssemblyName(evaluatedAssemblyName))
+            return evaluatedAssemblyName!.Trim();
+
+        return string.IsNullOrWhiteSpace(projectName)
+            ? Path.GetFileNameWithoutExtension(csproj) ?? "Project"
+            : projectName.Trim();
+    }
+
+    private static string? ResolveEvaluatedAssemblyName(
+        string csproj,
+        string? workingDirectory,
+        string? configuration,
+        string projectName,
+        ILogger? logger)
+    {
+        if (string.IsNullOrWhiteSpace(workingDirectory) || string.IsNullOrWhiteSpace(configuration) || logger is null)
+            return null;
+
+        foreach (var targetFramework in ReadTargetFrameworks(csproj))
+        {
+            var exitCode = RunDotnetMsBuildGetProperty(
+                csproj,
+                workingDirectory!,
+                configuration!,
+                targetFramework,
+                "AssemblyName",
+                projectName,
+                logger,
+                out var value,
+                out _,
+                out _,
+                out _);
+
+            if (exitCode == 0 && IsUsableAssemblyName(value))
+                return value!.Trim();
+        }
+
+        return null;
+    }
+
+    private static bool IsUsableAssemblyName(string? assemblyName)
+        => !string.IsNullOrWhiteSpace(assemblyName) &&
+           assemblyName!.IndexOf("$(", StringComparison.Ordinal) < 0 &&
+           assemblyName.IndexOf(';') < 0;
+
     private static string?[] ReadTargetFrameworks(string csproj)
     {
         try
@@ -439,9 +805,32 @@ public sealed partial class DotNetRepositoryReleaseService
         return new string?[] { null };
     }
 
-    private static int RunDotnetMsBuildPack(
+    private static string[] ReadOutputPaths(string csproj)
+    {
+        try
+        {
+            var document = XDocument.Load(csproj);
+            return document.Descendants()
+                .Where(element =>
+                    string.Equals(element.Name.LocalName, "OutputPath", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(element.Name.LocalName, "OutDir", StringComparison.OrdinalIgnoreCase))
+                .Select(static element => element.Value?.Trim())
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray()!;
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    private static int RunDotnetMsBuildTarget(
         string traversalProject,
         string workingDirectory,
+        string targetName,
+        string heartbeatOperation,
+        string logOperation,
         int projectCount,
         ILogger logger,
         out string stdErr,
@@ -468,7 +857,7 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             "msbuild",
             traversalProject,
-            "/t:PackSelected",
+            $"/t:{targetName}",
             "/m",
             "/nr:false",
             logger.IsVerbose ? "/v:n" : "/v:m"
@@ -476,7 +865,7 @@ public sealed partial class DotNetRepositoryReleaseService
 #else
         psi.ArgumentList.Add("msbuild");
         psi.ArgumentList.Add(traversalProject);
-        psi.ArgumentList.Add("/t:PackSelected");
+        psi.ArgumentList.Add($"/t:{targetName}");
         psi.ArgumentList.Add("/m");
         psi.ArgumentList.Add("/nr:false");
         psi.ArgumentList.Add(logger.IsVerbose ? "/v:n" : "/v:m");
@@ -485,11 +874,11 @@ public sealed partial class DotNetRepositoryReleaseService
         var exitCode = RunProcessWithHeartbeat(
             psi,
             logger,
-            elapsed => $"MSBuild batch pack still running ({projectCount} project(s), {FormatDuration(elapsed)} elapsed).",
+            elapsed => $"MSBuild batch {heartbeatOperation} still running ({projectCount} project(s), {FormatDuration(elapsed)} elapsed).",
             out stdErr,
             out stdOut,
             out duration);
-        LogProcessOutput(logger, "MSBuild batch", "dotnet msbuild pack", stdOut, stdErr);
+        LogProcessOutput(logger, "MSBuild batch", logOperation, stdOut, stdErr);
         return exitCode;
     }
 

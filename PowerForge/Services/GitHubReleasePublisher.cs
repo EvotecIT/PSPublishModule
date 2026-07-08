@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -63,6 +64,7 @@ public sealed class GitHubReleasePublisher
                 throw new FileNotFoundException($"GitHub asset not found: {assetPath}");
         }
 
+        var releaseWatch = Stopwatch.StartNew();
         var release = CreateRelease(
             owner,
             repo,
@@ -75,6 +77,8 @@ public sealed class GitHubReleasePublisher
             isDraft,
             isPreRelease,
             reuseExistingReleaseOnConflict);
+        releaseWatch.Stop();
+        _logger.Success($"GitHub release ready in {DotNetRepositoryReleaseService.FormatDuration(releaseWatch.Elapsed)}: {release.HtmlUrl}");
 
         var result = new GitHubReleasePublishResult
         {
@@ -89,6 +93,7 @@ public sealed class GitHubReleasePublisher
         if (assets.Length > 0)
         {
             var uploadUrl = RemoveUploadUrlTemplate(release.UploadUrl);
+            var assetUploadWatch = Stopwatch.StartNew();
             result.SkippedExistingAssets.AddRange(UploadAssets(
                 uploadUrl,
                 assets,
@@ -98,6 +103,9 @@ public sealed class GitHubReleasePublisher
                 release.Id,
                 replaceExistingAssets,
                 result.ReplacedExistingAssets));
+            assetUploadWatch.Stop();
+            var uploaded = assets.Length - result.SkippedExistingAssets.Count;
+            _logger.Success($"GitHub release asset upload phase completed in {DotNetRepositoryReleaseService.FormatDuration(assetUploadWatch.Elapsed)} ({uploaded} uploaded, {result.SkippedExistingAssets.Count} skipped).");
         }
 
         return result;
@@ -245,8 +253,10 @@ public sealed class GitHubReleasePublisher
                 replacedExistingAssets.Add(fileName);
             }
 
-            _logger.Info($"Uploading GitHub release asset: {fileName}");
+            var assetSize = new FileInfo(assetPath).Length;
+            _logger.Info($"Uploading GitHub release asset: {fileName} ({DotNetRepositoryReleaseService.FormatBytes(assetSize)})");
 
+            var assetWatch = Stopwatch.StartNew();
             var resp = UploadAsset(uploadUrl, assetPath, fileName, token);
             var respText = resp.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
             if (!resp.IsSuccessStatusCode && replaceExistingAssets &&
@@ -268,7 +278,8 @@ public sealed class GitHubReleasePublisher
                     // Idempotency: reruns can hit "asset already exists". Prefer to continue rather than failing the whole build.
                     if ((int)resp.StatusCode == 422 && IsAlreadyExistsValidationError(respText, fieldName: "name"))
                     {
-                        _logger.Info($"GitHub release asset '{fileName}' already exists; skipping upload.");
+                        assetWatch.Stop();
+                        _logger.Info($"GitHub release asset '{fileName}' already exists; skipping upload after {DotNetRepositoryReleaseService.FormatDuration(assetWatch.Elapsed)}.");
                         skippedAssets.Add(fileName);
                         continue;
                     }
@@ -276,6 +287,9 @@ public sealed class GitHubReleasePublisher
                     throw new InvalidOperationException($"GitHub asset upload failed for '{fileName}' ({(int)resp.StatusCode} {resp.ReasonPhrase}). {TrimForMessage(respText)}");
                 }
             }
+
+            assetWatch.Stop();
+            _logger.Success($"Uploaded GitHub release asset: {fileName} in {DotNetRepositoryReleaseService.FormatDuration(assetWatch.Elapsed)} ({DotNetRepositoryReleaseService.FormatBytes(assetSize)}).");
         }
 
         return skippedAssets;

@@ -23,6 +23,13 @@ public sealed partial class DotNetRepositoryReleaseService
         public List<string> Packages { get; } = new();
     }
 
+    private sealed class AssemblySigningPlan
+    {
+        public string[] IncludePatterns { get; set; } = Array.Empty<string>();
+        public string[] Files { get; set; } = Array.Empty<string>();
+        public int OutputDirectoryCount { get; set; }
+    }
+
     internal static string FormatDuration(TimeSpan duration)
     {
         if (duration.TotalHours >= 1)

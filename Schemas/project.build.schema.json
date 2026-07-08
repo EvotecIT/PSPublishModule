@@ -162,6 +162,10 @@
       "type": "boolean",
       "description": "When true and CertificateThumbprint is configured, signs build outputs before NuGet packages and release ZIPs are created. Defaults to true when CertificateThumbprint is set."
     },
+    "SignDependencyAssemblies": {
+      "type": "boolean",
+      "description": "When true, assembly signing also signs copied dependency assemblies from build output folders. Defaults to false so only the current project's assemblies are signed."
+    },
     "SignPackages": {
       "type": "boolean",
       "description": "When true and CertificateThumbprint is configured, signs generated NuGet packages. Defaults to true when CertificateThumbprint is set."

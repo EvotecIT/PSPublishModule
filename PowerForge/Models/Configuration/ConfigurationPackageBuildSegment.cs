@@ -56,6 +56,9 @@ public sealed class ProjectBuildConfigurationReference
     /// <summary>Whether assemblies should be signed before packages are created, overriding the referenced JSON when set.</summary>
     public bool? SignAssemblies { get; set; }
 
+    /// <summary>Whether copied dependency assemblies should also be signed, overriding the referenced JSON when set.</summary>
+    public bool? SignDependencyAssemblies { get; set; }
+
     /// <summary>Whether generated NuGet packages should be signed, overriding the referenced JSON when set.</summary>
     public bool? SignPackages { get; set; }
 
@@ -202,6 +205,9 @@ public sealed class PackageBuildConfiguration
 
     /// <summary>Whether assemblies should be signed before packages are created.</summary>
     public bool? SignAssemblies { get; set; }
+
+    /// <summary>Whether copied dependency assemblies should also be signed.</summary>
+    public bool? SignDependencyAssemblies { get; set; }
 
     /// <summary>Whether generated NuGet packages should be signed.</summary>
     public bool? SignPackages { get; set; }

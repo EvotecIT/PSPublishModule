@@ -185,66 +185,66 @@ public sealed class AuthenticodeSigningService
 
     private IReadOnlyList<PSObject> SignWithWindowsAuthenticode(string[] files, AuthenticodeSignRequest request)
     {
-        var outputs = new List<PSObject>();
+        var unsignedFiles = GetUnsignedFiles("Get-AuthenticodeSignature", files);
+        if (unsignedFiles.Length == 0)
+            return Array.Empty<PSObject>();
 
-        foreach (var file in files)
-        {
-            var signature = InvokeSingle("Get-AuthenticodeSignature", ps =>
-            {
-                ps.AddParameter("FilePath", file);
-            });
-
-            var status = signature?.Properties["Status"]?.Value?.ToString();
-            if (!string.Equals(status, "NotSigned", StringComparison.OrdinalIgnoreCase))
-                continue;
-
+        foreach (var file in unsignedFiles)
             _logger.Verbose($"Signing file: {file}");
-            var signed = InvokeSingle("Set-AuthenticodeSignature", ps =>
-            {
-                ps.AddParameter("FilePath", file);
-                ps.AddParameter("Certificate", request.Certificate);
-                ps.AddParameter("TimestampServer", request.TimeStampServer);
-                ps.AddParameter("IncludeChain", request.WindowsIncludeChain);
-                ps.AddParameter("HashAlgorithm", request.HashAlgorithm);
-            });
 
-            if (signed is not null)
-                outputs.Add(signed);
-        }
-
-        return outputs;
+        return InvokeMany("Set-AuthenticodeSignature", ps =>
+        {
+            ps.AddParameter("FilePath", unsignedFiles);
+            ps.AddParameter("Certificate", request.Certificate);
+            ps.AddParameter("TimestampServer", request.TimeStampServer);
+            ps.AddParameter("IncludeChain", request.WindowsIncludeChain);
+            ps.AddParameter("HashAlgorithm", request.HashAlgorithm);
+        });
     }
 
     private IReadOnlyList<PSObject> SignWithOpenAuthenticode(string[] files, AuthenticodeSignRequest request)
     {
-        var outputs = new List<PSObject>();
+        var unsignedFiles = GetUnsignedFiles("Get-OpenAuthenticodeSignature", files);
+        if (unsignedFiles.Length == 0)
+            return Array.Empty<PSObject>();
 
-        foreach (var file in files)
+        foreach (var file in unsignedFiles)
+            _logger.Verbose($"Signing file: {file}");
+
+        return InvokeMany("Set-OpenAuthenticodeSignature", ps =>
         {
-            var signature = InvokeSingle("Get-OpenAuthenticodeSignature", ps =>
-            {
-                ps.AddParameter("FilePath", file);
-            });
+            ps.AddParameter("FilePath", unsignedFiles);
+            ps.AddParameter("Certificate", request.Certificate);
+            ps.AddParameter("TimeStampServer", request.TimeStampServer);
+            ps.AddParameter("IncludeChain", request.NonWindowsIncludeChain);
+            ps.AddParameter("HashAlgorithm", request.HashAlgorithm);
+        });
+    }
 
-            var status = signature?.Properties["Status"]?.Value?.ToString();
+    private string[] GetUnsignedFiles(string commandName, string[] files)
+    {
+        var signatures = InvokeMany(commandName, ps => ps.AddParameter("FilePath", files));
+        var unsigned = new List<string>();
+
+        for (var i = 0; i < signatures.Count; i++)
+        {
+            var signature = signatures[i];
+            var status = signature.Properties["Status"]?.Value?.ToString();
             if (!string.Equals(status, "NotSigned", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            _logger.Verbose($"Signing file: {file}");
-            var signed = InvokeSingle("Set-OpenAuthenticodeSignature", ps =>
-            {
-                ps.AddParameter("FilePath", file);
-                ps.AddParameter("Certificate", request.Certificate);
-                ps.AddParameter("TimeStampServer", request.TimeStampServer);
-                ps.AddParameter("IncludeChain", request.NonWindowsIncludeChain);
-                ps.AddParameter("HashAlgorithm", request.HashAlgorithm);
-            });
-
-            if (signed is not null)
-                outputs.Add(signed);
+            var path = signature.Properties["Path"]?.Value?.ToString();
+            if (!string.IsNullOrWhiteSpace(path))
+                unsigned.Add(path!);
+            else if (i < files.Length)
+                unsigned.Add(files[i]);
         }
 
-        return outputs;
+        return unsigned
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private void EnsureCommandAvailable(string name)
@@ -260,10 +260,15 @@ public sealed class AuthenticodeSigningService
 
     private PSObject? InvokeSingle(string commandName, Action<PowerShell> configure)
     {
+        var result = InvokeMany(commandName, configure);
+        return result.FirstOrDefault();
+    }
+
+    private IReadOnlyList<PSObject> InvokeMany(string commandName, Action<PowerShell> configure)
+    {
         using var ps = CreatePowerShell();
         ps.AddCommand(commandName);
         configure(ps);
-
         var result = ps.Invoke();
         if (ps.HadErrors)
         {
@@ -271,7 +276,7 @@ public sealed class AuthenticodeSigningService
             throw error?.Exception ?? new InvalidOperationException($"PowerShell command '{commandName}' failed.");
         }
 
-        return result.FirstOrDefault();
+        return result.ToArray();
     }
 
     private static PowerShell CreatePowerShell()
