@@ -49,4 +49,19 @@ public sealed class ManagedModuleRepositoryClientOptions
     /// True when the explicit proxy should be bypassed for local addresses.
     /// </summary>
     public bool BypassProxyOnLocal { get; set; } = true;
+
+    /// <summary>
+    /// Optional explicit user managed module catalog path used for repository metadata fallback.
+    /// </summary>
+    public string? ManagedModuleCatalogPath { get; set; }
+
+    /// <summary>
+    /// Optional explicit machine managed module catalog path used after the user catalog path.
+    /// </summary>
+    public string? MachineManagedModuleCatalogPath { get; set; }
+
+    /// <summary>
+    /// True to disable managed module catalog metadata fallback for this repository client.
+    /// </summary>
+    public bool DisableManagedModuleCatalog { get; set; }
 }

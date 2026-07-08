@@ -19,6 +19,7 @@ public sealed partial class ManagedModuleRepositoryClient
     private readonly HttpClient _httpClient;
     private readonly ManagedModulePackageReader _packageReader;
     private readonly ManagedModuleRepositoryClientOptions _options;
+    private readonly IReadOnlyList<ManagedModuleCatalogStore> _catalogStores;
     private readonly ConcurrentDictionary<string, string> _packageBaseAddressCache = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _searchQueryServiceCache = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _packagePublishAddressCache = new(StringComparer.Ordinal);
@@ -46,6 +47,7 @@ public sealed partial class ManagedModuleRepositoryClient
         _options = options ?? new ManagedModuleRepositoryClientOptions();
         _httpClient = httpClient ?? CreateDefaultHttpClient(_options);
         _packageReader = packageReader ?? new ManagedModulePackageReader();
+        _catalogStores = CreateCatalogStores(_options);
     }
 
     /// <summary>
@@ -83,14 +85,26 @@ public sealed partial class ManagedModuleRepositoryClient
                 includePrerelease,
                 credential,
                 cancellationToken,
-                token => GetNuGetVersionsWithPowerShellGalleryReadApiAsync(repository, packageId, includePrerelease, credential, token)).ConfigureAwait(false),
+                token => GetVersionsWithCatalogAsync(
+                    repository,
+                    packageId,
+                    includePrerelease,
+                    credential,
+                    token,
+                    liveToken => GetNuGetVersionsWithPowerShellGalleryReadApiAsync(repository, packageId, includePrerelease, credential, liveToken))).ConfigureAwait(false),
             ManagedModuleRepositoryKind.NuGetV2 => await ExecuteCoalescedVersionQueryAsync(
                 repository,
                 packageId,
                 includePrerelease,
                 credential,
                 cancellationToken,
-                token => GetNuGetV2VersionsAsync(repository, packageId, includePrerelease, credential, token)).ConfigureAwait(false),
+                token => GetVersionsWithCatalogAsync(
+                    repository,
+                    packageId,
+                    includePrerelease,
+                    credential,
+                    token,
+                    liveToken => GetNuGetV2VersionsAsync(repository, packageId, includePrerelease, credential, liveToken))).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
     }
@@ -125,14 +139,26 @@ public sealed partial class ManagedModuleRepositoryClient
                 includePrerelease,
                 credential,
                 cancellationToken,
-                token => GetLatestNuGetVersionWithPowerShellGalleryReadApiAsync(repository, packageId, includePrerelease, credential, token)).ConfigureAwait(false),
+                token => GetLatestVersionWithCatalogAsync(
+                    repository,
+                    packageId,
+                    includePrerelease,
+                    credential,
+                    token,
+                    liveToken => GetLatestNuGetVersionWithPowerShellGalleryReadApiAsync(repository, packageId, includePrerelease, credential, liveToken))).ConfigureAwait(false),
             ManagedModuleRepositoryKind.NuGetV2 => await ExecuteCoalescedLatestVersionQueryAsync(
                 repository,
                 packageId,
                 includePrerelease,
                 credential,
                 cancellationToken,
-                token => GetLatestNuGetV2VersionAsync(repository, packageId, includePrerelease, credential, token)).ConfigureAwait(false),
+                token => GetLatestVersionWithCatalogAsync(
+                    repository,
+                    packageId,
+                    includePrerelease,
+                    credential,
+                    token,
+                    liveToken => GetLatestNuGetV2VersionAsync(repository, packageId, includePrerelease, credential, liveToken))).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
     }
@@ -194,7 +220,15 @@ public sealed partial class ManagedModuleRepositoryClient
                 skip,
                 credential,
                 cancellationToken,
-                token => SearchNuGetPackagesWithPowerShellGalleryReadApiAsync(repository, query, includePrerelease, credential, take, skip, token)).ConfigureAwait(false),
+                token => SearchPackagesWithCatalogAsync(
+                    repository,
+                    query,
+                    includePrerelease,
+                    credential,
+                    take,
+                    skip,
+                    token,
+                    liveToken => SearchNuGetPackagesWithPowerShellGalleryReadApiAsync(repository, query, includePrerelease, credential, take, skip, liveToken))).ConfigureAwait(false),
             ManagedModuleRepositoryKind.NuGetV2 => await ExecuteCoalescedSearchQueryAsync(
                 repository,
                 query,
@@ -203,7 +237,15 @@ public sealed partial class ManagedModuleRepositoryClient
                 skip,
                 credential,
                 cancellationToken,
-                token => SearchNuGetV2PackagesAsync(repository, query, includePrerelease, credential, take, skip, token)).ConfigureAwait(false),
+                token => SearchPackagesWithCatalogAsync(
+                    repository,
+                    query,
+                    includePrerelease,
+                    credential,
+                    take,
+                    skip,
+                    token,
+                    liveToken => SearchNuGetV2PackagesAsync(repository, query, includePrerelease, credential, take, skip, liveToken))).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
     }
