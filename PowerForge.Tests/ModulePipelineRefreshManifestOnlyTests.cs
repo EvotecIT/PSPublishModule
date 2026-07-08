@@ -446,6 +446,24 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
                             Destination = PublishDestination.PowerShellGallery
                         }
                     },
+                    new ConfigurationExternalAssetSegment
+                    {
+                        Configuration = new ExternalAssetConfiguration
+                        {
+                            Name = "VendorTool",
+                            OutputPath = "Artefacts/VendorTool",
+                            SkipDownload = true,
+                            Files = new[]
+                            {
+                                new ExternalAssetFileConfiguration
+                                {
+                                    Runtime = "win-x64",
+                                    FileName = "tool.zip",
+                                    Uri = "Vendor/tool.zip"
+                                }
+                            }
+                        }
+                    },
                     new ConfigurationActionSegment
                     {
                         Configuration = new ModulePipelineActionConfiguration
@@ -490,6 +508,7 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
             Assert.Empty(plan.PackageBuilds);
             Assert.Empty(plan.Artefacts);
             Assert.Empty(plan.Publishes);
+            Assert.Single(plan.ExternalAssets);
             Assert.Collection(
                 plan.Actions,
                 action => Assert.Equal(ModulePipelineActionStage.BeforeStaging, action.Configuration.At),

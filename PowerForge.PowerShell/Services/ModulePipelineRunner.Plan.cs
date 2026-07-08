@@ -885,7 +885,6 @@ public sealed partial class ModulePipelineRunner
             validationSettings = null;
             importModules = null;
             testsAfterMerge.Clear();
-            enabledExternalAssets = Array.Empty<ConfigurationExternalAssetSegment>();
             enabledArtefacts = Array.Empty<ConfigurationArtefactSegment>();
             enabledPublishes = Array.Empty<ConfigurationPublishSegment>();
             projectBuilds.Clear();

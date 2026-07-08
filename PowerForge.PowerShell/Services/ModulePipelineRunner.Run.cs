@@ -48,6 +48,7 @@ public sealed partial class ModulePipelineRunner
             ExecutePreparationAndBuildPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, pipeline, state);
             if (plan.GateMode == ConfigurationGateMode.Documentation)
             {
+                EnsureDocumentationGateConfigured(plan);
                 ExecuteDocumentationPhase(plan, session, session.Reporter, state);
                 state.ProjectManifestSyncMessage = SyncBuildManifestToProjectRoot(plan, state.BuildResult);
                 return BuildPipelineResult(spec, plan, state);
@@ -82,6 +83,14 @@ public sealed partial class ModulePipelineRunner
             if (state.PipelineFailure is not null)
                 session.NotifySkippedOnFailure();
         }
+    }
+
+    private static void EnsureDocumentationGateConfigured(ModulePipelinePlan plan)
+    {
+        if (plan.Documentation is not null && plan.DocumentationBuild?.Enable == true)
+            return;
+
+        throw new InvalidOperationException("Gate mode Documentation requires an enabled Documentation and BuildDocumentation configuration.");
     }
 
 }

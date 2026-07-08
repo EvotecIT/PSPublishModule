@@ -328,6 +328,53 @@ public sealed class ModulePipelineScriptExecutionSeamTests
         }
     }
 
+    [Fact]
+    public void Run_DocumentationGateRequiresDocumentationConfiguration()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                new FakeHostedOperations());
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration
+                        {
+                            Mode = ConfigurationGateMode.Documentation
+                        }
+                    }
+                }
+            };
+
+            var plan = runner.Plan(spec);
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, plan));
+
+            Assert.Contains("Gate mode Documentation requires", ex.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteMinimalModule(string moduleRoot, string moduleName, string version, string[]? functionsToExport = null)
     {
         var functions = functionsToExport ?? Array.Empty<string>();
