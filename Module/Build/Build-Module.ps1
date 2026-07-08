@@ -18,6 +18,8 @@
     [switch] $SignIncludeExe,
     [switch] $NoInteractive,
     [switch] $NoExitCode,
+    [ValidateSet('Manifest', 'Documentation', 'Build', 'Publish')]
+    [string] $RunMode,
     [string] $DiagnosticsBaselinePath,
     [switch] $GenerateDiagnosticsBaseline,
     [switch] $UpdateDiagnosticsBaseline,
@@ -112,6 +114,7 @@ if ($JsonOnly) {
     $buildParams.JsonPath = $JsonPath
 }
 if ($NoInteractive.IsPresent) { $buildParams.NoInteractive = $true }
+if ($PSBoundParameters.ContainsKey('RunMode')) { $buildParams.RunMode = $RunMode }
 if ($PSBoundParameters.ContainsKey('DiagnosticsBaselinePath')) { $buildParams.DiagnosticsBaselinePath = $DiagnosticsBaselinePath }
 if ($PSBoundParameters.ContainsKey('GenerateDiagnosticsBaseline')) { $buildParams.GenerateDiagnosticsBaseline = $GenerateDiagnosticsBaseline.IsPresent }
 if ($PSBoundParameters.ContainsKey('UpdateDiagnosticsBaseline')) { $buildParams.UpdateDiagnosticsBaseline = $UpdateDiagnosticsBaseline.IsPresent }

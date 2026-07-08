@@ -698,6 +698,10 @@ public sealed partial class ModulePipelinePackageBuildTests
                         {
                             Name = "InlinePackages",
                             RootPath = "Sources",
+                            CertificateThumbprint = "ABC123",
+                            SignAssemblies = true,
+                            SignPackages = true,
+                            CreateReleaseZip = true,
                             BuildBeforeModule = true,
                             Build = true,
                             PublishNuget = true,
@@ -716,6 +720,226 @@ public sealed partial class ModulePipelinePackageBuildTests
             Assert.False(call.Request.PublishNuget);
             Assert.False(call.Request.PublishGitHub);
             Assert.Null(call.Configuration?.CertificateThumbprint);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_GateDocumentation_KeepsPreModulePackageBuildWithoutVersionUpdates()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var calls = new List<PackageBuildCall>();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    calls.Add(new PackageBuildCall(request, configuration, configPath));
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        Result = new ProjectBuildResult { Success = true }
+                    };
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    StagingPath = stagingPath
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration
+                        {
+                            Mode = ConfigurationGateMode.Documentation
+                        }
+                    },
+                    new ConfigurationDocumentationSegment
+                    {
+                        Configuration = new DocumentationConfiguration
+                        {
+                            Path = "Docs",
+                            PathReadme = "Docs\\Readme.md"
+                        }
+                    },
+                    new ConfigurationBuildDocumentationSegment
+                    {
+                        Configuration = new BuildDocumentationConfiguration
+                        {
+                            Enable = true,
+                            GenerateExternalHelp = false
+                        }
+                    },
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "InlinePackages",
+                            RootPath = "Sources",
+                            CertificateThumbprint = "ABC123",
+                            SignAssemblies = true,
+                            SignPackages = true,
+                            BuildBeforeModule = true,
+                            Build = true,
+                            PublishNuget = true,
+                            PublishGitHub = true
+                        }
+                    }
+                }
+            };
+
+            var result = runner.Run(spec);
+
+            var call = Assert.Single(calls);
+            Assert.Equal(ConfigurationGateMode.Documentation, result.Plan.GateMode);
+            Assert.Single(result.ProjectBuildResults);
+            Assert.False(call.Request.UpdateVersions);
+            Assert.True(call.Request.Build);
+            Assert.False(call.Request.PublishNuget);
+            Assert.False(call.Request.PublishGitHub);
+            Assert.Null(call.Configuration?.CertificateThumbprint);
+            Assert.False(call.Configuration?.SignAssemblies);
+            Assert.False(call.Configuration?.SignPackages);
+            Assert.False(call.Configuration?.CreateReleaseZip);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_GateDocumentation_ClearsReferencedProjectBuildSigning()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var configPath = Path.Combine(root.FullName, "Build", "project.build.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+            File.WriteAllText(
+                configPath,
+                string.Join(Environment.NewLine, new[]
+                {
+                    "{",
+                    "  \"RootPath\": \"Sources\",",
+                    "  \"Build\": true,",
+                    "  \"PublishNuget\": true,",
+                    "  \"PublishGitHub\": true,",
+                    "  \"CertificateThumbprint\": \"ABC123\",",
+                    "  \"SignAssemblies\": true,",
+                    "  \"SignPackages\": true,",
+                    "  \"CreateReleaseZip\": true",
+                    "}"
+                }));
+
+            var calls = new List<PackageBuildCall>();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPathValue) =>
+                {
+                    calls.Add(new PackageBuildCall(request, configuration, configPathValue));
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPathValue ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        Result = new ProjectBuildResult { Success = true }
+                    };
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    StagingPath = stagingPath
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration
+                        {
+                            Mode = ConfigurationGateMode.Documentation
+                        }
+                    },
+                    new ConfigurationDocumentationSegment
+                    {
+                        Configuration = new DocumentationConfiguration
+                        {
+                            Path = "Docs",
+                            PathReadme = "Docs\\Readme.md"
+                        }
+                    },
+                    new ConfigurationBuildDocumentationSegment
+                    {
+                        Configuration = new BuildDocumentationConfiguration
+                        {
+                            Enable = true,
+                            GenerateExternalHelp = false
+                        }
+                    },
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            Name = "JsonPackages",
+                            ConfigPath = Path.Combine("Build", "project.build.json"),
+                            BuildBeforeModule = true
+                        }
+                    }
+                }
+            };
+
+            var result = runner.Run(spec);
+
+            var call = Assert.Single(calls);
+            Assert.Equal(ConfigurationGateMode.Documentation, result.Plan.GateMode);
+            Assert.True(call.Request.Build);
+            Assert.False(call.Request.PublishNuget);
+            Assert.False(call.Request.PublishGitHub);
+            Assert.Null(call.Configuration?.CertificateThumbprint);
+            Assert.False(call.Configuration?.SignAssemblies);
+            Assert.False(call.Configuration?.SignPackages);
+            Assert.False(call.Configuration?.CreateReleaseZip);
         }
         finally
         {

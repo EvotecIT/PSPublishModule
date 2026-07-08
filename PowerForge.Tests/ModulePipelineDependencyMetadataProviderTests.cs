@@ -177,6 +177,46 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
     }
 
     [Fact]
+    public void Plan_GateDocumentation_UsesPublishRepositoryAsDependencyVersionSourceWithoutPublishing()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string dependencyName = "PSWriteHTML";
+
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = CreateGateDependencyVersionSourceSpec(
+                root.FullName,
+                moduleName,
+                dependencyName,
+                ConfigurationGateMode.Documentation,
+                publishEnabled: false);
+
+            var provider = new FakeModuleDependencyMetadataProvider(
+                installedModules: new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase),
+                onlineModules: new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [dependencyName] = ("1.41.0", null)
+                });
+
+            var runner = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider);
+            var plan = runner.Plan(spec);
+
+            var required = Assert.Single(plan.RequiredModules);
+            Assert.Equal(ConfigurationGateMode.Documentation, plan.GateMode);
+            Assert.Equal("1.41.0", required.ModuleVersion);
+            Assert.Equal("InternalModules", provider.LastOnlineRepository);
+            Assert.Empty(plan.Publishes);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_GateManifest_UsesEnabledPublishRepositoryAsDependencyVersionSourceWithoutPublishing()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

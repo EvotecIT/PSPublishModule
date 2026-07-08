@@ -19244,7 +19244,8 @@ Defaults to powerforge.json in the project root.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="ConfigurationGateMode">
           <maml:name>RunMode</maml:name>
           <maml:description>
-            <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Build runs local build/package lanes,&#xD;
+            <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Documentation regenerates command Markdown&#xD;
+and external help without validation/tests/signing/package/install phases, Build runs local build/package lanes,&#xD;
 and Publish enables configured publish destinations.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
@@ -19471,7 +19472,8 @@ Defaults to powerforge.json in the project root.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="ConfigurationGateMode">
           <maml:name>RunMode</maml:name>
           <maml:description>
-            <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Build runs local build/package lanes,&#xD;
+            <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Documentation regenerates command Markdown&#xD;
+and external help without validation/tests/signing/package/install phases, Build runs local build/package lanes,&#xD;
 and Publish enables configured publish destinations.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
@@ -19662,7 +19664,8 @@ Defaults to powerforge.json in the project root.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="ConfigurationGateMode">
           <maml:name>RunMode</maml:name>
           <maml:description>
-            <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Build runs local build/package lanes,&#xD;
+            <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Documentation regenerates command Markdown&#xD;
+and external help without validation/tests/signing/package/install phases, Build runs local build/package lanes,&#xD;
 and Publish enables configured publish destinations.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
@@ -20143,7 +20146,8 @@ Defaults to powerforge.json in the project root.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="ConfigurationGateMode">
         <maml:name>RunMode</maml:name>
         <maml:description>
-          <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Build runs local build/package lanes,&#xD;
+          <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Documentation regenerates command Markdown&#xD;
+and external help without validation/tests/signing/package/install phases, Build runs local build/package lanes,&#xD;
 and Publish enables configured publish destinations.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
@@ -38790,13 +38794,14 @@ and (optionally) auto-fix issues during a build.</maml:para>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Type">
           <maml:name>Mode</maml:name>
           <maml:description>
-            <maml:para>High-level run mode. Use Manifest for PSD1 refresh, Build for local build/package work, and Publish for release publishing.</maml:para>
+            <maml:para>High-level run mode. Use Manifest for PSD1 refresh, Documentation for generated command docs and external help, Build for local build/package work, and Publish for release publishing.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">ConfigurationGateMode</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Manifest</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Build</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Publish</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Documentation</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ConfigurationGateMode</maml:name>
@@ -38810,13 +38815,14 @@ and (optionally) auto-fix issues during a build.</maml:para>
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Type">
         <maml:name>Mode</maml:name>
         <maml:description>
-          <maml:para>High-level run mode. Use Manifest for PSD1 refresh, Build for local build/package work, and Publish for release publishing.</maml:para>
+          <maml:para>High-level run mode. Use Manifest for PSD1 refresh, Documentation for generated command docs and external help, Build for local build/package work, and Publish for release publishing.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">ConfigurationGateMode</command:parameterValue>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">Manifest</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Build</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Publish</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Documentation</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>ConfigurationGateMode</maml:name>
@@ -38848,6 +38854,13 @@ and (optionally) auto-fix issues during a build.</maml:para>
       <command:example>
         <maml:title>Run only manifest refresh work.</maml:title>
         <dev:code>New-ConfigurationGate -Mode Manifest</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Regenerate command Markdown and external help without packaging or installing.</maml:title>
+        <dev:code>New-ConfigurationGate -Mode Documentation</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>

@@ -1566,6 +1566,49 @@ public sealed class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
+    public void RunPreflight_DocumentationGateDisablesRefreshOnlyBeforeOnlineToolCheck()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = CreateOnlineRequiredModuleSpec(
+                root.FullName,
+                moduleName,
+                refreshPsd1Only: true,
+                resolveMissingModulesOnline: true);
+            spec.Segments = new IConfigurationSegment[]
+            {
+                new ConfigurationGateSegment
+                {
+                    Configuration = new GateConfiguration
+                    {
+                        Mode = ConfigurationGateMode.Documentation
+                    }
+                }
+            }.Concat(spec.Segments).ToArray();
+
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            InvokeEnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(runner, spec);
+
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void RunPreflight_DoesNotRefreshExactRequiredVersionPrecomputedPlans()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

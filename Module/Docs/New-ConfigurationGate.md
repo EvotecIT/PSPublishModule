@@ -27,6 +27,12 @@ New-ConfigurationGate -Mode Manifest
 
 ### EXAMPLE 2
 ```powershell
+New-ConfigurationGate -Mode Documentation
+```
+
+
+### EXAMPLE 3
+```powershell
 New-ConfigurationGate -Mode Build
 ```
 
@@ -34,13 +40,13 @@ New-ConfigurationGate -Mode Build
 ## PARAMETERS
 
 ### -Mode
-High-level run mode. Use Manifest for PSD1 refresh, Build for local build/package work, and Publish for release publishing.
+High-level run mode. Use Manifest for PSD1 refresh, Documentation for generated command docs and external help, Build for local build/package work, and Publish for release publishing.
 
 ```yaml
 Type: ConfigurationGateMode
 Parameter Sets: __AllParameterSets
 Aliases: Type
-Possible values: Manifest, Build, Publish
+Possible values: Manifest, Build, Publish, Documentation
 
 Required: True
 Position: 0

@@ -11,6 +11,10 @@ namespace PSPublishModule;
 /// <code>New-ConfigurationGate -Mode Manifest</code>
 /// </example>
 /// <example>
+/// <summary>Regenerate command Markdown and external help without packaging or installing.</summary>
+/// <code>New-ConfigurationGate -Mode Documentation</code>
+/// </example>
+/// <example>
 /// <summary>Build locally without publishing configured destinations.</summary>
 /// <code>New-ConfigurationGate -Mode Build</code>
 /// </example>
@@ -19,7 +23,7 @@ namespace PSPublishModule;
 public sealed class NewConfigurationGateCommand : PSCmdlet
 {
     /// <summary>
-    /// High-level run mode. Use Manifest for PSD1 refresh, Build for local build/package work, and Publish for release publishing.
+    /// High-level run mode. Use Manifest for PSD1 refresh, Documentation for generated command docs and external help, Build for local build/package work, and Publish for release publishing.
     /// </summary>
     [Parameter(Mandatory = true, Position = 0)]
     [Alias("Type")]

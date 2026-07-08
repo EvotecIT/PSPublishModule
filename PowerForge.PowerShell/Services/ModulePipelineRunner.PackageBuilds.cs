@@ -280,6 +280,15 @@ public sealed partial class ModulePipelineRunner
         {
             target.CertificateThumbprint = null;
         }
+
+        if (gateMode == ConfigurationGateMode.Documentation &&
+            mode is PackageBuildExecutionMode.DependencyBuild or PackageBuildExecutionMode.BuildOnly)
+        {
+            target.CertificateThumbprint = null;
+            target.SignAssemblies = false;
+            target.SignPackages = false;
+            target.CreateReleaseZip = false;
+        }
     }
 
     private static bool HasProjectBuildActionOverride(ProjectBuildConfigurationReference reference)
@@ -335,6 +344,7 @@ public sealed partial class ModulePipelineRunner
         ConfigurationGateMode? gateMode)
         => mode switch
         {
+            PackageBuildExecutionMode.DependencyBuild when gateMode == ConfigurationGateMode.Documentation => false,
             PackageBuildExecutionMode.DependencyBuild => actions.UpdateVersions || actions.PublishNuGet || actions.PublishGitHub,
             PackageBuildExecutionMode.BuildOnly when gateMode == ConfigurationGateMode.Build => actions.UpdateVersions || actions.PublishNuGet || actions.PublishGitHub,
             PackageBuildExecutionMode.BuildOnly => actions.UpdateVersions,

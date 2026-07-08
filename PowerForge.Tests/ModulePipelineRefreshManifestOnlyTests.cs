@@ -351,6 +351,317 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
     }
 
     [Fact]
+    public void Plan_GateDocumentation_KeepsDocumentationAndDisablesPublishingPhases()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = Path.Combine(root.FullName, "Sources", moduleName, moduleName + ".csproj")
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = true },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration
+                        {
+                            Mode = ConfigurationGateMode.Documentation
+                        }
+                    },
+                    new ConfigurationDocumentationSegment
+                    {
+                        Configuration = new DocumentationConfiguration
+                        {
+                            Path = "Docs",
+                            PathReadme = "README.md"
+                        }
+                    },
+                    new ConfigurationBuildDocumentationSegment
+                    {
+                        Configuration = new BuildDocumentationConfiguration
+                        {
+                            Enable = true,
+                            GenerateExternalHelp = true,
+                            SyncExternalHelpToProjectRoot = true
+                        }
+                    },
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            RefreshPSD1Only = true,
+                            Merge = true,
+                            SignMerged = true,
+                            InstallMissingModules = true
+                        }
+                    },
+                    new ConfigurationFormattingSegment(),
+                    new ConfigurationValidationSegment(),
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            ConfigPath = Path.Combine("Build", "project.build.json"),
+                            Name = "pre-module-project-build",
+                            BuildBeforeModule = true,
+                            Build = true,
+                            PublishNuget = true,
+                            PublishGitHub = true
+                        }
+                    },
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            ConfigPath = Path.Combine("Build", "post-module-project.build.json"),
+                            Name = "post-module-project-build",
+                            BuildBeforeModule = false,
+                            Build = true,
+                            PublishNuget = true,
+                            PublishGitHub = true
+                        }
+                    },
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "pre-module-package-build",
+                            RootPath = "Sources",
+                            BuildBeforeModule = true,
+                            Build = true,
+                            PublishNuget = true,
+                            PublishGitHub = true
+                        }
+                    },
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "post-module-package-build",
+                            RootPath = "PostModuleSources",
+                            BuildBeforeModule = false,
+                            Build = true,
+                            PublishNuget = true,
+                            PublishGitHub = true
+                        }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Packed,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Enabled = true,
+                            Path = "Artefacts/Packed"
+                        }
+                    },
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            Enabled = true,
+                            Destination = PublishDestination.PowerShellGallery
+                        }
+                    },
+                    new ConfigurationExternalAssetSegment
+                    {
+                        Configuration = new ExternalAssetConfiguration
+                        {
+                            Name = "VendorTool",
+                            OutputPath = "Artefacts/VendorTool",
+                            SkipDownload = true,
+                            Files = new[]
+                            {
+                                new ExternalAssetFileConfiguration
+                                {
+                                    Runtime = "win-x64",
+                                    FileName = "tool.zip",
+                                    Uri = "Vendor/tool.zip"
+                                }
+                            }
+                        }
+                    },
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            Name = "kept-before-staging",
+                            At = ModulePipelineActionStage.BeforeStaging
+                        }
+                    },
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            Name = "kept-before-docs",
+                            At = ModulePipelineActionStage.BeforeDocumentation
+                        }
+                    },
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            Name = "removed-before-publish",
+                            At = ModulePipelineActionStage.BeforePublish
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+
+            Assert.Equal(ConfigurationGateMode.Documentation, plan.GateMode);
+            Assert.False(plan.BuildSpec.RefreshManifestOnly);
+            Assert.NotNull(plan.Documentation);
+            Assert.NotNull(plan.DocumentationBuild);
+            Assert.True(plan.DocumentationBuild.Enable);
+            Assert.False(plan.SyncNETProjectVersion);
+            Assert.False(plan.SignModule);
+            Assert.False(plan.InstallEnabled);
+            Assert.True(plan.InstallMissingModules);
+            Assert.Null(plan.Formatting);
+            Assert.Null(plan.ValidationSettings);
+            var projectBuild = Assert.Single(plan.ProjectBuilds);
+            Assert.Equal("pre-module-project-build", projectBuild.Configuration.Name);
+            Assert.True(projectBuild.Configuration.BuildBeforeModule);
+            var packageBuild = Assert.Single(plan.PackageBuilds);
+            Assert.Equal("pre-module-package-build", packageBuild.Configuration.Name);
+            Assert.True(packageBuild.Configuration.BuildBeforeModule);
+            Assert.Empty(plan.Artefacts);
+            Assert.Empty(plan.Publishes);
+            Assert.Single(plan.ExternalAssets);
+            Assert.Collection(
+                plan.Actions,
+                action => Assert.Equal(ModulePipelineActionStage.BeforeStaging, action.Configuration.At),
+                action => Assert.Equal(ModulePipelineActionStage.BeforeDocumentation, action.Configuration.At));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_GateDocumentation_DisablesVersionSyncBeforeCsprojRequirementResolution()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = true },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration
+                        {
+                            Mode = ConfigurationGateMode.Documentation
+                        }
+                    },
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            SyncNETProjectVersion = true
+                        }
+                    },
+                    new ConfigurationDocumentationSegment
+                    {
+                        Configuration = new DocumentationConfiguration
+                        {
+                            Path = "Docs",
+                            PathReadme = "README.md"
+                        }
+                    },
+                    new ConfigurationBuildDocumentationSegment
+                    {
+                        Configuration = new BuildDocumentationConfiguration
+                        {
+                            Enable = true
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+
+            Assert.False(plan.SyncNETProjectVersion);
+            Assert.Empty(plan.BuildSpec.CsprojRequiredReasons);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_GateDocumentation_UsesCurrentManifestVersionForPatternVersion()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "2.4.8");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "2.4.X"
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration
+                        {
+                            Mode = ConfigurationGateMode.Documentation
+                        }
+                    },
+                    new ConfigurationBuildDocumentationSegment
+                    {
+                        Configuration = new BuildDocumentationConfiguration
+                        {
+                            Enable = true
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+
+            Assert.Equal("2.4.8", plan.ExpectedVersion);
+            Assert.Equal("2.4.8", plan.ResolvedVersion);
+            Assert.Equal("2.4.8", plan.BuildSpec.Version);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_RefreshPSD1Only_PreservesResolvedCsprojPath_ForVersionSync()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -976,6 +1287,76 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
             Assert.DoesNotContain("# SIG # Begin signature block", sourceContent);
             Assert.DoesNotContain("# SIG # End signature block", sourceContent);
             Assert.Contains("# SIG # Begin signature block", File.ReadAllText(stagingPsm1));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void SyncBuildManifestToProjectRoot_CanSkipGeneratedBootstrapperCopy()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var sourcePsm1 = Path.Combine(root.FullName, moduleName + ".psm1");
+            File.WriteAllText(
+                sourcePsm1,
+                "# Auto-generated by PowerForge. Do not edit." + Environment.NewLine +
+                "# TestModule bootstrapper" + Environment.NewLine +
+                "Export-ModuleMember -Function @('Get-Old')" + Environment.NewLine);
+
+            var staging = Directory.CreateDirectory(Path.Combine(root.FullName, "staging"));
+            var stagingManifest = Path.Combine(staging.FullName, moduleName + ".psd1");
+            File.WriteAllText(
+                stagingManifest,
+                "@{" + Environment.NewLine +
+                "    RootModule = 'TestModule.psm1'" + Environment.NewLine +
+                "    ModuleVersion = '2.0.0'" + Environment.NewLine +
+                "    FunctionsToExport = @('Get-New')" + Environment.NewLine +
+                "    CmdletsToExport = @()" + Environment.NewLine +
+                "    AliasesToExport = @()" + Environment.NewLine +
+                "}");
+
+            var stagingPsm1 = Path.Combine(staging.FullName, moduleName + ".psm1");
+            File.WriteAllText(
+                stagingPsm1,
+                "# Auto-generated by PowerForge. Do not edit." + Environment.NewLine +
+                "# TestModule bootstrapper" + Environment.NewLine +
+                "Export-ModuleMember -Function @('Get-New')" + Environment.NewLine);
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "2.0.0",
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var buildResult = new ModuleBuildResult(
+                staging.FullName,
+                stagingManifest,
+                new ExportSet(new[] { "Get-New" }, Array.Empty<string>(), Array.Empty<string>()));
+
+            var message = runner.SyncBuildManifestToProjectRoot(plan, buildResult, syncGeneratedBootstrapper: false);
+
+            var projectManifest = File.ReadAllText(Path.Combine(root.FullName, moduleName + ".psd1"));
+            Assert.Contains("manifest and exports", message, StringComparison.Ordinal);
+            Assert.DoesNotContain("bootstrapper", message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Get-New", projectManifest, StringComparison.Ordinal);
+            Assert.DoesNotContain("Get-Old", projectManifest, StringComparison.Ordinal);
+            Assert.Contains("Get-Old", File.ReadAllText(sourcePsm1), StringComparison.Ordinal);
+            Assert.DoesNotContain("Get-New", File.ReadAllText(sourcePsm1), StringComparison.Ordinal);
         }
         finally
         {

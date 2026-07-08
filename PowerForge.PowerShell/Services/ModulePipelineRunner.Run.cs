@@ -7,6 +7,7 @@ public sealed partial class ModulePipelineRunner
     /// </summary>
     public ModulePipelineResult Run(ModulePipelineSpec spec)
     {
+        EnsureDocumentationGateConfigured(spec);
         EnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(spec);
         var plan = Plan(spec);
         return Run(spec, plan, progress: null, preflightPrecomputedPlan: false);
@@ -27,10 +28,15 @@ public sealed partial class ModulePipelineRunner
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
 
+        if (plan.GateMode == ConfigurationGateMode.Documentation)
+            EnsureDocumentationGateConfigured(plan);
+
         if (preflightPrecomputedPlan && ShouldRefreshPrecomputedPlanAfterOnlineRequiredModulePreflight(spec, plan))
         {
             EnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(spec);
             plan = Plan(spec);
+            if (plan.GateMode == ConfigurationGateMode.Documentation)
+                EnsureDocumentationGateConfigured(plan);
         }
 
         var manifestRequiredModules = ResolveOutputRequiredModules(plan.RequiredModules, plan.MergeMissing, plan.ApprovedModules);
@@ -46,6 +52,13 @@ public sealed partial class ModulePipelineRunner
         try
         {
             ExecutePreparationAndBuildPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, pipeline, state);
+            if (plan.GateMode == ConfigurationGateMode.Documentation)
+            {
+                ExecuteDocumentationPhase(plan, session, session.Reporter, state);
+                state.ProjectManifestSyncMessage = SyncBuildManifestToProjectRoot(plan, state.BuildResult, syncGeneratedBootstrapper: false);
+                return BuildPipelineResult(spec, plan, state);
+            }
+
             ExecuteFormattingAndSigningPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, state);
             ExecuteTypeAcceleratorSurfaceReportPhase(plan, state);
             ExecuteDocumentationPhase(plan, session, session.Reporter, state);
@@ -75,6 +88,65 @@ public sealed partial class ModulePipelineRunner
             if (state.PipelineFailure is not null)
                 session.NotifySkippedOnFailure();
         }
+    }
+
+    private static void EnsureDocumentationGateConfigured(ModulePipelinePlan plan)
+    {
+        if (plan.Documentation is not null && plan.DocumentationBuild?.Enable == true)
+        {
+            EnsureDocumentationPathIsSafe(plan.ProjectRoot, plan.Documentation);
+            return;
+        }
+
+        throw new InvalidOperationException("Gate mode Documentation requires an enabled Documentation and BuildDocumentation configuration.");
+    }
+
+    private static void EnsureDocumentationGateConfigured(ModulePipelineSpec spec)
+    {
+        if (spec is null)
+            throw new ArgumentNullException(nameof(spec));
+
+        var documentationGate = false;
+        DocumentationConfiguration? documentation = null;
+        var hasEnabledDocumentationBuild = false;
+
+        foreach (var segment in spec.Segments ?? Array.Empty<IConfigurationSegment>())
+        {
+            switch (segment)
+            {
+                case ConfigurationGateSegment gate:
+                    documentationGate = gate.Configuration.Mode == ConfigurationGateMode.Documentation;
+                    break;
+                case ConfigurationDocumentationSegment docs:
+                    documentation = docs.Configuration;
+                    break;
+                case ConfigurationBuildDocumentationSegment buildDocs:
+                    hasEnabledDocumentationBuild = buildDocs.Configuration?.Enable == true;
+                    break;
+            }
+        }
+
+        if (!documentationGate)
+            return;
+
+        if (documentation is not null && hasEnabledDocumentationBuild)
+        {
+            var sourcePath = spec.Build?.SourcePath ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(sourcePath))
+                EnsureDocumentationPathIsSafe(sourcePath, documentation);
+
+            return;
+        }
+
+        throw new InvalidOperationException("Gate mode Documentation requires an enabled Documentation and BuildDocumentation configuration.");
+    }
+
+    private static void EnsureDocumentationPathIsSafe(string projectRoot, DocumentationConfiguration documentation)
+    {
+        if (documentation is null)
+            throw new ArgumentNullException(nameof(documentation));
+
+        NormalizeProjectPathForStaging(projectRoot, documentation.Path, rejectProjectRoot: true);
     }
 
 }

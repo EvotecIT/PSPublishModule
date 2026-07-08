@@ -21,6 +21,7 @@ public sealed class ConfigurationSegmentJsonConverterTests
             .Select(static item => item.GetString())
             .ToArray();
         Assert.Contains("Manifest", modes);
+        Assert.Contains("Documentation", modes);
         Assert.Contains("Build", modes);
         Assert.Contains("Publish", modes);
         Assert.Contains("Mode", gateConfiguration.GetProperty("required").EnumerateArray().Select(static item => item.GetString()));
@@ -33,6 +34,15 @@ public sealed class ConfigurationSegmentJsonConverterTests
             .Select(static item => item.GetProperty("$ref").GetString())
             .ToArray();
         Assert.Contains("#/$defs/GateSegment", segmentRefs);
+    }
+
+    [Fact]
+    public void ConfigurationGateMode_NumericValuesRemainStable()
+    {
+        Assert.Equal(0, (int)ConfigurationGateMode.Manifest);
+        Assert.Equal(1, (int)ConfigurationGateMode.Build);
+        Assert.Equal(2, (int)ConfigurationGateMode.Publish);
+        Assert.Equal(3, (int)ConfigurationGateMode.Documentation);
     }
 
     [Fact]

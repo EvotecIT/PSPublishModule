@@ -106,9 +106,10 @@ public sealed partial class ModulePipelineRunner
         }
 
         if (plan.DocumentationBuild.GenerateExternalHelp &&
-            plan.DocumentationBuild.SyncExternalHelpToProjectRoot &&
+            (plan.DocumentationBuild.SyncExternalHelpToProjectRoot ||
+             plan.GateMode == ConfigurationGateMode.Documentation) &&
             !string.IsNullOrWhiteSpace(documentationResult.ExternalHelpFilePath) &&
-            File.Exists(documentationResult.ExternalHelpFilePath))        
+            File.Exists(documentationResult.ExternalHelpFilePath))
         {
             var externalHelpDir = Path.GetDirectoryName(Path.GetFullPath(documentationResult.ExternalHelpFilePath));
             var cultureFolder = string.IsNullOrWhiteSpace(externalHelpDir)

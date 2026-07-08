@@ -776,6 +776,7 @@ public sealed partial class ModulePipelineRunner
             case ConfigurationGateMode.Manifest:
                 refreshPsd1Only = true;
                 break;
+            case ConfigurationGateMode.Documentation:
             case ConfigurationGateMode.Build:
             case ConfigurationGateMode.Publish:
                 refreshPsd1Only = false;
