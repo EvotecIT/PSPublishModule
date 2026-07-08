@@ -2,6 +2,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Xml.Linq;
 using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text;
 
 namespace PowerForge;
 
@@ -114,14 +116,27 @@ public sealed class ManagedModuleCatalogStore
             CreatedAtUtc = now
         };
 
+        var source = NormalizeSource(request.Source);
+        var repositoryKind = request.RepositoryKind;
+        var sourceIdentityChanged = existing is not null &&
+                                    (!string.Equals(NormalizeSource(existing.Source), source, StringComparison.OrdinalIgnoreCase) ||
+                                     existing.RepositoryKind != repositoryKind);
+
         catalog.Name = name;
-        catalog.Source = NormalizeSource(request.Source);
-        catalog.RepositoryKind = request.RepositoryKind;
+        catalog.Source = source;
+        catalog.RepositoryKind = repositoryKind;
         catalog.Mode = request.Mode;
         catalog.MaxStaleness = request.MaxStaleness <= TimeSpan.Zero ? TimeSpan.FromDays(14) : request.MaxStaleness;
         catalog.IncludePrerelease = request.IncludePrerelease;
         catalog.UpdatedAtUtc = now;
-        catalog.Packages ??= new List<ManagedModuleCatalogPackage>();
+        catalog.Packages = sourceIdentityChanged
+            ? new List<ManagedModuleCatalogPackage>()
+            : catalog.Packages ?? new List<ManagedModuleCatalogPackage>();
+        if (sourceIdentityChanged)
+        {
+            catalog.LastRefreshAtUtc = null;
+            catalog.LastWarning = null;
+        }
 
         var catalogs = document.Catalogs
             .Where(item => !string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase))
@@ -178,6 +193,7 @@ public sealed class ManagedModuleCatalogStore
                     catalog,
                     packageName,
                     request.IncludePrerelease ?? catalog.IncludePrerelease,
+                    request.Credential,
                     warnings,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -220,17 +236,24 @@ public sealed class ManagedModuleCatalogStore
         ManagedModuleCatalog catalog,
         string packageName,
         bool includePrerelease,
+        RepositoryCredential? credential,
         List<string> warnings,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         try
         {
             var source = ResolveMetadataSource(catalog);
-            var documents = await ReadNuGetV2XmlPagesAsync(source, packageName, cancellationToken).ConfigureAwait(false);
+            var documents = await ReadNuGetV2XmlPagesAsync(source, packageName, credential, cancellationToken).ConfigureAwait(false);
             var package = ReadPackage(source, packageName, documents, includePrerelease);
             if (package is null)
                 warnings.Add($"Package '{packageName}' was not found in catalog source '{source}'.");
             return package;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException or System.Xml.XmlException)
         {
@@ -242,6 +265,7 @@ public sealed class ManagedModuleCatalogStore
     private async Task<IReadOnlyList<XDocument>> ReadNuGetV2XmlPagesAsync(
         string source,
         string packageName,
+        RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
         const int MaxPages = 100;
@@ -257,6 +281,7 @@ public sealed class ManagedModuleCatalogStore
 
             using var request = new HttpRequestMessage(HttpMethod.Get, current);
             request.Headers.Accept.ParseAdd("application/xml");
+            ApplyCredential(request, credential);
             using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
                 throw new HttpRequestException($"HTTP {(int)response.StatusCode} {response.ReasonPhrase}: {current}");
@@ -473,6 +498,22 @@ public sealed class ManagedModuleCatalogStore
 
     private static string EnsureTrailingSlash(string value)
         => value.EndsWith("/", StringComparison.Ordinal) ? value : value + "/";
+
+    private static void ApplyCredential(HttpRequestMessage request, RepositoryCredential? credential)
+    {
+        if (credential is null)
+            return;
+
+        if (!string.IsNullOrWhiteSpace(credential.UserName) && !string.IsNullOrWhiteSpace(credential.Secret))
+        {
+            var raw = Encoding.ASCII.GetBytes($"{credential.UserName}:{credential.Secret}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(raw));
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(credential.Secret))
+            request.Headers.Add("X-NuGet-ApiKey", credential.Secret);
+    }
 
     private static string? ReadString(XElement? entry, XNamespace data, string name)
         => entry?.Descendants(data + name).FirstOrDefault()?.Value.Trim();

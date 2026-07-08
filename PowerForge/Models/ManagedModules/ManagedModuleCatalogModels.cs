@@ -199,6 +199,9 @@ public sealed class ManagedModuleCatalogUpdateRequest
 
     /// <summary>Optional prerelease override for this refresh.</summary>
     public bool? IncludePrerelease { get; set; }
+
+    /// <summary>Optional repository credential used for authenticated catalog metadata refresh.</summary>
+    public RepositoryCredential? Credential { get; set; }
 }
 
 /// <summary>

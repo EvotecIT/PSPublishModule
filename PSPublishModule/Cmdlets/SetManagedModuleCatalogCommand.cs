@@ -64,14 +64,34 @@ public sealed class SetManagedModuleCatalogCommand : PSCmdlet
         if (!ShouldProcess(store.Path, $"Set managed module catalog '{Name}'"))
             return;
 
+        var existing = store.GetCatalog(Name);
+        var bound = MyInvocation.BoundParameters;
+        var source = bound.ContainsKey(nameof(Source))
+            ? Source
+            : existing?.Source ?? Source;
+        var repositoryKind = bound.ContainsKey(nameof(RepositoryKind))
+            ? RepositoryKind
+            : bound.ContainsKey(nameof(Source))
+                ? new ManagedModuleRepository(Name, source, ManagedModuleRepositoryKind.Auto).Kind
+                : existing?.RepositoryKind ?? new ManagedModuleRepository(Name, source, ManagedModuleRepositoryKind.Auto).Kind;
+        var mode = bound.ContainsKey(nameof(Mode))
+            ? Mode
+            : existing?.Mode ?? Mode;
+        var maxStaleness = bound.ContainsKey(nameof(MaxStaleness))
+            ? MaxStaleness
+            : existing?.MaxStaleness ?? MaxStaleness;
+        var includePrerelease = bound.ContainsKey(nameof(IncludePrerelease))
+            ? IncludePrerelease
+            : existing?.IncludePrerelease ?? IncludePrerelease;
+
         var catalog = store.SetCatalog(new ManagedModuleCatalogSetRequest
         {
             Name = Name,
-            Source = Source,
-            RepositoryKind = RepositoryKind,
-            Mode = Mode,
-            MaxStaleness = MaxStaleness,
-            IncludePrerelease = IncludePrerelease
+            Source = source,
+            RepositoryKind = repositoryKind,
+            Mode = mode,
+            MaxStaleness = maxStaleness,
+            IncludePrerelease = includePrerelease
         });
         WriteObject(catalog);
     }

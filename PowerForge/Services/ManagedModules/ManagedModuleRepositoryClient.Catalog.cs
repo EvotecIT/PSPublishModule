@@ -47,7 +47,7 @@ public sealed partial class ManagedModuleRepositoryClient
         if (readThroughCatalogs.Length > 0)
         {
             var liveVersions = await liveQuery(cancellationToken).ConfigureAwait(false);
-            await WarmCatalogsAsync(readThroughCatalogs, packageId, cancellationToken).ConfigureAwait(false);
+            await WarmCatalogsAsync(readThroughCatalogs, packageId, credential, cancellationToken).ConfigureAwait(false);
             return liveVersions;
         }
 
@@ -93,7 +93,7 @@ public sealed partial class ManagedModuleRepositoryClient
         {
             var liveVersion = await liveQuery(cancellationToken).ConfigureAwait(false);
             if (liveVersion is not null)
-                await WarmCatalogsAsync(readThroughCatalogs, packageId, cancellationToken).ConfigureAwait(false);
+                await WarmCatalogsAsync(readThroughCatalogs, packageId, credential, cancellationToken).ConfigureAwait(false);
             return liveVersion;
         }
 
@@ -140,11 +140,11 @@ public sealed partial class ManagedModuleRepositoryClient
         if (readThroughCatalogs.Length > 0)
         {
             var liveMatches = await liveQuery(cancellationToken).ConfigureAwait(false);
-            await WarmCatalogsAsync(readThroughCatalogs, liveMatches.Select(static match => match.Name), cancellationToken).ConfigureAwait(false);
+            await WarmCatalogsAsync(readThroughCatalogs, liveMatches.Select(static match => match.Name), credential, cancellationToken).ConfigureAwait(false);
             return liveMatches;
         }
 
-        var cachedMatches = SearchFirstCatalogVersions(repository, catalogs, query, includePrerelease, take, skip);
+        var cachedMatches = SearchCatalogVersions(repository, catalogs, query, includePrerelease, take, skip);
         if (catalogs.Any(static catalog => catalog.Catalog.Mode == ManagedModuleCatalogCacheMode.Offline))
             return cachedMatches;
         if (catalogs.Any(static catalog => catalog.Catalog.Mode == ManagedModuleCatalogCacheMode.PreferCache) && cachedMatches.Count > 0)
@@ -194,27 +194,17 @@ public sealed partial class ManagedModuleRepositoryClient
             .Select(catalog => GetLatestCatalogVersion(repository, catalog.Catalog, packageId, includePrerelease))
             .FirstOrDefault(static version => version is not null);
 
-    private IReadOnlyList<ManagedModuleVersionInfo> SearchFirstCatalogVersions(
-        ManagedModuleRepository repository,
-        IReadOnlyList<ManagedModuleCatalogMatch> catalogs,
-        string query,
-        bool includePrerelease,
-        int take,
-        int skip)
-        => catalogs
-            .Select(catalog => SearchCatalogVersions(repository, catalog.Catalog, query, includePrerelease, take, skip))
-            .FirstOrDefault(static versions => versions.Count > 0) ??
-           Array.Empty<ManagedModuleVersionInfo>();
-
     private async Task WarmCatalogsAsync(
         IReadOnlyList<ManagedModuleCatalogMatch> catalogs,
         string packageId,
+        RepositoryCredential? credential,
         CancellationToken cancellationToken)
-        => await WarmCatalogsAsync(catalogs, new[] { packageId }, cancellationToken).ConfigureAwait(false);
+        => await WarmCatalogsAsync(catalogs, new[] { packageId }, credential, cancellationToken).ConfigureAwait(false);
 
     private async Task WarmCatalogsAsync(
         IReadOnlyList<ManagedModuleCatalogMatch> catalogs,
         IEnumerable<string> packageIds,
+        RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
         var packages = packageIds
@@ -233,7 +223,8 @@ public sealed partial class ManagedModuleRepositoryClient
                         {
                             Name = catalog.Catalog.Name,
                             PackageNames = packages,
-                            IncludePrerelease = catalog.Catalog.IncludePrerelease
+                            IncludePrerelease = catalog.Catalog.IncludePrerelease,
+                            Credential = credential
                         },
                         cancellationToken)
                     .ConfigureAwait(false);
@@ -274,11 +265,25 @@ public sealed partial class ManagedModuleRepositoryClient
 
     private IReadOnlyList<ManagedModuleVersionInfo> SearchCatalogVersions(
         ManagedModuleRepository repository,
-        ManagedModuleCatalog catalog,
+        IReadOnlyList<ManagedModuleCatalogMatch> catalogs,
         string query,
         bool includePrerelease,
         int take,
         int skip)
+        => catalogs
+            .SelectMany(catalog => SearchCatalogVersions(repository, catalog.Catalog, query, includePrerelease))
+            .GroupBy(static version => version.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .OrderBy(static version => version.Name, StringComparer.OrdinalIgnoreCase)
+            .Skip(Math.Max(0, skip))
+            .Take(Math.Max(1, take))
+            .ToArray();
+
+    private IReadOnlyList<ManagedModuleVersionInfo> SearchCatalogVersions(
+        ManagedModuleRepository repository,
+        ManagedModuleCatalog catalog,
+        string query,
+        bool includePrerelease)
         => catalog.Packages
             .Where(package => IsCatalogPackageUsable(catalog, package))
             .Where(package => ManagedModuleSearchMatcher.IsMatch(query, package.Id))
@@ -290,9 +295,6 @@ public sealed partial class ManagedModuleRepositoryClient
                 .LastOrDefault())
             .Where(static version => version is not null)
             .Select(static version => version!)
-            .OrderBy(static version => version.Name, StringComparer.OrdinalIgnoreCase)
-            .Skip(Math.Max(0, skip))
-            .Take(Math.Max(1, take))
             .ToArray();
 
     private static ManagedModuleCatalogPackage? FindCatalogPackage(ManagedModuleCatalog catalog, string packageId)

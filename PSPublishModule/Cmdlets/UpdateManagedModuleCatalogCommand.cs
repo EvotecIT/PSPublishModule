@@ -34,6 +34,25 @@ public sealed class UpdateManagedModuleCatalogCommand : PSCmdlet
     [Parameter]
     public bool? IncludePrerelease { get; set; }
 
+    /// <summary>Optional repository credential.</summary>
+    [Parameter]
+    public PSCredential? Credential { get; set; }
+
+    /// <summary>Optional repository credential username.</summary>
+    [Parameter]
+    [Alias("UserName")]
+    public string? CredentialUserName { get; set; }
+
+    /// <summary>Optional repository credential secret.</summary>
+    [Parameter]
+    [Alias("Password", "Token")]
+    public string? CredentialSecret { get; set; }
+
+    /// <summary>Optional path to a file containing the repository credential secret.</summary>
+    [Parameter]
+    [Alias("CredentialPath", "TokenPath")]
+    public string? CredentialSecretFilePath { get; set; }
+
     /// <summary>Catalog storage scope.</summary>
     [Parameter]
     public ModuleRepositoryProfileScope Scope { get; set; } = ModuleRepositoryProfileScope.User;
@@ -59,11 +78,13 @@ public sealed class UpdateManagedModuleCatalogCommand : PSCmdlet
         if (!ShouldProcess(store.Path, $"Update managed module catalog '{Name}'"))
             return;
 
+        var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
         var result = store.UpdateCatalogAsync(new ManagedModuleCatalogUpdateRequest
         {
             Name = Name,
             PackageNames = _packageNames.ToArray(),
-            IncludePrerelease = IncludePrerelease
+            IncludePrerelease = IncludePrerelease,
+            Credential = credential
         }, CancellationToken.None).GetAwaiter().GetResult();
         WriteObject(result);
     }

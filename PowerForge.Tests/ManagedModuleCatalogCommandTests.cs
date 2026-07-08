@@ -64,6 +64,44 @@ public sealed class ManagedModuleCatalogCommandTests
         }
     }
 
+    [Fact]
+    public void SetManagedModuleCatalog_preserves_custom_source_on_mode_only_updates()
+    {
+        using var temp = new TemporaryDirectory();
+        var catalogPath = Path.Combine(temp.Path, "catalog.json");
+        var previous = Environment.GetEnvironmentVariable("POWERFORGE_MODULE_CATALOG_PATH");
+        try
+        {
+            Environment.SetEnvironmentVariable("POWERFORGE_MODULE_CATALOG_PATH", catalogPath);
+            using var ps = CreatePowerShellWithModuleImported();
+
+            ps.AddCommand("Set-ManagedModuleCatalog")
+                .AddParameter("Name", "Internal")
+                .AddParameter("Source", "https://packages.contoso.example/api/v2")
+                .AddParameter("Mode", ManagedModuleCatalogCacheMode.Fallback);
+            var firstResults = ps.Invoke();
+            AssertNoPowerShellErrors(ps);
+            var first = Assert.IsType<ManagedModuleCatalog>(Assert.Single(firstResults).BaseObject);
+            Assert.Equal(ManagedModuleRepositoryKind.NuGetV2, first.RepositoryKind);
+
+            ps.Commands.Clear();
+            ps.AddCommand("Set-ManagedModuleCatalog")
+                .AddParameter("Name", "Internal")
+                .AddParameter("Mode", ManagedModuleCatalogCacheMode.Offline);
+            var secondResults = ps.Invoke();
+            AssertNoPowerShellErrors(ps);
+            var second = Assert.IsType<ManagedModuleCatalog>(Assert.Single(secondResults).BaseObject);
+
+            Assert.Equal("https://packages.contoso.example/api/v2", second.Source);
+            Assert.Equal(ManagedModuleRepositoryKind.NuGetV2, second.RepositoryKind);
+            Assert.Equal(ManagedModuleCatalogCacheMode.Offline, second.Mode);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("POWERFORGE_MODULE_CATALOG_PATH", previous);
+        }
+    }
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();

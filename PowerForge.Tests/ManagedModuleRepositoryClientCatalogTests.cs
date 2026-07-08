@@ -63,6 +63,38 @@ public sealed class ManagedModuleRepositoryClientCatalogTests
     }
 
     [Fact]
+    public async Task SearchPackagesAsync_merges_catalog_matches_across_user_and_machine_scopes()
+    {
+        using var temp = new TemporaryDirectory();
+        var userCatalogPath = await CreateCatalogAsync(
+            temp.Path,
+            "Pester",
+            "5.7.0",
+            ManagedModuleCatalogCacheMode.Fallback);
+        var machineCatalogPath = await CreateCatalogAsync(
+            Path.Combine(temp.Path, "machine"),
+            "PSReadLine",
+            "2.3.6",
+            ManagedModuleCatalogCacheMode.Fallback);
+        using var client = new HttpClient(new FailingGalleryHandler());
+        var repositoryClient = new ManagedModuleRepositoryClient(
+            new NullLogger(),
+            client,
+            options: new ManagedModuleRepositoryClientOptions
+            {
+                ManagedModuleCatalogPath = userCatalogPath,
+                MachineManagedModuleCatalogPath = machineCatalogPath,
+                RetryDelay = TimeSpan.Zero,
+                MaxRetries = 0
+            });
+        var repository = CreatePowerShellGalleryRepository();
+
+        var results = await repositoryClient.SearchPackagesAsync(repository, "P*", includePrerelease: false, take: 10);
+
+        Assert.Equal(new[] { "Pester", "PSReadLine" }, results.Select(result => result.Name).OrderBy(static name => name, StringComparer.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task GetVersionsAsync_uses_managed_catalog_offline_without_live_gallery_request()
     {
         using var temp = new TemporaryDirectory();
@@ -150,6 +182,31 @@ public sealed class ManagedModuleRepositoryClientCatalogTests
         return catalogPath;
     }
 
+    private static async Task<string> CreateCatalogAsync(
+        string tempRoot,
+        string packageName,
+        string stableVersion,
+        ManagedModuleCatalogCacheMode mode)
+    {
+        var catalogPath = Path.Combine(tempRoot, "catalog.json");
+        using var client = new HttpClient(new CatalogRefreshHandler(packageName, stableVersion, includePrerelease: false));
+        var store = new ManagedModuleCatalogStore(catalogPath, client);
+        store.SetCatalog(new ManagedModuleCatalogSetRequest
+        {
+            Name = "PSGallery",
+            Source = ManagedModuleCatalogDefaults.PowerShellGalleryV3,
+            Mode = mode,
+            MaxStaleness = TimeSpan.FromDays(30),
+            IncludePrerelease = true
+        });
+        await store.UpdateCatalogAsync(new ManagedModuleCatalogUpdateRequest
+        {
+            Name = "PSGallery",
+            PackageNames = new[] { packageName }
+        });
+        return catalogPath;
+    }
+
     private static void CreateEmptyCatalog(string catalogPath, ManagedModuleCatalogCacheMode mode)
     {
         var store = new ManagedModuleCatalogStore(catalogPath);
@@ -189,47 +246,47 @@ public sealed class ManagedModuleRepositoryClientCatalogTests
 
     private sealed class CatalogRefreshHandler : HttpMessageHandler
     {
+        private readonly string _packageName;
+        private readonly string _stableVersion;
+        private readonly bool _includePrerelease;
+
+        public CatalogRefreshHandler()
+            : this("Pester", "5.7.0", includePrerelease: true)
+        {
+        }
+
+        public CatalogRefreshHandler(string packageName, string stableVersion, bool includePrerelease)
+        {
+            _packageName = packageName;
+            _stableVersion = stableVersion;
+            _includePrerelease = includePrerelease;
+        }
+
         public int RequestCount { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             RequestCount++;
             var uri = request.RequestUri ?? throw new InvalidOperationException("Request URI is required.");
-            if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v2/FindPackagesById()?id='Pester'&semVerLevel=2.0.0")
+            if (uri.AbsoluteUri == $"https://www.powershellgallery.com/api/v2/FindPackagesById()?id='{_packageName}'&semVerLevel=2.0.0")
             {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new StringContent(CreatePesterFeed(), Encoding.UTF8, "application/xml")
+                    Content = new StringContent(CreateFeed(_packageName, _stableVersion, _includePrerelease), Encoding.UTF8, "application/xml")
                 });
             }
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         }
 
-        private static string CreatePesterFeed()
-            => """
-<?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"
-      xmlns:d="http://schemas.microsoft.com/ado/2007/08/dataservices"
-      xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata">
+        private static string CreateFeed(string packageName, string stableVersion, bool includePrerelease)
+        {
+            var prereleaseEntry = includePrerelease
+                ? $"""
   <entry>
-    <content type="application/zip" src="https://www.powershellgallery.com/api/v2/package/Pester/5.7.0">
+    <content type="application/zip" src="https://www.powershellgallery.com/api/v2/package/{packageName}/5.8.0-preview1">
       <m:properties>
-        <d:Id>Pester</d:Id>
-        <d:Version>5.7.0</d:Version>
-        <d:NormalizedVersion>5.7.0</d:NormalizedVersion>
-        <d:Tags>powershell test</d:Tags>
-        <d:IsPrerelease m:type="Edm.Boolean">false</d:IsPrerelease>
-        <d:IsLatestVersion m:type="Edm.Boolean">true</d:IsLatestVersion>
-        <d:IsAbsoluteLatestVersion m:type="Edm.Boolean">false</d:IsAbsoluteLatestVersion>
-        <d:Published m:type="Edm.DateTime">2025-01-01T00:00:00</d:Published>
-      </m:properties>
-    </content>
-  </entry>
-  <entry>
-    <content type="application/zip" src="https://www.powershellgallery.com/api/v2/package/Pester/5.8.0-preview1">
-      <m:properties>
-        <d:Id>Pester</d:Id>
+        <d:Id>{packageName}</d:Id>
         <d:Version>5.8.0-preview1</d:Version>
         <d:NormalizedVersion>5.8.0-preview1</d:NormalizedVersion>
         <d:Tags>powershell test</d:Tags>
@@ -240,7 +297,31 @@ public sealed class ManagedModuleRepositoryClientCatalogTests
       </m:properties>
     </content>
   </entry>
+"""
+                : string.Empty;
+
+            return $"""
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:d="http://schemas.microsoft.com/ado/2007/08/dataservices"
+      xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata">
+  <entry>
+    <content type="application/zip" src="https://www.powershellgallery.com/api/v2/package/{packageName}/{stableVersion}">
+      <m:properties>
+        <d:Id>{packageName}</d:Id>
+        <d:Version>{stableVersion}</d:Version>
+        <d:NormalizedVersion>{stableVersion}</d:NormalizedVersion>
+        <d:Tags>powershell test</d:Tags>
+        <d:IsPrerelease m:type="Edm.Boolean">false</d:IsPrerelease>
+        <d:IsLatestVersion m:type="Edm.Boolean">true</d:IsLatestVersion>
+        <d:IsAbsoluteLatestVersion m:type="Edm.Boolean">false</d:IsAbsoluteLatestVersion>
+        <d:Published m:type="Edm.DateTime">2025-01-01T00:00:00</d:Published>
+      </m:properties>
+    </content>
+  </entry>
+{prereleaseEntry}
 </feed>
 """;
+        }
     }
 }
