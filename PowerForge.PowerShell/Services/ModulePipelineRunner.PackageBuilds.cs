@@ -287,6 +287,7 @@ public sealed partial class ModulePipelineRunner
             target.CertificateThumbprint = null;
             target.SignAssemblies = false;
             target.SignPackages = false;
+            target.CreateReleaseZip = false;
         }
     }
 

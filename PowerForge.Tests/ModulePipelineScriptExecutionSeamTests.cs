@@ -329,6 +329,82 @@ public sealed class ModulePipelineScriptExecutionSeamTests
     }
 
     [Fact]
+    public void Plan_DocumentationGatePreservesManifestVersionAndSuppressesDelivery()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.2.3");
+
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                new FakeHostedOperations());
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "9.9.9"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration
+                        {
+                            Mode = ConfigurationGateMode.Documentation
+                        }
+                    },
+                    new ConfigurationOptionsSegment
+                    {
+                        Options = new ConfigurationOptions
+                        {
+                            Delivery = new DeliveryOptionsConfiguration
+                            {
+                                Enable = true,
+                                IncludeRootReadme = true
+                            }
+                        }
+                    },
+                    new ConfigurationDocumentationSegment
+                    {
+                        Configuration = new DocumentationConfiguration
+                        {
+                            Path = "Docs",
+                            PathReadme = "Docs\\Readme.md"
+                        }
+                    },
+                    new ConfigurationBuildDocumentationSegment
+                    {
+                        Configuration = new BuildDocumentationConfiguration
+                        {
+                            Enable = true,
+                            GenerateExternalHelp = false
+                        }
+                    }
+                }
+            };
+
+            var plan = runner.Plan(spec);
+
+            Assert.Equal("1.2.3", plan.ExpectedVersion);
+            Assert.Equal("1.2.3", plan.ResolvedVersion);
+            Assert.Equal("1.2.3", plan.BuildSpec.Version);
+            Assert.Null(plan.Delivery);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Run_DocumentationGateRequiresDocumentationConfiguration()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

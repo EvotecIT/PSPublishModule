@@ -701,6 +701,7 @@ public sealed partial class ModulePipelinePackageBuildTests
                             CertificateThumbprint = "ABC123",
                             SignAssemblies = true,
                             SignPackages = true,
+                            CreateReleaseZip = true,
                             BuildBeforeModule = true,
                             Build = true,
                             PublishNuget = true,
@@ -823,6 +824,7 @@ public sealed partial class ModulePipelinePackageBuildTests
             Assert.Null(call.Configuration?.CertificateThumbprint);
             Assert.False(call.Configuration?.SignAssemblies);
             Assert.False(call.Configuration?.SignPackages);
+            Assert.False(call.Configuration?.CreateReleaseZip);
         }
         finally
         {
@@ -854,7 +856,8 @@ public sealed partial class ModulePipelinePackageBuildTests
                     "  \"PublishGitHub\": true,",
                     "  \"CertificateThumbprint\": \"ABC123\",",
                     "  \"SignAssemblies\": true,",
-                    "  \"SignPackages\": true",
+                    "  \"SignPackages\": true,",
+                    "  \"CreateReleaseZip\": true",
                     "}"
                 }));
 
@@ -936,6 +939,7 @@ public sealed partial class ModulePipelinePackageBuildTests
             Assert.Null(call.Configuration?.CertificateThumbprint);
             Assert.False(call.Configuration?.SignAssemblies);
             Assert.False(call.Configuration?.SignPackages);
+            Assert.False(call.Configuration?.CreateReleaseZip);
         }
         finally
         {

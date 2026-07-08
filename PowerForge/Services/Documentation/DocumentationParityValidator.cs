@@ -146,7 +146,7 @@ internal static class DocumentationParityValidator
             .Where(static name => !ContainsWildcard(name))
             .ToArray();
 
-        if (names.Length == 0)
+        if (names.Length == 0 && !isComplete)
             return null;
 
         return names;

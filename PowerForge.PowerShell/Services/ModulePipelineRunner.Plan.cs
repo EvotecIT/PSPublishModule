@@ -549,9 +549,19 @@ public sealed partial class ModulePipelineRunner
         }
 
         expectedVersion ??= spec.Build.Version;
-        if (IsAutoVersion(expectedVersion))
+        var psd1 = Path.Combine(projectRoot, $"{moduleName}.psd1");
+        if (gateMode == ConfigurationGateMode.Documentation &&
+            File.Exists(psd1) &&
+            ModuleManifestValueReader.TryGetTopLevelString(psd1, "ModuleVersion", out var documentationManifestVersion) &&
+            !string.IsNullOrWhiteSpace(documentationManifestVersion))
         {
-            var psd1 = Path.Combine(projectRoot, $"{moduleName}.psd1");
+            if (!string.Equals(expectedVersion, documentationManifestVersion, StringComparison.OrdinalIgnoreCase))
+                _logger.Info($"Gate mode Documentation enabled: using current manifest version {documentationManifestVersion} instead of configured version {expectedVersion}.");
+
+            expectedVersion = documentationManifestVersion;
+        }
+        else if (IsAutoVersion(expectedVersion))
+        {
             try
             {
                 if (File.Exists(psd1) &&
@@ -570,18 +580,6 @@ public sealed partial class ModulePipelineRunner
             {
                 _logger.Warn($"Failed to read ModuleVersion from manifest: {psd1}. Falling back to 1.0.0. Error: {ex.Message}");
                 expectedVersion = "1.0.0";
-            }
-        }
-        else if (gateMode == ConfigurationGateMode.Documentation &&
-                 IsVersionPattern(expectedVersion))
-        {
-            var psd1 = Path.Combine(projectRoot, $"{moduleName}.psd1");
-            if (File.Exists(psd1) &&
-                ModuleManifestValueReader.TryGetTopLevelString(psd1, "ModuleVersion", out var manifestVersion) &&
-                !string.IsNullOrWhiteSpace(manifestVersion))
-            {
-                _logger.Info($"Gate mode Documentation enabled: using current manifest version {manifestVersion} instead of stepping {expectedVersion}.");
-                expectedVersion = manifestVersion;
             }
         }
 
@@ -887,6 +885,7 @@ public sealed partial class ModulePipelineRunner
             testsAfterMerge.Clear();
             enabledArtefacts = Array.Empty<ConfigurationArtefactSegment>();
             enabledPublishes = Array.Empty<ConfigurationPublishSegment>();
+            delivery = null;
             projectBuilds = projectBuilds
                 .Where(static build => build?.Configuration?.BuildBeforeModule == true)
                 .ToList();

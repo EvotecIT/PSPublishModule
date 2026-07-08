@@ -86,6 +86,31 @@ public sealed class DocumentationParityValidatorTests
     }
 
     [Fact]
+    public void Validate_FailsOnStaleDocsWhenExactExportsAreExplicitlyEmpty()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var docsPath = Path.Combine(root.FullName, "Docs");
+            Directory.CreateDirectory(docsPath);
+            WriteCommandMarkdown(docsPath, "Get-StaleCommand");
+
+            var report = DocumentationParityValidator.Validate(
+                docsPath,
+                externalHelpFilePath: null,
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+            Assert.False(report.Succeeded);
+            Assert.Equal(0, report.ExactExportedCommandCount);
+            Assert.Contains(report.Errors, error => error.Contains("stale/non-exported", StringComparison.Ordinal));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Validate_StillChecksExactCmdletsWhenFunctionsAreWildcarded()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
