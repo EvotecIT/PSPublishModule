@@ -220,7 +220,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
             if (signNuGetPackages)
             {
-                signingSha256 = GetCertificateSha256(spec.CertificateThumbprint!.Trim(), spec.CertificateStore);
+                signingSha256 = _getCertificateSha256(spec.CertificateThumbprint!.Trim(), spec.CertificateStore);
                 if (signingSha256 is null)
                 {
                     result.Success = false;
@@ -475,12 +475,13 @@ public sealed partial class DotNetRepositoryReleaseService
                     {
                         _logger.Info($"Signing {packagesToSign.Length} NuGet package(s)...");
                         var signingWatch = Stopwatch.StartNew();
-                        if (!SignPackages(packagesToSign, spec, signingSha256, out var signError))
+                        if (!_signPackages(packagesToSign, spec, signingSha256, out var signError))
                         {
                             signingWatch.Stop();
                             result.ErrorMessage = signError;
                             _logger.Warn(signError);
                             result.Success = false;
+                            MarkPackageSigningFailure(packable, packagesToSign, signError);
                             if (spec.PublishFailFast)
                                 return result;
                         }
@@ -596,6 +597,32 @@ public sealed partial class DotNetRepositoryReleaseService
             result.Success = false;
             result.ErrorMessage = ex.Message;
             return result;
+        }
+    }
+
+    private static void MarkPackageSigningFailure(
+        IEnumerable<DotNetRepositoryProjectResult> projects,
+        IReadOnlyList<string> packagesToSign,
+        string signError)
+    {
+        var failedPackages = new HashSet<string>(
+            packagesToSign.Where(package => !string.IsNullOrWhiteSpace(package)),
+            StringComparer.OrdinalIgnoreCase);
+
+        if (failedPackages.Count == 0)
+            return;
+
+        var message = string.IsNullOrWhiteSpace(signError)
+            ? "Package signing failed."
+            : $"Package signing failed: {signError}";
+
+        foreach (var project in projects)
+        {
+            if (!string.IsNullOrWhiteSpace(project.ErrorMessage))
+                continue;
+
+            if (project.Packages.Any(package => failedPackages.Contains(package)))
+                project.ErrorMessage = message;
         }
     }
 

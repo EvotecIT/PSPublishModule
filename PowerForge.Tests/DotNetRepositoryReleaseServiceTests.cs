@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
@@ -478,6 +479,76 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.Single(project.Packages);
             Assert.True(File.Exists(project.Packages[0]));
             Assert.True(File.Exists(project.ReleaseZipPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Execute_WithPackageSigningFailure_DoesNotPublishUnsignedPackagesWhenFailFastIsDisabled()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Src", "Sample.Package"));
+            File.WriteAllText(Path.Combine(projectDir.FullName, "Sample.Package.csproj"), string.Join(Environment.NewLine, new[]
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <TargetFramework>net8.0</TargetFramework>",
+                "    <PackageId>Sample.Package</PackageId>",
+                "    <VersionPrefix>1.2.3</VersionPrefix>",
+                "    <IsPackable>true</IsPackable>",
+                "  </PropertyGroup>",
+                "</Project>"
+            }));
+            File.WriteAllText(Path.Combine(projectDir.FullName, "Class1.cs"), "namespace Sample.Package; public static class Class1 { public static string Value => \"signed\"; }");
+
+            var localFeed = Directory.CreateDirectory(Path.Combine(root.FullName, "feed"));
+            var packagesSeenBySigner = Array.Empty<string>();
+            DotNetRepositoryReleaseService.PackageSigningHandler signPackages = (
+                IReadOnlyList<string> packages,
+                DotNetRepositoryReleaseSpec spec,
+                string sha256,
+                out string error) =>
+            {
+                packagesSeenBySigner = packages.ToArray();
+                error = "simulated signing failure";
+                return false;
+            };
+
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Configuration = "Release",
+                OutputPath = Path.Combine(root.FullName, "packages"),
+                Pack = true,
+                Publish = true,
+                PublishApiKey = "key",
+                PublishSource = localFeed.FullName,
+                PublishFailFast = false,
+                SkipDuplicate = true,
+                UpdateVersions = false,
+                CreateReleaseZip = false,
+                CertificateThumbprint = "ABC123",
+                SignAssemblies = false,
+                SignPackages = true
+            };
+
+            var result = new DotNetRepositoryReleaseService(
+                new NullLogger(),
+                signPackages,
+                (_, _) => "ABCDEF").Execute(spec);
+
+            Assert.False(result.Success);
+            Assert.Single(packagesSeenBySigner);
+            Assert.Empty(result.PublishedPackages);
+            Assert.Empty(Directory.EnumerateFiles(localFeed.FullName, "*.nupkg", SearchOption.AllDirectories));
+            var project = Assert.Single(result.Projects, item => item.IsPackable);
+            Assert.Contains("Package signing failed", project.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Publish preflight failed", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

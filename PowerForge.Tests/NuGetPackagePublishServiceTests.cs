@@ -148,6 +148,45 @@ public sealed class NuGetPackagePublishServiceTests
     }
 
     [Fact]
+    public void ExecutePackages_PreservesExplicitPackageOrder()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-nuget-publish-explicit-order-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            var dependencyPackagePath = Path.Combine(root.FullName, "Z.Dependency.1.0.0.nupkg");
+            var consumerPackagePath = Path.Combine(root.FullName, "A.Consumer.1.0.0.nupkg");
+            File.WriteAllText(dependencyPackagePath, "pkg");
+            File.WriteAllText(consumerPackagePath, "pkg");
+
+            var pushed = new List<string>();
+            var service = new NuGetPackagePublishService(
+                new NullLogger(),
+                (package, _, _, _) =>
+                {
+                    pushed.Add(package);
+                    return new DotNetRepositoryReleaseService.PackagePushResult
+                    {
+                        Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Published
+                    };
+                });
+
+            var result = service.ExecutePackages(
+                new[] { dependencyPackagePath, consumerPackagePath, dependencyPackagePath },
+                "key",
+                "https://api.nuget.org/v3/index.json",
+                skipDuplicate: true);
+
+            Assert.True(result.Success);
+            Assert.Equal(new[] { dependencyPackagePath, consumerPackagePath }, pushed);
+            Assert.Equal(new[] { dependencyPackagePath, consumerPackagePath }, result.PublishedItems);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Execute_treats_skipped_duplicate_as_success()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-nuget-publish-dup-" + Guid.NewGuid().ToString("N")));

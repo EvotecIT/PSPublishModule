@@ -107,7 +107,6 @@ internal sealed class NuGetPackagePublishService
         var packagePaths = packages
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Where(path => unique.Add(path))
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         if (packagePaths.Length == 0)
