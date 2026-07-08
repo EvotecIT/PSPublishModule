@@ -10,7 +10,7 @@ param(
     [switch] $SignModule,
     [string] $ModuleVersion,
     [string] $PreReleaseTag,
-    [string] $CertificateThumbprint = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703',
+    [string] $CertificateThumbprint = '92e95fb58effa6a4a75e77a33cdd6bfe6dd30f1a',
     [switch] $SignIncludeBinaries,
     [switch] $SignIncludeInternals,
     [switch] $SignIncludeExe,
