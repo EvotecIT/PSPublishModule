@@ -207,7 +207,7 @@ public sealed class ManagedModuleCatalogStore
         var refreshed = 0;
         foreach (var packageName in packageNames)
         {
-            var package = await TryReadPackageAsync(
+            var readResult = await TryReadPackageAsync(
                     catalog,
                     packageName,
                     request.IncludePrerelease ?? catalog.IncludePrerelease,
@@ -215,6 +215,14 @@ public sealed class ManagedModuleCatalogStore
                     warnings,
                     cancellationToken)
                 .ConfigureAwait(false);
+            if (readResult.Package is null && readResult.Succeeded)
+            {
+                RemovePackage(catalog, packageName);
+                refreshed++;
+                continue;
+            }
+
+            var package = readResult.Package;
             if (package is null)
                 continue;
 
@@ -250,7 +258,7 @@ public sealed class ManagedModuleCatalogStore
         };
     }
 
-    private async Task<ManagedModuleCatalogPackage?> TryReadPackageAsync(
+    private async Task<CatalogPackageReadResult> TryReadPackageAsync(
         ManagedModuleCatalog catalog,
         string packageName,
         bool includePrerelease,
@@ -267,7 +275,7 @@ public sealed class ManagedModuleCatalogStore
                 : await ReadNuGetV2PackageAsync(catalog, packageName, includePrerelease, credential, cancellationToken).ConfigureAwait(false);
             if (package is null)
                 warnings.Add($"Package '{packageName}' was not found in catalog source '{catalog.Source}'.");
-            return package;
+            return new CatalogPackageReadResult(package, succeeded: true);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -276,7 +284,7 @@ public sealed class ManagedModuleCatalogStore
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException or System.Xml.XmlException or JsonException)
         {
             warnings.Add($"Package '{packageName}' refresh failed: {ex.GetType().Name}: {ex.Message}");
-            return null;
+            return new CatalogPackageReadResult(null, succeeded: false);
         }
     }
 
@@ -300,7 +308,7 @@ public sealed class ManagedModuleCatalogStore
         CancellationToken cancellationToken)
     {
         var resources = await ResolveNuGetV3ResourcesAsync(source, credential, cancellationToken).ConfigureAwait(false);
-        var versions = await ReadNuGetV3VersionsAsync(resources.PackageBaseAddress, packageName, cancellationToken).ConfigureAwait(false);
+        var versions = await ReadNuGetV3VersionsAsync(resources.PackageBaseAddress, packageName, credential, cancellationToken).ConfigureAwait(false);
         if (versions.Count == 0)
             return null;
 
@@ -489,6 +497,14 @@ public sealed class ManagedModuleCatalogStore
             .ToList();
     }
 
+    private static void RemovePackage(ManagedModuleCatalog catalog, string packageName)
+    {
+        catalog.Packages = catalog.Packages
+            .Where(existing => !string.Equals(existing.Id, packageName, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(static item => item.Id, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     private static ManagedModuleCatalog NormalizeCatalog(ManagedModuleCatalog catalog)
     {
         catalog.Name = NormalizeName(catalog.Name);
@@ -559,12 +575,14 @@ public sealed class ManagedModuleCatalogStore
     private async Task<IReadOnlyList<string>> ReadNuGetV3VersionsAsync(
         string packageBaseAddress,
         string packageName,
+        RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
         var lowerId = packageName.Trim().ToLowerInvariant();
         var indexUri = new Uri(new Uri(EnsureTrailingSlash(packageBaseAddress)), $"{Uri.EscapeDataString(lowerId)}/index.json");
         using var request = new HttpRequestMessage(HttpMethod.Get, indexUri);
         request.Headers.Accept.ParseAdd("application/json");
+        ApplyCredential(request, credential);
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return Array.Empty<string>();
@@ -752,9 +770,9 @@ public sealed class ManagedModuleCatalogStore
             document.Catalogs ??= new List<ManagedModuleCatalog>();
             return document;
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            return new ManagedModuleCatalogDocument();
+            throw new InvalidOperationException($"Managed module catalog '{_path}' could not be read because it contains invalid JSON.", ex);
         }
     }
 
@@ -1068,5 +1086,18 @@ public sealed class ManagedModuleCatalogStore
         public List<string> Tags { get; } = new();
 
         public List<ManagedModuleCatalogVersion> Versions { get; } = new();
+    }
+
+    private readonly struct CatalogPackageReadResult
+    {
+        public CatalogPackageReadResult(ManagedModuleCatalogPackage? package, bool succeeded)
+        {
+            Package = package;
+            Succeeded = succeeded;
+        }
+
+        public ManagedModuleCatalogPackage? Package { get; }
+
+        public bool Succeeded { get; }
     }
 }

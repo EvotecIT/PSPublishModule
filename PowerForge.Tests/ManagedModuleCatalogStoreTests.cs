@@ -83,6 +83,88 @@ public sealed class ManagedModuleCatalogStoreTests
     }
 
     [Fact]
+    public async Task UpdateCatalog_sends_repository_credentials_to_nuget_v3_requests()
+    {
+        using var temp = new TemporaryDirectory();
+        var requests = new List<string>();
+        var handler = new NuGetV3CatalogHandler(requests, requireAuthorization: true);
+        using var client = new HttpClient(handler);
+        var catalogPath = Path.Combine(temp.Path, "catalog.json");
+        var store = new ManagedModuleCatalogStore(catalogPath, client);
+        store.SetCatalog(new ManagedModuleCatalogSetRequest
+        {
+            Name = "pwsh.gallery",
+            Source = "https://pwsh.gallery/index.json",
+            RepositoryKind = ManagedModuleRepositoryKind.NuGetV3,
+            Mode = ManagedModuleCatalogCacheMode.Fallback
+        });
+
+        var result = await store.UpdateCatalogAsync(new ManagedModuleCatalogUpdateRequest
+        {
+            Name = "pwsh.gallery",
+            PackageNames = new[] { "ISpy" },
+            Credential = new RepositoryCredential
+            {
+                UserName = "build",
+                Secret = "secret"
+            }
+        });
+
+        Assert.Equal(1, result.RefreshedPackageCount);
+        Assert.Equal("Basic", handler.AuthorizationSchemes["https://pwsh.gallery/index.json"]);
+        Assert.Equal("Basic", handler.AuthorizationSchemes["https://pwsh.gallery/flatcontainer/ispy/index.json"]);
+        Assert.Equal("Basic", handler.AuthorizationSchemes["https://pwsh.gallery/registration/ispy/index.json"]);
+    }
+
+    [Fact]
+    public async Task UpdateCatalog_removes_cached_package_when_refresh_succeeds_with_no_versions()
+    {
+        using var temp = new TemporaryDirectory();
+        var catalogPath = Path.Combine(temp.Path, "catalog.json");
+        using (var client = new HttpClient(new CatalogHandler(new List<string>())))
+        {
+            var store = new ManagedModuleCatalogStore(catalogPath, client);
+            store.SetCatalog(new ManagedModuleCatalogSetRequest
+            {
+                Name = "PSGallery",
+                Source = ManagedModuleCatalogDefaults.PowerShellGalleryV3,
+                Mode = ManagedModuleCatalogCacheMode.Fallback
+            });
+            await store.UpdateCatalogAsync(new ManagedModuleCatalogUpdateRequest
+            {
+                Name = "PSGallery",
+                PackageNames = new[] { "Pester" }
+            });
+            Assert.NotEmpty(store.GetCatalog("PSGallery")!.Packages);
+        }
+
+        using var emptyClient = new HttpClient(new EmptyCatalogHandler());
+        var refreshedStore = new ManagedModuleCatalogStore(catalogPath, emptyClient);
+        var result = await refreshedStore.UpdateCatalogAsync(new ManagedModuleCatalogUpdateRequest
+        {
+            Name = "PSGallery",
+            PackageNames = new[] { "Pester" }
+        });
+
+        Assert.Equal(1, result.RefreshedPackageCount);
+        Assert.Equal(0, result.PackageCount);
+        Assert.Empty(refreshedStore.GetCatalog("PSGallery")!.Packages);
+        Assert.Contains(result.Warnings, warning => warning.Contains("was not found", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void GetCatalogs_rejects_invalid_catalog_json()
+    {
+        using var temp = new TemporaryDirectory();
+        var catalogPath = Path.Combine(temp.Path, "catalog.json");
+        File.WriteAllText(catalogPath, "{ invalid json", Encoding.UTF8);
+        var store = new ManagedModuleCatalogStore(catalogPath);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => store.GetCatalogs());
+        Assert.Contains("invalid JSON", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void SetCatalog_round_trips_cache_settings()
     {
         using var temp = new TemporaryDirectory();
@@ -298,16 +380,24 @@ public sealed class ManagedModuleCatalogStoreTests
     private sealed class NuGetV3CatalogHandler : HttpMessageHandler
     {
         private readonly List<string> _requests;
+        private readonly bool _requireAuthorization;
 
-        public NuGetV3CatalogHandler(List<string> requests)
+        public NuGetV3CatalogHandler(List<string> requests, bool requireAuthorization = false)
         {
             _requests = requests;
+            _requireAuthorization = requireAuthorization;
         }
+
+        public Dictionary<string, string?> AuthorizationSchemes { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var uri = request.RequestUri ?? throw new InvalidOperationException("Request URI is required.");
             _requests.Add(uri.AbsoluteUri);
+            AuthorizationSchemes[uri.AbsoluteUri] = request.Headers.Authorization?.Scheme;
+            if (_requireAuthorization && request.Headers.Authorization?.Scheme != "Basic")
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized));
+
             if (uri.AbsoluteUri == "https://pwsh.gallery/index.json")
             {
                 return Json("""
@@ -367,6 +457,24 @@ public sealed class ManagedModuleCatalogStoreTests
             {
                 Content = new StringContent(content, Encoding.UTF8, "application/json")
             });
+    }
+
+    private sealed class EmptyCatalogHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(CreateEmptyFeed(), Encoding.UTF8, "application/xml")
+            });
+
+        private static string CreateEmptyFeed()
+            => """
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:d="http://schemas.microsoft.com/ado/2007/08/dataservices"
+      xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata">
+</feed>
+""";
     }
 
     private sealed class AuthenticatedCatalogHandler : HttpMessageHandler
