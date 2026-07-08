@@ -111,6 +111,10 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
     [Parameter]
     public SwitchParameter SkipAssemblySigning { get; set; }
 
+    /// <summary>Also sign copied dependency assemblies from build output folders.</summary>
+    [Parameter]
+    public SwitchParameter SignDependencyAssemblies { get; set; }
+
     /// <summary>Skip signing generated NuGet packages.</summary>
     [Parameter]
     public SwitchParameter SkipPackageSigning { get; set; }
@@ -193,6 +197,7 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
                 : PowerForge.CertificateStoreLocation.CurrentUser,
             TimeStampServer = TimeStampServer,
             SignAssemblies = SkipAssemblySigning.IsPresent ? false : null,
+            SignDependencyAssemblies = SignDependencyAssemblies.IsPresent,
             SignPackages = SkipPackageSigning.IsPresent ? false : null,
             SkipPack = SkipPack.IsPresent,
             Publish = Publish.IsPresent,

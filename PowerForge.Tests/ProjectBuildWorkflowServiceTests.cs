@@ -73,18 +73,24 @@ public sealed class ProjectBuildWorkflowServiceTests
     public void Execute_runs_release_and_github_publish_when_requested()
     {
         var callIndex = 0;
+        var logger = new RecordingLogger();
         var service = new ProjectBuildWorkflowService(
-            new NullLogger(),
+            logger,
             executeRelease: spec =>
             {
                 callIndex++;
                 if (callIndex == 1)
                 {
                     Assert.True(spec.WhatIf);
-                    return new DotNetRepositoryReleaseResult { Success = true };
+                    var plan = new DotNetRepositoryReleaseResult { Success = true };
+                    plan.ResolvedVersionsByProject["ProjectA"] = "1.2.3";
+                    return plan;
                 }
 
                 Assert.False(spec.WhatIf);
+                Assert.Null(spec.ExpectedVersion);
+                Assert.NotNull(spec.ExpectedVersionsByProject);
+                Assert.Equal("1.2.3", spec.ExpectedVersionsByProject!["ProjectA"]);
                 return new DotNetRepositoryReleaseResult
                 {
                     Success = true,
@@ -147,5 +153,25 @@ public sealed class ProjectBuildWorkflowServiceTests
         Assert.Single(workflow.Result.GitHub);
         Assert.NotNull(workflow.GitHubPublishSummary);
         Assert.Equal("v1.2.3", workflow.GitHubPublishSummary!.SummaryTag);
+        Assert.Contains(logger.SuccessMessages, message => message.Contains("Project build plan prepared in", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(logger.SuccessMessages, message => message.Contains("Project build release execution completed in", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(logger.SuccessMessages, message => message.Contains("GitHub publish completed in", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private sealed class RecordingLogger : ILogger
+    {
+        public List<string> SuccessMessages { get; } = new();
+
+        public bool IsVerbose => false;
+
+        public void Info(string message) { }
+
+        public void Success(string message) => SuccessMessages.Add(message);
+
+        public void Warn(string message) { }
+
+        public void Error(string message) { }
+
+        public void Verbose(string message) { }
     }
 }

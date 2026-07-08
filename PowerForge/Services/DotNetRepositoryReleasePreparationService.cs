@@ -61,6 +61,7 @@ internal sealed class DotNetRepositoryReleasePreparationService
                 CertificateStore = mappedStore,
                 TimeStampServer = request.TimeStampServer,
                 SignAssemblies = ResolveSigningEnabled(request.SignAssemblies, request.CertificateThumbprint),
+                SignDependencyAssemblies = request.SignDependencyAssemblies ?? false,
                 SignPackages = ResolveSigningEnabled(request.SignPackages, request.CertificateThumbprint),
                 Pack = !request.SkipPack,
                 Publish = request.Publish,

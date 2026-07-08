@@ -584,7 +584,13 @@ public sealed partial class ModulePipelinePackageBuildTests
                         Success = true,
                         ConfigPath = configPath ?? request.ConfigPath,
                         RootPath = root.FullName,
-                        Result = new ProjectBuildResult { Success = true }
+                        Result = new ProjectBuildResult
+                        {
+                            Success = true,
+                            Release = request.Build == true
+                                ? new DotNetRepositoryReleaseResult { Success = true }
+                                : null
+                        }
                     };
                 });
 
@@ -634,6 +640,106 @@ public sealed partial class ModulePipelinePackageBuildTests
             Assert.False(calls[2].Request.Build);
             Assert.False(calls[2].Request.PublishNuget);
             Assert.True(calls[2].Request.PublishGitHub);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_DoesNotReusePackageBuildWhenSomeNuGetArtifactsAreMissing()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var packageOutput = Directory.CreateDirectory(Path.Combine(root.FullName, "Artifacts", "NuGet"));
+            var existingPackage = Path.Combine(packageOutput.FullName, "Dependency.Z.1.0.0.nupkg");
+            var missingPackage = Path.Combine(packageOutput.FullName, "Consumer.A.1.0.0.nupkg");
+            File.WriteAllText(existingPackage, "package");
+
+            var calls = new List<PackageBuildCall>();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    calls.Add(new PackageBuildCall(request, configuration, configPath));
+                    var release = new DotNetRepositoryReleaseResult { Success = true };
+                    release.Projects.Add(new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = "Dependency.Z",
+                        PackageId = "Dependency.Z",
+                        IsPackable = true
+                    });
+                    release.Projects[0].Packages.Add(existingPackage);
+                    release.Projects.Add(new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = "Consumer.A",
+                        PackageId = "Consumer.A",
+                        IsPackable = true
+                    });
+                    release.Projects[1].Packages.Add(missingPackage);
+
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        OutputPath = packageOutput.FullName,
+                        Result = new ProjectBuildResult
+                        {
+                            Success = true,
+                            Release = release
+                        }
+                    };
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    StagingPath = stagingPath
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "InlinePackages",
+                            RootPath = "Sources",
+                            BuildBeforeModule = true,
+                            Build = true,
+                            PublishNuget = true,
+                            PublishApiKey = "key"
+                        }
+                    }
+                }
+            };
+
+            var result = runner.Run(spec);
+
+            Assert.Equal(2, calls.Count);
+            Assert.Single(result.ProjectBuildResults);
+            Assert.True(calls[0].Request.Build);
+            Assert.False(calls[0].Request.PublishNuget);
+            Assert.False(calls[1].Request.Build);
+            Assert.True(calls[1].Request.PublishNuget);
         }
         finally
         {

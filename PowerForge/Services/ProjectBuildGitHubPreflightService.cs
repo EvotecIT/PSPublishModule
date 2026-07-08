@@ -36,6 +36,11 @@ internal sealed class ProjectBuildGitHubPreflightService
         var conflictPolicy = ProjectBuildSupportService.ParseGitHubTagConflictPolicy(config.GitHubTagConflictPolicy);
         if (!string.Equals(conflictPolicy, "Reuse", StringComparison.OrdinalIgnoreCase))
             return null;
+        if (string.IsNullOrWhiteSpace(config.GitHubTagName) && HasVolatileTagTemplate(config.GitHubTagTemplate))
+        {
+            _logger.Info("GitHub preflight: skipping release reuse probe because the tag template contains a timestamp token.");
+            return null;
+        }
 
         var plannedAssetNames = plan.Projects
             .Where(project => project.IsPackable && !string.IsNullOrWhiteSpace(project.ReleaseZipPath))
@@ -92,6 +97,17 @@ internal sealed class ProjectBuildGitHubPreflightService
 
         _logger.Info($"GitHub preflight: release tag '{tag}' already exists; validating asset set before publish.");
         return ProjectBuildGitHubPublisher.BuildSingleReleaseReuseAdvisory(tag, plan.Projects, plannedAssetNames, existingRelease.AssetNames);
+    }
+
+    private static bool HasVolatileTagTemplate(string? tagTemplate)
+    {
+        if (string.IsNullOrWhiteSpace(tagTemplate))
+            return false;
+
+        return tagTemplate!.IndexOf("{Timestamp}", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               tagTemplate.IndexOf("{UtcTimestamp}", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               tagTemplate.IndexOf("{DateTime}", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               tagTemplate.IndexOf("{UtcDateTime}", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private static GitHubReleaseProbeResult ProbeGitHubReleaseByTag(

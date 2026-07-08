@@ -22,21 +22,22 @@ public sealed partial class DotNetRepositoryReleaseService
         var store = spec.CertificateStore == CertificateStoreLocation.LocalMachine ? "LocalMachine" : "CurrentUser";
         var timeStampServer = string.IsNullOrWhiteSpace(spec.TimeStampServer) ? "http://timestamp.digicert.com" : spec.TimeStampServer!.Trim();
 
-        foreach (var pkg in packages)
-        {
-            var exitCode = RunDotnetSign(pkg, sha256, store, timeStampServer, out var stdErr, out var stdOut);
-            if (exitCode == 0) continue;
+        var packagePaths = packages
+            .Where(package => !string.IsNullOrWhiteSpace(package))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (packagePaths.Length == 0) return true;
 
-            var msg = string.Join(Environment.NewLine, stdErr, stdOut).Trim();
-            error = $"Signing failed for {Path.GetFileName(pkg)}. {msg}".Trim();
-            return false;
-        }
+        var exitCode = RunDotnetSign(packagePaths, sha256, store, timeStampServer, out var stdErr, out var stdOut);
+        if (exitCode == 0) return true;
 
-        return true;
+        var msg = string.Join(Environment.NewLine, stdErr, stdOut).Trim();
+        error = $"Signing failed for {packagePaths.Length} package(s). {msg}".Trim();
+        return false;
     }
 
     private static int RunDotnetSign(
-        string packagePath,
+        IReadOnlyList<string> packagePaths,
         string sha256,
         string store,
         string timeStampServer,
@@ -45,7 +46,7 @@ public sealed partial class DotNetRepositoryReleaseService
     {
         var result = new DotNetNuGetClient()
             .SignPackageAsync(new DotNetNuGetSignRequest(
-                packagePath: packagePath,
+                packagePaths: packagePaths,
                 certificateFingerprint: sha256,
                 certificateStoreLocation: store,
                 timeStampServer: timeStampServer))

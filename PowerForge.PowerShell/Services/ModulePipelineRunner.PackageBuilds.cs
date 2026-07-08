@@ -71,6 +71,9 @@ public sealed partial class ModulePipelineRunner
             if (segment?.Configuration is null || !ShouldExecuteProjectBuildPublish(plan, segment, destination))
                 continue;
 
+            if (TryExecuteExistingProjectBuildPublish(plan, session, state, segment, destination))
+                continue;
+
             ExecuteProjectBuildSegment(plan, session, state, segment, mode);
         }
 
@@ -79,8 +82,240 @@ public sealed partial class ModulePipelineRunner
             if (segment?.Configuration is null || !ShouldExecutePackageBuildPublish(plan, segment, destination))
                 continue;
 
+            if (TryExecuteExistingPackageBuildPublish(plan, session, state, segment, destination))
+                continue;
+
             ExecutePackageBuildSegment(plan, session, state, segment, mode);
         }
+    }
+
+    private bool TryExecuteExistingProjectBuildPublish(
+        ModulePipelinePlan plan,
+        ModulePipelineExecutionSession session,
+        ModulePipelineRunState state,
+        ConfigurationProjectBuildSegment segment,
+        PackageBuildPublishDestination destination)
+    {
+        if (!state.PackageBuildResultsBySegment.TryGetValue(segment, out var existing))
+            return false;
+        if (existing.Result.Release is null)
+            return false;
+
+        var cfg = segment.Configuration ?? throw new InvalidOperationException("ProjectBuild configuration is missing.");
+        var configPath = ResolvePackageBuildPath(plan.ProjectRoot, cfg.ConfigPath);
+        var configuration = LoadProjectBuildConfiguration(configPath, cfg);
+        if (!CanPublishExistingPackageBuildResult(configuration, configPath, destination))
+            return false;
+        if (!HasReusablePackageBuildArtifacts(existing.Result.Release, destination))
+            return false;
+
+        var step = session.GetProjectBuildStep(segment);
+        session.Start(step);
+        try
+        {
+            PublishExistingPackageBuildResult(existing, configuration, configPath, destination);
+            session.Done(step);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            session.Fail(step, ex);
+            throw;
+        }
+    }
+
+    private bool TryExecuteExistingPackageBuildPublish(
+        ModulePipelinePlan plan,
+        ModulePipelineExecutionSession session,
+        ModulePipelineRunState state,
+        ConfigurationPackageBuildSegment segment,
+        PackageBuildPublishDestination destination)
+    {
+        if (!state.PackageBuildResultsBySegment.TryGetValue(segment, out var existing))
+            return false;
+        if (existing.Result.Release is null)
+            return false;
+
+        var configuration = MapPackageBuildConfiguration(segment.Configuration, plan.ProjectRoot);
+        var configPath = Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
+        if (!CanPublishExistingPackageBuildResult(configuration, configPath, destination))
+            return false;
+        if (!HasReusablePackageBuildArtifacts(existing.Result.Release, destination))
+            return false;
+
+        var step = session.GetPackageBuildStep(segment);
+        session.Start(step);
+        try
+        {
+            PublishExistingPackageBuildResult(existing, configuration, configPath, destination);
+            session.Done(step);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            session.Fail(step, ex);
+            throw;
+        }
+    }
+
+    private static bool CanPublishExistingPackageBuildResult(
+        ProjectBuildConfiguration configuration,
+        string configPath,
+        PackageBuildPublishDestination destination)
+    {
+        var configDirectory = Path.GetDirectoryName(configPath);
+        if (string.IsNullOrWhiteSpace(configDirectory))
+            return false;
+
+        var feed = ProjectBuildPackageFeedResolver.Resolve(configuration, configDirectory);
+        return destination switch
+        {
+            PackageBuildPublishDestination.NuGet => !string.IsNullOrWhiteSpace(feed.PublishApiKey),
+            PackageBuildPublishDestination.GitHub =>
+                !string.IsNullOrWhiteSpace(feed.GitHubToken) &&
+                !string.IsNullOrWhiteSpace(configuration.GitHubUsername) &&
+                !string.IsNullOrWhiteSpace(configuration.GitHubRepositoryName),
+            _ => false
+        };
+    }
+
+    private static bool HasReusablePackageBuildArtifacts(
+        DotNetRepositoryReleaseResult release,
+        PackageBuildPublishDestination destination)
+    {
+        return destination switch
+        {
+            PackageBuildPublishDestination.NuGet => HasAllArtifacts(release.Projects
+                .SelectMany(project => project.Packages)
+                .Where(package => !string.IsNullOrWhiteSpace(package))),
+            PackageBuildPublishDestination.GitHub => HasAllArtifacts(release.Projects
+                .Select(project => project.ReleaseZipPath)
+                .Where(path => !string.IsNullOrWhiteSpace(path))),
+            _ => false
+        };
+    }
+
+    private static bool HasAllArtifacts(IEnumerable<string?> artifactPaths)
+    {
+        var paths = artifactPaths
+            .Select(path => path?.Trim())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return paths.Length > 0 && paths.All(path => File.Exists(path!));
+    }
+
+    private void PublishExistingPackageBuildResult(
+        ProjectBuildHostExecutionResult existing,
+        ProjectBuildConfiguration configuration,
+        string configPath,
+        PackageBuildPublishDestination destination)
+    {
+        var release = existing.Result.Release
+            ?? throw new InvalidOperationException($"Cannot reuse package build result for {destination}; the earlier package build did not include a release result.");
+
+        if (!release.Success)
+            throw new InvalidOperationException(release.ErrorMessage ?? $"Cannot reuse failed package build result for {destination}.");
+
+        switch (destination)
+        {
+            case PackageBuildPublishDestination.NuGet:
+                PublishExistingNuGetPackages(release, configuration, configPath);
+                break;
+            case PackageBuildPublishDestination.GitHub:
+                PublishExistingGitHubRelease(existing, release, configuration, configPath);
+                break;
+        }
+    }
+
+    private void PublishExistingNuGetPackages(
+        DotNetRepositoryReleaseResult release,
+        ProjectBuildConfiguration configuration,
+        string configPath)
+    {
+        var configDirectory = Path.GetDirectoryName(configPath);
+        if (string.IsNullOrWhiteSpace(configDirectory))
+            throw new InvalidOperationException($"Unable to resolve the configuration directory for '{configPath}'.");
+
+        var feed = ProjectBuildPackageFeedResolver.Resolve(configuration, configDirectory);
+        var apiKey = feed.PublishApiKey;
+        if (string.IsNullOrWhiteSpace(apiKey))
+            throw new InvalidOperationException("PublishApiKey is required when package NuGet publishing is enabled.");
+
+        var source = string.IsNullOrWhiteSpace(feed.PublishSource)
+            ? ProjectBuildPackageFeedResolver.GetDefaultPublishSource()
+            : feed.PublishSource!.Trim();
+        var packages = release.Projects
+            .SelectMany(project => project.Packages)
+            .Where(package => !string.IsNullOrWhiteSpace(package))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        _logger.Info($"Publishing {packages.Length} existing package(s) from earlier package build.");
+        var publish = new NuGetPackagePublishService(_logger).ExecutePackages(
+            packages,
+            apiKey!,
+            source,
+            configuration.SkipDuplicate ?? true,
+            configuration.PublishFailFast ?? true);
+
+        release.PublishedPackages.AddRange(publish.PublishedItems);
+        release.FailedPackages.AddRange(publish.FailedItems);
+        if (!publish.Success)
+        {
+            release.Success = false;
+            release.ErrorMessage = publish.ErrorMessage ?? "One or more packages failed to publish.";
+            throw new InvalidOperationException(release.ErrorMessage);
+        }
+    }
+
+    private void PublishExistingGitHubRelease(
+        ProjectBuildHostExecutionResult existing,
+        DotNetRepositoryReleaseResult release,
+        ProjectBuildConfiguration configuration,
+        string configPath)
+    {
+        var configDirectory = Path.GetDirectoryName(configPath);
+        if (string.IsNullOrWhiteSpace(configDirectory))
+            throw new InvalidOperationException($"Unable to resolve the configuration directory for '{configPath}'.");
+
+        var feed = ProjectBuildPackageFeedResolver.Resolve(configuration, configDirectory);
+        var token = feed.GitHubToken;
+        if (string.IsNullOrWhiteSpace(token))
+            throw new InvalidOperationException("GitHub access token is required for package GitHub publishing.");
+        if (string.IsNullOrWhiteSpace(configuration.GitHubUsername) || string.IsNullOrWhiteSpace(configuration.GitHubRepositoryName))
+            throw new InvalidOperationException("GitHubUsername and GitHubRepositoryName are required for package GitHub publishing.");
+
+        var preflightError = new ProjectBuildGitHubPreflightService(_logger).Validate(configuration, release, token!);
+        if (!string.IsNullOrWhiteSpace(preflightError))
+            throw new InvalidOperationException(preflightError);
+
+        _logger.Info("Publishing GitHub release from existing package build result.");
+        var summary = new ProjectBuildPublishHostService(_logger).PublishGitHub(
+            new ProjectBuildPublishHostConfiguration
+            {
+                GitHubUsername = configuration.GitHubUsername!.Trim(),
+                GitHubRepositoryName = configuration.GitHubRepositoryName!.Trim(),
+                GitHubToken = token,
+                GitHubReleaseMode = string.IsNullOrWhiteSpace(configuration.GitHubReleaseMode) ? "Single" : configuration.GitHubReleaseMode!.Trim(),
+                GitHubIncludeProjectNameInTag = configuration.GitHubIncludeProjectNameInTag,
+                GitHubIsPreRelease = configuration.GitHubIsPreRelease,
+                GitHubGenerateReleaseNotes = configuration.GitHubGenerateReleaseNotes,
+                GitHubReleaseName = NormalizeOptional(configuration.GitHubReleaseName),
+                GitHubTagName = NormalizeOptional(configuration.GitHubTagName),
+                GitHubTagTemplate = NormalizeOptional(configuration.GitHubTagTemplate),
+                GitHubPrimaryProject = NormalizeOptional(configuration.GitHubPrimaryProject),
+                GitHubTagConflictPolicy = NormalizeOptional(configuration.GitHubTagConflictPolicy),
+                PublishFailFast = configuration.PublishFailFast ?? true
+            },
+            release);
+
+        existing.Result.GitHub.AddRange(summary.Results);
+        existing.Result.Success = summary.Success;
+        existing.Result.ErrorMessage = summary.ErrorMessage;
+        if (!summary.Success)
+            throw new InvalidOperationException(summary.ErrorMessage ?? "Package GitHub publishing failed.");
     }
 
     private void ExecuteProjectBuildSegment(
@@ -103,6 +338,7 @@ public sealed partial class ModulePipelineRunner
                 segment.Configuration.Name ?? result.ConfigPath,
                 segment.Configuration.UseAsReleaseVersionSource,
                 segment.Configuration.ProvideLocalNuGetFeed,
+                segment,
                 mode,
                 "Project build");
 
@@ -135,6 +371,7 @@ public sealed partial class ModulePipelineRunner
                 segment.Configuration.Name ?? result.ConfigPath,
                 segment.Configuration.UseAsReleaseVersionSource,
                 segment.Configuration.ProvideLocalNuGetFeed,
+                segment,
                 mode,
                 "Package build");
 
@@ -155,6 +392,7 @@ public sealed partial class ModulePipelineRunner
         string laneLabel,
         bool useAsReleaseVersionSource,
         bool provideLocalNuGetFeed,
+        object segment,
         PackageBuildExecutionMode mode,
         string failurePrefix)
     {
@@ -168,6 +406,7 @@ public sealed partial class ModulePipelineRunner
         }
 
         state.ProjectBuildResults.Add(result);
+        state.PackageBuildResultsBySegment[segment] = result;
 
         if (provideLocalNuGetFeed)
             RegisterLocalNuGetFeeds(plan, result, laneLabel);
@@ -266,6 +505,8 @@ public sealed partial class ModulePipelineRunner
             target.CreateReleaseZip = reference.CreateReleaseZip;
         if (reference.SignAssemblies is not null)
             target.SignAssemblies = reference.SignAssemblies;
+        if (reference.SignDependencyAssemblies is not null)
+            target.SignDependencyAssemblies = reference.SignDependencyAssemblies;
         if (reference.SignPackages is not null)
             target.SignPackages = reference.SignPackages;
     }
@@ -484,6 +725,9 @@ public sealed partial class ModulePipelineRunner
         return false;
     }
 
+    private static string? NormalizeOptional(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
+
     private static string DescribePackageBuildMode(PackageBuildExecutionMode mode)
         => mode switch
         {
@@ -534,6 +778,7 @@ public sealed partial class ModulePipelineRunner
             CertificateStore = source.CertificateStore,
             TimeStampServer = source.TimeStampServer,
             SignAssemblies = source.SignAssemblies,
+            SignDependencyAssemblies = source.SignDependencyAssemblies,
             SignPackages = source.SignPackages,
             NugetCredentialUserName = source.NugetCredentialUserName,
             NugetCredentialSecret = source.NugetCredentialSecret,

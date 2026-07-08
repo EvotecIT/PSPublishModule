@@ -80,6 +80,47 @@ public sealed class DotNetNuGetClientTests
         Assert.True(result.Succeeded);
     }
 
+    [Fact]
+    public async Task SignPackageAsync_AcceptsMultiplePackagesInOneProcess()
+    {
+        ProcessRunRequest? captured = null;
+        var processRunner = new StubProcessRunner(request => {
+            captured = request;
+            return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+        });
+        var client = new DotNetNuGetClient(processRunner);
+
+        var result = await client.SignPackageAsync(new DotNetNuGetSignRequest(
+            packagePaths: new[]
+            {
+                @"C:\repo\Artifacts\One.1.0.0.nupkg",
+                @"C:\repo\Artifacts\Two.1.0.0.nupkg"
+            },
+            certificateFingerprint: "ABC123",
+            certificateStoreLocation: "CurrentUser",
+            timeStampServer: "http://timestamp.digicert.com"));
+
+        Assert.NotNull(captured);
+        Assert.Equal(
+            [
+                "nuget",
+                "sign",
+                @"C:\repo\Artifacts\One.1.0.0.nupkg",
+                @"C:\repo\Artifacts\Two.1.0.0.nupkg",
+                "--certificate-fingerprint",
+                "ABC123",
+                "--certificate-store-location",
+                "CurrentUser",
+                "--certificate-store-name",
+                "My",
+                "--timestamper",
+                "http://timestamp.digicert.com",
+                "--overwrite"
+            ],
+            captured!.Arguments);
+        Assert.True(result.Succeeded);
+    }
+
     private sealed class StubProcessRunner : IProcessRunner
     {
         private readonly Func<ProcessRunRequest, ProcessRunResult> _execute;

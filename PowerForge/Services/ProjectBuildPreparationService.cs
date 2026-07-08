@@ -108,6 +108,7 @@ internal sealed class ProjectBuildPreparationService
             CertificateStore = ProjectBuildSupportService.ParseCertificateStore(config.CertificateStore),
             TimeStampServer = config.TimeStampServer,
             SignAssemblies = ResolveSigningEnabled(config.SignAssemblies, config.CertificateThumbprint),
+            SignDependencyAssemblies = config.SignDependencyAssemblies ?? false,
             SignPackages = ResolveSigningEnabled(config.SignPackages, config.CertificateThumbprint),
             Pack = context.Build || context.PublishNuget || context.PublishGitHub,
             CreateReleaseZip = context.CreateReleaseZip,

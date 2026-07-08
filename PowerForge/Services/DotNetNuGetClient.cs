@@ -88,8 +88,8 @@ public sealed class DotNetNuGetClient
     {
         if (request is null)
             throw new ArgumentNullException(nameof(request));
-        if (string.IsNullOrWhiteSpace(request.PackagePath))
-            throw new ArgumentException("PackagePath is required.", nameof(request));
+        if (request.PackagePaths.Length == 0)
+            throw new ArgumentException("At least one package path is required.", nameof(request));
         if (string.IsNullOrWhiteSpace(request.CertificateFingerprint))
             throw new ArgumentException("CertificateFingerprint is required.", nameof(request));
         if (string.IsNullOrWhiteSpace(request.CertificateStoreLocation))
@@ -101,8 +101,11 @@ public sealed class DotNetNuGetClient
 
         var arguments = new List<string> {
             "nuget",
-            "sign",
-            request.PackagePath,
+            "sign"
+        };
+        arguments.AddRange(request.PackagePaths);
+        arguments.AddRange(new[]
+        {
             "--certificate-fingerprint",
             request.CertificateFingerprint,
             "--certificate-store-location",
@@ -111,7 +114,7 @@ public sealed class DotNetNuGetClient
             request.CertificateStoreName,
             "--timestamper",
             request.TimeStampServer
-        };
+        });
 
         if (request.Overwrite)
             arguments.Add("--overwrite");

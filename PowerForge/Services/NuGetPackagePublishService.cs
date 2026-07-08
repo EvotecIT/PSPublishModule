@@ -92,6 +92,75 @@ internal sealed class NuGetPackagePublishService
         return result;
     }
 
+    public NuGetPackagePublishResult ExecutePackages(
+        IReadOnlyList<string> packages,
+        string apiKey,
+        string source,
+        bool skipDuplicate,
+        bool publishFailFast = true)
+    {
+        if (packages is null)
+            throw new ArgumentNullException(nameof(packages));
+
+        var result = new NuGetPackagePublishResult();
+        var unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var packagePaths = packages
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Where(path => unique.Add(path))
+            .ToArray();
+
+        if (packagePaths.Length == 0)
+        {
+            result.Success = false;
+            result.ErrorMessage = "No package paths were provided.";
+            return result;
+        }
+
+        foreach (var package in packagePaths)
+        {
+            if (!File.Exists(package))
+            {
+                result.Success = false;
+                result.FailedItems.Add(package);
+                if (string.IsNullOrWhiteSpace(result.ErrorMessage))
+                    result.ErrorMessage = $"Package '{package}' not found.";
+                if (publishFailFast)
+                    return result;
+                continue;
+            }
+
+            var pushResult = _pushPackage(package, apiKey, source, skipDuplicate)
+                ?? new DotNetRepositoryReleaseService.PackagePushResult
+                {
+                    Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
+                    Message = "Push handler returned no result."
+                };
+
+            switch (pushResult.Outcome)
+            {
+                case DotNetRepositoryReleaseService.PackagePushOutcome.Published:
+                case DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate:
+                    result.PublishedItems.Add(package);
+                    break;
+                default:
+                    result.Success = false;
+                    result.FailedItems.Add(package);
+                    _logger.Verbose($"dotnet nuget push failed for {package}.");
+                    if (pushResult.Message is string message && message.Length > 0)
+                        _logger.Verbose(message);
+                    if (publishFailFast)
+                    {
+                        if (string.IsNullOrWhiteSpace(result.ErrorMessage) && pushResult.Message is string failureMessage && failureMessage.Length > 0)
+                            result.ErrorMessage = failureMessage;
+                        return result;
+                    }
+                    break;
+            }
+        }
+
+        return result;
+    }
+
     private static DotNetRepositoryReleaseService.PackagePushResult PushPackage(string packagePath, string apiKey, string source, bool skipDuplicate)
     {
         var result = new DotNetNuGetClient()

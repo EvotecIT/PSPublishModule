@@ -67,6 +67,10 @@ public sealed class NewConfigurationProjectBuildCommand : PSCmdlet
     [Parameter]
     public SwitchParameter SignAssemblies { get; set; }
 
+    /// <summary>Whether copied dependency assemblies should also be signed, overriding the referenced JSON when set.</summary>
+    [Parameter]
+    public SwitchParameter SignDependencyAssemblies { get; set; }
+
     /// <summary>Whether generated NuGet packages should be signed, overriding the referenced JSON when set.</summary>
     [Parameter]
     public SwitchParameter SignPackages { get; set; }
@@ -94,6 +98,7 @@ public sealed class NewConfigurationProjectBuildCommand : PSCmdlet
                 PublishGitHub = BoundSwitch(nameof(PublishGitHub), PublishGitHub),
                 CreateReleaseZip = BoundSwitch(nameof(CreateReleaseZip), CreateReleaseZip),
                 SignAssemblies = BoundSwitch(nameof(SignAssemblies), SignAssemblies),
+                SignDependencyAssemblies = BoundSwitch(nameof(SignDependencyAssemblies), SignDependencyAssemblies),
                 SignPackages = BoundSwitch(nameof(SignPackages), SignPackages),
                 Options = PackageBuildConfiguration.ToObjectDictionary(Options)
             }
@@ -246,6 +251,9 @@ public sealed class NewConfigurationPackageBuildCommand : PSCmdlet
     /// <summary>Whether assemblies should be signed before packages are created.</summary>
     [Parameter] public SwitchParameter SignAssemblies { get; set; }
 
+    /// <summary>Whether copied dependency assemblies should also be signed.</summary>
+    [Parameter] public SwitchParameter SignDependencyAssemblies { get; set; }
+
     /// <summary>Whether generated NuGet packages should be signed.</summary>
     [Parameter] public SwitchParameter SignPackages { get; set; }
 
@@ -354,6 +362,7 @@ public sealed class NewConfigurationPackageBuildCommand : PSCmdlet
                 CertificateStore = Normalize(CertificateStore),
                 TimeStampServer = Normalize(TimeStampServer),
                 SignAssemblies = BoundSwitch(nameof(SignAssemblies), SignAssemblies),
+                SignDependencyAssemblies = BoundSwitch(nameof(SignDependencyAssemblies), SignDependencyAssemblies),
                 SignPackages = BoundSwitch(nameof(SignPackages), SignPackages),
                 NugetCredentialUserName = Normalize(NugetCredentialUserName),
                 NugetCredentialSecret = NugetCredentialSecret,

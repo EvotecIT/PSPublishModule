@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace PowerForge;
 
 internal sealed class ProjectBuildWorkflowService
@@ -45,10 +47,25 @@ internal sealed class ProjectBuildWorkflowService
 
         var spec = preparation.Spec ?? throw new ArgumentException("Prepared spec is required.", nameof(preparation));
         spec.WhatIf = true;
+        var planWatch = Stopwatch.StartNew();
         var plan = _executeRelease(spec, _signAssemblies, _validateAssemblySigning);
+        planWatch.Stop();
+        if (plan.Success)
+            _logger.Success($"Project build plan prepared in {DotNetRepositoryReleaseService.FormatDuration(planWatch.Elapsed)}.");
+        else
+            _logger.Warn($"Project build plan failed after {DotNetRepositoryReleaseService.FormatDuration(planWatch.Elapsed)}.");
+
         var preflightErrors = new List<string>();
         if (!plan.Success)
             preflightErrors.Add(plan.ErrorMessage ?? "Plan/preflight validation failed.");
+        else if (plan.ResolvedVersionsByProject.Count > 0)
+        {
+            spec.ExpectedVersion = null;
+            spec.ExpectedVersionsByProject = new Dictionary<string, string>(
+                plan.ResolvedVersionsByProject,
+                StringComparer.OrdinalIgnoreCase);
+            _logger.Info($"Reusing {plan.ResolvedVersionsByProject.Count} resolved project version(s) from the plan for release execution.");
+        }
 
         if (!executeBuild || preparation.PlanOnly)
         {
@@ -93,7 +110,14 @@ internal sealed class ProjectBuildWorkflowService
         _support.TryWritePlan(plan, preparation.PlanOutputPath);
 
         spec.WhatIf = false;
+        var releaseWatch = Stopwatch.StartNew();
         var release = _executeRelease(spec, _signAssemblies, _validateAssemblySigning);
+        releaseWatch.Stop();
+        if (release is not null && release.Success)
+            _logger.Success($"Project build release execution completed in {DotNetRepositoryReleaseService.FormatDuration(releaseWatch.Elapsed)}.");
+        else
+            _logger.Warn($"Project build release execution failed after {DotNetRepositoryReleaseService.FormatDuration(releaseWatch.Elapsed)}.");
+
         var result = new ProjectBuildResult { Release = release };
 
         if (release is null || !release.Success)
@@ -124,6 +148,7 @@ internal sealed class ProjectBuildWorkflowService
             return new ProjectBuildWorkflowResult { Result = result };
         }
 
+        var gitHubWatch = Stopwatch.StartNew();
         var publishSummary = _publishGitHub(new ProjectBuildGitHubPublishRequest
         {
             Owner = config.GitHubUsername!,
@@ -141,6 +166,11 @@ internal sealed class ProjectBuildWorkflowService
             PrimaryProject = config.GitHubPrimaryProject,
             TagConflictPolicy = config.GitHubTagConflictPolicy
         });
+        gitHubWatch.Stop();
+        if (publishSummary.Success)
+            _logger.Success($"GitHub publish completed in {DotNetRepositoryReleaseService.FormatDuration(gitHubWatch.Elapsed)}.");
+        else
+            _logger.Warn($"GitHub publish failed after {DotNetRepositoryReleaseService.FormatDuration(gitHubWatch.Elapsed)}.");
 
         result.GitHub.AddRange(publishSummary.Results);
         result.Success = publishSummary.Success;
