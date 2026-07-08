@@ -43,6 +43,46 @@ public sealed class ManagedModuleCatalogStoreTests
     }
 
     [Fact]
+    public async Task UpdateCatalog_supports_generic_nuget_v3_metadata_sources()
+    {
+        using var temp = new TemporaryDirectory();
+        var requests = new List<string>();
+        using var client = new HttpClient(new NuGetV3CatalogHandler(requests));
+        var catalogPath = Path.Combine(temp.Path, "catalog.json");
+        var store = new ManagedModuleCatalogStore(catalogPath, client);
+        store.SetCatalog(new ManagedModuleCatalogSetRequest
+        {
+            Name = "pwsh.gallery",
+            Source = "https://pwsh.gallery/index.json",
+            RepositoryKind = ManagedModuleRepositoryKind.NuGetV3,
+            Mode = ManagedModuleCatalogCacheMode.Fallback
+        });
+
+        var result = await store.UpdateCatalogAsync(new ManagedModuleCatalogUpdateRequest
+        {
+            Name = "pwsh.gallery",
+            PackageNames = new[] { "ISpy" }
+        });
+
+        Assert.Equal(1, result.RefreshedPackageCount);
+        Assert.Contains("https://pwsh.gallery/index.json", requests);
+        Assert.Contains("https://pwsh.gallery/flatcontainer/ispy/index.json", requests);
+        Assert.Contains("https://pwsh.gallery/registration/ispy/index.json", requests);
+        var catalog = Assert.Single(store.GetCatalogs());
+        var package = Assert.Single(catalog.Packages);
+        Assert.Equal("ISpy", package.Id);
+        Assert.Equal("0.5.0", package.LatestStableVersion);
+        Assert.Contains("decompiler", package.Tags);
+        var version = Assert.Single(package.Versions);
+        Assert.Equal("0.5.0", version.Version);
+        Assert.Equal("https://pwsh.gallery/flatcontainer/ispy/0.5.0/ispy.0.5.0.nupkg", version.PackageSource);
+        Assert.Equal("MIT", version.License);
+        var dependency = Assert.Single(version.Dependencies);
+        Assert.Equal("PowerShellStandard.Library", dependency.Id);
+        Assert.Equal("[5.1.0, )", dependency.VersionRange);
+    }
+
+    [Fact]
     public void SetCatalog_round_trips_cache_settings()
     {
         using var temp = new TemporaryDirectory();
@@ -253,6 +293,80 @@ public sealed class ManagedModuleCatalogStoreTests
   </entry>
 </feed>
 """;
+    }
+
+    private sealed class NuGetV3CatalogHandler : HttpMessageHandler
+    {
+        private readonly List<string> _requests;
+
+        public NuGetV3CatalogHandler(List<string> requests)
+        {
+            _requests = requests;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri ?? throw new InvalidOperationException("Request URI is required.");
+            _requests.Add(uri.AbsoluteUri);
+            if (uri.AbsoluteUri == "https://pwsh.gallery/index.json")
+            {
+                return Json("""
+{
+  "resources": [
+    { "@id": "https://pwsh.gallery/search/query", "@type": "SearchQueryService/3.0.0-beta" },
+    { "@id": "https://pwsh.gallery/registration", "@type": "RegistrationsBaseUrl/3.4.0" },
+    { "@id": "https://pwsh.gallery/flatcontainer/", "@type": "PackageBaseAddress/3.0.0" }
+  ]
+}
+""");
+            }
+
+            if (uri.AbsoluteUri == "https://pwsh.gallery/flatcontainer/ispy/index.json")
+                return Json("""{ "versions": [ "0.5.0" ] }""");
+
+            if (uri.AbsoluteUri == "https://pwsh.gallery/registration/ispy/index.json")
+            {
+                return Json("""
+{
+  "items": [
+    {
+      "items": [
+        {
+          "catalogEntry": {
+            "id": "ISpy",
+            "version": "0.5.0",
+            "authors": "ISpy Team",
+            "description": "PowerShell module for decompiling assemblies.",
+            "projectUrl": "https://github.com/example/ispy",
+            "tags": [ "powershell", "decompiler" ],
+            "licenseExpression": "MIT",
+            "listed": true,
+            "published": "2026-01-01T00:00:00Z",
+            "dependencyGroups": [
+              {
+                "targetFramework": ".NETStandard2.0",
+                "dependencies": [
+                  { "id": "PowerShellStandard.Library", "range": "[5.1.0, )" }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
+""");
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+
+        private static Task<HttpResponseMessage> Json(string content)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(content, Encoding.UTF8, "application/json")
+            });
     }
 
     private sealed class AuthenticatedCatalogHandler : HttpMessageHandler

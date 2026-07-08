@@ -262,22 +262,89 @@ public sealed class ManagedModuleCatalogStore
 
         try
         {
-            var source = ResolveMetadataSource(catalog);
-            var documents = await ReadNuGetV2XmlPagesAsync(source, packageName, credential, cancellationToken).ConfigureAwait(false);
-            var package = ReadPackage(source, packageName, documents, includePrerelease);
+            var package = catalog.RepositoryKind == ManagedModuleRepositoryKind.NuGetV3 && !IsPowerShellGalleryV3(catalog.Source)
+                ? await ReadNuGetV3PackageAsync(catalog.Source, packageName, includePrerelease, credential, cancellationToken).ConfigureAwait(false)
+                : await ReadNuGetV2PackageAsync(catalog, packageName, includePrerelease, credential, cancellationToken).ConfigureAwait(false);
             if (package is null)
-                warnings.Add($"Package '{packageName}' was not found in catalog source '{source}'.");
+                warnings.Add($"Package '{packageName}' was not found in catalog source '{catalog.Source}'.");
             return package;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException or System.Xml.XmlException)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException or System.Xml.XmlException or JsonException)
         {
             warnings.Add($"Package '{packageName}' refresh failed: {ex.GetType().Name}: {ex.Message}");
             return null;
         }
+    }
+
+    private async Task<ManagedModuleCatalogPackage?> ReadNuGetV2PackageAsync(
+        ManagedModuleCatalog catalog,
+        string packageName,
+        bool includePrerelease,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        var source = ResolveNuGetV2MetadataSource(catalog);
+        var documents = await ReadNuGetV2XmlPagesAsync(source, packageName, credential, cancellationToken).ConfigureAwait(false);
+        return ReadPackage(source, packageName, documents, includePrerelease);
+    }
+
+    private async Task<ManagedModuleCatalogPackage?> ReadNuGetV3PackageAsync(
+        string source,
+        string packageName,
+        bool includePrerelease,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        var resources = await ResolveNuGetV3ResourcesAsync(source, credential, cancellationToken).ConfigureAwait(false);
+        var versions = await ReadNuGetV3VersionsAsync(resources.PackageBaseAddress, packageName, cancellationToken).ConfigureAwait(false);
+        if (versions.Count == 0)
+            return null;
+
+        var registration = string.IsNullOrWhiteSpace(resources.RegistrationBaseAddress)
+            ? null
+            : await ReadNuGetV3RegistrationAsync(resources.RegistrationBaseAddress!, packageName, credential, cancellationToken).ConfigureAwait(false);
+        var registrationVersions = registration?.Versions.ToDictionary(static version => version.Version, StringComparer.OrdinalIgnoreCase) ??
+                                   new Dictionary<string, ManagedModuleCatalogVersion>(StringComparer.OrdinalIgnoreCase);
+        var catalogVersions = versions
+            .Where(version => includePrerelease || !ManagedModuleVersionComparer.IsPrerelease(version))
+            .Select(version => registrationVersions.TryGetValue(version, out var registered)
+                ? EnsureNuGetV3VersionPackageSource(registered, resources.PackageBaseAddress, packageName)
+                : CreateNuGetV3Version(resources.PackageBaseAddress, packageName, version, listed: true))
+            .GroupBy(static version => version.Version, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .OrderBy(static version => version.Version, ManagedModuleVersionComparer.Instance)
+            .ToList();
+        if (catalogVersions.Count == 0)
+            return null;
+
+        var package = new ManagedModuleCatalogPackage
+        {
+            Id = registration?.Id ?? packageName.Trim(),
+            Authors = registration?.Authors,
+            Owners = registration?.Owners,
+            Description = registration?.Description,
+            ProjectUrl = registration?.ProjectUrl,
+            GalleryUrl = registration?.GalleryUrl,
+            Tags = registration?.Tags.ToList() ?? new List<string>(),
+            Versions = catalogVersions,
+            LastRefreshAtUtc = DateTimeOffset.UtcNow,
+            SourceReceipt = source.Trim().TrimEnd('/')
+        };
+        package.LatestStableVersion = catalogVersions
+            .Where(static version => !version.IsPrerelease && version.Listed)
+            .OrderBy(static version => version.Version, ManagedModuleVersionComparer.Instance)
+            .LastOrDefault()
+            ?.Version;
+        package.LatestPrereleaseVersion = catalogVersions
+            .Where(static version => version.IsPrerelease && version.Listed)
+            .OrderBy(static version => version.Version, ManagedModuleVersionComparer.Instance)
+            .LastOrDefault()
+            ?.Version;
+        return package;
     }
 
     private async Task<IReadOnlyList<XDocument>> ReadNuGetV2XmlPagesAsync(
@@ -439,7 +506,216 @@ public sealed class ManagedModuleCatalogStore
         return catalog;
     }
 
-    private static string ResolveMetadataSource(ManagedModuleCatalog catalog)
+    private async Task<NuGetV3CatalogResources> ResolveNuGetV3ResourcesAsync(
+        string source,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        var normalizedSource = source.Trim().TrimEnd('/');
+        if (!TryNormalizeNuGetV3ServiceIndexSource(normalizedSource, out var serviceIndexSource))
+        {
+            return new NuGetV3CatalogResources
+            {
+                PackageBaseAddress = EnsureTrailingSlash(normalizedSource)
+            };
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, serviceIndexSource);
+        request.Headers.Accept.ParseAdd("application/json");
+        ApplyCredential(request, credential);
+        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"HTTP {(int)response.StatusCode} {response.ReasonPhrase}: {serviceIndexSource}");
+
+        using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (!document.RootElement.TryGetProperty("resources", out var resources) || resources.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("NuGet v3 service index did not include a resources array.");
+
+        string? packageBase = null;
+        string? registrationBase = null;
+        foreach (var resource in resources.EnumerateArray())
+        {
+            var id = ReadJsonString(resource, "@id");
+            if (string.IsNullOrWhiteSpace(id))
+                continue;
+
+            if (IsNuGetV3PackageBaseResource(resource))
+                packageBase = EnsureTrailingSlash(id!);
+            else if (IsNuGetV3RegistrationBaseResource(resource))
+                registrationBase = EnsureTrailingSlash(id!);
+        }
+
+        if (string.IsNullOrWhiteSpace(packageBase))
+            throw new InvalidOperationException("NuGet v3 service index did not expose PackageBaseAddress.");
+
+        return new NuGetV3CatalogResources
+        {
+            PackageBaseAddress = packageBase!,
+            RegistrationBaseAddress = registrationBase
+        };
+    }
+
+    private async Task<IReadOnlyList<string>> ReadNuGetV3VersionsAsync(
+        string packageBaseAddress,
+        string packageName,
+        CancellationToken cancellationToken)
+    {
+        var lowerId = packageName.Trim().ToLowerInvariant();
+        var indexUri = new Uri(new Uri(EnsureTrailingSlash(packageBaseAddress)), $"{Uri.EscapeDataString(lowerId)}/index.json");
+        using var request = new HttpRequestMessage(HttpMethod.Get, indexUri);
+        request.Headers.Accept.ParseAdd("application/json");
+        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return Array.Empty<string>();
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"HTTP {(int)response.StatusCode} {response.ReasonPhrase}: {indexUri}");
+
+        using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (!document.RootElement.TryGetProperty("versions", out var versions) || versions.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException($"NuGet v3 flat-container response did not include a versions array for '{packageName}'.");
+
+        return versions.EnumerateArray()
+            .Select(static version => version.GetString())
+            .Where(static version => !string.IsNullOrWhiteSpace(version))
+            .Select(static version => version!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private async Task<NuGetV3RegistrationPackage?> ReadNuGetV3RegistrationAsync(
+        string registrationBaseAddress,
+        string packageName,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        var lowerId = packageName.Trim().ToLowerInvariant();
+        var indexUri = new Uri(new Uri(EnsureTrailingSlash(registrationBaseAddress)), $"{Uri.EscapeDataString(lowerId)}/index.json");
+        var package = new NuGetV3RegistrationPackage { Id = packageName.Trim() };
+        await ReadNuGetV3RegistrationPageAsync(indexUri, credential, package, depth: 0, cancellationToken).ConfigureAwait(false);
+        return package.Versions.Count == 0 ? null : package;
+    }
+
+    private async Task ReadNuGetV3RegistrationPageAsync(
+        Uri uri,
+        RepositoryCredential? credential,
+        NuGetV3RegistrationPackage package,
+        int depth,
+        CancellationToken cancellationToken)
+    {
+        if (depth > 32)
+            throw new InvalidOperationException($"NuGet v3 registration query for '{uri}' exceeded the page limit.");
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        request.Headers.Accept.ParseAdd("application/json");
+        ApplyCredential(request, credential);
+        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return;
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"HTTP {(int)response.StatusCode} {response.ReasonPhrase}: {uri}");
+
+        using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        await ReadNuGetV3RegistrationItemsAsync(document.RootElement, credential, package, depth, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ReadNuGetV3RegistrationItemsAsync(
+        JsonElement element,
+        RepositoryCredential? credential,
+        NuGetV3RegistrationPackage package,
+        int depth,
+        CancellationToken cancellationToken)
+    {
+        if (!element.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+            return;
+
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.TryGetProperty("catalogEntry", out var catalogEntry) && catalogEntry.ValueKind == JsonValueKind.Object)
+            {
+                ReadNuGetV3RegistrationCatalogEntry(catalogEntry, package);
+                continue;
+            }
+
+            if (item.TryGetProperty("items", out var nestedItems) && nestedItems.ValueKind == JsonValueKind.Array)
+            {
+                await ReadNuGetV3RegistrationItemsAsync(item, credential, package, depth + 1, cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+
+            var page = ReadJsonString(item, "@id");
+            if (Uri.TryCreate(page, UriKind.Absolute, out var pageUri))
+                await ReadNuGetV3RegistrationPageAsync(pageUri, credential, package, depth + 1, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static void ReadNuGetV3RegistrationCatalogEntry(JsonElement catalogEntry, NuGetV3RegistrationPackage package)
+    {
+        var id = ReadJsonString(catalogEntry, "id") ?? ReadJsonString(catalogEntry, "Id") ?? package.Id;
+        var version = ReadJsonString(catalogEntry, "version") ?? ReadJsonString(catalogEntry, "Version");
+        if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(version))
+            return;
+
+        package.Id = id!.Trim();
+        package.Authors ??= ReadJsonStringOrArray(catalogEntry, "authors");
+        package.Owners ??= ReadJsonStringOrArray(catalogEntry, "owners");
+        package.Description ??= ReadJsonString(catalogEntry, "description");
+        package.ProjectUrl ??= ReadJsonString(catalogEntry, "projectUrl");
+        package.GalleryUrl ??= ReadJsonString(catalogEntry, "galleryDetailsUrl") ?? ReadJsonString(catalogEntry, "@id");
+        foreach (var tag in ReadJsonTags(catalogEntry, "tags"))
+        {
+            if (!package.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase))
+                package.Tags.Add(tag);
+        }
+
+        package.Versions.Add(new ManagedModuleCatalogVersion
+        {
+            Version = version!.Trim(),
+            NormalizedVersion = ReadJsonString(catalogEntry, "normalizedVersion"),
+            IsPrerelease = ReadJsonBoolean(catalogEntry, "isPrerelease") || ManagedModuleVersionComparer.IsPrerelease(version),
+            Listed = ReadJsonListed(catalogEntry),
+            CreatedAtUtc = ReadJsonDateTimeOffset(catalogEntry, "created"),
+            PublishedAtUtc = ReadJsonDateTimeOffset(catalogEntry, "published"),
+            DownloadCount = ReadJsonInt64(catalogEntry, "downloadCount"),
+            VersionDownloadCount = ReadJsonInt64(catalogEntry, "versionDownloadCount"),
+            PackageSize = ReadJsonInt64(catalogEntry, "packageSize"),
+            PackageHash = ReadJsonString(catalogEntry, "packageHash"),
+            PackageHashAlgorithm = ReadJsonString(catalogEntry, "packageHashAlgorithm"),
+            License = ReadJsonString(catalogEntry, "licenseExpression") ??
+                      ReadJsonString(catalogEntry, "licenseUrl"),
+            RequireLicenseAcceptance = ReadJsonBoolean(catalogEntry, "requireLicenseAcceptance"),
+            PackageSource = ReadJsonString(catalogEntry, "packageContent"),
+            Dependencies = ReadJsonDependencies(catalogEntry).ToList()
+        });
+    }
+
+    private static ManagedModuleCatalogVersion CreateNuGetV3Version(
+        string packageBaseAddress,
+        string packageId,
+        string version,
+        bool listed)
+        => new()
+        {
+            Version = version.Trim(),
+            IsPrerelease = ManagedModuleVersionComparer.IsPrerelease(version),
+            Listed = listed,
+            PackageSource = BuildNuGetV3PackageUri(packageBaseAddress, packageId, version).ToString()
+        };
+
+    private static ManagedModuleCatalogVersion EnsureNuGetV3VersionPackageSource(
+        ManagedModuleCatalogVersion version,
+        string packageBaseAddress,
+        string packageId)
+    {
+        if (string.IsNullOrWhiteSpace(version.PackageSource))
+            version.PackageSource = BuildNuGetV3PackageUri(packageBaseAddress, packageId, version.Version).ToString();
+
+        return version;
+    }
+
+    private static string ResolveNuGetV2MetadataSource(ManagedModuleCatalog catalog)
     {
         if (IsPowerShellGalleryV3(catalog.Source))
             return ManagedModuleCatalogDefaults.PowerShellGalleryV2;
@@ -508,6 +784,14 @@ public sealed class ManagedModuleCatalogStore
                        $"{Uri.EscapeDataString(lowerId)}.{Uri.EscapeDataString(lowerVersion)}.nupkg");
     }
 
+    private static Uri BuildNuGetV3PackageUri(string packageBaseAddress, string packageId, string version)
+    {
+        var lowerId = packageId.Trim().ToLowerInvariant();
+        var lowerVersion = version.Trim().ToLowerInvariant();
+        return new Uri(new Uri(EnsureTrailingSlash(packageBaseAddress)),
+            $"{Uri.EscapeDataString(lowerId)}/{Uri.EscapeDataString(lowerVersion)}/{Uri.EscapeDataString(lowerId)}.{Uri.EscapeDataString(lowerVersion)}.nupkg");
+    }
+
     private static bool IsPowerShellGalleryV3(string source)
         => source.Trim().TrimEnd('/').Equals(ManagedModuleCatalogDefaults.PowerShellGalleryV3, StringComparison.OrdinalIgnoreCase);
 
@@ -516,6 +800,42 @@ public sealed class ManagedModuleCatalogStore
 
     private static string EnsureTrailingSlash(string value)
         => value.EndsWith("/", StringComparison.Ordinal) ? value : value + "/";
+
+    private static bool TryNormalizeNuGetV3ServiceIndexSource(string source, out Uri serviceIndexSource)
+    {
+        serviceIndexSource = null!;
+        if (!Uri.TryCreate(source.Trim(), UriKind.Absolute, out var uri))
+            return false;
+        if (!uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+            !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var path = uri.AbsolutePath.TrimEnd('/');
+        if (!path.EndsWith("index.json", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        serviceIndexSource = uri;
+        return true;
+    }
+
+    private static bool IsNuGetV3PackageBaseResource(JsonElement resource)
+        => ResourceTypeContains(resource, "PackageBaseAddress");
+
+    private static bool IsNuGetV3RegistrationBaseResource(JsonElement resource)
+        => ResourceTypeContains(resource, "RegistrationsBaseUrl");
+
+    private static bool ResourceTypeContains(JsonElement resource, string value)
+    {
+        if (!resource.TryGetProperty("@type", out var type))
+            return false;
+
+        if (type.ValueKind == JsonValueKind.String)
+            return type.GetString()?.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
+
+        return type.ValueKind == JsonValueKind.Array &&
+               type.EnumerateArray().Any(item => item.ValueKind == JsonValueKind.String &&
+                                                 item.GetString()?.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0);
+    }
 
     private static void ApplyCredential(HttpRequestMessage request, RepositoryCredential? credential)
     {
@@ -531,6 +851,123 @@ public sealed class ManagedModuleCatalogStore
 
         if (!string.IsNullOrWhiteSpace(credential.Secret))
             request.Headers.Add("X-NuGet-ApiKey", credential.Secret);
+    }
+
+    private static string? ReadJsonString(JsonElement element, string name)
+    {
+        if (!element.TryGetProperty(name, out var value))
+            return null;
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString()?.Trim(),
+            JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => value.ToString().Trim(),
+            _ => null
+        };
+    }
+
+    private static string? ReadJsonStringOrArray(JsonElement element, string name)
+    {
+        if (!element.TryGetProperty(name, out var value))
+            return null;
+
+        if (value.ValueKind == JsonValueKind.String)
+            return value.GetString()?.Trim();
+        if (value.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var values = value.EnumerateArray()
+            .Where(static item => item.ValueKind == JsonValueKind.String)
+            .Select(static item => item.GetString()?.Trim())
+            .Where(static item => !string.IsNullOrWhiteSpace(item))
+            .ToArray();
+        return values.Length == 0 ? null : string.Join(", ", values);
+    }
+
+    private static bool ReadJsonBoolean(JsonElement element, string name)
+    {
+        if (!element.TryGetProperty(name, out var value))
+            return false;
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.String when bool.TryParse(value.GetString(), out var parsed) => parsed,
+            _ => false
+        };
+    }
+
+    private static bool ReadJsonListed(JsonElement element)
+    {
+        if (element.TryGetProperty("listed", out var listed))
+        {
+            return listed.ValueKind switch
+            {
+                JsonValueKind.False => false,
+                JsonValueKind.String when bool.TryParse(listed.GetString(), out var parsed) => parsed,
+                _ => true
+            };
+        }
+
+        var published = ReadJsonString(element, "published");
+        return !string.Equals(published, "1900-01-01T00:00:00", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static DateTimeOffset? ReadJsonDateTimeOffset(JsonElement element, string name)
+        => DateTimeOffset.TryParse(ReadJsonString(element, name), out var parsed) ? parsed.ToUniversalTime() : null;
+
+    private static long? ReadJsonInt64(JsonElement element, string name)
+        => long.TryParse(ReadJsonString(element, name), out var parsed) ? parsed : null;
+
+    private static IEnumerable<string> ReadJsonTags(JsonElement element, string name)
+    {
+        if (!element.TryGetProperty(name, out var value))
+            yield break;
+
+        if (value.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in value.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.String)
+                    continue;
+
+                var tag = item.GetString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(tag))
+                    yield return tag!;
+            }
+
+            yield break;
+        }
+
+        foreach (var tag in SplitTags(value.ValueKind == JsonValueKind.String ? value.GetString() : value.ToString()))
+            yield return tag;
+    }
+
+    private static IEnumerable<ManagedModuleDependencyInfo> ReadJsonDependencies(JsonElement catalogEntry)
+    {
+        if (!catalogEntry.TryGetProperty("dependencyGroups", out var groups) || groups.ValueKind != JsonValueKind.Array)
+            yield break;
+
+        foreach (var group in groups.EnumerateArray())
+        {
+            var targetFramework = ReadJsonString(group, "targetFramework");
+            if (!group.TryGetProperty("dependencies", out var dependencies) || dependencies.ValueKind != JsonValueKind.Array)
+                continue;
+
+            foreach (var dependency in dependencies.EnumerateArray())
+            {
+                var id = ReadJsonString(dependency, "id");
+                if (string.IsNullOrWhiteSpace(id))
+                    continue;
+
+                yield return new ManagedModuleDependencyInfo
+                {
+                    Id = id!,
+                    VersionRange = ReadJsonString(dependency, "range"),
+                    TargetFramework = targetFramework
+                };
+            }
+        }
     }
 
     private static string? ReadString(XElement? entry, XNamespace data, string name)
@@ -605,5 +1042,31 @@ public sealed class ManagedModuleCatalogStore
         public int Version { get; set; } = 1;
 
         public List<ManagedModuleCatalog> Catalogs { get; set; } = new();
+    }
+
+    private sealed class NuGetV3CatalogResources
+    {
+        public string PackageBaseAddress { get; set; } = string.Empty;
+
+        public string? RegistrationBaseAddress { get; set; }
+    }
+
+    private sealed class NuGetV3RegistrationPackage
+    {
+        public string Id { get; set; } = string.Empty;
+
+        public string? Authors { get; set; }
+
+        public string? Owners { get; set; }
+
+        public string? Description { get; set; }
+
+        public string? ProjectUrl { get; set; }
+
+        public string? GalleryUrl { get; set; }
+
+        public List<string> Tags { get; } = new();
+
+        public List<ManagedModuleCatalogVersion> Versions { get; } = new();
     }
 }
