@@ -537,14 +537,11 @@ public sealed partial class DotNetRepositoryReleaseService
             directories.Add(Path.GetFullPath(directory));
         }
 
-        if (directories.Count > 0)
-        {
-            logger.Verbose($"{projectName}: resolved {directories.Count} signing output directorie(s) from conventional build paths.");
-            return directories.ToArray();
-        }
-
         foreach (var targetFramework in ReadTargetFrameworks(csproj))
         {
+            if (directories.Count > 0 && HasOutputDirectoryForTargetFramework(directories, targetFramework))
+                continue;
+
             var exitCode = RunDotnetMsBuildGetProperty(
                 csproj,
                 workingDirectory,
@@ -581,6 +578,19 @@ public sealed partial class DotNetRepositoryReleaseService
             throw new DirectoryNotFoundException($"No build output directory found for {projectName}.");
 
         return directories.ToArray();
+    }
+
+    private static bool HasOutputDirectoryForTargetFramework(IEnumerable<string> directories, string? targetFramework)
+    {
+        if (string.IsNullOrWhiteSpace(targetFramework))
+            return directories.Any();
+
+        var normalizedTargetFramework = targetFramework!.Trim();
+        return directories.Any(directory =>
+        {
+            var parts = directory.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
+            return parts.Any(part => string.Equals(part, normalizedTargetFramework, StringComparison.OrdinalIgnoreCase));
+        });
     }
 
     private static string[] ResolveConventionalBuildOutputDirectories(
@@ -713,6 +723,10 @@ public sealed partial class DotNetRepositoryReleaseService
         string? configuration = null,
         ILogger? logger = null)
     {
+        var evaluatedAssemblyName = ResolveEvaluatedAssemblyName(csproj, workingDirectory, configuration, projectName, logger);
+        if (IsUsableAssemblyName(evaluatedAssemblyName))
+            return evaluatedAssemblyName!.Trim();
+
         try
         {
             var document = XDocument.Load(csproj);
@@ -726,10 +740,6 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             // Project file metadata is best-effort here; the csproj name is the SDK default.
         }
-
-        var evaluatedAssemblyName = ResolveEvaluatedAssemblyName(csproj, workingDirectory, configuration, projectName, logger);
-        if (IsUsableAssemblyName(evaluatedAssemblyName))
-            return evaluatedAssemblyName!.Trim();
 
         return string.IsNullOrWhiteSpace(projectName)
             ? Path.GetFileNameWithoutExtension(csproj) ?? "Project"

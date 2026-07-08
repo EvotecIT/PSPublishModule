@@ -185,13 +185,25 @@ public sealed partial class ModulePipelineRunner
     {
         return destination switch
         {
-            PackageBuildPublishDestination.NuGet => release.Projects
+            PackageBuildPublishDestination.NuGet => HasAllArtifacts(release.Projects
                 .SelectMany(project => project.Packages)
-                .Any(package => !string.IsNullOrWhiteSpace(package) && File.Exists(package)),
-            PackageBuildPublishDestination.GitHub => release.Projects
-                .Any(project => !string.IsNullOrWhiteSpace(project.ReleaseZipPath) && File.Exists(project.ReleaseZipPath)),
+                .Where(package => !string.IsNullOrWhiteSpace(package))),
+            PackageBuildPublishDestination.GitHub => HasAllArtifacts(release.Projects
+                .Select(project => project.ReleaseZipPath)
+                .Where(path => !string.IsNullOrWhiteSpace(path))),
             _ => false
         };
+    }
+
+    private static bool HasAllArtifacts(IEnumerable<string?> artifactPaths)
+    {
+        var paths = artifactPaths
+            .Select(path => path?.Trim())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return paths.Length > 0 && paths.All(path => File.Exists(path!));
     }
 
     private void PublishExistingPackageBuildResult(
