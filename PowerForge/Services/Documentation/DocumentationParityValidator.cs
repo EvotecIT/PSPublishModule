@@ -19,14 +19,15 @@ internal static class DocumentationParityValidator
         var errors = new List<string>();
         var markdownCommands = ReadMarkdownCommandNames(docsPath, errors);
         var mamlCommands = ReadMamlCommandNames(externalHelpFilePath, errors);
-        var expectedCommands = ReadExactExportedCommandNames(exports);
+        var expectedCommands = ReadExactExportedCommandNames(exports, out var expectedCommandsComplete);
 
         AddSetDiffErrors(
             errors,
             expectedCommands,
             markdownCommands,
             "exported command",
-            "Markdown command page");
+            "Markdown command page",
+            checkStale: expectedCommandsComplete);
 
         if (mamlCommands is not null)
         {
@@ -35,14 +36,16 @@ internal static class DocumentationParityValidator
                 markdownCommands,
                 mamlCommands,
                 "Markdown command page",
-                "MAML command entry");
+                "MAML command entry",
+                checkStale: true);
 
             AddSetDiffErrors(
                 errors,
                 expectedCommands,
                 mamlCommands,
                 "exported command",
-                "MAML command entry");
+                "MAML command entry",
+                checkStale: expectedCommandsComplete);
         }
 
         return new DocumentationParityReport(
@@ -123,8 +126,9 @@ internal static class DocumentationParityValidator
         }
     }
 
-    private static string[]? ReadExactExportedCommandNames(ExportSet? exports)
+    private static string[]? ReadExactExportedCommandNames(ExportSet? exports, out bool isComplete)
     {
+        isComplete = false;
         if (exports is null)
             return null;
 
@@ -135,6 +139,8 @@ internal static class DocumentationParityValidator
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+        isComplete = !names.Any(ContainsWildcard);
 
         names = names
             .Where(static name => !ContainsWildcard(name))
@@ -154,7 +160,8 @@ internal static class DocumentationParityValidator
         string[]? expected,
         string[] actual,
         string expectedLabel,
-        string actualLabel)
+        string actualLabel,
+        bool checkStale)
     {
         if (expected is null)
             return;
@@ -166,12 +173,15 @@ internal static class DocumentationParityValidator
         if (missing.Length > 0)
             errors.Add($"{actualLabel} is missing {missing.Length} {expectedLabel}(s): {string.Join(", ", missing)}");
 
-        var stale = actual
-            .Except(expected, StringComparer.OrdinalIgnoreCase)
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (stale.Length > 0)
-            errors.Add($"{actualLabel} has {stale.Length} stale/non-exported command(s): {string.Join(", ", stale)}");
+        if (checkStale)
+        {
+            var stale = actual
+                .Except(expected, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (stale.Length > 0)
+                errors.Add($"{actualLabel} has {stale.Length} stale/non-exported command(s): {string.Join(", ", stale)}");
+        }
     }
 }
 

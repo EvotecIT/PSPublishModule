@@ -15,51 +15,41 @@ $Standard = $false
 foreach ($A in $AssemblyFolders.Name) {
     if ($A -eq 'Default') {
         $Default = $true
-    }
-    elseif ($A -eq 'Core') {
+    } elseif ($A -eq 'Core') {
         $Core = $true
-    }
-    elseif ($A -eq 'Standard') {
+    } elseif ($A -eq 'Standard') {
         $Standard = $true
     }
 }
 if ($Standard -and $Core -and $Default) {
     $FrameworkNet = 'Default'
     $Framework = 'Standard'
-}
-elseif ($Standard -and $Core) {
+} elseif ($Standard -and $Core) {
     $Framework = 'Standard'
     $FrameworkNet = 'Standard'
-}
-elseif ($Core -and $Default) {
+} elseif ($Core -and $Default) {
     $Framework = 'Core'
     $FrameworkNet = 'Default'
-}
-elseif ($Standard -and $Default) {
+} elseif ($Standard -and $Default) {
     $Framework = 'Standard'
     $FrameworkNet = 'Default'
-}
-elseif ($Standard) {
+} elseif ($Standard) {
     $Framework = 'Standard'
     $FrameworkNet = 'Standard'
-}
-elseif ($Core) {
+} elseif ($Core) {
     $Framework = 'Core'
     $FrameworkNet = ''
-}
-elseif ($Default) {
+} elseif ($Default) {
     $Framework = 'Default'
     $FrameworkNet = 'Default'
-}
-else {
+} else {
     Write-Error -Message 'No assemblies found'
     return
 }
 
 if ($PSEdition -eq 'Core') {
     $LibFolder = $Framework
-}
-else {
+} else {
     $LibFolder = $FrameworkNet
 }
 
@@ -77,254 +67,243 @@ try {
         $InnerModule = & $ImportModule -Assembly $ModuleAssembly -Force -PassThru -ErrorAction Stop
 
         # Type accelerator registration relies on $ModuleAssembly and $LibFolder from this ALC loader scope.
-        $RegisterPowerForgeAssemblyTypeAccelerators = {
-            param(
-                [Parameter(Mandatory = $true)][System.Reflection.Assembly] $ModuleAssembly,
-                [Parameter(Mandatory = $true)][string] $LibFolder
-            )
+$RegisterPowerForgeAssemblyTypeAccelerators = {
+    param(
+        [Parameter(Mandatory = $true)][System.Reflection.Assembly] $ModuleAssembly,
+        [Parameter(Mandatory = $true)][string] $LibFolder
+    )
 
-            $Mode = 'AllowList'
-            $RequestedTypes = @('PowerForge.ModuleTestFailureAnalysis', 'PowerForge.ModuleTestSuiteResult', 'PowerForge.ModuleRepositoryProfileScope', 'PowerForge.PrivateGalleryBootstrapMode', 'PowerForge.PrivateGalleryCredentialSource', 'PowerForge.PublishTool', 'PowerForge.RepositoryRegistrationTool')
-            $RequestedAssemblies = @()
+    $Mode = 'AllowList'
+    $RequestedTypes = @('PowerForge.ModuleTestFailureAnalysis', 'PowerForge.ModuleTestSuiteResult', 'PowerForge.ModuleRepositoryProfileScope', 'PowerForge.PrivateGalleryBootstrapMode', 'PowerForge.PrivateGalleryCredentialSource', 'PowerForge.PublishTool', 'PowerForge.RepositoryRegistrationTool')
+    $RequestedAssemblies = @()
 
-            if ($null -eq $ModuleAssembly) {
-                Write-Warning -Message 'Module assembly was not available. ALC dependency type exposure is disabled.'
-                return
+    if ($null -eq $ModuleAssembly) {
+        Write-Warning -Message 'Module assembly was not available. ALC dependency type exposure is disabled.'
+        return
+    }
+
+    if ([string]::IsNullOrWhiteSpace($LibFolder)) {
+        Write-Warning -Message 'Module library folder was not available. ALC dependency type exposure is disabled.'
+        return
+    }
+
+    $PowerForgeAlcLibraryDirectory = $null
+    if ([IO.Path]::IsPathRooted($LibFolder)) {
+        $PowerForgeAlcLibraryDirectory = [IO.Path]::GetFullPath($LibFolder)
+    } elseif ($LibFolder.Contains('..') -or $LibFolder.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {
+        Write-Warning -Message "Module library folder '$LibFolder' must be a simple folder name or a rooted development binary directory. ALC dependency type exposure is disabled."
+        return
+    } else {
+        $PowerForgeAlcLibraryDirectory = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder)
+    }
+
+    if ($Mode -eq 'AllowList' -and $RequestedTypes.Count -eq 0) {
+        Write-Warning -Message 'AllowList type accelerator mode was configured without type names. No ALC dependency type accelerators will be registered.'
+        return
+    }
+
+    if (($Mode -eq 'Assembly' -or $Mode -eq 'Enums') -and $RequestedAssemblies.Count -eq 0) {
+        if ($RequestedTypes.Count -eq 0) {
+            Write-Warning -Message "$Mode type accelerator mode was configured without assembly names or type names. No ALC dependency type accelerators will be registered."
+            return
+        }
+
+        Write-Warning -Message "$Mode type accelerator mode was configured without assembly names. Only explicitly configured type names will be registered."
+    }
+
+    $TypeAccelerators = [psobject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
+    if ($null -eq $TypeAccelerators) {
+        Write-Warning -Message 'PowerShell type accelerator APIs are not available. ALC dependency type exposure is disabled.'
+        return
+    }
+
+    $AddTypeAccelerator = $TypeAccelerators.GetMethod('Add', [type[]]@([string], [type]))
+    $GetTypeAccelerators = $TypeAccelerators.GetProperty('Get', [System.Reflection.BindingFlags] 'Static,Public,NonPublic')
+    if ($null -eq $AddTypeAccelerator -or $null -eq $GetTypeAccelerators) {
+        Write-Warning -Message 'PowerShell type accelerator APIs are incomplete. ALC dependency type exposure is disabled.'
+        return
+    }
+
+    $ModuleAlc = [System.Runtime.Loader.AssemblyLoadContext]::GetLoadContext($ModuleAssembly)
+    if ($null -eq $ModuleAlc) {
+        Write-Warning -Message 'Unable to resolve the module AssemblyLoadContext. ALC dependency type exposure is disabled.'
+        return
+    }
+
+    if ($null -eq $script:PowerForgeRegisteredAssemblyTypeAccelerators) {
+        $script:PowerForgeRegisteredAssemblyTypeAccelerators = @{}
+    }
+
+    $ImportPowerForgeAlcAssembly = {
+        param([Parameter(Mandatory = $true)][string] $AssemblyName)
+
+        foreach ($Assembly in $ModuleAlc.Assemblies) {
+            if ($Assembly.GetName().Name -eq $AssemblyName) {
+                return $Assembly
             }
+        }
 
-            if ([string]::IsNullOrWhiteSpace($LibFolder)) {
-                Write-Warning -Message 'Module library folder was not available. ALC dependency type exposure is disabled.'
-                return
-            }
-
-            $PowerForgeAlcLibraryDirectory = $null
-            if ([IO.Path]::IsPathRooted($LibFolder)) {
-                $PowerForgeAlcLibraryDirectory = [IO.Path]::GetFullPath($LibFolder)
-            }
-            elseif ($LibFolder.Contains('..') -or $LibFolder.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {
-                Write-Warning -Message "Module library folder '$LibFolder' must be a simple folder name or a rooted development binary directory. ALC dependency type exposure is disabled."
-                return
-            }
-            else {
-                $PowerForgeAlcLibraryDirectory = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder)
-            }
-
-            if ($Mode -eq 'AllowList' -and $RequestedTypes.Count -eq 0) {
-                Write-Warning -Message 'AllowList type accelerator mode was configured without type names. No ALC dependency type accelerators will be registered.'
-                return
-            }
-
-            if (($Mode -eq 'Assembly' -or $Mode -eq 'Enums') -and $RequestedAssemblies.Count -eq 0) {
-                if ($RequestedTypes.Count -eq 0) {
-                    Write-Warning -Message "$Mode type accelerator mode was configured without assembly names or type names. No ALC dependency type accelerators will be registered."
-                    return
-                }
-
-                Write-Warning -Message "$Mode type accelerator mode was configured without assembly names. Only explicitly configured type names will be registered."
-            }
-
-            $TypeAccelerators = [psobject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
-            if ($null -eq $TypeAccelerators) {
-                Write-Warning -Message 'PowerShell type accelerator APIs are not available. ALC dependency type exposure is disabled.'
-                return
-            }
-
-            $AddTypeAccelerator = $TypeAccelerators.GetMethod('Add', [type[]]@([string], [type]))
-            $GetTypeAccelerators = $TypeAccelerators.GetProperty('Get', [System.Reflection.BindingFlags] 'Static,Public,NonPublic')
-            if ($null -eq $AddTypeAccelerator -or $null -eq $GetTypeAccelerators) {
-                Write-Warning -Message 'PowerShell type accelerator APIs are incomplete. ALC dependency type exposure is disabled.'
-                return
-            }
-
-            $ModuleAlc = [System.Runtime.Loader.AssemblyLoadContext]::GetLoadContext($ModuleAssembly)
-            if ($null -eq $ModuleAlc) {
-                Write-Warning -Message 'Unable to resolve the module AssemblyLoadContext. ALC dependency type exposure is disabled.'
-                return
-            }
-
-            if ($null -eq $script:PowerForgeRegisteredAssemblyTypeAccelerators) {
-                $script:PowerForgeRegisteredAssemblyTypeAccelerators = @{}
-            }
-
-            $ImportPowerForgeAlcAssembly = {
-                param([Parameter(Mandatory = $true)][string] $AssemblyName)
-
-                foreach ($Assembly in $ModuleAlc.Assemblies) {
-                    if ($Assembly.GetName().Name -eq $AssemblyName) {
-                        return $Assembly
-                    }
-                }
-
+        try {
+            return $ModuleAlc.LoadFromAssemblyName([System.Reflection.AssemblyName]::new($AssemblyName))
+        } catch {
+            $AssemblyPath = [IO.Path]::Combine($PowerForgeAlcLibraryDirectory, $AssemblyName + '.dll')
+            if (Test-Path -LiteralPath $AssemblyPath) {
                 try {
-                    return $ModuleAlc.LoadFromAssemblyName([System.Reflection.AssemblyName]::new($AssemblyName))
-                }
-                catch {
-                    $AssemblyPath = [IO.Path]::Combine($PowerForgeAlcLibraryDirectory, $AssemblyName + '.dll')
-                    if (Test-Path -LiteralPath $AssemblyPath) {
-                        try {
-                            $AssemblyNameObject = [System.Reflection.AssemblyName]::GetAssemblyName($AssemblyPath)
-                            return $ModuleAlc.LoadFromAssemblyName($AssemblyNameObject)
-                        }
-                        catch {
-                            Write-Warning -Message "Could not load ALC assembly '$AssemblyName' for type accelerator exposure: $($_.Exception.Message)"
-                        }
-                    }
-                }
-
-                return $null
-            }
-
-            $FindPowerForgeAlcType = {
-                param([Parameter(Mandatory = $true)][string] $TypeName)
-
-                foreach ($Assembly in $ModuleAlc.Assemblies) {
-                    $Type = $Assembly.GetType($TypeName, $false, $false)
-                    if ($null -ne $Type) {
-                        return $Type
-                    }
-                }
-
-                $LibDirectory = $PowerForgeAlcLibraryDirectory
-                if (-not (Test-Path -LiteralPath $LibDirectory)) {
-                    return $null
-                }
-
-                foreach ($File in Get-ChildItem -LiteralPath $LibDirectory -Filter '*.dll' -File -ErrorAction SilentlyContinue) {
-                    try {
-                        $AssemblyName = [System.Reflection.AssemblyName]::GetAssemblyName($File.FullName)
-                        $Assembly = & $ImportPowerForgeAlcAssembly -AssemblyName $AssemblyName.Name
-                        if ($null -eq $Assembly) {
-                            continue
-                        }
-
-                        $Type = $Assembly.GetType($TypeName, $false, $false)
-                        if ($null -ne $Type) {
-                            return $Type
-                        }
-                    }
-                    catch {
-                        continue
-                    }
-                }
-
-                return $null
-            }
-
-            $AddPowerForgeTypeAccelerator = {
-                param([Parameter(Mandatory = $true)][type] $Type)
-
-                if ([string]::IsNullOrWhiteSpace($Type.FullName)) {
-                    return
-                }
-
-                $Name = $Type.FullName
-                $Existing = $GetTypeAccelerators.GetValue($null)
-                if ($Existing.ContainsKey($Name)) {
-                    $ExistingType = $Existing[$Name]
-                    if ([object]::ReferenceEquals($ExistingType, $Type)) {
-                        return
-                    }
-                    else {
-                        $ExistingAssemblyName = $ExistingType.Assembly.GetName()
-                        $TypeAssemblyName = $Type.Assembly.GetName()
-                        $ExistingLoadContext = [System.Runtime.Loader.AssemblyLoadContext]::GetLoadContext($ExistingType.Assembly)
-                        $TypeLoadContext = [System.Runtime.Loader.AssemblyLoadContext]::GetLoadContext($Type.Assembly)
-                        if ([object]::ReferenceEquals($ExistingLoadContext, $TypeLoadContext) -and [object]::Equals($ExistingAssemblyName.FullName, $TypeAssemblyName.FullName)) {
-                            Write-Verbose -Message "Type accelerator '$Name' already exists in the same AssemblyLoadContext from the same assembly identity. Keeping the existing accelerator and skipping the duplicate type from $($TypeAssemblyName.Name)."
-                        }
-                        else {
-                            Write-Warning -Message "Type accelerator '$Name' already exists from $($ExistingAssemblyName.FullName). Keeping the existing accelerator and skipping the ALC type from $($TypeAssemblyName.FullName)."
-                        }
-                    }
-                    return
-                }
-
-                try {
-                    $AddTypeAccelerator.Invoke($null, @($Name, $Type)) | Out-Null
-                }
-                catch {
-                    Write-Warning -Message "Type accelerator '$Name' could not be registered from $($Type.Assembly.GetName().Name): $($_.Exception.Message)"
-                    return
-                }
-
-                $script:PowerForgeRegisteredAssemblyTypeAccelerators[$Name] = $Type
-            }
-
-            if ($Mode -eq 'Assembly' -or $Mode -eq 'Enums') {
-                foreach ($AssemblyName in $RequestedAssemblies) {
-                    $Assembly = & $ImportPowerForgeAlcAssembly -AssemblyName $AssemblyName
-                    if ($null -eq $Assembly) {
-                        Write-Warning -Message "Assembly '$AssemblyName' was not found in the module AssemblyLoadContext. No type accelerators were registered for it."
-                        continue
-                    }
-
-                    try {
-                        $ExportedTypes = @($Assembly.GetExportedTypes())
-                    }
-                    catch {
-                        Write-Warning -Message "Could not enumerate exported types from assembly '$AssemblyName' for type accelerator exposure: $($_.Exception.Message)"
-                        continue
-                    }
-
-                    foreach ($Type in $ExportedTypes) {
-                        if ($Mode -eq 'Enums' -and -not $Type.IsEnum) {
-                            continue
-                        }
-
-                        & $AddPowerForgeTypeAccelerator -Type $Type
-                    }
+                    $AssemblyNameObject = [System.Reflection.AssemblyName]::GetAssemblyName($AssemblyPath)
+                    return $ModuleAlc.LoadFromAssemblyName($AssemblyNameObject)
+                } catch {
+                    Write-Warning -Message "Could not load ALC assembly '$AssemblyName' for type accelerator exposure: $($_.Exception.Message)"
                 }
             }
+        }
 
-            foreach ($TypeName in $RequestedTypes) {
-                $Type = & $FindPowerForgeAlcType -TypeName $TypeName
-                if ($null -eq $Type) {
-                    Write-Warning -Message "Type '$TypeName' was not found in the module AssemblyLoadContext. No type accelerator was registered."
+        return $null
+    }
+
+    $FindPowerForgeAlcType = {
+        param([Parameter(Mandatory = $true)][string] $TypeName)
+
+        foreach ($Assembly in $ModuleAlc.Assemblies) {
+            $Type = $Assembly.GetType($TypeName, $false, $false)
+            if ($null -ne $Type) {
+                return $Type
+            }
+        }
+
+        $LibDirectory = $PowerForgeAlcLibraryDirectory
+        if (-not (Test-Path -LiteralPath $LibDirectory)) {
+            return $null
+        }
+
+        foreach ($File in Get-ChildItem -LiteralPath $LibDirectory -Filter '*.dll' -File -ErrorAction SilentlyContinue) {
+            try {
+                $AssemblyName = [System.Reflection.AssemblyName]::GetAssemblyName($File.FullName)
+                $Assembly = & $ImportPowerForgeAlcAssembly -AssemblyName $AssemblyName.Name
+                if ($null -eq $Assembly) {
+                    continue
+                }
+
+                $Type = $Assembly.GetType($TypeName, $false, $false)
+                if ($null -ne $Type) {
+                    return $Type
+                }
+            } catch {
+                continue
+            }
+        }
+
+        return $null
+    }
+
+    $AddPowerForgeTypeAccelerator = {
+        param([Parameter(Mandatory = $true)][type] $Type)
+
+        if ([string]::IsNullOrWhiteSpace($Type.FullName)) {
+            return
+        }
+
+        $Name = $Type.FullName
+        $Existing = $GetTypeAccelerators.GetValue($null)
+        if ($Existing.ContainsKey($Name)) {
+            $ExistingType = $Existing[$Name]
+            if ([object]::ReferenceEquals($ExistingType, $Type)) {
+                return
+            } else {
+                $ExistingAssemblyName = $ExistingType.Assembly.GetName()
+                $TypeAssemblyName = $Type.Assembly.GetName()
+                $ExistingLoadContext = [System.Runtime.Loader.AssemblyLoadContext]::GetLoadContext($ExistingType.Assembly)
+                $TypeLoadContext = [System.Runtime.Loader.AssemblyLoadContext]::GetLoadContext($Type.Assembly)
+                if ([object]::ReferenceEquals($ExistingLoadContext, $TypeLoadContext) -and [object]::Equals($ExistingAssemblyName.FullName, $TypeAssemblyName.FullName)) {
+                    Write-Verbose -Message "Type accelerator '$Name' already exists in the same AssemblyLoadContext from the same assembly identity. Keeping the existing accelerator and skipping the duplicate type from $($TypeAssemblyName.Name)."
+                } else {
+                    Write-Warning -Message "Type accelerator '$Name' already exists from $($ExistingAssemblyName.FullName). Keeping the existing accelerator and skipping the ALC type from $($TypeAssemblyName.FullName)."
+                }
+            }
+            return
+        }
+
+        try {
+            $AddTypeAccelerator.Invoke($null, @($Name, $Type)) | Out-Null
+        } catch {
+            Write-Warning -Message "Type accelerator '$Name' could not be registered from $($Type.Assembly.GetName().Name): $($_.Exception.Message)"
+            return
+        }
+
+        $script:PowerForgeRegisteredAssemblyTypeAccelerators[$Name] = $Type
+    }
+
+    if ($Mode -eq 'Assembly' -or $Mode -eq 'Enums') {
+        foreach ($AssemblyName in $RequestedAssemblies) {
+            $Assembly = & $ImportPowerForgeAlcAssembly -AssemblyName $AssemblyName
+            if ($null -eq $Assembly) {
+                Write-Warning -Message "Assembly '$AssemblyName' was not found in the module AssemblyLoadContext. No type accelerators were registered for it."
+                continue
+            }
+
+            try {
+                $ExportedTypes = @($Assembly.GetExportedTypes())
+            } catch {
+                Write-Warning -Message "Could not enumerate exported types from assembly '$AssemblyName' for type accelerator exposure: $($_.Exception.Message)"
+                continue
+            }
+
+            foreach ($Type in $ExportedTypes) {
+                if ($Mode -eq 'Enums' -and -not $Type.IsEnum) {
                     continue
                 }
 
                 & $AddPowerForgeTypeAccelerator -Type $Type
             }
+        }
+    }
 
-            if ($script:PowerForgeAssemblyTypeAcceleratorCleanupRegistered -ne $true) {
-                $script:PowerForgeAssemblyTypeAcceleratorCleanupRegistered = $true
-                $PreviousPowerForgeOnRemove = $ExecutionContext.SessionState.Module.OnRemove
-                $ExecutionContext.SessionState.Module.OnRemove = {
-                    try {
-                        $TypeAccelerators = [psobject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
-                        if ($null -eq $TypeAccelerators -or $null -eq $script:PowerForgeRegisteredAssemblyTypeAccelerators) {
-                            return
-                        }
+    foreach ($TypeName in $RequestedTypes) {
+        $Type = & $FindPowerForgeAlcType -TypeName $TypeName
+        if ($null -eq $Type) {
+            Write-Warning -Message "Type '$TypeName' was not found in the module AssemblyLoadContext. No type accelerator was registered."
+            continue
+        }
 
-                        $GetTypeAccelerators = $TypeAccelerators.GetProperty('Get', [System.Reflection.BindingFlags] 'Static,Public,NonPublic')
-                        $RemoveTypeAccelerator = $TypeAccelerators.GetMethod('Remove', [type[]]@([string]))
-                        if ($null -eq $GetTypeAccelerators -or $null -eq $RemoveTypeAccelerator) {
-                            return
-                        }
+        & $AddPowerForgeTypeAccelerator -Type $Type
+    }
 
-                        $Existing = $GetTypeAccelerators.GetValue($null)
-                        foreach ($Entry in @($script:PowerForgeRegisteredAssemblyTypeAccelerators.GetEnumerator())) {
-                            if ($Existing.ContainsKey($Entry.Key) -and [object]::ReferenceEquals($Existing[$Entry.Key], $Entry.Value)) {
-                                $RemoveTypeAccelerator.Invoke($null, @($Entry.Key)) | Out-Null
-                            }
-                        }
+    if ($script:PowerForgeAssemblyTypeAcceleratorCleanupRegistered -ne $true) {
+        $script:PowerForgeAssemblyTypeAcceleratorCleanupRegistered = $true
+        $PreviousPowerForgeOnRemove = $ExecutionContext.SessionState.Module.OnRemove
+        $ExecutionContext.SessionState.Module.OnRemove = {
+            try {
+                $TypeAccelerators = [psobject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
+                if ($null -eq $TypeAccelerators -or $null -eq $script:PowerForgeRegisteredAssemblyTypeAccelerators) {
+                    return
+                }
+
+                $GetTypeAccelerators = $TypeAccelerators.GetProperty('Get', [System.Reflection.BindingFlags] 'Static,Public,NonPublic')
+                $RemoveTypeAccelerator = $TypeAccelerators.GetMethod('Remove', [type[]]@([string]))
+                if ($null -eq $GetTypeAccelerators -or $null -eq $RemoveTypeAccelerator) {
+                    return
+                }
+
+                $Existing = $GetTypeAccelerators.GetValue($null)
+                foreach ($Entry in @($script:PowerForgeRegisteredAssemblyTypeAccelerators.GetEnumerator())) {
+                    if ($Existing.ContainsKey($Entry.Key) -and [object]::ReferenceEquals($Existing[$Entry.Key], $Entry.Value)) {
+                        $RemoveTypeAccelerator.Invoke($null, @($Entry.Key)) | Out-Null
                     }
-                    finally {
-                        if ($null -ne $PreviousPowerForgeOnRemove) {
-                            & $PreviousPowerForgeOnRemove @args
-                        }
-                    }
-                }.GetNewClosure()
+                }
+            } finally {
+                if ($null -ne $PreviousPowerForgeOnRemove) {
+                    & $PreviousPowerForgeOnRemove @args
+                }
             }
-        }
+        }.GetNewClosure()
+    }
+}
 
-        # Type accelerator exposure is PowerShell Core-only because it depends on AssemblyLoadContext.
-        try {
-            & $RegisterPowerForgeAssemblyTypeAccelerators -ModuleAssembly $ModuleAssembly -LibFolder $LibFolder
-        }
-        catch {
-            Write-Warning -Message "ALC type accelerator registration failed: $($_.Exception.Message)"
-        }
+# Type accelerator exposure is PowerShell Core-only because it depends on AssemblyLoadContext.
+try {
+    & $RegisterPowerForgeAssemblyTypeAccelerators -ModuleAssembly $ModuleAssembly -LibFolder $LibFolder
+} catch {
+    Write-Warning -Message "ALC type accelerator registration failed: $($_.Exception.Message)"
+}
 
         if ($InnerModule) {
             # Import-Module -Assembly loads the inner binary module into its own module object. PowerShell has no
@@ -345,51 +324,38 @@ try {
                 )
                 if ($null -ne $AddExportedAlias) {
                     foreach ($Alias in $InnerModule.ExportedAliases.Values) {
-                        $AliasTarget = if ([string]::IsNullOrWhiteSpace($Alias.Definition)) {
-                            $Alias.ResolvedCommandName 
-                        }
-                        else {
-                            $Alias.Definition 
-                        }
+                        $AliasTarget = if ([string]::IsNullOrWhiteSpace($Alias.Definition)) { $Alias.ResolvedCommandName } else { $Alias.Definition }
                         try {
                             # The alias must exist in this module scope before the private export table can reference it.
                             Set-Alias -Name $Alias.Name -Value $AliasTarget -Scope Local -Force -ErrorAction Stop
                             $ExportedAlias = $ExecutionContext.SessionState.InvokeCommand.GetCommand($Alias.Name, [System.Management.Automation.CommandTypes]::Alias)
                             if ($null -ne $ExportedAlias) {
                                 $AddExportedAlias.Invoke($ExecutionContext.SessionState.Module, @(, $ExportedAlias)) | Out-Null
-                            }
-                            else {
+                            } else {
                                 Write-Warning -Message "Alias '$($Alias.Name)' from $LibraryName was created but could not be resolved for export."
                             }
-                        }
-                        catch {
+                        } catch {
                             Write-Warning -Message "Alias '$($Alias.Name)' from $LibraryName could not be re-exported: $($_.Exception.Message)"
                         }
                     }
-                }
-                else {
+                } else {
                     Write-Warning -Message "AddExportedAlias is not available on this PowerShell version. Aliases from $LibraryName will not be re-exported to the module scope."
                 }
-            }
-            else {
+            } else {
                 Write-Warning -Message "AddExportedCmdlet is not available on this PowerShell version. Falling back to direct Import-Module; cmdlets from $LibraryName will load from the default context."
                 & $ImportModule $ModuleAssemblyPath -ErrorAction Stop
             }
         }
-    }
-    elseif (-not ($Class -as [type])) {
+    } elseif (-not ($Class -as [type])) {
         & $ImportModule $ModuleAssemblyPath -ErrorAction Stop
-    }
-    else {
+    } else {
         $Type = "$Class" -as [Type]
         & $ImportModule -Force -Assembly ($Type.Assembly)
     }
-}
-catch {
+} catch {
     if ($ErrorActionPreference -eq 'Stop') {
         throw
-    }
-    else {
+    } else {
         Write-Warning -Message "Importing module $Library failed. Fix errors before continuing. Error: $($_.Exception.Message)"
     }
 }
@@ -402,6 +368,7 @@ if ($PSEdition -ne 'Core') {
         . $LibrariesScript
     }
 }
+
 
 $FunctionsToExport = @()
 $CmdletsToExport = @('Add-AppStoreConnectBetaTesterToGroup', 'Add-AppStoreConnectBuildToBetaGroup', 'Add-BenchmarkAxis', 'Add-BenchmarkCase', 'Add-BenchmarkCases', 'Add-BenchmarkCaseSource', 'Add-BenchmarkComparison', 'Add-BenchmarkEngine', 'Add-BenchmarkMetric', 'Add-BenchmarkOperation', 'Add-BenchmarkReadmeBlock', 'Add-BenchmarkSkipRule', 'Add-BenchmarkValidation', 'Assert-BenchmarkPath', 'Assert-BenchmarkValue', 'Compress-ManagedResource', 'Convert-ProjectConsistency', 'Export-CertificateForNuGet', 'Export-ConfigurationProject', 'Find-ManagedModule', 'Get-AppleDevice', 'Get-AppStoreConnectApp', 'Get-AppStoreConnectBetaGroup', 'Get-AppStoreConnectBetaTester', 'Get-AppStoreConnectBuild', 'Get-AppStoreConnectReleaseState', 'Get-AppStoreConnectScreenshot', 'Get-AppStoreConnectScreenshotSet', 'Get-AppStoreConnectSubscription', 'Get-AppStoreConnectVersion', 'Get-AppStoreConnectVersionLocalization', 'Get-BenchmarkInput', 'Get-ConfigurationBoolean', 'Get-ManagedModule', 'Get-ManagedModuleRepository', 'Get-ManagedScriptFileInfo', 'Get-MissingFunctions', 'Get-ModuleDocumentation', 'Get-ModuleInformation', 'Get-ModuleTestFailures', 'Get-PowerShellAssemblyMetadata', 'Get-PowerShellCompatibility', 'Get-ProjectConsistency', 'Get-ProjectVersion', 'Get-XcodeProjectVersion', 'Import-BenchmarkResult', 'Import-ConfigurationProject', 'Import-IsolatedModule', 'Import-ManagedModuleRepository', 'Import-ModuleDependency', 'Initialize-ManagedModuleRepository', 'Install-AppleApp', 'Install-ManagedModule', 'Install-ManagedScript', 'Install-ModuleDependency', 'Install-ModuleDocumentation', 'Install-ModuleScript', 'Invoke-BenchmarkSuite', 'Invoke-DotNetPublish', 'Invoke-DotNetReleaseBuild', 'Invoke-DotNetRepositoryRelease', 'Invoke-ModuleBuild', 'Invoke-ModuleTestSuite', 'Invoke-PowerForgeBundlePostProcess', 'Invoke-PowerForgePluginExport', 'Invoke-PowerForgePluginPack', 'Invoke-PowerForgeRelease', 'Invoke-ProjectBuild', 'Invoke-ProjectRelease', 'New-AppleAppArchive', 'New-AppleAppBuild', 'New-AppStoreConnectBetaTester', 'New-AppStoreConnectScreenshotSet', 'New-BenchmarkSuite', 'New-ConfigurationAppleApp', 'New-ConfigurationArtefact', 'New-ConfigurationBuild', 'New-ConfigurationCommand', 'New-ConfigurationCompatibility', 'New-ConfigurationDelivery', 'New-ConfigurationDocumentation', 'New-ConfigurationDotNetBenchmarkGate', 'New-ConfigurationDotNetBenchmarkMetric', 'New-ConfigurationDotNetConfigBootstrapRule', 'New-ConfigurationDotNetInstaller', 'New-ConfigurationDotNetMatrix', 'New-ConfigurationDotNetMatrixRule', 'New-ConfigurationDotNetProfile', 'New-ConfigurationDotNetProject', 'New-ConfigurationDotNetPublish', 'New-ConfigurationDotNetService', 'New-ConfigurationDotNetServiceHealthCheck', 'New-ConfigurationDotNetServiceLifecycle', 'New-ConfigurationDotNetServiceRecovery', 'New-ConfigurationDotNetSign', 'New-ConfigurationDotNetState', 'New-ConfigurationDotNetStateRule', 'New-ConfigurationDotNetTarget', 'New-ConfigurationExecute', 'New-ConfigurationExternalAsset', 'New-ConfigurationExternalAssetFile', 'New-ConfigurationFileConsistency', 'New-ConfigurationFormat', 'New-ConfigurationGate', 'New-ConfigurationImportModule', 'New-ConfigurationInformation', 'New-ConfigurationManifest', 'New-ConfigurationModule', 'New-ConfigurationModuleBuildProfile', 'New-ConfigurationModuleSkip', 'New-ConfigurationPackageBuild', 'New-ConfigurationPlaceHolder', 'New-ConfigurationProject', 'New-ConfigurationProjectBuild', 'New-ConfigurationProjectInstaller', 'New-ConfigurationProjectOutput', 'New-ConfigurationProjectRelease', 'New-ConfigurationProjectSigning', 'New-ConfigurationProjectTarget', 'New-ConfigurationProjectWorkspace', 'New-ConfigurationPublish', 'New-ConfigurationRelease', 'New-ConfigurationTest', 'New-ConfigurationValidation', 'New-ConfigurationXcodeProjectVersion', 'New-DotNetPublishConfig', 'New-ManagedScriptFileInfo', 'New-ModuleAboutTopic', 'New-PowerForgeReleaseConfig', 'New-ProjectReleaseConfig', 'Publish-AppleAppArchive', 'Publish-AppleAppToDevice', 'Publish-AppStoreConnectApprovedVersion', 'Publish-AppStoreConnectScreenshot', 'Publish-AppStoreConnectTestFlightBuild', 'Publish-GitHubReleaseAsset', 'Publish-ManagedModule', 'Publish-NugetPackage', 'Register-Certificate', 'Register-ManagedModuleRepository', 'Remove-Comments', 'Remove-ManagedModuleRepository', 'Remove-ProjectFiles', 'Repair-ManagedModule', 'Reset-ManagedModuleRepository', 'Save-ManagedModule', 'Save-ManagedScript', 'Send-GitHubRelease', 'Set-AppStoreConnectVersionBuild', 'Set-AppStoreConnectVersionLocalization', 'Set-BenchmarkArtifacts', 'Set-BenchmarkCleanup', 'Set-BenchmarkDataFactory', 'Set-BenchmarkPolicy', 'Set-BenchmarkProfile', 'Set-BenchmarkSetup', 'Set-ManagedModuleRepository', 'Set-ModuleDocumentation', 'Set-ProjectVersion', 'Set-XcodeProjectVersion', 'Show-ModuleDocumentation', 'Start-AppleApp', 'Step-Version', 'Submit-AppStoreConnectTestFlightBuildForReview', 'Submit-AppStoreConnectVersionForReview', 'Sync-AppStoreConnectScreenshots', 'Sync-AppStoreConnectVersionMetadata', 'Test-AppleAppReleaseDrift', 'Test-AppStoreConnectReleaseReadiness', 'Test-AppStoreConnectScreenshotSyncConfig', 'Test-BenchmarkGate', 'Test-IsolatedModuleProfile', 'Test-ManagedScriptFileInfo', 'Uninstall-ManagedModule', 'Unregister-ManagedModuleRepository', 'Update-BenchmarkDocument', 'Update-ManagedModule', 'Update-ManagedScriptFileInfo')

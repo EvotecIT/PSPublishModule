@@ -450,6 +450,14 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
                     {
                         Configuration = new ModulePipelineActionConfiguration
                         {
+                            Name = "kept-before-staging",
+                            At = ModulePipelineActionStage.BeforeStaging
+                        }
+                    },
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
                             Name = "kept-before-docs",
                             At = ModulePipelineActionStage.BeforeDocumentation
                         }
@@ -475,7 +483,7 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
             Assert.False(plan.SyncNETProjectVersion);
             Assert.False(plan.SignModule);
             Assert.False(plan.InstallEnabled);
-            Assert.False(plan.InstallMissingModules);
+            Assert.True(plan.InstallMissingModules);
             Assert.Null(plan.Formatting);
             Assert.Null(plan.ValidationSettings);
             Assert.Empty(plan.ProjectBuilds);
@@ -484,7 +492,71 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
             Assert.Empty(plan.Publishes);
             Assert.Collection(
                 plan.Actions,
+                action => Assert.Equal(ModulePipelineActionStage.BeforeStaging, action.Configuration.At),
                 action => Assert.Equal(ModulePipelineActionStage.BeforeDocumentation, action.Configuration.At));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_GateDocumentation_DisablesVersionSyncBeforeCsprojRequirementResolution()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = true },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration
+                        {
+                            Mode = ConfigurationGateMode.Documentation
+                        }
+                    },
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            SyncNETProjectVersion = true
+                        }
+                    },
+                    new ConfigurationDocumentationSegment
+                    {
+                        Configuration = new DocumentationConfiguration
+                        {
+                            Path = "Docs",
+                            PathReadme = "README.md"
+                        }
+                    },
+                    new ConfigurationBuildDocumentationSegment
+                    {
+                        Configuration = new BuildDocumentationConfiguration
+                        {
+                            Enable = true
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+
+            Assert.False(plan.SyncNETProjectVersion);
+            Assert.Empty(plan.BuildSpec.CsprojRequiredReasons);
         }
         finally
         {

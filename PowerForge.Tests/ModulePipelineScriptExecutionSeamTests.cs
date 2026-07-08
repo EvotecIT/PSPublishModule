@@ -253,6 +253,81 @@ public sealed class ModulePipelineScriptExecutionSeamTests
         }
     }
 
+    [Fact]
+    public void Run_DocumentationGateSyncsRefreshedManifestToProjectRoot()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0", functionsToExport: new[] { "Get-StaleCommand" });
+
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration
+                        {
+                            Mode = ConfigurationGateMode.Documentation
+                        }
+                    },
+                    new ConfigurationManifestSegment
+                    {
+                        Configuration = new ManifestConfiguration
+                        {
+                            FunctionsToExport = new[] { "Get-DocumentedCommand" },
+                            CmdletsToExport = Array.Empty<string>(),
+                            AliasesToExport = Array.Empty<string>()
+                        }
+                    },
+                    new ConfigurationDocumentationSegment
+                    {
+                        Configuration = new DocumentationConfiguration
+                        {
+                            Path = "Docs",
+                            PathReadme = "Docs\\Readme.md"
+                        }
+                    },
+                    new ConfigurationBuildDocumentationSegment
+                    {
+                        Configuration = new BuildDocumentationConfiguration
+                        {
+                            Enable = true,
+                            GenerateExternalHelp = false
+                        }
+                    }
+                }
+            };
+
+            var plan = runner.Plan(spec);
+            runner.Run(spec, plan);
+
+            var projectManifest = File.ReadAllText(Path.Combine(root.FullName, moduleName + ".psd1"));
+            Assert.Contains("Get-DocumentedCommand", projectManifest, StringComparison.Ordinal);
+            Assert.DoesNotContain("Get-StaleCommand", projectManifest, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteMinimalModule(string moduleRoot, string moduleName, string version, string[]? functionsToExport = null)
     {
         var functions = functionsToExport ?? Array.Empty<string>();

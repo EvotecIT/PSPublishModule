@@ -49,6 +49,7 @@ public sealed partial class ModulePipelineRunner
             if (plan.GateMode == ConfigurationGateMode.Documentation)
             {
                 ExecuteDocumentationPhase(plan, session, session.Reporter, state);
+                state.ProjectManifestSyncMessage = SyncBuildManifestToProjectRoot(plan, state.BuildResult);
                 return BuildPipelineResult(spec, plan, state);
             }
 

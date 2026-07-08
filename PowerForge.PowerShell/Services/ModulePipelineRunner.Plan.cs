@@ -644,6 +644,12 @@ public sealed partial class ModulePipelineRunner
             gateMode,
             ref refreshPsd1Only);
 
+        if (gateMode == ConfigurationGateMode.Documentation && syncNETProjectVersion)
+        {
+            _logger.Info("Gate mode Documentation enabled: disabling project version sync for this run.");
+            syncNETProjectVersion = false;
+        }
+
         var csprojRequiredReasons = refreshPsd1Only
             ? Array.Empty<string>()
             : BuildMissingCsprojReasonList(
@@ -873,9 +879,6 @@ public sealed partial class ModulePipelineRunner
             syncNETProjectVersion = false;
             signModule = false;
             installEnabled = false;
-            installMissingModules = false;
-            installMissingModulesForce = false;
-            installMissingModulesPrerelease = false;
             formatting = null;
             compatibilitySettings = null;
             fileConsistencySettings = null;
@@ -893,8 +896,7 @@ public sealed partial class ModulePipelineRunner
             actions = actions
                 .Where(static action => action?.Configuration is not null &&
                                         action.Configuration.Enabled &&
-                                        (action.Configuration.At == ModulePipelineActionStage.BeforeDocumentation ||
-                                         action.Configuration.At == ModulePipelineActionStage.AfterDocumentation))
+                                        IsDocumentationGateActionStage(action.Configuration.At))
                 .ToList();
         }
 
@@ -1096,6 +1098,20 @@ public sealed partial class ModulePipelineRunner
         => segment?.Configuration is not null &&
            gateMode is not (ConfigurationGateMode.Manifest or ConfigurationGateMode.Documentation) &&
            (gateMode.HasValue || segment.Configuration.Enabled);
+
+    private static bool IsDocumentationGateActionStage(ModulePipelineActionStage stage)
+        => stage is ModulePipelineActionStage.BeforeDependencies
+            or ModulePipelineActionStage.AfterDependencies
+            or ModulePipelineActionStage.BeforeVersioning
+            or ModulePipelineActionStage.AfterVersioning
+            or ModulePipelineActionStage.BeforeStaging
+            or ModulePipelineActionStage.AfterStaging
+            or ModulePipelineActionStage.BeforeBuild
+            or ModulePipelineActionStage.AfterBuild
+            or ModulePipelineActionStage.BeforeManifest
+            or ModulePipelineActionStage.AfterManifest
+            or ModulePipelineActionStage.BeforeDocumentation
+            or ModulePipelineActionStage.AfterDocumentation;
 
     private DependencyVersionSourceRepository? ResolvePublishDependencyVersionSource(ConfigurationPublishSegment[] enabledPublishes)
     {

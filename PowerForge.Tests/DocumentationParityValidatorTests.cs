@@ -109,6 +109,32 @@ public sealed class DocumentationParityValidatorTests
         }
     }
 
+    [Fact]
+    public void Validate_DoesNotTreatWildcardCoveredCommandsAsStale()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var docsPath = Path.Combine(root.FullName, "Docs");
+            Directory.CreateDirectory(docsPath);
+            WriteCommandMarkdown(docsPath, "Get-FunctionDoc");
+            WriteCommandMarkdown(docsPath, "Get-ExactCmdlet");
+
+            var report = DocumentationParityValidator.Validate(
+                docsPath,
+                externalHelpFilePath: null,
+                new ExportSet(new[] { "*" }, new[] { "Get-ExactCmdlet" }, Array.Empty<string>()));
+
+            Assert.True(report.Succeeded);
+            Assert.Equal(1, report.ExactExportedCommandCount);
+            Assert.Empty(report.Errors);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteCommandMarkdown(string docsPath, string commandName)
     {
         File.WriteAllText(

@@ -88,7 +88,15 @@ public sealed partial class ModulePipelineRunner
     {
         var content = File.ReadAllText(sourcePath);
         var unsignedContent = RemoveAuthenticodeSignatureBlock(content);
-        File.WriteAllText(destinationPath, unsignedContent, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        var normalizedContent = NormalizeLineEndingsForDestination(unsignedContent, destinationPath);
+
+        if (File.Exists(destinationPath) &&
+            string.Equals(File.ReadAllText(destinationPath), normalizedContent, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        File.WriteAllText(destinationPath, normalizedContent, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
     }
 
     private static string RemoveAuthenticodeSignatureBlock(string content)
@@ -124,6 +132,21 @@ public sealed partial class ModulePipelineRunner
         }
 
         return string.Join(Environment.NewLine, kept).TrimEnd() + Environment.NewLine;
+    }
+
+    private static string NormalizeLineEndingsForDestination(string content, string destinationPath)
+    {
+        var newline = Environment.NewLine;
+        if (File.Exists(destinationPath))
+        {
+            var destinationContent = File.ReadAllText(destinationPath);
+            var firstLineFeed = destinationContent.IndexOf('\n');
+            if (firstLineFeed >= 0)
+                newline = firstLineFeed > 0 && destinationContent[firstLineFeed - 1] == '\r' ? "\r\n" : "\n";
+        }
+
+        var normalized = content.Replace("\r\n", "\n").Replace('\r', '\n');
+        return normalized.Replace("\n", newline);
     }
 
     private static bool SourceCanUseGeneratedBuildBootstrapper(
