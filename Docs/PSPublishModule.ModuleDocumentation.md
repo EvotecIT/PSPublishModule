@@ -9,7 +9,7 @@ For DotNet publish usage and command conventions, see:
 
 - `Module/Docs` is generated output.
 - `Module/en-US/<ModuleName>-help.xml` is generated external help output.
-- Treat both as build artifacts that can be overwritten by `Invoke-ModuleBuild` / `Build-Module.ps1`.
+- Treat both as build artifacts that can be overwritten by the documentation gate in `Invoke-ModuleBuild` / `Build-Module.ps1`.
 
 In this repo, module build uses:
 
@@ -18,6 +18,14 @@ New-ConfigurationDocumentation -Enable -PathReadme 'Docs\Readme.md' -Path 'Docs'
 ```
 
 Because documentation generation is enabled, PowerForge cleans stale generated docs and syncs new output back to `Module/Docs`. Manual edits in `Module/Docs` are not durable.
+
+For docs-only refreshes, use the documentation run mode instead of a full build:
+
+```powershell
+.\Module\Build\Build-Module.ps1 -RunMode Documentation -NoInteractive -NoExitCode -NoSign
+```
+
+This regenerates command Markdown and external help without validation, tests, signing, artefacts, publishing, or install phases. The build also verifies parity between exported commands, generated command Markdown pages, and MAML command entries.
 
 ## Authoring Sources
 
@@ -196,5 +204,5 @@ During docs generation:
 2. For binary modules, ensure the project emits the compiler XML docs file and let PowerForge generate PowerShell help from it instead of using a separate XML-help package.
 3. Add about-topic source files (prefer `Help/About`): `about_*.help.txt`, `about_*.txt`, `about_*.md`, or `about_*.markdown`.
 4. Configure `New-ConfigurationDocumentation` with `-Enable`, `-Path`, `-PathReadme`, and optional `-AboutTopicsSourcePath`.
-5. Run `Invoke-ModuleBuild` in normal mode to regenerate docs.
+5. Run `Invoke-ModuleBuild -RunMode Documentation` or the repo build script's `-RunMode Documentation` switch to regenerate docs.
 6. Review generated `Docs` + external help XML and commit intentional updates.

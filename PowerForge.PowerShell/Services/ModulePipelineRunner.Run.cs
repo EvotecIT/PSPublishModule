@@ -46,6 +46,12 @@ public sealed partial class ModulePipelineRunner
         try
         {
             ExecutePreparationAndBuildPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, pipeline, state);
+            if (plan.GateMode == ConfigurationGateMode.Documentation)
+            {
+                ExecuteDocumentationPhase(plan, session, session.Reporter, state);
+                return BuildPipelineResult(spec, plan, state);
+            }
+
             ExecuteFormattingAndSigningPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, state);
             ExecuteTypeAcceleratorSurfaceReportPhase(plan, state);
             ExecuteDocumentationPhase(plan, session, session.Reporter, state);

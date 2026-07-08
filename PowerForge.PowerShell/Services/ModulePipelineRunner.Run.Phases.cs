@@ -146,6 +146,20 @@ public sealed partial class ModulePipelineRunner
             if (state.DocumentationResult is not null &&
                 state.DocumentationResult.Succeeded)
             {
+                var parity = DocumentationParityValidator.Validate(
+                    docsPath: state.DocumentationResult.DocsPath,
+                    externalHelpFilePath: plan.DocumentationBuild.GenerateExternalHelp
+                        ? state.DocumentationResult.ExternalHelpFilePath
+                        : null,
+                    exports: buildResult.Exports);
+                if (!parity.Succeeded)
+                    throw new InvalidOperationException($"Documentation parity check failed. {string.Join(" ", parity.Errors)}");
+
+                var mamlSummary = parity.MamlCommandCount.HasValue
+                    ? $", {parity.MamlCommandCount.Value} MAML command(s)"
+                    : string.Empty;
+                _logger.Info($"Documentation parity verified: {parity.MarkdownCommandCount} Markdown command page(s){mamlSummary}.");
+
                 try
                 {
                     SyncGeneratedDocumentationToProjectRoot(plan, state.DocumentationResult);

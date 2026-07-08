@@ -673,7 +673,8 @@ Accept wildcard characters: True
 ```
 
 ### -RunMode
-High-level module build lane. Manifest refreshes PSD1 metadata only, Build runs local build/package lanes,
+High-level module build lane. Manifest refreshes PSD1 metadata only, Documentation regenerates command Markdown
+and external help without validation/tests/signing/package/install phases, Build runs local build/package lanes,
 and Publish enables configured publish destinations.
 
 ```yaml

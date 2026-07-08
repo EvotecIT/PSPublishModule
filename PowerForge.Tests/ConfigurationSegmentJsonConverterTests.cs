@@ -21,6 +21,7 @@ public sealed class ConfigurationSegmentJsonConverterTests
             .Select(static item => item.GetString())
             .ToArray();
         Assert.Contains("Manifest", modes);
+        Assert.Contains("Documentation", modes);
         Assert.Contains("Build", modes);
         Assert.Contains("Publish", modes);
         Assert.Contains("Mode", gateConfiguration.GetProperty("required").EnumerateArray().Select(static item => item.GetString()));

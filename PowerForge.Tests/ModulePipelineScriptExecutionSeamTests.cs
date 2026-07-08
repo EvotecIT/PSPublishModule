@@ -269,10 +269,14 @@ public sealed class ModulePipelineScriptExecutionSeamTests
             ModulePipelineStep? externalHelpStep)
         {
             OperationOrder.Add("Docs");
+            var docsPath = Path.Combine(stagingPath, "Docs");
+            Directory.CreateDirectory(docsPath);
+            File.WriteAllText(Path.Combine(docsPath, "Readme.md"), "# TestModule" + Environment.NewLine);
+
             return new DocumentationBuildResult(
                 enabled: true,
-                docsPath: Path.Combine(stagingPath, "Docs"),
-                readmePath: Path.Combine(stagingPath, "Docs", "Readme.md"),
+                docsPath: docsPath,
+                readmePath: Path.Combine(docsPath, "Readme.md"),
                 succeeded: true,
                 exitCode: 0,
                 markdownFiles: 0,

@@ -119,7 +119,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "Mode": { "type": "string", "enum": ["Manifest", "Build", "Publish"] }
+        "Mode": { "type": "string", "enum": ["Manifest", "Documentation", "Build", "Publish"] }
       },
       "required": ["Mode"]
     },
@@ -250,7 +250,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "Mode": { "type": "string", "enum": ["Manifest", "Build", "Publish"] }
+        "Mode": { "type": "string", "enum": ["Manifest", "Documentation", "Build", "Publish"] }
       },
       "required": ["Mode"]
     },

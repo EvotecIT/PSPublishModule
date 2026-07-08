@@ -31,6 +31,9 @@ public enum ConfigurationGateMode
     /// <summary>Only refresh manifest metadata and skip build, package, signing, artefact, publish, and install phases.</summary>
     Manifest,
 
+    /// <summary>Generate command Markdown and external help without validation, tests, signing, artefacts, publishing, or install phases.</summary>
+    Documentation,
+
     /// <summary>Build module and package lanes locally, but suppress publishing for this run.</summary>
     Build,
 

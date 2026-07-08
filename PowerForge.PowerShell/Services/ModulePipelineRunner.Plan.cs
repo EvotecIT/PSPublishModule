@@ -572,6 +572,18 @@ public sealed partial class ModulePipelineRunner
                 expectedVersion = "1.0.0";
             }
         }
+        else if (gateMode == ConfigurationGateMode.Documentation &&
+                 IsVersionPattern(expectedVersion))
+        {
+            var psd1 = Path.Combine(projectRoot, $"{moduleName}.psd1");
+            if (File.Exists(psd1) &&
+                ModuleManifestValueReader.TryGetTopLevelString(psd1, "ModuleVersion", out var manifestVersion) &&
+                !string.IsNullOrWhiteSpace(manifestVersion))
+            {
+                _logger.Info($"Gate mode Documentation enabled: using current manifest version {manifestVersion} instead of stepping {expectedVersion}.");
+                expectedVersion = manifestVersion;
+            }
+        }
 
         var expectedVersionResolved = string.IsNullOrWhiteSpace(expectedVersion) ? "1.0.0" : expectedVersion!;
 
@@ -853,6 +865,39 @@ public sealed partial class ModulePipelineRunner
             release = null;
         }
 
+        if (gateMode == ConfigurationGateMode.Documentation)
+        {
+            if (signModule)
+                _logger.Info("Gate mode Documentation enabled: disabling signing for this run.");
+
+            syncNETProjectVersion = false;
+            signModule = false;
+            installEnabled = false;
+            installMissingModules = false;
+            installMissingModulesForce = false;
+            installMissingModulesPrerelease = false;
+            formatting = null;
+            compatibilitySettings = null;
+            fileConsistencySettings = null;
+            validationSettings = null;
+            importModules = null;
+            testsAfterMerge.Clear();
+            enabledExternalAssets = Array.Empty<ConfigurationExternalAssetSegment>();
+            enabledArtefacts = Array.Empty<ConfigurationArtefactSegment>();
+            enabledPublishes = Array.Empty<ConfigurationPublishSegment>();
+            projectBuilds.Clear();
+            packageBuilds.Clear();
+            appleApps.Clear();
+            xcodeProjectVersions.Clear();
+            release = null;
+            actions = actions
+                .Where(static action => action?.Configuration is not null &&
+                                        action.Configuration.Enabled &&
+                                        (action.Configuration.At == ModulePipelineActionStage.BeforeDocumentation ||
+                                         action.Configuration.At == ModulePipelineActionStage.AfterDocumentation))
+                .ToList();
+        }
+
         // Run delivery validation after refresh-only pruning so artefact overlap checks reflect
         // the operations that will actually execute for this plan.
         ValidateDeliveryPathConflicts(
@@ -971,6 +1016,7 @@ public sealed partial class ModulePipelineRunner
                     _logger.Info("Gate mode Manifest enabled: forcing RefreshPSD1Only for this run.");
                 refreshPsd1Only = true;
                 break;
+            case ConfigurationGateMode.Documentation:
             case ConfigurationGateMode.Build:
             case ConfigurationGateMode.Publish:
                 if (refreshPsd1Only)
@@ -979,6 +1025,10 @@ public sealed partial class ModulePipelineRunner
                 break;
         }
     }
+
+    private static bool IsVersionPattern(string? value)
+        => !string.IsNullOrWhiteSpace(value) &&
+           value!.IndexOf("X", StringComparison.OrdinalIgnoreCase) >= 0;
 
     private static ModuleDevelopmentBinaryMode ResolveDevelopmentBinariesMode(
         bool? enabledFromSegments,
@@ -1001,7 +1051,7 @@ public sealed partial class ModulePipelineRunner
         IEnumerable<ConfigurationPublishSegment> publishes)
         => gateMode switch
         {
-            ConfigurationGateMode.Manifest or ConfigurationGateMode.Build => Array.Empty<ConfigurationPublishSegment>(),
+            ConfigurationGateMode.Manifest or ConfigurationGateMode.Documentation or ConfigurationGateMode.Build => Array.Empty<ConfigurationPublishSegment>(),
             ConfigurationGateMode.Publish => publishes
                 .Where(static publish => publish?.Configuration is not null)
                 .Select(static publish => NormalizePublishGateSegment(publish))
@@ -1019,6 +1069,7 @@ public sealed partial class ModulePipelineRunner
             ConfigurationGateMode.Manifest => publishes
                 .Where(static publish => publish?.Configuration?.Enabled == true)
                 .ToArray(),
+            ConfigurationGateMode.Documentation => Array.Empty<ConfigurationPublishSegment>(),
             ConfigurationGateMode.Build or ConfigurationGateMode.Publish => publishes
                 .Where(static publish => publish?.Configuration is not null)
                 .ToArray(),
@@ -1037,12 +1088,14 @@ public sealed partial class ModulePipelineRunner
         ConfigurationGateMode? gateMode,
         ConfigurationProjectBuildSegment? segment)
         => segment?.Configuration is not null &&
+           gateMode is not (ConfigurationGateMode.Manifest or ConfigurationGateMode.Documentation) &&
            (gateMode.HasValue || segment.Configuration.Enabled);
 
     private static bool IsGateEnabledPackageBuild(
         ConfigurationGateMode? gateMode,
         ConfigurationPackageBuildSegment? segment)
         => segment?.Configuration is not null &&
+           gateMode is not (ConfigurationGateMode.Manifest or ConfigurationGateMode.Documentation) &&
            (gateMode.HasValue || segment.Configuration.Enabled);
 
     private DependencyVersionSourceRepository? ResolvePublishDependencyVersionSource(ConfigurationPublishSegment[] enabledPublishes)

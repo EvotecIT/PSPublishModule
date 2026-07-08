@@ -17,11 +17,13 @@ Use this skill when work is primarily documentation-pipeline related (not websit
    - Cmdlet docs: C# XML comments/examples.
    - About docs: `Help/About/about_*.help.txt|.txt|.md|.markdown`.
    - Narrative docs: `Docs/*.md`.
-4. Regenerate docs through normal build path.
-   - Prefer `.\Module\Build\Build-Module.ps1`.
+4. Regenerate docs through the documentation gate.
+   - Prefer `.\Module\Build\Build-Module.ps1 -RunMode Documentation -NoInteractive -NoExitCode -NoSign`.
+   - Do not use stock `platyPS` or hand-authored MAML as the normal path; PSPublishModule owns Markdown and external-help generation.
 5. Validate generated outputs.
    - `Module/Docs` pages present and updated.
    - `Module/en-US/PSPublishModule-help.xml` updated.
+   - Confirm the build reported documentation parity between exported commands, generated Markdown pages, and MAML command entries.
 6. Keep naming and discoverability consistent.
    - Prefer explicit entrypoint docs for `New-*` (scaffold), `New-Configuration*` (DSL object), `Invoke-*` (execute).
 7. Commit generated docs only when source changes require them.
@@ -29,8 +31,8 @@ Use this skill when work is primarily documentation-pipeline related (not websit
 ## High-Value Commands
 
 ```powershell
-# Regenerate docs/help via normal module pipeline
-.\Module\Build\Build-Module.ps1
+# Regenerate docs/help without signing, artefacts, publish, or install
+.\Module\Build\Build-Module.ps1 -RunMode Documentation -NoInteractive -NoExitCode -NoSign
 
 # Scaffold about-topic source
 New-ModuleAboutTopic -TopicName 'Troubleshooting' -OutputPath '.\Help\About'
@@ -39,8 +41,10 @@ New-ModuleAboutTopic -TopicName 'Troubleshooting' -OutputPath '.\Help\About'
 ## Decision Rules
 
 - Treat `Module/Docs` as generated output that can be overwritten.
+- Treat `Module/en-US/*-help.xml` as generated output from the same documentation gate, not as a hand-edit target.
 - Keep durable guidance under `Docs/*.md`.
 - When adding cmdlets/parameters, update XML docs comments first, then regenerate help.
+- If documentation parity fails, fix the source export/help metadata or the generator; do not paper over it with generated-name substitutions.
 - Add cross-links between docs so quickstart and deep reference docs stay connected.
 
 ## Reference Files (Read As Needed)
