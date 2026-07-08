@@ -6,6 +6,13 @@ namespace PowerForge.Tests;
 
 public sealed class ManagedModuleCatalogCommandTests
 {
+    private static readonly string[] CatalogCmdlets =
+    {
+        "Get-ManagedModuleCatalog",
+        "Set-ManagedModuleCatalog",
+        "Update-ManagedModuleCatalog"
+    };
+
     [Fact]
     public void SetAndGetManagedModuleCatalog_round_trip_through_cmdlets()
     {
@@ -43,6 +50,20 @@ public sealed class ManagedModuleCatalogCommandTests
         }
     }
 
+    [Fact]
+    public void ManagedModuleCatalog_cmdlets_are_exported_from_packaged_module_lists()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var manifest = File.ReadAllText(Path.Combine(repositoryRoot, "Module", "PSPublishModule.psd1"));
+        var rootModule = File.ReadAllText(Path.Combine(repositoryRoot, "Module", "PSPublishModule.psm1"));
+
+        foreach (var cmdlet in CatalogCmdlets)
+        {
+            Assert.Contains($"'{cmdlet}'", manifest, StringComparison.Ordinal);
+            Assert.Contains($"'{cmdlet}'", rootModule, StringComparison.Ordinal);
+        }
+    }
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();
@@ -59,5 +80,19 @@ public sealed class ManagedModuleCatalogCommandTests
     {
         if (ps.HadErrors)
             throw new InvalidOperationException(string.Join(Environment.NewLine, ps.Streams.Error.Select(error => error.ToString())));
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "PSPublishModule.sln")))
+                return directory.FullName;
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException("Unable to locate repository root.");
     }
 }

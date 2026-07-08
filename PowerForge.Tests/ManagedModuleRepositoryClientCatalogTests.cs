@@ -79,6 +79,56 @@ public sealed class ManagedModuleRepositoryClientCatalogTests
         Assert.Equal(new[] { "5.7.0", "5.8.0-preview1" }, versions.Select(version => version.Version));
     }
 
+    [Fact]
+    public async Task GetVersionsAsync_falls_through_to_machine_catalog_when_user_catalog_has_no_package()
+    {
+        using var temp = new TemporaryDirectory();
+        var userCatalogPath = Path.Combine(temp.Path, "user-catalog.json");
+        var machineCatalogPath = await CreatePesterCatalogAsync(
+            Path.Combine(temp.Path, "machine"),
+            ManagedModuleCatalogCacheMode.Fallback);
+        CreateEmptyCatalog(userCatalogPath, ManagedModuleCatalogCacheMode.Fallback);
+        using var client = new HttpClient(new FailingGalleryHandler());
+        var repositoryClient = new ManagedModuleRepositoryClient(
+            new NullLogger(),
+            client,
+            options: new ManagedModuleRepositoryClientOptions
+            {
+                ManagedModuleCatalogPath = userCatalogPath,
+                MachineManagedModuleCatalogPath = machineCatalogPath,
+                RetryDelay = TimeSpan.Zero,
+                MaxRetries = 0
+            });
+        var repository = CreatePowerShellGalleryRepository();
+
+        var versions = await repositoryClient.GetVersionsAsync(repository, "Pester", includePrerelease: false);
+
+        Assert.Equal(new[] { "5.7.0" }, versions.Select(version => version.Version));
+    }
+
+    [Fact]
+    public async Task GetVersionsAsync_readthrough_catalog_warms_after_successful_live_query()
+    {
+        using var temp = new TemporaryDirectory();
+        var catalogPath = Path.Combine(temp.Path, "catalog.json");
+        CreateEmptyCatalog(catalogPath, ManagedModuleCatalogCacheMode.ReadThrough);
+        var handler = new CatalogRefreshHandler();
+        using var client = new HttpClient(handler);
+        var repositoryClient = new ManagedModuleRepositoryClient(
+            new NullLogger(),
+            client,
+            options: CreateCatalogOptions(temp.Path, catalogPath));
+        var repository = CreatePowerShellGalleryRepository();
+
+        var versions = await repositoryClient.GetVersionsAsync(repository, "Pester", includePrerelease: false);
+
+        Assert.Equal(new[] { "5.7.0" }, versions.Select(version => version.Version));
+        Assert.True(handler.RequestCount >= 2);
+        var warmed = new ManagedModuleCatalogStore(catalogPath).GetCatalog("PSGallery");
+        Assert.NotNull(warmed);
+        Assert.Contains(warmed.Packages, package => package.Id == "Pester");
+    }
+
     private static async Task<string> CreatePesterCatalogAsync(string tempRoot, ManagedModuleCatalogCacheMode mode)
     {
         var catalogPath = Path.Combine(tempRoot, "catalog.json");
@@ -98,6 +148,19 @@ public sealed class ManagedModuleRepositoryClientCatalogTests
             PackageNames = new[] { "Pester" }
         });
         return catalogPath;
+    }
+
+    private static void CreateEmptyCatalog(string catalogPath, ManagedModuleCatalogCacheMode mode)
+    {
+        var store = new ManagedModuleCatalogStore(catalogPath);
+        store.SetCatalog(new ManagedModuleCatalogSetRequest
+        {
+            Name = "PSGallery",
+            Source = ManagedModuleCatalogDefaults.PowerShellGalleryV3,
+            Mode = mode,
+            MaxStaleness = TimeSpan.FromDays(30),
+            IncludePrerelease = true
+        });
     }
 
     private static ManagedModuleRepositoryClientOptions CreateCatalogOptions(string tempRoot, string catalogPath)
@@ -126,8 +189,11 @@ public sealed class ManagedModuleRepositoryClientCatalogTests
 
     private sealed class CatalogRefreshHandler : HttpMessageHandler
     {
+        public int RequestCount { get; private set; }
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            RequestCount++;
             var uri = request.RequestUri ?? throw new InvalidOperationException("Request URI is required.");
             if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v2/FindPackagesById()?id='Pester'&semVerLevel=2.0.0")
             {

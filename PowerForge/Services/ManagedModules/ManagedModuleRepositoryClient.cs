@@ -47,7 +47,7 @@ public sealed partial class ManagedModuleRepositoryClient
         _options = options ?? new ManagedModuleRepositoryClientOptions();
         _httpClient = httpClient ?? CreateDefaultHttpClient(_options);
         _packageReader = packageReader ?? new ManagedModulePackageReader();
-        _catalogStores = CreateCatalogStores(_options);
+        _catalogStores = CreateCatalogStores(_options, _httpClient);
     }
 
     /// <summary>

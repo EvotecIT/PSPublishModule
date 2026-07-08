@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Xml.Linq;
+using System.Net.Http;
 
 namespace PowerForge;
 
@@ -342,7 +343,7 @@ public sealed class ManagedModuleCatalogStore
         if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(versionText))
             return null;
 
-        var version = versionText.Trim();
+        var version = versionText!.Trim();
         return new ManagedModuleCatalogVersion
         {
             Version = version,
@@ -449,7 +450,7 @@ public sealed class ManagedModuleCatalogStore
 
     private static Uri BuildFindPackagesByIdUri(string source, string packageId)
     {
-        var escapedId = Uri.EscapeDataString(packageId.Trim().Replace("'", "''", StringComparison.Ordinal));
+        var escapedId = Uri.EscapeDataString(packageId.Trim().Replace("'", "''"));
         return new Uri(new Uri(EnsureTrailingSlash(source)), $"FindPackagesById()?id='{escapedId}'&semVerLevel=2.0.0");
     }
 
@@ -500,7 +501,7 @@ public sealed class ManagedModuleCatalogStore
         if (string.IsNullOrWhiteSpace(tags))
             yield break;
 
-        foreach (var tag in tags.Split(new[] { ' ', ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries))
+        foreach (var tag in tags!.Split(new[] { ' ', ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries))
         {
             var trimmed = tag.Trim();
             if (!string.IsNullOrWhiteSpace(trimmed))
