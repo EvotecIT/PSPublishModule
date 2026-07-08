@@ -59,8 +59,7 @@ public sealed partial class ManagedModuleRepositoryClient
 
         try
         {
-            var liveVersions = await liveQuery(cancellationToken).ConfigureAwait(false);
-            return liveVersions.Count > 0 ? liveVersions : cachedVersions;
+            return await liveQuery(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (CanFallbackToCatalog(ex))
         {
@@ -105,8 +104,7 @@ public sealed partial class ManagedModuleRepositoryClient
 
         try
         {
-            var liveVersion = await liveQuery(cancellationToken).ConfigureAwait(false);
-            return liveVersion ?? cachedVersion;
+            return await liveQuery(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (CanFallbackToCatalog(ex))
         {
@@ -152,8 +150,7 @@ public sealed partial class ManagedModuleRepositoryClient
 
         try
         {
-            var liveMatches = await liveQuery(cancellationToken).ConfigureAwait(false);
-            return liveMatches.Count > 0 ? liveMatches : cachedMatches;
+            return await liveQuery(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (CanFallbackToCatalog(ex))
         {
@@ -333,9 +330,6 @@ public sealed partial class ManagedModuleRepositoryClient
 
     private static bool CatalogMatches(ManagedModuleRepository repository, ManagedModuleCatalog catalog)
     {
-        if (string.Equals(repository.Name, catalog.Name, StringComparison.OrdinalIgnoreCase))
-            return true;
-
         var repositorySource = NormalizeCatalogSource(repository.Source);
         var catalogSource = NormalizeCatalogSource(catalog.Source);
         return string.Equals(repositorySource, catalogSource, StringComparison.OrdinalIgnoreCase) ||

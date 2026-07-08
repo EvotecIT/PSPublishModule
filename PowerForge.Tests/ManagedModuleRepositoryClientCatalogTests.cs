@@ -139,6 +139,44 @@ public sealed class ManagedModuleRepositoryClientCatalogTests
     }
 
     [Fact]
+    public async Task GetVersionsAsync_ignores_catalog_with_matching_name_but_different_source()
+    {
+        using var temp = new TemporaryDirectory();
+        var catalogPath = await CreateCatalogAsync(
+            temp.Path,
+            "Pester",
+            "5.7.0",
+            ManagedModuleCatalogCacheMode.Fallback,
+            source: "https://packages.contoso.example/api/v2",
+            repositoryKind: ManagedModuleRepositoryKind.NuGetV2);
+        using var client = new HttpClient(new FailingGalleryHandler());
+        var repositoryClient = new ManagedModuleRepositoryClient(
+            new NullLogger(),
+            client,
+            options: CreateCatalogOptions(temp.Path, catalogPath));
+        var repository = CreatePowerShellGalleryRepository();
+
+        await Assert.ThrowsAsync<ManagedModuleRepositoryException>(() => repositoryClient.GetVersionsAsync(repository, "Pester", includePrerelease: false));
+    }
+
+    [Fact]
+    public async Task GetVersionsAsync_does_not_fallback_when_live_query_succeeds_with_no_versions()
+    {
+        using var temp = new TemporaryDirectory();
+        var catalogPath = await CreatePesterCatalogAsync(temp.Path, ManagedModuleCatalogCacheMode.Fallback);
+        using var client = new HttpClient(new EmptyGalleryHandler());
+        var repositoryClient = new ManagedModuleRepositoryClient(
+            new NullLogger(),
+            client,
+            options: CreateCatalogOptions(temp.Path, catalogPath));
+        var repository = CreatePowerShellGalleryRepository();
+
+        var versions = await repositoryClient.GetVersionsAsync(repository, "Pester", includePrerelease: false);
+
+        Assert.Empty(versions);
+    }
+
+    [Fact]
     public async Task GetVersionsAsync_readthrough_catalog_warms_after_successful_live_query()
     {
         using var temp = new TemporaryDirectory();
@@ -186,7 +224,9 @@ public sealed class ManagedModuleRepositoryClientCatalogTests
         string tempRoot,
         string packageName,
         string stableVersion,
-        ManagedModuleCatalogCacheMode mode)
+        ManagedModuleCatalogCacheMode mode,
+        string? source = null,
+        ManagedModuleRepositoryKind repositoryKind = ManagedModuleRepositoryKind.NuGetV3)
     {
         var catalogPath = Path.Combine(tempRoot, "catalog.json");
         using var client = new HttpClient(new CatalogRefreshHandler(packageName, stableVersion, includePrerelease: false));
@@ -194,7 +234,8 @@ public sealed class ManagedModuleRepositoryClientCatalogTests
         store.SetCatalog(new ManagedModuleCatalogSetRequest
         {
             Name = "PSGallery",
-            Source = ManagedModuleCatalogDefaults.PowerShellGalleryV3,
+            Source = source ?? ManagedModuleCatalogDefaults.PowerShellGalleryV3,
+            RepositoryKind = repositoryKind,
             Mode = mode,
             MaxStaleness = TimeSpan.FromDays(30),
             IncludePrerelease = true
@@ -244,6 +285,20 @@ public sealed class ManagedModuleRepositoryClientCatalogTests
             => throw new InvalidOperationException("Live metadata should not be queried in offline catalog mode.");
     }
 
+    private sealed class EmptyGalleryHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:d="http://schemas.microsoft.com/ado/2007/08/dataservices"
+      xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata" />
+""", Encoding.UTF8, "application/xml")
+            });
+    }
+
     private sealed class CatalogRefreshHandler : HttpMessageHandler
     {
         private readonly string _packageName;
@@ -268,7 +323,7 @@ public sealed class ManagedModuleRepositoryClientCatalogTests
         {
             RequestCount++;
             var uri = request.RequestUri ?? throw new InvalidOperationException("Request URI is required.");
-            if (uri.AbsoluteUri == $"https://www.powershellgallery.com/api/v2/FindPackagesById()?id='{_packageName}'&semVerLevel=2.0.0")
+            if (uri.AbsoluteUri.Contains($"id='{_packageName}'", StringComparison.OrdinalIgnoreCase))
             {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {

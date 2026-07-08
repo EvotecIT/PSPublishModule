@@ -4,6 +4,7 @@ using System.Xml.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Collections.Concurrent;
 
 namespace PowerForge;
 
@@ -12,6 +13,7 @@ namespace PowerForge;
 /// </summary>
 public sealed class ManagedModuleCatalogStore
 {
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> CatalogLocks = new(StringComparer.OrdinalIgnoreCase);
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
     private readonly HttpClient _httpClient;
     private readonly string _path;
@@ -161,6 +163,22 @@ public sealed class ManagedModuleCatalogStore
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
 
+        var catalogLock = CatalogLocks.GetOrAdd(_path, static _ => new SemaphoreSlim(1, 1));
+        await catalogLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await UpdateCatalogCoreAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            catalogLock.Release();
+        }
+    }
+
+    private async Task<ManagedModuleCatalogUpdateResult> UpdateCatalogCoreAsync(
+        ManagedModuleCatalogUpdateRequest request,
+        CancellationToken cancellationToken)
+    {
         var document = ReadDocument();
         var name = NormalizeName(request.Name);
         var catalog = document.Catalogs.FirstOrDefault(item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));

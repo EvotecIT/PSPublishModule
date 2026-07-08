@@ -112,7 +112,7 @@ public sealed class ManagedModuleCatalogStoreTests
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        await Assert.ThrowsAsync<OperationCanceledException>(() => store.UpdateCatalogAsync(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => store.UpdateCatalogAsync(
             new ManagedModuleCatalogUpdateRequest
             {
                 Name = "PSGallery",
@@ -151,6 +151,37 @@ public sealed class ManagedModuleCatalogStoreTests
         Assert.Equal(1, result.RefreshedPackageCount);
         Assert.Equal("Basic", handler.AuthorizationScheme);
         Assert.False(string.IsNullOrWhiteSpace(handler.AuthorizationParameter));
+    }
+
+    [Fact]
+    public async Task UpdateCatalog_serializes_concurrent_package_refreshes()
+    {
+        using var temp = new TemporaryDirectory();
+        var catalogPath = Path.Combine(temp.Path, "catalog.json");
+        using var client = new HttpClient(new MultiPackageCatalogHandler(delay: TimeSpan.FromMilliseconds(100)));
+        var store = new ManagedModuleCatalogStore(catalogPath, client);
+        store.SetCatalog(new ManagedModuleCatalogSetRequest
+        {
+            Name = "PSGallery",
+            Source = ManagedModuleCatalogDefaults.PowerShellGalleryV3,
+            Mode = ManagedModuleCatalogCacheMode.ReadThrough
+        });
+
+        await Task.WhenAll(
+            store.UpdateCatalogAsync(new ManagedModuleCatalogUpdateRequest
+            {
+                Name = "PSGallery",
+                PackageNames = new[] { "Pester" }
+            }),
+            store.UpdateCatalogAsync(new ManagedModuleCatalogUpdateRequest
+            {
+                Name = "PSGallery",
+                PackageNames = new[] { "PSReadLine" }
+            }));
+
+        var catalog = store.GetCatalog("PSGallery");
+        Assert.NotNull(catalog);
+        Assert.Equal(new[] { "Pester", "PSReadLine" }, catalog.Packages.Select(static package => package.Id).OrderBy(static id => id, StringComparer.OrdinalIgnoreCase));
     }
 
     private sealed class CatalogHandler : HttpMessageHandler
@@ -252,6 +283,50 @@ public sealed class ManagedModuleCatalogStoreTests
         <d:Id>Company.Tools</d:Id>
         <d:Version>1.0.0</d:Version>
         <d:NormalizedVersion>1.0.0</d:NormalizedVersion>
+        <d:IsPrerelease m:type="Edm.Boolean">false</d:IsPrerelease>
+        <d:Published m:type="Edm.DateTime">2025-01-01T00:00:00</d:Published>
+      </m:properties>
+    </content>
+  </entry>
+</feed>
+""";
+    }
+
+    private sealed class MultiPackageCatalogHandler : HttpMessageHandler
+    {
+        private readonly TimeSpan _delay;
+
+        public MultiPackageCatalogHandler(TimeSpan delay)
+        {
+            _delay = delay;
+        }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (_delay > TimeSpan.Zero)
+                await Task.Delay(_delay, cancellationToken).ConfigureAwait(false);
+
+            var packageName = request.RequestUri?.AbsoluteUri.Contains("PSReadLine", StringComparison.OrdinalIgnoreCase) == true
+                ? "PSReadLine"
+                : "Pester";
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(CreatePackageFeed(packageName, "1.0.0"), Encoding.UTF8, "application/xml")
+            };
+        }
+
+        private static string CreatePackageFeed(string packageName, string version)
+            => $"""
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:d="http://schemas.microsoft.com/ado/2007/08/dataservices"
+      xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata">
+  <entry>
+    <content type="application/zip" src="https://www.powershellgallery.com/api/v2/package/{packageName}/{version}">
+      <m:properties>
+        <d:Id>{packageName}</d:Id>
+        <d:Version>{version}</d:Version>
+        <d:NormalizedVersion>{version}</d:NormalizedVersion>
         <d:IsPrerelease m:type="Edm.Boolean">false</d:IsPrerelease>
         <d:Published m:type="Edm.DateTime">2025-01-01T00:00:00</d:Published>
       </m:properties>
