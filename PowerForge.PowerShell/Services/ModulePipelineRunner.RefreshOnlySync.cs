@@ -8,20 +8,28 @@ public sealed partial class ModulePipelineRunner
 {
     internal string? SyncBuildManifestToProjectRoot(
         ModulePipelinePlan plan,
-        ModuleBuildResult? buildResult = null)
+        ModuleBuildResult? buildResult = null,
+        bool syncGeneratedBootstrapper = true)
     {
         var projectManifestPath = GetProjectManifestPath(plan);
         if (!File.Exists(projectManifestPath))
             return null;
 
         RefreshProjectManifestFromPlan(plan, projectManifestPath);
-        var syncedBinaryExports = buildResult is not null &&
-                                  !plan.BuildSpec.RefreshManifestOnly &&
-                                  SyncBinaryExportsToProjectRoot(plan, buildResult, projectManifestPath);
+        var syncedStagedExports = buildResult is not null &&
+                                  !plan.BuildSpec.RefreshManifestOnly;
+        var syncedGeneratedBootstrapper = syncedStagedExports &&
+                                          SyncBinaryExportsToProjectRoot(plan, buildResult!, projectManifestPath, syncGeneratedBootstrapper);
 
-        var label = plan.BuildSpec.RefreshManifestOnly ? "RefreshPSD1Only" : "Build";
-        var message = syncedBinaryExports
+        var label = plan.GateMode == ConfigurationGateMode.Documentation
+            ? "Documentation"
+            : plan.BuildSpec.RefreshManifestOnly
+                ? "RefreshPSD1Only"
+                : "Build";
+        var message = syncedGeneratedBootstrapper
             ? $"{label}: refreshed project-root manifest and bootstrapper from staged binary exports."
+            : syncedStagedExports
+                ? $"{label}: refreshed project-root manifest and exports from staged binary manifest."
             : $"{label}: refreshed project-root manifest from source manifest inputs.";
         _logger.Info(message);
         return message;
@@ -64,7 +72,8 @@ public sealed partial class ModulePipelineRunner
     private bool SyncBinaryExportsToProjectRoot(
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
-        string projectManifestPath)
+        string projectManifestPath,
+        bool syncGeneratedBootstrapper)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (buildResult is null) throw new ArgumentNullException(nameof(buildResult));
@@ -76,12 +85,16 @@ public sealed partial class ModulePipelineRunner
 
         var sourcePsm1Path = Path.Combine(plan.BuildSpec.SourcePath, plan.ModuleName + ".psm1");
         var stagingPsm1Path = Path.Combine(buildResult.StagingPath, plan.ModuleName + ".psm1");
-        if (File.Exists(stagingPsm1Path) && SourceCanUseGeneratedBuildBootstrapper(plan, sourcePsm1Path))
+        var copiedGeneratedBootstrapper = false;
+        if (syncGeneratedBootstrapper &&
+            File.Exists(stagingPsm1Path) &&
+            SourceCanUseGeneratedBuildBootstrapper(plan, sourcePsm1Path))
         {
             CopyGeneratedBootstrapperWithoutSignature(stagingPsm1Path, sourcePsm1Path);
+            copiedGeneratedBootstrapper = true;
         }
 
-        return true;
+        return copiedGeneratedBootstrapper;
     }
 
     private static void CopyGeneratedBootstrapperWithoutSignature(string sourcePath, string destinationPath)

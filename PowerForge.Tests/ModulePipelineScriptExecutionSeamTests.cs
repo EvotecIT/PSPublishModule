@@ -392,6 +392,87 @@ public sealed class ModulePipelineScriptExecutionSeamTests
         }
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(".")]
+    public void Run_DocumentationGateRejectsProjectRootDocumentationPathBeforeDependencyPreflight(string docsPath)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration
+                        {
+                            Mode = ConfigurationGateMode.Documentation
+                        }
+                    },
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            ResolveMissingModulesOnline = true
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Pester",
+                            RequiredVersion = "Latest"
+                        }
+                    },
+                    new ConfigurationDocumentationSegment
+                    {
+                        Configuration = new DocumentationConfiguration
+                        {
+                            Path = docsPath,
+                            PathReadme = "Readme.md"
+                        }
+                    },
+                    new ConfigurationBuildDocumentationSegment
+                    {
+                        Configuration = new BuildDocumentationConfiguration
+                        {
+                            Enable = true
+                        }
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("project root", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(hostedOperations.OperationOrder);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteMinimalModule(string moduleRoot, string moduleName, string version, string[]? functionsToExport = null)
     {
         var functions = functionsToExport ?? Array.Empty<string>();

@@ -280,6 +280,14 @@ public sealed partial class ModulePipelineRunner
         {
             target.CertificateThumbprint = null;
         }
+
+        if (gateMode == ConfigurationGateMode.Documentation &&
+            mode is PackageBuildExecutionMode.DependencyBuild or PackageBuildExecutionMode.BuildOnly)
+        {
+            target.CertificateThumbprint = null;
+            target.SignAssemblies = false;
+            target.SignPackages = false;
+        }
     }
 
     private static bool HasProjectBuildActionOverride(ProjectBuildConfigurationReference reference)

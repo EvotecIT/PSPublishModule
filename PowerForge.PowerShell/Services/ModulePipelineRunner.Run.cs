@@ -55,7 +55,7 @@ public sealed partial class ModulePipelineRunner
             if (plan.GateMode == ConfigurationGateMode.Documentation)
             {
                 ExecuteDocumentationPhase(plan, session, session.Reporter, state);
-                state.ProjectManifestSyncMessage = SyncBuildManifestToProjectRoot(plan, state.BuildResult);
+                state.ProjectManifestSyncMessage = SyncBuildManifestToProjectRoot(plan, state.BuildResult, syncGeneratedBootstrapper: false);
                 return BuildPipelineResult(spec, plan, state);
             }
 
@@ -93,7 +93,10 @@ public sealed partial class ModulePipelineRunner
     private static void EnsureDocumentationGateConfigured(ModulePipelinePlan plan)
     {
         if (plan.Documentation is not null && plan.DocumentationBuild?.Enable == true)
+        {
+            EnsureDocumentationPathIsSafe(plan.ProjectRoot, plan.Documentation);
             return;
+        }
 
         throw new InvalidOperationException("Gate mode Documentation requires an enabled Documentation and BuildDocumentation configuration.");
     }
@@ -104,7 +107,7 @@ public sealed partial class ModulePipelineRunner
             throw new ArgumentNullException(nameof(spec));
 
         var documentationGate = false;
-        var hasDocumentation = false;
+        DocumentationConfiguration? documentation = null;
         var hasEnabledDocumentationBuild = false;
 
         foreach (var segment in spec.Segments ?? Array.Empty<IConfigurationSegment>())
@@ -115,7 +118,7 @@ public sealed partial class ModulePipelineRunner
                     documentationGate = gate.Configuration.Mode == ConfigurationGateMode.Documentation;
                     break;
                 case ConfigurationDocumentationSegment docs:
-                    hasDocumentation = docs.Configuration is not null;
+                    documentation = docs.Configuration;
                     break;
                 case ConfigurationBuildDocumentationSegment buildDocs:
                     hasEnabledDocumentationBuild = buildDocs.Configuration?.Enable == true;
@@ -123,10 +126,27 @@ public sealed partial class ModulePipelineRunner
             }
         }
 
-        if (!documentationGate || (hasDocumentation && hasEnabledDocumentationBuild))
+        if (!documentationGate)
             return;
 
+        if (documentation is not null && hasEnabledDocumentationBuild)
+        {
+            var sourcePath = spec.Build?.SourcePath ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(sourcePath))
+                EnsureDocumentationPathIsSafe(sourcePath, documentation);
+
+            return;
+        }
+
         throw new InvalidOperationException("Gate mode Documentation requires an enabled Documentation and BuildDocumentation configuration.");
+    }
+
+    private static void EnsureDocumentationPathIsSafe(string projectRoot, DocumentationConfiguration documentation)
+    {
+        if (documentation is null)
+            throw new ArgumentNullException(nameof(documentation));
+
+        NormalizeProjectPathForStaging(projectRoot, documentation.Path, rejectProjectRoot: true);
     }
 
 }
