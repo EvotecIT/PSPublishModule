@@ -337,11 +337,12 @@ public sealed class ModulePipelineScriptExecutionSeamTests
             const string moduleName = "TestModule";
             WriteMinimalModule(root.FullName, moduleName, "1.0.0");
 
+            var hostedOperations = new FakeHostedOperations();
             var runner = new ModulePipelineRunner(
                 new NullLogger(),
                 new ThrowingPowerShellRunner(),
                 new FakeMetadataProvider(),
-                new FakeHostedOperations());
+                hostedOperations);
 
             var spec = new ModulePipelineSpec
             {
@@ -368,6 +369,7 @@ public sealed class ModulePipelineScriptExecutionSeamTests
             var ex = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, plan));
 
             Assert.Contains("Gate mode Documentation requires", ex.Message, StringComparison.Ordinal);
+            Assert.Empty(hostedOperations.OperationOrder);
         }
         finally
         {

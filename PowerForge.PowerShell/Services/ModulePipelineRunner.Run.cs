@@ -37,6 +37,9 @@ public sealed partial class ModulePipelineRunner
         var packagingRequiredModules = ResolveOutputRequiredModules(plan.RequiredModulesForPackaging, plan.MergeMissing, plan.ApprovedModules);
         var manifestExternalModuleDependencies = plan.ExternalModuleDependencies ?? Array.Empty<string>();
 
+        if (plan.GateMode == ConfigurationGateMode.Documentation)
+            EnsureDocumentationGateConfigured(plan);
+
         var session = ModulePipelineExecutionSession.Create(plan, progress);
         var cleanupStep = session.CleanupStep;
 
@@ -48,7 +51,6 @@ public sealed partial class ModulePipelineRunner
             ExecutePreparationAndBuildPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, pipeline, state);
             if (plan.GateMode == ConfigurationGateMode.Documentation)
             {
-                EnsureDocumentationGateConfigured(plan);
                 ExecuteDocumentationPhase(plan, session, session.Reporter, state);
                 state.ProjectManifestSyncMessage = SyncBuildManifestToProjectRoot(plan, state.BuildResult);
                 return BuildPipelineResult(spec, plan, state);

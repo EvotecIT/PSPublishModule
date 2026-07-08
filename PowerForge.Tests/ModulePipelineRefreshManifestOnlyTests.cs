@@ -412,6 +412,31 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
                         Configuration = new ProjectBuildConfigurationReference
                         {
                             ConfigPath = Path.Combine("Build", "project.build.json"),
+                            Name = "pre-module-project-build",
+                            BuildBeforeModule = true,
+                            Build = true,
+                            PublishNuget = true,
+                            PublishGitHub = true
+                        }
+                    },
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            ConfigPath = Path.Combine("Build", "post-module-project.build.json"),
+                            Name = "post-module-project-build",
+                            BuildBeforeModule = false,
+                            Build = true,
+                            PublishNuget = true,
+                            PublishGitHub = true
+                        }
+                    },
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "pre-module-package-build",
+                            RootPath = "Sources",
                             BuildBeforeModule = true,
                             Build = true,
                             PublishNuget = true,
@@ -422,8 +447,9 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
                     {
                         Configuration = new PackageBuildConfiguration
                         {
-                            RootPath = "Sources",
-                            BuildBeforeModule = true,
+                            Name = "post-module-package-build",
+                            RootPath = "PostModuleSources",
+                            BuildBeforeModule = false,
                             Build = true,
                             PublishNuget = true,
                             PublishGitHub = true
@@ -504,8 +530,12 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
             Assert.True(plan.InstallMissingModules);
             Assert.Null(plan.Formatting);
             Assert.Null(plan.ValidationSettings);
-            Assert.Empty(plan.ProjectBuilds);
-            Assert.Empty(plan.PackageBuilds);
+            var projectBuild = Assert.Single(plan.ProjectBuilds);
+            Assert.Equal("pre-module-project-build", projectBuild.Configuration.Name);
+            Assert.True(projectBuild.Configuration.BuildBeforeModule);
+            var packageBuild = Assert.Single(plan.PackageBuilds);
+            Assert.Equal("pre-module-package-build", packageBuild.Configuration.Name);
+            Assert.True(packageBuild.Configuration.BuildBeforeModule);
             Assert.Empty(plan.Artefacts);
             Assert.Empty(plan.Publishes);
             Assert.Single(plan.ExternalAssets);

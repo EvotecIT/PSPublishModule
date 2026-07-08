@@ -887,8 +887,12 @@ public sealed partial class ModulePipelineRunner
             testsAfterMerge.Clear();
             enabledArtefacts = Array.Empty<ConfigurationArtefactSegment>();
             enabledPublishes = Array.Empty<ConfigurationPublishSegment>();
-            projectBuilds.Clear();
-            packageBuilds.Clear();
+            projectBuilds = projectBuilds
+                .Where(static build => build?.Configuration?.BuildBeforeModule == true)
+                .ToList();
+            packageBuilds = packageBuilds
+                .Where(static build => build?.Configuration?.BuildBeforeModule == true)
+                .ToList();
             appleApps.Clear();
             xcodeProjectVersions.Clear();
             release = null;
@@ -1088,14 +1092,18 @@ public sealed partial class ModulePipelineRunner
         ConfigurationGateMode? gateMode,
         ConfigurationProjectBuildSegment? segment)
         => segment?.Configuration is not null &&
-           gateMode is not (ConfigurationGateMode.Manifest or ConfigurationGateMode.Documentation) &&
+           gateMode is not ConfigurationGateMode.Manifest &&
+           (gateMode != ConfigurationGateMode.Documentation ||
+            (segment.Configuration.Enabled && segment.Configuration.BuildBeforeModule)) &&
            (gateMode.HasValue || segment.Configuration.Enabled);
 
     private static bool IsGateEnabledPackageBuild(
         ConfigurationGateMode? gateMode,
         ConfigurationPackageBuildSegment? segment)
         => segment?.Configuration is not null &&
-           gateMode is not (ConfigurationGateMode.Manifest or ConfigurationGateMode.Documentation) &&
+           gateMode is not ConfigurationGateMode.Manifest &&
+           (gateMode != ConfigurationGateMode.Documentation ||
+            (segment.Configuration.Enabled && segment.Configuration.BuildBeforeModule)) &&
            (gateMode.HasValue || segment.Configuration.Enabled);
 
     private static bool IsDocumentationGateActionStage(ModulePipelineActionStage stage)
