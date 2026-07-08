@@ -136,7 +136,11 @@ internal static class DocumentationParityValidator
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        if (names.Length == 0 || names.Any(ContainsWildcard))
+        names = names
+            .Where(static name => !ContainsWildcard(name))
+            .ToArray();
+
+        if (names.Length == 0)
             return null;
 
         return names;

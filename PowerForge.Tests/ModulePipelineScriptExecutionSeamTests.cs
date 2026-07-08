@@ -186,14 +186,85 @@ public sealed class ModulePipelineScriptExecutionSeamTests
         }
     }
 
-    private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
+    [Fact]
+    public void Run_DocumentationParityUsesRefreshedManifestExports()
     {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0", functionsToExport: new[] { "Get-StaleCommand" });
+
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationManifestSegment
+                    {
+                        Configuration = new ManifestConfiguration
+                        {
+                            FunctionsToExport = new[] { "Get-DocumentedCommand" },
+                            CmdletsToExport = Array.Empty<string>(),
+                            AliasesToExport = Array.Empty<string>()
+                        }
+                    },
+                    new ConfigurationDocumentationSegment
+                    {
+                        Configuration = new DocumentationConfiguration
+                        {
+                            Path = "Docs",
+                            PathReadme = "Docs\\Readme.md"
+                        }
+                    },
+                    new ConfigurationBuildDocumentationSegment
+                    {
+                        Configuration = new BuildDocumentationConfiguration
+                        {
+                            Enable = true,
+                            GenerateExternalHelp = false
+                        }
+                    }
+                }
+            };
+
+            var plan = runner.Plan(spec);
+            runner.Run(spec, plan);
+
+            Assert.Equal(new[] { "Docs" }, hostedOperations.OperationOrder);
+            Assert.Equal("Get-DocumentedCommand", hostedOperations.LastDocumentationCommands.Single());
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    private static void WriteMinimalModule(string moduleRoot, string moduleName, string version, string[]? functionsToExport = null)
+    {
+        var functions = functionsToExport ?? Array.Empty<string>();
         Directory.CreateDirectory(moduleRoot);
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psm1"), string.Empty);
         File.WriteAllText(
             Path.Combine(moduleRoot, $"{moduleName}.psd1"),
-            $"@{{ ModuleVersion = '{version}'; RootModule = '{moduleName}.psm1'; FunctionsToExport = @(); CmdletsToExport = @(); AliasesToExport = @() }}");
+            $"@{{ ModuleVersion = '{version}'; RootModule = '{moduleName}.psm1'; FunctionsToExport = @({FormatStringArray(functions)}); CmdletsToExport = @(); AliasesToExport = @() }}");
     }
+
+    private static string FormatStringArray(string[] values)
+        => string.Join(", ", values.Select(static value => "'" + value.Replace("'", "''") + "'"));
 
     private static void InvokeRunImportModules(ModulePipelineRunner runner, ModulePipelinePlan plan, ModuleBuildResult buildResult)
     {
@@ -247,6 +318,7 @@ public sealed class ModulePipelineScriptExecutionSeamTests
         public string[] LastExcludePatterns { get; private set; } = Array.Empty<string>();
         public ModuleSigningResult NextSigningResult { get; set; } = new();
         public List<string> OperationOrder { get; } = new();
+        public string[] LastDocumentationCommands { get; private set; } = Array.Empty<string>();
 
         public IReadOnlyList<ModuleDependencyInstallResult> EnsureDependenciesInstalled(
             ModuleDependency[] dependencies,
@@ -272,6 +344,25 @@ public sealed class ModulePipelineScriptExecutionSeamTests
             var docsPath = Path.Combine(stagingPath, "Docs");
             Directory.CreateDirectory(docsPath);
             File.WriteAllText(Path.Combine(docsPath, "Readme.md"), "# TestModule" + Environment.NewLine);
+            var exports = ModuleManifestExportReader.ReadExports(moduleManifestPath);
+            LastDocumentationCommands = exports.Functions
+                .Concat(exports.Cmdlets)
+                .Where(static name => !string.IsNullOrWhiteSpace(name) &&
+                                      name.IndexOf("*", StringComparison.OrdinalIgnoreCase) < 0 &&
+                                      name.IndexOf("?", StringComparison.OrdinalIgnoreCase) < 0)
+                .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            foreach (var commandName in LastDocumentationCommands)
+            {
+                File.WriteAllText(
+                    Path.Combine(docsPath, commandName + ".md"),
+                    "---" + Environment.NewLine +
+                    "external help file: TestModule-help.xml" + Environment.NewLine +
+                    "schema: 2.0.0" + Environment.NewLine +
+                    "---" + Environment.NewLine +
+                    "# " + commandName + Environment.NewLine);
+            }
 
             return new DocumentationBuildResult(
                 enabled: true,
@@ -279,7 +370,7 @@ public sealed class ModulePipelineScriptExecutionSeamTests
                 readmePath: Path.Combine(docsPath, "Readme.md"),
                 succeeded: true,
                 exitCode: 0,
-                markdownFiles: 0,
+                markdownFiles: LastDocumentationCommands.Length,
                 externalHelpFilePath: string.Empty,
                 errorMessage: null);
         }

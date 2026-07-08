@@ -37,6 +37,15 @@ public sealed class ConfigurationSegmentJsonConverterTests
     }
 
     [Fact]
+    public void ConfigurationGateMode_NumericValuesRemainStable()
+    {
+        Assert.Equal(0, (int)ConfigurationGateMode.Manifest);
+        Assert.Equal(1, (int)ConfigurationGateMode.Build);
+        Assert.Equal(2, (int)ConfigurationGateMode.Publish);
+        Assert.Equal(3, (int)ConfigurationGateMode.Documentation);
+    }
+
+    [Fact]
     public void Deserialize_ReadsGateSegment()
     {
         const string json = """

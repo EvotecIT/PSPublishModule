@@ -1069,8 +1069,7 @@ public sealed partial class ModulePipelineRunner
             ConfigurationGateMode.Manifest => publishes
                 .Where(static publish => publish?.Configuration?.Enabled == true)
                 .ToArray(),
-            ConfigurationGateMode.Documentation => Array.Empty<ConfigurationPublishSegment>(),
-            ConfigurationGateMode.Build or ConfigurationGateMode.Publish => publishes
+            ConfigurationGateMode.Documentation or ConfigurationGateMode.Build or ConfigurationGateMode.Publish => publishes
                 .Where(static publish => publish?.Configuration is not null)
                 .ToArray(),
             _ => publishes

@@ -38799,9 +38799,9 @@ and (optionally) auto-fix issues during a build.</maml:para>
           <command:parameterValue required="true" variableLength="false">ConfigurationGateMode</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Manifest</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">Documentation</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Build</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Publish</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Documentation</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>ConfigurationGateMode</maml:name>
@@ -38820,9 +38820,9 @@ and (optionally) auto-fix issues during a build.</maml:para>
         <command:parameterValue required="true" variableLength="false">ConfigurationGateMode</command:parameterValue>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">Manifest</command:parameterValue>
-          <command:parameterValue required="false" variableLength="false">Documentation</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Build</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Publish</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Documentation</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>ConfigurationGateMode</maml:name>

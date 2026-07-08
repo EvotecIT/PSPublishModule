@@ -85,6 +85,30 @@ public sealed class DocumentationParityValidatorTests
         }
     }
 
+    [Fact]
+    public void Validate_StillChecksExactCmdletsWhenFunctionsAreWildcarded()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var docsPath = Path.Combine(root.FullName, "Docs");
+            Directory.CreateDirectory(docsPath);
+            WriteCommandMarkdown(docsPath, "Get-FunctionDoc");
+
+            var report = DocumentationParityValidator.Validate(
+                docsPath,
+                externalHelpFilePath: null,
+                new ExportSet(new[] { "*" }, new[] { "Get-ExactCmdlet" }, Array.Empty<string>()));
+
+            Assert.False(report.Succeeded);
+            Assert.Contains(report.Errors, error => error.Contains("Get-ExactCmdlet", StringComparison.Ordinal));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteCommandMarkdown(string docsPath, string commandName)
     {
         File.WriteAllText(

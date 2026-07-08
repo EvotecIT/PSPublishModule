@@ -151,7 +151,7 @@ public sealed partial class ModulePipelineRunner
                     externalHelpFilePath: plan.DocumentationBuild.GenerateExternalHelp
                         ? state.DocumentationResult.ExternalHelpFilePath
                         : null,
-                    exports: buildResult.Exports);
+                    exports: ModuleManifestExportReader.ReadExports(buildResult.ManifestPath));
                 if (!parity.Succeeded)
                     throw new InvalidOperationException($"Documentation parity check failed. {string.Join(" ", parity.Errors)}");
 

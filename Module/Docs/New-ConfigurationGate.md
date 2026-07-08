@@ -46,7 +46,7 @@ High-level run mode. Use Manifest for PSD1 refresh, Documentation for generated 
 Type: ConfigurationGateMode
 Parameter Sets: __AllParameterSets
 Aliases: Type
-Possible values: Manifest, Documentation, Build, Publish
+Possible values: Manifest, Build, Publish, Documentation
 
 Required: True
 Position: 0

@@ -29,14 +29,14 @@ public sealed class GateConfiguration
 public enum ConfigurationGateMode
 {
     /// <summary>Only refresh manifest metadata and skip build, package, signing, artefact, publish, and install phases.</summary>
-    Manifest,
+    Manifest = 0,
 
     /// <summary>Generate command Markdown and external help without validation, tests, signing, artefacts, publishing, or install phases.</summary>
-    Documentation,
+    Documentation = 3,
 
     /// <summary>Build module and package lanes locally, but suppress publishing for this run.</summary>
-    Build,
+    Build = 1,
 
     /// <summary>Allow configured build and publish phases to execute.</summary>
-    Publish
+    Publish = 2
 }
