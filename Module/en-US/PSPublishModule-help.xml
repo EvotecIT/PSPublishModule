@@ -56069,6 +56069,18 @@ managed delivery engine.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>InstallMissing</maml:name>
+          <maml:description>
+            <maml:para>Plan installs for literal names that are not present in the selected inventory.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByValue)" position="named" aliases="None">
           <maml:name>Inventory</maml:name>
           <maml:description>
@@ -56214,6 +56226,30 @@ managed delivery engine.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredResource</maml:name>
+          <maml:description>
+            <maml:para>PSResourceGet-style required resource map used as desired module state.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Object</command:parameterValue>
+          <dev:type>
+            <maml:name>Object</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredResourceFile</maml:name>
+          <maml:description>
+            <maml:para>Path to a PowerShell data file containing a PSResourceGet-style required resource map.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Scope</maml:name>
           <maml:description>
             <maml:para>Target installation scope used when selecting installed baseline modules.</maml:para>
@@ -56233,6 +56269,18 @@ managed delivery engine.</maml:para>
           <maml:name>ShowSummary</maml:name>
           <maml:description>
             <maml:para>Write a compact Spectre.Console summary.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="SkipDependenciesCheck">
+          <maml:name>SkipDependencyCheck</maml:name>
+          <maml:description>
+            <maml:para>Skip installing dependencies declared by repaired packages.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -56428,6 +56476,18 @@ managed delivery engine.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>InstallMissing</maml:name>
+        <maml:description>
+          <maml:para>Plan installs for literal names that are not present in the selected inventory.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByValue)" position="named" aliases="None">
         <maml:name>Inventory</maml:name>
         <maml:description>
@@ -56573,6 +56633,30 @@ managed delivery engine.</maml:para>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequiredResource</maml:name>
+        <maml:description>
+          <maml:para>PSResourceGet-style required resource map used as desired module state.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Object</command:parameterValue>
+        <dev:type>
+          <maml:name>Object</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequiredResourceFile</maml:name>
+        <maml:description>
+          <maml:para>Path to a PowerShell data file containing a PSResourceGet-style required resource map.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Scope</maml:name>
         <maml:description>
           <maml:para>Target installation scope used when selecting installed baseline modules.</maml:para>
@@ -56592,6 +56676,18 @@ managed delivery engine.</maml:para>
         <maml:name>ShowSummary</maml:name>
         <maml:description>
           <maml:para>Write a compact Spectre.Console summary.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="SkipDependenciesCheck">
+        <maml:name>SkipDependencyCheck</maml:name>
+        <maml:description>
+          <maml:para>Skip installing dependencies declared by repaired packages.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -56676,6 +56772,20 @@ PSPublishModule.ModuleStateInventoryResult</maml:name>
       <command:example>
         <maml:title>Preview version-coherence repair for Graph modules</maml:title>
         <dev:code>Repair-ManagedModule -Family Graph -Repository PSGallery -Plan -ShowSummary</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Preview baseline enforcement from a list of module names</maml:title>
+        <dev:code>Repair-ManagedModule -Name Company.Tools,Company.Web -InstallMissing -Latest -Repository PSGallery -Plan -ShowSummary</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Preview baseline enforcement from a PSResourceGet-style resource file</maml:title>
+        <dev:code>Repair-ManagedModule -RequiredResourceFile .\required-resources.psd1 -Latest -Repository PSGallery -Plan -ShowSummary</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>

@@ -11,7 +11,7 @@ Repairs installed PowerShell modules through the managed module-state engine.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Repair-ManagedModule [[-Name] <string[]>] [-Inventory <ModuleStateInventoryResult>] [-InventoryPath <string>] [-ModulePath <string[]>] [-IncludeLoaded] [-MaintenanceReceiptPath <string[]>] [-Latest] [-Version <string>] [-MinimumVersion <string>] [-VersionPolicy <string>] [-Cleanup <string>] [-Family <string[]>] [-Scope <string>] [-ProfileName <string>] [-Repository <string>] [-Transport <ModuleStateDeliveryTransport>] [-ModuleRoot <string>] [-Prerelease] [-Force] [-AllowClobber] [-AcceptLicense] [-AllowConflict] [-Plan] [-ShowSummary] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Repair-ManagedModule [[-Name] <string[]>] [-InstallMissing] [-RequiredResource <Object>] [-RequiredResourceFile <string>] [-Inventory <ModuleStateInventoryResult>] [-InventoryPath <string>] [-ModulePath <string[]>] [-IncludeLoaded] [-MaintenanceReceiptPath <string[]>] [-Latest] [-Version <string>] [-MinimumVersion <string>] [-VersionPolicy <string>] [-Cleanup <string>] [-Family <string[]>] [-Scope <string>] [-ProfileName <string>] [-Repository <string>] [-Transport <ModuleStateDeliveryTransport>] [-ModuleRoot <string>] [-Prerelease] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-AllowConflict] [-Plan] [-ShowSummary] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -35,6 +35,18 @@ Repair-ManagedModule -Family Graph -Repository PSGallery -Plan -ShowSummary
 
 
 ### EXAMPLE 3
+```powershell
+Repair-ManagedModule -Name Company.Tools,Company.Web -InstallMissing -Latest -Repository PSGallery -Plan -ShowSummary
+```
+
+
+### EXAMPLE 4
+```powershell
+Repair-ManagedModule -RequiredResourceFile .\required-resources.psd1 -Latest -Repository PSGallery -Plan -ShowSummary
+```
+
+
+### EXAMPLE 5
 ```powershell
 Repair-ManagedModule -MaintenanceReceiptPath .\module-maintenance.json -ProfileName CompanyModules -AcceptLicense
 ```
@@ -204,6 +216,22 @@ Accept wildcard characters: True
 
 ### -IncludeLoaded
 Include modules loaded in the current runspace as inventory evidence.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -InstallMissing
+Plan installs for literal names that are not present in the selected inventory.
 
 ```yaml
 Type: SwitchParameter
@@ -410,6 +438,38 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -RequiredResource
+PSResourceGet-style required resource map used as desired module state.
+
+```yaml
+Type: Object
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RequiredResourceFile
+Path to a PowerShell data file containing a PSResourceGet-style required resource map.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -Scope
 Target installation scope used when selecting installed baseline modules.
 
@@ -433,6 +493,22 @@ Write a compact Spectre.Console summary.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SkipDependencyCheck
+Skip installing dependencies declared by repaired packages.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: SkipDependenciesCheck
 Possible values:
 
 Required: False
