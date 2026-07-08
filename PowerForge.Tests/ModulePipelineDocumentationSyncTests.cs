@@ -97,6 +97,86 @@ public sealed class ModulePipelineDocumentationSyncTests
     }
 
     [Fact]
+    public void SyncGeneratedDocumentationToProjectRoot_DocumentationGateSyncsExternalHelpByDefault()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            var projectRoot = Path.Combine(root.FullName, "Project");
+            Directory.CreateDirectory(projectRoot);
+            ModulePipelineMissingAnalysisServiceTests.WriteMinimalModule(projectRoot, moduleName, "1.0.0");
+
+            var sourceDocs = Path.Combine(root.FullName, "Staging", "Docs");
+            Directory.CreateDirectory(sourceDocs);
+            var readmePath = Path.Combine(sourceDocs, "Readme.md");
+            File.WriteAllText(readmePath, "# TestModule");
+
+            var stagedHelpDir = Path.Combine(root.FullName, "Staging", "en-US");
+            Directory.CreateDirectory(stagedHelpDir);
+            var stagedHelp = Path.Combine(stagedHelpDir, "TestModule-help.xml");
+            File.WriteAllText(stagedHelp, "<helpItems />");
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = projectRoot,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration
+                        {
+                            Mode = ConfigurationGateMode.Documentation
+                        }
+                    },
+                    new ConfigurationDocumentationSegment
+                    {
+                        Configuration = new DocumentationConfiguration
+                        {
+                            Path = "Docs",
+                            PathReadme = "Docs\\Readme.md"
+                        }
+                    },
+                    new ConfigurationBuildDocumentationSegment
+                    {
+                        Configuration = new BuildDocumentationConfiguration
+                        {
+                            Enable = true,
+                            GenerateExternalHelp = true,
+                            SyncExternalHelpToProjectRoot = false
+                        }
+                    }
+                }
+            });
+            var result = new DocumentationBuildResult(
+                enabled: true,
+                docsPath: sourceDocs,
+                readmePath: readmePath,
+                succeeded: true,
+                exitCode: 0,
+                markdownFiles: 1,
+                externalHelpFilePath: stagedHelp,
+                errorMessage: null);
+
+            InvokeSync(runner, plan, result);
+
+            Assert.True(File.Exists(Path.Combine(projectRoot, "en-US", "TestModule-help.xml")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void NormalizeDocumentationForStaging_MapsProjectAbsoluteDocsPathToStagingRelativePath()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

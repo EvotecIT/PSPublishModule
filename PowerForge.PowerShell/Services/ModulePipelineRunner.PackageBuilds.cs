@@ -335,6 +335,7 @@ public sealed partial class ModulePipelineRunner
         ConfigurationGateMode? gateMode)
         => mode switch
         {
+            PackageBuildExecutionMode.DependencyBuild when gateMode == ConfigurationGateMode.Documentation => false,
             PackageBuildExecutionMode.DependencyBuild => actions.UpdateVersions || actions.PublishNuGet || actions.PublishGitHub,
             PackageBuildExecutionMode.BuildOnly when gateMode == ConfigurationGateMode.Build => actions.UpdateVersions || actions.PublishNuGet || actions.PublishGitHub,
             PackageBuildExecutionMode.BuildOnly => actions.UpdateVersions,

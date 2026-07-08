@@ -7,6 +7,7 @@ public sealed partial class ModulePipelineRunner
     /// </summary>
     public ModulePipelineResult Run(ModulePipelineSpec spec)
     {
+        EnsureDocumentationGateConfigured(spec);
         EnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(spec);
         var plan = Plan(spec);
         return Run(spec, plan, progress: null, preflightPrecomputedPlan: false);
@@ -27,18 +28,20 @@ public sealed partial class ModulePipelineRunner
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
 
+        if (plan.GateMode == ConfigurationGateMode.Documentation)
+            EnsureDocumentationGateConfigured(plan);
+
         if (preflightPrecomputedPlan && ShouldRefreshPrecomputedPlanAfterOnlineRequiredModulePreflight(spec, plan))
         {
             EnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(spec);
             plan = Plan(spec);
+            if (plan.GateMode == ConfigurationGateMode.Documentation)
+                EnsureDocumentationGateConfigured(plan);
         }
 
         var manifestRequiredModules = ResolveOutputRequiredModules(plan.RequiredModules, plan.MergeMissing, plan.ApprovedModules);
         var packagingRequiredModules = ResolveOutputRequiredModules(plan.RequiredModulesForPackaging, plan.MergeMissing, plan.ApprovedModules);
         var manifestExternalModuleDependencies = plan.ExternalModuleDependencies ?? Array.Empty<string>();
-
-        if (plan.GateMode == ConfigurationGateMode.Documentation)
-            EnsureDocumentationGateConfigured(plan);
 
         var session = ModulePipelineExecutionSession.Create(plan, progress);
         var cleanupStep = session.CleanupStep;
@@ -90,6 +93,37 @@ public sealed partial class ModulePipelineRunner
     private static void EnsureDocumentationGateConfigured(ModulePipelinePlan plan)
     {
         if (plan.Documentation is not null && plan.DocumentationBuild?.Enable == true)
+            return;
+
+        throw new InvalidOperationException("Gate mode Documentation requires an enabled Documentation and BuildDocumentation configuration.");
+    }
+
+    private static void EnsureDocumentationGateConfigured(ModulePipelineSpec spec)
+    {
+        if (spec is null)
+            throw new ArgumentNullException(nameof(spec));
+
+        var documentationGate = false;
+        var hasDocumentation = false;
+        var hasEnabledDocumentationBuild = false;
+
+        foreach (var segment in spec.Segments ?? Array.Empty<IConfigurationSegment>())
+        {
+            switch (segment)
+            {
+                case ConfigurationGateSegment gate:
+                    documentationGate = gate.Configuration.Mode == ConfigurationGateMode.Documentation;
+                    break;
+                case ConfigurationDocumentationSegment docs:
+                    hasDocumentation = docs.Configuration is not null;
+                    break;
+                case ConfigurationBuildDocumentationSegment buildDocs:
+                    hasEnabledDocumentationBuild = buildDocs.Configuration?.Enable == true;
+                    break;
+            }
+        }
+
+        if (!documentationGate || (hasDocumentation && hasEnabledDocumentationBuild))
             return;
 
         throw new InvalidOperationException("Gate mode Documentation requires an enabled Documentation and BuildDocumentation configuration.");

@@ -361,12 +361,27 @@ public sealed class ModulePipelineScriptExecutionSeamTests
                         {
                             Mode = ConfigurationGateMode.Documentation
                         }
+                    },
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            ResolveMissingModulesOnline = true
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Pester",
+                            RequiredVersion = "Latest"
+                        }
                     }
                 }
             };
 
-            var plan = runner.Plan(spec);
-            var ex = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, plan));
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
 
             Assert.Contains("Gate mode Documentation requires", ex.Message, StringComparison.Ordinal);
             Assert.Empty(hostedOperations.OperationOrder);
