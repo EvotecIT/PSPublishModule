@@ -307,6 +307,8 @@ internal static class PowerForgeInstallerDefinitionValidator
 
         Require(script.Command, $"service component '{service.Id}' ScriptInstall.Command");
         Require(script.Condition, $"service component '{service.Id}' ScriptInstall.Condition");
+        if (!string.IsNullOrWhiteSpace(script.UninstallCommand))
+            Require(script.UninstallCondition, $"service component '{service.Id}' ScriptInstall.UninstallCondition");
         if (script.BackupExistingImagePath)
             Require(script.BackupPath, $"service component '{service.Id}' ScriptInstall.BackupPath");
         if (script.StopDelaySeconds < 0)

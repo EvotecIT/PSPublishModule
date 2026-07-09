@@ -683,6 +683,22 @@ public sealed class PowerForgeInstallerServiceScriptInstall
     public string? UpgradeCommand { get; set; }
 
     /// <summary>
+    /// Optional uninstall command used when script-based service registration owns service removal.
+    /// Supports WiX formatted properties.
+    /// </summary>
+    public string? UninstallCommand { get; set; }
+
+    /// <summary>
+    /// Condition used for the deferred uninstall action.
+    /// </summary>
+    public string UninstallCondition { get; set; } = "REMOVE=\"ALL\"";
+
+    /// <summary>
+    /// Suppresses WiX ServiceControl emission when script actions fully own service lifecycle.
+    /// </summary>
+    public bool SuppressServiceControl { get; set; }
+
+    /// <summary>
     /// Condition used for the deferred install action.
     /// </summary>
     public string Condition { get; set; } = "NOT REMOVE=\"ALL\"";

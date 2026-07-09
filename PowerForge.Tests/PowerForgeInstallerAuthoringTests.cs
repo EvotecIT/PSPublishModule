@@ -142,6 +142,15 @@ public sealed class PowerForgeInstallerAuthoringTests
 
         var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
         var doc = XDocument.Parse(xml);
+        var serviceExistsProperty = doc.Descendants(Wix + "Property").SingleOrDefault(e =>
+            (string?)e.Attribute("Secure") == "yes" &&
+            e.Descendants(Wix + "RegistrySearch").Any(search =>
+                (string?)search.Attribute("Root") == "HKLM" &&
+                (string?)search.Attribute("Key") == @"SYSTEM\CurrentControlSet\Services\TestimoX.Monitoring" &&
+                (string?)search.Attribute("Name") == "ImagePath" &&
+                (string?)search.Attribute("Type") == "raw"));
+        Assert.NotNull(serviceExistsProperty);
+        var serviceExistsPropertyId = (string)serviceExistsProperty!.Attribute("Id")!;
 
         Assert.Null(doc.Descendants(Wix + "ServiceInstall").SingleOrDefault(e =>
             (string?)e.Attribute("Name") == "TestimoX.Monitoring"));
@@ -181,6 +190,12 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.Contains("ServiceComponent.StopService", sequenceActions);
         Assert.Contains("ServiceComponent.SetInstallServiceUpgrade", sequenceActions);
         Assert.Contains("ServiceComponent.InstallService", sequenceActions);
+        Assert.NotNull(sequenceRows.SingleOrDefault(e =>
+            (string?)e.Attribute("Action") == "ServiceComponent.SetInstallServiceUpgrade" &&
+            ((string?)e.Attribute("Condition"))?.Contains("WIX_UPGRADE_DETECTED OR " + serviceExistsPropertyId, StringComparison.Ordinal) == true));
+        Assert.NotNull(sequenceRows.SingleOrDefault(e =>
+            (string?)e.Attribute("Action") == "ServiceComponent.SetInstallService" &&
+            ((string?)e.Attribute("Condition"))?.Contains("NOT (WIX_UPGRADE_DETECTED OR " + serviceExistsPropertyId + ")", StringComparison.Ordinal) == true));
         Assert.NotNull(sequenceRows.SingleOrDefault(e =>
             (string?)e.Attribute("Action") == "ServiceComponent.SetBackupCommand" &&
             (string?)e.Attribute("Before") == "RemoveExistingProducts"));
@@ -278,6 +293,50 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.NotNull(sequenceRows.SingleOrDefault(e =>
             (string?)e.Attribute("Action") == "InstallMonitoringLicense" &&
             (string?)e.Attribute("Before") == "InstallServices"));
+    }
+
+    [Fact]
+    public void EmitSource_ScriptInstallCanOwnServiceUninstallWithoutServiceControl()
+    {
+        var definition = CreateMonitoringInstaller();
+        var service = definition.Components.OfType<PowerForgeInstallerServiceComponent>().Single();
+        service.ScriptInstall = new PowerForgeInstallerServiceScriptInstall
+        {
+            Command = "\"[INSTALLFOLDER]Monitoring.exe\" --install --name \"TestimoX.Monitoring\"",
+            UpgradeCommand = "\"[INSTALLFOLDER]Monitoring.exe\" --install --name \"TestimoX.Monitoring\" --preserve-existing-service-binpath",
+            UninstallCommand = "\"[INSTALLFOLDER]Monitoring.exe\" --uninstall --name \"TestimoX.Monitoring\"",
+            SuppressServiceControl = true,
+            BackupExistingImagePath = true,
+            StopServiceForUpgrade = true
+        };
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.Null(doc.Descendants(Wix + "ServiceInstall").SingleOrDefault(e =>
+            (string?)e.Attribute("Name") == "TestimoX.Monitoring"));
+        Assert.Null(doc.Descendants(Wix + "ServiceControl").SingleOrDefault(e =>
+            (string?)e.Attribute("Name") == "TestimoX.Monitoring"));
+        Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "ServiceComponent.UninstallService" &&
+            (string?)e.Attribute("DllEntry") == "WixQuietExec" &&
+            (string?)e.Attribute("Execute") == "deferred" &&
+            (string?)e.Attribute("Impersonate") == "no"));
+        Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "ServiceComponent.SetUninstallService" &&
+            ((string?)e.Attribute("Value"))?.Contains("--uninstall --name", StringComparison.Ordinal) == true));
+
+        var sequenceRows = doc.Descendants(Wix + "InstallExecuteSequence")
+            .Descendants(Wix + "Custom")
+            .ToArray();
+        Assert.NotNull(sequenceRows.SingleOrDefault(e =>
+            (string?)e.Attribute("Action") == "ServiceComponent.SetUninstallService" &&
+            (string?)e.Attribute("Before") == "ServiceComponent.UninstallService" &&
+            (string?)e.Attribute("Condition") == "REMOVE=\"ALL\""));
+        Assert.NotNull(sequenceRows.SingleOrDefault(e =>
+            (string?)e.Attribute("Action") == "ServiceComponent.UninstallService" &&
+            (string?)e.Attribute("Before") == "RemoveFiles" &&
+            (string?)e.Attribute("Condition") == "REMOVE=\"ALL\""));
     }
 
     [Fact]
@@ -543,6 +602,33 @@ public sealed class PowerForgeInstallerAuthoringTests
             (string?)e.Attribute("Id") == "Message" &&
             (string?)e.Attribute("Text") == "Fill the required field before continuing: License key."));
         Assert.Equal(2, dialog.Descendants(Wix + "RadioButton").Count());
+    }
+
+    [Fact]
+    public void EmitSource_DoesNotInitializeUncheckedCheckboxProperties()
+    {
+        var definition = CreateMonitoringInstaller();
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.Null(doc.Descendants(Wix + "Property")
+            .SingleOrDefault(e => (string?)e.Attribute("Id") == "REMOVE_DATA"));
+    }
+
+    [Fact]
+    public void EmitSource_InitializesCheckedCheckboxProperties()
+    {
+        var definition = CreateMonitoringInstaller();
+        definition.Inputs.Single(input => input.Id == "RemoveData").DefaultValue = "true";
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.NotNull(doc.Descendants(Wix + "Property")
+            .SingleOrDefault(e =>
+                (string?)e.Attribute("Id") == "REMOVE_DATA" &&
+                (string?)e.Attribute("Value") == "1"));
     }
 
     [Fact]

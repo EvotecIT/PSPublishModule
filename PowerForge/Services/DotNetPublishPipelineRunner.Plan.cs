@@ -1127,6 +1127,9 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             Command = script.Command,
             UpgradeCommand = script.UpgradeCommand,
+            UninstallCommand = script.UninstallCommand,
+            UninstallCondition = script.UninstallCondition,
+            SuppressServiceControl = script.SuppressServiceControl,
             Condition = script.Condition,
             BackupExistingImagePath = script.BackupExistingImagePath,
             BackupPath = script.BackupPath,
