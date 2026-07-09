@@ -289,7 +289,12 @@ public sealed class ModuleBuilder
         }
 
         if (scripts.Length > 0)
-            functionsToSet = _scriptFunctionExportDetector.DetectScriptFunctions(scripts);
+        {
+            functionsToSet = _scriptFunctionExportDetector
+                .DetectScriptFunctions(scripts)
+                .Where(functionName => !IsGeneratedDevelopmentBinaryHelper(functionName, opts.ModuleName))
+                .ToArray();
+        }
 
         IEnumerable<string>? cmdletsToSet = null;
         IEnumerable<string>? aliasesToSet = null;
@@ -368,6 +373,16 @@ public sealed class ModuleBuilder
         if (aliases is not null)
             changed |= _manifestMutator.TrySetTopLevelStringArray(psd1Path, "AliasesToExport", aliases.ToArray());
         return changed;
+    }
+
+    private static bool IsGeneratedDevelopmentBinaryHelper(string? functionName, string moduleName)
+    {
+        if (string.IsNullOrWhiteSpace(functionName) || string.IsNullOrWhiteSpace(moduleName))
+            return false;
+
+        var trimmedFunctionName = functionName!.Trim();
+        var expected = $"Import-{moduleName}DevelopmentBinaryModule";
+        return string.Equals(trimmedFunctionName, expected, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsCore(string tfm)

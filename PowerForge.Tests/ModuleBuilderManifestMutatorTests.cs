@@ -64,6 +64,48 @@ public sealed class ModuleBuilderManifestMutatorTests
         }
     }
 
+    [Fact]
+    public void BuildInPlace_DoesNotExportGeneratedDevelopmentBinaryHelper()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            const string moduleName = "TestModule";
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psd1"), "@{ ModuleVersion = '1.0.0'; RootModule = 'TestModule.psm1' }");
+            File.WriteAllText(Path.Combine(root, $"{moduleName}.psm1"), "function Import-TestModuleDevelopmentBinaryModule { } function Invoke-TestModule { }");
+
+            var mutator = new RecordingManifestMutator();
+            var scriptDetector = new RecordingScriptFunctionExportDetector(
+                "Import-TestModuleDevelopmentBinaryModule",
+                "Invoke-TestModule");
+            var builder = new ModuleBuilder(new NullLogger(), mutator, scriptDetector);
+
+            builder.BuildInPlace(new ModuleBuilder.Options
+            {
+                ProjectRoot = root,
+                ModuleName = moduleName,
+                ModuleVersion = "2.0.0"
+            });
+
+            var exportWrite = Assert.Single(mutator.TopLevelStringArrayWrites, static write => write.Key == "FunctionsToExport");
+            Assert.Equal(new[] { "Invoke-TestModule" }, exportWrite.Values);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
     private sealed class RecordingManifestMutator : IModuleManifestMutator
     {
         public List<(string FilePath, string NewVersion)> TopLevelVersionWrites { get; } = new();
