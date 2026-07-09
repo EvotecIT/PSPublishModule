@@ -236,12 +236,19 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         PowerForgeInstallerServiceComponent service,
         string backupPath)
     {
-        var serviceName = EscapeCommandDoubleQuoted(service.ServiceName);
-        var backup = EscapeCommandDoubleQuoted(backupPath);
-        return "\"[%ComSpec]\" /c (for /f \"tokens=2,*\" %A in ('reg query \"HKLM\\SYSTEM\\CurrentControlSet\\Services\\" +
-               serviceName +
-               "\" /v ImagePath 2^>nul ^| find \"ImagePath\"') do @echo %B)>\"" +
-               backup +
+        string serviceName = EscapePowerShellSingleQuoted(service.ServiceName);
+        string backup = EscapePowerShellSingleQuoted(backupPath);
+        string command = "$p=(Get-ItemProperty -LiteralPath 'Registry::HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\" +
+                         serviceName +
+                         "' -Name ImagePath -ErrorAction SilentlyContinue).ImagePath; if ($null -ne $p) { [System.IO.File]::WriteAllText('" +
+                         backup +
+                         "', [string]$p) } elseif (Test-Path -LiteralPath '" +
+                         backup +
+                         "') { Remove-Item -LiteralPath '" +
+                         backup +
+                         "' -Force }";
+        return "\"[%ComSpec]\" /c powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command \"" +
+               EscapeCommandDoubleQuoted(command) +
                "\"";
     }
 
@@ -297,6 +304,9 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
 
     private static string EscapeCommandDoubleQuoted(string value)
         => (value ?? string.Empty).Replace("\"", "\\\"");
+
+    private static string EscapePowerShellSingleQuoted(string value)
+        => (value ?? string.Empty).Replace("'", "''");
 
     private static string CombineConditions(params string[] conditions)
     {

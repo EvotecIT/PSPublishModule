@@ -162,10 +162,10 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "ServiceComponent.SetBackupCommand" &&
             (string?)e.Attribute("Property") == "WixQuietExecCmdLine" &&
-            ((string?)e.Attribute("Value"))?.Contains(@"HKLM\SYSTEM\CurrentControlSet\Services\TestimoX.Monitoring", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains("powershell.exe -NoLogo -NoProfile", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains(@"Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\TestimoX.Monitoring", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("ImagePath", StringComparison.Ordinal) == true &&
-            ((string?)e.Attribute("Value"))?.Contains("tokens=2,*", StringComparison.Ordinal) == true &&
-            ((string?)e.Attribute("Value"))?.Contains("do @echo %B", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains("WriteAllText", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("[TempFolder]tmx-svc.txt", StringComparison.Ordinal) == true));
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "ServiceComponent.SetStopService" &&
