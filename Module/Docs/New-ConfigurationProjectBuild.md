@@ -11,7 +11,7 @@ References an existing project.build.json package build from the module-build DS
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationProjectBuild [-Name <string>] [-ConfigPath <string>] [-Enabled] [-BuildBeforeModule] [-UseAsReleaseVersionSource] [-ProvideLocalNuGetFeed] [-UpdateVersions] [-Build] [-PublishNuget] [-PublishGitHub] [-CreateReleaseZip] [-SignAssemblies] [-SignPackages] [-Options <IDictionary>] [<CommonParameters>]
+New-ConfigurationProjectBuild [-Name <string>] [-ConfigPath <string>] [-Enabled] [-BuildBeforeModule] [-UseAsReleaseVersionSource] [-ProvideLocalNuGetFeed] [-UpdateVersions] [-Build] [-PublishNuget] [-PublishGitHub] [-CreateReleaseZip] [-SignAssemblies] [-SignDependencyAssemblies] [-SignPackages] [-Options <IDictionary>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -190,6 +190,22 @@ Accept wildcard characters: True
 
 ### -SignAssemblies
 Whether assemblies should be signed before packages are created, overriding the referenced JSON when set.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SignDependencyAssemblies
+Whether copied dependency assemblies should also be signed, overriding the referenced JSON when set.
 
 ```yaml
 Type: SwitchParameter

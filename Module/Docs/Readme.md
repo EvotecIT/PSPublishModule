@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.45
+Help Version: 3.0.46
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -111,6 +111,9 @@ Resolves a boolean configuration value from an environment variable with a scrip
 
 ### [Get-ManagedModule](Get-ManagedModule.md)
 Gets installed PowerShell modules from managed module inventory.
+
+### [Get-ManagedModuleCatalog](Get-ManagedModuleCatalog.md)
+Gets local managed module catalog settings or package metadata.
 
 ### [Get-ManagedModuleRepository](Get-ManagedModuleRepository.md)
 Gets, tests, or exports saved managed module repository profiles.
@@ -483,6 +486,9 @@ Sets the benchmark profile mode.
 ### [Set-BenchmarkSetup](Set-BenchmarkSetup.md)
 Sets the suite setup block.
 
+### [Set-ManagedModuleCatalog](Set-ManagedModuleCatalog.md)
+Creates or updates local managed module catalog cache settings.
+
 ### [Set-ManagedModuleRepository](Set-ManagedModuleRepository.md)
 Creates or updates a saved managed module repository profile.
 
@@ -549,6 +555,9 @@ Updates a marker-delimited benchmark block in a Markdown document.
 
 ### [Update-ManagedModule](Update-ManagedModule.md)
 Updates installed PowerShell modules through the managed C# module engine.
+
+### [Update-ManagedModuleCatalog](Update-ManagedModuleCatalog.md)
+Refreshes package metadata in a local managed module catalog.
 
 ### [Update-ManagedScriptFileInfo](Update-ManagedScriptFileInfo.md)
 Updates PSResourceGet-compatible PSScriptInfo metadata in an existing script file.

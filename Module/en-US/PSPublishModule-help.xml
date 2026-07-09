@@ -6923,6 +6923,145 @@ System.String</maml:name>
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Get-ManagedModuleCatalog</command:name>
+      <command:verb>Get</command:verb>
+      <command:noun>ManagedModuleCatalog</command:noun>
+      <maml:description>
+        <maml:para>Gets local managed module catalog settings or package metadata.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Gets local managed module catalog settings or package metadata.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Get-ManagedModuleCatalog</maml:name>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="Repository,RepositoryName">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Optional catalog names. When omitted, all visible catalogs are returned.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Package,Module,ModuleName">
+          <maml:name>PackageName</maml:name>
+          <maml:description>
+            <maml:para>Optional package names to return from the selected catalogs.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Scope</maml:name>
+          <maml:description>
+            <maml:para>Catalog storage scope. The default reads user catalogs before machine-wide catalogs.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModuleRepositoryProfileScope</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="Repository,RepositoryName">
+        <maml:name>Name</maml:name>
+        <maml:description>
+          <maml:para>Optional catalog names. When omitted, all visible catalogs are returned.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Package,Module,ModuleName">
+        <maml:name>PackageName</maml:name>
+        <maml:description>
+          <maml:para>Optional package names to return from the selected catalogs.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Scope</maml:name>
+        <maml:description>
+          <maml:para>Catalog storage scope. The default reads user catalogs before machine-wide catalogs.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ModuleRepositoryProfileScope</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.ManagedModuleCatalog&#xD;
+PowerForge.ManagedModuleCatalogPackage</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Show configured catalogs</maml:title>
+        <dev:code>Get-ManagedModuleCatalog</dev:code>
+        <dev:remarks>
+          <maml:para>Returns catalog settings and cached package counts.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Show cached package metadata</maml:title>
+        <dev:code>Get-ManagedModuleCatalog -Name PSGallery -PackageName Pester</dev:code>
+        <dev:remarks>
+          <maml:para>Returns the cached package entry for Pester from the PSGallery catalog.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Get-ManagedModuleRepository</command:name>
       <command:verb>Get</command:verb>
       <command:noun>ManagedModuleRepository</command:noun>
@@ -18331,6 +18470,18 @@ updates csproj versions, packs, and optionally publishes packages.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignDependencyAssemblies</maml:name>
+          <maml:description>
+            <maml:para>Also sign copied dependency assemblies from build output folders.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>SkipAssemblySigning</maml:name>
           <maml:description>
             <maml:para>Skip Authenticode signing of build outputs before packages are created.</maml:para>
@@ -18685,6 +18836,18 @@ updates csproj versions, packs, and optionally publishes packages.</maml:para>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignDependencyAssemblies</maml:name>
+        <maml:description>
+          <maml:para>Also sign copied dependency assemblies from build output folders.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -42210,6 +42373,18 @@ Build-Module { } to remain the primary authoring surface for combined module and
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignDependencyAssemblies</maml:name>
+          <maml:description>
+            <maml:para>Whether copied dependency assemblies should also be signed.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>SignPackages</maml:name>
           <maml:description>
             <maml:para>Whether generated NuGet packages should be signed.</maml:para>
@@ -42945,6 +43120,18 @@ Build-Module { } to remain the primary authoring surface for combined module and
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignDependencyAssemblies</maml:name>
+        <maml:description>
+          <maml:para>Whether copied dependency assemblies should also be signed.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>SignPackages</maml:name>
         <maml:description>
           <maml:para>Whether generated NuGet packages should be signed.</maml:para>
@@ -43599,6 +43786,18 @@ module build should coordinate with that package lane.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignDependencyAssemblies</maml:name>
+          <maml:description>
+            <maml:para>Whether copied dependency assemblies should also be signed, overriding the referenced JSON when set.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>SignPackages</maml:name>
           <maml:description>
             <maml:para>Whether generated NuGet packages should be signed, overriding the referenced JSON when set.</maml:para>
@@ -43761,6 +43960,18 @@ module build should coordinate with that package lane.</maml:para>
         <maml:name>SignAssemblies</maml:name>
         <maml:description>
           <maml:para>Whether assemblies should be signed before packages are created, overriding the referenced JSON when set.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignDependencyAssemblies</maml:name>
+        <maml:description>
+          <maml:para>Whether copied dependency assemblies should also be signed, overriding the referenced JSON when set.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -60021,6 +60232,261 @@ When false, the cmdlet fails on existing tags.</maml:para>
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Set-ManagedModuleCatalog</command:name>
+      <command:verb>Set</command:verb>
+      <command:noun>ManagedModuleCatalog</command:noun>
+      <maml:description>
+        <maml:para>Creates or updates local managed module catalog cache settings.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>The catalog stores local repository metadata only. It does not mirror package blobs unless a later package cache&#xD;
+feature is explicitly enabled. Managed module commands can use this metadata as an opt-in fallback when live&#xD;
+repository metadata is unavailable.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Set-ManagedModuleCatalog</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IncludePrerelease</maml:name>
+          <maml:description>
+            <maml:para>Include prerelease versions during catalog refresh.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MaxStaleness</maml:name>
+          <maml:description>
+            <maml:para>Maximum age accepted for stale catalog fallback decisions.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">TimeSpan</command:parameterValue>
+          <dev:type>
+            <maml:name>TimeSpan</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Mode</maml:name>
+          <maml:description>
+            <maml:para>Local catalog cache mode.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ManagedModuleCatalogCacheMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">ReadThrough</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Fallback</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PreferCache</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Offline</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ManagedModuleCatalogCacheMode</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Repository,RepositoryName">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Catalog name, usually the repository name. Defaults to PSGallery.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryKind</maml:name>
+          <maml:description>
+            <maml:para>Repository kind used by the catalog refresh path.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ManagedModuleRepositoryKind</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">NuGetV3</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">NuGetV2</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">LocalFolder</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ManagedModuleRepositoryKind</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Scope</maml:name>
+          <maml:description>
+            <maml:para>Catalog storage scope.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModuleRepositoryProfileScope</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Source</maml:name>
+          <maml:description>
+            <maml:para>Repository source URL used to refresh metadata.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>IncludePrerelease</maml:name>
+        <maml:description>
+          <maml:para>Include prerelease versions during catalog refresh.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MaxStaleness</maml:name>
+        <maml:description>
+          <maml:para>Maximum age accepted for stale catalog fallback decisions.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">TimeSpan</command:parameterValue>
+        <dev:type>
+          <maml:name>TimeSpan</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Mode</maml:name>
+        <maml:description>
+          <maml:para>Local catalog cache mode.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ManagedModuleCatalogCacheMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">ReadThrough</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Fallback</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PreferCache</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Offline</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ManagedModuleCatalogCacheMode</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Repository,RepositoryName">
+        <maml:name>Name</maml:name>
+        <maml:description>
+          <maml:para>Catalog name, usually the repository name. Defaults to PSGallery.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RepositoryKind</maml:name>
+        <maml:description>
+          <maml:para>Repository kind used by the catalog refresh path.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ManagedModuleRepositoryKind</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">NuGetV3</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">NuGetV2</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">LocalFolder</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ManagedModuleRepositoryKind</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Scope</maml:name>
+        <maml:description>
+          <maml:para>Catalog storage scope.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ModuleRepositoryProfileScope</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Source</maml:name>
+        <maml:description>
+          <maml:para>Repository source URL used to refresh metadata.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.ManagedModuleCatalog</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Enable a fallback catalog for PowerShell Gallery metadata</maml:title>
+        <dev:code>Set-ManagedModuleCatalog -Name PSGallery -Mode Fallback -MaxStaleness 14.00:00:00</dev:code>
+        <dev:remarks>
+          <maml:para>Stores user-local catalog settings for the canonical PowerShell Gallery source.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Set-ManagedModuleRepository</command:name>
       <command:verb>Set</command:verb>
       <command:noun>ManagedModuleRepository</command:noun>
@@ -67362,6 +67828,257 @@ PowerForge.ManagedModuleUpdatePlan</maml:name>
         <dev:code>Update-ManagedModule -Name Company.Tools -Repository C:\Packages -Path C:\Modules</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Update-ManagedModuleCatalog</command:name>
+      <command:verb>Update</command:verb>
+      <command:noun>ManagedModuleCatalog</command:noun>
+      <maml:description>
+        <maml:para>Refreshes package metadata in a local managed module catalog.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Refreshes package metadata in a local managed module catalog.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Update-ManagedModuleCatalog</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Credential</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PSCredential</command:parameterValue>
+          <dev:type>
+            <maml:name>PSCredential</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Password,Token">
+          <maml:name>CredentialSecret</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential secret.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="CredentialPath,TokenPath">
+          <maml:name>CredentialSecretFilePath</maml:name>
+          <maml:description>
+            <maml:para>Optional path to a file containing the repository credential secret.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="UserName">
+          <maml:name>CredentialUserName</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential username.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IncludePrerelease</maml:name>
+          <maml:description>
+            <maml:para>Override the catalog's prerelease refresh setting for this run.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Repository,RepositoryName">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Catalog name. Defaults to PSGallery.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="1" aliases="Package,Module,ModuleName">
+          <maml:name>PackageName</maml:name>
+          <maml:description>
+            <maml:para>Package/module names to refresh. When omitted, existing catalog packages are refreshed.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Scope</maml:name>
+          <maml:description>
+            <maml:para>Catalog storage scope.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModuleRepositoryProfileScope</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Credential</maml:name>
+        <maml:description>
+          <maml:para>Optional repository credential.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">PSCredential</command:parameterValue>
+        <dev:type>
+          <maml:name>PSCredential</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Password,Token">
+        <maml:name>CredentialSecret</maml:name>
+        <maml:description>
+          <maml:para>Optional repository credential secret.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="CredentialPath,TokenPath">
+        <maml:name>CredentialSecretFilePath</maml:name>
+        <maml:description>
+          <maml:para>Optional path to a file containing the repository credential secret.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="UserName">
+        <maml:name>CredentialUserName</maml:name>
+        <maml:description>
+          <maml:para>Optional repository credential username.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>IncludePrerelease</maml:name>
+        <maml:description>
+          <maml:para>Override the catalog's prerelease refresh setting for this run.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <dev:type>
+          <maml:name>Nullable`1</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Repository,RepositoryName">
+        <maml:name>Name</maml:name>
+        <maml:description>
+          <maml:para>Catalog name. Defaults to PSGallery.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="1" aliases="Package,Module,ModuleName">
+        <maml:name>PackageName</maml:name>
+        <maml:description>
+          <maml:para>Package/module names to refresh. When omitted, existing catalog packages are refreshed.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Scope</maml:name>
+        <maml:description>
+          <maml:para>Catalog storage scope.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ModuleRepositoryProfileScope</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">User</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Machine</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ModuleRepositoryProfileScope</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>System.String[]</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.ManagedModuleCatalogUpdateResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Refresh selected PowerShell Gallery packages</maml:title>
+        <dev:code>Update-ManagedModuleCatalog -Name PSGallery -PackageName Pester, Microsoft.Graph.Authentication</dev:code>
+        <dev:remarks>
+          <maml:para>Queries live metadata and stores the known versions, dependency metadata, hashes, sizes, and package URLs locally.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
