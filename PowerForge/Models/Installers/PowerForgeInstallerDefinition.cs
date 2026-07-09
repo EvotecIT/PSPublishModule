@@ -691,7 +691,7 @@ public sealed class PowerForgeInstallerServiceScriptInstall
     /// <summary>
     /// Condition used for the deferred uninstall action.
     /// </summary>
-    public string UninstallCondition { get; set; } = "REMOVE=\"ALL\"";
+    public string UninstallCondition { get; set; } = "REMOVE=\"ALL\" AND NOT UPGRADINGPRODUCTCODE";
 
     /// <summary>
     /// Suppresses WiX ServiceControl emission when script actions fully own service lifecycle.

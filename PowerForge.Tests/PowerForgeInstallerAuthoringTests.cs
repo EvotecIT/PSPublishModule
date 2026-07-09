@@ -332,11 +332,28 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.NotNull(sequenceRows.SingleOrDefault(e =>
             (string?)e.Attribute("Action") == "ServiceComponent.SetUninstallService" &&
             (string?)e.Attribute("Before") == "ServiceComponent.UninstallService" &&
-            (string?)e.Attribute("Condition") == "REMOVE=\"ALL\""));
+            (string?)e.Attribute("Condition") == "REMOVE=\"ALL\" AND NOT UPGRADINGPRODUCTCODE"));
         Assert.NotNull(sequenceRows.SingleOrDefault(e =>
             (string?)e.Attribute("Action") == "ServiceComponent.UninstallService" &&
             (string?)e.Attribute("Before") == "RemoveFiles" &&
-            (string?)e.Attribute("Condition") == "REMOVE=\"ALL\""));
+            (string?)e.Attribute("Condition") == "REMOVE=\"ALL\" AND NOT UPGRADINGPRODUCTCODE"));
+    }
+
+    [Fact]
+    public void EmitSource_SuppressServiceControlRequiresScriptUninstallCommand()
+    {
+        var definition = CreateMonitoringInstaller();
+        var service = definition.Components.OfType<PowerForgeInstallerServiceComponent>().Single();
+        service.ScriptInstall = new PowerForgeInstallerServiceScriptInstall
+        {
+            Command = "\"[INSTALLFOLDER]Monitoring.exe\" --install --name \"TestimoX.Monitoring\"",
+            SuppressServiceControl = true
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+
+        Assert.Contains("SuppressServiceControl requires ScriptInstall.UninstallCommand", exception.Message);
     }
 
     [Fact]
