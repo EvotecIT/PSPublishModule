@@ -906,6 +906,52 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
     }
 
     [Fact]
+    public void BuildToStaging_WithDesktopBinaryConflict_ReturnsAdvisoryWithoutFailingBuild()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "DemoModule";
+            var source = Path.Combine(tempRoot.FullName, "src");
+            var staging = Path.Combine(tempRoot.FullName, "staging");
+            var stagedAssembly = BuildLibrary(tempRoot.FullName, "SharedAuth", "2.0.0");
+            var installedAssembly = BuildLibrary(tempRoot.FullName, "SharedAuth", "1.0.0", projectFolderName: "SharedAuth_DesktopOther");
+
+            WriteMinimalBinaryModule(source, moduleName);
+            Directory.CreateDirectory(Path.Combine(source, "Lib", "Default"));
+            File.Copy(stagedAssembly, Path.Combine(source, "Lib", "Default", "SharedAuth.dll"), overwrite: true);
+
+            var moduleSearchRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "PSModules"));
+            var installedModuleDir = Directory.CreateDirectory(Path.Combine(moduleSearchRoot.FullName, "OtherModule", "1.0.0", "bin"));
+            File.Copy(installedAssembly, Path.Combine(installedModuleDir.FullName, "SharedAuth.dll"), overwrite: true);
+
+            var pipeline = ModuleBuildPipelineFactory.Create(new NullLogger());
+            var result = pipeline.BuildToStaging(new ModuleBuildSpec
+            {
+                Name = moduleName,
+                SourcePath = source,
+                StagingPath = staging,
+                Version = "1.0.0",
+                Frameworks = new[] { "net472", "net8.0" },
+                ExportAssemblies = new[] { "SharedAuth.dll" },
+                DisableBinaryCmdletScan = true,
+                UseAssemblyLoadContext = true,
+                BinaryConflictSearchRoots = new[] { moduleSearchRoot.FullName }
+            });
+
+            Assert.True(Directory.Exists(result.StagingPath));
+            Assert.Contains(
+                result.BuildNotes,
+                note => note.Severity == ModuleOwnerNoteSeverity.Warning &&
+                        note.Title.Contains("Binary Conflicts (Desktop)", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void BuildToStaging_DirectBuildSpecExplicitNone_DoesNotEmitTypeAcceleratorBootstrapper()
     {
         var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
