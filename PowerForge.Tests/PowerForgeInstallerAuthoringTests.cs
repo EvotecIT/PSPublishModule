@@ -357,6 +357,23 @@ public sealed class PowerForgeInstallerAuthoringTests
     }
 
     [Fact]
+    public void EmitSource_ScriptUninstallCommandRequiresSuppressingServiceControl()
+    {
+        var definition = CreateMonitoringInstaller();
+        var service = definition.Components.OfType<PowerForgeInstallerServiceComponent>().Single();
+        service.ScriptInstall = new PowerForgeInstallerServiceScriptInstall
+        {
+            Command = "\"[INSTALLFOLDER]Monitoring.exe\" --install --name \"TestimoX.Monitoring\"",
+            UninstallCommand = "\"[INSTALLFOLDER]Monitoring.exe\" --uninstall --name \"TestimoX.Monitoring\""
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+
+        Assert.Contains("UninstallCommand requires ScriptInstall.SuppressServiceControl", exception.Message);
+    }
+
+    [Fact]
     public void EmitSource_ModelsLicenseAgreement()
     {
         var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
