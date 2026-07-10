@@ -159,6 +159,99 @@ public sealed class DotNetRepositoryReleaseFreshBuildTests
     }
 
     [Fact]
+    public void PackagePayloadValidation_ValidatesToolAssembly()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var toolPayload = new byte[] { 1, 2, 3 };
+            var packagePath = Path.Combine(root.FullName, "Sample.Tool.1.0.0.nupkg");
+            using (var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create))
+                WriteArchiveEntry(archive, "tools/net8.0/any/Sample.Tool.dll", toolPayload);
+
+            var outputHashes = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Sample.Tool.dll"] = new(StringComparer.OrdinalIgnoreCase) { ComputeSha256(toolPayload) }
+            };
+
+            var success = DotNetRepositoryReleaseService.TryValidatePackagePayload(
+                packagePath,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Sample.Tool.dll" },
+                outputHashes,
+                out var validatedPayloads,
+                out var error);
+
+            Assert.True(success, error);
+            Assert.Equal(1, validatedPayloads);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ProjectPackagePayloadValidation_RejectsStaleNestedPublishCopy()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Output"));
+            var projectPath = Path.Combine(projectDirectory.FullName, "Sample.Output.csproj");
+            var sourcePath = Path.Combine(projectDirectory.FullName, "Contract.cs");
+            File.WriteAllText(projectPath, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <PackageId>Sample.Output</PackageId>
+                    <VersionPrefix>1.0.0</VersionPrefix>
+                    <IsPackable>true</IsPackable>
+                  </PropertyGroup>
+                </Project>
+                """);
+            File.WriteAllText(sourcePath, "namespace Sample.Output; public sealed class LegacyContract { }");
+            RunDotNet(projectDirectory.FullName, "build", projectPath, "--configuration", "Release", "--nologo");
+
+            var targetDirectory = Path.Combine(projectDirectory.FullName, "bin", "Release", "net8.0");
+            var assemblyPath = Path.Combine(targetDirectory, "Sample.Output.dll");
+            var legacyAssembly = File.ReadAllBytes(assemblyPath);
+            File.WriteAllText(sourcePath, "namespace Sample.Output; public sealed class CurrentContract { }");
+            RunDotNet(projectDirectory.FullName, "build", projectPath, "--configuration", "Release", "--no-incremental", "--nologo");
+
+            var publishDirectory = Directory.CreateDirectory(Path.Combine(targetDirectory, "publish"));
+            File.WriteAllBytes(Path.Combine(publishDirectory.FullName, "Sample.Output.dll"), legacyAssembly);
+            var packagePath = Path.Combine(root.FullName, "Sample.Output.1.0.0.nupkg");
+            using (var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create))
+                WriteArchiveEntry(archive, "lib/net8.0/Sample.Output.dll", legacyAssembly);
+
+            var success = DotNetRepositoryReleaseService.TryValidateProjectPackagePayloads(
+                new DotNetRepositoryProjectResult
+                {
+                    ProjectName = "Sample.Output",
+                    PackageId = "Sample.Output",
+                    CsprojPath = projectPath,
+                    IsPackable = true,
+                    NewVersion = "1.0.0"
+                },
+                new DotNetRepositoryReleaseSpec
+                {
+                    RootPath = root.FullName,
+                    Configuration = "Release"
+                },
+                new[] { packagePath },
+                new NullLogger(),
+                out var error);
+
+            Assert.False(success);
+            Assert.Contains("does not match any freshly rebuilt output", error, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void ProjectPackagePayloadValidation_SkipsOutputLookupForMetadataOnlyPackage()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

@@ -193,9 +193,12 @@ public sealed partial class DotNetRepositoryReleaseService
         HashSet<string> payloadNames)
     {
         var hashes = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var directory in CollapseNestedOutputDirectories(outputDirectories))
+        foreach (var directory in outputDirectories
+                     .Where(Directory.Exists)
+                     .Select(Path.GetFullPath)
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            foreach (var path in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
+            foreach (var path in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
             {
                 var fileName = Path.GetFileName(path);
                 if (!payloadNames.Contains(fileName))
@@ -215,37 +218,58 @@ public sealed partial class DotNetRepositoryReleaseService
         return hashes;
     }
 
-    private static IReadOnlyList<string> CollapseNestedOutputDirectories(IEnumerable<string> outputDirectories)
+    private static string?[] ResolveConfiguredTargetFrameworks(
+        string csproj,
+        string workingDirectory,
+        string configuration,
+        string projectName,
+        ILogger logger)
     {
-        var roots = new List<string>();
-        foreach (var directory in outputDirectories
-                     .Where(Directory.Exists)
-                     .Select(Path.GetFullPath)
-                     .Distinct(StringComparer.OrdinalIgnoreCase)
-                     .OrderBy(static path => path.Length))
+        var declaredFrameworks = ReadTargetFrameworks(csproj)
+            .Where(static framework => !string.IsNullOrWhiteSpace(framework))
+            .Select(static framework => framework!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (declaredFrameworks.Length > 0)
+            return declaredFrameworks.Cast<string?>().ToArray();
+
+        foreach (var propertyName in new[] { "TargetFrameworks", "TargetFramework" })
         {
-            if (roots.Any(root => IsSameOrNestedPath(directory, root)))
+            var exitCode = RunDotnetMsBuildGetProperty(
+                csproj,
+                workingDirectory,
+                configuration,
+                null,
+                propertyName,
+                projectName,
+                logger,
+                out var value,
+                out _,
+                out _,
+                out _);
+            if (exitCode != 0 || string.IsNullOrWhiteSpace(value) || value!.IndexOf("$(", StringComparison.Ordinal) >= 0)
                 continue;
 
-            roots.Add(directory);
+            var evaluatedFrameworks = value!
+                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(static framework => framework.Trim())
+                .Where(static framework => framework.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (evaluatedFrameworks.Length > 0)
+                return evaluatedFrameworks.Cast<string?>().ToArray();
         }
 
-        return roots;
-    }
-
-    private static bool IsSameOrNestedPath(string path, string root)
-    {
-        if (string.Equals(path, root, StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        var rootWithSeparator = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        return path.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase);
+        return new string?[] { null };
     }
 
     private static bool IsRuntimePackagePayload(ZipArchiveEntry entry)
     {
         var segments = entry.FullName.Replace('\\', '/').Split('/');
         if (segments.Length >= 3 && string.Equals(segments[0], "lib", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (segments.Length >= 4 && string.Equals(segments[0], "tools", StringComparison.OrdinalIgnoreCase))
             return true;
 
         return segments.Length >= 5 &&

@@ -538,7 +538,8 @@ public sealed partial class DotNetRepositoryReleaseService
         IReadOnlyList<string>? includePatterns = null)
     {
         var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var directory in ResolveConventionalBuildOutputDirectories(csproj, workingDirectory, configuration))
+        var targetFrameworks = ResolveConfiguredTargetFrameworks(csproj, workingDirectory, configuration, projectName, logger);
+        foreach (var directory in ResolveConventionalBuildOutputDirectories(csproj, workingDirectory, configuration, targetFrameworks))
         {
             if (!Directory.Exists(directory))
                 continue;
@@ -549,7 +550,7 @@ public sealed partial class DotNetRepositoryReleaseService
             directories.Add(Path.GetFullPath(directory));
         }
 
-        foreach (var targetFramework in ReadTargetFrameworks(csproj))
+        foreach (var targetFramework in targetFrameworks)
         {
             if (directories.Count > 0 && HasOutputDirectoryForTargetFramework(directories, targetFramework))
                 continue;
@@ -608,10 +609,11 @@ public sealed partial class DotNetRepositoryReleaseService
     private static string[] ResolveConventionalBuildOutputDirectories(
         string csproj,
         string workingDirectory,
-        string configuration)
+        string configuration,
+        IReadOnlyList<string?> targetFrameworkValues)
     {
         var directories = new List<string>();
-        var targetFrameworks = ReadTargetFrameworks(csproj)
+        var targetFrameworks = targetFrameworkValues
             .Where(static framework => !string.IsNullOrWhiteSpace(framework))
             .Select(static framework => framework!.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
