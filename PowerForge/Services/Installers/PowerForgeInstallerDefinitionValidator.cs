@@ -307,6 +307,21 @@ internal static class PowerForgeInstallerDefinitionValidator
 
         Require(script.Command, $"service component '{service.Id}' ScriptInstall.Command");
         Require(script.Condition, $"service component '{service.Id}' ScriptInstall.Condition");
+        if (!string.IsNullOrWhiteSpace(script.UninstallCommand))
+        {
+            Require(script.UninstallCondition, $"service component '{service.Id}' ScriptInstall.UninstallCondition");
+            if (!script.SuppressServiceControl)
+            {
+                throw new InvalidOperationException(
+                    $"Service component '{service.Id}' ScriptInstall.UninstallCommand requires ScriptInstall.SuppressServiceControl.");
+            }
+        }
+        else if (script.SuppressServiceControl)
+        {
+            throw new InvalidOperationException(
+                $"Service component '{service.Id}' ScriptInstall.SuppressServiceControl requires ScriptInstall.UninstallCommand.");
+        }
+
         if (script.BackupExistingImagePath)
             Require(script.BackupPath, $"service component '{service.Id}' ScriptInstall.BackupPath");
         if (script.StopDelaySeconds < 0)

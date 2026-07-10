@@ -412,6 +412,9 @@
       "properties": {
         "Command": { "type": "string", "minLength": 1 },
         "UpgradeCommand": { "type": ["string", "null"], "minLength": 1 },
+        "UninstallCommand": { "type": ["string", "null"], "minLength": 1 },
+        "UninstallCondition": { "type": "string", "minLength": 1 },
+        "SuppressServiceControl": { "type": "boolean" },
         "Condition": { "type": "string", "minLength": 1 },
         "BackupExistingImagePath": { "type": "boolean" },
         "BackupPath": { "type": "string", "minLength": 1 },

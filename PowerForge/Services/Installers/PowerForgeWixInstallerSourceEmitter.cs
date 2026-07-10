@@ -149,7 +149,8 @@ public sealed class PowerForgeWixInstallerSourceEmitter
 
         foreach (var input in definition.Inputs)
         {
-            if (string.IsNullOrWhiteSpace(input.DefaultValue) &&
+            string? defaultValue = NormalizeDefaultValue(input);
+            if (string.IsNullOrWhiteSpace(defaultValue) &&
                 !input.Secure &&
                 !input.Hidden &&
                 input.RegistrySearch is null)
@@ -161,8 +162,8 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                 WixNamespace + "Property",
                 new XAttribute("Id", input.PropertyName));
 
-            if (!string.IsNullOrWhiteSpace(input.DefaultValue))
-                property.Add(new XAttribute("Value", input.DefaultValue!));
+            if (!string.IsNullOrWhiteSpace(defaultValue))
+                property.Add(new XAttribute("Value", defaultValue!));
             if (input.Secure)
                 property.Add(new XAttribute("Secure", "yes"));
             if (input.Hidden)
@@ -180,6 +181,26 @@ public sealed class PowerForgeWixInstallerSourceEmitter
 
         package.Add(property);
         }
+    }
+
+    private static string? NormalizeDefaultValue(PowerForgeInstallerInput input)
+    {
+        if (input.Kind != PowerForgeInstallerInputKind.Checkbox)
+            return input.DefaultValue;
+
+        string? defaultValue = input.DefaultValue;
+        if (string.IsNullOrWhiteSpace(defaultValue))
+            return null;
+
+        string value = defaultValue!.Trim();
+        if (string.Equals(value, "1", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase))
+        {
+            return "1";
+        }
+
+        return null;
     }
 
     private static void EmitLaunchConditions(XElement package, PowerForgeInstallerDefinition definition)
@@ -894,14 +915,17 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                 new XAttribute("Value", "1")));
         }
 
-        component.Add(new XElement(
-            WixNamespace + "ServiceControl",
-            new XAttribute("Id", service.Id + "Control"),
-            new XAttribute("Name", service.ServiceName),
-            new XAttribute("Start", service.ControlStart),
-            new XAttribute("Stop", service.ControlStop),
-            new XAttribute("Remove", service.ControlRemove),
-            new XAttribute("Wait", "yes")));
+        if (service.ScriptInstall?.SuppressServiceControl != true)
+        {
+            component.Add(new XElement(
+                WixNamespace + "ServiceControl",
+                new XAttribute("Id", service.Id + "Control"),
+                new XAttribute("Name", service.ServiceName),
+                new XAttribute("Start", service.ControlStart),
+                new XAttribute("Stop", service.ControlStop),
+                new XAttribute("Remove", service.ControlRemove),
+                new XAttribute("Wait", "yes")));
+        }
 
         return component;
     }

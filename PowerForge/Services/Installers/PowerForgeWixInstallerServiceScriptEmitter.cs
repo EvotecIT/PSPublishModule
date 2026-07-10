@@ -50,6 +50,8 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         yield return ids.InstallServiceId;
         yield return ids.SetInstallStandardId;
         yield return ids.SetInstallUpgradeId;
+        yield return ids.UninstallServiceId;
+        yield return ids.SetUninstallServiceId;
     }
 
     private static string? EmitServiceActions(
@@ -61,10 +63,29 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         var script = service.ScriptInstall!;
         var ids = BuildIds(service.Id);
         var resolvedBackupPath = ResolveBackupPath(service, script);
-        var upgradeCondition = CombineConditions(script.Condition, "WIX_UPGRADE_DETECTED", "NOT REMOVE=\"ALL\"");
+        bool hasUninstallCommand = !string.IsNullOrWhiteSpace(script.UninstallCommand);
+        string? serviceExistsProperty = string.IsNullOrWhiteSpace(script.UpgradeCommand) && !hasUninstallCommand
+            ? null
+            : ids.ServiceExistsPropertyId;
+        var existingServiceUpgradeSignal = !string.IsNullOrWhiteSpace(serviceExistsProperty) &&
+                                           CanUseExistingServiceUpgradeSignal(service)
+            ? serviceExistsProperty
+            : null;
+        var upgradeSignal = string.IsNullOrWhiteSpace(existingServiceUpgradeSignal)
+            ? "WIX_UPGRADE_DETECTED"
+            : "WIX_UPGRADE_DETECTED OR " + existingServiceUpgradeSignal;
+        var upgradeCondition = CombineConditions(script.Condition, upgradeSignal, "NOT REMOVE=\"ALL\"");
         var standardCondition = string.IsNullOrWhiteSpace(script.UpgradeCommand)
             ? script.Condition
-            : CombineConditions(script.Condition, "NOT WIX_UPGRADE_DETECTED", "NOT REMOVE=\"ALL\"");
+            : CombineConditions(script.Condition, "NOT (" + upgradeSignal + ")", "NOT REMOVE=\"ALL\"");
+        string uninstallCondition = !hasUninstallCommand || string.IsNullOrWhiteSpace(serviceExistsProperty)
+            ? script.UninstallCondition
+            : CombineConditions(script.UninstallCondition, serviceExistsProperty!);
+
+        if (!string.IsNullOrWhiteSpace(serviceExistsProperty))
+        {
+            actions.Add(CreateExistingServiceSearch(serviceExistsProperty!, service));
+        }
 
         if (script.BackupExistingImagePath)
         {
@@ -85,8 +106,14 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             actions.Add(CreateSetInstallCommand(ids.SetInstallUpgradeId, ids.InstallServiceId, script.UpgradeCommand!));
         }
 
+        if (hasUninstallCommand)
+        {
+            actions.Add(CreateQuietExecAction(ids.UninstallServiceId, execute: "deferred", hideTarget: true));
+            actions.Add(CreateSetInstallCommand(ids.SetUninstallServiceId, ids.UninstallServiceId, script.UninstallCommand!));
+        }
+
         actions.Add(CreateSetInstallCommand(ids.SetInstallStandardId, ids.InstallServiceId, script.Command));
-        return AddSequenceRows(sequence, ids, script, standardCondition, upgradeCondition, upgradeSequenceTail);
+        return AddSequenceRows(sequence, ids, script, standardCondition, upgradeCondition, uninstallCondition, upgradeSequenceTail);
     }
 
     private static string? AddSequenceRows(
@@ -95,6 +122,7 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         PowerForgeInstallerServiceScriptInstall script,
         string standardCondition,
         string upgradeCondition,
+        string uninstallCondition,
         string? upgradeSequenceTail)
     {
         string? tail = upgradeSequenceTail;
@@ -127,6 +155,20 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
                 new XAttribute("Action", ids.SetInstallUpgradeId),
                 new XAttribute("Before", ids.InstallServiceId),
                 new XAttribute("Condition", upgradeCondition)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(script.UninstallCommand))
+        {
+            sequence.Add(new XElement(
+                WixNamespace + "Custom",
+                new XAttribute("Action", ids.SetUninstallServiceId),
+                new XAttribute("Before", ids.UninstallServiceId),
+                new XAttribute("Condition", uninstallCondition)));
+            sequence.Add(new XElement(
+                WixNamespace + "Custom",
+                new XAttribute("Action", ids.UninstallServiceId),
+                new XAttribute("Before", "RemoveFiles"),
+                new XAttribute("Condition", uninstallCondition)));
         }
 
         sequence.Add(new XElement(
@@ -175,6 +217,19 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         return element;
     }
 
+    private static XElement CreateExistingServiceSearch(string propertyId, PowerForgeInstallerServiceComponent service)
+        => new(
+            WixNamespace + "Property",
+            new XAttribute("Id", propertyId),
+            new XAttribute("Secure", "yes"),
+            new XElement(
+                WixNamespace + "RegistrySearch",
+                new XAttribute("Id", propertyId + "_SEARCH"),
+                new XAttribute("Root", "HKLM"),
+                new XAttribute("Key", "SYSTEM\\CurrentControlSet\\Services\\" + service.ServiceName),
+                new XAttribute("Name", "ImagePath"),
+                new XAttribute("Type", "raw")));
+
     private static XElement CreateSetInstallCommand(string id, string actionId, string command)
         => new(
             WixNamespace + "CustomAction",
@@ -190,12 +245,15 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         PowerForgeInstallerServiceComponent service,
         string backupPath)
     {
-        var serviceName = EscapeCommandDoubleQuoted(service.ServiceName);
-        var backup = EscapeCommandDoubleQuoted(backupPath);
-        return "\"[%ComSpec]\" /c (for /f \"tokens=2,*\" %A in ('reg query \"HKLM\\SYSTEM\\CurrentControlSet\\Services\\" +
+        string serviceName = EscapeCmdSetValue(service.ServiceName);
+        string backup = EscapeCmdSetValue(backupPath);
+        string command = "$svc=$env:PF_SERVICE; $backup=$env:PF_BACKUP; $key=Join-Path 'Registry::HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services' $svc; $p=(Get-ItemProperty -LiteralPath $key -Name ImagePath -ErrorAction SilentlyContinue).ImagePath; if ($null -ne $p) { [System.IO.File]::WriteAllText($backup, [string]$p) } elseif (Test-Path -LiteralPath $backup) { Remove-Item -LiteralPath $backup -Force }";
+        return "\"[%ComSpec]\" /c set \"PF_SERVICE=" +
                serviceName +
-               "\" /v ImagePath 2^>nul ^| find \"ImagePath\"') do @echo %B)>\"" +
+               "\" && set \"PF_BACKUP=" +
                backup +
+               "\" && powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command \"" +
+               EscapeCommandDoubleQuoted(command) +
                "\"";
     }
 
@@ -225,7 +283,10 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             BuildActionId(prefix, "StopService"),
             BuildActionId(prefix, "InstallService"),
             BuildActionId(prefix, "SetInstallService"),
-            BuildActionId(prefix, "SetInstallServiceUpgrade"));
+            BuildActionId(prefix, "SetInstallServiceUpgrade"),
+            BuildActionId(prefix, "UninstallService"),
+            BuildActionId(prefix, "SetUninstallService"),
+            "PF_" + HashId(serviceComponentId).ToUpperInvariant() + "_SERVICE_EXISTS");
     }
 
     private static string BuildActionId(string prefix, string suffix)
@@ -249,6 +310,12 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
     private static string EscapeCommandDoubleQuoted(string value)
         => (value ?? string.Empty).Replace("\"", "\\\"");
 
+    private static string EscapePowerShellSingleQuoted(string value)
+        => (value ?? string.Empty).Replace("'", "''");
+
+    private static string EscapeCmdSetValue(string value)
+        => (value ?? string.Empty).Replace("\"", string.Empty);
+
     private static string CombineConditions(params string[] conditions)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -260,6 +327,14 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             .ToArray();
         return string.Join(" AND ", parts);
     }
+
+    private static bool CanUseExistingServiceUpgradeSignal(PowerForgeInstallerServiceComponent service)
+        => service.ScriptInstall?.SuppressServiceControl == true ||
+           !RemovesServiceDuringInstall(service.ControlRemove);
+
+    private static bool RemovesServiceDuringInstall(string? controlRemove)
+        => string.Equals(controlRemove, "install", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(controlRemove, "both", StringComparison.OrdinalIgnoreCase);
 
     private static string HashId(string value)
     {
@@ -277,7 +352,10 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             string stopServiceId,
             string installServiceId,
             string setInstallStandardId,
-            string setInstallUpgradeId)
+            string setInstallUpgradeId,
+            string uninstallServiceId,
+            string setUninstallServiceId,
+            string serviceExistsPropertyId)
         {
             BackupImagePathId = backupImagePathId;
             SetBackupCommandId = setBackupCommandId;
@@ -286,6 +364,9 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             InstallServiceId = installServiceId;
             SetInstallStandardId = setInstallStandardId;
             SetInstallUpgradeId = setInstallUpgradeId;
+            UninstallServiceId = uninstallServiceId;
+            SetUninstallServiceId = setUninstallServiceId;
+            ServiceExistsPropertyId = serviceExistsPropertyId;
         }
 
         internal string BackupImagePathId { get; }
@@ -295,5 +376,8 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         internal string InstallServiceId { get; }
         internal string SetInstallStandardId { get; }
         internal string SetInstallUpgradeId { get; }
+        internal string UninstallServiceId { get; }
+        internal string SetUninstallServiceId { get; }
+        internal string ServiceExistsPropertyId { get; }
     }
 }
