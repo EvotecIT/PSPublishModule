@@ -112,7 +112,7 @@ Build-Module -ModuleName 'PSParseHTML' {
         -StagingPath '.\Artefacts\ProjectBuild' `
         -CleanStaging `
         -CreateReleaseZip `
-        -CertificateThumbprint '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703' `
+        -CertificateThumbprint 'YOUR_CERTIFICATE_THUMBPRINT' `
         -CertificateStore CurrentUser `
         -PublishNuget `
         -PublishSource 'https://api.nuget.org/v3/index.json' `

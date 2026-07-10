@@ -19,6 +19,8 @@ Prefer one entrypoint script: `Build/Build-Project.ps1`.
    - Use `PlanOnly` or cmdlet `-Plan` first.
 4. Execute build/pack/sign path.
    - Ensure staging/output paths are deterministic.
+   - Treat `CleanStaging` as artifact cleanup only; release compilation freshness is enforced by PowerForge.
+   - Require the generated package payload to match the fresh release build before signing or publishing.
    - Keep `Build-Project.ps1` minimal (param pass-through + `Invoke-ProjectBuild` call).
    - Do not keep legacy wrapper scripts (`Build-AllPackages.ps1`, `Publish-*.ps1`, `Update-Version.ps1`) unless explicitly required.
 5. Publish NuGet with explicit fail-fast and duplicate policy.
@@ -29,6 +31,8 @@ Prefer one entrypoint script: `Build/Build-Project.ps1`.
    - Prefer configurable conflict policy instead of ad-hoc retries.
 8. Verify final release state.
    - Confirm release/tag and attached asset set match plan.
+   - Inspect the published package content when the release adds or changes public APIs; version visibility and a valid signature alone do not prove the payload is current.
+   - If an immutable feed already contains a stale package, publish a corrected higher version and keep consumers off the bad version.
 9. Update docs/schema/help for any new config fields.
 10. Keep engine boundaries explicit.
    - Use `Invoke-ProjectBuild` for package/release pipelines.
@@ -62,6 +66,8 @@ dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release
 - Use explicit conflict policy for existing tags:
   - `Reuse`, `Fail`, or `AppendUtcTimestamp`.
 - In plan/what-if mode, avoid hard failures that require produced artefacts on disk.
+- Never use `CleanStaging` as evidence that project `bin`/`obj` outputs were rebuilt.
+- Do not publish when PowerForge reports a package payload provenance mismatch.
 
 ## Reference Files (Read As Needed)
 

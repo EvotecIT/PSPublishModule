@@ -1,6 +1,6 @@
 Import-Module PSPublishModule -Force -ErrorAction Stop
 
-$certificateThumbprint = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703'
+$certificateThumbprint = '92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A'
 Invoke-DotNetReleaseBuild -ProjectPath @(
     "$PSScriptRoot\..\PowerForge"
     "$PSScriptRoot\..\PowerForge.Blazor"

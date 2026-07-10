@@ -41,7 +41,7 @@ Write-Host "To execute for real, uncomment the sections below and provide real c
 <#
 # Step 1: Build with dependency packing
 Write-Host "🔨 Building ImagePlayground with all dependencies..." -ForegroundColor Cyan
-$buildResult = Invoke-DotNetReleaseBuild -ProjectPath "$PSScriptRoot\..\..\ImagePlayground\Sources\ImagePlayground" -PackDependencies -CertificateThumbprint '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703'
+$buildResult = Invoke-DotNetReleaseBuild -ProjectPath "$PSScriptRoot\..\..\ImagePlayground\Sources\ImagePlayground" -PackDependencies -CertificateThumbprint 'YOUR_CERTIFICATE_THUMBPRINT'
 
 if ($buildResult.Success) {
     Write-Host "✅ Build successful!" -ForegroundColor Green
