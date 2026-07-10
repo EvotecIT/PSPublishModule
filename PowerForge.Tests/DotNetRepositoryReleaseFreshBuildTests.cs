@@ -9,9 +9,13 @@ namespace PowerForge.Tests;
 public sealed class DotNetRepositoryReleaseFreshBuildTests
 {
     [Theory]
-    [InlineData(DotNetRepositoryPackStrategy.PerProject)]
-    [InlineData(DotNetRepositoryPackStrategy.MSBuild)]
-    public void Execute_RebuildsStaleOutputBeforePacking(DotNetRepositoryPackStrategy packStrategy)
+    [InlineData(DotNetRepositoryPackStrategy.PerProject, false)]
+    [InlineData(DotNetRepositoryPackStrategy.MSBuild, false)]
+    [InlineData(DotNetRepositoryPackStrategy.PerProject, true)]
+    [InlineData(DotNetRepositoryPackStrategy.MSBuild, true)]
+    public void Execute_RebuildsStaleOutputBeforePacking(
+        DotNetRepositoryPackStrategy packStrategy,
+        bool targetFrameworkFromImport)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -19,16 +23,33 @@ public sealed class DotNetRepositoryReleaseFreshBuildTests
             var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Stale"));
             var projectPath = Path.Combine(projectDirectory.FullName, "Sample.Stale.csproj");
             var sourcePath = Path.Combine(projectDirectory.FullName, "Contract.cs");
-            File.WriteAllText(projectPath, """
-                <Project Sdk="Microsoft.NET.Sdk">
-                  <PropertyGroup>
-                    <TargetFramework>net8.0</TargetFramework>
-                    <PackageId>Sample.Stale</PackageId>
-                    <VersionPrefix>1.0.0</VersionPrefix>
-                    <IsPackable>true</IsPackable>
-                  </PropertyGroup>
-                </Project>
-                """);
+            if (targetFrameworkFromImport)
+            {
+                File.WriteAllText(Path.Combine(root.FullName, "Directory.Build.props"), """
+                    <Project>
+                      <PropertyGroup>
+                        <TargetFramework>net8.0</TargetFramework>
+                      </PropertyGroup>
+                    </Project>
+                    """);
+            }
+
+            var projectLines = new List<string>
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>"
+            };
+            if (!targetFrameworkFromImport)
+                projectLines.Add("    <TargetFramework>net8.0</TargetFramework>");
+            projectLines.AddRange(new[]
+            {
+                "    <PackageId>Sample.Stale</PackageId>",
+                "    <VersionPrefix>1.0.0</VersionPrefix>",
+                "    <IsPackable>true</IsPackable>",
+                "  </PropertyGroup>",
+                "</Project>"
+            });
+            File.WriteAllText(projectPath, string.Join(Environment.NewLine, projectLines));
             File.WriteAllText(sourcePath, "namespace Sample.Stale; public sealed class LegacyContract { }");
 
             RunDotNet(projectDirectory.FullName, "build", projectPath, "--configuration", "Release", "--nologo");
@@ -102,6 +123,79 @@ public sealed class DotNetRepositoryReleaseFreshBuildTests
         }
     }
 
+    [Fact]
+    public void PackagePayloadValidation_IgnoresSameNamedNativeRuntimeAsset()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var managedPayload = new byte[] { 1, 2, 3 };
+            var packagePath = Path.Combine(root.FullName, "Sample.Runtime.1.0.0.nupkg");
+            using (var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create))
+            {
+                WriteArchiveEntry(archive, "lib/net8.0/Sample.Runtime.dll", managedPayload);
+                WriteArchiveEntry(archive, "runtimes/win-x64/native/Sample.Runtime.dll", new byte[] { 4, 5, 6 });
+            }
+
+            var outputHashes = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Sample.Runtime.dll"] = new(StringComparer.OrdinalIgnoreCase) { ComputeSha256(managedPayload) }
+            };
+
+            var success = DotNetRepositoryReleaseService.TryValidatePackagePayload(
+                packagePath,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Sample.Runtime.dll" },
+                outputHashes,
+                out var validatedPayloads,
+                out var error);
+
+            Assert.True(success, error);
+            Assert.Equal(1, validatedPayloads);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ProjectPackagePayloadValidation_SkipsOutputLookupForMetadataOnlyPackage()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectPath = Path.Combine(root.FullName, "Sample.Metadata.csproj");
+            File.WriteAllText(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><IsPackable>true</IsPackable></PropertyGroup></Project>");
+            var packagePath = Path.Combine(root.FullName, "Sample.Metadata.1.0.0.nupkg");
+            using (var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create))
+                WriteArchiveEntry(archive, "buildTransitive/Sample.Metadata.props", new byte[] { 1, 2, 3 });
+
+            var success = DotNetRepositoryReleaseService.TryValidateProjectPackagePayloads(
+                new DotNetRepositoryProjectResult
+                {
+                    ProjectName = "Sample.Metadata",
+                    PackageId = "Sample.Metadata",
+                    CsprojPath = projectPath,
+                    IsPackable = true,
+                    NewVersion = "1.0.0"
+                },
+                new DotNetRepositoryReleaseSpec
+                {
+                    RootPath = root.FullName,
+                    Configuration = "Release"
+                },
+                new[] { packagePath },
+                new NullLogger(),
+                out var error);
+
+            Assert.True(success, error);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static IReadOnlyList<string> ReadPackagedTypeNames(string packagePath, string assemblyFileName)
     {
         using var archive = ZipFile.OpenRead(packagePath);
@@ -145,4 +239,11 @@ public sealed class DotNetRepositoryReleaseFreshBuildTests
 
     private static string ComputeSha256(byte[] content)
         => Convert.ToHexString(SHA256.HashData(content));
+
+    private static void WriteArchiveEntry(ZipArchive archive, string path, byte[] content)
+    {
+        var entry = archive.CreateEntry(path);
+        using var stream = entry.Open();
+        stream.Write(content);
+    }
 }

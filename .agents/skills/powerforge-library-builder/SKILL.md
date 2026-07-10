@@ -20,7 +20,7 @@ Prefer one entrypoint script: `Build/Build-Project.ps1`.
 4. Execute build/pack/sign path.
    - Ensure staging/output paths are deterministic.
    - Treat `CleanStaging` as artifact cleanup only; release compilation freshness is enforced by PowerForge.
-   - Require the generated package payload to match the fresh release build before signing or publishing.
+   - Require primary managed package assemblies to match the fresh release build before signing or publishing; do not treat native runtime assets or metadata-only packages as managed assembly payloads.
    - Keep `Build-Project.ps1` minimal (param pass-through + `Invoke-ProjectBuild` call).
    - Do not keep legacy wrapper scripts (`Build-AllPackages.ps1`, `Publish-*.ps1`, `Update-Version.ps1`) unless explicitly required.
 5. Publish NuGet with explicit fail-fast and duplicate policy.

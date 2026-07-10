@@ -44,7 +44,7 @@ public sealed partial class DotNetRepositoryReleaseService
         foreach (var project in projects)
         {
             var projectPackages = FilterPackages(packagePaths, project.PackageId, project.NewVersion!);
-            if (!TryValidatePackagePayloads(project, spec, projectPackages, logger, out error))
+            if (!TryValidateProjectPackagePayloads(project, spec, projectPackages, logger, out error))
                 return false;
         }
 
@@ -52,7 +52,10 @@ public sealed partial class DotNetRepositoryReleaseService
         return true;
     }
 
-    private static bool TryValidatePackagePayloads(
+    /// <summary>
+    /// Validates package assembly payloads for one project without requiring build output for metadata-only packages.
+    /// </summary>
+    internal static bool TryValidateProjectPackagePayloads(
         DotNetRepositoryProjectResult project,
         DotNetRepositoryReleaseSpec spec,
         IReadOnlyList<string> packagePaths,
@@ -72,6 +75,24 @@ public sealed partial class DotNetRepositoryReleaseService
         if (payloadNames.Count == 0)
             return true;
 
+        var packagesWithPayloads = new List<string>();
+        foreach (var packagePath in packagePaths)
+        {
+            if (!TryCountPackagePayloads(packagePath, payloadNames, out var payloadCount, out error))
+            {
+                error = $"{project.ProjectName}: package payload provenance validation failed. {error}";
+                return false;
+            }
+
+            if (payloadCount == 0)
+                logger.Verbose($"{project.ProjectName}: package {Path.GetFileName(packagePath)} contains no primary lib/runtime assembly payload to verify.");
+            else
+                packagesWithPayloads.Add(packagePath);
+        }
+
+        if (packagesWithPayloads.Count == 0)
+            return true;
+
         var outputDirectories = ResolveBuildOutputDirectories(
             project.CsprojPath,
             projectDirectory,
@@ -81,7 +102,7 @@ public sealed partial class DotNetRepositoryReleaseService
             payloadNames.ToArray());
         var outputHashes = BuildOutputHashLookup(outputDirectories, payloadNames);
 
-        foreach (var packagePath in packagePaths)
+        foreach (var packagePath in packagesWithPayloads)
         {
             if (!TryValidatePackagePayload(packagePath, payloadNames, outputHashes, out var validatedPayloads, out error))
             {
@@ -91,8 +112,6 @@ public sealed partial class DotNetRepositoryReleaseService
 
             if (validatedPayloads > 0)
                 logger.Success($"{project.ProjectName}: verified {validatedPayloads} package payload(s) against the fresh release build in {Path.GetFileName(packagePath)}.");
-            else
-                logger.Verbose($"{project.ProjectName}: package {Path.GetFileName(packagePath)} contains no primary lib/runtime assembly payload to verify.");
         }
 
         return true;
@@ -146,17 +165,37 @@ public sealed partial class DotNetRepositoryReleaseService
         }
     }
 
+    private static bool TryCountPackagePayloads(
+        string packagePath,
+        HashSet<string> payloadNames,
+        out int payloadCount,
+        out string error)
+    {
+        payloadCount = 0;
+        error = string.Empty;
+
+        try
+        {
+            using var archive = ZipFile.OpenRead(packagePath);
+            payloadCount = archive.Entries.Count(entry =>
+                IsRuntimePackagePayload(entry) && payloadNames.Contains(Path.GetFileName(entry.FullName)));
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = $"Could not inspect {Path.GetFileName(packagePath)}: {ex.Message}";
+            return false;
+        }
+    }
+
     private static Dictionary<string, HashSet<string>> BuildOutputHashLookup(
         IEnumerable<string> outputDirectories,
         HashSet<string> payloadNames)
     {
         var hashes = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var directory in outputDirectories)
+        foreach (var directory in CollapseNestedOutputDirectories(outputDirectories))
         {
-            if (!Directory.Exists(directory))
-                continue;
-
-            foreach (var path in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
+            foreach (var path in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
             {
                 var fileName = Path.GetFileName(path);
                 if (!payloadNames.Contains(fileName))
@@ -176,11 +215,42 @@ public sealed partial class DotNetRepositoryReleaseService
         return hashes;
     }
 
+    private static IReadOnlyList<string> CollapseNestedOutputDirectories(IEnumerable<string> outputDirectories)
+    {
+        var roots = new List<string>();
+        foreach (var directory in outputDirectories
+                     .Where(Directory.Exists)
+                     .Select(Path.GetFullPath)
+                     .Distinct(StringComparer.OrdinalIgnoreCase)
+                     .OrderBy(static path => path.Length))
+        {
+            if (roots.Any(root => IsSameOrNestedPath(directory, root)))
+                continue;
+
+            roots.Add(directory);
+        }
+
+        return roots;
+    }
+
+    private static bool IsSameOrNestedPath(string path, string root)
+    {
+        if (string.Equals(path, root, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var rootWithSeparator = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return path.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool IsRuntimePackagePayload(ZipArchiveEntry entry)
     {
-        var path = entry.FullName.Replace('\\', '/');
-        return path.StartsWith("lib/", StringComparison.OrdinalIgnoreCase) ||
-               path.StartsWith("runtimes/", StringComparison.OrdinalIgnoreCase);
+        var segments = entry.FullName.Replace('\\', '/').Split('/');
+        if (segments.Length >= 3 && string.Equals(segments[0], "lib", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return segments.Length >= 5 &&
+               string.Equals(segments[0], "runtimes", StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(segments[2], "lib", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ComputePackagePayloadSha256(Stream stream)
