@@ -127,17 +127,75 @@ public sealed class DotNetRepositoryReleaseFreshBuildTests
         }
     }
 
+    [Fact]
+    public void FreshnessCleanup_DoesNotDeleteConditionalOutputFromAnotherConfiguration()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Conditional"));
+            var debugOutputRoot = Path.Combine(root.FullName, "debug-only");
+            var projectPath = Path.Combine(projectDirectory.FullName, "Sample.Conditional.csproj");
+            File.WriteAllText(projectPath, $"""
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                  </PropertyGroup>
+                  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+                    <OutputPath>{debugOutputRoot}</OutputPath>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var releaseOutput = Path.Combine(projectDirectory.FullName, "bin", "Release", "net8.0", "Sample.Conditional.dll");
+            var releaseIntermediate = Path.Combine(projectDirectory.FullName, "obj", "Release", "net8.0", "Sample.Conditional.dll");
+            var debugOutput = Path.Combine(debugOutputRoot, "Sample.Conditional.dll");
+            foreach (var path in new[] { releaseOutput, releaseIntermediate, debugOutput })
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, path);
+            }
+
+            var success = DotNetRepositoryReleaseService.TryRemoveStalePrimaryPackageOutputs(
+                new DotNetRepositoryProjectResult
+                {
+                    ProjectName = "Sample.Conditional",
+                    CsprojPath = projectPath
+                },
+                "Release",
+                new NullLogger(),
+                out var removedFileCount,
+                out var removedIntermediatePrimaryOutput,
+                out _,
+                out var error);
+
+            Assert.True(success, error);
+            Assert.Equal(2, removedFileCount);
+            Assert.True(removedIntermediatePrimaryOutput);
+            Assert.False(File.Exists(releaseOutput));
+            Assert.False(File.Exists(releaseIntermediate));
+            Assert.True(File.Exists(debugOutput));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Theory]
-    [InlineData(DotNetRepositoryPackStrategy.PerProject, false, false)]
-    [InlineData(DotNetRepositoryPackStrategy.MSBuild, false, false)]
-    [InlineData(DotNetRepositoryPackStrategy.PerProject, true, false)]
-    [InlineData(DotNetRepositoryPackStrategy.MSBuild, true, false)]
-    [InlineData(DotNetRepositoryPackStrategy.PerProject, false, true)]
-    [InlineData(DotNetRepositoryPackStrategy.MSBuild, false, true)]
+    [InlineData(DotNetRepositoryPackStrategy.PerProject, false, false, false)]
+    [InlineData(DotNetRepositoryPackStrategy.MSBuild, false, false, false)]
+    [InlineData(DotNetRepositoryPackStrategy.PerProject, true, false, false)]
+    [InlineData(DotNetRepositoryPackStrategy.MSBuild, true, false, false)]
+    [InlineData(DotNetRepositoryPackStrategy.PerProject, false, true, false)]
+    [InlineData(DotNetRepositoryPackStrategy.MSBuild, false, true, false)]
+    [InlineData(DotNetRepositoryPackStrategy.PerProject, false, false, true)]
+    [InlineData(DotNetRepositoryPackStrategy.MSBuild, false, false, true)]
     public void Execute_RecompilesStaleOutputBeforePacking(
         DotNetRepositoryPackStrategy packStrategy,
         bool targetFrameworkFromImport,
-        bool centralOutputPaths)
+        bool centralOutputPaths,
+        bool centralAssemblyName)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -145,7 +203,7 @@ public sealed class DotNetRepositoryReleaseFreshBuildTests
             var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Stale"));
             var projectPath = Path.Combine(projectDirectory.FullName, "Sample.Stale.csproj");
             var sourcePath = Path.Combine(projectDirectory.FullName, "Contract.cs");
-            if (targetFrameworkFromImport || centralOutputPaths)
+            if (targetFrameworkFromImport || centralOutputPaths || centralAssemblyName)
             {
                 var importedProperties = new List<string>();
                 if (targetFrameworkFromImport)
@@ -155,6 +213,8 @@ public sealed class DotNetRepositoryReleaseFreshBuildTests
                     importedProperties.Add("    <BaseOutputPath>$(MSBuildThisFileDirectory)artifacts/bin/</BaseOutputPath>");
                     importedProperties.Add("    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)artifacts/obj/</BaseIntermediateOutputPath>");
                 }
+                if (centralAssemblyName)
+                    importedProperties.Add("    <AssemblyName>Sample.Central</AssemblyName>");
 
                 File.WriteAllText(Path.Combine(root.FullName, "Directory.Build.props"), string.Join(Environment.NewLine, new[]
                 {
@@ -185,9 +245,10 @@ public sealed class DotNetRepositoryReleaseFreshBuildTests
             File.WriteAllText(sourcePath, "namespace Sample.Stale; public sealed class LegacyContract { }");
 
             RunDotNet(projectDirectory.FullName, "build", projectPath, "--configuration", "Release", "--nologo");
+            var assemblyFileName = centralAssemblyName ? "Sample.Central.dll" : "Sample.Stale.dll";
             var assemblyPath = centralOutputPaths
-                ? Path.Combine(root.FullName, "artifacts", "bin", "Release", "net8.0", "Sample.Stale.dll")
-                : Path.Combine(projectDirectory.FullName, "bin", "Release", "net8.0", "Sample.Stale.dll");
+                ? Path.Combine(root.FullName, "artifacts", "bin", "Release", "net8.0", assemblyFileName)
+                : Path.Combine(projectDirectory.FullName, "bin", "Release", "net8.0", assemblyFileName);
             Assert.True(File.Exists(assemblyPath));
             var staleAssembly = File.ReadAllBytes(assemblyPath);
 
@@ -211,7 +272,7 @@ public sealed class DotNetRepositoryReleaseFreshBuildTests
             Assert.True(result.Success, result.ErrorMessage);
             Assert.NotEqual(staleAssembly, File.ReadAllBytes(assemblyPath));
             var package = Assert.Single(Assert.Single(result.Projects, project => project.IsPackable).Packages);
-            var typeNames = ReadPackagedTypeNames(package, "Sample.Stale.dll");
+            var typeNames = ReadPackagedTypeNames(package, assemblyFileName);
             Assert.Contains("Sample.Stale.CurrentContract", typeNames);
             Assert.DoesNotContain("Sample.Stale.LegacyContract", typeNames);
         }

@@ -35,9 +35,9 @@ public sealed partial class DotNetRepositoryReleaseService
             var projectDirectory = Path.GetDirectoryName(project.CsprojPath) ?? string.Empty;
             var primaryFileNames = ResolvePrimaryAssemblyFileNamesForCleanup(project)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var outputRoots = ResolvePrimaryOutputCleanupRoots(project.CsprojPath, projectDirectory, configuration);
+            var outputRoots = ResolvePrimaryOutputCleanupRoots(projectDirectory, configuration);
             var intermediateRoots = new[] { Path.GetFullPath(Path.Combine(projectDirectory, "obj", configuration)) };
-            if (HasConfiguredOutputPathProperties(project.CsprojPath, projectDirectory))
+            if (RequiresEvaluatedCleanupMetadata(project.CsprojPath, projectDirectory))
             {
                 if (!TryResolveEvaluatedCleanupRoots(
                         project,
@@ -46,6 +46,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         logger,
                         out var evaluatedOutputRoots,
                         out var evaluatedIntermediateRoots,
+                        out var evaluatedAssemblyName,
                         out _,
                         out error))
                 {
@@ -55,14 +56,15 @@ public sealed partial class DotNetRepositoryReleaseService
                     return false;
                 }
 
-                outputRoots = outputRoots
-                    .Concat(evaluatedOutputRoots)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
+                // Configured projects must use only roots evaluated for the active build.
+                // Raw conditional OutputPath values can point at another configuration.
+                outputRoots = evaluatedOutputRoots;
                 // Only an evaluated intermediate root proves that a centrally configured
                 // compiler output was invalidated. An abandoned conventional obj tree must
                 // not accidentally enable the incremental fast path.
                 intermediateRoots = evaluatedIntermediateRoots;
+                primaryFileNames.Add(evaluatedAssemblyName + ".dll");
+                primaryFileNames.Add(evaluatedAssemblyName + ".exe");
             }
 
             var searchRoots = outputRoots
@@ -131,33 +133,15 @@ public sealed partial class DotNetRepositoryReleaseService
             .ToArray();
     }
 
-    private static string[] ResolvePrimaryOutputCleanupRoots(
-        string csproj,
-        string projectDirectory,
-        string configuration)
+    private static string[] ResolvePrimaryOutputCleanupRoots(string projectDirectory, string configuration)
     {
-        var roots = new List<string>
+        return new[]
         {
-            Path.Combine(projectDirectory, "bin", configuration)
+            Path.GetFullPath(Path.Combine(projectDirectory, "bin", configuration))
         };
-
-        foreach (var configuredOutputPath in ReadOutputPaths(csproj))
-        {
-            if (configuredOutputPath.IndexOf("$(", StringComparison.Ordinal) >= 0)
-                continue;
-
-            roots.Add(Path.IsPathRooted(configuredOutputPath)
-                ? configuredOutputPath
-                : Path.Combine(projectDirectory, configuredOutputPath));
-        }
-
-        return roots
-            .Select(Path.GetFullPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
     }
 
-    private static bool HasConfiguredOutputPathProperties(string csproj, string projectDirectory)
+    private static bool RequiresEvaluatedCleanupMetadata(string csproj, string projectDirectory)
     {
         var paths = new List<string> { csproj };
         for (var directory = new DirectoryInfo(projectDirectory); directory is not null; directory = directory.Parent)
@@ -166,7 +150,7 @@ public sealed partial class DotNetRepositoryReleaseService
             paths.Add(Path.Combine(directory.FullName, "Directory.Build.targets"));
         }
 
-        var relevantProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        var outputProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "ArtifactsPath",
             "BaseIntermediateOutputPath",
@@ -182,7 +166,14 @@ public sealed partial class DotNetRepositoryReleaseService
             try
             {
                 var document = XDocument.Load(path);
-                if (document.Descendants().Any(element => relevantProperties.Contains(element.Name.LocalName)))
+                if (document.Descendants().Any(element => outputProperties.Contains(element.Name.LocalName)))
+                    return true;
+
+                var assemblyNames = document.Descendants()
+                    .Where(element => string.Equals(element.Name.LocalName, "AssemblyName", StringComparison.OrdinalIgnoreCase));
+                if (!string.Equals(path, csproj, StringComparison.OrdinalIgnoreCase) && assemblyNames.Any())
+                    return true;
+                if (assemblyNames.Any(element => element.Value.IndexOf("$(", StringComparison.Ordinal) >= 0))
                     return true;
             }
             catch
@@ -201,10 +192,11 @@ public sealed partial class DotNetRepositoryReleaseService
         ILogger logger,
         out string[] outputRoots,
         out string[] intermediateRoots,
+        out string evaluatedAssemblyName,
         out TimeSpan duration,
         out string error)
     {
-        const string propertyNames = "BaseOutputPath,BaseIntermediateOutputPath,OutputPath,OutDir,IntermediateOutputPath,TargetDir";
+        const string propertyNames = "AssemblyName,BaseOutputPath,BaseIntermediateOutputPath,OutputPath,OutDir,IntermediateOutputPath,TargetDir";
         var exitCode = RunDotnetMsBuildGetProperty(
             project.CsprojPath,
             projectDirectory,
@@ -221,6 +213,7 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             outputRoots = Array.Empty<string>();
             intermediateRoots = Array.Empty<string>();
+            evaluatedAssemblyName = string.Empty;
             error = $"Could not evaluate configured output paths for {project.ProjectName}. {SummarizeProcessFailureOutput(stdErr, stdOut)}".Trim();
             return false;
         }
@@ -236,9 +229,12 @@ public sealed partial class DotNetRepositoryReleaseService
             var properties = document.RootElement.GetProperty("Properties");
             outputRoots = ResolveEvaluatedRoots(properties, projectDirectory, "OutputPath", "OutDir", "TargetDir", "BaseOutputPath");
             intermediateRoots = ResolveEvaluatedRoots(properties, projectDirectory, "IntermediateOutputPath", "BaseIntermediateOutputPath");
-            if (outputRoots.Length == 0 || intermediateRoots.Length == 0)
+            evaluatedAssemblyName = properties.TryGetProperty("AssemblyName", out var assemblyNameProperty)
+                ? assemblyNameProperty.GetString() ?? string.Empty
+                : string.Empty;
+            if (outputRoots.Length == 0 || intermediateRoots.Length == 0 || !IsUsableAssemblyName(evaluatedAssemblyName))
             {
-                error = $"Configured output paths for {project.ProjectName} could not be resolved to both output and intermediate roots.";
+                error = $"Configured build metadata for {project.ProjectName} could not be resolved to output roots, intermediate roots, and an assembly name.";
                 return false;
             }
 
@@ -250,6 +246,7 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             outputRoots = Array.Empty<string>();
             intermediateRoots = Array.Empty<string>();
+            evaluatedAssemblyName = string.Empty;
             error = $"Could not parse configured output paths for {project.ProjectName}. {ex.Message}";
             return false;
         }
