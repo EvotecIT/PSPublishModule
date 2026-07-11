@@ -49,11 +49,13 @@ public sealed class DotNetRepositoryReleaseFreshBuildTests
                 "Release",
                 new NullLogger(),
                 out var removedFileCount,
+                out var removedIntermediatePrimaryOutput,
                 out _,
                 out var error);
 
             Assert.True(success, error);
             Assert.Equal(4, removedFileCount);
+            Assert.True(removedIntermediatePrimaryOutput);
             Assert.False(File.Exists(staleFramework));
             Assert.False(File.Exists(staleRid));
             Assert.False(File.Exists(staleProjectName));
@@ -68,14 +70,74 @@ public sealed class DotNetRepositoryReleaseFreshBuildTests
         }
     }
 
+    [Fact]
+    public void FreshnessCleanup_DoesNotTreatAbandonedConventionalObjAsConfiguredIntermediateProof()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            File.WriteAllText(Path.Combine(root.FullName, "Directory.Build.props"), """
+                <Project>
+                  <PropertyGroup>
+                    <BaseOutputPath>$(MSBuildThisFileDirectory)artifacts/bin/</BaseOutputPath>
+                    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)artifacts/obj/</BaseIntermediateOutputPath>
+                  </PropertyGroup>
+                </Project>
+                """);
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Configured"));
+            var projectPath = Path.Combine(projectDirectory.FullName, "Sample.Configured.csproj");
+            File.WriteAllText(projectPath, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <AssemblyName>Sample.Configured</AssemblyName>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var configuredOutput = Path.Combine(root.FullName, "artifacts", "bin", "Release", "net8.0", "Sample.Configured.dll");
+            var abandonedIntermediate = Path.Combine(projectDirectory.FullName, "obj", "Release", "net8.0", "Sample.Configured.dll");
+            Directory.CreateDirectory(Path.GetDirectoryName(configuredOutput)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(abandonedIntermediate)!);
+            File.WriteAllText(configuredOutput, "configured-output");
+            File.WriteAllText(abandonedIntermediate, "abandoned-intermediate");
+
+            var success = DotNetRepositoryReleaseService.TryRemoveStalePrimaryPackageOutputs(
+                new DotNetRepositoryProjectResult
+                {
+                    ProjectName = "Sample.Configured",
+                    CsprojPath = projectPath
+                },
+                "Release",
+                new NullLogger(),
+                out var removedFileCount,
+                out var removedIntermediatePrimaryOutput,
+                out _,
+                out var error);
+
+            Assert.True(success, error);
+            Assert.Equal(1, removedFileCount);
+            Assert.False(removedIntermediatePrimaryOutput);
+            Assert.False(File.Exists(configuredOutput));
+            Assert.True(File.Exists(abandonedIntermediate));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Theory]
-    [InlineData(DotNetRepositoryPackStrategy.PerProject, false)]
-    [InlineData(DotNetRepositoryPackStrategy.MSBuild, false)]
-    [InlineData(DotNetRepositoryPackStrategy.PerProject, true)]
-    [InlineData(DotNetRepositoryPackStrategy.MSBuild, true)]
+    [InlineData(DotNetRepositoryPackStrategy.PerProject, false, false)]
+    [InlineData(DotNetRepositoryPackStrategy.MSBuild, false, false)]
+    [InlineData(DotNetRepositoryPackStrategy.PerProject, true, false)]
+    [InlineData(DotNetRepositoryPackStrategy.MSBuild, true, false)]
+    [InlineData(DotNetRepositoryPackStrategy.PerProject, false, true)]
+    [InlineData(DotNetRepositoryPackStrategy.MSBuild, false, true)]
     public void Execute_RecompilesStaleOutputBeforePacking(
         DotNetRepositoryPackStrategy packStrategy,
-        bool targetFrameworkFromImport)
+        bool targetFrameworkFromImport,
+        bool centralOutputPaths)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -83,15 +145,25 @@ public sealed class DotNetRepositoryReleaseFreshBuildTests
             var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Stale"));
             var projectPath = Path.Combine(projectDirectory.FullName, "Sample.Stale.csproj");
             var sourcePath = Path.Combine(projectDirectory.FullName, "Contract.cs");
-            if (targetFrameworkFromImport)
+            if (targetFrameworkFromImport || centralOutputPaths)
             {
-                File.WriteAllText(Path.Combine(root.FullName, "Directory.Build.props"), """
-                    <Project>
-                      <PropertyGroup>
-                        <TargetFramework>net8.0</TargetFramework>
-                      </PropertyGroup>
-                    </Project>
-                    """);
+                var importedProperties = new List<string>();
+                if (targetFrameworkFromImport)
+                    importedProperties.Add("    <TargetFramework>net8.0</TargetFramework>");
+                if (centralOutputPaths)
+                {
+                    importedProperties.Add("    <BaseOutputPath>$(MSBuildThisFileDirectory)artifacts/bin/</BaseOutputPath>");
+                    importedProperties.Add("    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)artifacts/obj/</BaseIntermediateOutputPath>");
+                }
+
+                File.WriteAllText(Path.Combine(root.FullName, "Directory.Build.props"), string.Join(Environment.NewLine, new[]
+                {
+                    "<Project>",
+                    "  <PropertyGroup>",
+                    string.Join(Environment.NewLine, importedProperties),
+                    "  </PropertyGroup>",
+                    "</Project>"
+                }));
             }
 
             var projectLines = new List<string>
@@ -113,7 +185,9 @@ public sealed class DotNetRepositoryReleaseFreshBuildTests
             File.WriteAllText(sourcePath, "namespace Sample.Stale; public sealed class LegacyContract { }");
 
             RunDotNet(projectDirectory.FullName, "build", projectPath, "--configuration", "Release", "--nologo");
-            var assemblyPath = Path.Combine(projectDirectory.FullName, "bin", "Release", "net8.0", "Sample.Stale.dll");
+            var assemblyPath = centralOutputPaths
+                ? Path.Combine(root.FullName, "artifacts", "bin", "Release", "net8.0", "Sample.Stale.dll")
+                : Path.Combine(projectDirectory.FullName, "bin", "Release", "net8.0", "Sample.Stale.dll");
             Assert.True(File.Exists(assemblyPath));
             var staleAssembly = File.ReadAllBytes(assemblyPath);
 

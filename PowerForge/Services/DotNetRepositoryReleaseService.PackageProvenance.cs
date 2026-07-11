@@ -18,6 +18,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 configuration,
                 logger,
                 out _,
+                out var removedIntermediatePrimaryOutput,
                 out var cleanupDuration,
                 out error))
         {
@@ -26,12 +27,15 @@ public sealed partial class DotNetRepositoryReleaseService
         }
 
         logger.Info($"{project.ProjectName}: building fresh assemblies before no-build pack...");
+        if (!removedIntermediatePrimaryOutput)
+            logger.Info($"{project.ProjectName}: no primary intermediate output was removed; using a non-incremental safety build.");
         var exitCode = RunDotnetBuild(
             project.CsprojPath,
             projectDirectory,
             configuration,
             project.ProjectName,
             logger,
+            forceNonIncremental: !removedIntermediatePrimaryOutput,
             out var standardError,
             out var standardOutput,
             out duration);
