@@ -650,7 +650,7 @@ public sealed partial class DotNetRepositoryReleaseService
             if (string.IsNullOrWhiteSpace(includePattern))
                 continue;
 
-            if (Directory.EnumerateFiles(directory, includePattern, SearchOption.AllDirectories).Any())
+            if (Directory.EnumerateFiles(directory, includePattern, SearchOption.TopDirectoryOnly).Any())
                 return true;
         }
 
