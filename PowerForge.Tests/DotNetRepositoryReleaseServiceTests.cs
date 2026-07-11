@@ -974,6 +974,61 @@ public sealed class DotNetRepositoryReleaseServiceTests
     }
 
     [Fact]
+    public void ResolveBuildOutputDirectories_ProbesRidSpecificTargetDirInsteadOfFrameworkParent()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Src", "Sample.Package"));
+            var csprojPath = Path.Combine(projectDir.FullName, "Sample.Package.csproj");
+            File.WriteAllText(csprojPath, string.Join(Environment.NewLine, new[]
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <TargetFramework>net472</TargetFramework>",
+                "    <RuntimeIdentifier>win-x64</RuntimeIdentifier>",
+                "    <AssemblyName>Sample.Package</AssemblyName>",
+                "  </PropertyGroup>",
+                "</Project>"
+            }));
+            var frameworkDirectory = Directory.CreateDirectory(
+                Path.Combine(projectDir.FullName, "bin", "Release", "net472"));
+            var ridTargetDirectory = Directory.CreateDirectory(Path.Combine(frameworkDirectory.FullName, "win-x64"));
+            File.WriteAllText(Path.Combine(ridTargetDirectory.FullName, "Sample.Package.dll"), "rid-output");
+
+            var method = typeof(DotNetRepositoryReleaseService).GetMethod(
+                "ResolveBuildOutputDirectories",
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            Assert.NotNull(method);
+            var directories = Assert.IsType<string[]>(method!.Invoke(null, new object?[]
+            {
+                csprojPath,
+                projectDir.FullName,
+                "Release",
+                "Sample.Package",
+                new NullLogger(),
+                new[] { "Sample.Package.dll" }
+            }));
+
+            string expected = Path.GetFullPath(ridTargetDirectory.FullName)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            Assert.Contains(directories, path => string.Equals(
+                path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                expected,
+                StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(directories, path => string.Equals(
+                path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                Path.GetFullPath(frameworkDirectory.FullName).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Execute_WithAssemblySigning_PreflightsBeforeEditingProjectVersion()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
