@@ -241,13 +241,22 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static IEnumerable<string> BuildMsBuildPropertyArgs(IReadOnlyDictionary<string, string> props)
+    internal static IEnumerable<string> BuildMsBuildPropertyArgs(IReadOnlyDictionary<string, string> props)
     {
         if (props is null || props.Count == 0) return Array.Empty<string>();
         return props
             .Where(kv => !string.IsNullOrWhiteSpace(kv.Key))
-            .Select(kv => $"/p:{kv.Key}={kv.Value}");
+            .Select(kv => $"/p:{kv.Key}={EscapeMsBuildPropertyValue(kv.Value)}");
     }
+
+    private static string EscapeMsBuildPropertyValue(string? value)
+        => (value ?? string.Empty)
+            .Replace("%", "%25")
+            .Replace(";", "%3B")
+            .Replace(",", "%2C")
+            .Replace("=", "%3D")
+            .Replace("$", "%24")
+            .Replace("@", "%40");
 
     internal static string ResolvePath(string baseDir, string path)
     {

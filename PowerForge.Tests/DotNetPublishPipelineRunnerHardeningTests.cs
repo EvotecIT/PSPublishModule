@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using Xunit;
@@ -9,6 +10,21 @@ namespace PowerForge.Tests;
 
 public sealed class DotNetPublishPipelineRunnerHardeningTests
 {
+    [Fact]
+    public void BuildMsBuildPropertyArgs_EscapesListAndAssignmentSeparators()
+    {
+        var properties = new Dictionary<string, string>
+        {
+            ["MonitoringDbProviders"] = "Sqlite,SqlServer",
+            ["Composite"] = "one;two=three%$@"
+        };
+
+        string[] arguments = DotNetPublishPipelineRunner.BuildMsBuildPropertyArgs(properties).ToArray();
+
+        Assert.Contains("/p:MonitoringDbProviders=Sqlite%2CSqlServer", arguments);
+        Assert.Contains("/p:Composite=one%3Btwo%3Dthree%25%24%40", arguments);
+    }
+
     [Fact]
     public void Plan_DeniesOutputPathOutsideProjectRoot_ByDefault()
     {
