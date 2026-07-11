@@ -1098,6 +1098,7 @@ internal static class SpectrePipelineSummaryWriter
 
         var preferredPrefixes = new[]
         {
+            "Project build failed:",
             "Import-Module failed",
             "Cause:",
             "Detail:",

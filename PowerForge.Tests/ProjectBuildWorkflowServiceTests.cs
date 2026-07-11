@@ -158,9 +158,57 @@ public sealed class ProjectBuildWorkflowServiceTests
         Assert.Contains(logger.SuccessMessages, message => message.Contains("GitHub publish completed in", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void Execute_reports_all_project_failures_and_uses_error_severity()
+    {
+        var callIndex = 0;
+        var logger = new RecordingLogger();
+        var service = new ProjectBuildWorkflowService(
+            logger,
+            executeRelease: _ =>
+            {
+                callIndex++;
+                if (callIndex == 1)
+                    return new DotNetRepositoryReleaseResult { Success = true };
+
+                var release = new DotNetRepositoryReleaseResult { Success = false };
+                release.Projects.Add(new DotNetRepositoryProjectResult
+                {
+                    ProjectName = "ProjectA",
+                    IsPackable = true,
+                    ErrorMessage = "package provenance mismatch"
+                });
+                release.Projects.Add(new DotNetRepositoryProjectResult
+                {
+                    ProjectName = "ProjectB",
+                    IsPackable = true,
+                    ErrorMessage = "signing failed"
+                });
+                return release;
+            });
+
+        var workflow = service.Execute(
+            new ProjectBuildConfiguration(),
+            Directory.GetCurrentDirectory(),
+            new ProjectBuildPreparedContext
+            {
+                RootPath = Directory.GetCurrentDirectory(),
+                Spec = new DotNetRepositoryReleaseSpec { RootPath = Directory.GetCurrentDirectory() }
+            },
+            executeBuild: true);
+
+        Assert.False(workflow.Result.Success);
+        Assert.Contains("2 of 2 project(s) failed", workflow.Result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("Detail: ProjectA: package provenance mismatch", workflow.Result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("Detail: ProjectB: signing failed", workflow.Result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains(logger.ErrorMessages, message =>
+            message.Contains("Project build release execution failed after", StringComparison.OrdinalIgnoreCase));
+    }
+
     private sealed class RecordingLogger : ILogger
     {
         public List<string> SuccessMessages { get; } = new();
+        public List<string> ErrorMessages { get; } = new();
 
         public bool IsVerbose => false;
 
@@ -170,7 +218,7 @@ public sealed class ProjectBuildWorkflowServiceTests
 
         public void Warn(string message) { }
 
-        public void Error(string message) { }
+        public void Error(string message) => ErrorMessages.Add(message);
 
         public void Verbose(string message) { }
     }

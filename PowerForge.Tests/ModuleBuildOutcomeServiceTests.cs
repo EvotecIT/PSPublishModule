@@ -24,6 +24,8 @@ public sealed class ModuleBuildOutcomeServiceTests
         Assert.False(result.ShouldEmitErrorRecord);
         Assert.False(result.ShouldReplayBufferedLogs);
         Assert.False(result.ShouldWriteInteractiveFailureSummary);
+        Assert.False(result.ShouldWriteFailureMessage);
+        Assert.Equal(string.Empty, result.FailureMessage);
         Assert.Equal("Module build completed in 2s 500ms", result.CompletionMessage);
     }
 
@@ -50,6 +52,8 @@ public sealed class ModuleBuildOutcomeServiceTests
         Assert.Equal("InvokeModuleBuildDslFailed", result.ErrorRecordId);
         Assert.True(result.ShouldReplayBufferedLogs);
         Assert.False(result.ShouldWriteInteractiveFailureSummary);
+        Assert.False(result.ShouldWriteFailureMessage);
+        Assert.Equal("boom", result.FailureMessage);
         Assert.Equal("Pipeline config generation failed in 1m 0s", result.CompletionMessage);
     }
 
@@ -75,7 +79,33 @@ public sealed class ModuleBuildOutcomeServiceTests
         Assert.False(result.ShouldEmitErrorRecord);
         Assert.True(result.ShouldReplayBufferedLogs);
         Assert.True(result.ShouldWriteInteractiveFailureSummary);
+        Assert.False(result.ShouldWriteFailureMessage);
         Assert.Equal("Module build failed in 250ms", result.CompletionMessage);
+    }
+
+    [Fact]
+    public void Evaluate_PreservesFullFailureMessageForNonInteractiveExitCodeBuilds()
+    {
+        var failure = "Project build failed: 2 of 2 project(s) failed." + Environment.NewLine +
+                      "Detail: ProjectA: first failure" + Environment.NewLine +
+                      "Detail: ProjectB: " + new string('x', 2500) + " END-OF-DETAIL";
+        var workflow = new ModuleBuildWorkflowResult
+        {
+            Succeeded = false,
+            UsedInteractiveView = false,
+            Error = new InvalidOperationException(failure)
+        };
+
+        var result = new ModuleBuildOutcomeService().Evaluate(
+            workflow,
+            exitCodeMode: true,
+            jsonOnly: false,
+            useLegacy: false,
+            elapsed: TimeSpan.FromSeconds(1));
+
+        Assert.True(result.ShouldWriteFailureMessage);
+        Assert.Equal(failure, result.FailureMessage);
+        Assert.Contains("END-OF-DETAIL", result.FailureMessage, StringComparison.Ordinal);
     }
 
     private static ModulePipelinePlan CreateUninitializedPlan()
