@@ -5,8 +5,8 @@ Clear-Host
 
 # Step 1: Certificate Information
 # Replace these with your actual certificate details
-$CertificateThumbprint = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703'
-$CertificateSha256 = '769C6B450BE58DC6E15193EE3916282D73BCED16E5E2FF8ACD0850D604DD560C'
+$CertificateThumbprint = 'YOUR_CERTIFICATE_THUMBPRINT'
+$CertificateSha256 = 'YOUR_CERTIFICATE_SHA256'
 
 # Project path
 $ProjectPath = "$PSScriptRoot\..\IISParser"

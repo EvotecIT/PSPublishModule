@@ -20,7 +20,8 @@
 1. Run plan mode first.
 2. Validate proposed versions and package paths.
 3. Run full build/publish.
-4. Verify published package/release inventory.
+4. Confirm PowerForge rebuilt the selected projects and verified package payload provenance before publish.
+5. Verify published package/release inventory and inspect the public package payload when APIs changed.
 
 ## GitHub Release Decisions
 
@@ -44,3 +45,5 @@
   - set primary project or tag template to date/timestamp.
 - Pipeline purpose confusion (library vs app publish):
   - `Invoke-ProjectBuild` for NuGet/release; `Invoke-DotNetPublish` for publish/service/MSI/state pipelines.
+- A package version and signature are correct but its assembly is stale:
+  - do not republish the immutable version; use the next version, verify its packaged API/assembly payload, and fix the shared PowerForge rebuild/provenance gate before another release.

@@ -75,19 +75,16 @@ public sealed partial class DotNetRepositoryReleaseService
         var packageRoot = outputPath ?? Path.Combine(csprojDir, "bin", configuration);
         var existingPackages = SnapshotPackages(packageRoot);
 
+        if (!TryRunFreshReleaseBuild(project, configuration, logger, out var buildDuration, out var buildError))
+        {
+            result.ErrorMessage = buildError;
+            return result;
+        }
+        result.Duration += buildDuration;
+
         var shouldSignAssemblies = signAssemblies is not null && !string.IsNullOrWhiteSpace(spec.CertificateThumbprint);
         if (shouldSignAssemblies)
         {
-            logger.Info($"{project.ProjectName}: building assemblies before pack signing...");
-            var buildExitCode = RunDotnetBuild(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, out var buildStdErr, out var buildStdOut, out var buildDuration);
-            result.Duration += buildDuration;
-            if (buildExitCode != 0)
-            {
-                result.ErrorMessage = $"dotnet build failed for {project.ProjectName} (exit {buildExitCode}). {SummarizeProcessFailureOutput(buildStdErr, buildStdOut)}".Trim();
-                return result;
-            }
-            logger.Success($"{project.ProjectName}: build before pack signing completed in {FormatDuration(buildDuration)}.");
-
             try
             {
                 var includePatterns = ResolveAssemblySigningIncludePatterns(project, spec, csprojDir, configuration, logger);
@@ -133,7 +130,7 @@ public sealed partial class DotNetRepositoryReleaseService
             }
         }
 
-        var exitCode = RunDotnetPack(project.CsprojPath, csprojDir, configuration, outputPath, project.ProjectName, logger, shouldSignAssemblies, out var stdErr, out var stdOut, out var duration);
+        var exitCode = RunDotnetPack(project.CsprojPath, csprojDir, configuration, outputPath, project.ProjectName, logger, noBuild: true, out var stdErr, out var stdOut, out var duration);
         result.Duration += duration;
         if (exitCode != 0)
         {
@@ -154,6 +151,12 @@ public sealed partial class DotNetRepositoryReleaseService
         packageDiscoveryWatch.Stop();
         result.Duration += packageDiscoveryWatch.Elapsed;
         logger.Success($"{project.ProjectName}: package discovery found {result.Packages.Count} package(s) in {FormatDuration(packageDiscoveryWatch.Elapsed)}.");
+
+        if (!TryValidateProjectPackagePayloads(project, spec, result.Packages, logger, out var validationError))
+        {
+            result.ErrorMessage = validationError;
+            return result;
+        }
 
         result.Success = true;
         return result;
@@ -267,6 +270,14 @@ public sealed partial class DotNetRepositoryReleaseService
                 .Where(p => WasPackageCreatedOrChanged(existingPackages, p))
                 .ToArray();
             result.Packages.AddRange(pkgs);
+
+            if (!TryValidatePackagePayloads(projects, spec, result.Packages, logger, out var validationError))
+            {
+                result.Success = false;
+                result.ErrorMessage = validationError;
+                return result;
+            }
+
             result.Success = true;
             return result;
         }
@@ -312,7 +323,7 @@ public sealed partial class DotNetRepositoryReleaseService
                     new XAttribute("DependsOnTargets", "RestoreSelected"),
                     new XElement("MSBuild",
                         new XAttribute("Projects", "@(PackProject)"),
-                        new XAttribute("Targets", "Build"),
+                        new XAttribute("Targets", "Rebuild"),
                         new XAttribute("BuildInParallel", "true"),
                         new XAttribute("StopOnFirstFailure", "true"),
                         new XAttribute("Properties", buildProperties))),
@@ -498,12 +509,13 @@ public sealed partial class DotNetRepositoryReleaseService
         ProcessStartInfoEncoding.TryApplyUtf8(psi);
 
 #if NET472
-        psi.Arguments = BuildWindowsArgumentString(new[] { "build", csproj, "--configuration", configuration });
+        psi.Arguments = BuildWindowsArgumentString(new[] { "build", csproj, "--configuration", configuration, "--no-incremental" });
 #else
         psi.ArgumentList.Add("build");
         psi.ArgumentList.Add(csproj);
         psi.ArgumentList.Add("--configuration");
         psi.ArgumentList.Add(configuration);
+        psi.ArgumentList.Add("--no-incremental");
 #endif
 
         var exitCode = RunProcessWithHeartbeat(
@@ -526,7 +538,8 @@ public sealed partial class DotNetRepositoryReleaseService
         IReadOnlyList<string>? includePatterns = null)
     {
         var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var directory in ResolveConventionalBuildOutputDirectories(csproj, workingDirectory, configuration))
+        var targetFrameworks = ResolveConfiguredTargetFrameworks(csproj, workingDirectory, configuration, projectName, logger);
+        foreach (var directory in ResolveConventionalBuildOutputDirectories(csproj, workingDirectory, configuration, targetFrameworks))
         {
             if (!Directory.Exists(directory))
                 continue;
@@ -537,7 +550,7 @@ public sealed partial class DotNetRepositoryReleaseService
             directories.Add(Path.GetFullPath(directory));
         }
 
-        foreach (var targetFramework in ReadTargetFrameworks(csproj))
+        foreach (var targetFramework in targetFrameworks)
         {
             if (directories.Count > 0 && HasOutputDirectoryForTargetFramework(directories, targetFramework))
                 continue;
@@ -596,10 +609,11 @@ public sealed partial class DotNetRepositoryReleaseService
     private static string[] ResolveConventionalBuildOutputDirectories(
         string csproj,
         string workingDirectory,
-        string configuration)
+        string configuration,
+        IReadOnlyList<string?> targetFrameworkValues)
     {
         var directories = new List<string>();
-        var targetFrameworks = ReadTargetFrameworks(csproj)
+        var targetFrameworks = targetFrameworkValues
             .Where(static framework => !string.IsNullOrWhiteSpace(framework))
             .Select(static framework => framework!.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
