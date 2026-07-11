@@ -182,6 +182,134 @@ public sealed class DotNetRepositoryReleaseFreshBuildTests
         }
     }
 
+    [Fact]
+    public void FreshnessCleanup_EvaluatesConfiguredMetadataForEveryTargetFramework()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            File.WriteAllText(Path.Combine(root.FullName, "Directory.Build.props"), """
+                <Project>
+                  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
+                    <AssemblyName>Sample.Net8</AssemblyName>
+                    <OutputPath>$(MSBuildThisFileDirectory)artifacts/bin/Release/net8.0/</OutputPath>
+                    <IntermediateOutputPath>$(MSBuildThisFileDirectory)artifacts/obj/Release/net8.0/</IntermediateOutputPath>
+                  </PropertyGroup>
+                  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+                    <AssemblyName>Sample.Net10</AssemblyName>
+                    <OutputPath>$(MSBuildThisFileDirectory)artifacts/bin/Release/net10.0/</OutputPath>
+                    <IntermediateOutputPath>$(MSBuildThisFileDirectory)artifacts/obj/Release/net10.0/</IntermediateOutputPath>
+                  </PropertyGroup>
+                </Project>
+                """);
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.MultiTarget"));
+            var projectPath = Path.Combine(projectDirectory.FullName, "Sample.MultiTarget.csproj");
+            File.WriteAllText(projectPath, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var stalePaths = new[]
+            {
+                Path.Combine(root.FullName, "artifacts", "bin", "Release", "net8.0", "Sample.Net8.dll"),
+                Path.Combine(root.FullName, "artifacts", "bin", "Release", "net8.0", "old-rid", "Sample.Net8.dll"),
+                Path.Combine(root.FullName, "artifacts", "obj", "Release", "net8.0", "Sample.Net8.dll"),
+                Path.Combine(root.FullName, "artifacts", "bin", "Release", "net10.0", "Sample.Net10.dll"),
+                Path.Combine(root.FullName, "artifacts", "obj", "Release", "net10.0", "Sample.Net10.dll")
+            };
+            foreach (var path in stalePaths)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, path);
+            }
+
+            var success = DotNetRepositoryReleaseService.TryRemoveStalePrimaryPackageOutputs(
+                new DotNetRepositoryProjectResult
+                {
+                    ProjectName = "Sample.MultiTarget",
+                    CsprojPath = projectPath
+                },
+                "Release",
+                new NullLogger(),
+                out var removedFileCount,
+                out var removedIntermediatePrimaryOutput,
+                out _,
+                out var error);
+
+            Assert.True(success, error);
+            Assert.Equal(stalePaths.Length, removedFileCount);
+            Assert.True(removedIntermediatePrimaryOutput);
+            Assert.All(stalePaths, path => Assert.False(File.Exists(path)));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void FreshnessCleanup_EvaluatesMetadataFromExplicitProjectImport()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Imported"));
+            var importDirectory = Directory.CreateDirectory(Path.Combine(projectDirectory.FullName, "build"));
+            File.WriteAllText(Path.Combine(importDirectory.FullName, "outputs.props"), """
+                <Project>
+                  <PropertyGroup>
+                    <AssemblyName>Imported.Primary</AssemblyName>
+                    <OutputPath>$(MSBuildThisFileDirectory)../imported/bin/Release/net8.0/</OutputPath>
+                    <IntermediateOutputPath>$(MSBuildThisFileDirectory)../imported/obj/Release/net8.0/</IntermediateOutputPath>
+                  </PropertyGroup>
+                </Project>
+                """);
+            var projectPath = Path.Combine(projectDirectory.FullName, "Sample.Imported.csproj");
+            File.WriteAllText(projectPath, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                  </PropertyGroup>
+                  <Import Project="build/outputs.props" />
+                </Project>
+                """);
+
+            var output = Path.Combine(projectDirectory.FullName, "imported", "bin", "Release", "net8.0", "Imported.Primary.dll");
+            var intermediate = Path.Combine(projectDirectory.FullName, "imported", "obj", "Release", "net8.0", "Imported.Primary.dll");
+            foreach (var path in new[] { output, intermediate })
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, path);
+            }
+
+            var success = DotNetRepositoryReleaseService.TryRemoveStalePrimaryPackageOutputs(
+                new DotNetRepositoryProjectResult
+                {
+                    ProjectName = "Sample.Imported",
+                    CsprojPath = projectPath
+                },
+                "Release",
+                new NullLogger(),
+                out var removedFileCount,
+                out var removedIntermediatePrimaryOutput,
+                out _,
+                out var error);
+
+            Assert.True(success, error);
+            Assert.Equal(2, removedFileCount);
+            Assert.True(removedIntermediatePrimaryOutput);
+            Assert.False(File.Exists(output));
+            Assert.False(File.Exists(intermediate));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Theory]
     [InlineData(DotNetRepositoryPackStrategy.PerProject, false, false, false)]
     [InlineData(DotNetRepositoryPackStrategy.MSBuild, false, false, false)]

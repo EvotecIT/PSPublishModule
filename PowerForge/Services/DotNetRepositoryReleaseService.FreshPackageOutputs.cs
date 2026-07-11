@@ -46,7 +46,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         logger,
                         out var evaluatedOutputRoots,
                         out var evaluatedIntermediateRoots,
-                        out var evaluatedAssemblyName,
+                        out var evaluatedAssemblyNames,
                         out _,
                         out error))
                 {
@@ -63,8 +63,11 @@ public sealed partial class DotNetRepositoryReleaseService
                 // compiler output was invalidated. An abandoned conventional obj tree must
                 // not accidentally enable the incremental fast path.
                 intermediateRoots = evaluatedIntermediateRoots;
-                primaryFileNames.Add(evaluatedAssemblyName + ".dll");
-                primaryFileNames.Add(evaluatedAssemblyName + ".exe");
+                foreach (var evaluatedAssemblyName in evaluatedAssemblyNames)
+                {
+                    primaryFileNames.Add(evaluatedAssemblyName + ".dll");
+                    primaryFileNames.Add(evaluatedAssemblyName + ".exe");
+                }
             }
 
             var searchRoots = outputRoots
@@ -166,6 +169,8 @@ public sealed partial class DotNetRepositoryReleaseService
             try
             {
                 var document = XDocument.Load(path);
+                if (document.Descendants().Any(element => string.Equals(element.Name.LocalName, "Import", StringComparison.OrdinalIgnoreCase)))
+                    return true;
                 if (document.Descendants().Any(element => outputProperties.Contains(element.Name.LocalName)))
                     return true;
 
@@ -192,64 +197,96 @@ public sealed partial class DotNetRepositoryReleaseService
         ILogger logger,
         out string[] outputRoots,
         out string[] intermediateRoots,
-        out string evaluatedAssemblyName,
+        out string[] evaluatedAssemblyNames,
         out TimeSpan duration,
         out string error)
     {
         const string propertyNames = "AssemblyName,BaseOutputPath,BaseIntermediateOutputPath,OutputPath,OutDir,IntermediateOutputPath,TargetDir";
-        var exitCode = RunDotnetMsBuildGetProperty(
-            project.CsprojPath,
-            projectDirectory,
-            configuration,
-            null,
-            propertyNames,
-            project.ProjectName,
-            logger,
-            out _,
-            out var stdErr,
-            out var stdOut,
-            out duration);
-        if (exitCode != 0)
-        {
-            outputRoots = Array.Empty<string>();
-            intermediateRoots = Array.Empty<string>();
-            evaluatedAssemblyName = string.Empty;
-            error = $"Could not evaluate configured output paths for {project.ProjectName}. {SummarizeProcessFailureOutput(stdErr, stdOut)}".Trim();
-            return false;
-        }
+        var resolvedOutputRoots = new List<string>();
+        var resolvedIntermediateRoots = new List<string>();
+        var resolvedAssemblyNames = new List<string>();
+        duration = TimeSpan.Zero;
+        var targetFrameworks = ResolveConfiguredTargetFrameworks(
+                project.CsprojPath,
+                projectDirectory,
+                configuration,
+                project.ProjectName,
+                logger)
+            .Where(framework => string.IsNullOrWhiteSpace(framework) || framework!.IndexOf("$(", StringComparison.Ordinal) < 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (targetFrameworks.Length == 0)
+            targetFrameworks = new string?[] { null };
 
-        try
+        foreach (var targetFramework in targetFrameworks)
         {
-            var jsonStart = stdOut.IndexOf('{');
-            var jsonEnd = stdOut.LastIndexOf('}');
-            if (jsonStart < 0 || jsonEnd < jsonStart)
-                throw new InvalidDataException("MSBuild property output did not contain a JSON object.");
-
-            using var document = JsonDocument.Parse(stdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
-            var properties = document.RootElement.GetProperty("Properties");
-            outputRoots = ResolveEvaluatedRoots(properties, projectDirectory, "OutputPath", "OutDir", "TargetDir", "BaseOutputPath");
-            intermediateRoots = ResolveEvaluatedRoots(properties, projectDirectory, "IntermediateOutputPath", "BaseIntermediateOutputPath");
-            evaluatedAssemblyName = properties.TryGetProperty("AssemblyName", out var assemblyNameProperty)
-                ? assemblyNameProperty.GetString() ?? string.Empty
-                : string.Empty;
-            if (outputRoots.Length == 0 || intermediateRoots.Length == 0 || !IsUsableAssemblyName(evaluatedAssemblyName))
+            var exitCode = RunDotnetMsBuildGetProperty(
+                project.CsprojPath,
+                projectDirectory,
+                configuration,
+                targetFramework,
+                propertyNames,
+                project.ProjectName,
+                logger,
+                out _,
+                out var stdErr,
+                out var stdOut,
+                out var evaluationDuration);
+            duration += evaluationDuration;
+            if (exitCode != 0)
             {
-                error = $"Configured build metadata for {project.ProjectName} could not be resolved to output roots, intermediate roots, and an assembly name.";
+                outputRoots = Array.Empty<string>();
+                intermediateRoots = Array.Empty<string>();
+                evaluatedAssemblyNames = Array.Empty<string>();
+                error = $"Could not evaluate configured output paths for {project.ProjectName}{FormatTargetFrameworkContext(targetFramework)}. {SummarizeProcessFailureOutput(stdErr, stdOut)}".Trim();
                 return false;
             }
 
-            error = string.Empty;
-            logger.Verbose($"{project.ProjectName}: evaluated {outputRoots.Length} output and {intermediateRoots.Length} intermediate freshness root(s) in {FormatDuration(duration)}.");
-            return true;
+            try
+            {
+                var jsonStart = stdOut.IndexOf('{');
+                var jsonEnd = stdOut.LastIndexOf('}');
+                if (jsonStart < 0 || jsonEnd < jsonStart)
+                    throw new InvalidDataException("MSBuild property output did not contain a JSON object.");
+
+                using var document = JsonDocument.Parse(stdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
+                var properties = document.RootElement.GetProperty("Properties");
+                var frameworkOutputRoots = ResolveEvaluatedRoots(properties, projectDirectory, "OutputPath", "OutDir", "TargetDir", "BaseOutputPath")
+                    .Select(root => ResolveConfigurationCleanupRoot(root, targetFramework));
+                var frameworkIntermediateRoots = ResolveEvaluatedRoots(properties, projectDirectory, "IntermediateOutputPath", "BaseIntermediateOutputPath")
+                    .Select(root => ResolveConfigurationCleanupRoot(root, targetFramework));
+                var evaluatedAssemblyName = properties.TryGetProperty("AssemblyName", out var assemblyNameProperty)
+                    ? assemblyNameProperty.GetString() ?? string.Empty
+                    : string.Empty;
+                if (!frameworkOutputRoots.Any() || !frameworkIntermediateRoots.Any() || !IsUsableAssemblyName(evaluatedAssemblyName))
+                {
+                    outputRoots = Array.Empty<string>();
+                    intermediateRoots = Array.Empty<string>();
+                    evaluatedAssemblyNames = Array.Empty<string>();
+                    error = $"Configured build metadata for {project.ProjectName}{FormatTargetFrameworkContext(targetFramework)} could not be resolved to output roots, intermediate roots, and an assembly name.";
+                    return false;
+                }
+
+                resolvedOutputRoots.AddRange(frameworkOutputRoots);
+                resolvedIntermediateRoots.AddRange(frameworkIntermediateRoots);
+                resolvedAssemblyNames.Add(evaluatedAssemblyName.Trim());
+            }
+            catch (Exception ex)
+            {
+                outputRoots = Array.Empty<string>();
+                intermediateRoots = Array.Empty<string>();
+                evaluatedAssemblyNames = Array.Empty<string>();
+                error = $"Could not parse configured output paths for {project.ProjectName}{FormatTargetFrameworkContext(targetFramework)}. {ex.Message}";
+                return false;
+            }
         }
-        catch (Exception ex)
-        {
-            outputRoots = Array.Empty<string>();
-            intermediateRoots = Array.Empty<string>();
-            evaluatedAssemblyName = string.Empty;
-            error = $"Could not parse configured output paths for {project.ProjectName}. {ex.Message}";
-            return false;
-        }
+
+        outputRoots = resolvedOutputRoots.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        intermediateRoots = resolvedIntermediateRoots.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        evaluatedAssemblyNames = resolvedAssemblyNames.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        error = string.Empty;
+        logger.Verbose($"{project.ProjectName}: evaluated {outputRoots.Length} output, {intermediateRoots.Length} intermediate, and {evaluatedAssemblyNames.Length} assembly-name freshness value(s) across {targetFrameworks.Length} target framework(s) in {FormatDuration(duration)}.");
+        return true;
     }
 
     private static string[] ResolveEvaluatedRoots(
@@ -282,4 +319,26 @@ public sealed partial class DotNetRepositoryReleaseService
         var normalizedPath = Path.GetFullPath(path);
         return normalizedPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string ResolveConfigurationCleanupRoot(string root, string? targetFramework)
+    {
+        var resolved = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.IsNullOrWhiteSpace(targetFramework))
+            return resolved;
+
+        var normalized = resolved.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+        var framework = targetFramework!.Trim();
+        var marker = Path.DirectorySeparatorChar + framework + Path.DirectorySeparatorChar;
+        var markerIndex = normalized.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (markerIndex >= 0)
+            return normalized.Substring(0, markerIndex);
+
+        var suffix = Path.DirectorySeparatorChar + framework;
+        return normalized.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+            ? normalized.Substring(0, normalized.Length - suffix.Length)
+            : normalized;
+    }
+
+    private static string FormatTargetFrameworkContext(string? targetFramework)
+        => string.IsNullOrWhiteSpace(targetFramework) ? string.Empty : $" ({targetFramework})";
 }
