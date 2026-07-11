@@ -193,6 +193,24 @@ public sealed partial class DotNetRepositoryReleaseService
         var traversalPath = Path.Combine(tempRoot, "pack.proj");
         try
         {
+            foreach (var project in projects)
+            {
+                if (!TryRemoveStalePrimaryPackageOutputs(
+                        project,
+                        string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim(),
+                        logger,
+                        out _,
+                        out var cleanupDuration,
+                        out var cleanupError))
+                {
+                    result.Duration += cleanupDuration;
+                    result.ErrorMessage = cleanupError;
+                    return result;
+                }
+
+                result.Duration += cleanupDuration;
+            }
+
             WritePackTraversalProject(traversalPath, projects, spec, outputPath);
 
             var shouldSignAssemblies = signAssemblies is not null && !string.IsNullOrWhiteSpace(spec.CertificateThumbprint);
@@ -323,7 +341,10 @@ public sealed partial class DotNetRepositoryReleaseService
                     new XAttribute("DependsOnTargets", "RestoreSelected"),
                     new XElement("MSBuild",
                         new XAttribute("Projects", "@(PackProject)"),
-                        new XAttribute("Targets", "Rebuild"),
+                        // Freshness cleanup removes each selected project's primary output first.
+                        // A normal Build therefore recompiles the package producer while preserving
+                        // incremental project-reference and intermediate-output caches.
+                        new XAttribute("Targets", "Build"),
                         new XAttribute("BuildInParallel", "true"),
                         new XAttribute("StopOnFirstFailure", "true"),
                         new XAttribute("Properties", buildProperties))),
@@ -509,13 +530,12 @@ public sealed partial class DotNetRepositoryReleaseService
         ProcessStartInfoEncoding.TryApplyUtf8(psi);
 
 #if NET472
-        psi.Arguments = BuildWindowsArgumentString(new[] { "build", csproj, "--configuration", configuration, "--no-incremental" });
+        psi.Arguments = BuildWindowsArgumentString(new[] { "build", csproj, "--configuration", configuration });
 #else
         psi.ArgumentList.Add("build");
         psi.ArgumentList.Add(csproj);
         psi.ArgumentList.Add("--configuration");
         psi.ArgumentList.Add(configuration);
-        psi.ArgumentList.Add("--no-incremental");
 #endif
 
         var exitCode = RunProcessWithHeartbeat(

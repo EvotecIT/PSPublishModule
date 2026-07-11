@@ -8,12 +8,72 @@ namespace PowerForge.Tests;
 
 public sealed class DotNetRepositoryReleaseFreshBuildTests
 {
+    [Fact]
+    public void FreshnessCleanup_RemovesOnlyPrimaryAssembliesFromSelectedConfigurationOutputs()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Package"));
+            var projectPath = Path.Combine(projectDirectory.FullName, "Sample.Package.csproj");
+            File.WriteAllText(projectPath, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <AssemblyName>Sample.Primary</AssemblyName>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var releaseFramework = Directory.CreateDirectory(Path.Combine(projectDirectory.FullName, "bin", "Release", "net8.0"));
+            var releaseRid = Directory.CreateDirectory(Path.Combine(releaseFramework.FullName, "win-x64"));
+            var debugFramework = Directory.CreateDirectory(Path.Combine(projectDirectory.FullName, "bin", "Debug", "net8.0"));
+            var intermediate = Directory.CreateDirectory(Path.Combine(projectDirectory.FullName, "obj", "Release", "net8.0"));
+
+            var staleFramework = Path.Combine(releaseFramework.FullName, "Sample.Primary.dll");
+            var staleRid = Path.Combine(releaseRid.FullName, "Sample.Primary.dll");
+            var staleProjectName = Path.Combine(releaseFramework.FullName, "Sample.Package.exe");
+            var dependency = Path.Combine(releaseFramework.FullName, "Dependency.dll");
+            var debugOutput = Path.Combine(debugFramework.FullName, "Sample.Primary.dll");
+            var intermediateOutput = Path.Combine(intermediate.FullName, "Sample.Primary.dll");
+            var intermediateCache = Path.Combine(intermediate.FullName, "project.assets.cache");
+            foreach (var path in new[] { staleFramework, staleRid, staleProjectName, dependency, debugOutput, intermediateOutput, intermediateCache })
+                File.WriteAllText(path, path);
+
+            var success = DotNetRepositoryReleaseService.TryRemoveStalePrimaryPackageOutputs(
+                new DotNetRepositoryProjectResult
+                {
+                    ProjectName = "Sample.Package",
+                    CsprojPath = projectPath
+                },
+                "Release",
+                new NullLogger(),
+                out var removedFileCount,
+                out _,
+                out var error);
+
+            Assert.True(success, error);
+            Assert.Equal(4, removedFileCount);
+            Assert.False(File.Exists(staleFramework));
+            Assert.False(File.Exists(staleRid));
+            Assert.False(File.Exists(staleProjectName));
+            Assert.True(File.Exists(dependency));
+            Assert.True(File.Exists(debugOutput));
+            Assert.False(File.Exists(intermediateOutput));
+            Assert.True(File.Exists(intermediateCache));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Theory]
     [InlineData(DotNetRepositoryPackStrategy.PerProject, false)]
     [InlineData(DotNetRepositoryPackStrategy.MSBuild, false)]
     [InlineData(DotNetRepositoryPackStrategy.PerProject, true)]
     [InlineData(DotNetRepositoryPackStrategy.MSBuild, true)]
-    public void Execute_RebuildsStaleOutputBeforePacking(
+    public void Execute_RecompilesStaleOutputBeforePacking(
         DotNetRepositoryPackStrategy packStrategy,
         bool targetFrameworkFromImport)
     {

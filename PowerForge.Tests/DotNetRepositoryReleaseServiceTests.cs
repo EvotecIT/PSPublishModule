@@ -244,7 +244,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 Assert.Equal("true", msbuild.Attribute("StopOnFirstFailure")?.Value);
             });
             Assert.Equal("Restore", msbuildTasks[0].Attribute("Targets")?.Value);
-            Assert.Equal("Rebuild", msbuildTasks[1].Attribute("Targets")?.Value);
+            Assert.Equal("Build", msbuildTasks[1].Attribute("Targets")?.Value);
             Assert.Equal("Pack", msbuildTasks[2].Attribute("Targets")?.Value);
             Assert.Equal("Configuration=Release", msbuildTasks[0].Attribute("Properties")?.Value);
             Assert.Equal("Configuration=Release", msbuildTasks[1].Attribute("Properties")?.Value);
