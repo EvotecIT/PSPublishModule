@@ -160,6 +160,19 @@ public sealed class ModulePublisherManagedModuleTests
                 Uri = "https://pkgs.dev.azure.com/contoso/Platform/_packaging/CompanyModules/nuget/v3/index.json"
             }
         };
+        var registeredRequiredModuleSource = new PublishConfiguration
+        {
+            Destination = PublishDestination.PowerShellGallery,
+            Tool = PublishTool.Auto,
+            RepositoryName = "CompanyModules",
+            PublishRequiredModules = true,
+            RequiredModuleSourceRepository = "RegisteredUpstream",
+            Repository = new PublishRepositoryConfiguration
+            {
+                Name = "CompanyModules",
+                Uri = "https://packages.example.test/v3/index.json"
+            }
+        };
 
         Assert.True(ModulePublisher.ShouldUseManagedModuleForAuto(psGallery));
         Assert.True(ModulePublisher.ShouldUseManagedModuleForAuto(psGalleryV3));
@@ -171,6 +184,27 @@ public sealed class ModulePublisherManagedModuleTests
             ModulePublisher.NormalizeManagedRepositorySource(ManagedModuleCatalogDefaults.PowerShellGalleryV3));
         Assert.False(ModulePublisher.ShouldUseManagedModuleForAuto(runtimeCredential));
         Assert.False(ModulePublisher.ShouldUseManagedModuleForAuto(azureArtifacts));
+        Assert.False(ModulePublisher.ShouldUseManagedModuleForAuto(registeredRequiredModuleSource));
+    }
+
+    [Fact]
+    public void ModulePublishResult_preserves_legacy_constructor_signature()
+    {
+        var constructor = typeof(ModulePublishResult).GetConstructor(new[]
+        {
+            typeof(PublishDestination),
+            typeof(string),
+            typeof(string),
+            typeof(string),
+            typeof(string),
+            typeof(bool),
+            typeof(string[]),
+            typeof(string),
+            typeof(bool),
+            typeof(string)
+        });
+
+        Assert.NotNull(constructor);
     }
 
     [Fact]

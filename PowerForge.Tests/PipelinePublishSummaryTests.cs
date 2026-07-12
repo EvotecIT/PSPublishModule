@@ -78,6 +78,39 @@ public sealed class PipelinePublishSummaryTests
         Assert.Contains(summary.Rows, row => row.Result == "Published DbaClientX-PowerShellModule.v1.0.2 (3 assets)");
     }
 
+    [Fact]
+    public void Build_redacts_private_feed_credentials_from_targets_and_references()
+    {
+        const string package = @"C:\artifacts\Company.Tools.1.0.0.nupkg";
+        var release = new DotNetRepositoryReleaseResult
+        {
+            Success = true,
+            PublishSource = "https://user:token@feed.example/v3/index.json"
+        };
+        release.Projects.Add(CreateProject("Company.Tools", "Company.Tools", "1.0.0", package, @"C:\artifacts\Company.Tools.1.0.0.zip"));
+        release.PublishedPackages.Add(package);
+        var build = new ProjectBuildHostExecutionResult
+        {
+            Success = true,
+            Result = new ProjectBuildResult
+            {
+                Success = true,
+                Release = release
+            }
+        };
+
+        var summary = PipelinePublishSummaryBuilder.Build(
+            "Company.Tools",
+            Array.Empty<ModulePublishResult>(),
+            new[] { build });
+
+        var row = Assert.Single(summary.Rows);
+        Assert.Equal("https://feed.example/v3/index.json", row.Target);
+        Assert.Equal("https://feed.example/v3/index.json", row.Reference);
+        Assert.DoesNotContain("user", summary.Channels[0].Label, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("token", summary.Channels[0].Label, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static DotNetRepositoryProjectResult CreateProject(
         string projectName,
         string packageId,

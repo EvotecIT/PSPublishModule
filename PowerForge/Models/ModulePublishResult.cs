@@ -51,8 +51,37 @@ public sealed class ModulePublishResult
         string[] assetPaths,
         string? releaseUrl,
         bool succeeded,
+        string? errorMessage)
+        : this(
+            destination,
+            repositoryName,
+            userName,
+            tagName,
+            versionText,
+            isPreRelease,
+            assetPaths,
+            releaseUrl,
+            succeeded,
+            errorMessage,
+            tool: null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new result instance and records the repository publishing engine.
+    /// </summary>
+    public ModulePublishResult(
+        PublishDestination destination,
+        string? repositoryName,
+        string? userName,
+        string? tagName,
+        string versionText,
+        bool isPreRelease,
+        string[] assetPaths,
+        string? releaseUrl,
+        bool succeeded,
         string? errorMessage,
-        PublishTool? tool = null)
+        PublishTool? tool)
     {
         Destination = destination;
         RepositoryName = repositoryName;

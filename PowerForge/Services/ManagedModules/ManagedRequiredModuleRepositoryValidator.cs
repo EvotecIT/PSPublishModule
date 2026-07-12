@@ -323,6 +323,17 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
             $"Managed required-module mirroring could not resolve source repository '{source}'. Use PSGallery, a repository URL, a local feed path, or the target repository name.");
     }
 
+    internal static bool CanResolveSourceRepository(PublishConfiguration publish, string targetRepositoryName)
+    {
+        if (!publish.PublishRequiredModules || !string.IsNullOrWhiteSpace(publish.RequiredModuleSourceRepositoryUri))
+            return true;
+
+        var source = ResolveSourceRepositoryName(publish);
+        return string.Equals(source, "PSGallery", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(source, targetRepositoryName, StringComparison.OrdinalIgnoreCase) ||
+               LooksLikeRepositorySource(source);
+    }
+
     private static bool IsPowerShellGalleryRepository(ManagedModuleRepository repository)
     {
         if (string.Equals(repository.Name, "PSGallery", StringComparison.OrdinalIgnoreCase))

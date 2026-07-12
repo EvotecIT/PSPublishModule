@@ -290,16 +290,31 @@ internal static class PipelinePublishSummaryBuilder
 
     private static string BuildNuGetTarget(string? source)
     {
-        if (string.IsNullOrWhiteSpace(source))
+        var safeSource = SanitizeRepositorySource(source);
+        if (string.IsNullOrWhiteSpace(safeSource))
             return "(NuGet feed)";
-        return IsNuGetOrg(source!) ? "nuget.org" : source!.Trim();
+        return IsNuGetOrg(safeSource) ? "nuget.org" : safeSource;
     }
 
     private static string BuildNuGetReference(string? source, string packageId, string version)
     {
         if (IsNuGetOrg(source) && !string.IsNullOrWhiteSpace(packageId) && !string.IsNullOrWhiteSpace(version))
             return $"https://www.nuget.org/packages/{Uri.EscapeDataString(packageId)}/{Uri.EscapeDataString(version)}";
-        return source?.Trim() ?? string.Empty;
+        return SanitizeRepositorySource(source);
+    }
+
+    private static string SanitizeRepositorySource(string? source)
+    {
+        var value = source?.Trim() ?? string.Empty;
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || string.IsNullOrWhiteSpace(uri.UserInfo))
+            return value;
+
+        var builder = new UriBuilder(uri)
+        {
+            UserName = string.Empty,
+            Password = string.Empty
+        };
+        return builder.Uri.AbsoluteUri;
     }
 
     private static string BuildPowerShellGalleryReference(string moduleName, ModulePublishResult publish)

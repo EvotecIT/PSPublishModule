@@ -17,6 +17,8 @@ public sealed partial class ModulePublisher
             return false;
 
         var (repositoryName, repository) = ResolveRepository(publish);
+        if (!ManagedRequiredModuleRepositoryValidator.CanResolveSourceRepository(publish, repositoryName))
+            return false;
         try
         {
             var support = ManagedModuleProviderSupportEvaluator.Evaluate(
