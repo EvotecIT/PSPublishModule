@@ -35,9 +35,9 @@ internal static class CsprojVersionEditor
 
     private static readonly string[] ReadVersionTags =
     {
+        "PackageVersion",
         "Version",
         "VersionPrefix",
-        "PackageVersion",
         "AssemblyVersion",
         "FileVersion",
         "InformationalVersion"

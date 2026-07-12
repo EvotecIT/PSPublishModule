@@ -25,7 +25,13 @@ internal static class PackageVersionUtility
 
         normalized = NormalizeNumericCore(coreVersion);
         if (match.Groups["prerelease"].Success)
-            normalized += "-" + match.Groups["prerelease"].Value;
+        {
+            var prerelease = match.Groups["prerelease"].Value;
+            if (HasLeadingZeroNumericIdentifier(prerelease))
+                return false;
+
+            normalized += "-" + prerelease;
+        }
         return true;
     }
 
@@ -114,6 +120,17 @@ internal static class PackageVersionUtility
             return leftNumeric ? -1 : 1;
 
         return string.Compare(left, right, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasLeadingZeroNumericIdentifier(string prerelease)
+    {
+        foreach (var identifier in prerelease.Split('.'))
+        {
+            if (identifier.Length > 1 && identifier[0] == '0' && IsNumericIdentifier(identifier))
+                return true;
+        }
+
+        return false;
     }
 
     private static bool IsNumericIdentifier(string value)

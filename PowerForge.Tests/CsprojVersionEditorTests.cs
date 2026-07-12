@@ -89,6 +89,26 @@ public sealed class CsprojVersionEditorTests
         }
     }
 
+    [Fact]
+    public void TryGetVersion_PrefersPackageVersionOverride()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N") + ".csproj");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+        try
+        {
+            File.WriteAllText(path, "<Project><PropertyGroup><VersionPrefix>2.0.0</VersionPrefix><VersionSuffix>rc.1</VersionSuffix><PackageVersion>9.1.0-preview.2</PackageVersion></PropertyGroup></Project>");
+
+            Assert.True(CsprojVersionEditor.TryGetVersion(path, out var version));
+            Assert.Equal("9.1.0-preview.2", version);
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+    }
+
     [Theory]
     [InlineData("<VersionSuffix></VersionSuffix>")]
     [InlineData("<VersionSuffix />")]

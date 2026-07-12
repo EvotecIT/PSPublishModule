@@ -111,6 +111,42 @@ public sealed class DotNetRepositoryReleaseServiceVersioningTests
         }
     }
 
+    [Fact]
+    public void Execute_RejectsLeadingZeroNumericPrereleaseWithoutChangingProject()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Package"));
+            var csprojPath = Path.Combine(projectDir.FullName, "Sample.Package.csproj");
+            const string originalProject = "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Version>1.0.0</Version><IsPackable>true</IsPackable></PropertyGroup></Project>";
+            File.WriteAllText(csprojPath, originalProject);
+
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                ExpectedVersionsByProject = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Sample.Package"] = "1.0.0-beta.01"
+                },
+                ExpectedVersionMapAsInclude = true,
+                UpdateVersions = true,
+                Pack = false,
+                Publish = false
+            };
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(spec);
+
+            Assert.False(result.Success);
+            Assert.Contains("Version resolution failed", Assert.Single(result.Projects).ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(originalProject, File.ReadAllText(csprojPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Theory]
     [InlineData("2.1.0-beta.1", "2.1.0-beta.1", false)]
     [InlineData("2.1.0-beta.1", "2.1.0-beta.2", true)]
