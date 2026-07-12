@@ -4914,11 +4914,13 @@ public sealed class PowerForgeReleaseServiceTests
     {
         var root = CreateSandbox();
         var package = Path.Combine(root, "IntelligenceX.Tools.Common.0.1.0.nupkg");
+        var symbolPackage = Path.Combine(root, "IntelligenceX.Tools.Common.0.1.0.snupkg");
         var bundleZip = Path.Combine(root, "IntelligenceX.Chat-Portable-win-x64.zip");
         var msi = Path.Combine(root, "IntelligenceX.Chat.Installer.msi");
         var storeUpload = Path.Combine(root, "IntelligenceX.Chat.Store.msixupload");
         var dotNetManifest = Path.Combine(root, "dotnet-manifest.json");
         File.WriteAllText(package, "pkg", new UTF8Encoding(false));
+        File.WriteAllText(symbolPackage, "symbols", new UTF8Encoding(false));
         File.WriteAllText(bundleZip, "zip", new UTF8Encoding(false));
         File.WriteAllText(msi, "msi", new UTF8Encoding(false));
         File.WriteAllText(storeUpload, "upload", new UTF8Encoding(false));
@@ -4938,6 +4940,7 @@ public sealed class PowerForgeReleaseServiceTests
                         IsPackable = true
                     };
                     project.Packages.Add(package);
+                    project.SymbolPackages.Add(symbolPackage);
                     release.Projects.Add(project);
 
                     return new ProjectBuildHostExecutionResult
@@ -5054,11 +5057,13 @@ public sealed class PowerForgeReleaseServiceTests
             Assert.Equal(Path.Combine(stageRoot, "release-manifest.json"), result.ReleaseManifestPath);
             Assert.Equal(Path.Combine(stageRoot, "SHA256SUMS.txt"), result.ReleaseChecksumsPath);
             Assert.True(File.Exists(Path.Combine(stageRoot, "nuget", Path.GetFileName(package))));
+            Assert.True(File.Exists(Path.Combine(stageRoot, "nuget", Path.GetFileName(symbolPackage))));
             Assert.True(File.Exists(Path.Combine(stageRoot, "portable", Path.GetFileName(bundleZip))));
             Assert.True(File.Exists(Path.Combine(stageRoot, "installer", Path.GetFileName(msi))));
             Assert.True(File.Exists(Path.Combine(stageRoot, "store", Path.GetFileName(storeUpload))));
             Assert.True(File.Exists(Path.Combine(stageRoot, "metadata", Path.GetFileName(dotNetManifest))));
             Assert.Contains(Path.Combine(stageRoot, "nuget", Path.GetFileName(package)), result.ReleaseAssets, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(Path.Combine(stageRoot, "nuget", Path.GetFileName(symbolPackage)), result.ReleaseAssets, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(Path.Combine(stageRoot, "portable", Path.GetFileName(bundleZip)), result.ReleaseAssets, StringComparer.OrdinalIgnoreCase);
 
             var stagedPackage = Assert.Single(
@@ -5068,6 +5073,7 @@ public sealed class PowerForgeReleaseServiceTests
 
             var checksumText = File.ReadAllText(Path.Combine(stageRoot, "SHA256SUMS.txt"));
             Assert.Contains("nuget/" + Path.GetFileName(package), checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("nuget/" + Path.GetFileName(symbolPackage), checksumText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("portable/" + Path.GetFileName(bundleZip), checksumText, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(package.Replace('\\', '/'), checksumText, StringComparison.OrdinalIgnoreCase);
         }

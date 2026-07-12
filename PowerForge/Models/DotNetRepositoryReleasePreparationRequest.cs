@@ -28,6 +28,7 @@ internal sealed class DotNetRepositoryReleasePreparationRequest
     public bool? SignDependencyAssemblies { get; set; }
     public bool? SignPackages { get; set; }
     public bool SkipPack { get; set; }
+    public bool IncludeSymbols { get; set; }
     public bool Publish { get; set; }
     public string? PublishSource { get; set; }
     public string? PublishApiKey { get; set; }

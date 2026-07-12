@@ -61,6 +61,9 @@ public sealed class DotNetRepositoryProjectResult
     /// <summary>Packages produced for this project.</summary>
     public List<string> Packages { get; } = new();
 
+    /// <summary>Portable symbol packages produced for this project.</summary>
+    public List<string> SymbolPackages { get; } = new();
+
     /// <summary>Release zip path (if created).</summary>
     public string? ReleaseZipPath { get; set; }
 

@@ -362,7 +362,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         }
                         else
                         {
-                            _logger.Success($"MSBuild batch pack produced {batchPackResult.Packages.Count} package(s) in {FormatDuration(batchPackResult.Duration)}.");
+                            _logger.Success($"MSBuild batch pack produced {batchPackResult.Packages.Count} package(s) and {batchPackResult.SymbolPackages.Count} symbol package(s) in {FormatDuration(batchPackResult.Duration)}.");
                         }
                     }
                 }
@@ -388,6 +388,12 @@ public sealed partial class DotNetRepositoryReleaseService
                         var planned = ResolvePackagePath(spec, project, project.NewVersion!);
                         if (!string.IsNullOrWhiteSpace(planned))
                             project.Packages.Add(planned!);
+                        if (spec.IncludeSymbols)
+                        {
+                            var plannedSymbols = ResolveSymbolPackagePath(spec, project, project.NewVersion!);
+                            if (!string.IsNullOrWhiteSpace(plannedSymbols))
+                                project.SymbolPackages.Add(plannedSymbols!);
+                        }
                         continue;
                     }
 
@@ -422,6 +428,20 @@ public sealed partial class DotNetRepositoryReleaseService
                     foreach (var pkg in filtered)
                         project.Packages.Add(pkg);
 
+                    var filteredSymbols = FilterPackages(packResult.SymbolPackages, project.PackageId, project.NewVersion!);
+                    foreach (var symbolPackage in filteredSymbols)
+                        project.SymbolPackages.Add(symbolPackage);
+
+                    if (spec.IncludeSymbols && filteredSymbols.Count == 0)
+                    {
+                        project.ErrorMessage = $"No symbol package found for version {project.NewVersion}.";
+                        _logger.Warn($"{project.ProjectName}: {project.ErrorMessage}");
+                        result.Success = false;
+                        if (spec.PublishFailFast)
+                            return result;
+                        continue;
+                    }
+
                     var ignored = packResult.Packages.Except(filtered, StringComparer.OrdinalIgnoreCase).ToArray();
                     // In batch mode, ignored packages are normally packages for other batched projects.
                     if (ignored.Length > 0 && batchPackResult is null)
@@ -432,7 +452,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         var packTiming = batchPackResult is null
                             ? $" in {FormatDuration(packResult.Duration)}"
                             : " from MSBuild batch";
-                        _logger.Success($"{project.ProjectName}: package workflow produced {filtered.Count} package(s){packTiming}.");
+                        _logger.Success($"{project.ProjectName}: package workflow produced {filtered.Count} package(s) and {filteredSymbols.Count} symbol package(s){packTiming}.");
                     }
 
                     if (spec.CreateReleaseZip && !string.IsNullOrWhiteSpace(project.NewVersion))
@@ -517,13 +537,10 @@ public sealed partial class DotNetRepositoryReleaseService
                 result.PublishSource = source;
 
                 var orderedProjects = SortProjectsForPublish(packable);
-                var packages = orderedProjects.SelectMany(p => p.Packages)
-                    .Where(p => !string.IsNullOrWhiteSpace(p))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
+                var packages = GetPackagesForPublish(orderedProjects);
 
                 var packageLookup = orderedProjects
-                    .SelectMany(p => p.Packages.Select(pkg => new { Package = pkg, Project = p }))
+                    .SelectMany(p => p.Packages.Concat(p.SymbolPackages).Select(pkg => new { Package = pkg, Project = p }))
                     .GroupBy(x => x.Package, StringComparer.OrdinalIgnoreCase)
                     .ToDictionary(g => g.Key, g => g.First().Project, StringComparer.OrdinalIgnoreCase);
 

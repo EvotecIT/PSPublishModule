@@ -50,4 +50,12 @@ public sealed partial class DotNetRepositoryReleaseService
         return list;
     }
 
+    internal static string[] GetPackagesForPublish(IEnumerable<DotNetRepositoryProjectResult> projects)
+        => projects
+            .Where(static project => project is not null)
+            .SelectMany(static project => project.Packages.Concat(project.SymbolPackages))
+            .Where(static package => !string.IsNullOrWhiteSpace(package))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
 }

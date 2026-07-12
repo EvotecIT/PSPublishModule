@@ -47,6 +47,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 Configuration = "Release",
                 OutputPath = Path.Combine(root.FullName, "Artefacts", "packages"),
                 Pack = true,
+                IncludeSymbols = true,
                 Publish = true,
                 WhatIf = true,
                 PublishApiKey = "dummy",
@@ -62,8 +63,11 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.True(string.IsNullOrWhiteSpace(result.ErrorMessage), result.ErrorMessage);
             var project = Assert.Single(result.Projects, p => p.IsPackable);
             var pkg = Assert.Single(project.Packages);
+            var symbols = Assert.Single(project.SymbolPackages);
             Assert.False(File.Exists(pkg));
+            Assert.False(File.Exists(symbols));
             Assert.Contains(pkg, result.PublishedPackages, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(symbols, result.PublishedPackages, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {
@@ -202,6 +206,27 @@ public sealed class DotNetRepositoryReleaseServiceTests
         Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.Published, result.Outcome);
     }
 
+    [Fact]
+    public void GetPackagesForPublish_OrdersEachSymbolPackageAfterItsPrimaryPackage()
+    {
+        var first = new DotNetRepositoryProjectResult { ProjectName = "First" };
+        first.Packages.Add("First.1.0.0.nupkg");
+        first.SymbolPackages.Add("First.1.0.0.snupkg");
+        var second = new DotNetRepositoryProjectResult { ProjectName = "Second" };
+        second.Packages.Add("Second.2.0.0.nupkg");
+        second.SymbolPackages.Add("Second.2.0.0.snupkg");
+
+        var packages = DotNetRepositoryReleaseService.GetPackagesForPublish(new[] { first, second });
+
+        Assert.Equal(new[]
+        {
+            "First.1.0.0.nupkg",
+            "First.1.0.0.snupkg",
+            "Second.2.0.0.nupkg",
+            "Second.2.0.0.snupkg"
+        }, packages);
+    }
+
     [Theory]
     [InlineData(false, "Build")]
     [InlineData(true, "Rebuild")]
@@ -313,6 +338,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 OutputPath = outputPath,
                 Pack = true,
                 PackStrategy = DotNetRepositoryPackStrategy.MSBuild,
+                IncludeSymbols = true,
                 Publish = false,
                 UpdateVersions = false,
                 CreateReleaseZip = false
@@ -326,6 +352,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.All(result.Projects.Where(project => project.IsPackable), project =>
             {
                 Assert.Single(project.Packages);
+                Assert.Single(project.SymbolPackages);
                 Assert.True(string.IsNullOrWhiteSpace(project.ErrorMessage), project.ErrorMessage);
             });
         }
@@ -446,6 +473,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 OutputPath = Path.Combine(root.FullName, "packages"),
                 ReleaseZipOutputPath = Path.Combine(root.FullName, "releases"),
                 Pack = true,
+                IncludeSymbols = true,
                 Publish = false,
                 UpdateVersions = false,
                 CreateReleaseZip = true,
@@ -481,7 +509,9 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.True(File.Exists(signedMarker));
             var project = Assert.Single(result.Projects, item => item.IsPackable);
             Assert.Single(project.Packages);
+            Assert.Single(project.SymbolPackages);
             Assert.True(File.Exists(project.Packages[0]));
+            Assert.True(File.Exists(project.SymbolPackages[0]));
             Assert.True(File.Exists(project.ReleaseZipPath));
         }
         finally
@@ -1173,13 +1203,16 @@ public sealed class DotNetRepositoryReleaseServiceTests
         try
         {
             var existing = Path.Combine(root.FullName, "Sample.Package.1.0.0.nupkg");
-            var symbols = Path.Combine(root.FullName, "Sample.Package.1.0.0.symbols.nupkg");
+            var legacySymbols = Path.Combine(root.FullName, "Sample.Package.1.0.0.symbols.nupkg");
+            var symbols = Path.Combine(root.FullName, "Sample.Package.1.0.0.snupkg");
             File.WriteAllText(existing, "old");
+            File.WriteAllText(legacySymbols, "legacy symbols");
             File.WriteAllText(symbols, "symbols");
 
             var snapshot = DotNetRepositoryReleaseService.SnapshotPackages(root.FullName);
 
             Assert.False(DotNetRepositoryReleaseService.WasPackageCreatedOrChanged(snapshot, existing));
+            Assert.False(DotNetRepositoryReleaseService.WasPackageCreatedOrChanged(snapshot, symbols));
 
             File.WriteAllText(existing, "changed package");
             var created = Path.Combine(root.FullName, "Sample.Package.1.0.1.nupkg");
@@ -1190,7 +1223,8 @@ public sealed class DotNetRepositoryReleaseServiceTests
 
             File.Delete(existing);
             Assert.False(DotNetRepositoryReleaseService.WasPackageCreatedOrChanged(snapshot, existing));
-            Assert.DoesNotContain(symbols, snapshot.Keys, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(symbols, snapshot.Keys, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain(legacySymbols, snapshot.Keys, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {

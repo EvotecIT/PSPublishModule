@@ -498,6 +498,8 @@ public sealed partial class ModulePipelineRunner
             target.UpdateVersions = reference.UpdateVersions;
         if (reference.Build is not null)
             target.Build = reference.Build;
+        if (reference.IncludeSymbols is not null)
+            target.IncludeSymbols = reference.IncludeSymbols;
         if (reference.PublishNuget is not null)
             target.PublishNuget = reference.PublishNuget;
         if (reference.PublishGitHub is not null)
@@ -764,6 +766,7 @@ public sealed partial class ModulePipelineRunner
             UpdateVersions = source.UpdateVersions,
             Build = source.Build,
             PackStrategy = source.PackStrategy,
+            IncludeSymbols = source.IncludeSymbols,
             PublishNuget = source.PublishNuget,
             PublishGitHub = source.PublishGitHub,
             CreateReleaseZip = source.CreateReleaseZip,

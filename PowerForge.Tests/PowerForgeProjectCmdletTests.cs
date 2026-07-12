@@ -111,6 +111,7 @@ public sealed class PowerForgeProjectCmdletTests
             .AddParameter("UseAsReleaseVersionSource")
             .AddParameter("ProvideLocalNuGetFeed")
             .AddParameter("Build")
+            .AddParameter("IncludeSymbols")
             .AddParameter("PublishNuget", false)
             .AddParameter("PublishGitHub", false)
             .AddParameter("CreateReleaseZip", false)
@@ -127,6 +128,7 @@ public sealed class PowerForgeProjectCmdletTests
         Assert.True(segment.Configuration.ProvideLocalNuGetFeed);
         Assert.True(segment.Configuration.Enabled);
         Assert.True(segment.Configuration.Build);
+        Assert.True(segment.Configuration.IncludeSymbols);
         Assert.False(segment.Configuration.PublishNuget);
         Assert.False(segment.Configuration.PublishGitHub);
         Assert.False(segment.Configuration.CreateReleaseZip);
@@ -150,6 +152,7 @@ public sealed class PowerForgeProjectCmdletTests
                 }
             })
             .AddParameter("BuildBeforeModule")
+            .AddParameter("IncludeSymbols")
             .AddParameter("PublishNuget", false)
             .AddParameter("UseGitHubPackages")
             .AddParameter("GitHubPackagesOwner", "EvotecIT")
@@ -162,6 +165,7 @@ public sealed class PowerForgeProjectCmdletTests
         Assert.Equal(".\\Sources", segment.Configuration.RootPath);
         Assert.Equal("2.0.X", segment.Configuration.ExpectedVersionMap?["HtmlTinkerX"]);
         Assert.True(segment.Configuration.BuildBeforeModule);
+        Assert.True(segment.Configuration.IncludeSymbols);
         Assert.False(segment.Configuration.PublishNuget);
         Assert.True(segment.Configuration.UseGitHubPackages);
         Assert.Equal("EvotecIT", segment.Configuration.GitHubPackagesOwner);

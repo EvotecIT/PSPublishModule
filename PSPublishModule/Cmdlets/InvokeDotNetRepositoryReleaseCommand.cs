@@ -123,6 +123,10 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
     [Parameter]
     public SwitchParameter SkipPack { get; set; }
 
+    /// <summary>Create portable <c>.snupkg</c> symbol packages alongside primary packages.</summary>
+    [Parameter]
+    public SwitchParameter IncludeSymbols { get; set; }
+
     /// <summary>Publish packages to the feed.</summary>
     [Parameter]
     public SwitchParameter Publish { get; set; }
@@ -200,6 +204,7 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
             SignDependencyAssemblies = SignDependencyAssemblies.IsPresent,
             SignPackages = SkipPackageSigning.IsPresent ? false : null,
             SkipPack = SkipPack.IsPresent,
+            IncludeSymbols = IncludeSymbols.IsPresent,
             Publish = Publish.IsPresent,
             PublishSource = PublishSource,
             PublishApiKey = PublishApiKey,

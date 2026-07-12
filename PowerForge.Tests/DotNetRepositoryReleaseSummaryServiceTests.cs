@@ -19,6 +19,7 @@ public sealed class DotNetRepositoryReleaseSummaryServiceTests
             NewVersion = "2.0.5"
         });
         result.Projects[0].Packages.Add("LibraryA.2.0.5.nupkg");
+        result.Projects[0].SymbolPackages.Add("LibraryA.2.0.5.snupkg");
         result.Projects.Add(new DotNetRepositoryProjectResult
         {
             ProjectName = "LibraryB",
@@ -40,6 +41,7 @@ public sealed class DotNetRepositoryReleaseSummaryServiceTests
         Assert.Equal("LibraryA", summary.Projects[0].ProjectName);
         Assert.Equal(DotNetRepositoryReleaseProjectStatus.Ok, summary.Projects[0].Status);
         Assert.Equal("2.0.4 -> 2.0.5", summary.Projects[0].VersionDisplay);
+        Assert.Equal(2, summary.Projects[0].PackageCount);
         Assert.Equal("LibraryB", summary.Projects[1].ProjectName);
         Assert.Equal(DotNetRepositoryReleaseProjectStatus.Skipped, summary.Projects[1].Status);
         Assert.Equal("LibraryC", summary.Projects[2].ProjectName);
@@ -49,7 +51,7 @@ public sealed class DotNetRepositoryReleaseSummaryServiceTests
         Assert.Equal(3, summary.Totals.ProjectCount);
         Assert.Equal(2, summary.Totals.PackableCount);
         Assert.Equal(1, summary.Totals.FailedProjectCount);
-        Assert.Equal(1, summary.Totals.PackageCount);
+        Assert.Equal(2, summary.Totals.PackageCount);
         Assert.Equal(1, summary.Totals.PublishedPackageCount);
         Assert.Equal(1, summary.Totals.SkippedDuplicatePackageCount);
         Assert.Equal(1, summary.Totals.FailedPublishCount);
