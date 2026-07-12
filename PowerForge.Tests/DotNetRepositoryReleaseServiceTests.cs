@@ -11,6 +11,52 @@ namespace PowerForge.Tests;
 public sealed class DotNetRepositoryReleaseServiceTests
 {
     [Fact]
+    public void Execute_AcceptsExactPrereleasePackageVersion()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Package"));
+            var csprojPath = Path.Combine(projectDir.FullName, "Sample.Package.csproj");
+            File.WriteAllText(csprojPath, string.Join(Environment.NewLine, new[]
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <TargetFramework>net8.0</TargetFramework>",
+                "    <PackageId>Sample.Package</PackageId>",
+                "    <Version>2.1.0-beta.1</Version>",
+                "    <IsPackable>true</IsPackable>",
+                "  </PropertyGroup>",
+                "</Project>"
+            }));
+
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                ExpectedVersionsByProject = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Sample.Package"] = "2.1.0-beta.1"
+                },
+                ExpectedVersionMapAsInclude = true,
+                UpdateVersions = true,
+                Pack = false,
+                Publish = false
+            };
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(spec);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            var project = Assert.Single(result.Projects);
+            Assert.Equal("2.1.0-beta.1", project.NewVersion);
+            Assert.Contains("<Version>2.1.0-beta.1</Version>", File.ReadAllText(csprojPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Execute_preserves_one_argument_public_overload()
     {
         var overload = typeof(DotNetRepositoryReleaseService)

@@ -514,6 +514,29 @@ public sealed class ProjectBuildPreparationServiceTests
     }
 
     [Fact]
+    public void Version_tracks_accept_exact_prerelease_versions_without_an_anchor_feed()
+    {
+        var config = new ProjectBuildConfiguration
+        {
+            ExpectedVersionMapAsInclude = true,
+            VersionTracks = new Dictionary<string, ProjectBuildVersionTrack>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Preview"] = new()
+                {
+                    ExpectedVersion = "2.1.0-beta.1",
+                    AnchorProject = "HtmlTinkerX"
+                }
+            }
+        };
+
+        var map = new ProjectBuildVersionTrackService(new NullLogger())
+            .ResolveExpectedVersionMap(config, Array.Empty<string>(), credential: null);
+
+        Assert.NotNull(map);
+        Assert.Equal("2.1.0-beta.1", map!["HtmlTinkerX"]);
+    }
+
+    [Fact]
     public void Prepare_resolves_version_tracks_from_explicit_anchor_package_id()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-track-packageid-" + Guid.NewGuid().ToString("N")));
