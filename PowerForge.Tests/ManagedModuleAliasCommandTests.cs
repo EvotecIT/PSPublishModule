@@ -801,7 +801,7 @@ public sealed class ManagedModuleAliasCommandTests
 
         AssertNoPowerShellErrors(ps);
         Assert.True(result.Published);
-        Assert.Equal("https://example.invalid/v2", result.RepositorySource);
+        Assert.Equal(feed.Path, result.RepositorySource);
         Assert.Equal(feed.Path, Path.GetDirectoryName(result.PublishSource));
         Assert.True(File.Exists(Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg")));
     }
@@ -839,7 +839,7 @@ public sealed class ManagedModuleAliasCommandTests
 
         AssertNoPowerShellErrors(ps);
         Assert.True(result.Published);
-        Assert.Equal(readFeed.Path, result.RepositorySource);
+        Assert.Equal(publishFeed.Path, result.RepositorySource);
         Assert.Equal(publishFeed.Path, Path.GetDirectoryName(result.PublishSource));
         Assert.False(File.Exists(Path.Combine(readFeed.Path, "Company.Tools.1.0.0.nupkg")));
         Assert.True(File.Exists(Path.Combine(publishFeed.Path, "Company.Tools.1.0.0.nupkg")));
