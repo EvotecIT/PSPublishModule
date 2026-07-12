@@ -201,7 +201,7 @@ public sealed partial class DotNetRepositoryReleaseService
         out TimeSpan duration,
         out string error)
     {
-        const string propertyNames = "AssemblyName,BaseOutputPath,BaseIntermediateOutputPath,OutputPath,OutDir,IntermediateOutputPath,TargetDir";
+        const string propertyNames = "AssemblyName,ArtifactsPath,ArtifactsPivots,UseArtifactsOutput,BaseOutputPath,BaseIntermediateOutputPath,OutputPath,OutDir,IntermediateOutputPath,TargetDir";
         var resolvedOutputRoots = new List<string>();
         var resolvedIntermediateRoots = new List<string>();
         var resolvedAssemblyNames = new List<string>();
@@ -251,10 +251,34 @@ public sealed partial class DotNetRepositoryReleaseService
 
                 using var document = JsonDocument.Parse(stdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
                 var properties = document.RootElement.GetProperty("Properties");
-                var frameworkOutputRoots = ResolveEvaluatedRoots(properties, projectDirectory, "OutputPath", "OutDir", "TargetDir", "BaseOutputPath")
-                    .Select(root => ResolveConfigurationCleanupRoot(root, targetFramework));
-                var frameworkIntermediateRoots = ResolveEvaluatedRoots(properties, projectDirectory, "IntermediateOutputPath", "BaseIntermediateOutputPath")
-                    .Select(root => ResolveConfigurationCleanupRoot(root, targetFramework));
+                var frameworkOutputRoots = ResolveEvaluatedRoots(properties, projectDirectory, "TargetDir", "OutDir", "OutputPath");
+                if (frameworkOutputRoots.Length == 0)
+                    frameworkOutputRoots = ResolveEvaluatedRoots(properties, projectDirectory, "BaseOutputPath");
+                var frameworkIntermediateRoots = ResolveEvaluatedRoots(properties, projectDirectory, "IntermediateOutputPath");
+                if (frameworkIntermediateRoots.Length == 0)
+                    frameworkIntermediateRoots = ResolveEvaluatedRoots(properties, projectDirectory, "BaseIntermediateOutputPath");
+
+                frameworkOutputRoots = frameworkOutputRoots
+                    .Select(root => ResolveConfigurationCleanupRoot(root, targetFramework))
+                    .ToArray();
+                frameworkIntermediateRoots = frameworkIntermediateRoots
+                    .Select(root => ResolveConfigurationCleanupRoot(root, targetFramework))
+                    .ToArray();
+
+                var useArtifactsOutput = properties.TryGetProperty("UseArtifactsOutput", out var useArtifactsOutputProperty) &&
+                                         bool.TryParse(useArtifactsOutputProperty.GetString(), out var parsedUseArtifactsOutput) &&
+                                         parsedUseArtifactsOutput;
+                if (useArtifactsOutput)
+                {
+                    frameworkOutputRoots = ExpandArtifactConfigurationRoots(
+                        frameworkOutputRoots,
+                        ResolveEvaluatedRoots(properties, projectDirectory, "BaseOutputPath"),
+                        configuration);
+                    frameworkIntermediateRoots = ExpandArtifactConfigurationRoots(
+                        frameworkIntermediateRoots,
+                        ResolveEvaluatedRoots(properties, projectDirectory, "BaseIntermediateOutputPath"),
+                        configuration);
+                }
                 var evaluatedAssemblyName = properties.TryGetProperty("AssemblyName", out var assemblyNameProperty)
                     ? assemblyNameProperty.GetString() ?? string.Empty
                     : string.Empty;
@@ -294,6 +318,7 @@ public sealed partial class DotNetRepositoryReleaseService
         string projectDirectory,
         params string[] propertyNames)
     {
+        var roots = new List<string>();
         foreach (var propertyName in propertyNames)
         {
             if (!properties.TryGetProperty(propertyName, out var property))
@@ -306,10 +331,10 @@ public sealed partial class DotNetRepositoryReleaseService
             var resolved = Path.IsPathRooted(value)
                 ? value
                 : Path.Combine(projectDirectory, value);
-            return new[] { Path.GetFullPath(resolved) };
+            roots.Add(Path.GetFullPath(resolved));
         }
 
-        return Array.Empty<string>();
+        return roots.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     private static bool IsPathWithinRoot(string path, string root)
@@ -341,4 +366,28 @@ public sealed partial class DotNetRepositoryReleaseService
 
     private static string FormatTargetFrameworkContext(string? targetFramework)
         => string.IsNullOrWhiteSpace(targetFramework) ? string.Empty : $" ({targetFramework})";
+
+    private static string[] ExpandArtifactConfigurationRoots(
+        IEnumerable<string> evaluatedRoots,
+        IEnumerable<string> artifactBaseRoots,
+        string configuration)
+    {
+        var roots = new List<string>(evaluatedRoots);
+        var pivotPrefix = configuration.Trim() + "_";
+        foreach (var baseRoot in artifactBaseRoots.Where(Directory.Exists))
+        {
+            roots.AddRange(Directory.EnumerateDirectories(baseRoot, "*", SearchOption.TopDirectoryOnly)
+                .Where(path =>
+                {
+                    var name = Path.GetFileName(path);
+                    return string.Equals(name, configuration, StringComparison.OrdinalIgnoreCase) ||
+                           name.StartsWith(pivotPrefix, StringComparison.OrdinalIgnoreCase);
+                }));
+        }
+
+        return roots
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
 }
