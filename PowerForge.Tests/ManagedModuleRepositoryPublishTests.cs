@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -91,9 +92,9 @@ public sealed class ManagedModuleRepositoryPublishTests
         using var temp = new TemporaryDirectory();
         var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
         File.WriteAllBytes(packagePath, TestPackageFactory.CreateBytes("Company.Tools", "1.0.0"));
-        var responseStream = new SlowCancellationStream();
-        using var client = new HttpClient(new StreamFailureHandler(responseStream));
-        var options = new ManagedModuleRepositoryClientOptions { RequestTimeout = TimeSpan.FromMilliseconds(25) };
+        var responseStream = new SlowCancellationStream(TimeSpan.FromSeconds(5));
+        using var client = new HttpClient(new DelayedStreamFailureHandler(responseStream, TimeSpan.FromMilliseconds(1500)));
+        var options = new ManagedModuleRepositoryClientOptions { RequestTimeout = TimeSpan.FromSeconds(2) };
         var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client, options: options);
         var repository = new ManagedModuleRepository("PrivateGallery", "https://packages.example.test/api/v2");
 
@@ -102,6 +103,9 @@ public sealed class ManagedModuleRepositoryPublishTests
 
         Assert.Equal(400, exception.StatusCode);
         Assert.True(responseStream.CancellationObserved);
+        Assert.True(
+            responseStream.TimeUntilCancellation < TimeSpan.FromMilliseconds(1200),
+            $"Error body consumed a restarted timeout window ({responseStream.TimeUntilCancellation}).");
     }
 
     [Fact]
@@ -216,6 +220,24 @@ public sealed class ManagedModuleRepositoryPublishTests
             });
     }
 
+    private sealed class DelayedStreamFailureHandler : HttpMessageHandler
+    {
+        private readonly Stream _stream;
+        private readonly TimeSpan _headerDelay;
+
+        public DelayedStreamFailureHandler(Stream stream, TimeSpan headerDelay)
+        {
+            _stream = stream;
+            _headerDelay = headerDelay;
+        }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            await Task.Delay(_headerDelay, cancellationToken).ConfigureAwait(false);
+            return new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StreamContent(_stream) };
+        }
+    }
+
     private sealed class CountingReadStream : MemoryStream
     {
         public CountingReadStream(byte[] buffer)
@@ -266,7 +288,15 @@ public sealed class ManagedModuleRepositoryPublishTests
 
     private sealed class SlowCancellationStream : Stream
     {
+        private readonly TimeSpan _readDelay;
+
+        public SlowCancellationStream(TimeSpan readDelay)
+        {
+            _readDelay = readDelay;
+        }
+
         public bool CancellationObserved { get; private set; }
+        public TimeSpan TimeUntilCancellation { get; private set; }
 
         public override bool CanRead => true;
         public override bool CanSeek => false;
@@ -286,14 +316,17 @@ public sealed class ManagedModuleRepositoryPublishTests
 
         public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
+            var timer = Stopwatch.StartNew();
             try
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken).ConfigureAwait(false);
+                await Task.Delay(_readDelay, cancellationToken).ConfigureAwait(false);
                 return 0;
             }
             catch (OperationCanceledException)
             {
+                timer.Stop();
                 CancellationObserved = true;
+                TimeUntilCancellation = timer.Elapsed;
                 throw;
             }
         }

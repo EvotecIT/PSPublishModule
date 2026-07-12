@@ -48,7 +48,7 @@ public sealed partial class ManagedModuleRepositoryClient
 
         if (response.Content is not null)
         {
-            using var responseReadTimeout = CreateRepositoryResponseReadTimeout(cancellationToken);
+            using var responseReadTimeout = CreateRepositoryResponseReadTimeout(response, cancellationToken);
             var responseReadToken = responseReadTimeout?.Token ?? cancellationToken;
             try
             {
@@ -78,13 +78,18 @@ public sealed partial class ManagedModuleRepositoryClient
         return normalized.Substring(0, MaximumRepositoryResponseDetailLength) + "...";
     }
 
-    private CancellationTokenSource? CreateRepositoryResponseReadTimeout(CancellationToken cancellationToken)
+    private CancellationTokenSource? CreateRepositoryResponseReadTimeout(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
     {
-        if (_options.RequestTimeout is null)
+        if (!TryGetRemainingRequestTime(response, out var remaining))
             return null;
 
         var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(_options.RequestTimeout.Value);
+        if (remaining <= TimeSpan.Zero)
+            timeout.Cancel();
+        else
+            timeout.CancelAfter(remaining);
         return timeout;
     }
 
