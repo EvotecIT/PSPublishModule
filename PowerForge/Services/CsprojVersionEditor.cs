@@ -13,7 +13,7 @@ internal static class CsprojVersionEditor
 {
     private const string VersionValuePattern = @"\s*(?<value>[^<]+?)\s*";
 
-    private static readonly string[] PackageVersionTags =
+    private static readonly string[] FullPackageVersionTags =
     {
         "Version",
         "PackageVersion",
@@ -27,7 +27,15 @@ internal static class CsprojVersionEditor
         "FileVersion"
     };
 
-    private static readonly string[] VersionTags = PackageVersionTags.Concat(NumericVersionTags).Append("VersionSuffix").ToArray();
+    private static readonly string[] ReadVersionTags =
+    {
+        "Version",
+        "VersionPrefix",
+        "PackageVersion",
+        "AssemblyVersion",
+        "FileVersion",
+        "InformationalVersion"
+    };
 
     internal static bool TryGetVersion(string csprojPath, out string version)
     {
@@ -38,24 +46,7 @@ internal static class CsprojVersionEditor
         try
         {
             var content = File.ReadAllText(csprojPath);
-            foreach (var tag in PackageVersionTags)
-            {
-                if (TryMatchVersionTag(content, tag, out var v))
-                {
-                    version = v;
-                    return true;
-                }
-            }
-
-            if (TryMatchVersionTag(content, "VersionPrefix", out var prefix))
-            {
-                version = TryMatchVersionTag(content, "VersionSuffix", out var suffix)
-                    ? prefix + "-" + suffix
-                    : prefix;
-                return true;
-            }
-
-            foreach (var tag in NumericVersionTags.Where(tag => !tag.Equals("VersionPrefix", StringComparison.Ordinal)))
+            foreach (var tag in ReadVersionTags)
             {
                 if (TryMatchVersionTag(content, tag, out var v))
                 {
@@ -78,17 +69,19 @@ internal static class CsprojVersionEditor
         var escapedNumericVersion = SecurityElement.Escape(PackageVersionUtility.GetNumericVersion(version)) ?? string.Empty;
         var prereleaseVersion = PackageVersionUtility.GetPrereleaseVersion(version);
         var escapedPrereleaseVersion = SecurityElement.Escape(prereleaseVersion) ?? string.Empty;
-        var hasPackageVersionTag = PackageVersionTags.Any(tag => Regex.IsMatch(content, BuildVersionTagPattern(tag), RegexOptions.IgnoreCase));
+        var hasPackageVersionTag = FullPackageVersionTags.Any(tag => Regex.IsMatch(content, BuildVersionTagPattern(tag), RegexOptions.IgnoreCase));
         var hasVersionPrefix = Regex.IsMatch(content, BuildVersionTagPattern("VersionPrefix"), RegexOptions.IgnoreCase);
 
-        foreach (var tag in VersionTags)
+        foreach (var tag in ReadVersionTags)
         {
             if (Regex.IsMatch(content, BuildVersionTagPattern(tag), RegexOptions.IgnoreCase))
                 hadVersionTag = true;
         }
+        if (Regex.IsMatch(content, BuildVersionElementPattern("VersionSuffix"), RegexOptions.IgnoreCase))
+            hadVersionTag = true;
 
         var updated = content;
-        foreach (var tag in PackageVersionTags)
+        foreach (var tag in FullPackageVersionTags)
         {
             updated = Regex.Replace(
                 updated,
@@ -107,11 +100,11 @@ internal static class CsprojVersionEditor
 
         if (hasVersionPrefix && !string.IsNullOrEmpty(prereleaseVersion))
         {
-            if (Regex.IsMatch(updated, BuildVersionTagPattern("VersionSuffix"), RegexOptions.IgnoreCase))
+            if (Regex.IsMatch(updated, BuildVersionElementPattern("VersionSuffix"), RegexOptions.IgnoreCase))
             {
                 updated = Regex.Replace(
                     updated,
-                    BuildVersionTagPattern("VersionSuffix"),
+                    BuildVersionElementPattern("VersionSuffix"),
                     $"<VersionSuffix>{escapedPrereleaseVersion}</VersionSuffix>",
                     RegexOptions.IgnoreCase);
             }
@@ -120,11 +113,11 @@ internal static class CsprojVersionEditor
                 updated = InsertAfterVersionPrefix(updated, "VersionSuffix", escapedPrereleaseVersion);
             }
         }
-        else if (Regex.IsMatch(updated, BuildVersionTagPattern("VersionSuffix"), RegexOptions.IgnoreCase))
+        else if (Regex.IsMatch(updated, BuildVersionElementPattern("VersionSuffix"), RegexOptions.IgnoreCase))
         {
             updated = Regex.Replace(
                 updated,
-                BuildVersionTagPattern("VersionSuffix"),
+                BuildVersionElementPattern("VersionSuffix"),
                 "<VersionSuffix></VersionSuffix>",
                 RegexOptions.IgnoreCase);
         }
@@ -148,6 +141,9 @@ internal static class CsprojVersionEditor
 
     private static string BuildVersionTagPattern(string tag)
         => $"<{Regex.Escape(tag)}>{VersionValuePattern}</{Regex.Escape(tag)}>";
+
+    private static string BuildVersionElementPattern(string tag)
+        => $"<{Regex.Escape(tag)}\\b[^>]*(?:/\\s*>|>[^<]*</{Regex.Escape(tag)}\\s*>)";
 
     private static string InsertVersion(string content, string tag, string escapedVersion)
     {

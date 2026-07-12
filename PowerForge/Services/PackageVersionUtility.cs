@@ -20,10 +20,10 @@ internal static class PackageVersionUtility
 
         var candidate = value!.Trim();
         var match = ExactVersionRegex.Match(candidate);
-        if (!match.Success || !Version.TryParse(match.Groups["core"].Value, out _))
+        if (!match.Success || !Version.TryParse(match.Groups["core"].Value, out var coreVersion))
             return false;
 
-        normalized = match.Groups["core"].Value;
+        normalized = NormalizeNumericCore(coreVersion);
         if (match.Groups["prerelease"].Success)
             normalized += "-" + match.Groups["prerelease"].Value;
         return true;
@@ -52,5 +52,12 @@ internal static class PackageVersionUtility
         return metadataSeparator < 0
             ? trimmed.Substring(separator + 1)
             : trimmed.Substring(separator + 1, metadataSeparator - separator - 1);
+    }
+
+    private static string NormalizeNumericCore(Version version)
+    {
+        var build = version.Build < 0 ? 0 : version.Build;
+        var normalized = $"{version.Major}.{version.Minor}.{build}";
+        return version.Revision > 0 ? normalized + "." + version.Revision : normalized;
     }
 }
