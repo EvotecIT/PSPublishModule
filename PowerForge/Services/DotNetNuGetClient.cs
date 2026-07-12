@@ -141,14 +141,16 @@ public sealed class DotNetNuGetClient
 
     private static string BuildPushResponseFileContent(DotNetNuGetPushRequest request)
     {
+        // dotnet response files treat each line as one argument and preserve quote characters.
+        // Writing shell-style quotes here therefore passes the quotes into options such as --source.
         var lines = new List<string> {
             "nuget",
             "push",
-            QuoteResponseFileValue(request.PackagePath),
+            request.PackagePath,
             "--api-key",
-            QuoteResponseFileValue(request.ApiKey),
+            request.ApiKey,
             "--source",
-            QuoteResponseFileValue(request.Source)
+            request.Source
         };
 
         if (request.SkipDuplicate)
@@ -168,9 +170,6 @@ public sealed class DotNetNuGetClient
 
         return Environment.CurrentDirectory;
     }
-
-    private static string QuoteResponseFileValue(string value)
-        => "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
 
     private static void TryDeleteFile(string path)
     {
