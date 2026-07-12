@@ -85,6 +85,63 @@ public sealed class ManagedModuleRepositoryPublishTests
         Assert.True(responseStream.SawCancelableToken);
     }
 
+    [Fact]
+    public async Task PublishPackageAsync_applies_request_timeout_to_repository_error_body_read()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        File.WriteAllBytes(packagePath, TestPackageFactory.CreateBytes("Company.Tools", "1.0.0"));
+        var responseStream = new SlowCancellationStream();
+        using var client = new HttpClient(new StreamFailureHandler(responseStream));
+        var options = new ManagedModuleRepositoryClientOptions { RequestTimeout = TimeSpan.FromMilliseconds(25) };
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client, options: options);
+        var repository = new ManagedModuleRepository("PrivateGallery", "https://packages.example.test/api/v2");
+
+        var exception = await Assert.ThrowsAsync<ManagedModuleRepositoryException>(() =>
+            repositoryClient.PublishPackageAsync(repository, packagePath));
+
+        Assert.Equal(400, exception.StatusCode);
+        Assert.True(responseStream.CancellationObserved);
+    }
+
+    [Fact]
+    public async Task PublishPackageAsync_falls_back_to_utf8_for_unsupported_response_charset()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        File.WriteAllBytes(packagePath, TestPackageFactory.CreateBytes("Company.Tools", "1.0.0"));
+        using var client = new HttpClient(new UnsupportedCharsetFailureHandler());
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+        var repository = new ManagedModuleRepository("PrivateGallery", "https://packages.example.test/api/v2");
+
+        var exception = await Assert.ThrowsAsync<ManagedModuleRepositoryException>(() =>
+            repositoryClient.PublishPackageAsync(repository, packagePath));
+
+        Assert.Equal(400, exception.StatusCode);
+        Assert.Contains("legacy repository error", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PublishPackageAsync_redacts_reflected_proxy_authorization_value()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        File.WriteAllBytes(packagePath, TestPackageFactory.CreateBytes("Company.Tools", "1.0.0"));
+        var proxyCredential = new RepositoryCredential { UserName = "proxy-user", Secret = "proxy-secret" };
+        var encodedCredential = Convert.ToBase64String(Encoding.ASCII.GetBytes("proxy-user:proxy-secret"));
+        using var client = new HttpClient(new ReflectedProxyAuthorizationFailureHandler(encodedCredential));
+        var options = new ManagedModuleRepositoryClientOptions { ProxyCredential = proxyCredential };
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client, options: options);
+        var repository = new ManagedModuleRepository("PrivateGallery", "https://packages.example.test/api/v2");
+
+        var exception = await Assert.ThrowsAsync<ManagedModuleRepositoryException>(() =>
+            repositoryClient.PublishPackageAsync(repository, packagePath));
+
+        Assert.Contains("Proxy-Authorization: Basic [REDACTED]", exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("proxy-secret", exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(encodedCredential, exception.Message, StringComparison.Ordinal);
+    }
+
     private sealed class PublishFailureHandler : HttpMessageHandler
     {
         private readonly string _apiKey;
@@ -114,6 +171,32 @@ public sealed class ManagedModuleRepositoryPublishTests
             {
                 Content = new StringContent($"Rejected request. Authorization: {reflectedAuthorization}")
             });
+        }
+    }
+
+    private sealed class ReflectedProxyAuthorizationFailureHandler : HttpMessageHandler
+    {
+        private readonly string _encodedCredential;
+
+        public ReflectedProxyAuthorizationFailureHandler(string encodedCredential)
+        {
+            _encodedCredential = encodedCredential;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.ProxyAuthenticationRequired)
+            {
+                Content = new StringContent($"Proxy-Authorization: Basic {_encodedCredential}")
+            });
+    }
+
+    private sealed class UnsupportedCharsetFailureHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var content = new StringContent("legacy repository error", Encoding.UTF8, "text/plain");
+            content.Headers.ContentType!.CharSet = "windows-1252";
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = content });
         }
     }
 
@@ -174,6 +257,45 @@ public sealed class ManagedModuleRepositoryPublishTests
         {
             SawCancelableToken = cancellationToken.CanBeCanceled;
             return Task.FromResult(0);
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    private sealed class SlowCancellationStream : Stream
+    {
+        public bool CancellationObserved { get; private set; }
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => 0;
+
+        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken).ConfigureAwait(false);
+                return 0;
+            }
+            catch (OperationCanceledException)
+            {
+                CancellationObserved = true;
+                throw;
+            }
         }
 
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();

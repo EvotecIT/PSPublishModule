@@ -25,7 +25,7 @@ public sealed partial class ManagedModuleRepositoryClient
             ResolveHttpRemediation(statusCode),
             (int)statusCode);
 
-    private static async Task<ManagedModuleRepositoryException> CreateRepositoryHttpExceptionAsync(
+    private async Task<ManagedModuleRepositoryException> CreateRepositoryHttpExceptionAsync(
         ManagedModuleRepository repository,
         string operation,
         HttpResponseMessage response,
@@ -37,7 +37,7 @@ public sealed partial class ManagedModuleRepositoryClient
         return CreateRepositoryHttpException(repository, operation, response.StatusCode, detail, responseDetail);
     }
 
-    private static async Task<string?> ReadRepositoryResponseDetailAsync(
+    private async Task<string?> ReadRepositoryResponseDetailAsync(
         HttpResponseMessage response,
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
@@ -48,11 +48,17 @@ public sealed partial class ManagedModuleRepositoryClient
 
         if (response.Content is not null)
         {
+            using var responseReadTimeout = CreateRepositoryResponseReadTimeout(cancellationToken);
+            var responseReadToken = responseReadTimeout?.Token ?? cancellationToken;
             try
             {
-                var body = await ReadRepositoryResponseBodyAsync(response.Content, cancellationToken).ConfigureAwait(false);
+                var body = await ReadRepositoryResponseBodyAsync(response.Content, responseReadToken).ConfigureAwait(false);
                 if (!string.IsNullOrWhiteSpace(body))
                     values.Add(body!);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                // A repository error body is best-effort and must not extend the configured request timeout.
             }
             catch (Exception ex) when (ex is HttpRequestException or IOException or ObjectDisposedException or InvalidOperationException)
             {
@@ -63,11 +69,23 @@ public sealed partial class ManagedModuleRepositoryClient
         if (values.Count == 0)
             return null;
 
-        var normalized = NormalizeRepositoryResponseDetail(string.Join(" ", values), credential);
+        var detail = RedactRepositoryCredential(string.Join(" ", values), credential);
+        detail = RedactRepositoryCredential(detail, _options.ProxyCredential);
+        var normalized = NormalizeRepositoryResponseDetail(detail);
         if (normalized.Length <= MaximumRepositoryResponseDetailLength)
             return normalized;
 
         return normalized.Substring(0, MaximumRepositoryResponseDetailLength) + "...";
+    }
+
+    private CancellationTokenSource? CreateRepositoryResponseReadTimeout(CancellationToken cancellationToken)
+    {
+        if (_options.RequestTimeout is null)
+            return null;
+
+        var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(_options.RequestTimeout.Value);
+        return timeout;
     }
 
     private static async Task<string?> ReadRepositoryResponseBodyAsync(
@@ -108,7 +126,7 @@ public sealed partial class ManagedModuleRepositoryClient
             {
                 return Encoding.GetEncoding(charset);
             }
-            catch (ArgumentException)
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
             {
                 // Fall back to UTF-8 when the repository declares an invalid charset.
             }
@@ -117,7 +135,7 @@ public sealed partial class ManagedModuleRepositoryClient
         return Encoding.UTF8;
     }
 
-    private static string NormalizeRepositoryResponseDetail(string value, RepositoryCredential? credential)
+    private static string RedactRepositoryCredential(string value, RepositoryCredential? credential)
     {
         var secret = credential?.Secret;
         if (!string.IsNullOrEmpty(secret))
@@ -132,6 +150,11 @@ public sealed partial class ManagedModuleRepositoryClient
             }
         }
 
+        return value;
+    }
+
+    private static string NormalizeRepositoryResponseDetail(string value)
+    {
         var builder = new StringBuilder(value.Length);
         var previousWasWhitespace = false;
         foreach (var character in value)
