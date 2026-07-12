@@ -428,18 +428,21 @@ public sealed partial class DotNetRepositoryReleaseService
                     foreach (var pkg in filtered)
                         project.Packages.Add(pkg);
 
-                    var filteredSymbols = FilterPackages(packResult.SymbolPackages, project.PackageId, project.NewVersion!);
-                    foreach (var symbolPackage in filteredSymbols)
-                        project.SymbolPackages.Add(symbolPackage);
-
-                    if (spec.IncludeSymbols && filteredSymbols.Count == 0)
+                    if (spec.IncludeSymbols)
                     {
-                        project.ErrorMessage = $"No symbol package found for version {project.NewVersion}.";
-                        _logger.Warn($"{project.ProjectName}: {project.ErrorMessage}");
-                        result.Success = false;
-                        if (spec.PublishFailFast)
-                            return result;
-                        continue;
+                        var filteredSymbols = FilterPackages(packResult.SymbolPackages, project.PackageId, project.NewVersion!);
+                        foreach (var symbolPackage in filteredSymbols)
+                            project.SymbolPackages.Add(symbolPackage);
+
+                        if (filteredSymbols.Count == 0)
+                        {
+                            project.ErrorMessage = $"No symbol package found for version {project.NewVersion}.";
+                            _logger.Warn($"{project.ProjectName}: {project.ErrorMessage}");
+                            result.Success = false;
+                            if (spec.PublishFailFast)
+                                return result;
+                            continue;
+                        }
                     }
 
                     var ignored = packResult.Packages.Except(filtered, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -452,7 +455,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         var packTiming = batchPackResult is null
                             ? $" in {FormatDuration(packResult.Duration)}"
                             : " from MSBuild batch";
-                        _logger.Success($"{project.ProjectName}: package workflow produced {filtered.Count} package(s) and {filteredSymbols.Count} symbol package(s){packTiming}.");
+                        _logger.Success($"{project.ProjectName}: package workflow produced {filtered.Count} package(s) and {project.SymbolPackages.Count} symbol package(s){packTiming}.");
                     }
 
                     if (spec.CreateReleaseZip && !string.IsNullOrWhiteSpace(project.NewVersion))
@@ -486,7 +489,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 {
                     var packagesToSign = packable
                         .Where(project => string.IsNullOrWhiteSpace(project.ErrorMessage))
-                        .SelectMany(project => project.Packages)
+                        .SelectMany(project => project.Packages.Concat(project.SymbolPackages))
                         .Where(package => !string.IsNullOrWhiteSpace(package))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToArray();
@@ -540,16 +543,18 @@ public sealed partial class DotNetRepositoryReleaseService
                 var packages = GetPackagesForPublish(orderedProjects);
 
                 var packageLookup = orderedProjects
-                    .SelectMany(p => p.Packages.Concat(p.SymbolPackages).Select(pkg => new { Package = pkg, Project = p }))
+                    .SelectMany(p => p.Packages.Select(pkg => new { Package = pkg, Project = p }))
                     .GroupBy(x => x.Package, StringComparer.OrdinalIgnoreCase)
                     .ToDictionary(g => g.Key, g => g.First().Project, StringComparer.OrdinalIgnoreCase);
 
                 var publishWatch = Stopwatch.StartNew();
                 foreach (var pkg in packages)
                 {
+                    packageLookup.TryGetValue(pkg, out var project);
+                    var publishedArtifacts = GetPublishedArtifacts(project, pkg);
                     if (spec.WhatIf)
                     {
-                        result.PublishedPackages.Add(pkg);
+                        result.PublishedPackages.AddRange(publishedArtifacts);
                         continue;
                     }
 
@@ -561,12 +566,12 @@ public sealed partial class DotNetRepositoryReleaseService
                     {
                         if (pushResult.Outcome == PackagePushOutcome.SkippedDuplicate)
                         {
-                            result.SkippedDuplicatePackages.Add(pkg);
+                            result.SkippedDuplicatePackages.AddRange(publishedArtifacts);
                             _logger.Info($"Skipped duplicate {Path.GetFileName(pkg)} in {FormatDuration(packagePublishWatch.Elapsed)}; package already exists in the feed.");
                         }
                         else
                         {
-                            result.PublishedPackages.Add(pkg);
+                            result.PublishedPackages.AddRange(publishedArtifacts);
                             _logger.Success($"Published {Path.GetFileName(pkg)} in {FormatDuration(packagePublishWatch.Elapsed)}.");
                         }
                     }
@@ -576,7 +581,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         result.FailedPackages.Add(pkg);
                         var error = pushResult.Message;
                         _logger.Warn($"NuGet push failed for {pkg} after {FormatDuration(packagePublishWatch.Elapsed)}: {error}");
-                        if (packageLookup.TryGetValue(pkg, out var project) && string.IsNullOrWhiteSpace(project.ErrorMessage))
+                        if (project is not null && string.IsNullOrWhiteSpace(project.ErrorMessage))
                             project.ErrorMessage = $"Publish failed for {Path.GetFileName(pkg)}: {error}";
                         if (spec.PublishFailFast)
                         {
@@ -639,7 +644,7 @@ public sealed partial class DotNetRepositoryReleaseService
             if (!string.IsNullOrWhiteSpace(project.ErrorMessage))
                 continue;
 
-            if (project.Packages.Any(package => failedPackages.Contains(package)))
+            if (project.Packages.Concat(project.SymbolPackages).Any(package => failedPackages.Contains(package)))
                 project.ErrorMessage = message;
         }
     }

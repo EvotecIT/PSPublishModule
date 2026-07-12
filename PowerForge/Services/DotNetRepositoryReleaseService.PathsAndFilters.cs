@@ -53,9 +53,28 @@ public sealed partial class DotNetRepositoryReleaseService
     internal static string[] GetPackagesForPublish(IEnumerable<DotNetRepositoryProjectResult> projects)
         => projects
             .Where(static project => project is not null)
-            .SelectMany(static project => project.Packages.Concat(project.SymbolPackages))
+            .SelectMany(static project => project.Packages)
             .Where(static package => !string.IsNullOrWhiteSpace(package))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+    internal static string[] GetPublishedArtifacts(
+        DotNetRepositoryProjectResult? project,
+        string package)
+    {
+        if (project is null || string.IsNullOrWhiteSpace(package))
+            return string.IsNullOrWhiteSpace(package) ? Array.Empty<string>() : new[] { package };
+
+        var packageName = Path.GetFileNameWithoutExtension(package);
+        return new[] { package }
+            .Concat(project.SymbolPackages.Where(symbolPackage =>
+                string.Equals(
+                    Path.GetFileNameWithoutExtension(symbolPackage),
+                    packageName,
+                    StringComparison.OrdinalIgnoreCase)))
+            .Where(static artifact => !string.IsNullOrWhiteSpace(artifact))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
 
 }

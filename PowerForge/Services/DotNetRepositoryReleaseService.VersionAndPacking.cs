@@ -148,10 +148,13 @@ public sealed partial class DotNetRepositoryReleaseService
                 .ToArray();
             result.Packages.AddRange(pkgs);
 
-            var symbolPackages = Directory.EnumerateFiles(packageRoot, "*.snupkg", SearchOption.AllDirectories)
-                .Where(p => WasPackageCreatedOrChanged(existingPackages, p))
-                .ToArray();
-            result.SymbolPackages.AddRange(symbolPackages);
+            if (spec.IncludeSymbols)
+            {
+                var symbolPackages = Directory.EnumerateFiles(packageRoot, "*.snupkg", SearchOption.AllDirectories)
+                    .Where(p => WasPackageCreatedOrChanged(existingPackages, p))
+                    .ToArray();
+                result.SymbolPackages.AddRange(symbolPackages);
+            }
         }
         packageDiscoveryWatch.Stop();
         result.Duration += packageDiscoveryWatch.Elapsed;

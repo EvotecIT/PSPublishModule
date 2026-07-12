@@ -207,7 +207,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
     }
 
     [Fact]
-    public void GetPackagesForPublish_OrdersEachSymbolPackageAfterItsPrimaryPackage()
+    public void GetPackagesForPublish_PushesOnlyPrimaryPackages()
     {
         var first = new DotNetRepositoryProjectResult { ProjectName = "First" };
         first.Packages.Add("First.1.0.0.nupkg");
@@ -221,10 +221,27 @@ public sealed class DotNetRepositoryReleaseServiceTests
         Assert.Equal(new[]
         {
             "First.1.0.0.nupkg",
-            "First.1.0.0.snupkg",
-            "Second.2.0.0.nupkg",
-            "Second.2.0.0.snupkg"
+            "Second.2.0.0.nupkg"
         }, packages);
+    }
+
+    [Fact]
+    public void GetPublishedArtifacts_ReportsSymbolUploadedWithPrimaryPackage()
+    {
+        var project = new DotNetRepositoryProjectResult { ProjectName = "Sample" };
+        project.Packages.Add("Sample.1.0.0.nupkg");
+        project.SymbolPackages.Add("Sample.1.0.0.snupkg");
+        project.SymbolPackages.Add("Other.1.0.0.snupkg");
+
+        var artifacts = DotNetRepositoryReleaseService.GetPublishedArtifacts(
+            project,
+            "Sample.1.0.0.nupkg");
+
+        Assert.Equal(new[]
+        {
+            "Sample.1.0.0.nupkg",
+            "Sample.1.0.0.snupkg"
+        }, artifacts);
     }
 
     [Theory]
@@ -559,6 +576,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 Configuration = "Release",
                 OutputPath = Path.Combine(root.FullName, "packages"),
                 Pack = true,
+                IncludeSymbols = true,
                 Publish = true,
                 PublishApiKey = "key",
                 PublishSource = localFeed.FullName,
@@ -577,7 +595,9 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 (_, _) => "ABCDEF").Execute(spec);
 
             Assert.False(result.Success);
-            Assert.Single(packagesSeenBySigner);
+            Assert.Equal(2, packagesSeenBySigner.Length);
+            Assert.Contains(packagesSeenBySigner, package => package.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(packagesSeenBySigner, package => package.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase));
             Assert.Empty(result.PublishedPackages);
             Assert.Empty(Directory.EnumerateFiles(localFeed.FullName, "*.nupkg", SearchOption.AllDirectories));
             var project = Assert.Single(result.Projects, item => item.IsPackable);
