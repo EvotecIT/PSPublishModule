@@ -150,7 +150,8 @@ public sealed partial class ManagedModuleRepositoryClient
                     "Publish",
                     response,
                     $"Unable to publish package '{package}'.",
-                    credential?.Secret)
+                    credential,
+                    cancellationToken)
                 .ConfigureAwait(false);
         }
 

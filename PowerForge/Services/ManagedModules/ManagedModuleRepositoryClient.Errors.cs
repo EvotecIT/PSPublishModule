@@ -6,6 +6,9 @@ namespace PowerForge;
 
 public sealed partial class ManagedModuleRepositoryClient
 {
+    private const int MaximumRepositoryResponseDetailLength = 2048;
+    private const int MaximumRepositoryResponseBodyBytes = MaximumRepositoryResponseDetailLength * 4;
+
     private static ManagedModuleRepositoryException CreateRepositoryHttpException(
         ManagedModuleRepository repository,
         string operation,
@@ -27,17 +30,18 @@ public sealed partial class ManagedModuleRepositoryClient
         string operation,
         HttpResponseMessage response,
         string detail,
-        string? sensitiveValue = null)
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
     {
-        var responseDetail = await ReadRepositoryResponseDetailAsync(response, sensitiveValue).ConfigureAwait(false);
+        var responseDetail = await ReadRepositoryResponseDetailAsync(response, credential, cancellationToken).ConfigureAwait(false);
         return CreateRepositoryHttpException(repository, operation, response.StatusCode, detail, responseDetail);
     }
 
     private static async Task<string?> ReadRepositoryResponseDetailAsync(
         HttpResponseMessage response,
-        string? sensitiveValue)
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
     {
-        const int maximumLength = 2048;
         var values = new List<string>();
         if (!string.IsNullOrWhiteSpace(response.ReasonPhrase))
             values.Add(response.ReasonPhrase!);
@@ -46,9 +50,9 @@ public sealed partial class ManagedModuleRepositoryClient
         {
             try
             {
-                var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                var body = await ReadRepositoryResponseBodyAsync(response.Content, cancellationToken).ConfigureAwait(false);
                 if (!string.IsNullOrWhiteSpace(body))
-                    values.Add(body);
+                    values.Add(body!);
             }
             catch (Exception ex) when (ex is HttpRequestException or IOException or ObjectDisposedException or InvalidOperationException)
             {
@@ -59,17 +63,74 @@ public sealed partial class ManagedModuleRepositoryClient
         if (values.Count == 0)
             return null;
 
-        var normalized = NormalizeRepositoryResponseDetail(string.Join(" ", values), sensitiveValue);
-        if (normalized.Length <= maximumLength)
+        var normalized = NormalizeRepositoryResponseDetail(string.Join(" ", values), credential);
+        if (normalized.Length <= MaximumRepositoryResponseDetailLength)
             return normalized;
 
-        return normalized.Substring(0, maximumLength) + "...";
+        return normalized.Substring(0, MaximumRepositoryResponseDetailLength) + "...";
     }
 
-    private static string NormalizeRepositoryResponseDetail(string value, string? sensitiveValue)
+    private static async Task<string?> ReadRepositoryResponseBodyAsync(
+        HttpContent content,
+        CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrEmpty(sensitiveValue))
-            value = value.Replace(sensitiveValue!, "[REDACTED]");
+        using var stream = await ReadContentStreamAsync(content, cancellationToken).ConfigureAwait(false);
+        var buffer = new byte[MaximumRepositoryResponseBodyBytes];
+        var bytesRead = 0;
+        while (bytesRead < buffer.Length)
+        {
+            var read = await stream.ReadAsync(
+                    buffer,
+                    bytesRead,
+                    buffer.Length - bytesRead,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (read == 0)
+                break;
+
+            bytesRead += read;
+        }
+
+        if (bytesRead == 0)
+            return null;
+
+        var encoding = ResolveRepositoryResponseEncoding(content);
+        return encoding.GetString(buffer, 0, bytesRead);
+    }
+
+    private static Encoding ResolveRepositoryResponseEncoding(HttpContent content)
+    {
+        var charset = content.Headers.ContentType?.CharSet;
+        if (!string.IsNullOrWhiteSpace(charset))
+        {
+            charset = charset!.Trim().Trim('"');
+            try
+            {
+                return Encoding.GetEncoding(charset);
+            }
+            catch (ArgumentException)
+            {
+                // Fall back to UTF-8 when the repository declares an invalid charset.
+            }
+        }
+
+        return Encoding.UTF8;
+    }
+
+    private static string NormalizeRepositoryResponseDetail(string value, RepositoryCredential? credential)
+    {
+        var secret = credential?.Secret;
+        if (!string.IsNullOrEmpty(secret))
+        {
+            value = value.Replace(secret!, "[REDACTED]");
+            var userName = credential?.UserName;
+            if (!string.IsNullOrWhiteSpace(userName))
+            {
+                var basicBytes = Encoding.ASCII.GetBytes($"{userName}:{secret}");
+                var encodedBasicCredential = Convert.ToBase64String(basicBytes);
+                value = value.Replace(encodedBasicCredential, "[REDACTED]");
+            }
+        }
 
         var builder = new StringBuilder(value.Length);
         var previousWasWhitespace = false;
