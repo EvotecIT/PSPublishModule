@@ -417,8 +417,10 @@ internal static partial class Program
             if (publishSummary.Rows.Count > 0)
             {
                 logger.Info($"Publish: {publishSummary.Rows.Count} result(s) across {publishSummary.ChannelCount} channel(s)");
+                foreach (var channel in publishSummary.Channels)
+                    logger.Info($" - {channel.Channel}: {channel.Label}");
                 foreach (var row in publishSummary.Rows)
-                    logger.Info($" - {row.Channel} | {row.Target} | {row.Result} | {row.Method} | {row.Reference}");
+                    logger.Info($"   * {row.Channel} | {row.Target} | {row.Result} | {row.Method} | {row.Reference}");
             }
             else
             {

@@ -197,9 +197,19 @@ internal static class SpectrePipelineSummaryWriter
             table.AddRow($"{(unicode ? "📦" : "*")} Artefacts", "[grey]None[/]");
 
         if (publishSummary.Rows.Count > 0)
+        {
             table.AddRow(
                 $"{(unicode ? "🚀" : "*")} Publish",
                 $"[green]{publishSummary.Rows.Count}[/] result(s) across [green]{publishSummary.ChannelCount}[/] channel(s)");
+
+            foreach (var channel in publishSummary.Channels)
+            {
+                var icon = unicode
+                    ? channel.Channel == "GitHub" ? "🚀" : "📦"
+                    : "*";
+                table.AddRow($"{icon} {Esc(channel.Channel)}", Esc(channel.Label));
+            }
+        }
         else
             table.AddRow($"{(unicode ? "🚀" : "*")} Publish", "[grey]Disabled[/]");
 

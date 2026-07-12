@@ -11,15 +11,81 @@ internal sealed class PipelinePublishSummary
     internal PipelinePublishSummary(IReadOnlyList<PipelinePublishSummaryRow> rows)
     {
         Rows = rows ?? Array.Empty<PipelinePublishSummaryRow>();
-        ChannelCount = Rows
-            .Select(static row => row.Channel)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Count();
+        Channels = Rows
+            .GroupBy(static row => row.Channel, StringComparer.OrdinalIgnoreCase)
+            .Select(BuildChannelSummary)
+            .ToArray();
     }
 
     internal IReadOnlyList<PipelinePublishSummaryRow> Rows { get; }
 
-    internal int ChannelCount { get; }
+    internal IReadOnlyList<PipelinePublishChannelSummary> Channels { get; }
+
+    internal int ChannelCount => Channels.Count;
+
+    private static PipelinePublishChannelSummary BuildChannelSummary(
+        IGrouping<string, PipelinePublishSummaryRow> channel)
+    {
+        var rows = channel.ToArray();
+        var itemName = channel.Key switch
+        {
+            "NuGet" => rows.Length == 1 ? "package" : "packages",
+            "PowerShell Gallery" => rows.Length == 1 ? "module" : "modules",
+            "GitHub" => rows.Length == 1 ? "release" : "releases",
+            _ => rows.Length == 1 ? "result" : "results"
+        };
+        var parts = new List<string> { $"{rows.Length} {itemName}" };
+
+        AddOutcome(parts, rows, PipelinePublishOutcome.Published, "published");
+        AddOutcome(parts, rows, PipelinePublishOutcome.AlreadyExisted, "already existed");
+        AddOutcome(parts, rows, PipelinePublishOutcome.Failed, "failed");
+
+        var targets = rows
+            .Select(static row => row.Target)
+            .Where(static target => !string.IsNullOrWhiteSpace(target))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (targets.Length == 1)
+            parts.Add(targets[0]);
+        else if (targets.Length > 1)
+            parts.Add($"{targets.Length} targets");
+
+        var methods = rows
+            .Select(static row => row.Method)
+            .Where(static method => !string.IsNullOrWhiteSpace(method))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (methods.Length == 1)
+            parts.Add($"via {methods[0]}");
+        else if (methods.Length > 1)
+            parts.Add($"via {methods.Length} methods");
+
+        return new PipelinePublishChannelSummary(channel.Key, string.Join(", ", parts));
+    }
+
+    private static void AddOutcome(
+        ICollection<string> parts,
+        IEnumerable<PipelinePublishSummaryRow> rows,
+        PipelinePublishOutcome outcome,
+        string label)
+    {
+        var count = rows.Count(row => row.Outcome == outcome);
+        if (count > 0)
+            parts.Add($"{count} {label}");
+    }
+}
+
+internal sealed class PipelinePublishChannelSummary
+{
+    internal PipelinePublishChannelSummary(string channel, string label)
+    {
+        Channel = channel ?? string.Empty;
+        Label = label ?? string.Empty;
+    }
+
+    internal string Channel { get; }
+
+    internal string Label { get; }
 }
 
 internal sealed class PipelinePublishSummaryRow
@@ -29,13 +95,15 @@ internal sealed class PipelinePublishSummaryRow
         string target,
         string result,
         string method,
-        string reference)
+        string reference,
+        PipelinePublishOutcome outcome)
     {
         Channel = channel ?? string.Empty;
         Target = target ?? string.Empty;
         Result = result ?? string.Empty;
         Method = method ?? string.Empty;
         Reference = reference ?? string.Empty;
+        Outcome = outcome;
     }
 
     internal string Channel { get; }
@@ -47,6 +115,15 @@ internal sealed class PipelinePublishSummaryRow
     internal string Method { get; }
 
     internal string Reference { get; }
+
+    internal PipelinePublishOutcome Outcome { get; }
+}
+
+internal enum PipelinePublishOutcome
+{
+    Published,
+    AlreadyExisted,
+    Failed
 }
 
 internal static class PipelinePublishSummaryBuilder
@@ -85,9 +162,9 @@ internal static class PipelinePublishSummaryBuilder
             if (release is null)
                 continue;
 
-            AddNuGetRows(rows, release, release.PublishedPackages, "Published");
-            AddNuGetRows(rows, release, release.SkippedDuplicatePackages, "Already existed");
-            AddNuGetRows(rows, release, release.FailedPackages, "Failed");
+            AddNuGetRows(rows, release, release.PublishedPackages, PipelinePublishOutcome.Published);
+            AddNuGetRows(rows, release, release.SkippedDuplicatePackages, PipelinePublishOutcome.AlreadyExisted);
+            AddNuGetRows(rows, release, release.FailedPackages, PipelinePublishOutcome.Failed);
             AddProjectGitHubRows(rows, buildResult!.GitHub, release);
         }
     }
@@ -96,7 +173,7 @@ internal static class PipelinePublishSummaryBuilder
         ICollection<PipelinePublishSummaryRow> rows,
         DotNetRepositoryReleaseResult release,
         IEnumerable<string>? packages,
-        string outcome)
+        PipelinePublishOutcome outcome)
     {
         foreach (var package in (packages ?? Array.Empty<string>())
                      .Where(static path => !string.IsNullOrWhiteSpace(path))
@@ -113,9 +190,10 @@ internal static class PipelinePublishSummaryBuilder
             rows.Add(new PipelinePublishSummaryRow(
                 channel: "NuGet",
                 target: BuildNuGetTarget(release.PublishSource),
-                result: $"{outcome} {identity}".Trim(),
-                method: "NuGet API",
-                reference: reference));
+                result: $"{FormatOutcome(outcome)} {identity}".Trim(),
+                method: "dotnet nuget push",
+                reference: reference,
+                outcome: outcome));
         }
     }
 
@@ -147,7 +225,8 @@ internal static class PipelinePublishSummaryBuilder
                 target: BuildGitHubTarget(publish.ReleaseUrl),
                 result: result,
                 method: "GitHub API",
-                reference: publish.Success ? publish.ReleaseUrl ?? string.Empty : publish.ErrorMessage ?? string.Empty));
+                reference: publish.Success ? publish.ReleaseUrl ?? string.Empty : publish.ErrorMessage ?? string.Empty,
+                outcome: publish.Success ? PipelinePublishOutcome.Published : PipelinePublishOutcome.Failed));
         }
     }
 
@@ -173,20 +252,22 @@ internal static class PipelinePublishSummaryBuilder
                     target: BuildGitHubTarget(publish.ReleaseUrl, publish.UserName, publish.RepositoryName),
                     result: result,
                     method: "GitHub API",
-                    reference: publish.Succeeded ? publish.ReleaseUrl ?? string.Empty : publish.ErrorMessage ?? string.Empty));
+                    reference: publish.Succeeded ? publish.ReleaseUrl ?? string.Empty : publish.ErrorMessage ?? string.Empty,
+                    outcome: publish.Succeeded ? PipelinePublishOutcome.Published : PipelinePublishOutcome.Failed));
                 continue;
             }
 
             var version = string.IsNullOrWhiteSpace(publish.VersionText) ? "(version unavailable)" : publish.VersionText;
             var identity = $"{moduleName} {version}".Trim();
             rows.Add(new PipelinePublishSummaryRow(
-                channel: "PowerShellGallery",
+                channel: "PowerShell Gallery",
                 target: string.IsNullOrWhiteSpace(publish.RepositoryName) ? "(repository unavailable)" : publish.RepositoryName!,
                 result: publish.Succeeded ? $"Published {identity}" : $"Failed {identity}",
                 method: publish.Tool?.ToString() ?? "Repository API",
                 reference: publish.Succeeded
                     ? BuildPowerShellGalleryReference(moduleName, publish)
-                    : publish.ErrorMessage ?? string.Empty));
+                    : publish.ErrorMessage ?? string.Empty,
+                outcome: publish.Succeeded ? PipelinePublishOutcome.Published : PipelinePublishOutcome.Failed));
         }
     }
 
@@ -271,11 +352,20 @@ internal static class PipelinePublishSummaryBuilder
     private static string FirstNonEmpty(params string?[] values)
         => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? string.Empty;
 
+    private static string FormatOutcome(PipelinePublishOutcome outcome)
+        => outcome switch
+        {
+            PipelinePublishOutcome.Published => "Published",
+            PipelinePublishOutcome.AlreadyExisted => "Already existed",
+            PipelinePublishOutcome.Failed => "Failed",
+            _ => outcome.ToString()
+        };
+
     private static int GetChannelOrder(string channel)
         => channel switch
         {
             "NuGet" => 0,
-            "PowerShellGallery" => 1,
+            "PowerShell Gallery" => 1,
             "GitHub" => 2,
             _ => 3
         };

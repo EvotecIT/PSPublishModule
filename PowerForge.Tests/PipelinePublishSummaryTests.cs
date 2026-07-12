@@ -17,7 +17,7 @@ public sealed class PipelinePublishSummaryTests
         release.Projects.Add(CreateProject("DbaClientX.Core", "DbaClientX.Core", "0.12.0", corePackage, @"C:\artifacts\DbaClientX.Core.0.12.0.zip"));
         release.Projects.Add(CreateProject("DbaClientX.SQLite", "DbaClientX.SQLite", "0.11.0", sqlitePackage, @"C:\artifacts\DbaClientX.SQLite.0.11.0.zip"));
         release.PublishedPackages.Add(corePackage);
-        release.PublishedPackages.Add(sqlitePackage);
+        release.SkippedDuplicatePackages.Add(sqlitePackage);
 
         var packageBuild = new ProjectBuildHostExecutionResult
         {
@@ -65,10 +65,15 @@ public sealed class PipelinePublishSummaryTests
 
         Assert.Equal(5, summary.Rows.Count);
         Assert.Equal(3, summary.ChannelCount);
+        Assert.Equal(3, summary.Channels.Count);
+        Assert.Contains(summary.Channels, channel => channel.Channel == "NuGet" && channel.Label == "2 packages, 1 published, 1 already existed, nuget.org, via dotnet nuget push");
+        Assert.Contains(summary.Channels, channel => channel.Channel == "PowerShell Gallery" && channel.Label == "1 module, 1 published, PSGallery, via ManagedModule");
+        Assert.Contains(summary.Channels, channel => channel.Channel == "GitHub" && channel.Label == "2 releases, 2 published, EvotecIT/DbaClientX, via GitHub API");
         Assert.Equal(2, summary.Rows.Count(row => row.Channel == "NuGet"));
         Assert.Equal(2, summary.Rows.Count(row => row.Channel == "GitHub"));
         Assert.Contains(summary.Rows, row => row.Result == "Published DbaClientX.Core 0.12.0" && row.Reference.EndsWith("/DbaClientX.Core/0.12.0", StringComparison.Ordinal));
-        Assert.Contains(summary.Rows, row => row.Channel == "PowerShellGallery" && row.Method == "ManagedModule" && row.Result == "Published DbaClientX 1.0.2");
+        Assert.Contains(summary.Rows, row => row.Result == "Already existed DbaClientX.SQLite 0.11.0" && row.Reference.EndsWith("/DbaClientX.SQLite/0.11.0", StringComparison.Ordinal));
+        Assert.Contains(summary.Rows, row => row.Channel == "PowerShell Gallery" && row.Method == "ManagedModule" && row.Result == "Published DbaClientX 1.0.2");
         Assert.Single(summary.Rows, row => row.Result == "Published DbaClientX-v20260712082246 (2 assets)");
         Assert.Contains(summary.Rows, row => row.Result == "Published DbaClientX-PowerShellModule.v1.0.2 (3 assets)");
     }
