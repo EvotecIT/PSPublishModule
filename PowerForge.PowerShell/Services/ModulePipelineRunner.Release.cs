@@ -496,7 +496,8 @@ public sealed partial class ModulePipelineRunner
         var assets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var result in projectBuildResults ?? Array.Empty<ProjectBuildHostExecutionResult>())
         {
-            foreach (var package in result.Result?.Release?.Projects.SelectMany(static project => project.Packages) ?? Array.Empty<string>())
+            foreach (var package in result.Result?.Release?.Projects.SelectMany(static project =>
+                         project.Packages.Concat(project.SymbolPackages)) ?? Array.Empty<string>())
                 TryAddReleasePackageAsset(assets, package);
         }
 
