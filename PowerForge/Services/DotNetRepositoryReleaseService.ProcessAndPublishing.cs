@@ -216,10 +216,67 @@ public sealed partial class DotNetRepositoryReleaseService
         };
     }
 
-    private static bool PushPackage(string packagePath, string apiKey, string source, bool skipDuplicate, out PackagePushResult result)
+    internal static IReadOnlyDictionary<string, PackagePushOutcome> ClassifyPublishedArtifacts(
+        IReadOnlyList<string> artifacts,
+        PackagePushResult pushResult)
+    {
+        var outcomes = new Dictionary<string, PackagePushOutcome>(StringComparer.OrdinalIgnoreCase);
+        if (pushResult.Outcome != PackagePushOutcome.SkippedDuplicate)
+        {
+            foreach (var artifact in artifacts)
+                outcomes[artifact] = pushResult.Outcome;
+            return outcomes;
+        }
+
+        var skippedArtifacts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string? currentArtifact = null;
+        var lines = (pushResult.Message ?? string.Empty)
+            .Replace("\r\n", "\n")
+            .Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var line in lines)
+        {
+            foreach (var artifact in artifacts)
+            {
+                var fileName = Path.GetFileName(artifact);
+                if (!string.IsNullOrWhiteSpace(fileName) &&
+                    line.IndexOf(fileName, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    currentArtifact = artifact;
+                    break;
+                }
+            }
+
+            if (currentArtifact is not null && LooksLikeSkippedDuplicate(line))
+                skippedArtifacts.Add(currentArtifact);
+        }
+
+        if (skippedArtifacts.Count == 0)
+        {
+            foreach (var artifact in artifacts)
+                outcomes[artifact] = PackagePushOutcome.SkippedDuplicate;
+            return outcomes;
+        }
+
+        foreach (var artifact in artifacts)
+        {
+            outcomes[artifact] = skippedArtifacts.Contains(artifact)
+                ? PackagePushOutcome.SkippedDuplicate
+                : PackagePushOutcome.Published;
+        }
+
+        return outcomes;
+    }
+
+    private static bool PushPackage(
+        string packagePath,
+        string apiKey,
+        string source,
+        bool skipDuplicate,
+        bool suppressCompanionSymbols,
+        out PackagePushResult result)
     {
         result = new PackagePushResult();
-        var psi = CreateNuGetPushStartInfo(packagePath, apiKey, source, skipDuplicate);
+        var psi = CreateNuGetPushStartInfo(packagePath, apiKey, source, skipDuplicate, suppressCompanionSymbols);
 
         using var p = Process.Start(psi);
         if (p is null)
@@ -245,7 +302,8 @@ public sealed partial class DotNetRepositoryReleaseService
         string packagePath,
         string apiKey,
         string source,
-        bool skipDuplicate)
+        bool skipDuplicate,
+        bool suppressCompanionSymbols = false)
     {
         var packageDirectory = Path.GetDirectoryName(Path.GetFullPath(packagePath));
         var psi = new ProcessStartInfo
@@ -267,6 +325,7 @@ public sealed partial class DotNetRepositoryReleaseService
             "--source", source
         };
         if (skipDuplicate) args.Add("--skip-duplicate");
+        if (suppressCompanionSymbols) args.Add("--no-symbols");
         psi.Arguments = BuildWindowsArgumentString(args);
 #else
         psi.ArgumentList.Add("nuget");
@@ -277,6 +336,7 @@ public sealed partial class DotNetRepositoryReleaseService
         psi.ArgumentList.Add("--source");
         psi.ArgumentList.Add(source);
         if (skipDuplicate) psi.ArgumentList.Add("--skip-duplicate");
+        if (suppressCompanionSymbols) psi.ArgumentList.Add("--no-symbols");
 #endif
         return psi;
     }

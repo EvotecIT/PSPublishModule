@@ -207,7 +207,32 @@ public sealed class DotNetRepositoryReleaseServiceTests
     }
 
     [Fact]
-    public void CreateNuGetPushStartInfo_UsesPrimaryPackageDirectoryForSymbolDiscovery()
+    public void ClassifyPublishedArtifacts_PreservesMixedDuplicateAndPublishedOutcomes()
+    {
+        var primary = "Sample.1.0.0.nupkg";
+        var symbols = "Sample.1.0.0.snupkg";
+        var pushResult = new DotNetRepositoryReleaseService.PackagePushResult
+        {
+            Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate,
+            Message = string.Join(Environment.NewLine, new[]
+            {
+                $"Pushing {primary}...",
+                $"Package '{primary}' already exists and cannot be modified. The server returned 409 (Conflict).",
+                $"Pushing {symbols}...",
+                "Your package was pushed."
+            })
+        };
+
+        var outcomes = DotNetRepositoryReleaseService.ClassifyPublishedArtifacts(
+            new[] { primary, symbols },
+            pushResult);
+
+        Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate, outcomes[primary]);
+        Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.Published, outcomes[symbols]);
+    }
+
+    [Fact]
+    public void CreateNuGetPushStartInfo_UsesPackageDirectory()
     {
         var packageDirectory = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         var packagePath = Path.Combine(packageDirectory, "Sample.1.0.0.nupkg");
@@ -219,6 +244,31 @@ public sealed class DotNetRepositoryReleaseServiceTests
             skipDuplicate: true);
 
         Assert.Equal(Path.GetFullPath(packageDirectory), startInfo.WorkingDirectory);
+    }
+
+    [Fact]
+    public void CreateNuGetPushStartInfo_SuppressesImplicitCompanionSymbolsWhenRequested()
+    {
+        var packagePath = Path.Combine(Path.GetTempPath(), "Sample.1.0.0.nupkg");
+
+        var startInfo = DotNetRepositoryReleaseService.CreateNuGetPushStartInfo(
+            packagePath,
+            "key",
+            "https://api.nuget.org/v3/index.json",
+            skipDuplicate: true,
+            suppressCompanionSymbols: true);
+
+        Assert.Contains("--no-symbols", startInfo.ArgumentList);
+    }
+
+    [Fact]
+    public void ResolvePublishSource_ResolvesRelativeLocalFeedFromRepositoryRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+
+        var source = DotNetRepositoryReleaseService.ResolvePublishSource("Artefacts/Feed", root);
+
+        Assert.Equal(Path.GetFullPath(Path.Combine(root, "Artefacts", "Feed")), source);
     }
 
     [Fact]

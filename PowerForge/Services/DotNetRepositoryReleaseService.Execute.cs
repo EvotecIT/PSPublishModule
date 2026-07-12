@@ -46,6 +46,8 @@ public sealed partial class DotNetRepositoryReleaseService
                 return result;
             }
             spec.RootPath = root;
+            if (!string.IsNullOrWhiteSpace(spec.PublishSource))
+                spec.PublishSource = ResolvePublishSource(spec.PublishSource!, root);
 
             var include = BuildNameSet(spec.IncludeProjects);
             var exclude = BuildNameSet(spec.ExcludeProjects);
@@ -560,19 +562,29 @@ public sealed partial class DotNetRepositoryReleaseService
 
                     _logger.Info($"Publishing {Path.GetFileName(pkg)}...");
                     var packagePublishWatch = Stopwatch.StartNew();
-                    var push = PushPackage(pkg, spec.PublishApiKey!, source, spec.SkipDuplicate, out var pushResult);
+                    var push = PushPackage(
+                        pkg,
+                        spec.PublishApiKey!,
+                        source,
+                        spec.SkipDuplicate,
+                        suppressCompanionSymbols: !spec.IncludeSymbols,
+                        out var pushResult);
                     packagePublishWatch.Stop();
                     if (push)
                     {
-                        if (pushResult.Outcome == PackagePushOutcome.SkippedDuplicate)
+                        var artifactOutcomes = ClassifyPublishedArtifacts(publishedArtifacts, pushResult);
+                        foreach (var artifact in publishedArtifacts)
                         {
-                            result.SkippedDuplicatePackages.AddRange(publishedArtifacts);
-                            _logger.Info($"Skipped duplicate {Path.GetFileName(pkg)} in {FormatDuration(packagePublishWatch.Elapsed)}; package already exists in the feed.");
-                        }
-                        else
-                        {
-                            result.PublishedPackages.AddRange(publishedArtifacts);
-                            _logger.Success($"Published {Path.GetFileName(pkg)} in {FormatDuration(packagePublishWatch.Elapsed)}.");
+                            if (artifactOutcomes[artifact] == PackagePushOutcome.SkippedDuplicate)
+                            {
+                                result.SkippedDuplicatePackages.Add(artifact);
+                                _logger.Info($"Skipped duplicate {Path.GetFileName(artifact)} in {FormatDuration(packagePublishWatch.Elapsed)}; package already exists in the feed.");
+                            }
+                            else
+                            {
+                                result.PublishedPackages.Add(artifact);
+                                _logger.Success($"Published {Path.GetFileName(artifact)} in {FormatDuration(packagePublishWatch.Elapsed)}.");
+                            }
                         }
                     }
                     else

@@ -77,4 +77,28 @@ public sealed partial class DotNetRepositoryReleaseService
             .ToArray();
     }
 
+    internal static string ResolvePublishSource(string source, string repositoryRoot)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            return source;
+
+        var trimmed = source.Trim();
+        if (Path.IsPathRooted(trimmed))
+            return Path.GetFullPath(trimmed);
+
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absoluteUri) && !absoluteUri.IsFile)
+            return trimmed;
+
+        var localCandidate = Path.Combine(repositoryRoot, trimmed);
+        if (trimmed.IndexOf(Path.DirectorySeparatorChar) >= 0 ||
+            trimmed.IndexOf(Path.AltDirectorySeparatorChar) >= 0 ||
+            trimmed.StartsWith(".", StringComparison.Ordinal) ||
+            Directory.Exists(localCandidate))
+        {
+            return Path.GetFullPath(localCandidate);
+        }
+
+        return trimmed;
+    }
+
 }
