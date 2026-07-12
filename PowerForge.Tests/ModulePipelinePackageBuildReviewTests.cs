@@ -8,6 +8,38 @@ namespace PowerForge.Tests;
 public sealed partial class ModulePipelinePackageBuildTests
 {
     [Fact]
+    public void ApplyPublishedNuGetArtifactOutcomes_PreservesMixedPrimaryAndSymbolResults()
+    {
+        var primary = Path.Combine(Path.GetTempPath(), "Sample.1.0.0.nupkg");
+        var symbols = Path.Combine(Path.GetTempPath(), "Sample.1.0.0.snupkg");
+        var release = new DotNetRepositoryReleaseResult();
+        release.Projects.Add(new DotNetRepositoryProjectResult
+        {
+            Packages = { primary },
+            SymbolPackages = { symbols }
+        });
+        var publish = new NuGetPackagePublishResult();
+        publish.PublishedItems.Add(primary);
+        publish.SkippedDuplicateItems.Add(primary);
+        publish.PackagePushResults[primary] = new DotNetRepositoryReleaseService.PackagePushResult
+        {
+            Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate,
+            Message = string.Join(Environment.NewLine, new[]
+            {
+                $"Pushing {Path.GetFileName(primary)}...",
+                $"Package '{Path.GetFileName(primary)}' already exists and cannot be modified.",
+                $"Pushing {Path.GetFileName(symbols)}...",
+                "Your package was pushed."
+            })
+        };
+
+        ModulePipelineRunner.ApplyPublishedNuGetArtifactOutcomes(release, publish);
+
+        Assert.Equal(new[] { symbols }, release.PublishedPackages);
+        Assert.Equal(new[] { primary }, release.SkippedDuplicatePackages);
+    }
+
+    [Fact]
     public void Run_DoesNotPublishPackageLaneWithoutExplicitPublishIntent()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

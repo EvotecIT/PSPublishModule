@@ -63,6 +63,10 @@ internal sealed class NuGetPackagePublishService
             if (shouldPublishPackage is not null && !shouldPublishPackage(package))
             {
                 result.PublishedItems.Add(package);
+                result.PackagePushResults[package] = new DotNetRepositoryReleaseService.PackagePushResult
+                {
+                    Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Published
+                };
                 continue;
             }
 
@@ -72,6 +76,7 @@ internal sealed class NuGetPackagePublishService
                     Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
                     Message = "Push handler returned no result."
                 };
+            result.PackagePushResults[package] = pushResult;
 
             switch (pushResult.Outcome)
             {
@@ -138,6 +143,7 @@ internal sealed class NuGetPackagePublishService
                     Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
                     Message = "Push handler returned no result."
                 };
+            result.PackagePushResults[package] = pushResult;
 
             switch (pushResult.Outcome)
             {

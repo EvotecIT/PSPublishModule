@@ -214,6 +214,9 @@ public sealed class NuGetPackagePublishServiceTests
             Assert.True(result.Success);
             Assert.Contains(packagePath, result.PublishedItems, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(packagePath, result.SkippedDuplicateItems, StringComparer.OrdinalIgnoreCase);
+            var pushResult = Assert.Contains(packagePath, result.PackagePushResults);
+            Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate, pushResult.Outcome);
+            Assert.Equal("already exists", pushResult.Message);
             Assert.Empty(result.FailedItems);
         }
         finally

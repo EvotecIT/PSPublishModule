@@ -261,11 +261,7 @@ public sealed partial class ModulePipelineRunner
             configuration.SkipDuplicate ?? true,
             configuration.PublishFailFast ?? true);
 
-        var skippedPrimaryPackages = new HashSet<string>(publish.SkippedDuplicateItems, StringComparer.OrdinalIgnoreCase);
-        release.PublishedPackages.AddRange(ExpandPublishedNuGetArtifacts(
-            release,
-            publish.PublishedItems.Where(package => !skippedPrimaryPackages.Contains(package))));
-        release.SkippedDuplicatePackages.AddRange(ExpandPublishedNuGetArtifacts(release, publish.SkippedDuplicateItems));
+        ApplyPublishedNuGetArtifactOutcomes(release, publish);
         release.FailedPackages.AddRange(publish.FailedItems);
         if (!publish.Success)
         {
@@ -275,19 +271,42 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
-    private static string[] ExpandPublishedNuGetArtifacts(
+    internal static void ApplyPublishedNuGetArtifactOutcomes(
         DotNetRepositoryReleaseResult release,
-        IEnumerable<string> primaryPackages)
+        NuGetPackagePublishResult publish)
     {
-        return primaryPackages
-            .SelectMany(package =>
+        var skippedPrimaryPackages = new HashSet<string>(publish.SkippedDuplicateItems, StringComparer.OrdinalIgnoreCase);
+        var publishedArtifacts = new HashSet<string>(release.PublishedPackages, StringComparer.OrdinalIgnoreCase);
+        var skippedArtifacts = new HashSet<string>(release.SkippedDuplicatePackages, StringComparer.OrdinalIgnoreCase);
+        foreach (var package in publish.PublishedItems)
+        {
+            var project = release.Projects.FirstOrDefault(candidate =>
+                candidate.Packages.Contains(package, StringComparer.OrdinalIgnoreCase));
+            var artifacts = DotNetRepositoryReleaseService.GetPublishedArtifacts(project, package);
+            if (!publish.PackagePushResults.TryGetValue(package, out var pushResult))
             {
-                var project = release.Projects.FirstOrDefault(candidate =>
-                    candidate.Packages.Contains(package, StringComparer.OrdinalIgnoreCase));
-                return DotNetRepositoryReleaseService.GetPublishedArtifacts(project, package);
-            })
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+                pushResult = new DotNetRepositoryReleaseService.PackagePushResult
+                {
+                    Outcome = skippedPrimaryPackages.Contains(package)
+                        ? DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate
+                        : DotNetRepositoryReleaseService.PackagePushOutcome.Published
+                };
+            }
+
+            var outcomes = DotNetRepositoryReleaseService.ClassifyPublishedArtifacts(artifacts, pushResult);
+            foreach (var artifact in artifacts)
+            {
+                if (outcomes[artifact] == DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate)
+                {
+                    if (skippedArtifacts.Add(artifact))
+                        release.SkippedDuplicatePackages.Add(artifact);
+                }
+                else if (publishedArtifacts.Add(artifact))
+                {
+                    release.PublishedPackages.Add(artifact);
+                }
+            }
+        }
     }
 
     private void PublishExistingGitHubRelease(
