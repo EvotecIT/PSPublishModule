@@ -131,7 +131,7 @@ public sealed class ManagedModuleRepositoryClientTests
         var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
         var repository = new ManagedModuleRepository(
             "PSGallery",
-            "https://www.powershellgallery.com/api/v3/index.json");
+            ManagedModuleCatalogDefaults.PowerShellGalleryV2);
 
         var versions = await repositoryClient.GetVersionsAsync(repository, "Pester", includePrerelease: false);
 
@@ -156,7 +156,7 @@ public sealed class ManagedModuleRepositoryClientTests
         var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
         var repository = new ManagedModuleRepository(
             "PSGallery",
-            "https://www.powershellgallery.com/api/v3/index.json");
+            ManagedModuleCatalogDefaults.PowerShellGalleryV2);
 
         var versions = await repositoryClient.GetVersionsAsync(repository, "Pester", includePrerelease: false);
 
@@ -918,6 +918,7 @@ public sealed class ManagedModuleRepositoryClientTests
         var publishRequest = Assert.Single(requests, request => request.Url == "https://example.test/publish/");
         Assert.Equal(HttpMethod.Put, publishRequest.Method);
         Assert.Equal("publish-key", publishRequest.ApiKey);
+        Assert.DoesNotContain(requests, request => request.Url == "https://example.test/symbol-publish/");
     }
 
     [Fact]
@@ -954,7 +955,7 @@ public sealed class ManagedModuleRepositoryClientTests
         var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
         var repository = new ManagedModuleRepository(
             "PSGallery",
-            "https://www.powershellgallery.com/api/v3/index.json");
+            ManagedModuleCatalogDefaults.PowerShellGalleryV2);
 
         var result = await repositoryClient.PublishPackageAsync(
             repository,
@@ -963,9 +964,14 @@ public sealed class ManagedModuleRepositoryClientTests
 
         Assert.True(result.Published);
         Assert.Equal(201, result.StatusCode);
-        var publishRequest = Assert.Single(requests, request => request.Url == "https://psgallery.test/publish/");
+        var publishRequest = Assert.Single(requests, request => request.Url == "https://www.powershellgallery.com/api/v2/package");
         Assert.Equal(HttpMethod.Put, publishRequest.Method);
         Assert.Equal("gallery-key", publishRequest.ApiKey);
+        Assert.Equal("multipart/form-data", publishRequest.ContentType);
+        Assert.Equal(1, publishRequest.MultipartPartCount);
+        Assert.Equal("package", publishRequest.MultipartPartName);
+        Assert.Equal("Company.Tools.1.0.0.nupkg", publishRequest.MultipartFileName);
+        Assert.Equal("application/octet-stream", publishRequest.MultipartPartContentType);
     }
 
     [Fact]
@@ -1328,7 +1334,19 @@ public sealed class ManagedModuleRepositoryClientTests
             var apiKey = request.Headers.TryGetValues("X-NuGet-ApiKey", out var values)
                 ? values.FirstOrDefault()
                 : null;
-            _requests.Add(new RecordedRequest(uri.AbsoluteUri, request.Method, request.Headers.Authorization, apiKey, request.Headers.UserAgent.ToString()));
+            var multipart = request.Content as MultipartFormDataContent;
+            var firstPart = multipart?.FirstOrDefault();
+            _requests.Add(new RecordedRequest(
+                uri.AbsoluteUri,
+                request.Method,
+                request.Headers.Authorization,
+                apiKey,
+                request.Headers.UserAgent.ToString(),
+                request.Content?.Headers.ContentType?.MediaType,
+                multipart?.Count() ?? 0,
+                firstPart?.Headers.ContentDisposition?.Name?.Trim('"'),
+                firstPart?.Headers.ContentDisposition?.FileName?.Trim('"'),
+                firstPart?.Headers.ContentType?.MediaType));
 
             if (uri.AbsoluteUri == "https://example.test/v3/index.json")
             {
@@ -1344,6 +1362,7 @@ public sealed class ManagedModuleRepositoryClientTests
                 return Json("{\"resources\":[" +
                             "{\"@id\":\"https://example.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}," +
                             "{\"@id\":\"https://example.test/search\",\"@type\":\"SearchQueryService/3.5.0\"}," +
+                            "{\"@id\":\"https://example.test/symbol-publish/\",\"@type\":\"SymbolPackagePublish/4.9.0\"}," +
                             "{\"@id\":\"https://example.test/publish/\",\"@type\":\"PackagePublish/2.0.0\"}" +
                             registration +
                             "]}");
@@ -1643,6 +1662,9 @@ public sealed class ManagedModuleRepositoryClientTests
             if (uri.AbsoluteUri == "https://psgallery.test/publish/" && request.Method == HttpMethod.Put)
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Created));
 
+            if (uri.AbsoluteUri == "https://www.powershellgallery.com/api/v2/package" && request.Method == HttpMethod.Put)
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Created));
+
             if (uri.AbsoluteUri == "https://push.example.test/api/v2/package" && request.Method == HttpMethod.Put)
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Created));
 
@@ -1686,13 +1708,28 @@ public sealed class ManagedModuleRepositoryClientTests
 
     internal sealed class RecordedRequest
     {
-        public RecordedRequest(string url, HttpMethod method, AuthenticationHeaderValue? authorization, string? apiKey, string userAgent)
+        public RecordedRequest(
+            string url,
+            HttpMethod method,
+            AuthenticationHeaderValue? authorization,
+            string? apiKey,
+            string userAgent,
+            string? contentType,
+            int multipartPartCount,
+            string? multipartPartName,
+            string? multipartFileName,
+            string? multipartPartContentType)
         {
             Url = url;
             Method = method;
             Authorization = authorization;
             ApiKey = apiKey;
             UserAgent = userAgent;
+            ContentType = contentType;
+            MultipartPartCount = multipartPartCount;
+            MultipartPartName = multipartPartName;
+            MultipartFileName = multipartFileName;
+            MultipartPartContentType = multipartPartContentType;
         }
 
         public string Url { get; }
@@ -1704,5 +1741,15 @@ public sealed class ManagedModuleRepositoryClientTests
         public string? ApiKey { get; }
 
         public string UserAgent { get; }
+
+        public string? ContentType { get; }
+
+        public int MultipartPartCount { get; }
+
+        public string? MultipartPartName { get; }
+
+        public string? MultipartFileName { get; }
+
+        public string? MultipartPartContentType { get; }
     }
 }

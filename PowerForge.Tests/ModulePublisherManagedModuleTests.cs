@@ -56,6 +56,7 @@ public sealed class ModulePublisherManagedModuleTests
             Assert.True(result.Succeeded);
             Assert.Equal("Local", result.RepositoryName);
             Assert.Equal("3.0.13", result.VersionText);
+            Assert.Equal(PublishTool.ManagedModule, result.Tool);
             Assert.True(File.Exists(Path.Combine(feed.Path, "PSPublishModule.3.0.13.nupkg")));
         }
         finally
@@ -63,6 +64,159 @@ public sealed class ModulePublisherManagedModuleTests
             if (Directory.Exists(stagingRoot))
                 Directory.Delete(stagingRoot, recursive: true);
         }
+    }
+
+    [Fact]
+    public void Publish_Auto_UsesManagedEngineWithoutPowerShellRunner()
+    {
+        var stagingRoot = Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N"));
+        using var feed = new TemporaryDirectory();
+        try
+        {
+            Directory.CreateDirectory(stagingRoot);
+            var manifestPath = Path.Combine(stagingRoot, "PSPublishModule.psd1");
+            File.WriteAllText(
+                manifestPath,
+                "@{ ModuleVersion = '3.0.14'; RootModule = 'PSPublishModule.psm1'; Author = 'Evotec'; Description = 'Managed auto publish test.' }");
+            File.WriteAllText(Path.Combine(stagingRoot, "PSPublishModule.psm1"), string.Empty);
+
+            var publisher = new ModulePublisher(
+                new NullLogger(),
+                new StubPowerShellRunner(_ => throw new InvalidOperationException("PowerShell runner should not be used by managed publish.")));
+            var publish = new PublishConfiguration
+            {
+                Destination = PublishDestination.PowerShellGallery,
+                Enabled = true,
+                Tool = PublishTool.Auto,
+                RepositoryName = "Local",
+                Repository = new PublishRepositoryConfiguration
+                {
+                    Name = "Local",
+                    Uri = feed.Path
+                }
+            };
+            var buildResult = new ModuleBuildResult(
+                stagingPath: stagingRoot,
+                manifestPath: manifestPath,
+                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+            var result = publisher.Publish(publish, CreatePlan(), buildResult, Array.Empty<ArtefactBuildResult>());
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(PublishTool.ManagedModule, result.Tool);
+            Assert.True(File.Exists(Path.Combine(feed.Path, "PSPublishModule.3.0.14.nupkg")));
+        }
+        finally
+        {
+            if (Directory.Exists(stagingRoot))
+                Directory.Delete(stagingRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AutoToolSelection_UsesManagedForPsGalleryAndRetainsCompatibilityForRuntimeCredentialProviders()
+    {
+        var psGallery = new PublishConfiguration
+        {
+            Destination = PublishDestination.PowerShellGallery,
+            Tool = PublishTool.Auto,
+            RepositoryName = "PSGallery"
+        };
+        var psGalleryV3 = new PublishConfiguration
+        {
+            Destination = PublishDestination.PowerShellGallery,
+            Tool = PublishTool.Auto,
+            RepositoryName = "PSGallery",
+            Repository = new PublishRepositoryConfiguration
+            {
+                Name = "PSGallery",
+                Uri = ManagedModuleCatalogDefaults.PowerShellGalleryV3
+            }
+        };
+        var runtimeCredential = new PublishConfiguration
+        {
+            Destination = PublishDestination.PowerShellGallery,
+            Tool = PublishTool.Auto,
+            RepositoryName = "JFrog",
+            Repository = new PublishRepositoryConfiguration
+            {
+                Name = "JFrog",
+                Uri = "https://example.jfrog.io/artifactory/api/nuget/v3/feed",
+                CredentialProvider = new RepositoryCredentialProviderConfiguration
+                {
+                    Kind = RepositoryCredentialProviderKind.JFrogOidc
+                }
+            }
+        };
+        var azureArtifacts = new PublishConfiguration
+        {
+            Destination = PublishDestination.PowerShellGallery,
+            Tool = PublishTool.Auto,
+            ApiKey = "AzureDevOps",
+            RepositoryName = "CompanyModules",
+            Repository = new PublishRepositoryConfiguration
+            {
+                Name = "CompanyModules",
+                Uri = "https://pkgs.dev.azure.com/contoso/Platform/_packaging/CompanyModules/nuget/v3/index.json"
+            }
+        };
+        var registeredRequiredModuleSource = new PublishConfiguration
+        {
+            Destination = PublishDestination.PowerShellGallery,
+            Tool = PublishTool.Auto,
+            RepositoryName = "CompanyModules",
+            PublishRequiredModules = true,
+            RequiredModuleSourceRepository = "RegisteredUpstream",
+            Repository = new PublishRepositoryConfiguration
+            {
+                Name = "CompanyModules",
+                Uri = "https://packages.example.test/v3/index.json"
+            }
+        };
+        var scriptEndpoint = new PublishConfiguration
+        {
+            Destination = PublishDestination.PowerShellGallery,
+            Tool = PublishTool.Auto,
+            RepositoryName = "CompanyScripts",
+            Repository = new PublishRepositoryConfiguration
+            {
+                Name = "CompanyScripts",
+                Uri = "https://packages.example.test/api/v2/items/psscript"
+            }
+        };
+
+        Assert.True(ModulePublisher.ShouldUseManagedModuleForAuto(psGallery));
+        Assert.True(ModulePublisher.ShouldUseManagedModuleForAuto(psGalleryV3));
+        Assert.Equal(
+            ManagedModuleCatalogDefaults.PowerShellGalleryV2,
+            ModulePublisher.ResolveDefaultManagedRepositorySource("PSGallery"));
+        Assert.Equal(
+            ManagedModuleCatalogDefaults.PowerShellGalleryV2,
+            ModulePublisher.NormalizeManagedRepositorySource(ManagedModuleCatalogDefaults.PowerShellGalleryV3));
+        Assert.False(ModulePublisher.ShouldUseManagedModuleForAuto(runtimeCredential));
+        Assert.False(ModulePublisher.ShouldUseManagedModuleForAuto(azureArtifacts));
+        Assert.False(ModulePublisher.ShouldUseManagedModuleForAuto(registeredRequiredModuleSource));
+        Assert.False(ModulePublisher.ShouldUseManagedModuleForAuto(scriptEndpoint));
+    }
+
+    [Fact]
+    public void ModulePublishResult_preserves_legacy_constructor_signature()
+    {
+        var constructor = typeof(ModulePublishResult).GetConstructor(new[]
+        {
+            typeof(PublishDestination),
+            typeof(string),
+            typeof(string),
+            typeof(string),
+            typeof(string),
+            typeof(bool),
+            typeof(string[]),
+            typeof(string),
+            typeof(bool),
+            typeof(string)
+        });
+
+        Assert.NotNull(constructor);
     }
 
     [Fact]

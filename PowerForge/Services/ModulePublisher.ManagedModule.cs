@@ -5,6 +5,33 @@ namespace PowerForge;
 /// </content>
 public sealed partial class ModulePublisher
 {
+    internal static bool ShouldUseManagedModuleForAuto(PublishConfiguration publish)
+    {
+        if (publish is null)
+            throw new ArgumentNullException(nameof(publish));
+        if (publish.Tool == PublishTool.ManagedModule)
+            return true;
+        if (publish.Tool != PublishTool.Auto)
+            return false;
+        if (publish.Repository?.CredentialProvider is { Kind: not RepositoryCredentialProviderKind.None })
+            return false;
+
+        var (repositoryName, repository) = ResolveRepository(publish);
+        if (!ManagedRequiredModuleRepositoryValidator.CanResolveSourceRepository(publish, repositoryName))
+            return false;
+        try
+        {
+            var support = ManagedModuleProviderSupportEvaluator.Evaluate(
+                CreateManagedPublishRepository(repositoryName, repository));
+            return support.Level == ManagedModuleProviderSupportLevel.Supported;
+        }
+        catch (InvalidOperationException)
+        {
+            // Named repositories without an explicit URI still require the compatibility registration path.
+            return false;
+        }
+    }
+
     private void PublishToRepositoryWithManagedModule(
         PublishConfiguration publish,
         ModulePipelinePlan plan,
@@ -46,6 +73,8 @@ public sealed partial class ModulePublisher
         var source = FirstNonEmpty(repoConfig?.PublishUri, repoConfig?.Uri, repoConfig?.SourceUri);
         if (string.IsNullOrWhiteSpace(source))
             source = ResolveDefaultManagedRepositorySource(repositoryName);
+        else
+            source = NormalizeManagedRepositorySource(source!);
 
         return new ManagedModuleRepository(
             repositoryName,
@@ -61,6 +90,8 @@ public sealed partial class ModulePublisher
         var source = FirstNonEmpty(repoConfig?.Uri, repoConfig?.SourceUri, repoConfig?.PublishUri);
         if (string.IsNullOrWhiteSpace(source))
             source = ResolveDefaultManagedRepositorySource(repositoryName);
+        else
+            source = NormalizeManagedRepositorySource(source!);
 
         return new ManagedModuleRepository(
             repositoryName,
@@ -69,13 +100,21 @@ public sealed partial class ModulePublisher
             repoConfig?.Trusted ?? true);
     }
 
-    private static string ResolveDefaultManagedRepositorySource(string repositoryName)
+    internal static string ResolveDefaultManagedRepositorySource(string repositoryName)
     {
         if (string.Equals(repositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase))
-            return "https://www.powershellgallery.com/api/v3/index.json";
+            return ManagedModuleCatalogDefaults.PowerShellGalleryV2;
 
         throw new InvalidOperationException(
             $"Managed module publishing requires a repository Uri, SourceUri, or PublishUri for repository '{repositoryName}'.");
+    }
+
+    internal static string NormalizeManagedRepositorySource(string source)
+    {
+        var normalized = source.Trim().TrimEnd('/');
+        return normalized.Equals(ManagedModuleCatalogDefaults.PowerShellGalleryV3, StringComparison.OrdinalIgnoreCase)
+            ? ManagedModuleCatalogDefaults.PowerShellGalleryV2
+            : normalized;
     }
 
     private static RepositoryCredential? ResolveManagedReadCredential(PublishRepositoryConfiguration? repoConfig)

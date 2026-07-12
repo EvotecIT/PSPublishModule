@@ -57,6 +57,7 @@ internal static class SpectrePipelineSummaryWriter
         var unicode = AnsiConsole.Profile.Capabilities.Unicode;
         var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
         var versionText = BuildServices.FormatVersionWithPreRelease(res.Plan.ResolvedVersion, res.Plan.PreRelease);
+        var publishSummary = PipelinePublishSummaryBuilder.Build(res);
 
         AnsiConsole.Write(new Rule($"[green]{(unicode ? "✅" : "OK")} Summary[/]").LeftJustified());
 
@@ -195,8 +196,20 @@ internal static class SpectrePipelineSummaryWriter
         else
             table.AddRow($"{(unicode ? "📦" : "*")} Artefacts", "[grey]None[/]");
 
-        if (res.PublishResults is { Length: > 0 })
-            table.AddRow($"{(unicode ? "🚀" : "*")} Publish", $"[green]{res.PublishResults.Length}[/] destination(s)");
+        if (publishSummary.Rows.Count > 0)
+        {
+            table.AddRow(
+                $"{(unicode ? "🚀" : "*")} Publish",
+                $"[green]{publishSummary.Rows.Count}[/] result(s) across [green]{publishSummary.ChannelCount}[/] channel(s)");
+
+            foreach (var channel in publishSummary.Channels)
+            {
+                var icon = unicode
+                    ? channel.Channel == "GitHub" ? "🚀" : "📦"
+                    : "*";
+                table.AddRow($"{icon} {Esc(channel.Channel)}", Esc(channel.Label));
+            }
+        }
         else
             table.AddRow($"{(unicode ? "🚀" : "*")} Publish", "[grey]Disabled[/]");
 
@@ -330,24 +343,20 @@ internal static class SpectrePipelineSummaryWriter
             AnsiConsole.Write(artefacts);
         }
 
-        if (res.PublishResults is { Length: > 0 })
+        if (publishSummary.Rows.Count > 0)
         {
             AnsiConsole.WriteLine();
 
             var publishes = new Table()
                 .Border(border)
-                .AddColumn(new TableColumn("Destination").NoWrap())
+                .AddColumn(new TableColumn("Channel").NoWrap())
                 .AddColumn(new TableColumn("Target").NoWrap())
-                .AddColumn(new TableColumn("Published").NoWrap())
+                .AddColumn(new TableColumn("Result").NoWrap())
+                .AddColumn(new TableColumn("Method").NoWrap())
                 .AddColumn(new TableColumn("Reference"));
 
-            foreach (var publish in res.PublishResults)
-            {
-                var target = BuildPublishTarget(publish);
-                var published = BuildPublishLabel(publish);
-                var reference = BuildPublishReference(res.Plan, publish);
-                publishes.AddRow(Esc(publish.Destination.ToString()), Esc(target), Esc(published), Esc(reference));
-            }
+            foreach (var row in publishSummary.Rows)
+                publishes.AddRow(Esc(row.Channel), Esc(row.Target), Esc(row.Result), Esc(row.Method), Esc(row.Reference));
 
             AnsiConsole.Write(publishes);
         }
@@ -400,45 +409,6 @@ internal static class SpectrePipelineSummaryWriter
 
         AnsiConsole.Write(table);
         WriteFailureDetails(message, border);
-    }
-
-    private static string BuildPublishTarget(ModulePublishResult publish)
-    {
-        if (publish.Destination == PublishDestination.GitHub)
-        {
-            var owner = string.IsNullOrWhiteSpace(publish.UserName) ? "(owner?)" : publish.UserName;
-            var repo = string.IsNullOrWhiteSpace(publish.RepositoryName) ? "(repo?)" : publish.RepositoryName;
-            return $"{owner}/{repo}";
-        }
-
-        return string.IsNullOrWhiteSpace(publish.RepositoryName) ? "(repository?)" : publish.RepositoryName!;
-    }
-
-    private static string BuildPublishLabel(ModulePublishResult publish)
-    {
-        var version = string.IsNullOrWhiteSpace(publish.VersionText) ? "(unknown)" : publish.VersionText;
-        if (publish.Destination != PublishDestination.GitHub)
-            return version;
-
-        var tag = string.IsNullOrWhiteSpace(publish.TagName) ? "(tag?)" : publish.TagName;
-        var assetCount = publish.AssetPaths?.Length ?? 0;
-        return assetCount > 0 ? $"{tag} ({version}, assets {assetCount})" : $"{tag} ({version})";
-    }
-
-    private static string BuildPublishReference(ModulePipelinePlan plan, ModulePublishResult publish)
-    {
-        if (!string.IsNullOrWhiteSpace(publish.ReleaseUrl))
-            return publish.ReleaseUrl!;
-
-        if (publish.Destination == PublishDestination.PowerShellGallery &&
-            string.Equals(publish.RepositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase) &&
-            !string.IsNullOrWhiteSpace(plan.ModuleName) &&
-            !string.IsNullOrWhiteSpace(publish.VersionText))
-        {
-            return $"https://www.powershellgallery.com/packages/{plan.ModuleName}/{publish.VersionText}";
-        }
-
-        return string.Empty;
     }
 
     private static void WriteFileConsistencyIssues(

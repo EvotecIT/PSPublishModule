@@ -17,7 +17,7 @@ public enum PublishDestination
 public enum PublishTool
 {
     /// <summary>
-    /// Choose the best available tool at runtime (prefer PSResourceGet, fall back to PowerShellGet).
+    /// Choose the best available tool at runtime (prefer the managed C# publisher and use compatibility tools only when required).
     /// </summary>
     Auto,
     /// <summary>Use Microsoft.PowerShell.PSResourceGet.</summary>

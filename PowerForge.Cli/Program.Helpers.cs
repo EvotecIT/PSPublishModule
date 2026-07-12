@@ -413,6 +413,20 @@ internal static partial class Program
                     logger.Info($" - {a.Type}{(string.IsNullOrWhiteSpace(a.Id) ? string.Empty : $" ({a.Id})")}: {a.OutputPath}");
             }
 
+            var publishSummary = PowerForge.ConsoleShared.PipelinePublishSummaryBuilder.Build(res);
+            if (publishSummary.Rows.Count > 0)
+            {
+                logger.Info($"Publish: {publishSummary.Rows.Count} result(s) across {publishSummary.ChannelCount} channel(s)");
+                foreach (var channel in publishSummary.Channels)
+                    logger.Info($" - {channel.Channel}: {channel.Label}");
+                foreach (var row in publishSummary.Rows)
+                    logger.Info($"   * {row.Channel} | {row.Target} | {row.Result} | {row.Method} | {row.Reference}");
+            }
+            else
+            {
+                logger.Info("Publish: disabled");
+            }
+
             if (res.DiagnosticsBaseline is not null)
             {
                 var baseline = res.DiagnosticsBaseline;

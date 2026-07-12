@@ -246,6 +246,7 @@ public sealed partial class ModulePipelineRunner
         var source = string.IsNullOrWhiteSpace(feed.PublishSource)
             ? ProjectBuildPackageFeedResolver.GetDefaultPublishSource()
             : feed.PublishSource!.Trim();
+        release.PublishSource = source;
         var packages = release.Projects
             .SelectMany(project => project.Packages)
             .Where(package => !string.IsNullOrWhiteSpace(package))

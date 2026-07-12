@@ -17,14 +17,39 @@ public sealed class ManagedModuleProviderSupportEvaluatorTests
     }
 
     [Fact]
-    public void EvaluateRepository_ClassifiesNuGetV2AsPartialBecauseManagedPublishNeedsV3OrLocal()
+    public void EvaluateRepository_ClassifiesNuGetV2AsSupported()
     {
         var support = ManagedModuleProviderSupportEvaluator.Evaluate(new ManagedModuleRepository("Legacy", "https://nuget.example.test/api/v2"));
 
-        Assert.Equal(ManagedModuleProviderSupportLevel.Partial, support.Level);
+        Assert.Equal(ManagedModuleProviderSupportLevel.Supported, support.Level);
         Assert.True(support.ManagedLifecycleSupported);
+        Assert.False(support.CompatibilityFallbackRecommended);
+        Assert.Empty(support.Limitations);
+    }
+
+    [Theory]
+    [InlineData("https://packages.example.test/api/v2/items/psscript")]
+    [InlineData("https://www.powershellgallery.com/api/v2/items/psscript/")]
+    public void EvaluateRepository_RejectsPowerShellGetScriptEndpointsForModulePublishing(string source)
+    {
+        var support = ManagedModuleProviderSupportEvaluator.Evaluate(new ManagedModuleRepository("Scripts", source));
+
+        Assert.Equal(ManagedModuleProviderSupportLevel.Unsupported, support.Level);
+        Assert.False(support.ManagedLifecycleSupported);
         Assert.True(support.CompatibilityFallbackRecommended);
-        Assert.Contains(support.Limitations, limitation => limitation.Contains("publishing", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(support.Limitations, limitation => limitation.Contains("module publish", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void EvaluateRepository_ClassifiesAzureArtifactsEndpointAsPartial()
+    {
+        var support = ManagedModuleProviderSupportEvaluator.Evaluate(new ManagedModuleRepository(
+            "CompanyModules",
+            "https://pkgs.dev.azure.com/contoso/Platform/_packaging/CompanyModules/nuget/v3/index.json"));
+
+        Assert.Equal(ManagedModuleProviderSupportLevel.Partial, support.Level);
+        Assert.True(support.CompatibilityFallbackRecommended);
+        Assert.Contains(support.Limitations, limitation => limitation.Contains("credential-provider", StringComparison.OrdinalIgnoreCase));
     }
 
     [Theory]

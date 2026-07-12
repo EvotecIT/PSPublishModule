@@ -35,6 +35,9 @@ public sealed class ModulePublishResult
     /// <summary>Optional error message when <see cref="Succeeded"/> is false.</summary>
     public string? ErrorMessage { get; }
 
+    /// <summary>Repository publishing engine used for PowerShell repository destinations.</summary>
+    public PublishTool? Tool { get; }
+
     /// <summary>
     /// Creates a new result instance.
     /// </summary>
@@ -49,6 +52,36 @@ public sealed class ModulePublishResult
         string? releaseUrl,
         bool succeeded,
         string? errorMessage)
+        : this(
+            destination,
+            repositoryName,
+            userName,
+            tagName,
+            versionText,
+            isPreRelease,
+            assetPaths,
+            releaseUrl,
+            succeeded,
+            errorMessage,
+            tool: null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new result instance and records the repository publishing engine.
+    /// </summary>
+    public ModulePublishResult(
+        PublishDestination destination,
+        string? repositoryName,
+        string? userName,
+        string? tagName,
+        string versionText,
+        bool isPreRelease,
+        string[] assetPaths,
+        string? releaseUrl,
+        bool succeeded,
+        string? errorMessage,
+        PublishTool? tool)
     {
         Destination = destination;
         RepositoryName = repositoryName;
@@ -60,5 +93,6 @@ public sealed class ModulePublishResult
         ReleaseUrl = releaseUrl;
         Succeeded = succeeded;
         ErrorMessage = errorMessage;
+        Tool = tool;
     }
 }

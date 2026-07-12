@@ -118,8 +118,11 @@ public sealed partial class ManagedModuleRepositoryClient
             () =>
             {
                 var request = CreateRequest(HttpMethod.Put, new Uri(publishAddress), credential, "application/json");
-                request.Content = new StreamContent(File.OpenRead(package));
-                request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                var packageContent = new StreamContent(File.OpenRead(package));
+                packageContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                var multipart = new MultipartFormDataContent();
+                multipart.Add(packageContent, "package", Path.GetFileName(package));
+                request.Content = multipart;
                 return request;
             },
             cancellationToken).ConfigureAwait(false);
@@ -200,7 +203,12 @@ public sealed partial class ManagedModuleRepositoryClient
         if (string.IsNullOrWhiteSpace(type))
             return false;
 
-        return type!.IndexOf("PackagePublish", StringComparison.OrdinalIgnoreCase) >= 0;
+        var normalized = type!.Trim();
+        var versionSeparator = normalized.IndexOf('/');
+        if (versionSeparator >= 0)
+            normalized = normalized.Substring(0, versionSeparator);
+
+        return string.Equals(normalized, "PackagePublish", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ResolveNuGetV2PackagePublishAddress(string source)
