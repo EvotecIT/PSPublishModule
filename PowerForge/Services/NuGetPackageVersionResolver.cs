@@ -47,6 +47,22 @@ public sealed class NuGetPackageVersionResolver
         IReadOnlyDictionary<string, RepositoryCredential>? credentialsBySource,
         bool includePrerelease)
     {
+        var latest = ResolveLatestPackageVersion(packageId, sources, credential, credentialsBySource, includePrerelease);
+        if (string.IsNullOrWhiteSpace(latest))
+            return null;
+
+        return Version.TryParse(PackageVersionUtility.GetNumericVersion(latest!), out var parsed)
+            ? parsed
+            : null;
+    }
+
+    internal string? ResolveLatestPackageVersion(
+        string packageId,
+        IReadOnlyList<string>? sources,
+        RepositoryCredential? credential,
+        IReadOnlyDictionary<string, RepositoryCredential>? credentialsBySource,
+        bool includePrerelease)
+    {
         if (string.IsNullOrWhiteSpace(packageId)) return null;
 
         var normalizedSources = (sources ?? Array.Empty<string>())
@@ -58,18 +74,18 @@ public sealed class NuGetPackageVersionResolver
         if (normalizedSources.Length == 0)
             normalizedSources = new[] { "https://api.nuget.org/v3/index.json" };
 
-        Version? latest = null;
+        string? latest = null;
         foreach (var source in normalizedSources)
         {
-            Version? candidate = null;
+            string? candidate = null;
             var sourceCredential = ResolveCredentialForSource(source, credentialsBySource) ?? credential;
             if (IsLocalPath(source))
-                candidate = ResolveFromLocalPath(packageId, source, includePrerelease);
+                candidate = ResolvePackageVersionFromLocalPath(packageId, source, includePrerelease);
             else
-                candidate = ResolveFromV3Source(packageId, source, sourceCredential, includePrerelease);
+                candidate = ResolvePackageVersionFromV3Source(packageId, source, sourceCredential, includePrerelease);
 
             if (candidate is null) continue;
-            if (latest is null || candidate > latest)
+            if (latest is null || PackageVersionUtility.Compare(candidate, latest) > 0)
                 latest = candidate;
         }
 
@@ -110,7 +126,7 @@ public sealed class NuGetPackageVersionResolver
         return Path.IsPathRooted(source) || source.StartsWith(".", StringComparison.Ordinal);
     }
 
-    private Version? ResolveFromLocalPath(string packageId, string path, bool includePrerelease)
+    private string? ResolvePackageVersionFromLocalPath(string packageId, string path, bool includePrerelease)
     {
         try
         {
@@ -122,7 +138,7 @@ public sealed class NuGetPackageVersionResolver
             }
 
             var prefix = packageId + ".";
-            Version? latest = null;
+            string? latest = null;
             foreach (var file in Directory.EnumerateFiles(full, "*.nupkg", SearchOption.AllDirectories))
             {
                 var name = Path.GetFileNameWithoutExtension(file);
@@ -133,10 +149,10 @@ public sealed class NuGetPackageVersionResolver
                 if (verText.EndsWith(".symbols", StringComparison.OrdinalIgnoreCase))
                     verText = verText.Substring(0, verText.Length - 8);
 
-                if (!TryParseVersion(verText, includePrerelease, out var v))
+                if (!TryNormalizeVersion(verText, includePrerelease, out var version))
                     continue;
 
-                if (latest is null || v > latest) latest = v;
+                if (latest is null || PackageVersionUtility.Compare(version, latest) > 0) latest = version;
             }
 
             return latest;
@@ -148,7 +164,7 @@ public sealed class NuGetPackageVersionResolver
         }
     }
 
-    private Version? ResolveFromV3Source(string packageId, string source, RepositoryCredential? credential, bool includePrerelease)
+    private string? ResolvePackageVersionFromV3Source(string packageId, string source, RepositoryCredential? credential, bool includePrerelease)
     {
         try
         {
@@ -173,13 +189,13 @@ public sealed class NuGetPackageVersionResolver
             if (!doc.RootElement.TryGetProperty("versions", out var versions))
                 return null;
 
-            Version? latest = null;
+            string? latest = null;
             foreach (var v in versions.EnumerateArray())
             {
                 var text = v.GetString() ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(text)) continue;
-                if (!TryParseVersion(text, includePrerelease, out var parsed)) continue;
-                if (latest is null || parsed > latest) latest = parsed;
+                if (!TryNormalizeVersion(text, includePrerelease, out var version)) continue;
+                if (latest is null || PackageVersionUtility.Compare(version, latest) > 0) latest = version;
             }
 
             return latest;
@@ -286,21 +302,17 @@ public sealed class NuGetPackageVersionResolver
             request.Headers.Add("X-NuGet-ApiKey", secret);
     }
 
-    private static bool TryParseVersion(string text, bool includePrerelease, out Version version)
+    private static bool TryNormalizeVersion(string text, bool includePrerelease, out string version)
     {
-        version = new Version(0, 0, 0, 0);
+        version = string.Empty;
         if (string.IsNullOrWhiteSpace(text)) return false;
 
-        if (text.IndexOf('-') >= 0)
-        {
-            if (!includePrerelease) return false;
-            text = text.Split('-')[0];
-        }
-
-        if (!Version.TryParse(text, out var parsed) || parsed is null)
+        if (!PackageVersionUtility.TryNormalizeExact(text, out var normalized))
+            return false;
+        if (!includePrerelease && PackageVersionUtility.GetPrereleaseVersion(normalized).Length > 0)
             return false;
 
-        version = parsed;
+        version = normalized;
         return true;
     }
 }

@@ -91,8 +91,8 @@ internal sealed class ProjectBuildVersionTrackService
         IReadOnlyDictionary<string, RepositoryCredential>? credentialsBySource,
         bool defaultIncludePrerelease)
     {
-        if (Version.TryParse(expectedVersion, out var exact))
-            return exact.ToString();
+        if (PackageVersionUtility.TryNormalizeExact(expectedVersion, out var exact))
+            return exact;
 
         var anchorPackageId = NormalizeNullable(track.AnchorPackageId) ?? NormalizeNullable(track.AnchorProject);
         if (anchorPackageId is null)

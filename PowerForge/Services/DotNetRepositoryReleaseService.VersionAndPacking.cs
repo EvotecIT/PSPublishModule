@@ -36,8 +36,8 @@ public sealed partial class DotNetRepositoryReleaseService
             return string.Empty;
         }
 
-        if (Version.TryParse(expectedVersion, out var exact))
-            return exact.ToString();
+        if (PackageVersionUtility.TryNormalizeExact(expectedVersion, out var exact))
+            return exact;
 
         var current = _resolver.ResolveLatest(
             packageId: string.IsNullOrWhiteSpace(project.PackageId) ? project.ProjectName : project.PackageId,

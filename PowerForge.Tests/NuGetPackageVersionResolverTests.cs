@@ -8,6 +8,32 @@ namespace PowerForge.Tests;
 public sealed class NuGetPackageVersionResolverTests
 {
     [Fact]
+    public void ResolveLatestPackageVersion_PreservesPrereleaseOrdering()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            File.WriteAllText(Path.Combine(root.FullName, "Sample.Package.2.0.0-beta.2.nupkg"), string.Empty);
+            File.WriteAllText(Path.Combine(root.FullName, "Sample.Package.2.0.0-beta.10.nupkg"), string.Empty);
+            File.WriteAllText(Path.Combine(root.FullName, "Sample.Package.1.9.9.nupkg"), string.Empty);
+            var resolver = new NuGetPackageVersionResolver(new NullLogger());
+
+            var latest = resolver.ResolveLatestPackageVersion(
+                "Sample.Package",
+                new[] { root.FullName },
+                credential: null,
+                credentialsBySource: null,
+                includePrerelease: true);
+
+            Assert.Equal("2.0.0-beta.10", latest);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void ResolveLatest_applies_source_scoped_credentials_only_to_matching_source()
     {
         var requests = new List<RecordedRequest>();

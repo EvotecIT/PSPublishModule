@@ -65,16 +65,19 @@ public sealed partial class DotNetRepositoryReleaseService
                     return (false, $"Publish preflight failed: package not found: {pkg}");
             }
 
-            var latest = _resolver.ResolveLatest(
+            if (!PackageVersionUtility.TryNormalizeExact(project.NewVersion, out var target))
+                continue;
+
+            var latest = _resolver.ResolveLatestPackageVersion(
                 packageId: string.IsNullOrWhiteSpace(project.PackageId) ? project.ProjectName : project.PackageId,
                 sources: versionSources,
                 credential: spec.VersionSourceCredential,
                 credentialsBySource: spec.VersionSourceCredentials,
-                includePrerelease: spec.IncludePrerelease);
+                includePrerelease: spec.IncludePrerelease || PackageVersionUtility.GetPrereleaseVersion(target).Length > 0);
 
-            if (latest is not null && Version.TryParse(project.NewVersion, out var target))
+            if (latest is not null && PackageVersionUtility.Compare(latest, target) >= 0)
             {
-                if (latest >= target && !spec.SkipDuplicate)
+                if (!spec.SkipDuplicate)
                     return (false, $"Publish preflight failed: {project.ProjectName} version {target} already exists (latest {latest}). Use -SkipDuplicate to allow.");
             }
         }
