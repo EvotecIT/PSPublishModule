@@ -31,12 +31,61 @@ public sealed class DotNetNuGetClientTests
             Assert.Single(captured.Arguments);
             Assert.StartsWith("@", captured.Arguments[0], StringComparison.Ordinal);
             Assert.NotNull(responseFileContent);
-            Assert.Contains("nuget", responseFileContent!, StringComparison.Ordinal);
-            Assert.Contains("push", responseFileContent!, StringComparison.Ordinal);
-            Assert.Contains("--skip-duplicate", responseFileContent!, StringComparison.Ordinal);
+            Assert.Equal(
+                string.Join(Environment.NewLine,
+                [
+                    "nuget",
+                    "push",
+                    @"C:\repo\Artifacts\Test.1.0.0.nupkg",
+                    "--api-key",
+                    "secret",
+                    "--source",
+                    "https://api.nuget.org/v3/index.json",
+                    "--skip-duplicate"
+                ]),
+                responseFileContent);
             Assert.True(result.Succeeded);
             Assert.NotNull(responseFilePath);
             Assert.False(File.Exists(responseFilePath!));
+        }
+        finally
+        {
+            try { Directory.Delete(runtimeDirectory, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task PushPackageAsync_WritesValuesWithSpacesAsSingleResponseFileLines()
+    {
+        string? responseFileContent = null;
+        var processRunner = new StubProcessRunner(request => {
+            responseFileContent = File.ReadAllText(request.Arguments.Single()[1..]);
+            return new ProcessRunResult(0, "ok", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+        });
+        var runtimeDirectory = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge Tests", Guid.NewGuid().ToString("N"))).FullName;
+        var client = new DotNetNuGetClient(processRunner, runtimeDirectoryRoot: runtimeDirectory);
+
+        try
+        {
+            var result = await client.PushPackageAsync(new DotNetNuGetPushRequest(
+                packagePath: @"C:\repo with spaces\Artifacts\Test.1.0.0.nupkg",
+                apiKey: "secret value",
+                source: @"C:\local feed with spaces"));
+
+            Assert.Equal(
+                string.Join(Environment.NewLine,
+                [
+                    "nuget",
+                    "push",
+                    @"C:\repo with spaces\Artifacts\Test.1.0.0.nupkg",
+                    "--api-key",
+                    "secret value",
+                    "--source",
+                    @"C:\local feed with spaces",
+                    "--skip-duplicate"
+                ]),
+                responseFileContent);
+            Assert.True(result.Succeeded);
         }
         finally
         {
