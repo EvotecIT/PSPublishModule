@@ -186,7 +186,7 @@ public sealed partial class ModulePipelineRunner
         return destination switch
         {
             PackageBuildPublishDestination.NuGet => HasAllArtifacts(release.Projects
-                .SelectMany(project => project.Packages)
+                .SelectMany(project => project.Packages.Concat(project.SymbolPackages))
                 .Where(package => !string.IsNullOrWhiteSpace(package))),
             PackageBuildPublishDestination.GitHub => HasAllArtifacts(release.Projects
                 .Select(project => project.ReleaseZipPath)
@@ -261,7 +261,11 @@ public sealed partial class ModulePipelineRunner
             configuration.SkipDuplicate ?? true,
             configuration.PublishFailFast ?? true);
 
-        release.PublishedPackages.AddRange(publish.PublishedItems);
+        var skippedPrimaryPackages = new HashSet<string>(publish.SkippedDuplicateItems, StringComparer.OrdinalIgnoreCase);
+        release.PublishedPackages.AddRange(ExpandPublishedNuGetArtifacts(
+            release,
+            publish.PublishedItems.Where(package => !skippedPrimaryPackages.Contains(package))));
+        release.SkippedDuplicatePackages.AddRange(ExpandPublishedNuGetArtifacts(release, publish.SkippedDuplicateItems));
         release.FailedPackages.AddRange(publish.FailedItems);
         if (!publish.Success)
         {
@@ -269,6 +273,21 @@ public sealed partial class ModulePipelineRunner
             release.ErrorMessage = publish.ErrorMessage ?? "One or more packages failed to publish.";
             throw new InvalidOperationException(release.ErrorMessage);
         }
+    }
+
+    private static string[] ExpandPublishedNuGetArtifacts(
+        DotNetRepositoryReleaseResult release,
+        IEnumerable<string> primaryPackages)
+    {
+        return primaryPackages
+            .SelectMany(package =>
+            {
+                var project = release.Projects.FirstOrDefault(candidate =>
+                    candidate.Packages.Contains(package, StringComparer.OrdinalIgnoreCase));
+                return DotNetRepositoryReleaseService.GetPublishedArtifacts(project, package);
+            })
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private void PublishExistingGitHubRelease(

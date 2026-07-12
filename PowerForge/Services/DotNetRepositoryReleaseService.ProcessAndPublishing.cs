@@ -219,10 +219,39 @@ public sealed partial class DotNetRepositoryReleaseService
     private static bool PushPackage(string packagePath, string apiKey, string source, bool skipDuplicate, out PackagePushResult result)
     {
         result = new PackagePushResult();
+        var psi = CreateNuGetPushStartInfo(packagePath, apiKey, source, skipDuplicate);
 
+        using var p = Process.Start(psi);
+        if (p is null)
+        {
+            result = new PackagePushResult
+            {
+                Outcome = PackagePushOutcome.Failed,
+                Message = "Failed to start dotnet."
+            };
+            return false;
+        }
+        // Start both stream reads before waiting to avoid pipe-buffer deadlocks.
+        var stdoutTask = p.StandardOutput.ReadToEndAsync();
+        var stderrTask = p.StandardError.ReadToEndAsync();
+        p.WaitForExit();
+        var stdOut = stdoutTask.GetAwaiter().GetResult();
+        var stdErr = stderrTask.GetAwaiter().GetResult();
+        result = ClassifyNuGetPushOutcome(p.ExitCode, skipDuplicate, stdErr, stdOut);
+        return result.Outcome != PackagePushOutcome.Failed;
+    }
+
+    internal static ProcessStartInfo CreateNuGetPushStartInfo(
+        string packagePath,
+        string apiKey,
+        string source,
+        bool skipDuplicate)
+    {
+        var packageDirectory = Path.GetDirectoryName(Path.GetFullPath(packagePath));
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
+            WorkingDirectory = string.IsNullOrWhiteSpace(packageDirectory) ? Environment.CurrentDirectory : packageDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -249,25 +278,7 @@ public sealed partial class DotNetRepositoryReleaseService
         psi.ArgumentList.Add(source);
         if (skipDuplicate) psi.ArgumentList.Add("--skip-duplicate");
 #endif
-
-        using var p = Process.Start(psi);
-        if (p is null)
-        {
-            result = new PackagePushResult
-            {
-                Outcome = PackagePushOutcome.Failed,
-                Message = "Failed to start dotnet."
-            };
-            return false;
-        }
-        // Start both stream reads before waiting to avoid pipe-buffer deadlocks.
-        var stdoutTask = p.StandardOutput.ReadToEndAsync();
-        var stderrTask = p.StandardError.ReadToEndAsync();
-        p.WaitForExit();
-        var stdOut = stdoutTask.GetAwaiter().GetResult();
-        var stdErr = stderrTask.GetAwaiter().GetResult();
-        result = ClassifyNuGetPushOutcome(p.ExitCode, skipDuplicate, stdErr, stdOut);
-        return result.Outcome != PackagePushOutcome.Failed;
+        return psi;
     }
 
     private static void LogProcessOutput(ILogger logger, string projectName, string operation, string stdOut, string stdErr)

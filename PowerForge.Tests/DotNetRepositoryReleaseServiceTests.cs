@@ -207,6 +207,21 @@ public sealed class DotNetRepositoryReleaseServiceTests
     }
 
     [Fact]
+    public void CreateNuGetPushStartInfo_UsesPrimaryPackageDirectoryForSymbolDiscovery()
+    {
+        var packageDirectory = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var packagePath = Path.Combine(packageDirectory, "Sample.1.0.0.nupkg");
+
+        var startInfo = DotNetRepositoryReleaseService.CreateNuGetPushStartInfo(
+            packagePath,
+            "key",
+            "https://api.nuget.org/v3/index.json",
+            skipDuplicate: true);
+
+        Assert.Equal(Path.GetFullPath(packageDirectory), startInfo.WorkingDirectory);
+    }
+
+    [Fact]
     public void GetPackagesForPublish_PushesOnlyPrimaryPackages()
     {
         var first = new DotNetRepositoryProjectResult { ProjectName = "First" };

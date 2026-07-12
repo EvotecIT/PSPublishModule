@@ -76,8 +76,11 @@ internal sealed class NuGetPackagePublishService
             switch (pushResult.Outcome)
             {
                 case DotNetRepositoryReleaseService.PackagePushOutcome.Published:
+                    result.PublishedItems.Add(package);
+                    break;
                 case DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate:
                     result.PublishedItems.Add(package);
+                    result.SkippedDuplicateItems.Add(package);
                     break;
                 default:
                     result.Success = false;
@@ -139,8 +142,11 @@ internal sealed class NuGetPackagePublishService
             switch (pushResult.Outcome)
             {
                 case DotNetRepositoryReleaseService.PackagePushOutcome.Published:
+                    result.PublishedItems.Add(package);
+                    break;
                 case DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate:
                     result.PublishedItems.Add(package);
+                    result.SkippedDuplicateItems.Add(package);
                     break;
                 default:
                     result.Success = false;

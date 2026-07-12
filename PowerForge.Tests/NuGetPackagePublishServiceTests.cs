@@ -213,6 +213,7 @@ public sealed class NuGetPackagePublishServiceTests
 
             Assert.True(result.Success);
             Assert.Contains(packagePath, result.PublishedItems, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(packagePath, result.SkippedDuplicateItems, StringComparer.OrdinalIgnoreCase);
             Assert.Empty(result.FailedItems);
         }
         finally
