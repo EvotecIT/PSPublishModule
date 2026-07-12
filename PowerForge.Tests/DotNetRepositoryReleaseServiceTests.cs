@@ -261,12 +261,14 @@ public sealed class DotNetRepositoryReleaseServiceTests
         Assert.Contains("--no-symbols", startInfo.ArgumentList);
     }
 
-    [Fact]
-    public void ResolvePublishSource_ResolvesRelativeLocalFeedFromRepositoryRoot()
+    [Theory]
+    [InlineData("Artefacts/Feed")]
+    [InlineData(@"Artefacts\Feed")]
+    public void ResolvePublishSource_ResolvesRelativeLocalFeedFromRepositoryRoot(string configuredSource)
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
 
-        var source = DotNetRepositoryReleaseService.ResolvePublishSource("Artefacts/Feed", root);
+        var source = DotNetRepositoryReleaseService.ResolvePublishSource(configuredSource, root);
 
         Assert.Equal(Path.GetFullPath(Path.Combine(root, "Artefacts", "Feed")), source);
     }

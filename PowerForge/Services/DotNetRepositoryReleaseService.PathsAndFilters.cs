@@ -83,19 +83,19 @@ public sealed partial class DotNetRepositoryReleaseService
             return source;
 
         var trimmed = source.Trim();
-        if (Path.IsPathRooted(trimmed))
-            return Path.GetFullPath(trimmed);
+        var normalized = PathValueResolver.NormalizeSeparators(trimmed);
+        if (Path.IsPathRooted(normalized))
+            return Path.GetFullPath(normalized);
 
         if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absoluteUri) && !absoluteUri.IsFile)
             return trimmed;
 
-        var localCandidate = Path.Combine(repositoryRoot, trimmed);
-        if (trimmed.IndexOf(Path.DirectorySeparatorChar) >= 0 ||
-            trimmed.IndexOf(Path.AltDirectorySeparatorChar) >= 0 ||
-            trimmed.StartsWith(".", StringComparison.Ordinal) ||
+        var localCandidate = Path.Combine(repositoryRoot, normalized);
+        if (normalized.IndexOf(Path.DirectorySeparatorChar) >= 0 ||
+            normalized.StartsWith(".", StringComparison.Ordinal) ||
             Directory.Exists(localCandidate))
         {
-            return Path.GetFullPath(localCandidate);
+            return PathValueResolver.Resolve(repositoryRoot, normalized);
         }
 
         return trimmed;
