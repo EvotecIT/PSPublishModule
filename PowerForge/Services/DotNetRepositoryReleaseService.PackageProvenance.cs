@@ -13,23 +13,40 @@ public sealed partial class DotNetRepositoryReleaseService
         out string error)
     {
         var projectDirectory = Path.GetDirectoryName(project.CsprojPath) ?? string.Empty;
-        logger.Info($"{project.ProjectName}: rebuilding assemblies before no-build pack...");
+        if (!TryRemoveStalePrimaryPackageOutputs(
+                project,
+                configuration,
+                logger,
+                out _,
+                out var removedIntermediatePrimaryOutput,
+                out var cleanupDuration,
+                out error))
+        {
+            duration = cleanupDuration;
+            return false;
+        }
+
+        logger.Info($"{project.ProjectName}: building fresh assemblies before no-build pack...");
+        if (!removedIntermediatePrimaryOutput)
+            logger.Info($"{project.ProjectName}: no primary intermediate output was removed; using a non-incremental safety build.");
         var exitCode = RunDotnetBuild(
             project.CsprojPath,
             projectDirectory,
             configuration,
             project.ProjectName,
             logger,
+            forceNonIncremental: !removedIntermediatePrimaryOutput,
             out var standardError,
             out var standardOutput,
             out duration);
+        duration += cleanupDuration;
         if (exitCode != 0)
         {
             error = $"dotnet build failed for {project.ProjectName} (exit {exitCode}). {SummarizeProcessFailureOutput(standardError, standardOutput)}".Trim();
             return false;
         }
 
-        logger.Success($"{project.ProjectName}: release rebuild completed in {FormatDuration(duration)}.");
+        logger.Success($"{project.ProjectName}: fresh release build completed in {FormatDuration(duration)}.");
         error = string.Empty;
         return true;
     }

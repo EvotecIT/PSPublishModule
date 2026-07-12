@@ -193,7 +193,31 @@ public sealed partial class DotNetRepositoryReleaseService
         var traversalPath = Path.Combine(tempRoot, "pack.proj");
         try
         {
-            WritePackTraversalProject(traversalPath, projects, spec, outputPath);
+            var forceBatchRebuild = false;
+            foreach (var project in projects)
+            {
+                if (!TryRemoveStalePrimaryPackageOutputs(
+                        project,
+                        string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim(),
+                        logger,
+                        out _,
+                        out var removedIntermediatePrimaryOutput,
+                        out var cleanupDuration,
+                        out var cleanupError))
+                {
+                    result.Duration += cleanupDuration;
+                    result.ErrorMessage = cleanupError;
+                    return result;
+                }
+
+                result.Duration += cleanupDuration;
+                forceBatchRebuild |= !removedIntermediatePrimaryOutput;
+            }
+
+            if (forceBatchRebuild)
+                logger.Info("MSBuild batch freshness could not prove every intermediate output was removed; using the Rebuild safety target.");
+
+            WritePackTraversalProject(traversalPath, projects, spec, outputPath, forceBatchRebuild);
 
             var shouldSignAssemblies = signAssemblies is not null && !string.IsNullOrWhiteSpace(spec.CertificateThumbprint);
             int exitCode;
@@ -291,7 +315,8 @@ public sealed partial class DotNetRepositoryReleaseService
         string traversalPath,
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         DotNetRepositoryReleaseSpec spec,
-        string outputPath)
+        string outputPath,
+        bool forceRebuild = false)
     {
         var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
         var buildProperties = $"Configuration={EscapeMsBuildPropertyValue(configuration)}";
@@ -323,7 +348,9 @@ public sealed partial class DotNetRepositoryReleaseService
                     new XAttribute("DependsOnTargets", "RestoreSelected"),
                     new XElement("MSBuild",
                         new XAttribute("Projects", "@(PackProject)"),
-                        new XAttribute("Targets", "Rebuild"),
+                        // Freshness cleanup normally permits an incremental Build. Rebuild remains
+                        // the safety target when an intermediate compiler output was not removed.
+                        new XAttribute("Targets", forceRebuild ? "Rebuild" : "Build"),
                         new XAttribute("BuildInParallel", "true"),
                         new XAttribute("StopOnFirstFailure", "true"),
                         new XAttribute("Properties", buildProperties))),
@@ -489,6 +516,7 @@ public sealed partial class DotNetRepositoryReleaseService
         string configuration,
         string projectName,
         ILogger logger,
+        bool forceNonIncremental,
         out string stdErr,
         out string stdOut,
         out TimeSpan duration)
@@ -509,13 +537,17 @@ public sealed partial class DotNetRepositoryReleaseService
         ProcessStartInfoEncoding.TryApplyUtf8(psi);
 
 #if NET472
-        psi.Arguments = BuildWindowsArgumentString(new[] { "build", csproj, "--configuration", configuration, "--no-incremental" });
+        var args = new List<string> { "build", csproj, "--configuration", configuration };
+        if (forceNonIncremental)
+            args.Add("--no-incremental");
+        psi.Arguments = BuildWindowsArgumentString(args);
 #else
         psi.ArgumentList.Add("build");
         psi.ArgumentList.Add(csproj);
         psi.ArgumentList.Add("--configuration");
         psi.ArgumentList.Add(configuration);
-        psi.ArgumentList.Add("--no-incremental");
+        if (forceNonIncremental)
+            psi.ArgumentList.Add("--no-incremental");
 #endif
 
         var exitCode = RunProcessWithHeartbeat(
@@ -922,6 +954,33 @@ public sealed partial class DotNetRepositoryReleaseService
         out string stdErr,
         out string stdOut,
         out TimeSpan duration)
+        => RunDotnetMsBuildGetProperty(
+            csproj,
+            workingDirectory,
+            configuration,
+            targetFramework,
+            runtimeIdentifier: null,
+            propertyName,
+            projectName,
+            logger,
+            out value,
+            out stdErr,
+            out stdOut,
+            out duration);
+
+    private static int RunDotnetMsBuildGetProperty(
+        string csproj,
+        string workingDirectory,
+        string configuration,
+        string? targetFramework,
+        string? runtimeIdentifier,
+        string propertyName,
+        string projectName,
+        ILogger logger,
+        out string? value,
+        out string stdErr,
+        out string stdOut,
+        out TimeSpan duration)
     {
         value = null;
         stdErr = string.Empty;
@@ -949,6 +1008,8 @@ public sealed partial class DotNetRepositoryReleaseService
         };
         if (!string.IsNullOrWhiteSpace(targetFramework))
             args.Add($"-p:TargetFramework={targetFramework!.Trim()}");
+        if (!string.IsNullOrWhiteSpace(runtimeIdentifier))
+            args.Add($"-p:RuntimeIdentifier={runtimeIdentifier!.Trim()}");
 
 #if NET472
         psi.Arguments = BuildWindowsArgumentString(args);

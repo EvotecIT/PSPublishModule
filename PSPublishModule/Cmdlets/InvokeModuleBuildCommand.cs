@@ -494,6 +494,8 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                 try { SpectrePipelineConsoleUi.WriteFailureSummary(workflow.Plan, ex); }
                 catch { /* best effort */ }
             }
+            if (outcome.ShouldWriteFailureMessage)
+                logger.Error(outcome.FailureMessage);
         }
 
         if (outcome.Succeeded)

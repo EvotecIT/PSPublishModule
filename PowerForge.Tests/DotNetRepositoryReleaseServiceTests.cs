@@ -202,8 +202,10 @@ public sealed class DotNetRepositoryReleaseServiceTests
         Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.Published, result.Outcome);
     }
 
-    [Fact]
-    public void WritePackTraversalProject_EmitsBatchPackProjectWithEscapedProperties()
+    [Theory]
+    [InlineData(false, "Build")]
+    [InlineData(true, "Rebuild")]
+    public void WritePackTraversalProject_EmitsBatchPackProjectWithEscapedProperties(bool forceRebuild, string expectedBuildTarget)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -229,7 +231,8 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 traversalPath,
                 new[] { project },
                 spec,
-                outputPath);
+                outputPath,
+                forceRebuild);
 
             var document = XDocument.Load(traversalPath);
             var packProject = Assert.Single(document.Descendants("PackProject"));
@@ -244,7 +247,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 Assert.Equal("true", msbuild.Attribute("StopOnFirstFailure")?.Value);
             });
             Assert.Equal("Restore", msbuildTasks[0].Attribute("Targets")?.Value);
-            Assert.Equal("Rebuild", msbuildTasks[1].Attribute("Targets")?.Value);
+            Assert.Equal(expectedBuildTarget, msbuildTasks[1].Attribute("Targets")?.Value);
             Assert.Equal("Pack", msbuildTasks[2].Attribute("Targets")?.Value);
             Assert.Equal("Configuration=Release", msbuildTasks[0].Attribute("Properties")?.Value);
             Assert.Equal("Configuration=Release", msbuildTasks[1].Attribute("Properties")?.Value);

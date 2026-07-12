@@ -20,6 +20,7 @@ internal sealed class ModuleBuildOutcomeService
     {
         var succeeded = workflow?.Succeeded ?? false;
         var duration = _logSupport.FormatDuration(elapsed);
+        var failureMessage = workflow?.Error?.Message?.Trim() ?? string.Empty;
 
         return new ModuleBuildCompletionOutcome
         {
@@ -36,6 +37,11 @@ internal sealed class ModuleBuildOutcomeService
                                                 workflow?.UsedInteractiveView == true &&
                                                 workflow?.Plan is not null &&
                                                 !workflow.WrotePolicySummary,
+            ShouldWriteFailureMessage = !succeeded &&
+                                        exitCodeMode &&
+                                        workflow?.UsedInteractiveView != true &&
+                                        failureMessage.Length > 0,
+            FailureMessage = failureMessage,
             CompletionMessage = succeeded
                 ? (jsonOnly
                     ? $"Pipeline config generated in {duration}"

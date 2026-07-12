@@ -55,4 +55,40 @@ public sealed class DotNetRepositoryReleaseSummaryServiceTests
         Assert.Equal(1, summary.Totals.FailedPublishCount);
         Assert.Equal("2.0.5", summary.Totals.ResolvedVersion);
     }
+
+    [Fact]
+    public void CreateFailureReport_IncludesEveryFailureWithoutTruncation()
+    {
+        var longDetail = new string('x', 2500) + " END-OF-DETAIL";
+        var result = new DotNetRepositoryReleaseResult
+        {
+            Success = false,
+            ErrorMessage = "One or more projects failed: ProjectA: first failure; ProjectB: " + longDetail
+        };
+        result.Projects.Add(new DotNetRepositoryProjectResult
+        {
+            ProjectName = "ProjectA",
+            IsPackable = true,
+            ErrorMessage = "first failure"
+        });
+        result.Projects.Add(new DotNetRepositoryProjectResult
+        {
+            ProjectName = "ProjectB",
+            IsPackable = true,
+            ErrorMessage = "ProjectB: " + longDetail
+        });
+        result.FailedPackages.Add("ProjectA.1.0.0.nupkg");
+        result.FailedPackages.Add("ProjectB.1.0.0.nupkg");
+
+        var report = new DotNetRepositoryReleaseSummaryService().CreateFailureReport(result);
+
+        Assert.StartsWith("Project build failed: 2 of 2 project(s) failed.", report, StringComparison.Ordinal);
+        Assert.Contains("Detail: ProjectA: first failure", report, StringComparison.Ordinal);
+        Assert.Contains("Detail: ProjectB: ", report, StringComparison.Ordinal);
+        Assert.DoesNotContain("Detail: ProjectB: ProjectB:", report, StringComparison.Ordinal);
+        Assert.Contains("END-OF-DETAIL", report, StringComparison.Ordinal);
+        Assert.Contains("Detail: Failed package publish: ProjectA.1.0.0.nupkg", report, StringComparison.Ordinal);
+        Assert.Contains("Detail: Failed package publish: ProjectB.1.0.0.nupkg", report, StringComparison.Ordinal);
+        Assert.DoesNotContain("One or more projects failed:", report, StringComparison.Ordinal);
+    }
 }

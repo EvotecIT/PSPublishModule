@@ -66,6 +66,25 @@ public sealed class SpectrePipelineSummaryWriterTests
     }
 
     [Fact]
+    public void NormalizeFailureMessage_PreservesCompleteProjectBuildReport()
+    {
+        var detail = new string('x', 2500) + " END-OF-DETAIL";
+        var message = string.Join(Environment.NewLine, new[]
+        {
+            "Project build failed: 2 of 6 project(s) failed.",
+            "Detail: ProjectA: package provenance mismatch",
+            "Detail: ProjectB: " + detail
+        });
+
+        var normalized = SpectrePipelineSummaryWriter.NormalizeFailureMessage(new InvalidOperationException(message));
+
+        Assert.Contains("Project build failed: 2 of 6 project(s) failed.", normalized, StringComparison.Ordinal);
+        Assert.Contains("Detail: ProjectA: package provenance mismatch", normalized, StringComparison.Ordinal);
+        Assert.Contains("END-OF-DETAIL", normalized, StringComparison.Ordinal);
+        Assert.DoesNotContain("…", normalized, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void NormalizeFailureMessage_PreservesStructuredContinuationLines()
     {
         var message = string.Join(Environment.NewLine, new[]

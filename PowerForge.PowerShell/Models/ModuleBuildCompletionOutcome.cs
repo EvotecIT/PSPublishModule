@@ -9,5 +9,7 @@ internal sealed class ModuleBuildCompletionOutcome
     public string ErrorRecordId { get; set; } = string.Empty;
     public bool ShouldReplayBufferedLogs { get; set; }
     public bool ShouldWriteInteractiveFailureSummary { get; set; }
+    public bool ShouldWriteFailureMessage { get; set; }
+    public string FailureMessage { get; set; } = string.Empty;
     public string CompletionMessage { get; set; } = string.Empty;
 }
