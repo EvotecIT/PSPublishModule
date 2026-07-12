@@ -514,6 +514,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 var source = string.IsNullOrWhiteSpace(spec.PublishSource)
                     ? "https://api.nuget.org/v3/index.json"
                     : spec.PublishSource!.Trim();
+                result.PublishSource = source;
 
                 var orderedProjects = SortProjectsForPublish(packable);
                 var packages = orderedProjects.SelectMany(p => p.Packages)

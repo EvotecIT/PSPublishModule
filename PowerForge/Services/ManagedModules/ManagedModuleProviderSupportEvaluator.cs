@@ -24,10 +24,7 @@ public static class ManagedModuleProviderSupportEvaluator
         {
             ManagedModuleRepositoryKind.LocalFolder => Supported("Local folder feed"),
             ManagedModuleRepositoryKind.NuGetV3 => Supported("Generic NuGet v3 feed"),
-            ManagedModuleRepositoryKind.NuGetV2 => Partial(
-                "NuGet v2 feed",
-                managedLifecycleSupported: true,
-                "NuGet v2 package lookup and download are supported, but managed publishing requires a local folder or NuGet v3 publish endpoint."),
+            ManagedModuleRepositoryKind.NuGetV2 => Supported("NuGet v2 feed"),
             _ => Unsupported(
                 repository.Kind.ToString(),
                 "Repository kind is not supported by the managed module engine.")

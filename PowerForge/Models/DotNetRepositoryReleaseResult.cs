@@ -30,6 +30,9 @@ public sealed class DotNetRepositoryReleaseResult
 
     /// <summary>Packages that failed to publish.</summary>
     public List<string> FailedPackages { get; } = new();
+
+    /// <summary>NuGet-compatible source used for package publishing, when publishing was executed.</summary>
+    public string? PublishSource { get; set; }
 }
 
 /// <summary>

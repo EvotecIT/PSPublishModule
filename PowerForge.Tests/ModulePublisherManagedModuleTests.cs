@@ -56,6 +56,7 @@ public sealed class ModulePublisherManagedModuleTests
             Assert.True(result.Succeeded);
             Assert.Equal("Local", result.RepositoryName);
             Assert.Equal("3.0.13", result.VersionText);
+            Assert.Equal(PublishTool.ManagedModule, result.Tool);
             Assert.True(File.Exists(Path.Combine(feed.Path, "PSPublishModule.3.0.13.nupkg")));
         }
         finally
@@ -63,6 +64,85 @@ public sealed class ModulePublisherManagedModuleTests
             if (Directory.Exists(stagingRoot))
                 Directory.Delete(stagingRoot, recursive: true);
         }
+    }
+
+    [Fact]
+    public void Publish_Auto_UsesManagedEngineWithoutPowerShellRunner()
+    {
+        var stagingRoot = Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N"));
+        using var feed = new TemporaryDirectory();
+        try
+        {
+            Directory.CreateDirectory(stagingRoot);
+            var manifestPath = Path.Combine(stagingRoot, "PSPublishModule.psd1");
+            File.WriteAllText(
+                manifestPath,
+                "@{ ModuleVersion = '3.0.14'; RootModule = 'PSPublishModule.psm1'; Author = 'Evotec'; Description = 'Managed auto publish test.' }");
+            File.WriteAllText(Path.Combine(stagingRoot, "PSPublishModule.psm1"), string.Empty);
+
+            var publisher = new ModulePublisher(
+                new NullLogger(),
+                new StubPowerShellRunner(_ => throw new InvalidOperationException("PowerShell runner should not be used by managed publish.")));
+            var publish = new PublishConfiguration
+            {
+                Destination = PublishDestination.PowerShellGallery,
+                Enabled = true,
+                Tool = PublishTool.Auto,
+                RepositoryName = "Local",
+                Repository = new PublishRepositoryConfiguration
+                {
+                    Name = "Local",
+                    Uri = feed.Path
+                }
+            };
+            var buildResult = new ModuleBuildResult(
+                stagingPath: stagingRoot,
+                manifestPath: manifestPath,
+                exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+            var result = publisher.Publish(publish, CreatePlan(), buildResult, Array.Empty<ArtefactBuildResult>());
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(PublishTool.ManagedModule, result.Tool);
+            Assert.True(File.Exists(Path.Combine(feed.Path, "PSPublishModule.3.0.14.nupkg")));
+        }
+        finally
+        {
+            if (Directory.Exists(stagingRoot))
+                Directory.Delete(stagingRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AutoToolSelection_UsesManagedForPsGalleryAndRetainsCompatibilityForRuntimeCredentialProviders()
+    {
+        var psGallery = new PublishConfiguration
+        {
+            Destination = PublishDestination.PowerShellGallery,
+            Tool = PublishTool.Auto,
+            RepositoryName = "PSGallery"
+        };
+        var runtimeCredential = new PublishConfiguration
+        {
+            Destination = PublishDestination.PowerShellGallery,
+            Tool = PublishTool.Auto,
+            RepositoryName = "JFrog",
+            Repository = new PublishRepositoryConfiguration
+            {
+                Name = "JFrog",
+                Uri = "https://example.jfrog.io/artifactory/api/nuget/v3/feed",
+                CredentialProvider = new RepositoryCredentialProviderConfiguration
+                {
+                    Kind = RepositoryCredentialProviderKind.JFrogOidc
+                }
+            }
+        };
+
+        Assert.True(ModulePublisher.ShouldUseManagedModuleForAuto(psGallery));
+        Assert.Equal(
+            ManagedModuleCatalogDefaults.PowerShellGalleryV2,
+            ModulePublisher.ResolveDefaultManagedRepositorySource("PSGallery"));
+        Assert.False(ModulePublisher.ShouldUseManagedModuleForAuto(runtimeCredential));
     }
 
     [Fact]

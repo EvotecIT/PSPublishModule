@@ -118,8 +118,11 @@ public sealed partial class ManagedModuleRepositoryClient
             () =>
             {
                 var request = CreateRequest(HttpMethod.Put, new Uri(publishAddress), credential, "application/json");
-                request.Content = new StreamContent(File.OpenRead(package));
-                request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                var packageContent = new StreamContent(File.OpenRead(package));
+                packageContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                var multipart = new MultipartFormDataContent();
+                multipart.Add(packageContent, "package", Path.GetFileName(package));
+                request.Content = multipart;
                 return request;
             },
             cancellationToken).ConfigureAwait(false);

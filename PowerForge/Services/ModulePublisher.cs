@@ -181,7 +181,9 @@ public sealed partial class ModulePublisher
         if (isPsGallery && string.IsNullOrWhiteSpace(publish.ApiKey))
             throw new InvalidOperationException("Publish API key is required for repository publishing to PSGallery.");
 
-        var managedRepository = publish.Tool == PublishTool.ManagedModule
+        var useManagedModule = publish.Tool == PublishTool.ManagedModule ||
+                               publish.Tool == PublishTool.Auto && ShouldUseManagedModuleForAuto(publish);
+        var managedRepository = useManagedModule
             ? CreateManagedPublishRepository(repositoryName, repoConfig)
             : null;
         var managedLocalFolder = managedRepository?.Kind == ManagedModuleRepositoryKind.LocalFolder;
@@ -192,6 +194,18 @@ public sealed partial class ModulePublisher
         var tool = publish.Tool;
         if (tool == PublishTool.Auto)
         {
+            if (useManagedModule)
+            {
+                return PublishToRepositoryWithTool(
+                    PublishTool.ManagedModule,
+                    publish,
+                    plan,
+                    buildResult,
+                    repositoryName,
+                    repoConfig,
+                    includeScriptFolders);
+            }
+
             try
             {
                 return PublishToRepositoryWithTool(PublishTool.PSResourceGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders);
@@ -294,7 +308,7 @@ public sealed partial class ModulePublisher
                     skipDependenciesCheck: true);
                 CleanupTemporaryPublishPath(temporaryPublishPath);
                 temporaryPublishPath = null;
-                return CreateRepositoryPublishResult(repositoryName, versionText);
+                return CreateRepositoryPublishResult(repositoryName, versionText, tool);
             }
 
             if (tool != PublishTool.PowerShellGet)
@@ -347,10 +361,10 @@ public sealed partial class ModulePublisher
                 CleanupTemporaryPublishPath(temporaryPackagePath);
         }
 
-        return CreateRepositoryPublishResult(repositoryName, versionText);
+        return CreateRepositoryPublishResult(repositoryName, versionText, tool);
     }
 
-    private static ModulePublishResult CreateRepositoryPublishResult(string repositoryName, string versionText)
+    private static ModulePublishResult CreateRepositoryPublishResult(string repositoryName, string versionText, PublishTool tool)
     {
         return new ModulePublishResult(
             destination: PublishDestination.PowerShellGallery,
@@ -362,7 +376,8 @@ public sealed partial class ModulePublisher
             assetPaths: Array.Empty<string>(),
             releaseUrl: null,
             succeeded: true,
-            errorMessage: null);
+            errorMessage: null,
+            tool: tool);
     }
 
     internal static string PrepareModulePackageForRepositoryPublish(

@@ -987,7 +987,7 @@ public sealed class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
-    public void EnsureBuildDependenciesInstalledIfNeeded_InstallsPSResourceGetForAutoRepositoryPublishWhenNoPublishToolExists()
+    public void EnsureBuildDependenciesInstalledIfNeeded_SkipsRepositoryToolForManagedAutoPublishWhenNoPublishToolExists()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -1006,9 +1006,8 @@ public sealed class ModulePipelineHostedOperationsTests
             var plan = runner.Plan(spec);
             var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
 
-            Assert.Single(result);
-            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
-            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
+            Assert.Empty(result);
+            Assert.Equal(0, hostedOperations.DependencyInstallCalls);
         }
         finally
         {
@@ -1017,7 +1016,7 @@ public sealed class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
-    public void EnsureBuildDependenciesInstalledIfNeeded_InstallsPSResourceGetForAutoRepositoryPublishWhenPowerShellGetIsTooOld()
+    public void EnsureBuildDependenciesInstalledIfNeeded_SkipsRepositoryToolForManagedAutoPublishWhenPowerShellGetIsTooOld()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -1034,6 +1033,44 @@ public sealed class ModulePipelineHostedOperationsTests
                 {
                     ["PowerShellGet"] = "1.0.0.1"
                 }),
+                hostedOperations);
+
+            var plan = runner.Plan(spec);
+            var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
+
+            Assert.Empty(result);
+            Assert.Equal(0, hostedOperations.DependencyInstallCalls);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_InstallsRepositoryToolForAutoPublishWithRuntimeCredentialProvider()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var repository = new PublishRepositoryConfiguration
+            {
+                Name = "JFrog",
+                Uri = "https://example.jfrog.io/artifactory/api/nuget/v3/feed",
+                CredentialProvider = new RepositoryCredentialProviderConfiguration
+                {
+                    Kind = RepositoryCredentialProviderKind.JFrogOidc
+                }
+            };
+            var spec = CreatePublishToolSpec(root.FullName, moduleName, PublishTool.Auto, repository: repository);
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
                 hostedOperations);
 
             var plan = runner.Plan(spec);
@@ -2329,7 +2366,8 @@ public sealed class ModulePipelineHostedOperationsTests
         string moduleName,
         PublishTool tool,
         ConfigurationGateMode? gateMode = null,
-        bool publishEnabled = true)
+        bool publishEnabled = true,
+        PublishRepositoryConfiguration? repository = null)
     {
         return new ModulePipelineSpec
         {
@@ -2358,7 +2396,9 @@ public sealed class ModulePipelineHostedOperationsTests
                         Enabled = publishEnabled,
                         Destination = PublishDestination.PowerShellGallery,
                         Tool = tool,
-                        ApiKey = "test-api-key"
+                        ApiKey = "test-api-key",
+                        RepositoryName = repository?.Name,
+                        Repository = repository
                     }
                 }
             }.Where(static segment => segment is not null).Cast<IConfigurationSegment>().ToArray()

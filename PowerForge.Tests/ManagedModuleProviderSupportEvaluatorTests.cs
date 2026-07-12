@@ -17,14 +17,14 @@ public sealed class ManagedModuleProviderSupportEvaluatorTests
     }
 
     [Fact]
-    public void EvaluateRepository_ClassifiesNuGetV2AsPartialBecauseManagedPublishNeedsV3OrLocal()
+    public void EvaluateRepository_ClassifiesNuGetV2AsSupported()
     {
         var support = ManagedModuleProviderSupportEvaluator.Evaluate(new ManagedModuleRepository("Legacy", "https://nuget.example.test/api/v2"));
 
-        Assert.Equal(ManagedModuleProviderSupportLevel.Partial, support.Level);
+        Assert.Equal(ManagedModuleProviderSupportLevel.Supported, support.Level);
         Assert.True(support.ManagedLifecycleSupported);
-        Assert.True(support.CompatibilityFallbackRecommended);
-        Assert.Contains(support.Limitations, limitation => limitation.Contains("publishing", StringComparison.OrdinalIgnoreCase));
+        Assert.False(support.CompatibilityFallbackRecommended);
+        Assert.Empty(support.Limitations);
     }
 
     [Theory]
