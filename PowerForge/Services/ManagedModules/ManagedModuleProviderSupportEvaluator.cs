@@ -20,6 +20,11 @@ public static class ManagedModuleProviderSupportEvaluator
             return Supported("PowerShell Gallery");
         }
 
+        if (IsAzureArtifacts(repository))
+        {
+            return Evaluate(PrivateGalleryProvider.AzureArtifacts);
+        }
+
         return repository.Kind switch
         {
             ManagedModuleRepositoryKind.LocalFolder => Supported("Local folder feed"),
@@ -61,6 +66,15 @@ public static class ManagedModuleProviderSupportEvaluator
     private static bool IsPowerShellGallery(ManagedModuleRepository repository)
         => string.Equals(repository.Name, "PSGallery", StringComparison.OrdinalIgnoreCase) ||
            repository.Source.IndexOf("powershellgallery.com", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    private static bool IsAzureArtifacts(ManagedModuleRepository repository)
+    {
+        if (!Uri.TryCreate(repository.Source, UriKind.Absolute, out var uri))
+            return false;
+
+        return uri.Host.Equals("pkgs.dev.azure.com", StringComparison.OrdinalIgnoreCase) ||
+               uri.Host.EndsWith(".pkgs.visualstudio.com", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static ManagedModuleProviderSupport Supported(string provider)
         => new()

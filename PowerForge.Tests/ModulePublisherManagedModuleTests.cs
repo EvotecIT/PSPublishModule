@@ -122,6 +122,17 @@ public sealed class ModulePublisherManagedModuleTests
             Tool = PublishTool.Auto,
             RepositoryName = "PSGallery"
         };
+        var psGalleryV3 = new PublishConfiguration
+        {
+            Destination = PublishDestination.PowerShellGallery,
+            Tool = PublishTool.Auto,
+            RepositoryName = "PSGallery",
+            Repository = new PublishRepositoryConfiguration
+            {
+                Name = "PSGallery",
+                Uri = ManagedModuleCatalogDefaults.PowerShellGalleryV3
+            }
+        };
         var runtimeCredential = new PublishConfiguration
         {
             Destination = PublishDestination.PowerShellGallery,
@@ -137,12 +148,29 @@ public sealed class ModulePublisherManagedModuleTests
                 }
             }
         };
+        var azureArtifacts = new PublishConfiguration
+        {
+            Destination = PublishDestination.PowerShellGallery,
+            Tool = PublishTool.Auto,
+            ApiKey = "AzureDevOps",
+            RepositoryName = "CompanyModules",
+            Repository = new PublishRepositoryConfiguration
+            {
+                Name = "CompanyModules",
+                Uri = "https://pkgs.dev.azure.com/contoso/Platform/_packaging/CompanyModules/nuget/v3/index.json"
+            }
+        };
 
         Assert.True(ModulePublisher.ShouldUseManagedModuleForAuto(psGallery));
+        Assert.True(ModulePublisher.ShouldUseManagedModuleForAuto(psGalleryV3));
         Assert.Equal(
             ManagedModuleCatalogDefaults.PowerShellGalleryV2,
             ModulePublisher.ResolveDefaultManagedRepositorySource("PSGallery"));
+        Assert.Equal(
+            ManagedModuleCatalogDefaults.PowerShellGalleryV2,
+            ModulePublisher.NormalizeManagedRepositorySource(ManagedModuleCatalogDefaults.PowerShellGalleryV3));
         Assert.False(ModulePublisher.ShouldUseManagedModuleForAuto(runtimeCredential));
+        Assert.False(ModulePublisher.ShouldUseManagedModuleForAuto(azureArtifacts));
     }
 
     [Fact]

@@ -27,6 +27,18 @@ public sealed class ManagedModuleProviderSupportEvaluatorTests
         Assert.Empty(support.Limitations);
     }
 
+    [Fact]
+    public void EvaluateRepository_ClassifiesAzureArtifactsEndpointAsPartial()
+    {
+        var support = ManagedModuleProviderSupportEvaluator.Evaluate(new ManagedModuleRepository(
+            "CompanyModules",
+            "https://pkgs.dev.azure.com/contoso/Platform/_packaging/CompanyModules/nuget/v3/index.json"));
+
+        Assert.Equal(ManagedModuleProviderSupportLevel.Partial, support.Level);
+        Assert.True(support.CompatibilityFallbackRecommended);
+        Assert.Contains(support.Limitations, limitation => limitation.Contains("credential-provider", StringComparison.OrdinalIgnoreCase));
+    }
+
     [Theory]
     [InlineData(PrivateGalleryProvider.AzureArtifacts, ManagedModuleProviderSupportLevel.Partial, "credential-provider")]
     [InlineData(PrivateGalleryProvider.JFrog, ManagedModuleProviderSupportLevel.Partial, "OIDC")]

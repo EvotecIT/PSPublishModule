@@ -71,6 +71,8 @@ public sealed partial class ModulePublisher
         var source = FirstNonEmpty(repoConfig?.PublishUri, repoConfig?.Uri, repoConfig?.SourceUri);
         if (string.IsNullOrWhiteSpace(source))
             source = ResolveDefaultManagedRepositorySource(repositoryName);
+        else
+            source = NormalizeManagedRepositorySource(source!);
 
         return new ManagedModuleRepository(
             repositoryName,
@@ -86,6 +88,8 @@ public sealed partial class ModulePublisher
         var source = FirstNonEmpty(repoConfig?.Uri, repoConfig?.SourceUri, repoConfig?.PublishUri);
         if (string.IsNullOrWhiteSpace(source))
             source = ResolveDefaultManagedRepositorySource(repositoryName);
+        else
+            source = NormalizeManagedRepositorySource(source!);
 
         return new ManagedModuleRepository(
             repositoryName,
@@ -101,6 +105,14 @@ public sealed partial class ModulePublisher
 
         throw new InvalidOperationException(
             $"Managed module publishing requires a repository Uri, SourceUri, or PublishUri for repository '{repositoryName}'.");
+    }
+
+    internal static string NormalizeManagedRepositorySource(string source)
+    {
+        var normalized = source.Trim().TrimEnd('/');
+        return normalized.Equals(ManagedModuleCatalogDefaults.PowerShellGalleryV3, StringComparison.OrdinalIgnoreCase)
+            ? ManagedModuleCatalogDefaults.PowerShellGalleryV2
+            : normalized;
     }
 
     private static RepositoryCredential? ResolveManagedReadCredential(PublishRepositoryConfiguration? repoConfig)
