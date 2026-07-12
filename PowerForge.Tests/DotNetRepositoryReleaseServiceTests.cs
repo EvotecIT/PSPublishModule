@@ -25,6 +25,8 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 "    <TargetFramework>net8.0</TargetFramework>",
                 "    <PackageId>Sample.Package</PackageId>",
                 "    <Version>2.1.0-beta.1</Version>",
+                "    <AssemblyVersion>2.0.0.0</AssemblyVersion>",
+                "    <FileVersion>2.0.0.0</FileVersion>",
                 "    <IsPackable>true</IsPackable>",
                 "  </PropertyGroup>",
                 "</Project>"
@@ -48,7 +50,57 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.True(result.Success, result.ErrorMessage);
             var project = Assert.Single(result.Projects);
             Assert.Equal("2.1.0-beta.1", project.NewVersion);
-            Assert.Contains("<Version>2.1.0-beta.1</Version>", File.ReadAllText(csprojPath), StringComparison.Ordinal);
+            var updated = File.ReadAllText(csprojPath);
+            Assert.Contains("<Version>2.1.0-beta.1</Version>", updated, StringComparison.Ordinal);
+            Assert.Contains("<AssemblyVersion>2.1.0</AssemblyVersion>", updated, StringComparison.Ordinal);
+            Assert.Contains("<FileVersion>2.1.0</FileVersion>", updated, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Execute_NormalizesBuildMetadataBeforePackageDiscovery()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Package"));
+            File.WriteAllText(Path.Combine(projectDir.FullName, "Sample.Package.csproj"), string.Join(Environment.NewLine, new[]
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <TargetFramework>net8.0</TargetFramework>",
+                "    <PackageId>Sample.Package</PackageId>",
+                "    <Version>1.2.3</Version>",
+                "    <IsPackable>true</IsPackable>",
+                "  </PropertyGroup>",
+                "</Project>"
+            }));
+
+            var outputPath = Path.Combine(root.FullName, "packages");
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                ExpectedVersionsByProject = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Sample.Package"] = "1.2.3+sha.abc"
+                },
+                ExpectedVersionMapAsInclude = true,
+                OutputPath = outputPath,
+                UpdateVersions = true,
+                Pack = true,
+                Publish = false
+            };
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(spec);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            var project = Assert.Single(result.Projects);
+            Assert.Equal("1.2.3", project.NewVersion);
+            Assert.Contains(project.Packages, path => Path.GetFileName(path).Equals("Sample.Package.1.2.3.nupkg", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

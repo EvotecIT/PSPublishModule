@@ -43,9 +43,52 @@ public sealed class CsprojVersionEditorTests
         var updated = CsprojVersionEditor.UpdateVersionText(content, "2.0.0-rc.1", out var hadVersionTag);
 
         Assert.True(hadVersionTag);
-        Assert.Contains("<VersionPrefix>2.0.0-rc.1</VersionPrefix>", updated, StringComparison.Ordinal);
+        Assert.Contains("<VersionPrefix>2.0.0</VersionPrefix>", updated, StringComparison.Ordinal);
+        Assert.Contains("<VersionSuffix>rc.1</VersionSuffix>", updated, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(updated, "<VersionPrefix>", StringComparison.Ordinal));
         Assert.DoesNotContain("1.0.0-preview.3", updated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryGetVersion_CombinesVersionPrefixAndSuffix()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N") + ".csproj");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+        try
+        {
+            File.WriteAllText(path, "<Project><PropertyGroup><VersionPrefix>2.0.0</VersionPrefix><VersionSuffix>rc.1</VersionSuffix></PropertyGroup></Project>");
+
+            Assert.True(CsprojVersionEditor.TryGetVersion(path, out var version));
+            Assert.Equal("2.0.0-rc.1", version);
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void UpdateVersionText_KeepsAssemblyAndFileVersionsNumericForPrereleasePackages()
+    {
+        var content =
+            "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup>" +
+            "<Version>1.0.0</Version>" +
+            "<PackageVersion>1.0.0</PackageVersion>" +
+            "<InformationalVersion>1.0.0</InformationalVersion>" +
+            "<AssemblyVersion>1.0.0</AssemblyVersion>" +
+            "<FileVersion>1.0.0</FileVersion>" +
+            "</PropertyGroup></Project>";
+
+        var updated = CsprojVersionEditor.UpdateVersionText(content, "2.1.0-beta.1", out var hadVersionTag);
+
+        Assert.True(hadVersionTag);
+        Assert.Contains("<Version>2.1.0-beta.1</Version>", updated, StringComparison.Ordinal);
+        Assert.Contains("<PackageVersion>2.1.0-beta.1</PackageVersion>", updated, StringComparison.Ordinal);
+        Assert.Contains("<InformationalVersion>2.1.0-beta.1</InformationalVersion>", updated, StringComparison.Ordinal);
+        Assert.Contains("<AssemblyVersion>2.1.0</AssemblyVersion>", updated, StringComparison.Ordinal);
+        Assert.Contains("<FileVersion>2.1.0</FileVersion>", updated, StringComparison.Ordinal);
     }
 
     private static int CountOccurrences(string input, string value, StringComparison comparison)

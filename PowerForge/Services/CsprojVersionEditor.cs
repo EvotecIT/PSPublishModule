@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Security;
 using System.Text.RegularExpressions;
 
@@ -12,15 +13,21 @@ internal static class CsprojVersionEditor
 {
     private const string VersionValuePattern = @"\s*(?<value>[^<]+?)\s*";
 
-    private static readonly string[] VersionTags =
+    private static readonly string[] PackageVersionTags =
     {
         "Version",
-        "VersionPrefix",
         "PackageVersion",
-        "AssemblyVersion",
-        "FileVersion",
         "InformationalVersion"
     };
+
+    private static readonly string[] NumericVersionTags =
+    {
+        "VersionPrefix",
+        "AssemblyVersion",
+        "FileVersion"
+    };
+
+    private static readonly string[] VersionTags = PackageVersionTags.Concat(NumericVersionTags).Append("VersionSuffix").ToArray();
 
     internal static bool TryGetVersion(string csprojPath, out string version)
     {
@@ -31,7 +38,24 @@ internal static class CsprojVersionEditor
         try
         {
             var content = File.ReadAllText(csprojPath);
-            foreach (var tag in VersionTags)
+            foreach (var tag in PackageVersionTags)
+            {
+                if (TryMatchVersionTag(content, tag, out var v))
+                {
+                    version = v;
+                    return true;
+                }
+            }
+
+            if (TryMatchVersionTag(content, "VersionPrefix", out var prefix))
+            {
+                version = TryMatchVersionTag(content, "VersionSuffix", out var suffix)
+                    ? prefix + "-" + suffix
+                    : prefix;
+                return true;
+            }
+
+            foreach (var tag in NumericVersionTags.Where(tag => !tag.Equals("VersionPrefix", StringComparison.Ordinal)))
             {
                 if (TryMatchVersionTag(content, tag, out var v))
                 {
@@ -51,6 +75,11 @@ internal static class CsprojVersionEditor
         if (content is null) throw new ArgumentNullException(nameof(content));
         hadVersionTag = false;
         var escapedVersion = SecurityElement.Escape(version) ?? string.Empty;
+        var escapedNumericVersion = SecurityElement.Escape(PackageVersionUtility.GetNumericVersion(version)) ?? string.Empty;
+        var prereleaseVersion = PackageVersionUtility.GetPrereleaseVersion(version);
+        var escapedPrereleaseVersion = SecurityElement.Escape(prereleaseVersion) ?? string.Empty;
+        var hasPackageVersionTag = PackageVersionTags.Any(tag => Regex.IsMatch(content, BuildVersionTagPattern(tag), RegexOptions.IgnoreCase));
+        var hasVersionPrefix = Regex.IsMatch(content, BuildVersionTagPattern("VersionPrefix"), RegexOptions.IgnoreCase);
 
         foreach (var tag in VersionTags)
         {
@@ -59,7 +88,7 @@ internal static class CsprojVersionEditor
         }
 
         var updated = content;
-        foreach (var tag in VersionTags)
+        foreach (var tag in PackageVersionTags)
         {
             updated = Regex.Replace(
                 updated,
@@ -67,9 +96,41 @@ internal static class CsprojVersionEditor
                 $"<{tag}>{escapedVersion}</{tag}>",
                 RegexOptions.IgnoreCase);
         }
+        foreach (var tag in NumericVersionTags)
+        {
+            updated = Regex.Replace(
+                updated,
+                BuildVersionTagPattern(tag),
+                $"<{tag}>{escapedNumericVersion}</{tag}>",
+                RegexOptions.IgnoreCase);
+        }
 
-        if (!hadVersionTag)
-            updated = InsertVersionPrefix(updated, version);
+        if (hasVersionPrefix && !string.IsNullOrEmpty(prereleaseVersion))
+        {
+            if (Regex.IsMatch(updated, BuildVersionTagPattern("VersionSuffix"), RegexOptions.IgnoreCase))
+            {
+                updated = Regex.Replace(
+                    updated,
+                    BuildVersionTagPattern("VersionSuffix"),
+                    $"<VersionSuffix>{escapedPrereleaseVersion}</VersionSuffix>",
+                    RegexOptions.IgnoreCase);
+            }
+            else
+            {
+                updated = InsertAfterVersionPrefix(updated, "VersionSuffix", escapedPrereleaseVersion);
+            }
+        }
+        else if (Regex.IsMatch(updated, BuildVersionTagPattern("VersionSuffix"), RegexOptions.IgnoreCase))
+        {
+            updated = Regex.Replace(
+                updated,
+                BuildVersionTagPattern("VersionSuffix"),
+                "<VersionSuffix></VersionSuffix>",
+                RegexOptions.IgnoreCase);
+        }
+
+        if (!hasPackageVersionTag && !hasVersionPrefix)
+            updated = InsertVersion(updated, string.IsNullOrEmpty(prereleaseVersion) ? "VersionPrefix" : "Version", string.IsNullOrEmpty(prereleaseVersion) ? escapedNumericVersion : escapedVersion);
 
         return updated;
     }
@@ -88,20 +149,31 @@ internal static class CsprojVersionEditor
     private static string BuildVersionTagPattern(string tag)
         => $"<{Regex.Escape(tag)}>{VersionValuePattern}</{Regex.Escape(tag)}>";
 
-    private static string InsertVersionPrefix(string content, string version)
+    private static string InsertVersion(string content, string tag, string escapedVersion)
     {
-        var escapedVersion = SecurityElement.Escape(version) ?? string.Empty;
         var match = Regex.Match(content, "<PropertyGroup[^>]*>", RegexOptions.IgnoreCase);
         if (!match.Success)
         {
-            return content + Environment.NewLine + $"  <PropertyGroup>{Environment.NewLine}    <VersionPrefix>{escapedVersion}</VersionPrefix>{Environment.NewLine}  </PropertyGroup>{Environment.NewLine}";
+            return content + Environment.NewLine + $"  <PropertyGroup>{Environment.NewLine}    <{tag}>{escapedVersion}</{tag}>{Environment.NewLine}  </PropertyGroup>{Environment.NewLine}";
         }
 
         var insertAt = match.Index + match.Length;
         var lineBreak = DetectLineBreak(content);
         var indent = DetectIndentation(content, match.Index);
-        var insert = $"{lineBreak}{indent}  <VersionPrefix>{escapedVersion}</VersionPrefix>";
+        var insert = $"{lineBreak}{indent}  <{tag}>{escapedVersion}</{tag}>";
         return content.Insert(insertAt, insert);
+    }
+
+    private static string InsertAfterVersionPrefix(string content, string tag, string escapedVersion)
+    {
+        var match = Regex.Match(content, BuildVersionTagPattern("VersionPrefix"), RegexOptions.IgnoreCase);
+        if (!match.Success)
+            return content;
+
+        var lineBreak = DetectLineBreak(content);
+        var lineStart = content.LastIndexOf('\n', Math.Max(0, match.Index - 1));
+        var indent = lineStart < 0 ? string.Empty : DetectIndentation(content, match.Index);
+        return content.Insert(match.Index + match.Length, $"{lineBreak}{indent}<{tag}>{escapedVersion}</{tag}>");
     }
 
     private static string DetectLineBreak(string content)
