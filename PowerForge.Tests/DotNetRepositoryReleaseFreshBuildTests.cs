@@ -208,6 +208,7 @@ public sealed class DotNetRepositoryReleaseFreshBuildTests
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
                     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+                    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
                   </PropertyGroup>
                 </Project>
                 """);
@@ -272,6 +273,7 @@ public sealed class DotNetRepositoryReleaseFreshBuildTests
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
                     <TargetFramework>net8.0</TargetFramework>
+                    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
                   </PropertyGroup>
                   <Import Project="build/outputs.props" />
                 </Project>
