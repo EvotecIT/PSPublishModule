@@ -54,10 +54,75 @@ internal static class PackageVersionUtility
             : trimmed.Substring(separator + 1, metadataSeparator - separator - 1);
     }
 
+    internal static int Compare(string left, string right)
+    {
+        if (!TryNormalizeExact(left, out var normalizedLeft))
+            throw new ArgumentException("A valid exact package version is required.", nameof(left));
+        if (!TryNormalizeExact(right, out var normalizedRight))
+            throw new ArgumentException("A valid exact package version is required.", nameof(right));
+
+        var leftCore = Version.Parse(GetNumericVersion(normalizedLeft));
+        var rightCore = Version.Parse(GetNumericVersion(normalizedRight));
+        var coreComparison = leftCore.CompareTo(rightCore);
+        if (coreComparison != 0)
+            return coreComparison;
+
+        var leftPrerelease = GetPrereleaseVersion(normalizedLeft);
+        var rightPrerelease = GetPrereleaseVersion(normalizedRight);
+        if (leftPrerelease.Length == 0)
+            return rightPrerelease.Length == 0 ? 0 : 1;
+        if (rightPrerelease.Length == 0)
+            return -1;
+
+        var leftIdentifiers = leftPrerelease.Split('.');
+        var rightIdentifiers = rightPrerelease.Split('.');
+        var commonLength = Math.Min(leftIdentifiers.Length, rightIdentifiers.Length);
+        for (var index = 0; index < commonLength; index++)
+        {
+            var identifierComparison = ComparePrereleaseIdentifier(leftIdentifiers[index], rightIdentifiers[index]);
+            if (identifierComparison != 0)
+                return identifierComparison;
+        }
+
+        return leftIdentifiers.Length.CompareTo(rightIdentifiers.Length);
+    }
+
     private static string NormalizeNumericCore(Version version)
     {
         var build = version.Build < 0 ? 0 : version.Build;
         var normalized = $"{version.Major}.{version.Minor}.{build}";
         return version.Revision > 0 ? normalized + "." + version.Revision : normalized;
+    }
+
+    private static int ComparePrereleaseIdentifier(string left, string right)
+    {
+        var leftNumeric = IsNumericIdentifier(left);
+        var rightNumeric = IsNumericIdentifier(right);
+        if (leftNumeric && rightNumeric)
+        {
+            var normalizedLeft = left.TrimStart('0');
+            var normalizedRight = right.TrimStart('0');
+            if (normalizedLeft.Length == 0) normalizedLeft = "0";
+            if (normalizedRight.Length == 0) normalizedRight = "0";
+            var lengthComparison = normalizedLeft.Length.CompareTo(normalizedRight.Length);
+            return lengthComparison != 0
+                ? lengthComparison
+                : string.Compare(normalizedLeft, normalizedRight, StringComparison.Ordinal);
+        }
+
+        if (leftNumeric != rightNumeric)
+            return leftNumeric ? -1 : 1;
+
+        return string.Compare(left, right, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsNumericIdentifier(string value)
+    {
+        if (value.Length == 0) return false;
+        foreach (var character in value)
+        {
+            if (character < '0' || character > '9') return false;
+        }
+        return true;
     }
 }

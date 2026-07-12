@@ -69,6 +69,26 @@ public sealed class CsprojVersionEditorTests
         }
     }
 
+    [Fact]
+    public void TryGetVersion_CombinesUnconditionalVersionPrefixAndSuffix()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N") + ".csproj");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+        try
+        {
+            File.WriteAllText(path, "<Project><PropertyGroup><VersionPrefix>2.0.0</VersionPrefix><VersionSuffix>rc.1</VersionSuffix></PropertyGroup></Project>");
+
+            Assert.True(CsprojVersionEditor.TryGetVersion(path, out var version));
+            Assert.Equal("2.0.0-rc.1", version);
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+    }
+
     [Theory]
     [InlineData("<VersionSuffix></VersionSuffix>")]
     [InlineData("<VersionSuffix />")]
@@ -104,6 +124,18 @@ public sealed class CsprojVersionEditorTests
         Assert.Contains("<InformationalVersion>2.1.0-beta.1</InformationalVersion>", updated, StringComparison.Ordinal);
         Assert.Contains("<AssemblyVersion>2.1.0</AssemblyVersion>", updated, StringComparison.Ordinal);
         Assert.Contains("<FileVersion>2.1.0</FileVersion>", updated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UpdateVersionText_InsertsPackageVersionWhenOnlyInformationalVersionExists()
+    {
+        var content = "<Project><PropertyGroup><InformationalVersion>1.0.0+sha</InformationalVersion></PropertyGroup></Project>";
+
+        var updated = CsprojVersionEditor.UpdateVersionText(content, "2.1.0-beta.1", out var hadVersionTag);
+
+        Assert.True(hadVersionTag);
+        Assert.Contains("<Version>2.1.0-beta.1</Version>", updated, StringComparison.Ordinal);
+        Assert.Contains("<InformationalVersion>2.1.0-beta.1</InformationalVersion>", updated, StringComparison.Ordinal);
     }
 
     private static int CountOccurrences(string input, string value, StringComparison comparison)

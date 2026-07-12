@@ -13,7 +13,13 @@ internal static class CsprojVersionEditor
 {
     private const string VersionValuePattern = @"\s*(?<value>[^<]+?)\s*";
 
-    private static readonly string[] FullPackageVersionTags =
+    private static readonly string[] PackageVersionTags =
+    {
+        "Version",
+        "PackageVersion"
+    };
+
+    private static readonly string[] FullVersionTags =
     {
         "Version",
         "PackageVersion",
@@ -50,7 +56,10 @@ internal static class CsprojVersionEditor
             {
                 if (TryMatchVersionTag(content, tag, out var v))
                 {
-                    version = v;
+                    version = tag.Equals("VersionPrefix", StringComparison.Ordinal)
+                        && TryMatchVersionTag(content, "VersionSuffix", out var suffix)
+                        ? v + "-" + suffix
+                        : v;
                     return true;
                 }
             }
@@ -69,7 +78,7 @@ internal static class CsprojVersionEditor
         var escapedNumericVersion = SecurityElement.Escape(PackageVersionUtility.GetNumericVersion(version)) ?? string.Empty;
         var prereleaseVersion = PackageVersionUtility.GetPrereleaseVersion(version);
         var escapedPrereleaseVersion = SecurityElement.Escape(prereleaseVersion) ?? string.Empty;
-        var hasPackageVersionTag = FullPackageVersionTags.Any(tag => Regex.IsMatch(content, BuildVersionTagPattern(tag), RegexOptions.IgnoreCase));
+        var hasPackageVersionTag = PackageVersionTags.Any(tag => Regex.IsMatch(content, BuildVersionTagPattern(tag), RegexOptions.IgnoreCase));
         var hasVersionPrefix = Regex.IsMatch(content, BuildVersionTagPattern("VersionPrefix"), RegexOptions.IgnoreCase);
 
         foreach (var tag in ReadVersionTags)
@@ -81,7 +90,7 @@ internal static class CsprojVersionEditor
             hadVersionTag = true;
 
         var updated = content;
-        foreach (var tag in FullPackageVersionTags)
+        foreach (var tag in FullVersionTags)
         {
             updated = Regex.Replace(
                 updated,
