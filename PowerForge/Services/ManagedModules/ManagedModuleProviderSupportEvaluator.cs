@@ -15,6 +15,13 @@ public static class ManagedModuleProviderSupportEvaluator
         if (repository is null)
             throw new ArgumentNullException(nameof(repository));
 
+        if (IsPowerShellScriptEndpoint(repository))
+        {
+            return Unsupported(
+                "PowerShellGet script feed",
+                "Script-source endpoints are not module publish endpoints; use the compatibility publishing tools or configure the module feed root.");
+        }
+
         if (IsPowerShellGallery(repository))
         {
             return Supported("PowerShell Gallery");
@@ -66,6 +73,14 @@ public static class ManagedModuleProviderSupportEvaluator
     private static bool IsPowerShellGallery(ManagedModuleRepository repository)
         => string.Equals(repository.Name, "PSGallery", StringComparison.OrdinalIgnoreCase) ||
            repository.Source.IndexOf("powershellgallery.com", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    private static bool IsPowerShellScriptEndpoint(ManagedModuleRepository repository)
+    {
+        if (!Uri.TryCreate(repository.Source, UriKind.Absolute, out var uri))
+            return false;
+
+        return uri.AbsolutePath.TrimEnd('/').EndsWith("/items/psscript", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool IsAzureArtifacts(ManagedModuleRepository repository)
     {

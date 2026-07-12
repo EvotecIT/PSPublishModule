@@ -918,6 +918,7 @@ public sealed class ManagedModuleRepositoryClientTests
         var publishRequest = Assert.Single(requests, request => request.Url == "https://example.test/publish/");
         Assert.Equal(HttpMethod.Put, publishRequest.Method);
         Assert.Equal("publish-key", publishRequest.ApiKey);
+        Assert.DoesNotContain(requests, request => request.Url == "https://example.test/symbol-publish/");
     }
 
     [Fact]
@@ -1361,6 +1362,7 @@ public sealed class ManagedModuleRepositoryClientTests
                 return Json("{\"resources\":[" +
                             "{\"@id\":\"https://example.test/packages/\",\"@type\":\"PackageBaseAddress/3.0.0\"}," +
                             "{\"@id\":\"https://example.test/search\",\"@type\":\"SearchQueryService/3.5.0\"}," +
+                            "{\"@id\":\"https://example.test/symbol-publish/\",\"@type\":\"SymbolPackagePublish/4.9.0\"}," +
                             "{\"@id\":\"https://example.test/publish/\",\"@type\":\"PackagePublish/2.0.0\"}" +
                             registration +
                             "]}");

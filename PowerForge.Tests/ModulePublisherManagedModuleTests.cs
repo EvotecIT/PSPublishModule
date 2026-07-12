@@ -173,6 +173,17 @@ public sealed class ModulePublisherManagedModuleTests
                 Uri = "https://packages.example.test/v3/index.json"
             }
         };
+        var scriptEndpoint = new PublishConfiguration
+        {
+            Destination = PublishDestination.PowerShellGallery,
+            Tool = PublishTool.Auto,
+            RepositoryName = "CompanyScripts",
+            Repository = new PublishRepositoryConfiguration
+            {
+                Name = "CompanyScripts",
+                Uri = "https://packages.example.test/api/v2/items/psscript"
+            }
+        };
 
         Assert.True(ModulePublisher.ShouldUseManagedModuleForAuto(psGallery));
         Assert.True(ModulePublisher.ShouldUseManagedModuleForAuto(psGalleryV3));
@@ -185,6 +196,7 @@ public sealed class ModulePublisherManagedModuleTests
         Assert.False(ModulePublisher.ShouldUseManagedModuleForAuto(runtimeCredential));
         Assert.False(ModulePublisher.ShouldUseManagedModuleForAuto(azureArtifacts));
         Assert.False(ModulePublisher.ShouldUseManagedModuleForAuto(registeredRequiredModuleSource));
+        Assert.False(ModulePublisher.ShouldUseManagedModuleForAuto(scriptEndpoint));
     }
 
     [Fact]

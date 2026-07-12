@@ -27,6 +27,19 @@ public sealed class ManagedModuleProviderSupportEvaluatorTests
         Assert.Empty(support.Limitations);
     }
 
+    [Theory]
+    [InlineData("https://packages.example.test/api/v2/items/psscript")]
+    [InlineData("https://www.powershellgallery.com/api/v2/items/psscript/")]
+    public void EvaluateRepository_RejectsPowerShellGetScriptEndpointsForModulePublishing(string source)
+    {
+        var support = ManagedModuleProviderSupportEvaluator.Evaluate(new ManagedModuleRepository("Scripts", source));
+
+        Assert.Equal(ManagedModuleProviderSupportLevel.Unsupported, support.Level);
+        Assert.False(support.ManagedLifecycleSupported);
+        Assert.True(support.CompatibilityFallbackRecommended);
+        Assert.Contains(support.Limitations, limitation => limitation.Contains("module publish", StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public void EvaluateRepository_ClassifiesAzureArtifactsEndpointAsPartial()
     {

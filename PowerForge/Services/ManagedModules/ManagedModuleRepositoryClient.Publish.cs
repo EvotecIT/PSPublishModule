@@ -203,7 +203,12 @@ public sealed partial class ManagedModuleRepositoryClient
         if (string.IsNullOrWhiteSpace(type))
             return false;
 
-        return type!.IndexOf("PackagePublish", StringComparison.OrdinalIgnoreCase) >= 0;
+        var normalized = type!.Trim();
+        var versionSeparator = normalized.IndexOf('/');
+        if (versionSeparator >= 0)
+            normalized = normalized.Substring(0, versionSeparator);
+
+        return string.Equals(normalized, "PackagePublish", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ResolveNuGetV2PackagePublishAddress(string source)
