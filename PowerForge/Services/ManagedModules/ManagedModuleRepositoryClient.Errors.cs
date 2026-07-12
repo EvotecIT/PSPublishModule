@@ -1,21 +1,183 @@
 using System.Net;
+using System.Net.Http;
+using System.Text;
 
 namespace PowerForge;
 
 public sealed partial class ManagedModuleRepositoryClient
 {
+    private const int MaximumRepositoryResponseDetailLength = 2048;
+    private const int MaximumRepositoryResponseBodyBytes = MaximumRepositoryResponseDetailLength * 4;
+
     private static ManagedModuleRepositoryException CreateRepositoryHttpException(
         ManagedModuleRepository repository,
         string operation,
         HttpStatusCode statusCode,
-        string detail)
+        string detail,
+        string? responseDetail = null)
         => new(
             operation,
             repository.Name,
             repository.Source,
-            $"{detail} Repository returned {(int)statusCode} {statusCode}.",
+            string.IsNullOrWhiteSpace(responseDetail)
+                ? $"{detail} Repository returned {(int)statusCode} {statusCode}."
+                : $"{detail} Repository returned {(int)statusCode} {statusCode}. Repository response: {responseDetail}",
             ResolveHttpRemediation(statusCode),
             (int)statusCode);
+
+    private async Task<ManagedModuleRepositoryException> CreateRepositoryHttpExceptionAsync(
+        ManagedModuleRepository repository,
+        string operation,
+        HttpResponseMessage response,
+        string detail,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        var responseDetail = await ReadRepositoryResponseDetailAsync(response, credential, cancellationToken).ConfigureAwait(false);
+        return CreateRepositoryHttpException(repository, operation, response.StatusCode, detail, responseDetail);
+    }
+
+    private async Task<string?> ReadRepositoryResponseDetailAsync(
+        HttpResponseMessage response,
+        RepositoryCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        var values = new List<string>();
+        if (!string.IsNullOrWhiteSpace(response.ReasonPhrase))
+            values.Add(response.ReasonPhrase!);
+
+        if (response.Content is not null)
+        {
+            using var responseReadTimeout = CreateRepositoryResponseReadTimeout(response, cancellationToken);
+            var responseReadToken = responseReadTimeout?.Token ?? cancellationToken;
+            try
+            {
+                var body = await ReadRepositoryResponseBodyAsync(response.Content, responseReadToken).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(body))
+                    values.Add(body!);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                // A repository error body is best-effort and must not extend the configured request timeout.
+            }
+            catch (Exception ex) when (ex is HttpRequestException or IOException or ObjectDisposedException or InvalidOperationException)
+            {
+                // Response diagnostics are best effort and must not replace the repository failure.
+            }
+        }
+
+        if (values.Count == 0)
+            return null;
+
+        var detail = RedactRepositoryCredential(string.Join(" ", values), credential);
+        detail = RedactRepositoryCredential(detail, _options.ProxyCredential);
+        var normalized = NormalizeRepositoryResponseDetail(detail);
+        if (normalized.Length <= MaximumRepositoryResponseDetailLength)
+            return normalized;
+
+        return normalized.Substring(0, MaximumRepositoryResponseDetailLength) + "...";
+    }
+
+    private CancellationTokenSource? CreateRepositoryResponseReadTimeout(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetRemainingRequestTime(response, out var remaining))
+            return null;
+
+        var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (remaining <= TimeSpan.Zero)
+            timeout.Cancel();
+        else
+            timeout.CancelAfter(remaining);
+        return timeout;
+    }
+
+    private static async Task<string?> ReadRepositoryResponseBodyAsync(
+        HttpContent content,
+        CancellationToken cancellationToken)
+    {
+        using var stream = await ReadContentStreamAsync(content, cancellationToken).ConfigureAwait(false);
+        var buffer = new byte[MaximumRepositoryResponseBodyBytes];
+        var bytesRead = 0;
+        while (bytesRead < buffer.Length)
+        {
+            var read = await stream.ReadAsync(
+                    buffer,
+                    bytesRead,
+                    buffer.Length - bytesRead,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (read == 0)
+                break;
+
+            bytesRead += read;
+        }
+
+        if (bytesRead == 0)
+            return null;
+
+        var encoding = ResolveRepositoryResponseEncoding(content);
+        return encoding.GetString(buffer, 0, bytesRead);
+    }
+
+    private static Encoding ResolveRepositoryResponseEncoding(HttpContent content)
+    {
+        var charset = content.Headers.ContentType?.CharSet;
+        if (!string.IsNullOrWhiteSpace(charset))
+        {
+            charset = charset!.Trim().Trim('"');
+            try
+            {
+                return Encoding.GetEncoding(charset);
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
+            {
+                // Fall back to UTF-8 when the repository declares an invalid charset.
+            }
+        }
+
+        return Encoding.UTF8;
+    }
+
+    private static string RedactRepositoryCredential(string value, RepositoryCredential? credential)
+    {
+        var secret = credential?.Secret;
+        if (!string.IsNullOrEmpty(secret))
+        {
+            value = value.Replace(secret!, "[REDACTED]");
+            var userName = credential?.UserName;
+            if (!string.IsNullOrWhiteSpace(userName))
+            {
+                var basicBytes = Encoding.ASCII.GetBytes($"{userName}:{secret}");
+                var encodedBasicCredential = Convert.ToBase64String(basicBytes);
+                value = value.Replace(encodedBasicCredential, "[REDACTED]");
+            }
+        }
+
+        return value;
+    }
+
+    private static string NormalizeRepositoryResponseDetail(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        var previousWasWhitespace = false;
+        foreach (var character in value)
+        {
+            if (char.IsWhiteSpace(character) || char.IsControl(character))
+            {
+                if (!previousWasWhitespace)
+                    builder.Append(' ');
+                previousWasWhitespace = true;
+                continue;
+            }
+
+            builder.Append(character);
+            previousWasWhitespace = false;
+        }
+
+        return builder.ToString().Trim();
+    }
 
     private static ManagedModuleRepositoryException CreateRepositoryContractException(
         ManagedModuleRepository repository,

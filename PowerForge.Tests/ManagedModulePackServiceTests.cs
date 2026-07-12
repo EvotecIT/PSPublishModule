@@ -596,11 +596,13 @@ public sealed class ManagedModulePackServiceTests
         var result = await service.PublishAsync(new ManagedModulePublishRequest
         {
             ModulePath = moduleRoot.Path,
-            Repository = new ManagedModuleRepository("Company", readFeed.Path),
-            PublishRepository = new ManagedModuleRepository("Company", publishFeed.Path)
+            Repository = new ManagedModuleRepository("CompanyRead", readFeed.Path),
+            PublishRepository = new ManagedModuleRepository("CompanyPublish", publishFeed.Path)
         });
 
         Assert.True(result.Published);
+        Assert.Equal("CompanyPublish", result.RepositoryName);
+        Assert.Equal(publishFeed.Path, result.RepositorySource);
         Assert.False(File.Exists(Path.Combine(readFeed.Path, "Company.Tools.1.0.0.nupkg")));
         Assert.True(File.Exists(Path.Combine(publishFeed.Path, "Company.Tools.1.0.0.nupkg")));
     }

@@ -967,6 +967,7 @@ public sealed class ManagedModuleRepositoryClientTests
         var publishRequest = Assert.Single(requests, request => request.Url == "https://www.powershellgallery.com/api/v2/package");
         Assert.Equal(HttpMethod.Put, publishRequest.Method);
         Assert.Equal("gallery-key", publishRequest.ApiKey);
+        Assert.Equal("4.1.0", publishRequest.NuGetClientVersion);
         Assert.Equal("multipart/form-data", publishRequest.ContentType);
         Assert.Equal(1, publishRequest.MultipartPartCount);
         Assert.Equal("package", publishRequest.MultipartPartName);
@@ -1334,6 +1335,9 @@ public sealed class ManagedModuleRepositoryClientTests
             var apiKey = request.Headers.TryGetValues("X-NuGet-ApiKey", out var values)
                 ? values.FirstOrDefault()
                 : null;
+            var nuGetClientVersion = request.Headers.TryGetValues("X-NuGet-Client-Version", out var clientVersions)
+                ? clientVersions.FirstOrDefault()
+                : null;
             var multipart = request.Content as MultipartFormDataContent;
             var firstPart = multipart?.FirstOrDefault();
             _requests.Add(new RecordedRequest(
@@ -1341,6 +1345,7 @@ public sealed class ManagedModuleRepositoryClientTests
                 request.Method,
                 request.Headers.Authorization,
                 apiKey,
+                nuGetClientVersion,
                 request.Headers.UserAgent.ToString(),
                 request.Content?.Headers.ContentType?.MediaType,
                 multipart?.Count() ?? 0,
@@ -1713,6 +1718,7 @@ public sealed class ManagedModuleRepositoryClientTests
             HttpMethod method,
             AuthenticationHeaderValue? authorization,
             string? apiKey,
+            string? nuGetClientVersion,
             string userAgent,
             string? contentType,
             int multipartPartCount,
@@ -1724,6 +1730,7 @@ public sealed class ManagedModuleRepositoryClientTests
             Method = method;
             Authorization = authorization;
             ApiKey = apiKey;
+            NuGetClientVersion = nuGetClientVersion;
             UserAgent = userAgent;
             ContentType = contentType;
             MultipartPartCount = multipartPartCount;
@@ -1739,6 +1746,8 @@ public sealed class ManagedModuleRepositoryClientTests
         public AuthenticationHeaderValue? Authorization { get; }
 
         public string? ApiKey { get; }
+
+        public string? NuGetClientVersion { get; }
 
         public string UserAgent { get; }
 

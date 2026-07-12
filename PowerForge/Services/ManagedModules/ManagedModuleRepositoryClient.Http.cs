@@ -1,10 +1,14 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
+using System.Runtime.CompilerServices;
 
 namespace PowerForge;
 
 public sealed partial class ManagedModuleRepositoryClient
 {
+    private readonly ConditionalWeakTable<HttpResponseMessage, RequestAttemptDeadline> _responseDeadlines = new();
+
     internal static HttpClient CreateDefaultHttpClient(ManagedModuleRepositoryClientOptions options)
     {
         var client = new HttpClient(CreateDefaultHttpMessageHandler(options));
@@ -169,9 +173,52 @@ public sealed partial class ManagedModuleRepositoryClient
         if (_options.RequestTimeout is null)
             return await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
 
+        var requestTimeout = _options.RequestTimeout.Value;
+        if (requestTimeout == Timeout.InfiniteTimeSpan)
+            return await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+
+        var deadlineTimestamp = CalculateRequestDeadlineTimestamp(requestTimeout);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(_options.RequestTimeout.Value);
-        return await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
+        timeout.CancelAfter(requestTimeout);
+        var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
+        _responseDeadlines.Remove(response);
+        _responseDeadlines.Add(response, new RequestAttemptDeadline(deadlineTimestamp));
+        return response;
+    }
+
+    private static long CalculateRequestDeadlineTimestamp(TimeSpan requestTimeout)
+    {
+        var duration = requestTimeout.TotalSeconds * Stopwatch.Frequency;
+        var current = Stopwatch.GetTimestamp();
+        if (duration >= long.MaxValue - current)
+            return long.MaxValue;
+
+        return current + Math.Max(0L, (long)Math.Ceiling(duration));
+    }
+
+    private bool TryGetRemainingRequestTime(HttpResponseMessage response, out TimeSpan remaining)
+    {
+        if (!_responseDeadlines.TryGetValue(response, out var deadline))
+        {
+            remaining = default;
+            return false;
+        }
+
+        var remainingTicks = deadline.Timestamp - Stopwatch.GetTimestamp();
+        remaining = remainingTicks <= 0
+            ? TimeSpan.Zero
+            : TimeSpan.FromSeconds(remainingTicks / (double)Stopwatch.Frequency);
+        return true;
+    }
+
+    private sealed class RequestAttemptDeadline
+    {
+        public RequestAttemptDeadline(long timestamp)
+        {
+            Timestamp = timestamp;
+        }
+
+        public long Timestamp { get; }
     }
 
     private static HttpRequestMessage CreateRedirectRequest(HttpRequestMessage source, Uri redirectUri)

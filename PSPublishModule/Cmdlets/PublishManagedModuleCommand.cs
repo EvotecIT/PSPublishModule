@@ -132,7 +132,7 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var repositoryClient = ManagedModuleCommandSupport.CreateRepositoryClient(this, logger, Proxy, ProxyCredential);
 
-        if (!ShouldProcess(modulePath, $"Publish managed module package to '{repository.Source}'"))
+        if (!ShouldProcess(modulePath, $"Publish managed module package to '{publishRepository.Source}'"))
             return;
 
         var result = new ManagedModulePublishService(logger, repositoryClient).PublishAsync(

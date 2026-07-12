@@ -106,7 +106,7 @@ public sealed class ManagedModuleRepositoryClientCoalescingTests
 
         Assert.Equal(new[] { "Company.Tools" }, firstResult.Select(version => version.Name));
         Assert.Equal(new[] { "Company.Tools" }, secondResult.Select(version => version.Name));
-        Assert.Equal(1, handler.Count("https://example.test/search/?q=Company.&prerelease=false&take=100&semVerLevel=2.0.0"));
+        Assert.Equal(1, handler.Count("https://example.test/search/?q=Company.&prerelease=false&take=100&skip=0&semVerLevel=2.0.0"));
     }
 
     private sealed class CoalescingHandler : HttpMessageHandler, IDisposable
@@ -118,13 +118,13 @@ public sealed class ManagedModuleRepositoryClientCoalescingTests
         private readonly TaskCompletionSource<object?> _releaseSearchRequest = CreateCompletionSource();
 
         public Task WaitForVersionRequestAsync()
-            => _versionRequestSeen.Task;
+            => _versionRequestSeen.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         public void ReleaseVersionRequest()
             => _releaseVersionRequest.TrySetResult(null);
 
         public Task WaitForSearchRequestAsync()
-            => _searchRequestSeen.Task;
+            => _searchRequestSeen.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         public void ReleaseSearchRequest()
             => _releaseSearchRequest.TrySetResult(null);
@@ -152,7 +152,7 @@ public sealed class ManagedModuleRepositoryClientCoalescingTests
                 return Json("{\"versions\":[\"1.0.0\",\"1.1.0\"]}");
             }
 
-            if (uri == "https://example.test/search/?q=Company.&prerelease=false&take=100&semVerLevel=2.0.0")
+            if (uri == "https://example.test/search/?q=Company.&prerelease=false&take=100&skip=0&semVerLevel=2.0.0")
             {
                 _searchRequestSeen.TrySetResult(null);
                 await _releaseSearchRequest.Task.ConfigureAwait(false);

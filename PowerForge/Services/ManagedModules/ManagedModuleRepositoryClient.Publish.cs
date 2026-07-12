@@ -6,6 +6,9 @@ namespace PowerForge;
 
 public sealed partial class ManagedModuleRepositoryClient
 {
+    private const string NuGetClientVersionHeader = "X-NuGet-Client-Version";
+    private const string NuGetPublishProtocolClientVersion = "4.1.0";
+
     /// <summary>
     /// Publishes an existing package to a local folder or NuGet-compatible publish endpoint.
     /// </summary>
@@ -118,6 +121,7 @@ public sealed partial class ManagedModuleRepositoryClient
             () =>
             {
                 var request = CreateRequest(HttpMethod.Put, new Uri(publishAddress), credential, "application/json");
+                request.Headers.TryAddWithoutValidation(NuGetClientVersionHeader, NuGetPublishProtocolClientVersion);
                 var packageContent = new StreamContent(File.OpenRead(package));
                 packageContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
                 var multipart = new MultipartFormDataContent();
@@ -140,7 +144,16 @@ public sealed partial class ManagedModuleRepositoryClient
         }
 
         if (!response.IsSuccessStatusCode)
-            throw CreateRepositoryHttpException(repository, "Publish", response.StatusCode, $"Unable to publish package '{package}'.");
+        {
+            throw await CreateRepositoryHttpExceptionAsync(
+                    repository,
+                    "Publish",
+                    response,
+                    $"Unable to publish package '{package}'.",
+                    credential,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         return new ManagedModulePackagePublishResult
         {
