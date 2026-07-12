@@ -14,13 +14,15 @@ public sealed class DotNetNuGetPushRequest
     /// <param name="skipDuplicate">When true, passes <c>--skip-duplicate</c>.</param>
     /// <param name="workingDirectory">Optional working directory override.</param>
     /// <param name="timeout">Optional timeout override.</param>
+    /// <param name="suppressCompanionSymbols">When true, passes <c>--no-symbols</c>.</param>
     public DotNetNuGetPushRequest(
         string packagePath,
         string apiKey,
         string source,
         bool skipDuplicate = true,
         string? workingDirectory = null,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null,
+        bool suppressCompanionSymbols = false)
     {
         PackagePath = packagePath;
         ApiKey = apiKey;
@@ -28,6 +30,7 @@ public sealed class DotNetNuGetPushRequest
         SkipDuplicate = skipDuplicate;
         WorkingDirectory = workingDirectory;
         Timeout = timeout;
+        SuppressCompanionSymbols = suppressCompanionSymbols;
     }
 
     /// <summary>
@@ -59,4 +62,9 @@ public sealed class DotNetNuGetPushRequest
     /// Gets the optional timeout override.
     /// </summary>
     public TimeSpan? Timeout { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether implicit companion symbol publication should be suppressed.
+    /// </summary>
+    public bool SuppressCompanionSymbols { get; }
 }

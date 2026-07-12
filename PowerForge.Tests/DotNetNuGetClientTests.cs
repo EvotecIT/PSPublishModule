@@ -24,7 +24,8 @@ public sealed class DotNetNuGetClientTests
             var result = await client.PushPackageAsync(new DotNetNuGetPushRequest(
                 packagePath: @"C:\repo\Artifacts\Test.1.0.0.nupkg",
                 apiKey: "secret",
-                source: "https://api.nuget.org/v3/index.json"));
+                source: "https://api.nuget.org/v3/index.json",
+                suppressCompanionSymbols: true));
 
             Assert.NotNull(captured);
             Assert.Equal("dotnet", captured!.FileName);
@@ -41,7 +42,8 @@ public sealed class DotNetNuGetClientTests
                     "secret",
                     "--source",
                     "https://api.nuget.org/v3/index.json",
-                    "--skip-duplicate"
+                    "--skip-duplicate",
+                    "--no-symbols"
                 ]),
                 responseFileContent);
             Assert.True(result.Succeeded);

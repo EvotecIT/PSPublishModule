@@ -155,6 +155,8 @@ public sealed class DotNetNuGetClient
 
         if (request.SkipDuplicate)
             lines.Add("--skip-duplicate");
+        if (request.SuppressCompanionSymbols)
+            lines.Add("--no-symbols");
 
         return string.Join(Environment.NewLine, lines);
     }

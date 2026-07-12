@@ -42,7 +42,7 @@ public sealed class NuGetPackagePublishServiceTests
 
             var service = new NuGetPackagePublishService(
                 new NullLogger { IsVerbose = true },
-                (_, _, _, _) => new DotNetRepositoryReleaseService.PackagePushResult
+                (_, _, _, _, _) => new DotNetRepositoryReleaseService.PackagePushResult
                 {
                     Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
                     Message = "push failed"
@@ -77,11 +77,13 @@ public sealed class NuGetPackagePublishServiceTests
             File.WriteAllText(oldPackagePath, "old");
 
             var pushed = new List<string>();
+            var suppressCompanionSymbols = new List<bool>();
             var service = new NuGetPackagePublishService(
                 new NullLogger(),
-                (package, _, _, _) =>
+                (package, _, _, _, suppressSymbols) =>
                 {
                     pushed.Add(package);
+                    suppressCompanionSymbols.Add(suppressSymbols);
                     return new DotNetRepositoryReleaseService.PackagePushResult
                     {
                         Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Published
@@ -92,10 +94,12 @@ public sealed class NuGetPackagePublishServiceTests
                 new[] { packagePath },
                 "key",
                 "https://api.nuget.org/v3/index.json",
-                skipDuplicate: true);
+                skipDuplicate: true,
+                suppressCompanionSymbols: true);
 
             Assert.True(result.Success);
             Assert.Equal(new[] { packagePath }, pushed);
+            Assert.Equal(new[] { true }, suppressCompanionSymbols);
             Assert.Contains(packagePath, result.PublishedItems, StringComparer.OrdinalIgnoreCase);
             Assert.DoesNotContain(oldPackagePath, result.PublishedItems, StringComparer.OrdinalIgnoreCase);
         }
@@ -119,7 +123,7 @@ public sealed class NuGetPackagePublishServiceTests
             var pushed = new List<string>();
             var service = new NuGetPackagePublishService(
                 new NullLogger(),
-                (package, _, _, _) =>
+                (package, _, _, _, _) =>
                 {
                     pushed.Add(package);
                     return new DotNetRepositoryReleaseService.PackagePushResult
@@ -161,7 +165,7 @@ public sealed class NuGetPackagePublishServiceTests
             var pushed = new List<string>();
             var service = new NuGetPackagePublishService(
                 new NullLogger(),
-                (package, _, _, _) =>
+                (package, _, _, _, _) =>
                 {
                     pushed.Add(package);
                     return new DotNetRepositoryReleaseService.PackagePushResult
@@ -197,7 +201,7 @@ public sealed class NuGetPackagePublishServiceTests
 
             var service = new NuGetPackagePublishService(
                 new NullLogger(),
-                (_, _, _, _) => new DotNetRepositoryReleaseService.PackagePushResult
+                (_, _, _, _, _) => new DotNetRepositoryReleaseService.PackagePushResult
                 {
                     Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate,
                     Message = "already exists"

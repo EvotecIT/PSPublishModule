@@ -259,7 +259,8 @@ public sealed partial class ModulePipelineRunner
             apiKey!,
             source,
             configuration.SkipDuplicate ?? true,
-            configuration.PublishFailFast ?? true);
+            configuration.PublishFailFast ?? true,
+            suppressCompanionSymbols: !(configuration.IncludeSymbols ?? false));
 
         ApplyPublishedNuGetArtifactOutcomes(release, publish);
         release.FailedPackages.AddRange(publish.FailedItems);

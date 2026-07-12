@@ -6,11 +6,11 @@ namespace PowerForge;
 internal sealed class NuGetPackagePublishService
 {
     private readonly ILogger _logger;
-    private readonly Func<string, string, string, bool, DotNetRepositoryReleaseService.PackagePushResult> _pushPackage;
+    private readonly Func<string, string, string, bool, bool, DotNetRepositoryReleaseService.PackagePushResult> _pushPackage;
 
     public NuGetPackagePublishService(
         ILogger logger,
-        Func<string, string, string, bool, DotNetRepositoryReleaseService.PackagePushResult>? pushPackage = null)
+        Func<string, string, string, bool, bool, DotNetRepositoryReleaseService.PackagePushResult>? pushPackage = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _pushPackage = pushPackage ?? PushPackage;
@@ -70,7 +70,7 @@ internal sealed class NuGetPackagePublishService
                 continue;
             }
 
-            var pushResult = _pushPackage(package, request.ApiKey, request.Source, request.SkipDuplicate)
+            var pushResult = _pushPackage(package, request.ApiKey, request.Source, request.SkipDuplicate, false)
                 ?? new DotNetRepositoryReleaseService.PackagePushResult
                 {
                     Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
@@ -105,7 +105,8 @@ internal sealed class NuGetPackagePublishService
         string apiKey,
         string source,
         bool skipDuplicate,
-        bool publishFailFast = true)
+        bool publishFailFast = true,
+        bool suppressCompanionSymbols = false)
     {
         if (packages is null)
             throw new ArgumentNullException(nameof(packages));
@@ -137,7 +138,7 @@ internal sealed class NuGetPackagePublishService
                 continue;
             }
 
-            var pushResult = _pushPackage(package, apiKey, source, skipDuplicate)
+            var pushResult = _pushPackage(package, apiKey, source, skipDuplicate, suppressCompanionSymbols)
                 ?? new DotNetRepositoryReleaseService.PackagePushResult
                 {
                     Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
@@ -173,10 +174,20 @@ internal sealed class NuGetPackagePublishService
         return result;
     }
 
-    private static DotNetRepositoryReleaseService.PackagePushResult PushPackage(string packagePath, string apiKey, string source, bool skipDuplicate)
+    private static DotNetRepositoryReleaseService.PackagePushResult PushPackage(
+        string packagePath,
+        string apiKey,
+        string source,
+        bool skipDuplicate,
+        bool suppressCompanionSymbols)
     {
         var result = new DotNetNuGetClient()
-            .PushPackageAsync(new DotNetNuGetPushRequest(packagePath, apiKey, source, skipDuplicate))
+            .PushPackageAsync(new DotNetNuGetPushRequest(
+                packagePath,
+                apiKey,
+                source,
+                skipDuplicate,
+                suppressCompanionSymbols: suppressCompanionSymbols))
             .GetAwaiter()
             .GetResult();
 
