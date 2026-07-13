@@ -73,6 +73,28 @@ public sealed class AsyncPSCmdletTests
         var item = Assert.Single(result);
         Assert.Equal(0, item.BaseObject);
     }
+
+    [Fact]
+    public void AsyncPSCmdlet_does_not_capture_a_custom_task_scheduler()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncTaskScheduler",
+            typeof(TestAsyncTaskSchedulerCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncTaskScheduler");
+
+        var result = powerShell.Invoke();
+
+        Assert.False(powerShell.HadErrors, string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString())));
+        var item = Assert.Single(result);
+        Assert.Equal(0, item.BaseObject);
+    }
 }
 
 [Cmdlet(VerbsDiagnostic.Test, "AsyncThreadAffinity")]
@@ -150,6 +172,59 @@ public sealed class TestAsyncSynchronizationContextCommand : AsyncPSCmdlet
         await Task.Yield();
         WriteObject(_context!.PostCount);
     }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncTaskScheduler")]
+public sealed class TestAsyncTaskSchedulerCommand : AsyncPSCmdlet
+{
+    private readonly ForwardingTaskScheduler _scheduler = new();
+
+    protected override void ProcessRecord()
+        => _scheduler.Run(base.ProcessRecord);
+
+    protected override async Task ProcessRecordAsync()
+    {
+        Assert.Same(_scheduler, TaskScheduler.Current);
+        await Task.Yield();
+        WriteObject(_scheduler.QueuedTaskCount);
+    }
+}
+
+public sealed class ForwardingTaskScheduler : TaskScheduler
+{
+    private int _executeNextTaskInline;
+    private int _queuedTaskCount;
+
+    public int QueuedTaskCount => Volatile.Read(ref _queuedTaskCount);
+
+    public void Run(Action action)
+    {
+        Volatile.Write(ref _executeNextTaskInline, 1);
+        var task = Task.Factory.StartNew(
+            action,
+            CancellationToken.None,
+            TaskCreationOptions.None,
+            this);
+        task.GetAwaiter().GetResult();
+    }
+
+    protected override IEnumerable<Task> GetScheduledTasks()
+        => Array.Empty<Task>();
+
+    protected override void QueueTask(Task task)
+    {
+        if (Interlocked.Exchange(ref _executeNextTaskInline, 0) == 1)
+        {
+            Assert.True(TryExecuteTask(task));
+            return;
+        }
+
+        Interlocked.Increment(ref _queuedTaskCount);
+        ThreadPool.QueueUserWorkItem(_ => TryExecuteTask(task));
+    }
+
+    protected override bool TryExecuteTaskInline(Task task, bool taskWasPreviouslyQueued)
+        => false;
 }
 
 public sealed class ForwardingSynchronizationContext : SynchronizationContext
