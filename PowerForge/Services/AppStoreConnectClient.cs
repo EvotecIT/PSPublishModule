@@ -557,12 +557,15 @@ public sealed partial class AppStoreConnectClient : IDisposable
         var list = new List<T>();
         var visitedPages = new HashSet<string>(StringComparer.Ordinal);
         string? nextPage = relativeUrl;
-        while (!string.IsNullOrWhiteSpace(nextPage))
+        while (true)
         {
-            if (!visitedPages.Add(nextPage))
-                throw new InvalidOperationException($"App Store Connect API returned a repeated pagination link: {nextPage}");
+            var currentPage = nextPage;
+            if (currentPage is null)
+                break;
+            if (!visitedPages.Add(currentPage))
+                throw new InvalidOperationException($"App Store Connect API returned a repeated pagination link: {currentPage}");
 
-            using var doc = await GetJsonAsync(nextPage, cancellationToken).ConfigureAwait(false)
+            using var doc = await GetJsonAsync(currentPage, cancellationToken).ConfigureAwait(false)
                 ?? throw new InvalidOperationException("App Store Connect API request returned no response body.");
             if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
             {
