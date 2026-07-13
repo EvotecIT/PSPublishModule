@@ -103,7 +103,17 @@ public sealed partial class DotNetRepositoryReleaseService
         return Path.IsPathRooted(PathValueResolver.NormalizeSeparators(trimmed));
     }
 
-    internal static string ResolvePublishSource(string source, string repositoryRoot)
+    /// <summary>
+    /// Resolves explicit filesystem sources and named local sources while preserving named remote sources.
+    /// </summary>
+    /// <param name="source">Configured source URL, path, or NuGet.config key.</param>
+    /// <param name="repositoryRoot">Repository root used for explicit relative paths.</param>
+    /// <param name="nuGetConfigSearchRoot">Optional directory whose NuGet.config hierarchy should resolve named sources.</param>
+    /// <returns>A normalized local path, or the original URL/source key.</returns>
+    internal static string ResolvePublishSource(
+        string source,
+        string repositoryRoot,
+        string? nuGetConfigSearchRoot = null)
     {
         if (string.IsNullOrWhiteSpace(source))
             return source;
@@ -128,7 +138,12 @@ public sealed partial class DotNetRepositoryReleaseService
             return PathValueResolver.Resolve(repositoryRoot, normalized);
         }
 
-        return trimmed;
+        return TryResolveNamedLocalPublishSource(
+            trimmed,
+            string.IsNullOrWhiteSpace(nuGetConfigSearchRoot) ? repositoryRoot : nuGetConfigSearchRoot!,
+            out var namedLocalSource)
+            ? namedLocalSource
+            : trimmed;
     }
 
 }

@@ -119,7 +119,7 @@ public sealed class DotNetRepositoryReleaseSymbolPackageReviewTests
     }
 
     [Fact]
-    public void Execute_WithSymbolsAndLocalFeed_PublishesBothArtifacts()
+    public void Execute_WithSymbolsAndNamedLocalFeed_PublishesBothArtifacts()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -141,6 +141,9 @@ public sealed class DotNetRepositoryReleaseSymbolPackageReviewTests
                 "namespace Sample.Package; public static class Class1 { public static string Value => \"symbols\"; }");
 
             var localFeed = Directory.CreateDirectory(Path.Combine(root.FullName, "feed"));
+            File.WriteAllText(
+                Path.Combine(root.FullName, "NuGet.config"),
+                $"<configuration><packageSources><clear /><add key=\"LocalFeed\" value=\"{localFeed.FullName}\" /></packageSources></configuration>");
             var spec = new DotNetRepositoryReleaseSpec
             {
                 RootPath = root.FullName,
@@ -150,7 +153,7 @@ public sealed class DotNetRepositoryReleaseSymbolPackageReviewTests
                 IncludeSymbols = true,
                 Publish = true,
                 PublishApiKey = "unused-for-local-feed",
-                PublishSource = localFeed.FullName,
+                PublishSource = "LocalFeed",
                 SkipDuplicate = true,
                 UpdateVersions = false,
                 CreateReleaseZip = false

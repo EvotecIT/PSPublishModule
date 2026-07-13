@@ -567,6 +567,30 @@ public sealed partial class DotNetRepositoryReleaseService
                         continue;
                     }
 
+                    if (publishSymbolsSeparately &&
+                        !CanPublishSymbolPackage(
+                            pkg,
+                            (IEnumerable<string>?)project?.Packages ?? Array.Empty<string>(),
+                            primaryPackage =>
+                                result.PublishedPackages.Contains(primaryPackage, StringComparer.OrdinalIgnoreCase) ||
+                                result.SkippedDuplicatePackages.Contains(primaryPackage, StringComparer.OrdinalIgnoreCase),
+                            out var primaryPackage))
+                    {
+                        var blockedResult = CreateBlockedCompanionResult(pkg, primaryPackage);
+                        result.Success = false;
+                        result.FailedPackages.Add(pkg);
+                        _logger.Warn(blockedResult.Message!);
+                        if (project is not null && string.IsNullOrWhiteSpace(project.ErrorMessage))
+                            project.ErrorMessage = blockedResult.Message;
+                        if (spec.PublishFailFast)
+                        {
+                            result.ErrorMessage = blockedResult.Message;
+                            return result;
+                        }
+
+                        continue;
+                    }
+
                     _logger.Info($"Publishing {Path.GetFileName(pkg)}...");
                     var packagePublishWatch = Stopwatch.StartNew();
                     var pushResult = PushPackage(
@@ -574,7 +598,8 @@ public sealed partial class DotNetRepositoryReleaseService
                         spec.PublishApiKey!,
                         source,
                         spec.SkipDuplicate,
-                        suppressCompanionSymbols: !spec.IncludeSymbols || publishSymbolsSeparately);
+                        suppressCompanionSymbols: !spec.IncludeSymbols || publishSymbolsSeparately,
+                        workingDirectory: root);
                     packagePublishWatch.Stop();
                     var artifactOutcomes = ClassifyPublishedArtifacts(
                         publishedArtifacts,

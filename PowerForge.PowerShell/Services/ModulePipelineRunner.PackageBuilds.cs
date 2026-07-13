@@ -249,7 +249,8 @@ public sealed partial class ModulePipelineRunner
             : feed.PublishSource!.Trim();
         var source = DotNetRepositoryReleaseService.ResolvePublishSource(
             configuredSource,
-            string.IsNullOrWhiteSpace(repositoryRoot) ? configDirectory : repositoryRoot);
+            string.IsNullOrWhiteSpace(repositoryRoot) ? configDirectory : repositoryRoot,
+            nuGetConfigSearchRoot: configDirectory);
         release.PublishSource = source;
         var publishSymbolsSeparately = (configuration.IncludeSymbols ?? false) &&
             DotNetRepositoryReleaseService.IsLocalPublishSource(source);
@@ -258,7 +259,9 @@ public sealed partial class ModulePipelineRunner
             includeSymbolPackages: publishSymbolsSeparately);
 
         _logger.Info($"Publishing {packages.Length} existing package(s) from earlier package build.");
-        var publish = new NuGetPackagePublishService(_logger).ExecutePackages(
+        var publish = new NuGetPackagePublishService(
+            _logger,
+            workingDirectory: configDirectory).ExecutePackages(
             packages,
             apiKey!,
             source,

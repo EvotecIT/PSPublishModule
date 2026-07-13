@@ -266,27 +266,38 @@ public sealed partial class DotNetRepositoryReleaseService
         string apiKey,
         string source,
         bool skipDuplicate,
-        bool suppressCompanionSymbols)
+        bool suppressCompanionSymbols,
+        string? workingDirectory = null)
+        => PushPackage(new DotNetNuGetPushRequest(
+            packagePath,
+            apiKey,
+            source,
+            skipDuplicate,
+            workingDirectory,
+            timeout: null,
+            suppressCompanionSymbols));
+
+    internal static PackagePushResult PushPackage(DotNetNuGetPushRequest request)
     {
-        if (IsLocalPublishSource(source) &&
-            packagePath.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase))
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+
+        if (IsLocalPublishSource(request.Source) &&
+            request.PackagePath.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase))
         {
-            CopySymbolPackageToLocalFeed(packagePath, source, skipDuplicate, out var localResult);
+            CopySymbolPackageToLocalFeed(
+                request.PackagePath,
+                request.Source,
+                request.SkipDuplicate,
+                out var localResult);
             return localResult;
         }
 
         var push = new DotNetNuGetClient()
-            .PushPackageAsync(new DotNetNuGetPushRequest(
-                packagePath,
-                apiKey,
-                source,
-                skipDuplicate,
-                workingDirectory: null,
-                timeout: null,
-                suppressCompanionSymbols: suppressCompanionSymbols))
+            .PushPackageAsync(request)
             .GetAwaiter()
             .GetResult();
-        return ClassifyNuGetPushOutcome(push.ExitCode, skipDuplicate, push.StdErr, push.StdOut);
+        return ClassifyNuGetPushOutcome(push.ExitCode, request.SkipDuplicate, push.StdErr, push.StdOut);
     }
 
     /// <summary>

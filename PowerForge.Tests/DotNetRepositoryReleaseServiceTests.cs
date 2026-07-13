@@ -278,6 +278,63 @@ public sealed class DotNetRepositoryReleaseServiceTests
     }
 
     [Fact]
+    public void ResolvePublishSource_ResolvesNamedLocalSourceFromNuGetConfig()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root.FullName, "NuGet.config"),
+                "<configuration><packageSources><clear /><add key=\"LocalFeed\" value=\"Artifacts/Feed\" /></packageSources></configuration>");
+            var configSearchRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Build"));
+
+            var source = DotNetRepositoryReleaseService.ResolvePublishSource(
+                "LocalFeed",
+                Path.Combine(root.FullName, "Sources"),
+                nuGetConfigSearchRoot: configSearchRoot.FullName);
+
+            Assert.Equal(
+                Path.GetFullPath(Path.Combine(root.FullName, "Artifacts", "Feed")),
+                source);
+            Assert.True(DotNetRepositoryReleaseService.IsLocalPublishSource(source));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ResolvePublishSource_PreservesNamedRemoteSourceFromNuGetConfig()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root.FullName, "NuGet.config"),
+                "<configuration><packageSources><clear /><add key=\"PrivateFeed\" value=\"https://packages.example.test/v3/index.json\" /></packageSources></configuration>");
+
+            var source = DotNetRepositoryReleaseService.ResolvePublishSource(
+                "PrivateFeed",
+                Path.Combine(root.FullName, "artifacts"),
+                nuGetConfigSearchRoot: root.FullName);
+
+            Assert.Equal("PrivateFeed", source);
+            Assert.False(DotNetRepositoryReleaseService.IsLocalPublishSource(source));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void GetPackagesForPublish_PushesOnlyPrimaryPackages()
     {
         var first = new DotNetRepositoryProjectResult { ProjectName = "First" };

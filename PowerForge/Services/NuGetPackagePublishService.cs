@@ -6,14 +6,17 @@ namespace PowerForge;
 internal sealed class NuGetPackagePublishService
 {
     private readonly ILogger _logger;
-    private readonly Func<string, string, string, bool, bool, DotNetRepositoryReleaseService.PackagePushResult> _pushPackage;
+    private readonly Func<DotNetNuGetPushRequest, DotNetRepositoryReleaseService.PackagePushResult> _pushPackage;
+    private readonly string? _workingDirectory;
 
     public NuGetPackagePublishService(
         ILogger logger,
-        Func<string, string, string, bool, bool, DotNetRepositoryReleaseService.PackagePushResult>? pushPackage = null)
+        Func<DotNetNuGetPushRequest, DotNetRepositoryReleaseService.PackagePushResult>? pushPackage = null,
+        string? workingDirectory = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _pushPackage = pushPackage ?? PushPackage;
+        _workingDirectory = workingDirectory;
     }
 
     public NuGetPackagePublishResult Execute(NuGetPackagePublishRequest request, Func<string, bool>? shouldPublishPackage = null)
@@ -70,7 +73,14 @@ internal sealed class NuGetPackagePublishService
                 continue;
             }
 
-            var pushResult = _pushPackage(package, request.ApiKey, request.Source, request.SkipDuplicate, false)
+            var pushResult = _pushPackage(new DotNetNuGetPushRequest(
+                    package,
+                    request.ApiKey,
+                    request.Source,
+                    request.SkipDuplicate,
+                    _workingDirectory,
+                    timeout: null,
+                    suppressCompanionSymbols: false))
                 ?? new DotNetRepositoryReleaseService.PackagePushResult
                 {
                     Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
@@ -138,7 +148,36 @@ internal sealed class NuGetPackagePublishService
                 continue;
             }
 
-            var pushResult = _pushPackage(package, apiKey, source, skipDuplicate, suppressCompanionSymbols)
+            if (!DotNetRepositoryReleaseService.CanPublishSymbolPackage(
+                    package,
+                    packagePaths,
+                    primaryPackage =>
+                        result.PackagePushResults.TryGetValue(primaryPackage, out var primaryResult) &&
+                        (primaryResult.Outcome == DotNetRepositoryReleaseService.PackagePushOutcome.Published ||
+                         primaryResult.Outcome == DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate),
+                    out var primaryPackage))
+            {
+                var blockedResult = DotNetRepositoryReleaseService.CreateBlockedCompanionResult(
+                    package,
+                    primaryPackage);
+                result.Success = false;
+                result.FailedItems.Add(package);
+                result.PackagePushResults[package] = blockedResult;
+                if (string.IsNullOrWhiteSpace(result.ErrorMessage))
+                    result.ErrorMessage = blockedResult.Message;
+                if (publishFailFast)
+                    return result;
+                continue;
+            }
+
+            var pushResult = _pushPackage(new DotNetNuGetPushRequest(
+                    package,
+                    apiKey,
+                    source,
+                    skipDuplicate,
+                    _workingDirectory,
+                    timeout: null,
+                    suppressCompanionSymbols))
                 ?? new DotNetRepositoryReleaseService.PackagePushResult
                 {
                     Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
@@ -160,13 +199,13 @@ internal sealed class NuGetPackagePublishService
                     result.FailedItems.Add(package);
                     _logger.Verbose($"dotnet nuget push failed for {package}.");
                     if (pushResult.Message is string message && message.Length > 0)
-                        _logger.Verbose(message);
-                    if (publishFailFast)
                     {
-                        if (string.IsNullOrWhiteSpace(result.ErrorMessage) && pushResult.Message is string failureMessage && failureMessage.Length > 0)
-                            result.ErrorMessage = failureMessage;
-                        return result;
+                        _logger.Verbose(message);
+                        if (string.IsNullOrWhiteSpace(result.ErrorMessage))
+                            result.ErrorMessage = message;
                     }
+                    if (publishFailFast)
+                        return result;
                     break;
             }
         }
@@ -174,16 +213,6 @@ internal sealed class NuGetPackagePublishService
         return result;
     }
 
-    private static DotNetRepositoryReleaseService.PackagePushResult PushPackage(
-        string packagePath,
-        string apiKey,
-        string source,
-        bool skipDuplicate,
-        bool suppressCompanionSymbols)
-        => DotNetRepositoryReleaseService.PushPackage(
-            packagePath,
-            apiKey,
-            source,
-            skipDuplicate,
-            suppressCompanionSymbols);
+    private static DotNetRepositoryReleaseService.PackagePushResult PushPackage(DotNetNuGetPushRequest request)
+        => DotNetRepositoryReleaseService.PushPackage(request);
 }

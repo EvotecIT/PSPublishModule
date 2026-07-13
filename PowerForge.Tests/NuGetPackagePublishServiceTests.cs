@@ -42,7 +42,7 @@ public sealed class NuGetPackagePublishServiceTests
 
             var service = new NuGetPackagePublishService(
                 new NullLogger { IsVerbose = true },
-                (_, _, _, _, _) => new DotNetRepositoryReleaseService.PackagePushResult
+                _ => new DotNetRepositoryReleaseService.PackagePushResult
                 {
                     Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
                     Message = "push failed"
@@ -80,10 +80,10 @@ public sealed class NuGetPackagePublishServiceTests
             var suppressCompanionSymbols = new List<bool>();
             var service = new NuGetPackagePublishService(
                 new NullLogger(),
-                (package, _, _, _, suppressSymbols) =>
+                request =>
                 {
-                    pushed.Add(package);
-                    suppressCompanionSymbols.Add(suppressSymbols);
+                    pushed.Add(request.PackagePath);
+                    suppressCompanionSymbols.Add(request.SuppressCompanionSymbols);
                     return new DotNetRepositoryReleaseService.PackagePushResult
                     {
                         Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Published
@@ -123,9 +123,9 @@ public sealed class NuGetPackagePublishServiceTests
             var pushed = new List<string>();
             var service = new NuGetPackagePublishService(
                 new NullLogger(),
-                (package, _, _, _, _) =>
+                request =>
                 {
-                    pushed.Add(package);
+                    pushed.Add(request.PackagePath);
                     return new DotNetRepositoryReleaseService.PackagePushResult
                     {
                         Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
@@ -165,9 +165,9 @@ public sealed class NuGetPackagePublishServiceTests
             var pushed = new List<string>();
             var service = new NuGetPackagePublishService(
                 new NullLogger(),
-                (package, _, _, _, _) =>
+                request =>
                 {
-                    pushed.Add(package);
+                    pushed.Add(request.PackagePath);
                     return new DotNetRepositoryReleaseService.PackagePushResult
                     {
                         Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Published
@@ -201,7 +201,7 @@ public sealed class NuGetPackagePublishServiceTests
 
             var service = new NuGetPackagePublishService(
                 new NullLogger(),
-                (_, _, _, _, _) => new DotNetRepositoryReleaseService.PackagePushResult
+                _ => new DotNetRepositoryReleaseService.PackagePushResult
                 {
                     Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate,
                     Message = "already exists"
@@ -222,6 +222,136 @@ public sealed class NuGetPackagePublishServiceTests
             Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate, pushResult.Outcome);
             Assert.Equal("already exists", pushResult.Message);
             Assert.Empty(result.FailedItems);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ExecutePackages_UsesRepositoryContextForNamedSource()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-nuget-publish-context-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            var packagePath = Path.Combine(root.FullName, "Sample.1.0.0.nupkg");
+            File.WriteAllText(packagePath, "pkg");
+
+            DotNetNuGetPushRequest? captured = null;
+            var service = new NuGetPackagePublishService(
+                new NullLogger(),
+                request =>
+                {
+                    captured = request;
+                    return new DotNetRepositoryReleaseService.PackagePushResult
+                    {
+                        Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Published
+                    };
+                },
+                workingDirectory: root.FullName);
+
+            var result = service.ExecutePackages(
+                new[] { packagePath },
+                "key",
+                "PrivateFeed",
+                skipDuplicate: true);
+
+            Assert.True(result.Success);
+            Assert.NotNull(captured);
+            Assert.Equal("PrivateFeed", captured!.Source);
+            Assert.Equal(root.FullName, captured.WorkingDirectory);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ExecutePackages_DoesNotPushSymbolsAfterPrimaryFailure()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-nuget-publish-symbol-gate-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            var primary = Path.Combine(root.FullName, "Sample.1.0.0.nupkg");
+            var symbols = Path.Combine(root.FullName, "Sample.1.0.0.snupkg");
+            File.WriteAllText(primary, "primary");
+            File.WriteAllText(symbols, "symbols");
+
+            var pushed = new List<string>();
+            var service = new NuGetPackagePublishService(
+                new NullLogger(),
+                request =>
+                {
+                    pushed.Add(request.PackagePath);
+                    return new DotNetRepositoryReleaseService.PackagePushResult
+                    {
+                        Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
+                        Message = "primary failed"
+                    };
+                });
+
+            var result = service.ExecutePackages(
+                new[] { primary, symbols },
+                "key",
+                root.FullName,
+                skipDuplicate: false,
+                publishFailFast: false,
+                suppressCompanionSymbols: true);
+
+            Assert.False(result.Success);
+            Assert.Equal(new[] { primary }, pushed);
+            Assert.Equal(new[] { primary, symbols }, result.FailedItems);
+            Assert.Equal(
+                DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
+                result.PackagePushResults[symbols].Outcome);
+            Assert.Contains("primary package", result.PackagePushResults[symbols].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("primary failed", result.ErrorMessage);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ExecutePackages_PushesSymbolsAfterPrimaryDuplicateIsAllowed()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-nuget-publish-symbol-duplicate-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            var primary = Path.Combine(root.FullName, "Sample.1.0.0.nupkg");
+            var symbols = Path.Combine(root.FullName, "Sample.1.0.0.snupkg");
+            File.WriteAllText(primary, "primary");
+            File.WriteAllText(symbols, "symbols");
+
+            var pushed = new List<string>();
+            var service = new NuGetPackagePublishService(
+                new NullLogger(),
+                request =>
+                {
+                    pushed.Add(request.PackagePath);
+                    return new DotNetRepositoryReleaseService.PackagePushResult
+                    {
+                        Outcome = request.PackagePath.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase)
+                            ? DotNetRepositoryReleaseService.PackagePushOutcome.Published
+                            : DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate
+                    };
+                });
+
+            var result = service.ExecutePackages(
+                new[] { primary, symbols },
+                "key",
+                root.FullName,
+                skipDuplicate: true,
+                publishFailFast: false,
+                suppressCompanionSymbols: true);
+
+            Assert.True(result.Success);
+            Assert.Equal(new[] { primary, symbols }, pushed);
+            Assert.Contains(primary, result.SkippedDuplicateItems, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(symbols, result.PublishedItems, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {
