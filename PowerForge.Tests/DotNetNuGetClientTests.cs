@@ -17,12 +17,13 @@ public sealed class DotNetNuGetClientTests
             return new ProcessRunResult(0, "ok", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
         });
         var runtimeDirectory = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        var packagePath = Path.Combine(runtimeDirectory, "Artifacts", "Test.1.0.0.nupkg");
         var client = new DotNetNuGetClient(processRunner, runtimeDirectoryRoot: runtimeDirectory);
 
         try
         {
             var result = await client.PushPackageAsync(new DotNetNuGetPushRequest(
-                packagePath: @"C:\repo\Artifacts\Test.1.0.0.nupkg",
+                packagePath,
                 apiKey: "secret",
                 source: "https://api.nuget.org/v3/index.json",
                 skipDuplicate: true,
@@ -40,7 +41,7 @@ public sealed class DotNetNuGetClientTests
                 [
                     "nuget",
                     "push",
-                    @"C:\repo\Artifacts\Test.1.0.0.nupkg",
+                    packagePath,
                     "--api-key",
                     "secret",
                     "--source",
@@ -169,7 +170,7 @@ public sealed class DotNetNuGetClientTests
         try
         {
             var result = await client.PushPackageAsync(new DotNetNuGetPushRequest(
-                packagePath,
+                Path.GetRelativePath(root.FullName, packagePath),
                 "key",
                 "./feed",
                 skipDuplicate: true,
@@ -190,7 +191,7 @@ public sealed class DotNetNuGetClientTests
     }
 
     [Fact]
-    public async Task PushPackageAsync_WritesValuesWithSpacesAsSingleResponseFileLines()
+    public async Task PushPackageAsync_PreservesResponseFileValuesWithSpacesWithoutLiteralQuotes()
     {
         string? responseFileContent = null;
         var processRunner = new StubProcessRunner(request => {
@@ -198,25 +199,27 @@ public sealed class DotNetNuGetClientTests
             return new ProcessRunResult(0, "ok", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
         });
         var runtimeDirectory = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge Tests", Guid.NewGuid().ToString("N"))).FullName;
+        var packagePath = Path.Combine(runtimeDirectory, "repo with spaces", "Artifacts", "Test.1.0.0.nupkg");
+        var source = Path.Combine(runtimeDirectory, "local feed with spaces");
         var client = new DotNetNuGetClient(processRunner, runtimeDirectoryRoot: runtimeDirectory);
 
         try
         {
             var result = await client.PushPackageAsync(new DotNetNuGetPushRequest(
-                packagePath: @"C:\repo with spaces\Artifacts\Test.1.0.0.nupkg",
+                packagePath,
                 apiKey: "secret value",
-                source: @"C:\local feed with spaces"));
+                source));
 
             Assert.Equal(
                 string.Join(Environment.NewLine,
                 [
                     "nuget",
                     "push",
-                    @"C:\repo with spaces\Artifacts\Test.1.0.0.nupkg",
+                    packagePath,
                     "--api-key",
                     "secret value",
                     "--source",
-                    @"C:\local feed with spaces",
+                    source,
                     "--skip-duplicate"
                 ]),
                 responseFileContent);
@@ -225,6 +228,48 @@ public sealed class DotNetNuGetClientTests
         finally
         {
             try { Directory.Delete(runtimeDirectory, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task PushPackageAsync_PublishesRelativePathsWithSpacesUsingDotNetCli()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge NuGet Push",
+            Guid.NewGuid().ToString("N")));
+        var repositoryDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Repository With Spaces"));
+        var packageDirectory = Directory.CreateDirectory(Path.Combine(repositoryDirectory.FullName, "Artifacts With Spaces"));
+        var feedDirectory = Directory.CreateDirectory(Path.Combine(repositoryDirectory.FullName, "Feed With Spaces"));
+        var packageFileName = "Sample.Package.1.0.0.nupkg";
+        var packagePath = Path.Combine(packageDirectory.FullName, packageFileName);
+        TestPackageFactory.Create(packagePath, "Sample.Package", "1.0.0");
+        var client = new DotNetNuGetClient(
+            runtimeDirectoryRoot: Path.Combine(root.FullName, "Runtime With Spaces"));
+
+        try
+        {
+            var result = await client.PushPackageAsync(new DotNetNuGetPushRequest(
+                packagePath: Path.Combine("Artifacts With Spaces", packageFileName),
+                apiKey: "unused key",
+                source: Path.Combine(".", "Feed With Spaces"),
+                skipDuplicate: true,
+                workingDirectory: repositoryDirectory.FullName,
+                timeout: TimeSpan.FromMinutes(1),
+                suppressCompanionSymbols: true));
+
+            Assert.True(
+                result.Succeeded,
+                $"{result.ErrorMessage}{Environment.NewLine}{result.StdOut}{Environment.NewLine}{result.StdErr}");
+            Assert.Single(Directory.GetFiles(
+                feedDirectory.FullName,
+                packageFileName,
+                SearchOption.AllDirectories));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
         }
     }
 

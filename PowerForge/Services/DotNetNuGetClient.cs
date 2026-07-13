@@ -153,8 +153,8 @@ public sealed class DotNetNuGetClient
         string packagePath,
         string source)
     {
-        // dotnet response files treat each line as one argument and preserve quote characters.
-        // Writing shell-style quotes here therefore passes the quotes into options such as --source.
+        // The .NET CLI keeps quotes as literal characters when one response-file token is written per line.
+        // Keep whitespace-bearing values raw so paths and keys remain single tokens without embedded quotes.
         var lines = new List<string> {
             "nuget",
             "push",
@@ -179,29 +179,38 @@ public sealed class DotNetNuGetClient
     /// </summary>
     private static PushExecutionContext PreparePushExecutionContext(DotNetNuGetPushRequest request)
     {
-        var workingDirectory = ResolveWorkingDirectory(request.WorkingDirectory, request.PackagePath);
+        var configurationDirectory = string.IsNullOrWhiteSpace(request.WorkingDirectory)
+            ? Environment.CurrentDirectory
+            : PathValueResolver.Resolve(Environment.CurrentDirectory, request.WorkingDirectory!);
+        var packagePath = PathValueResolver.Resolve(
+            string.IsNullOrWhiteSpace(request.WorkingDirectory)
+                ? Environment.CurrentDirectory
+                : configurationDirectory,
+            request.PackagePath);
+        var workingDirectory = string.IsNullOrWhiteSpace(request.WorkingDirectory)
+            ? Path.GetDirectoryName(packagePath) ?? configurationDirectory
+            : configurationDirectory;
         var source = ResolvePushSource(request.Source, workingDirectory);
         if (request.SuppressCompanionSymbols ||
             string.IsNullOrWhiteSpace(request.WorkingDirectory) ||
-            request.PackagePath.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase) ||
-            !request.PackagePath.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase))
+            packagePath.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase) ||
+            !packagePath.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase))
         {
-            return new PushExecutionContext(request.PackagePath, source, workingDirectory, stagingDirectory: null);
+            return new PushExecutionContext(packagePath, source, workingDirectory, stagingDirectory: null);
         }
 
-        var symbolPackagePath = Path.ChangeExtension(request.PackagePath, ".snupkg");
+        var symbolPackagePath = Path.ChangeExtension(packagePath, ".snupkg");
         if (!File.Exists(symbolPackagePath))
-            return new PushExecutionContext(request.PackagePath, source, workingDirectory, stagingDirectory: null);
+            return new PushExecutionContext(packagePath, source, workingDirectory, stagingDirectory: null);
 
-        var configurationDirectory = Path.GetFullPath(workingDirectory);
         if (!Directory.Exists(configurationDirectory))
             throw new DirectoryNotFoundException($"NuGet push working directory not found: {configurationDirectory}");
 
-        var packageDirectory = Path.GetDirectoryName(Path.GetFullPath(request.PackagePath));
+        var packageDirectory = Path.GetDirectoryName(packagePath);
         if (!string.IsNullOrWhiteSpace(packageDirectory) &&
             IsSameOrChildDirectory(packageDirectory!, configurationDirectory))
         {
-            return new PushExecutionContext(request.PackagePath, source, packageDirectory!, stagingDirectory: null);
+            return new PushExecutionContext(packagePath, source, packageDirectory!, stagingDirectory: null);
         }
 
         var stagingDirectory = Path.Combine(
@@ -210,9 +219,9 @@ public sealed class DotNetNuGetClient
         try
         {
             Directory.CreateDirectory(stagingDirectory);
-            var stagedPackagePath = Path.Combine(stagingDirectory, Path.GetFileName(request.PackagePath));
+            var stagedPackagePath = Path.Combine(stagingDirectory, Path.GetFileName(packagePath));
             var stagedSymbolPackagePath = Path.Combine(stagingDirectory, Path.GetFileName(symbolPackagePath));
-            File.Copy(request.PackagePath, stagedPackagePath);
+            File.Copy(packagePath, stagedPackagePath);
             File.Copy(symbolPackagePath, stagedSymbolPackagePath);
             return new PushExecutionContext(stagedPackagePath, source, stagingDirectory, stagingDirectory);
         }

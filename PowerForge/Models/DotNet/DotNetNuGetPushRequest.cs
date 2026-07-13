@@ -8,7 +8,7 @@ public sealed class DotNetNuGetPushRequest
     /// <summary>
     /// Initializes a new instance of the <see cref="DotNetNuGetPushRequest"/> class.
     /// </summary>
-    /// <param name="packagePath">Package path to push.</param>
+    /// <param name="packagePath">Package path to push. Relative paths are resolved from <paramref name="workingDirectory" /> when supplied, or from the current process directory otherwise.</param>
     /// <param name="apiKey">API key passed to the feed.</param>
     /// <param name="source">Feed source URL, name, or local path. Explicit relative paths are resolved from <paramref name="workingDirectory" />.</param>
     /// <param name="skipDuplicate">When true, passes <c>--skip-duplicate</c>.</param>
@@ -35,7 +35,7 @@ public sealed class DotNetNuGetPushRequest
     /// <summary>
     /// Initializes a new instance of the <see cref="DotNetNuGetPushRequest"/> class.
     /// </summary>
-    /// <param name="packagePath">Package path to push.</param>
+    /// <param name="packagePath">Package path to push. Relative paths are resolved from <paramref name="workingDirectory" /> when supplied, or from the current process directory otherwise.</param>
     /// <param name="apiKey">API key passed to the feed.</param>
     /// <param name="source">Feed source URL, name, or local path. Explicit relative paths are resolved from <paramref name="workingDirectory" />.</param>
     /// <param name="skipDuplicate">When true, passes <c>--skip-duplicate</c>.</param>
@@ -61,7 +61,8 @@ public sealed class DotNetNuGetPushRequest
     }
 
     /// <summary>
-    /// Gets the package path to push.
+    /// Gets the package path to push. Relative paths are resolved from <see cref="WorkingDirectory" /> when supplied,
+    /// or from the current process directory otherwise.
     /// </summary>
     public string PackagePath { get; }
 
