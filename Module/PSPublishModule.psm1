@@ -15,51 +15,41 @@ $Standard = $false
 foreach ($A in $AssemblyFolders.Name) {
     if ($A -eq 'Default') {
         $Default = $true
-    }
-    elseif ($A -eq 'Core') {
+    } elseif ($A -eq 'Core') {
         $Core = $true
-    }
-    elseif ($A -eq 'Standard') {
+    } elseif ($A -eq 'Standard') {
         $Standard = $true
     }
 }
 if ($Standard -and $Core -and $Default) {
     $FrameworkNet = 'Default'
     $Framework = 'Standard'
-}
-elseif ($Standard -and $Core) {
+} elseif ($Standard -and $Core) {
     $Framework = 'Standard'
     $FrameworkNet = 'Standard'
-}
-elseif ($Core -and $Default) {
+} elseif ($Core -and $Default) {
     $Framework = 'Core'
     $FrameworkNet = 'Default'
-}
-elseif ($Standard -and $Default) {
+} elseif ($Standard -and $Default) {
     $Framework = 'Standard'
     $FrameworkNet = 'Default'
-}
-elseif ($Standard) {
+} elseif ($Standard) {
     $Framework = 'Standard'
     $FrameworkNet = 'Standard'
-}
-elseif ($Core) {
+} elseif ($Core) {
     $Framework = 'Core'
     $FrameworkNet = ''
-}
-elseif ($Default) {
+} elseif ($Default) {
     $Framework = 'Default'
     $FrameworkNet = 'Default'
-}
-else {
+} else {
     Write-Error -Message 'No assemblies found'
     return
 }
 
 if ($PSEdition -eq 'Core') {
     $LibFolder = $Framework
-}
-else {
+} else {
     $LibFolder = $FrameworkNet
 }
 
@@ -100,12 +90,10 @@ try {
             $PowerForgeAlcLibraryDirectory = $null
             if ([IO.Path]::IsPathRooted($LibFolder)) {
                 $PowerForgeAlcLibraryDirectory = [IO.Path]::GetFullPath($LibFolder)
-            }
-            elseif ($LibFolder.Contains('..') -or $LibFolder.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {
+            } elseif ($LibFolder.Contains('..') -or $LibFolder.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {
                 Write-Warning -Message "Module library folder '$LibFolder' must be a simple folder name or a rooted development binary directory. ALC dependency type exposure is disabled."
                 return
-            }
-            else {
+            } else {
                 $PowerForgeAlcLibraryDirectory = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder)
             }
 
@@ -157,15 +145,13 @@ try {
 
                 try {
                     return $ModuleAlc.LoadFromAssemblyName([System.Reflection.AssemblyName]::new($AssemblyName))
-                }
-                catch {
+                } catch {
                     $AssemblyPath = [IO.Path]::Combine($PowerForgeAlcLibraryDirectory, $AssemblyName + '.dll')
                     if (Test-Path -LiteralPath $AssemblyPath) {
                         try {
                             $AssemblyNameObject = [System.Reflection.AssemblyName]::GetAssemblyName($AssemblyPath)
                             return $ModuleAlc.LoadFromAssemblyName($AssemblyNameObject)
-                        }
-                        catch {
+                        } catch {
                             Write-Warning -Message "Could not load ALC assembly '$AssemblyName' for type accelerator exposure: $($_.Exception.Message)"
                         }
                     }
@@ -201,8 +187,7 @@ try {
                         if ($null -ne $Type) {
                             return $Type
                         }
-                    }
-                    catch {
+                    } catch {
                         continue
                     }
                 }
@@ -223,16 +208,14 @@ try {
                     $ExistingType = $Existing[$Name]
                     if ([object]::ReferenceEquals($ExistingType, $Type)) {
                         return
-                    }
-                    else {
+                    } else {
                         $ExistingAssemblyName = $ExistingType.Assembly.GetName()
                         $TypeAssemblyName = $Type.Assembly.GetName()
                         $ExistingLoadContext = [System.Runtime.Loader.AssemblyLoadContext]::GetLoadContext($ExistingType.Assembly)
                         $TypeLoadContext = [System.Runtime.Loader.AssemblyLoadContext]::GetLoadContext($Type.Assembly)
                         if ([object]::ReferenceEquals($ExistingLoadContext, $TypeLoadContext) -and [object]::Equals($ExistingAssemblyName.FullName, $TypeAssemblyName.FullName)) {
                             Write-Verbose -Message "Type accelerator '$Name' already exists in the same AssemblyLoadContext from the same assembly identity. Keeping the existing accelerator and skipping the duplicate type from $($TypeAssemblyName.Name)."
-                        }
-                        else {
+                        } else {
                             Write-Warning -Message "Type accelerator '$Name' already exists from $($ExistingAssemblyName.FullName). Keeping the existing accelerator and skipping the ALC type from $($TypeAssemblyName.FullName)."
                         }
                     }
@@ -241,8 +224,7 @@ try {
 
                 try {
                     $AddTypeAccelerator.Invoke($null, @($Name, $Type)) | Out-Null
-                }
-                catch {
+                } catch {
                     Write-Warning -Message "Type accelerator '$Name' could not be registered from $($Type.Assembly.GetName().Name): $($_.Exception.Message)"
                     return
                 }
@@ -260,8 +242,7 @@ try {
 
                     try {
                         $ExportedTypes = @($Assembly.GetExportedTypes())
-                    }
-                    catch {
+                    } catch {
                         Write-Warning -Message "Could not enumerate exported types from assembly '$AssemblyName' for type accelerator exposure: $($_.Exception.Message)"
                         continue
                     }
@@ -308,8 +289,7 @@ try {
                                 $RemoveTypeAccelerator.Invoke($null, @($Entry.Key)) | Out-Null
                             }
                         }
-                    }
-                    finally {
+                    } finally {
                         if ($null -ne $PreviousPowerForgeOnRemove) {
                             & $PreviousPowerForgeOnRemove @args
                         }
@@ -321,8 +301,7 @@ try {
         # Type accelerator exposure is PowerShell Core-only because it depends on AssemblyLoadContext.
         try {
             & $RegisterPowerForgeAssemblyTypeAccelerators -ModuleAssembly $ModuleAssembly -LibFolder $LibFolder
-        }
-        catch {
+        } catch {
             Write-Warning -Message "ALC type accelerator registration failed: $($_.Exception.Message)"
         }
 
@@ -347,8 +326,7 @@ try {
                     foreach ($Alias in $InnerModule.ExportedAliases.Values) {
                         $AliasTarget = if ([string]::IsNullOrWhiteSpace($Alias.Definition)) {
                             $Alias.ResolvedCommandName 
-                        }
-                        else {
+                        } else {
                             $Alias.Definition 
                         }
                         try {
@@ -357,39 +335,31 @@ try {
                             $ExportedAlias = $ExecutionContext.SessionState.InvokeCommand.GetCommand($Alias.Name, [System.Management.Automation.CommandTypes]::Alias)
                             if ($null -ne $ExportedAlias) {
                                 $AddExportedAlias.Invoke($ExecutionContext.SessionState.Module, @(, $ExportedAlias)) | Out-Null
-                            }
-                            else {
+                            } else {
                                 Write-Warning -Message "Alias '$($Alias.Name)' from $LibraryName was created but could not be resolved for export."
                             }
-                        }
-                        catch {
+                        } catch {
                             Write-Warning -Message "Alias '$($Alias.Name)' from $LibraryName could not be re-exported: $($_.Exception.Message)"
                         }
                     }
-                }
-                else {
+                } else {
                     Write-Warning -Message "AddExportedAlias is not available on this PowerShell version. Aliases from $LibraryName will not be re-exported to the module scope."
                 }
-            }
-            else {
+            } else {
                 Write-Warning -Message "AddExportedCmdlet is not available on this PowerShell version. Falling back to direct Import-Module; cmdlets from $LibraryName will load from the default context."
                 & $ImportModule $ModuleAssemblyPath -ErrorAction Stop
             }
         }
-    }
-    elseif (-not ($Class -as [type])) {
+    } elseif (-not ($Class -as [type])) {
         & $ImportModule $ModuleAssemblyPath -ErrorAction Stop
-    }
-    else {
+    } else {
         $Type = "$Class" -as [Type]
         & $ImportModule -Force -Assembly ($Type.Assembly)
     }
-}
-catch {
+} catch {
     if ($ErrorActionPreference -eq 'Stop') {
         throw
-    }
-    else {
+    } else {
         Write-Warning -Message "Importing module $Library failed. Fix errors before continuing. Error: $($_.Exception.Message)"
     }
 }
