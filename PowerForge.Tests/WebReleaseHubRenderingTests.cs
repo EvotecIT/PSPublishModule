@@ -22,6 +22,8 @@ public class WebReleaseHubRenderingTests
         Assert.Contains("Download Chat", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("data-release-platform=\"windows\"", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Platform: Windows", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<h3 class=\"pf-release-group-title\">Platform: Windows</h3>", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<h4 class=\"pf-release-group-title\">", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Latest Stable", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Preview", html, StringComparison.OrdinalIgnoreCase);
     }
