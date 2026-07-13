@@ -4,24 +4,24 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# Get-AppStoreConnectSubscriptionPrice
+# Get-AppStoreConnectSubscriptionPricePoint
 ## SYNOPSIS
-Reads App Store Connect prices configured for an auto-renewable subscription.
+Reads App Store Connect price points available for an auto-renewable subscription and territory.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Get-AppStoreConnectSubscriptionPrice -IssuerId <string> -KeyId <string> -SubscriptionId <string> [-PrivateKey <string>] [-PrivateKeyPath <string>] [-TokenLifetimeMinutes <int>] [-Limit <int>] [<CommonParameters>]
+Get-AppStoreConnectSubscriptionPricePoint -IssuerId <string> -KeyId <string> -SubscriptionId <string> -TerritoryId <string> [-PrivateKey <string>] [-PrivateKeyPath <string>] [-TokenLifetimeMinutes <int>] [-Limit <int>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Reads App Store Connect prices configured for an auto-renewable subscription.
+Reads App Store Connect price points available for an auto-renewable subscription and territory.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-Get-AppStoreConnectSubscriptionPrice -IssuerId 'Value' -KeyId 'Value' -SubscriptionId 'Value'
+Get-AppStoreConnectSubscriptionPricePoint -IssuerId 'Value' -KeyId 'Value' -SubscriptionId 'Value' -TerritoryId 'Value'
 ```
 
 
@@ -123,6 +123,22 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -TerritoryId
+Territory resource id used to filter the available price points.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -TokenLifetimeMinutes
 Token lifetime in minutes, up to 20.
 
@@ -148,7 +164,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `PowerForge.AppStoreConnectSubscriptionPriceInfo`
+- `PowerForge.AppStoreConnectSubscriptionPricePointInfo`
 
 ## RELATED LINKS
 

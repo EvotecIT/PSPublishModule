@@ -100,8 +100,8 @@ Reads App Store Connect auto-renewable subscription products for an app.
 ### [Get-AppStoreConnectSubscriptionIntroductoryOffer](Get-AppStoreConnectSubscriptionIntroductoryOffer.md)
 Reads App Store Connect introductory offers for an auto-renewable subscription.
 
-### [Get-AppStoreConnectSubscriptionPrice](Get-AppStoreConnectSubscriptionPrice.md)
-Reads App Store Connect prices configured for an auto-renewable subscription.
+### [Get-AppStoreConnectSubscriptionPricePoint](Get-AppStoreConnectSubscriptionPricePoint.md)
+Reads App Store Connect price points available for an auto-renewable subscription and territory.
 
 ### [Get-AppStoreConnectVersion](Get-AppStoreConnectVersion.md)
 Reads App Store version information from App Store Connect.

@@ -34,7 +34,7 @@ Introductory-offer duration.
 Type: AppStoreConnectSubscriptionOfferDuration
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: OneDay, ThreeDays, OneWeek, TwoWeeks, OneMonth, TwoMonths, ThreeMonths, SixMonths, OneYear
+Possible values: ThreeDays, OneWeek, TwoWeeks, OneMonth, TwoMonths, ThreeMonths, SixMonths, OneYear
 
 Required: True
 Position: named

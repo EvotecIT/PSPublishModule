@@ -5898,19 +5898,19 @@ This cmdlet exports the selected certificate from the local certificate store.</
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
-      <command:name>Get-AppStoreConnectSubscriptionPrice</command:name>
+      <command:name>Get-AppStoreConnectSubscriptionPricePoint</command:name>
       <command:verb>Get</command:verb>
-      <command:noun>AppStoreConnectSubscriptionPrice</command:noun>
+      <command:noun>AppStoreConnectSubscriptionPricePoint</command:noun>
       <maml:description>
-        <maml:para>Reads App Store Connect prices configured for an auto-renewable subscription.</maml:para>
+        <maml:para>Reads App Store Connect price points available for an auto-renewable subscription and territory.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Reads App Store Connect prices configured for an auto-renewable subscription.</maml:para>
+      <maml:para>Reads App Store Connect price points available for an auto-renewable subscription and territory.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
-        <maml:name>Get-AppStoreConnectSubscriptionPrice</maml:name>
+        <maml:name>Get-AppStoreConnectSubscriptionPricePoint</maml:name>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>IssuerId</maml:name>
           <maml:description>
@@ -5975,6 +5975,18 @@ This cmdlet exports the selected certificate from the local certificate store.</
           <maml:name>SubscriptionId</maml:name>
           <maml:description>
             <maml:para>App Store Connect subscription resource id.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TerritoryId</maml:name>
+          <maml:description>
+            <maml:para>Territory resource id used to filter the available price points.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -6070,6 +6082,18 @@ This cmdlet exports the selected certificate from the local certificate store.</
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>TerritoryId</maml:name>
+        <maml:description>
+          <maml:para>Territory resource id used to filter the available price points.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>TokenLifetimeMinutes</maml:name>
         <maml:description>
@@ -6093,7 +6117,7 @@ This cmdlet exports the selected certificate from the local certificate store.</
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.AppStoreConnectSubscriptionPriceInfo</maml:name>
+          <maml:name>PowerForge.AppStoreConnectSubscriptionPricePointInfo</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
@@ -6105,7 +6129,7 @@ This cmdlet exports the selected certificate from the local certificate store.</
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Get-AppStoreConnectSubscriptionPrice -IssuerId 'Value' -KeyId 'Value' -SubscriptionId 'Value'</dev:code>
+        <dev:code>Get-AppStoreConnectSubscriptionPricePoint -IssuerId 'Value' -KeyId 'Value' -SubscriptionId 'Value' -TerritoryId 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -27510,7 +27534,6 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           </maml:description>
           <command:parameterValue required="true" variableLength="false">AppStoreConnectSubscriptionOfferDuration</command:parameterValue>
           <command:parameterValueGroup>
-            <command:parameterValue required="false" variableLength="false">OneDay</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">ThreeDays</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">OneWeek</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">TwoWeeks</command:parameterValue>
@@ -27686,7 +27709,6 @@ because App Store Connect price points are territory-specific.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">AppStoreConnectSubscriptionOfferDuration</command:parameterValue>
         <command:parameterValueGroup>
-          <command:parameterValue required="false" variableLength="false">OneDay</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">ThreeDays</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">OneWeek</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">TwoWeeks</command:parameterValue>

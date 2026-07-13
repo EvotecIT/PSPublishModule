@@ -4,11 +4,11 @@ using PowerForge;
 namespace PSPublishModule;
 
 /// <summary>
-/// Reads App Store Connect prices configured for an auto-renewable subscription.
+/// Reads App Store Connect price points available for an auto-renewable subscription and territory.
 /// </summary>
-[Cmdlet(VerbsCommon.Get, "AppStoreConnectSubscriptionPrice")]
-[OutputType(typeof(AppStoreConnectSubscriptionPriceInfo))]
-public sealed class GetAppStoreConnectSubscriptionPriceCommand : PSCmdlet
+[Cmdlet(VerbsCommon.Get, "AppStoreConnectSubscriptionPricePoint")]
+[OutputType(typeof(AppStoreConnectSubscriptionPricePointInfo))]
+public sealed class GetAppStoreConnectSubscriptionPricePointCommand : PSCmdlet
 {
     /// <summary>Issuer ID from App Store Connect API keys.</summary>
     [Parameter(Mandatory = true)] public string IssuerId { get; set; } = string.Empty;
@@ -30,16 +30,21 @@ public sealed class GetAppStoreConnectSubscriptionPriceCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string SubscriptionId { get; set; } = string.Empty;
 
+    /// <summary>Territory resource id used to filter the available price points.</summary>
+    [Parameter(Mandatory = true)]
+    [ValidateNotNullOrEmpty]
+    public string TerritoryId { get; set; } = string.Empty;
+
     /// <summary>Maximum result count per App Store Connect request.</summary>
     [Parameter] public int Limit { get; set; } = 200;
 
-    /// <summary>Reads configured subscription prices.</summary>
+    /// <summary>Reads available subscription price points.</summary>
     protected override void ProcessRecord()
     {
         var privateKeyPath = AppStoreConnectCommandSupport.ResolvePrivateKeyPath(SessionState, PrivateKeyPath);
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
-        var prices = client.GetSubscriptionPricesAsync(SubscriptionId, Limit).GetAwaiter().GetResult();
-        WriteObject(prices, enumerateCollection: true);
+        var pricePoints = client.GetSubscriptionPricePointsAsync(SubscriptionId, TerritoryId, Limit).GetAwaiter().GetResult();
+        WriteObject(pricePoints, enumerateCollection: true);
     }
 }

@@ -5,9 +5,6 @@ namespace PowerForge;
 /// </summary>
 public enum AppStoreConnectSubscriptionOfferDuration
 {
-    /// <summary>One day.</summary>
-    OneDay,
-
     /// <summary>Three days.</summary>
     ThreeDays,
 
@@ -49,27 +46,24 @@ public enum AppStoreConnectSubscriptionOfferMode
 }
 
 /// <summary>
-/// App Store Connect price configured for an auto-renewable subscription in a territory.
+/// App Store Connect price point available for an auto-renewable subscription in a territory.
 /// </summary>
-public sealed class AppStoreConnectSubscriptionPriceInfo
+public sealed class AppStoreConnectSubscriptionPricePointInfo
 {
     /// <summary>App Store Connect resource id.</summary>
     public string Id { get; set; } = string.Empty;
 
-    /// <summary>Date on which the price becomes effective.</summary>
-    public string? StartDate { get; set; }
+    /// <summary>Customer-facing price returned by App Store Connect.</summary>
+    public string? CustomerPrice { get; set; }
 
-    /// <summary>Whether existing subscribers keep their current price.</summary>
-    public bool? Preserved { get; set; }
+    /// <summary>Developer proceeds returned by App Store Connect.</summary>
+    public string? Proceeds { get; set; }
 
-    /// <summary>Subscription pricing plan type returned by App Store Connect.</summary>
-    public string? PlanType { get; set; }
+    /// <summary>Developer proceeds after the first year, when supplied by App Store Connect.</summary>
+    public string? ProceedsYear2 { get; set; }
 
-    /// <summary>Territory resource id for the configured price.</summary>
+    /// <summary>Territory resource id for the available price point.</summary>
     public string? TerritoryId { get; set; }
-
-    /// <summary>Subscription price point resource id.</summary>
-    public string? SubscriptionPricePointId { get; set; }
 }
 
 /// <summary>

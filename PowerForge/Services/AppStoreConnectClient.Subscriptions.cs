@@ -6,25 +6,29 @@ namespace PowerForge;
 public sealed partial class AppStoreConnectClient
 {
     /// <summary>
-    /// Lists prices configured for an auto-renewable subscription by territory.
+    /// Lists price points available for an auto-renewable subscription in a territory.
     /// </summary>
-    public Task<AppStoreConnectSubscriptionPriceInfo[]> GetSubscriptionPricesAsync(
+    public Task<AppStoreConnectSubscriptionPricePointInfo[]> GetSubscriptionPricePointsAsync(
         string subscriptionId,
+        string territoryId,
         int limit = 200,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(subscriptionId))
             throw new ArgumentException("Subscription id is required.", nameof(subscriptionId));
+        if (string.IsNullOrWhiteSpace(territoryId))
+            throw new ArgumentException("Territory id is required.", nameof(territoryId));
 
         var query = new Dictionary<string, string?>
         {
-            ["include"] = "territory,subscriptionPricePoint",
+            ["include"] = "territory",
+            ["filter[territory]"] = territoryId.Trim(),
             ["limit"] = ClampLimit(limit).ToString(CultureInfo.InvariantCulture)
         };
 
         return GetArrayAsync(
-            $"subscriptions/{Uri.EscapeDataString(subscriptionId.Trim())}/prices" + BuildQuery(query),
-            ParseSubscriptionPrice,
+            $"subscriptions/{Uri.EscapeDataString(subscriptionId.Trim())}/pricePoints" + BuildQuery(query),
+            ParseSubscriptionPricePoint,
             cancellationToken);
     }
 
@@ -141,17 +145,16 @@ public sealed partial class AppStoreConnectClient
         };
     }
 
-    private static AppStoreConnectSubscriptionPriceInfo ParseSubscriptionPrice(JsonElement item)
+    private static AppStoreConnectSubscriptionPricePointInfo ParseSubscriptionPricePoint(JsonElement item)
     {
         var attrs = GetAttributes(item);
-        return new AppStoreConnectSubscriptionPriceInfo
+        return new AppStoreConnectSubscriptionPricePointInfo
         {
             Id = GetString(item, "id") ?? string.Empty,
-            StartDate = GetString(attrs, "startDate"),
-            Preserved = GetBool(attrs, "preserved"),
-            PlanType = GetString(attrs, "planType"),
-            TerritoryId = GetRelationshipDataId(item, "territory"),
-            SubscriptionPricePointId = GetRelationshipDataId(item, "subscriptionPricePoint")
+            CustomerPrice = GetString(attrs, "customerPrice"),
+            Proceeds = GetString(attrs, "proceeds"),
+            ProceedsYear2 = GetString(attrs, "proceedsYear2"),
+            TerritoryId = GetRelationshipDataId(item, "territory")
         };
     }
 
@@ -159,7 +162,6 @@ public sealed partial class AppStoreConnectClient
     {
         return duration switch
         {
-            AppStoreConnectSubscriptionOfferDuration.OneDay => "ONE_DAY",
             AppStoreConnectSubscriptionOfferDuration.ThreeDays => "THREE_DAYS",
             AppStoreConnectSubscriptionOfferDuration.OneWeek => "ONE_WEEK",
             AppStoreConnectSubscriptionOfferDuration.TwoWeeks => "TWO_WEEKS",

@@ -9,23 +9,22 @@ namespace PowerForge.Tests;
 public sealed partial class AppStoreConnectClientTests
 {
     [Fact]
-    public async Task GetSubscriptionPrices_ParsesTerritoryAndPricePoint()
+    public async Task GetSubscriptionPricePoints_ParsesTerritoryAndAmounts()
     {
         var handler = new RecordingHandler(
             """
             {
               "data": [
                 {
-                  "id": "price-1",
-                  "type": "subscriptionPrices",
+                  "id": "point-1",
+                  "type": "subscriptionPricePoints",
                   "attributes": {
-                    "startDate": "2026-07-01",
-                    "preserved": false,
-                    "planType": "MONTHLY"
+                    "customerPrice": "4.99",
+                    "proceeds": "3.50",
+                    "proceedsYear2": "4.25"
                   },
                   "relationships": {
-                    "territory": { "data": { "type": "territories", "id": "POL" } },
-                    "subscriptionPricePoint": { "data": { "type": "subscriptionPricePoints", "id": "point-1" } }
+                    "territory": { "data": { "type": "territories", "id": "POL" } }
                   }
                 }
               ]
@@ -34,17 +33,16 @@ public sealed partial class AppStoreConnectClientTests
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
         using var client = new AppStoreConnectClient(CreateCredential(), http);
 
-        var prices = await client.GetSubscriptionPricesAsync("subscription-1");
+        var pricePoints = await client.GetSubscriptionPricePointsAsync("subscription-1", "POL");
 
-        var price = Assert.Single(prices);
-        Assert.Equal("price-1", price.Id);
-        Assert.Equal("2026-07-01", price.StartDate);
-        Assert.False(price.Preserved);
-        Assert.Equal("MONTHLY", price.PlanType);
-        Assert.Equal("POL", price.TerritoryId);
-        Assert.Equal("point-1", price.SubscriptionPricePointId);
+        var pricePoint = Assert.Single(pricePoints);
+        Assert.Equal("point-1", pricePoint.Id);
+        Assert.Equal("4.99", pricePoint.CustomerPrice);
+        Assert.Equal("3.50", pricePoint.Proceeds);
+        Assert.Equal("4.25", pricePoint.ProceedsYear2);
+        Assert.Equal("POL", pricePoint.TerritoryId);
         Assert.Equal(
-            "https://api.appstoreconnect.apple.com/v1/subscriptions/subscription-1/prices?include=territory%2CsubscriptionPricePoint&limit=200",
+            "https://api.appstoreconnect.apple.com/v1/subscriptions/subscription-1/pricePoints?include=territory&filter%5Bterritory%5D=POL&limit=200",
             Assert.Single(handler.RequestUris).ToString());
     }
 
@@ -88,8 +86,52 @@ public sealed partial class AppStoreConnectClientTests
             Assert.Single(handler.RequestUris).ToString());
     }
 
+    [Fact]
+    public async Task GetSubscriptionIntroductoryOffers_FollowsNextPageLink()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "offer-1",
+                      "type": "subscriptionIntroductoryOffers",
+                      "attributes": { "duration": "TWO_WEEKS", "offerMode": "FREE_TRIAL", "numberOfPeriods": 1 }
+                    }
+                  ],
+                  "links": {
+                    "next": "https://api.appstoreconnect.apple.com/v1/subscriptions/subscription-1/introductoryOffers?cursor=next-page"
+                  }
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "offer-2",
+                      "type": "subscriptionIntroductoryOffers",
+                      "attributes": { "duration": "ONE_MONTH", "offerMode": "FREE_TRIAL", "numberOfPeriods": 1 }
+                    }
+                  ],
+                  "links": { "next": null }
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var offers = await client.GetSubscriptionIntroductoryOffersAsync("subscription-1");
+
+        Assert.Equal(new[] { "offer-1", "offer-2" }, offers.Select(static offer => offer.Id));
+        Assert.Equal(2, handler.RequestUris.Count);
+        Assert.Equal(
+            "https://api.appstoreconnect.apple.com/v1/subscriptions/subscription-1/introductoryOffers?cursor=next-page",
+            handler.RequestUris[1].ToString());
+    }
+
     [Theory]
-    [InlineData(AppStoreConnectSubscriptionOfferDuration.OneDay, "ONE_DAY")]
+    [InlineData(AppStoreConnectSubscriptionOfferDuration.ThreeDays, "THREE_DAYS")]
     [InlineData(AppStoreConnectSubscriptionOfferDuration.TwoWeeks, "TWO_WEEKS")]
     public async Task CreateSubscriptionIntroductoryOffer_PostsFreeTrialRequest(
         AppStoreConnectSubscriptionOfferDuration duration,
