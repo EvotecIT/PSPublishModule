@@ -51,6 +51,28 @@ public sealed class AsyncPSCmdletTests
         var item = Assert.Single(result);
         Assert.Equal("queued-output", item.BaseObject);
     }
+
+    [Fact]
+    public void AsyncPSCmdlet_does_not_capture_a_host_synchronization_context()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncSynchronizationContext",
+            typeof(TestAsyncSynchronizationContextCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncSynchronizationContext");
+
+        var result = powerShell.Invoke();
+
+        Assert.False(powerShell.HadErrors, string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString())));
+        var item = Assert.Single(result);
+        Assert.Equal(0, item.BaseObject);
+    }
 }
 
 [Cmdlet(VerbsDiagnostic.Test, "AsyncThreadAffinity")]
@@ -100,5 +122,45 @@ public sealed class TestAsyncQueuedOutputCommand : AsyncPSCmdlet
             throw workerException;
 
         return Task.CompletedTask;
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncSynchronizationContext")]
+public sealed class TestAsyncSynchronizationContextCommand : AsyncPSCmdlet
+{
+    private ForwardingSynchronizationContext? _context;
+
+    protected override void ProcessRecord()
+    {
+        var previousContext = SynchronizationContext.Current;
+        _context = new ForwardingSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(_context);
+        try
+        {
+            base.ProcessRecord();
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+        }
+    }
+
+    protected override async Task ProcessRecordAsync()
+    {
+        await Task.Yield();
+        WriteObject(_context!.PostCount);
+    }
+}
+
+public sealed class ForwardingSynchronizationContext : SynchronizationContext
+{
+    private int _postCount;
+
+    public int PostCount => Volatile.Read(ref _postCount);
+
+    public override void Post(SendOrPostCallback callback, object? state)
+    {
+        Interlocked.Increment(ref _postCount);
+        ThreadPool.QueueUserWorkItem(_ => callback(state));
     }
 }
