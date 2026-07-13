@@ -2,6 +2,8 @@
 
 ## Unreleased
 ### What's Changed
+- Hardened the canonical `AsyncPSCmdlet` lifecycle with request-specific prompt and `ShouldProcess` replies while preserving PowerShell-thread execution until the first await.
+- Converted Task-backed App Store Connect and managed catalog cmdlets from sync-over-async blocking to cancellable asynchronous lifecycle hooks.
 - Added `Import-IsolatedModule` with a built-in `ExchangeOnlineManagement` profile that loads EXO binary assemblies through a module-scoped AssemblyLoadContext, allowing EXO's OData 7.22 dependency line to coexist with Az.Storage's OData 7.6 line in the same PowerShell 7 process.
 - Added a built-in `MicrosoftTeams` profile for `Import-IsolatedModule` that loads the Teams connect, Teams cmdlet, policy administration, and ConfigAPI binary surfaces through `MicrosoftTeams.ALC`.
 - Added `Import-IsolatedModule -PreferIsolatedModulePath` so downstream modules that import a profiled module by name can opt into resolving the generated isolated copy first for the current PowerShell process.

@@ -9,6 +9,28 @@ namespace PowerForge.Tests;
 public sealed class AsyncPSCmdletTests
 {
     [Fact]
+    public void AsyncPSCmdlet_starts_hooks_on_the_pipeline_thread_and_pumps_after_await()
+    {
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry(
+            "Test-AsyncThreadAffinity",
+            typeof(TestAsyncThreadAffinityCommand),
+            helpFileName: null));
+
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var powerShell = PowerShell.Create();
+        powerShell.Runspace = runspace;
+        powerShell.AddCommand("Test-AsyncThreadAffinity");
+
+        var result = powerShell.Invoke();
+
+        Assert.False(powerShell.HadErrors, string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString())));
+        var item = Assert.Single(result);
+        Assert.Equal("post-await-output", item.BaseObject);
+    }
+
+    [Fact]
     public void AsyncPSCmdlet_drains_worker_thread_writes_when_task_completes_synchronously()
     {
         var sessionState = InitialSessionState.CreateDefault();
@@ -28,6 +50,25 @@ public sealed class AsyncPSCmdletTests
         Assert.False(powerShell.HadErrors, string.Join(Environment.NewLine, powerShell.Streams.Error.Select(static error => error.ToString())));
         var item = Assert.Single(result);
         Assert.Equal("queued-output", item.BaseObject);
+    }
+}
+
+[Cmdlet(VerbsDiagnostic.Test, "AsyncThreadAffinity")]
+public sealed class TestAsyncThreadAffinityCommand : AsyncPSCmdlet
+{
+    private int _pipelineThreadId;
+
+    protected override void BeginProcessing()
+    {
+        _pipelineThreadId = Environment.CurrentManagedThreadId;
+        base.BeginProcessing();
+    }
+
+    protected override async Task ProcessRecordAsync()
+    {
+        Assert.Equal(_pipelineThreadId, Environment.CurrentManagedThreadId);
+        await Task.Yield();
+        WriteObject("post-await-output");
     }
 }
 

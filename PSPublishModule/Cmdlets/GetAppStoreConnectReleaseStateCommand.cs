@@ -1,5 +1,6 @@
 using System;
 using System.Management.Automation;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -9,7 +10,7 @@ namespace PSPublishModule;
 /// </summary>
 [Cmdlet(VerbsCommon.Get, "AppStoreConnectReleaseState")]
 [OutputType(typeof(AppStoreConnectReleaseStateResult))]
-public sealed class GetAppStoreConnectReleaseStateCommand : PSCmdlet
+public sealed class GetAppStoreConnectReleaseStateCommand : AsyncPSCmdlet
 {
     /// <summary>Issuer ID from App Store Connect API keys.</summary>
     [Parameter(Mandatory = true)] public string IssuerId { get; set; } = string.Empty;
@@ -48,13 +49,13 @@ public sealed class GetAppStoreConnectReleaseStateCommand : PSCmdlet
     [Parameter] public SwitchParameter IncludeAllBetaGroups { get; set; }
 
     /// <summary>Reads App Store Connect release state.</summary>
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         var privateKeyPath = AppStoreConnectCommandSupport.ResolvePrivateKeyPath(SessionState, PrivateKeyPath);
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
         var service = new AppStoreConnectReleaseStateService(client);
-        var result = service.GetAsync(new AppStoreConnectReleaseStateRequest
+        var result = await service.GetAsync(new AppStoreConnectReleaseStateRequest
         {
             Credential = credential,
             AppId = AppId,
@@ -64,7 +65,7 @@ public sealed class GetAppStoreConnectReleaseStateCommand : PSCmdlet
             BetaGroupIds = BetaGroupId,
             BetaGroupNames = BetaGroupName,
             IncludeAllBetaGroups = IncludeAllBetaGroups.IsPresent
-        }).GetAwaiter().GetResult();
+        }, CancelToken);
 
         WriteObject(result);
     }

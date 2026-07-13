@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -8,7 +9,7 @@ namespace PSPublishModule;
 /// </summary>
 [Cmdlet(VerbsCommon.Set, "AppStoreConnectVersionBuild", SupportsShouldProcess = true)]
 [OutputType(typeof(AppStoreConnectReleasePreparationResult))]
-public sealed class SetAppStoreConnectVersionBuildCommand : PSCmdlet
+public sealed class SetAppStoreConnectVersionBuildCommand : AsyncPSCmdlet
 {
     /// <summary>Issuer ID from App Store Connect API keys.</summary>
     [Parameter(Mandatory = true)] public string IssuerId { get; set; } = string.Empty;
@@ -47,7 +48,7 @@ public sealed class SetAppStoreConnectVersionBuildCommand : PSCmdlet
     [Parameter] public SwitchParameter AllowUnprocessedBuild { get; set; }
 
     /// <summary>Creates or finds an App Store version and selects a processed build for Distribution.</summary>
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         var target = $"{AppId.Trim()} {Platform} {VersionString.Trim()} ({BuildNumber.Trim()})";
         if (!ShouldProcess(target, "Prepare App Store Connect version build"))
@@ -57,7 +58,7 @@ public sealed class SetAppStoreConnectVersionBuildCommand : PSCmdlet
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
         var service = new AppStoreConnectReleasePreparationService(client);
-        var result = service.PrepareAsync(new AppStoreConnectReleasePreparationRequest
+        var result = await service.PrepareAsync(new AppStoreConnectReleasePreparationRequest
         {
             AppId = AppId,
             VersionString = VersionString,
@@ -66,7 +67,7 @@ public sealed class SetAppStoreConnectVersionBuildCommand : PSCmdlet
             CreateVersion = !NoCreateVersion.IsPresent,
             SelectBuild = !NoSelectBuild.IsPresent,
             RequireValidBuild = !AllowUnprocessedBuild.IsPresent
-        }).GetAwaiter().GetResult();
+        }, CancelToken);
 
         WriteObject(result);
     }

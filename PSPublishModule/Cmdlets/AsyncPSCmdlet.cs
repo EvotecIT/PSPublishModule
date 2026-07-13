@@ -10,6 +10,11 @@ namespace PSPublishModule;
 /// Base class for cmdlets that await asynchronous engine work while routing PowerShell pipeline writes
 /// back through the synchronous cmdlet pipeline thread.
 /// </summary>
+/// <remarks>
+/// Invoke asynchronous hooks on the PowerShell pipeline thread until their first incomplete await.
+/// Keep hook implementations asynchronous all the way through and pass <see cref="CancelToken"/> to
+/// cancellable engine operations. Do not block with Task.Wait, Task.Result, or Task.WaitAll.
+/// </remarks>
 public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
 {
     private enum PipelineType
@@ -26,9 +31,24 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
         PromptForCredential
     }
 
+    private sealed class PipelineItem
+    {
+        public PipelineItem(object? value, PipelineType type, BlockingCollection<object?>? replyPipe = null)
+        {
+            Value = value;
+            Type = type;
+            ReplyPipe = replyPipe;
+        }
+
+        public object? Value { get; }
+
+        public PipelineType Type { get; }
+
+        public BlockingCollection<object?>? ReplyPipe { get; }
+    }
+
     private readonly CancellationTokenSource _cancelSource = new();
-    private BlockingCollection<(object? Value, PipelineType Type)>? _currentOutPipe;
-    private BlockingCollection<object?>? _currentReplyPipe;
+    private BlockingCollection<PipelineItem>? _currentOutPipe;
     private int _pipelineThreadId;
 
     /// <summary>Cancellation token triggered when PowerShell stops the cmdlet.</summary>
@@ -66,22 +86,24 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
     public new bool ShouldProcess(string? target, string action)
     {
         ThrowIfStopped();
-        if (_currentOutPipe is null || _currentReplyPipe is null || IsPipelineThread)
+        if (_currentOutPipe is null || IsPipelineThread)
             return base.ShouldProcess(target ?? string.Empty, action);
 
-        _currentOutPipe.Add(((target ?? string.Empty, action), PipelineType.ShouldProcess), CancelToken);
-        return (bool)_currentReplyPipe.Take(CancelToken)!;
+        using var replyPipe = new BlockingCollection<object?>(boundedCapacity: 1);
+        _currentOutPipe.Add(new PipelineItem((target ?? string.Empty, action), PipelineType.ShouldProcess, replyPipe), CancelToken);
+        return (bool)replyPipe.Take(CancelToken)!;
     }
 
     /// <summary>Thread-safe credential prompt bridge for asynchronous cmdlet code.</summary>
     public PSCredential? PromptForCredential(string caption, string message, string userName, string targetName)
     {
         ThrowIfStopped();
-        if (_currentOutPipe is null || _currentReplyPipe is null || IsPipelineThread)
+        if (_currentOutPipe is null || IsPipelineThread)
             return Host.UI.PromptForCredential(caption, message, userName, targetName);
 
-        _currentOutPipe.Add(((caption, message, userName, targetName), PipelineType.PromptForCredential), CancelToken);
-        return (PSCredential?)_currentReplyPipe.Take(CancelToken);
+        using var replyPipe = new BlockingCollection<object?>(boundedCapacity: 1);
+        _currentOutPipe.Add(new PipelineItem((caption, message, userName, targetName), PipelineType.PromptForCredential, replyPipe), CancelToken);
+        return (PSCredential?)replyPipe.Take(CancelToken);
     }
 
     /// <summary>Thread-safe output bridge for asynchronous cmdlet code.</summary>
@@ -98,7 +120,7 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
             return;
         }
 
-        _currentOutPipe.Add((sendToPipeline, enumerateCollection ? PipelineType.OutputEnumerate : PipelineType.Output), CancelToken);
+        _currentOutPipe.Add(new PipelineItem(sendToPipeline, enumerateCollection ? PipelineType.OutputEnumerate : PipelineType.Output), CancelToken);
     }
 
     /// <summary>Thread-safe error bridge for asynchronous cmdlet code.</summary>
@@ -111,7 +133,7 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
             return;
         }
 
-        _currentOutPipe.Add((errorRecord, PipelineType.Error), CancelToken);
+        _currentOutPipe.Add(new PipelineItem(errorRecord, PipelineType.Error), CancelToken);
     }
 
     /// <summary>Thread-safe warning bridge for asynchronous cmdlet code.</summary>
@@ -124,7 +146,7 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
             return;
         }
 
-        _currentOutPipe.Add((text, PipelineType.Warning), CancelToken);
+        _currentOutPipe.Add(new PipelineItem(text, PipelineType.Warning), CancelToken);
     }
 
     /// <summary>Thread-safe verbose bridge for asynchronous cmdlet code.</summary>
@@ -137,7 +159,7 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
             return;
         }
 
-        _currentOutPipe.Add((text, PipelineType.Verbose), CancelToken);
+        _currentOutPipe.Add(new PipelineItem(text, PipelineType.Verbose), CancelToken);
     }
 
     /// <summary>Thread-safe debug bridge for asynchronous cmdlet code.</summary>
@@ -150,7 +172,7 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
             return;
         }
 
-        _currentOutPipe.Add((text, PipelineType.Debug), CancelToken);
+        _currentOutPipe.Add(new PipelineItem(text, PipelineType.Debug), CancelToken);
     }
 
     /// <summary>Thread-safe information bridge for asynchronous cmdlet code.</summary>
@@ -163,7 +185,7 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
             return;
         }
 
-        _currentOutPipe.Add((informationRecord, PipelineType.Information), CancelToken);
+        _currentOutPipe.Add(new PipelineItem(informationRecord, PipelineType.Information), CancelToken);
     }
 
     /// <summary>Thread-safe progress bridge for asynchronous cmdlet code.</summary>
@@ -176,7 +198,7 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
             return;
         }
 
-        _currentOutPipe.Add((progressRecord, PipelineType.Progress), CancelToken);
+        _currentOutPipe.Add(new PipelineItem(progressRecord, PipelineType.Progress), CancelToken);
     }
 
     /// <summary>Throws when PowerShell has requested cancellation.</summary>
@@ -195,17 +217,14 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
 
     private void RunBlockInAsync(Func<Task> task)
     {
-        using var outPipe = new BlockingCollection<(object? Value, PipelineType Type)>();
-        using var replyPipe = new BlockingCollection<object?>();
+        using var outPipe = new BlockingCollection<PipelineItem>();
         Task blockTask;
 
         void ClearPipes()
         {
             _currentOutPipe = null;
-            _currentReplyPipe = null;
             _pipelineThreadId = 0;
             CompleteAddingIfNeeded(outPipe);
-            CompleteAddingIfNeeded(replyPipe);
         }
 
         static void CompleteAddingIfNeeded<T>(BlockingCollection<T> pipe)
@@ -214,7 +233,7 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
                 pipe.CompleteAdding();
         }
 
-        void PumpItem((object? Value, PipelineType Type) item)
+        void PumpItem(PipelineItem item)
         {
             switch (item.Type)
             {
@@ -244,11 +263,11 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
                     break;
                 case PipelineType.ShouldProcess:
                     var should = ((string Target, string Action))item.Value!;
-                    replyPipe.Add(base.ShouldProcess(should.Target, should.Action), CancelToken);
+                    item.ReplyPipe!.Add(base.ShouldProcess(should.Target, should.Action), CancelToken);
                     break;
                 case PipelineType.PromptForCredential:
                     var prompt = ((string Caption, string Message, string UserName, string TargetName))item.Value!;
-                    replyPipe.Add(
+                    item.ReplyPipe!.Add(
                         Host.UI.PromptForCredential(prompt.Caption, prompt.Message, prompt.UserName, prompt.TargetName),
                         CancelToken);
                     break;
@@ -263,7 +282,6 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
 
         _pipelineThreadId = Environment.CurrentManagedThreadId;
         _currentOutPipe = outPipe;
-        _currentReplyPipe = replyPipe;
 
         try
         {
@@ -278,8 +296,15 @@ public abstract class AsyncPSCmdlet : PSCmdlet, IDisposable
         if (blockTask.IsCompleted)
         {
             CompleteAddingIfNeeded(outPipe);
-            PumpQueuedItems();
-            ClearPipes();
+            try
+            {
+                PumpQueuedItems();
+            }
+            finally
+            {
+                ClearPipes();
+            }
+
             blockTask.GetAwaiter().GetResult();
             return;
         }

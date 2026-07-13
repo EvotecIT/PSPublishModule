@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -8,7 +9,7 @@ namespace PSPublishModule;
 /// </summary>
 [Cmdlet(VerbsCommon.Set, "AppStoreConnectVersionLocalization", SupportsShouldProcess = true)]
 [OutputType(typeof(AppStoreConnectVersionLocalizationInfo))]
-public sealed class SetAppStoreConnectVersionLocalizationCommand : PSCmdlet
+public sealed class SetAppStoreConnectVersionLocalizationCommand : AsyncPSCmdlet
 {
     /// <summary>Issuer ID from App Store Connect API keys.</summary>
     [Parameter(Mandatory = true)] public string IssuerId { get; set; } = string.Empty;
@@ -49,7 +50,7 @@ public sealed class SetAppStoreConnectVersionLocalizationCommand : PSCmdlet
     [Parameter] public string? WhatsNew { get; set; }
 
     /// <summary>Updates localized App Store metadata fields.</summary>
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         if (!ShouldProcess(VersionLocalizationId, "Update App Store Connect version localization"))
             return;
@@ -57,7 +58,7 @@ public sealed class SetAppStoreConnectVersionLocalizationCommand : PSCmdlet
         var privateKeyPath = AppStoreConnectCommandSupport.ResolvePrivateKeyPath(SessionState, PrivateKeyPath);
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
-        var result = client.UpdateVersionLocalizationAsync(VersionLocalizationId, new AppStoreConnectVersionLocalizationUpdate
+        var result = await client.UpdateVersionLocalizationAsync(VersionLocalizationId, new AppStoreConnectVersionLocalizationUpdate
         {
             Description = Description,
             Keywords = Keywords,
@@ -65,7 +66,7 @@ public sealed class SetAppStoreConnectVersionLocalizationCommand : PSCmdlet
             PromotionalText = PromotionalText,
             SupportUrl = SupportUrl,
             WhatsNew = WhatsNew
-        }).GetAwaiter().GetResult();
+        }, CancelToken);
 
         WriteObject(result);
     }

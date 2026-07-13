@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -8,7 +9,7 @@ namespace PSPublishModule;
 /// </summary>
 [Cmdlet(VerbsDiagnostic.Test, "AppStoreConnectReleaseReadiness")]
 [OutputType(typeof(AppStoreConnectReleaseReadinessResult))]
-public sealed class TestAppStoreConnectReleaseReadinessCommand : PSCmdlet
+public sealed class TestAppStoreConnectReleaseReadinessCommand : AsyncPSCmdlet
 {
     /// <summary>Issuer ID from App Store Connect API keys.</summary>
     [Parameter(Mandatory = true)] public string IssuerId { get; set; } = string.Empty;
@@ -77,13 +78,13 @@ public sealed class TestAppStoreConnectReleaseReadinessCommand : PSCmdlet
     [Parameter] public SwitchParameter NoRequireCompleteScreenshots { get; set; }
 
     /// <summary>Checks App Store Connect release readiness.</summary>
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         var privateKeyPath = AppStoreConnectCommandSupport.ResolvePrivateKeyPath(SessionState, PrivateKeyPath);
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
         var service = new AppStoreConnectReleaseReadinessService(client);
-        var result = service.CheckAsync(new AppStoreConnectReleaseReadinessRequest
+        var result = await service.CheckAsync(new AppStoreConnectReleaseReadinessRequest
         {
             AppId = AppId,
             VersionString = VersionString,
@@ -102,7 +103,7 @@ public sealed class TestAppStoreConnectReleaseReadinessCommand : PSCmdlet
             RequireWhatsNew = RequireWhatsNew.IsPresent,
             RequireScreenshots = !NoRequireScreenshots.IsPresent,
             RequireCompleteScreenshots = !NoRequireCompleteScreenshots.IsPresent
-        }).GetAwaiter().GetResult();
+        }, CancelToken);
 
         WriteObject(result);
     }

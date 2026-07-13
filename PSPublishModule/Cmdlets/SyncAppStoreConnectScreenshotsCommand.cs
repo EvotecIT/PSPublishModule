@@ -3,6 +3,7 @@ using System.IO;
 using System.Management.Automation;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -12,7 +13,7 @@ namespace PSPublishModule;
 /// </summary>
 [Cmdlet(VerbsData.Sync, "AppStoreConnectScreenshots", SupportsShouldProcess = true)]
 [OutputType(typeof(AppStoreConnectScreenshotSyncResult))]
-public sealed class SyncAppStoreConnectScreenshotsCommand : PSCmdlet
+public sealed class SyncAppStoreConnectScreenshotsCommand : AsyncPSCmdlet
 {
     /// <summary>Issuer ID from App Store Connect API keys.</summary>
     [Parameter(Mandatory = true)] public string IssuerId { get; set; } = string.Empty;
@@ -39,7 +40,7 @@ public sealed class SyncAppStoreConnectScreenshotsCommand : PSCmdlet
     public SwitchParameter ReplaceExisting { get; set; }
 
     /// <summary>Syncs local screenshot folders to App Store Connect screenshot sets.</summary>
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         var resolvedConfigPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(ConfigPath);
         if (!ShouldProcess(resolvedConfigPath, "Sync App Store Connect screenshots"))
@@ -59,12 +60,12 @@ public sealed class SyncAppStoreConnectScreenshotsCommand : PSCmdlet
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
         var service = new AppStoreConnectScreenshotSyncService(client);
-        var result = service.SyncAsync(new AppStoreConnectScreenshotSyncRequest
+        var result = await service.SyncAsync(new AppStoreConnectScreenshotSyncRequest
         {
             Spec = spec,
             ReplaceExisting = ReplaceExisting.IsPresent,
             BaseDirectory = Path.GetDirectoryName(resolvedConfigPath) ?? SessionState.Path.CurrentFileSystemLocation.Path
-        }).GetAwaiter().GetResult();
+        }, CancelToken);
 
         WriteObject(result);
     }

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
-using System.Threading;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -17,7 +17,7 @@ namespace PSPublishModule;
 /// </example>
 [Cmdlet(VerbsData.Update, "ManagedModuleCatalog", SupportsShouldProcess = true)]
 [OutputType(typeof(ManagedModuleCatalogUpdateResult))]
-public sealed class UpdateManagedModuleCatalogCommand : PSCmdlet
+public sealed class UpdateManagedModuleCatalogCommand : AsyncPSCmdlet
 {
     /// <summary>Catalog name. Defaults to PSGallery.</summary>
     [Parameter(Position = 0)]
@@ -60,16 +60,17 @@ public sealed class UpdateManagedModuleCatalogCommand : PSCmdlet
     private readonly List<string> _packageNames = new();
 
     /// <summary>Collects package names from the pipeline.</summary>
-    protected override void ProcessRecord()
+    protected override Task ProcessRecordAsync()
     {
         if (PackageName is null)
-            return;
+            return Task.CompletedTask;
 
         _packageNames.AddRange(PackageName.Where(static name => !string.IsNullOrWhiteSpace(name)));
+        return Task.CompletedTask;
     }
 
     /// <summary>Refreshes the catalog.</summary>
-    protected override void EndProcessing()
+    protected override async Task EndProcessingAsync()
     {
         if (Scope == ModuleRepositoryProfileScope.All)
             throw new ArgumentException("Update-ManagedModuleCatalog requires User or Machine scope.", nameof(Scope));
@@ -79,13 +80,13 @@ public sealed class UpdateManagedModuleCatalogCommand : PSCmdlet
             return;
 
         var credential = ManagedModuleCommandSupport.ResolveCredential(this, Credential, CredentialUserName, CredentialSecret, CredentialSecretFilePath);
-        var result = store.UpdateCatalogAsync(new ManagedModuleCatalogUpdateRequest
+        var result = await store.UpdateCatalogAsync(new ManagedModuleCatalogUpdateRequest
         {
             Name = Name,
             PackageNames = _packageNames.ToArray(),
             IncludePrerelease = IncludePrerelease,
             Credential = credential
-        }, CancellationToken.None).GetAwaiter().GetResult();
+        }, CancelToken);
         WriteObject(result);
     }
 }

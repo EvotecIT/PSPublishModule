@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -8,7 +9,7 @@ namespace PSPublishModule;
 /// </summary>
 [Cmdlet(VerbsCommon.Get, "AppStoreConnectBuild")]
 [OutputType(typeof(AppStoreConnectBuildInfo))]
-public sealed class GetAppStoreConnectBuildCommand : PSCmdlet
+public sealed class GetAppStoreConnectBuildCommand : AsyncPSCmdlet
 {
     /// <summary>Issuer ID from App Store Connect API keys.</summary>
     [Parameter(Mandatory = true)] public string IssuerId { get; set; } = string.Empty;
@@ -41,17 +42,18 @@ public sealed class GetAppStoreConnectBuildCommand : PSCmdlet
     [Parameter] public int Limit { get; set; } = 20;
 
     /// <summary>Reads build information from App Store Connect.</summary>
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         var privateKeyPath = AppStoreConnectCommandSupport.ResolvePrivateKeyPath(SessionState, PrivateKeyPath);
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
-        var builds = client.GetBuildsAsync(
+        var builds = await client.GetBuildsAsync(
             AppId,
             BuildNumber,
             Limit,
             MarketingVersion,
-            Platform).GetAwaiter().GetResult();
+            Platform,
+            CancelToken);
         WriteObject(builds, enumerateCollection: true);
     }
 }

@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -7,7 +8,7 @@ namespace PSPublishModule;
 /// Adds App Store Connect builds to a TestFlight beta group.
 /// </summary>
 [Cmdlet(VerbsCommon.Add, "AppStoreConnectBuildToBetaGroup", SupportsShouldProcess = true)]
-public sealed class AddAppStoreConnectBuildToBetaGroupCommand : PSCmdlet
+public sealed class AddAppStoreConnectBuildToBetaGroupCommand : AsyncPSCmdlet
 {
     /// <summary>Issuer ID from App Store Connect API keys.</summary>
     [Parameter(Mandatory = true)] public string IssuerId { get; set; } = string.Empty;
@@ -31,7 +32,7 @@ public sealed class AddAppStoreConnectBuildToBetaGroupCommand : PSCmdlet
     [Parameter(Mandatory = true)] public string[] BuildId { get; set; } = System.Array.Empty<string>();
 
     /// <summary>Adds builds to a TestFlight beta group.</summary>
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         if (!ShouldProcess(BetaGroupId, "Add App Store Connect build(s) to beta group"))
             return;
@@ -39,6 +40,6 @@ public sealed class AddAppStoreConnectBuildToBetaGroupCommand : PSCmdlet
         var privateKeyPath = AppStoreConnectCommandSupport.ResolvePrivateKeyPath(SessionState, PrivateKeyPath);
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
-        client.AddBuildsToBetaGroupAsync(BetaGroupId, BuildId).GetAwaiter().GetResult();
+        await client.AddBuildsToBetaGroupAsync(BetaGroupId, BuildId, CancelToken);
     }
 }
