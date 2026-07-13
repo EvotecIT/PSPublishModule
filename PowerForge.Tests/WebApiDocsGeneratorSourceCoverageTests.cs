@@ -17,13 +17,15 @@ public class WebApiDocsGeneratorSourceCoverageTests
         Assert.Equal(string.Empty, hint);
     }
 
-    [Fact]
-    public void GitHubRepoMismatchHint_StillDetectsWrongRepositoryAfterRelativeSegments()
+    [Theory]
+    [InlineData("../../WrongRepository/WrongRepository/Barcode.cs")]
+    [InlineData("../../../../_/WrongRepository/WrongRepository/Barcode.cs")]
+    public void GitHubRepoMismatchHint_StillDetectsWrongRepositoryAfterPortablePdbPrefixes(string sourcePath)
     {
         var url = new Uri("https://github.com/EvotecIT/CodeGlyphX/blob/master/CodeGlyphX/Barcode.cs#L49");
 
         var mismatch = WebApiDocsGenerator.IsGitHubRepoMismatchHint(
-            "../../WrongRepository/WrongRepository/Barcode.cs",
+            sourcePath,
             url,
             out var hint);
 

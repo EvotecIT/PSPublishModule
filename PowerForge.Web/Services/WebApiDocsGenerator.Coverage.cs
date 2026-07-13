@@ -659,7 +659,11 @@ public static partial class WebApiDocsGenerator
 
         var segments = TrimLeadingRelativeSegments(sourcePath.Replace('\\', '/'))
             .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (segments.Length < 2 || !string.Equals(segments[0], segments[1], StringComparison.OrdinalIgnoreCase))
+        var repoSegmentIndex = segments.Length >= 3 && string.Equals(segments[0], "_", StringComparison.Ordinal)
+            ? 1
+            : 0;
+        if (segments.Length < repoSegmentIndex + 2 ||
+            !string.Equals(segments[repoSegmentIndex], segments[repoSegmentIndex + 1], StringComparison.OrdinalIgnoreCase))
             return false;
 
         var uriSegments = url.AbsolutePath
@@ -667,7 +671,7 @@ public static partial class WebApiDocsGenerator
         if (uriSegments.Length < 2)
             return false;
 
-        var inferredRepo = segments[0];
+        var inferredRepo = segments[repoSegmentIndex];
         var urlRepo = uriSegments[1];
         if (string.Equals(inferredRepo, urlRepo, StringComparison.OrdinalIgnoreCase))
             return false;
