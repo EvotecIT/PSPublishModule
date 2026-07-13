@@ -11,7 +11,7 @@ References an existing project.build.json package build from the module-build DS
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationProjectBuild [-Name <string>] [-ConfigPath <string>] [-Enabled] [-BuildBeforeModule] [-UseAsReleaseVersionSource] [-ProvideLocalNuGetFeed] [-UpdateVersions] [-Build] [-PublishNuget] [-PublishGitHub] [-CreateReleaseZip] [-SignAssemblies] [-SignDependencyAssemblies] [-SignPackages] [-Options <IDictionary>] [<CommonParameters>]
+New-ConfigurationProjectBuild [-Name <string>] [-ConfigPath <string>] [-Enabled] [-BuildBeforeModule] [-UseAsReleaseVersionSource] [-ProvideLocalNuGetFeed] [-UpdateVersions] [-Build] [-IncludeSymbols] [-PublishNuget] [-PublishGitHub] [-CreateReleaseZip] [-SignAssemblies] [-SignDependencyAssemblies] [-SignPackages] [-Options <IDictionary>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -94,6 +94,22 @@ Accept wildcard characters: True
 
 ### -Enabled
 Whether this project build lane is enabled. Defaults to true.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IncludeSymbols
+Whether portable symbol packages should be created, overriding the referenced JSON when set.
 
 ```yaml
 Type: SwitchParameter

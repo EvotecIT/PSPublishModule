@@ -11,7 +11,7 @@ Repository-wide .NET package release workflow (discover, version, pack, publish)
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Invoke-DotNetRepositoryRelease [-Path <string>] [-ExpectedVersion <string>] [-ExpectedVersionMap <IDictionary>] [-ExpectedVersionMapAsInclude] [-ExpectedVersionMapUseWildcards] [-IncludeProject <string[]>] [-ExcludeProject <string[]>] [-ExcludeDirectories <string[]>] [-NugetSource <string[]>] [-IncludePrerelease] [-NugetCredentialUserName <string>] [-NugetCredentialSecret <string>] [-NugetCredentialSecretFilePath <string>] [-NugetCredentialSecretEnvName <string>] [-Configuration <string>] [-OutputPath <string>] [-CertificateThumbprint <string>] [-CertificateStore <CertificateStoreLocation>] [-TimeStampServer <string>] [-SkipAssemblySigning] [-SignDependencyAssemblies] [-SkipPackageSigning] [-SkipPack] [-Publish] [-PublishSource <string>] [-PublishApiKey <string>] [-PublishApiKeyFilePath <string>] [-PublishApiKeyEnvName <string>] [-SkipDuplicate] [-PublishFailFast] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-DotNetRepositoryRelease [-Path <string>] [-ExpectedVersion <string>] [-ExpectedVersionMap <IDictionary>] [-ExpectedVersionMapAsInclude] [-ExpectedVersionMapUseWildcards] [-IncludeProject <string[]>] [-ExcludeProject <string[]>] [-ExcludeDirectories <string[]>] [-NugetSource <string[]>] [-IncludePrerelease] [-NugetCredentialUserName <string>] [-NugetCredentialSecret <string>] [-NugetCredentialSecretFilePath <string>] [-NugetCredentialSecretEnvName <string>] [-Configuration <string>] [-OutputPath <string>] [-CertificateThumbprint <string>] [-CertificateStore <CertificateStoreLocation>] [-TimeStampServer <string>] [-SkipAssemblySigning] [-SignDependencyAssemblies] [-SkipPackageSigning] [-SkipPack] [-IncludeSymbols] [-Publish] [-PublishSource <string>] [-PublishApiKey <string>] [-PublishApiKeyFilePath <string>] [-PublishApiKeyEnvName <string>] [-SkipDuplicate] [-PublishFailFast] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -199,6 +199,22 @@ Project names to include (csproj file name without extension).
 
 ```yaml
 Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IncludeSymbols
+Create portable .snupkg symbol packages alongside primary packages.
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

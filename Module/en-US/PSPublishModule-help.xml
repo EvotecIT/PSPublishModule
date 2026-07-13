@@ -1850,7 +1850,7 @@
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This PSResourceGet-shaped surface currently packages PowerShell module folders through the managed C# pack service.
+      <maml:para>This PSResourceGet-shaped surface currently packages PowerShell module folders through the managed C# pack service.&#xD;
 Script resources remain intentionally unsupported until the managed script metadata lane exists.</maml:para>
     </maml:description>
     <command:syntax>
@@ -1996,7 +1996,7 @@ Script resources remain intentionally unsupported until the managed script metad
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet applies a consistency policy (encoding and/or line endings) across a project tree.
+      <maml:para>This cmdlet applies a consistency policy (encoding and/or line endings) across a project tree.&#xD;
 It can also export a post-conversion report so you can validate what remains inconsistent.</maml:para>
       <maml:para>For build-time enforcement, use New-ConfigurationFileConsistency -AutoFix in the module build pipeline.</maml:para>
     </maml:description>
@@ -2638,7 +2638,7 @@ It can also export a post-conversion report so you can validate what remains inc
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>NuGet.org requires uploading the public certificate (.cer) used for package signing.
+      <maml:para>NuGet.org requires uploading the public certificate (.cer) used for package signing.&#xD;
 This cmdlet exports the selected certificate from the local certificate store.</maml:para>
     </maml:description>
     <command:syntax>
@@ -6870,8 +6870,8 @@ This cmdlet exports the selected certificate from the local certificate store.</
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.String
-System.Int32
+          <maml:name>System.String&#xD;
+System.Int32&#xD;
 System.Boolean</maml:name>
         </dev:type>
       </command:returnValue>
@@ -6916,7 +6916,7 @@ System.Boolean</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This helper is intended for build DSL scripts that need environment overrides without repeating
+      <maml:para>This helper is intended for build DSL scripts that need environment overrides without repeating&#xD;
 [bool]::Parse boilerplate in every repository.</maml:para>
     </maml:description>
     <command:syntax>
@@ -7014,8 +7014,8 @@ System.Boolean</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This command is the PowerShell-native inventory surface for managed module
-maintenance. It returns installed module rows by default while reusing the
+      <maml:para>This command is the PowerShell-native inventory surface for managed module&#xD;
+maintenance. It returns installed module rows by default while reusing the&#xD;
 same inventory engine that powers the advanced ModuleState workflow.</maml:para>
     </maml:description>
     <command:syntax>
@@ -7350,8 +7350,8 @@ same inventory engine that powers the advanced ModuleState workflow.</maml:para>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PSPublishModule.ModuleStateInstalledModuleResult
-PSPublishModule.ModuleStateInventoryResult
+          <maml:name>PSPublishModule.ModuleStateInstalledModuleResult&#xD;
+PSPublishModule.ModuleStateInventoryResult&#xD;
 System.String</maml:name>
         </dev:type>
       </command:returnValue>
@@ -7490,7 +7490,7 @@ System.String</maml:name>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.ManagedModuleCatalog
+          <maml:name>PowerForge.ManagedModuleCatalog&#xD;
 PowerForge.ManagedModuleCatalogPackage</maml:name>
         </dev:type>
       </command:returnValue>
@@ -7528,7 +7528,7 @@ PowerForge.ManagedModuleCatalogPackage</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Repository profiles contain non-secret feed settings. Use this cmdlet to review repository shape, test local
+      <maml:para>Repository profiles contain non-secret feed settings. Use this cmdlet to review repository shape, test local&#xD;
 onboarding readiness, or export profile definitions for another machine without creating another command family.</maml:para>
     </maml:description>
     <command:syntax>
@@ -7702,7 +7702,7 @@ onboarding readiness, or export profile definitions for another machine without 
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PSPublishModule.ModuleRepositoryProfileResult
+          <maml:name>PSPublishModule.ModuleRepositoryProfileResult&#xD;
 PSPublishModule.ModuleRepositoryProfileReadinessResult</maml:name>
         </dev:type>
         <maml:description>
@@ -7830,7 +7830,7 @@ PSPublishModule.ModuleRepositoryProfileReadinessResult</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet parses PowerShell code and returns a list of referenced commands that look like missing local helpers.
+      <maml:para>This cmdlet parses PowerShell code and returns a list of referenced commands that look like missing local helpers.&#xD;
 It is useful when building “portable” scripts/modules where you want to detect (and optionally inline) helper functions.</maml:para>
       <maml:para>When -ApprovedModules is specified, helper definitions are only accepted from those modules.</maml:para>
     </maml:description>
@@ -9465,7 +9465,7 @@ It is useful when building “portable” scripts/modules where you want to dete
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String
+          <maml:name>System.String&#xD;
 System.Management.Automation.PSModuleInfo</maml:name>
         </dev:type>
       </command:inputType>
@@ -9503,8 +9503,8 @@ System.Management.Automation.PSModuleInfo</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This is a lightweight helper used by build/publish commands.
-It finds the module manifest (*.psd1) under -Path and returns a structured object
+      <maml:para>This is a lightweight helper used by build/publish commands.&#xD;
+It finds the module manifest (*.psd1) under -Path and returns a structured object&#xD;
 containing common fields such as module name, version, required modules, and the manifest path.</maml:para>
       <maml:para>Use it in build scripts to avoid re-implementing manifest discovery logic.</maml:para>
     </maml:description>
@@ -9593,7 +9593,7 @@ containing common fields such as module name, version, required modules, and the
     </command:details>
     <maml:description>
       <maml:para>This cmdlet is designed to make CI output and local troubleshooting easier by summarizing failures from:</maml:para>
-      <maml:para>Use -OutputFormat to control whether the cmdlet writes a concise host summary, detailed messages,
+      <maml:para>Use -OutputFormat to control whether the cmdlet writes a concise host summary, detailed messages,&#xD;
 or emits JSON to the pipeline.</maml:para>
     </maml:description>
     <command:syntax>
@@ -9723,7 +9723,7 @@ or emits JSON to the pipeline.</maml:para>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue)" position="named" aliases="None">
           <maml:name>TestResults</maml:name>
           <maml:description>
-            <maml:para>Pester test results object from Invoke-Pester, a ModuleTestSuiteResult from Invoke-ModuleTestSuite,
+            <maml:para>Pester test results object from Invoke-Pester, a ModuleTestSuiteResult from Invoke-ModuleTestSuite,&#xD;
 or a precomputed ModuleTestFailureAnalysis.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">Object</command:parameterValue>
@@ -9804,7 +9804,7 @@ or a precomputed ModuleTestFailureAnalysis.</maml:para>
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue)" position="named" aliases="None">
         <maml:name>TestResults</maml:name>
         <maml:description>
-          <maml:para>Pester test results object from Invoke-Pester, a ModuleTestSuiteResult from Invoke-ModuleTestSuite,
+          <maml:para>Pester test results object from Invoke-Pester, a ModuleTestSuiteResult from Invoke-ModuleTestSuite,&#xD;
 or a precomputed ModuleTestFailureAnalysis.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">Object</command:parameterValue>
@@ -9878,9 +9878,9 @@ or a precomputed ModuleTestFailureAnalysis.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This is typically used by module build tooling to determine which cmdlets and aliases should be exported
+      <maml:para>This is typically used by module build tooling to determine which cmdlets and aliases should be exported&#xD;
 for binary modules (compiled cmdlets).</maml:para>
-      <maml:para>The cmdlet delegates scanning to a typed PowerForge service so the metadata logic can be reused outside
+      <maml:para>The cmdlet delegates scanning to a typed PowerForge service so the metadata logic can be reused outside&#xD;
 the PowerShell surface.</maml:para>
     </maml:description>
     <command:syntax>
@@ -9967,9 +9967,9 @@ the PowerShell surface.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Scans PowerShell files to detect patterns and constructs that can cause cross-version issues
+      <maml:para>Scans PowerShell files to detect patterns and constructs that can cause cross-version issues&#xD;
 (Windows PowerShell 5.1 vs PowerShell 7+), and outputs a compatibility report.</maml:para>
-      <maml:para>Use this as part of CI to keep modules compatible across editions, and pair it with encoding/line-ending checks
+      <maml:para>Use this as part of CI to keep modules compatible across editions, and pair it with encoding/line-ending checks&#xD;
 when supporting Windows PowerShell 5.1.</maml:para>
     </maml:description>
     <command:syntax>
@@ -10186,7 +10186,7 @@ when supporting Windows PowerShell 5.1.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet combines encoding and line-ending analysis to provide a single “consistency” view of your repository.
+      <maml:para>This cmdlet combines encoding and line-ending analysis to provide a single “consistency” view of your repository.&#xD;
 It is intended to be run before bulk conversions (encoding/line endings) and before packaging a module for release.</maml:para>
       <maml:para>For fixing issues during builds, use New-ConfigurationFileConsistency with -AutoFix enabled.</maml:para>
     </maml:description>
@@ -10466,8 +10466,8 @@ It is intended to be run before bulk conversions (encoding/line endings) and bef
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Scans the specified path for:
-*.csproj files*.psd1 filesPowerShell build scripts (*.ps1) that contain Invoke-ModuleBuild
+      <maml:para>Scans the specified path for:&#xD;
+*.csproj files*.psd1 filesPowerShell build scripts (*.ps1) that contain Invoke-ModuleBuild&#xD;
 and returns one record per discovered version entry.</maml:para>
       <maml:para>This is useful for multi-project repositories where you want to quickly verify version alignment across projects/modules.</maml:para>
     </maml:description>
@@ -10603,9 +10603,9 @@ and returns one record per discovered version entry.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Reads MARKETING_VERSION and CURRENT_PROJECT_VERSION values from a
+      <maml:para>Reads MARKETING_VERSION and CURRENT_PROJECT_VERSION values from a&#xD;
 .xcodeproj directory or a raw project.pbxproj file.</maml:para>
-      <maml:para>The returned object includes all distinct values so release scripts can detect drift
+      <maml:para>The returned object includes all distinct values so release scripts can detect drift&#xD;
 across targets or configurations before uploading to App Store Connect.</maml:para>
     </maml:description>
     <command:syntax>
@@ -10876,18 +10876,18 @@ across targets or configurations before uploading to App Store Connect.</maml:pa
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Import-IsolatedModule is intended for PowerShell 7+ sessions where one service module's binary
-dependencies cannot safely share the default AssemblyLoadContext with another module. The command
-resolves the selected profile, copies the target module to a temporary working folder, generates a
-profile-specific wrapper, loads selected binary assemblies through a module-scoped AssemblyLoadContext,
+      <maml:para>Import-IsolatedModule is intended for PowerShell 7+ sessions where one service module's binary&#xD;
+dependencies cannot safely share the default AssemblyLoadContext with another module. The command&#xD;
+resolves the selected profile, copies the target module to a temporary working folder, generates a&#xD;
+profile-specific wrapper, loads selected binary assemblies through a module-scoped AssemblyLoadContext,&#xD;
 and imports the generated wrapper into the current runspace.</maml:para>
-      <maml:para>Built-in profiles are maintained by PowerForge and are deliberately curated. Use the
-ExchangeOnlineManagement profile when Exchange Online needs to keep its binary surface out of the
-default context. Use the MicrosoftTeams profile when Teams should keep its MSAL, IdentityModel,
-policy administration, and ConfigAPI binary stack isolated. Use the MicrosoftGraphAuthentication
+      <maml:para>Built-in profiles are maintained by PowerForge and are deliberately curated. Use the&#xD;
+ExchangeOnlineManagement profile when Exchange Online needs to keep its binary surface out of the&#xD;
+default context. Use the MicrosoftTeams profile when Teams should keep its MSAL, IdentityModel,&#xD;
+policy administration, and ConfigAPI binary stack isolated. Use the MicrosoftGraphAuthentication&#xD;
 profile when Graph authentication assemblies should be loaded through a profile-specific context.</maml:para>
-      <maml:para>This command does not authenticate to the isolated module. After importing the profile, call the
-target module's normal connection command, such as Connect-ExchangeOnline or Connect-MicrosoftTeams.
+      <maml:para>This command does not authenticate to the isolated module. After importing the profile, call the&#xD;
+target module's normal connection command, such as Connect-ExchangeOnline or Connect-MicrosoftTeams.&#xD;
 Windows PowerShell 5.1 is not supported because AssemblyLoadContext is only available on CoreCLR.</maml:para>
     </maml:description>
     <command:syntax>
@@ -10896,7 +10896,7 @@ Windows PowerShell 5.1 is not supported because AssemblyLoadContext is only avai
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Name</maml:name>
           <maml:description>
-            <maml:para>Use this only when testing a compatible module installed under a non-standard module name. The
+            <maml:para>Use this only when testing a compatible module installed under a non-standard module name. The&#xD;
 selected profile still controls script patching, binary imports, and the load-context name.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -10909,7 +10909,7 @@ selected profile still controls script patching, binary imports, and the load-co
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>PassThru</maml:name>
           <maml:description>
-            <maml:para>The result includes the source module path, generated script and manifest paths, import path,
+            <maml:para>The result includes the source module path, generated script and manifest paths, import path,&#xD;
 work root, load-context name, and profile counts.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -10922,7 +10922,7 @@ work root, load-context name, and profile counts.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Path</maml:name>
           <maml:description>
-            <maml:para>Use Path to test a specific installed version or a copied module payload. Directory paths are treated
+            <maml:para>Use Path to test a specific installed version or a copied module payload. Directory paths are treated&#xD;
 as module bases. File paths are resolved to their parent directory.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -10935,9 +10935,9 @@ as module bases. File paths are resolved to their parent directory.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>PreferIsolatedModulePath</maml:name>
           <maml:description>
-            <maml:para>When set, Import-IsolatedModule prepends the generated module parent directory to PSModulePath after
-the isolated import succeeds. Later Import-Module calls and RequiredModules resolution in the same
-PowerShell process can then find the isolated copy before the original installed module. This is
+            <maml:para>When set, Import-IsolatedModule prepends the generated module parent directory to PSModulePath after&#xD;
+the isolated import succeeds. Later Import-Module calls and RequiredModules resolution in the same&#xD;
+PowerShell process can then find the isolated copy before the original installed module. This is&#xD;
 session-scoped and intentionally opt-in because it changes module-name resolution for the process.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -10950,7 +10950,7 @@ session-scoped and intentionally opt-in because it changes module-name resolutio
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
           <maml:name>Profile</maml:name>
           <maml:description>
-            <maml:para>Supported built-in profiles are ExchangeOnlineManagement, MicrosoftTeams, and
+            <maml:para>Supported built-in profiles are ExchangeOnlineManagement, MicrosoftTeams, and&#xD;
 MicrosoftGraphAuthentication. Profile names are resolved case-insensitively.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
@@ -10963,8 +10963,8 @@ MicrosoftGraphAuthentication. Profile names are resolved case-insensitively.</ma
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>WorkRoot</maml:name>
           <maml:description>
-            <maml:para>When omitted, generated module copies are created under the system temp folder in
-PowerForge\IsolatedModules\&lt;profile&gt;. Use WorkRoot when you want to inspect generated wrappers
+            <maml:para>When omitted, generated module copies are created under the system temp folder in&#xD;
+PowerForge\IsolatedModules\&lt;profile&gt;. Use WorkRoot when you want to inspect generated wrappers&#xD;
 or keep diagnostic artifacts in a known location.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -10980,7 +10980,7 @@ or keep diagnostic artifacts in a known location.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Name</maml:name>
         <maml:description>
-          <maml:para>Use this only when testing a compatible module installed under a non-standard module name. The
+          <maml:para>Use this only when testing a compatible module installed under a non-standard module name. The&#xD;
 selected profile still controls script patching, binary imports, and the load-context name.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -10993,7 +10993,7 @@ selected profile still controls script patching, binary imports, and the load-co
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>PassThru</maml:name>
         <maml:description>
-          <maml:para>The result includes the source module path, generated script and manifest paths, import path,
+          <maml:para>The result includes the source module path, generated script and manifest paths, import path,&#xD;
 work root, load-context name, and profile counts.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -11006,7 +11006,7 @@ work root, load-context name, and profile counts.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Path</maml:name>
         <maml:description>
-          <maml:para>Use Path to test a specific installed version or a copied module payload. Directory paths are treated
+          <maml:para>Use Path to test a specific installed version or a copied module payload. Directory paths are treated&#xD;
 as module bases. File paths are resolved to their parent directory.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -11019,9 +11019,9 @@ as module bases. File paths are resolved to their parent directory.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>PreferIsolatedModulePath</maml:name>
         <maml:description>
-          <maml:para>When set, Import-IsolatedModule prepends the generated module parent directory to PSModulePath after
-the isolated import succeeds. Later Import-Module calls and RequiredModules resolution in the same
-PowerShell process can then find the isolated copy before the original installed module. This is
+          <maml:para>When set, Import-IsolatedModule prepends the generated module parent directory to PSModulePath after&#xD;
+the isolated import succeeds. Later Import-Module calls and RequiredModules resolution in the same&#xD;
+PowerShell process can then find the isolated copy before the original installed module. This is&#xD;
 session-scoped and intentionally opt-in because it changes module-name resolution for the process.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -11034,7 +11034,7 @@ session-scoped and intentionally opt-in because it changes module-name resolutio
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="None">
         <maml:name>Profile</maml:name>
         <maml:description>
-          <maml:para>Supported built-in profiles are ExchangeOnlineManagement, MicrosoftTeams, and
+          <maml:para>Supported built-in profiles are ExchangeOnlineManagement, MicrosoftTeams, and&#xD;
 MicrosoftGraphAuthentication. Profile names are resolved case-insensitively.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
@@ -11047,8 +11047,8 @@ MicrosoftGraphAuthentication. Profile names are resolved case-insensitively.</ma
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>WorkRoot</maml:name>
         <maml:description>
-          <maml:para>When omitted, generated module copies are created under the system temp folder in
-PowerForge\IsolatedModules\&lt;profile&gt;. Use WorkRoot when you want to inspect generated wrappers
+          <maml:para>When omitted, generated module copies are created under the system temp folder in&#xD;
+PowerForge\IsolatedModules\&lt;profile&gt;. Use WorkRoot when you want to inspect generated wrappers&#xD;
 or keep diagnostic artifacts in a known location.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -11081,38 +11081,38 @@ or keep diagnostic artifacts in a known location.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Start an isolated Exchange Online session</maml:title>
-        <dev:code>Import-IsolatedModule -Profile ExchangeOnlineManagement
-$commands = 'Get-EXOMailbox', 'Get-ConnectionInformation'
-Connect-ExchangeOnline -ShowBanner:$false -CommandName $commands
-Get-ConnectionInformation | Format-Table UserPrincipalName, ConnectionUri
-Get-EXOMailbox -ResultSize 5 | Select-Object DisplayName, PrimarySmtpAddress
+        <dev:code>Import-IsolatedModule -Profile ExchangeOnlineManagement&#xD;
+$commands = 'Get-EXOMailbox', 'Get-ConnectionInformation'&#xD;
+Connect-ExchangeOnline -ShowBanner:$false -CommandName $commands&#xD;
+Get-ConnectionInformation | Format-Table UserPrincipalName, ConnectionUri&#xD;
+Get-EXOMailbox -ResultSize 5 | Select-Object DisplayName, PrimarySmtpAddress&#xD;
 Disconnect-ExchangeOnline -Confirm:$false</dev:code>
         <dev:remarks>
-          <maml:para>Imports ExchangeOnlineManagement through the curated profile, connects with the normal EXO
+          <maml:para>Imports ExchangeOnlineManagement through the curated profile, connects with the normal EXO&#xD;
 cmdlets, runs a small mailbox query, and disconnects cleanly.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Use Exchange Online after Az.Storage has loaded OData 7.6</maml:title>
-        <dev:code>Import-Module Az.Storage
-$defaultODataBefore = [System.Runtime.Loader.AssemblyLoadContext]::Default.Assemblies |
-    Where-Object { $_.GetName().Name -like 'Microsoft.OData*' }
-Import-IsolatedModule -Profile ExchangeOnlineManagement
-Connect-ExchangeOnline -ShowBanner:$false
-$defaultODataBefore | ForEach-Object { $_.GetName().Name + ' ' + $_.GetName().Version }
-Get-EXOMailbox -ResultSize 1 | Select-Object DisplayName, PrimarySmtpAddress
+        <dev:code>Import-Module Az.Storage&#xD;
+$defaultODataBefore = [System.Runtime.Loader.AssemblyLoadContext]::Default.Assemblies |&#xD;
+    Where-Object { $_.GetName().Name -like 'Microsoft.OData*' }&#xD;
+Import-IsolatedModule -Profile ExchangeOnlineManagement&#xD;
+Connect-ExchangeOnline -ShowBanner:$false&#xD;
+$defaultODataBefore | ForEach-Object { $_.GetName().Name + ' ' + $_.GetName().Version }&#xD;
+Get-EXOMailbox -ResultSize 1 | Select-Object DisplayName, PrimarySmtpAddress&#xD;
 Disconnect-ExchangeOnline -Confirm:$false</dev:code>
         <dev:remarks>
-          <maml:para>Keeps Az.Storage's Microsoft.OData 7.6 assemblies in the default context while Exchange Online loads
+          <maml:para>Keeps Az.Storage's Microsoft.OData 7.6 assemblies in the default context while Exchange Online loads&#xD;
 Microsoft.OData 7.22 assemblies in ExchangeOnlineManagement.ALC.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Start an isolated Microsoft Teams session</maml:title>
-        <dev:code>Import-IsolatedModule -Profile MicrosoftTeams
-Connect-MicrosoftTeams -UseDeviceAuthentication
-$teams = Get-Team
-$teams | Select-Object -First 10 DisplayName, GroupId, Visibility
+        <dev:code>Import-IsolatedModule -Profile MicrosoftTeams&#xD;
+Connect-MicrosoftTeams -UseDeviceAuthentication&#xD;
+$teams = Get-Team&#xD;
+$teams | Select-Object -First 10 DisplayName, GroupId, Visibility&#xD;
 Disconnect-MicrosoftTeams</dev:code>
         <dev:remarks>
           <maml:para>Imports Teams cmdlets from MicrosoftTeams.ALC and then uses the normal Teams connection workflow.</maml:para>
@@ -11120,39 +11120,39 @@ Disconnect-MicrosoftTeams</dev:code>
       </command:example>
       <command:example>
         <maml:title>Inspect the generated isolated Teams module</maml:title>
-        <dev:code>$result = Import-IsolatedModule -Profile MicrosoftTeams -PassThru
-$result | Format-List ProfileName, ContextName, IsolatedImportPath, IsolatedScriptPath, WorkPath
-Get-Command -Module MicrosoftTeams.ALC | Measure-Object
-[System.Runtime.Loader.AssemblyLoadContext]::All |
-    Where-Object Name -eq $result.ContextName |
-    ForEach-Object {
-        $_.Assemblies |
-            Where-Object { $_.GetName().Name -like 'Microsoft.Teams*' } |
-            Select-Object -ExpandProperty FullName
+        <dev:code>$result = Import-IsolatedModule -Profile MicrosoftTeams -PassThru&#xD;
+$result | Format-List ProfileName, ContextName, IsolatedImportPath, IsolatedScriptPath, WorkPath&#xD;
+Get-Command -Module MicrosoftTeams.ALC | Measure-Object&#xD;
+[System.Runtime.Loader.AssemblyLoadContext]::All |&#xD;
+    Where-Object Name -eq $result.ContextName |&#xD;
+    ForEach-Object {&#xD;
+        $_.Assemblies |&#xD;
+            Where-Object { $_.GetName().Name -like 'Microsoft.Teams*' } |&#xD;
+            Select-Object -ExpandProperty FullName&#xD;
     }</dev:code>
         <dev:remarks>
-          <maml:para>Returns the generated wrapper details and confirms that Teams assemblies were loaded in the
+          <maml:para>Returns the generated wrapper details and confirms that Teams assemblies were loaded in the&#xD;
 profile-specific AssemblyLoadContext.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Import a specific installed module copy by path</maml:title>
-        <dev:code>$module = Get-Module -ListAvailable ExchangeOnlineManagement |
-    Sort-Object Version -Descending |
-    Select-Object -First 1
-$result = Import-IsolatedModule -Profile ExchangeOnlineManagement -Path $module.ModuleBase -PassThru
-$result | Select-Object ProfileName, ModuleName, SourceModuleBase, IsolatedImportPath
+        <dev:code>$module = Get-Module -ListAvailable ExchangeOnlineManagement |&#xD;
+    Sort-Object Version -Descending |&#xD;
+    Select-Object -First 1&#xD;
+$result = Import-IsolatedModule -Profile ExchangeOnlineManagement -Path $module.ModuleBase -PassThru&#xD;
+$result | Select-Object ProfileName, ModuleName, SourceModuleBase, IsolatedImportPath&#xD;
 Get-Module ExchangeOnlineManagement | Select-Object Name, Version, ModuleBase</dev:code>
         <dev:remarks>
-          <maml:para>Uses the profile rules but bypasses PSModulePath discovery by pointing at a specific module base
+          <maml:para>Uses the profile rules but bypasses PSModulePath discovery by pointing at a specific module base&#xD;
 folder. The profile still validates its minimum supported module version.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Use a deterministic work root for diagnostics</maml:title>
-        <dev:code>$workRoot = Join-Path $env:TEMP 'PowerForge-Isolated'
-$result = Import-IsolatedModule -Profile MicrosoftTeams -WorkRoot $workRoot -PassThru
-Get-ChildItem -LiteralPath $result.WorkPath -Recurse | Select-Object -First 20 FullName
+        <dev:code>$workRoot = Join-Path $env:TEMP 'PowerForge-Isolated'&#xD;
+$result = Import-IsolatedModule -Profile MicrosoftTeams -WorkRoot $workRoot -PassThru&#xD;
+Get-ChildItem -LiteralPath $result.WorkPath -Recurse | Select-Object -First 20 FullName&#xD;
 Get-Content -LiteralPath $result.IsolatedScriptPath -TotalCount 40</dev:code>
         <dev:remarks>
           <maml:para>Creates the generated module copy under the supplied root and inspects the generated wrapper.</maml:para>
@@ -11160,16 +11160,16 @@ Get-Content -LiteralPath $result.IsolatedScriptPath -TotalCount 40</dev:code>
       </command:example>
       <command:example>
         <maml:title>Prefer the generated isolated copy for later module imports</maml:title>
-        <dev:code>Import-Module Az.Storage
-$result = Import-IsolatedModule -Profile ExchangeOnlineManagement -PreferIsolatedModulePath -PassThru
-Connect-ExchangeOnline -ShowBanner:$false
-Import-Module Contoso.ExchangeWorker
-Invoke-ContosoExchangeWorker
-$result | Format-List IsolatedModuleResolutionPath, PreferIsolatedModulePath
+        <dev:code>Import-Module Az.Storage&#xD;
+$result = Import-IsolatedModule -Profile ExchangeOnlineManagement -PreferIsolatedModulePath -PassThru&#xD;
+Connect-ExchangeOnline -ShowBanner:$false&#xD;
+Import-Module Contoso.ExchangeWorker&#xD;
+Invoke-ContosoExchangeWorker&#xD;
+$result | Format-List IsolatedModuleResolutionPath, PreferIsolatedModulePath&#xD;
 Disconnect-ExchangeOnline -Confirm:$false</dev:code>
         <dev:remarks>
-          <maml:para>Prepends the generated isolated module parent path to PSModulePath for the current process. This is
-useful when a downstream module imports ExchangeOnlineManagement by name and should bind to the
+          <maml:para>Prepends the generated isolated module parent path to PSModulePath for the current process. This is&#xD;
+useful when a downstream module imports ExchangeOnlineManagement by name and should bind to the&#xD;
 isolated copy instead of the original installed module.</maml:para>
         </dev:remarks>
       </command:example>
@@ -11351,8 +11351,8 @@ isolated copy instead of the original installed module.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Use -Name to import dependencies directly from a module's bundled Internals\Modules payload and
-then import that module by exact path. Add -Path after Install-ModuleDependency to import
+      <maml:para>Use -Name to import dependencies directly from a module's bundled Internals\Modules payload and&#xD;
+then import that module by exact path. Add -Path after Install-ModuleDependency to import&#xD;
 the private runtime copy without relying on PSModulePath discovery.</maml:para>
     </maml:description>
     <command:syntax>
@@ -11647,7 +11647,7 @@ the private runtime copy without relying on PSModulePath discovery.</maml:para>
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String
+          <maml:name>System.String&#xD;
 System.Management.Automation.PSObject</maml:name>
         </dev:type>
       </command:inputType>
@@ -11692,10 +11692,10 @@ System.Management.Automation.PSObject</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet is the workstation or build-agent onboarding entry point for managed module repositories. It can use an
-existing saved profile, import a non-secret profile JSON file, or create a profile from feed details. Unless
--SkipConnect is used, it then installs requested prerequisites, registers/probes native provider state where
-needed, and validates authenticated access through the selected bootstrap mode. It can also write a distributable
+      <maml:para>This cmdlet is the workstation or build-agent onboarding entry point for managed module repositories. It can use an&#xD;
+existing saved profile, import a non-secret profile JSON file, or create a profile from feed details. Unless&#xD;
+-SkipConnect is used, it then installs requested prerequisites, registers/probes native provider state where&#xD;
+needed, and validates authenticated access through the selected bootstrap mode. It can also write a distributable&#xD;
 non-secret bootstrap package for other machines.</maml:para>
     </maml:description>
     <command:syntax>
@@ -13067,7 +13067,7 @@ non-secret bootstrap package for other machines.</maml:para>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PSPublishModule.ModuleRepositoryOnboardingResult
+          <maml:name>PSPublishModule.ModuleRepositoryOnboardingResult&#xD;
 PSPublishModule.ModuleRepositoryRegistrationResult</maml:name>
         </dev:type>
         <maml:description>
@@ -13284,7 +13284,7 @@ PSPublishModule.ModuleRepositoryRegistrationResult</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This command is the first managed install surface. It uses PowerForge repository lookup, package download, and
+      <maml:para>This command is the first managed install surface. It uses PowerForge repository lookup, package download, and&#xD;
 safe archive extraction directly instead of invoking PowerShellGet or PSResourceGet.</maml:para>
     </maml:description>
     <command:syntax>
@@ -14862,7 +14862,7 @@ safe archive extraction directly instead of invoking PowerShellGet or PSResource
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.ManagedModuleInstallResult
+          <maml:name>PowerForge.ManagedModuleInstallResult&#xD;
 PowerForge.ManagedModuleInstallPlan</maml:name>
         </dev:type>
       </command:returnValue>
@@ -15587,7 +15587,7 @@ PowerForge.ManagedModuleInstallPlan</maml:name>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.ManagedScriptInstallResult
+          <maml:name>PowerForge.ManagedScriptInstallResult&#xD;
 PowerForge.ManagedScriptInstallPlan</maml:name>
         </dev:type>
       </command:returnValue>
@@ -15618,8 +15618,8 @@ PowerForge.ManagedScriptInstallPlan</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>The command reads the dependency manifest produced by New-ConfigurationModule -Type EmbeddedModule
-and copies the root module plus each dependency payload to the requested path. Modules are not installed
+      <maml:para>The command reads the dependency manifest produced by New-ConfigurationModule -Type EmbeddedModule&#xD;
+and copies the root module plus each dependency payload to the requested path. Modules are not installed&#xD;
 into PSModulePath unless the chosen path is already part of PSModulePath.</maml:para>
     </maml:description>
     <command:syntax>
@@ -15920,7 +15920,7 @@ into PSModulePath unless the chosen path is already part of PSModulePath.</maml:
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String
+          <maml:name>System.String&#xD;
 System.Management.Automation.PSObject</maml:name>
         </dev:type>
       </command:inputType>
@@ -16390,7 +16390,7 @@ System.Management.Automation.PSObject</maml:name>
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String
+          <maml:name>System.String&#xD;
 System.Management.Automation.PSModuleInfo</maml:name>
         </dev:type>
       </command:inputType>
@@ -16487,12 +16487,12 @@ System.Management.Automation.PSModuleInfo</maml:name>
       <command:verb>Install</command:verb>
       <command:noun>ModuleScript</command:noun>
       <maml:description>
-        <maml:para>Copies only PowerShell scripts from a module's Internals\Scripts folder to a destination path.
+        <maml:para>Copies only PowerShell scripts from a module's Internals\Scripts folder to a destination path.&#xD;
 The destination is flattened (no Module/Version subfolders).</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Copies only PowerShell scripts from a module's Internals\Scripts folder to a destination path.
+      <maml:para>Copies only PowerShell scripts from a module's Internals\Scripts folder to a destination path.&#xD;
 The destination is flattened (no Module/Version subfolders).</maml:para>
     </maml:description>
     <command:syntax>
@@ -16901,7 +16901,7 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String
+          <maml:name>System.String&#xD;
 System.Management.Automation.PSObject</maml:name>
         </dev:type>
       </command:inputType>
@@ -17644,7 +17644,7 @@ System.Management.Automation.PSObject</maml:name>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.BenchmarkRunResult
+          <maml:name>PowerForge.BenchmarkRunResult&#xD;
 PowerForge.PowerShellBenchmarkWorkItem</maml:name>
         </dev:type>
       </command:returnValue>
@@ -17675,8 +17675,8 @@ PowerForge.PowerShellBenchmarkWorkItem</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet follows the same authoring pattern as module build cmdlets:
-create a config using New-ConfigurationDotNet* and run it directly,
+      <maml:para>This cmdlet follows the same authoring pattern as module build cmdlets:&#xD;
+create a config using New-ConfigurationDotNet* and run it directly,&#xD;
 or export config first via -JsonOnly + -JsonPath.</maml:para>
     </maml:description>
     <command:syntax>
@@ -18383,7 +18383,7 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.DotNetPublishPlan
+          <maml:name>PowerForge.DotNetPublishPlan&#xD;
 PowerForge.DotNetPublishResult</maml:name>
         </dev:type>
       </command:returnValue>
@@ -18396,9 +18396,9 @@ PowerForge.DotNetPublishResult</maml:name>
     <command:examples>
       <command:example>
         <maml:title>Generate DotNet publish JSON from DSL without execution</maml:title>
-        <dev:code>Invoke-DotNetPublish -JsonOnly -JsonPath '.\powerforge.dotnetpublish.json' -Settings {
-    New-ConfigurationDotNetPublish -IncludeSchema -ProjectRoot '.' -Configuration 'Release'
-    New-ConfigurationDotNetTarget -Name 'PowerForge.Cli' -ProjectPath 'PowerForge.Cli/PowerForge.Cli.csproj' -Framework 'net10.0' -Runtimes 'win-x64' -Style PortableCompat -Zip
+        <dev:code>Invoke-DotNetPublish -JsonOnly -JsonPath '.\powerforge.dotnetpublish.json' -Settings {&#xD;
+    New-ConfigurationDotNetPublish -IncludeSchema -ProjectRoot '.' -Configuration 'Release'&#xD;
+    New-ConfigurationDotNetTarget -Name 'PowerForge.Cli' -ProjectPath 'PowerForge.Cli/PowerForge.Cli.csproj' -Framework 'net10.0' -Runtimes 'win-x64' -Style PortableCompat -Zip&#xD;
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -18424,8 +18424,8 @@ PowerForge.DotNetPublishResult</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>The cmdlet discovers the .csproj file (when a directory is provided), reads VersionPrefix from the
-project, then runs dotnet build and dotnet pack in Release (by default). It produces a ZIP snapshot of
+      <maml:para>The cmdlet discovers the .csproj file (when a directory is provided), reads VersionPrefix from the&#xD;
+project, then runs dotnet build and dotnet pack in Release (by default). It produces a ZIP snapshot of&#xD;
 the release output and returns a typed result object for each input project path.</maml:para>
       <maml:para>Use -WhatIf to preview the planned outputs without running build/pack/sign operations.</maml:para>
     </maml:description>
@@ -18625,7 +18625,7 @@ the release output and returns a typed result object for each input project path
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Discovers packable projects, resolves a repository-wide version (supports X-pattern),
+      <maml:para>Discovers packable projects, resolves a repository-wide version (supports X-pattern),&#xD;
 updates csproj versions, packs, and optionally publishes packages.</maml:para>
     </maml:description>
     <command:syntax>
@@ -18767,6 +18767,18 @@ updates csproj versions, packs, and optionally publishes packages.</maml:para>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IncludeSymbols</maml:name>
+          <maml:description>
+            <maml:para>Create portable .snupkg symbol packages alongside primary packages.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -19143,6 +19155,18 @@ updates csproj versions, packs, and optionally publishes packages.</maml:para>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>IncludeSymbols</maml:name>
+        <maml:description>
+          <maml:para>Create portable .snupkg symbol packages alongside primary packages.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>NugetCredentialSecret</maml:name>
         <maml:description>
           <maml:para>Credential secret/token for private NuGet sources.</maml:para>
@@ -19418,16 +19442,16 @@ updates csproj versions, packs, and optionally publishes packages.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This is the primary entry point for building a PowerShell module using PSPublishModule.
-Configuration is provided via a DSL using New-Configuration* cmdlets (typically inside the -Settings
+      <maml:para>This is the primary entry point for building a PowerShell module using PSPublishModule.&#xD;
+Configuration is provided via a DSL using New-Configuration* cmdlets (typically inside the -Settings&#xD;
 scriptblock) and then executed by the PowerForge pipeline runner.</maml:para>
-      <maml:para>To generate a reusable powerforge.json configuration file (for the PowerForge CLI) without running any build
+      <maml:para>To generate a reusable powerforge.json configuration file (for the PowerForge CLI) without running any build&#xD;
 steps, use -JsonOnly with -JsonPath.</maml:para>
-      <maml:para>When running in an interactive terminal, pipeline execution uses a Spectre.Console progress UI.
+      <maml:para>When running in an interactive terminal, pipeline execution uses a Spectre.Console progress UI.&#xD;
 Redirect output or use -Verbose to force plain, line-by-line output (useful for CI logs).</maml:para>
-      <maml:para>Dependency behavior is composed from the configuration segments you emit. Typically this means:
-New-ConfigurationModule declares dependencies, New-ConfigurationBuild decides whether the build host
-should install missing ones, and New-ConfigurationArtefact decides whether required modules should be
+      <maml:para>Dependency behavior is composed from the configuration segments you emit. Typically this means:&#xD;
+New-ConfigurationModule declares dependencies, New-ConfigurationBuild decides whether the build host&#xD;
+should install missing ones, and New-ConfigurationArtefact decides whether required modules should be&#xD;
 bundled into the output artefact.</maml:para>
     </maml:description>
     <command:syntax>
@@ -19472,7 +19496,7 @@ bundled into the output artefact.</maml:para>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>DiagnosticsBinaryConflictSearchRoot</maml:name>
           <maml:description>
-            <maml:para>Optional module roots to scan for deterministic binary conflict diagnostics.
+            <maml:para>Optional module roots to scan for deterministic binary conflict diagnostics.&#xD;
 When provided, conflict findings can participate in diagnostics baselines and policy.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -19701,7 +19725,7 @@ When provided, conflict findings can participate in diagnostics baselines and po
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>JsonOnly</maml:name>
           <maml:description>
-            <maml:para>Generates a PowerForge pipeline JSON file and exits without running the build pipeline.
+            <maml:para>Generates a PowerForge pipeline JSON file and exits without running the build pipeline.&#xD;
 Intended for migrating legacy DSL scripts to powerforge CLI configuration.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -19714,7 +19738,7 @@ Intended for migrating legacy DSL scripts to powerforge CLI configuration.</maml
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>JsonPath</maml:name>
           <maml:description>
-            <maml:para>Output path for the generated pipeline JSON file (used with JsonOnly).
+            <maml:para>Output path for the generated pipeline JSON file (used with JsonOnly).&#xD;
 Defaults to powerforge.json in the project root.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -19865,8 +19889,8 @@ Defaults to powerforge.json in the project root.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="ConfigurationGateMode">
           <maml:name>RunMode</maml:name>
           <maml:description>
-            <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Documentation regenerates command Markdown
-and external help without validation/tests/signing/package/install phases, Build runs local build/package lanes,
+            <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Documentation regenerates command Markdown&#xD;
+and external help without validation/tests/signing/package/install phases, Build runs local build/package lanes,&#xD;
 and Publish enables configured publish destinations.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
@@ -19954,7 +19978,7 @@ and Publish enables configured publish destinations.</maml:para>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>DiagnosticsBinaryConflictSearchRoot</maml:name>
           <maml:description>
-            <maml:para>Optional module roots to scan for deterministic binary conflict diagnostics.
+            <maml:para>Optional module roots to scan for deterministic binary conflict diagnostics.&#xD;
 When provided, conflict findings can participate in diagnostics baselines and policy.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -20043,7 +20067,7 @@ When provided, conflict findings can participate in diagnostics baselines and po
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>JsonOnly</maml:name>
           <maml:description>
-            <maml:para>Generates a PowerForge pipeline JSON file and exits without running the build pipeline.
+            <maml:para>Generates a PowerForge pipeline JSON file and exits without running the build pipeline.&#xD;
 Intended for migrating legacy DSL scripts to powerforge CLI configuration.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -20056,7 +20080,7 @@ Intended for migrating legacy DSL scripts to powerforge CLI configuration.</maml
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>JsonPath</maml:name>
           <maml:description>
-            <maml:para>Output path for the generated pipeline JSON file (used with JsonOnly).
+            <maml:para>Output path for the generated pipeline JSON file (used with JsonOnly).&#xD;
 Defaults to powerforge.json in the project root.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -20093,8 +20117,8 @@ Defaults to powerforge.json in the project root.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="ConfigurationGateMode">
           <maml:name>RunMode</maml:name>
           <maml:description>
-            <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Documentation regenerates command Markdown
-and external help without validation/tests/signing/package/install phases, Build runs local build/package lanes,
+            <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Documentation regenerates command Markdown&#xD;
+and external help without validation/tests/signing/package/install phases, Build runs local build/package lanes,&#xD;
 and Publish enables configured publish destinations.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
@@ -20146,7 +20170,7 @@ and Publish enables configured publish destinations.</maml:para>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>DiagnosticsBinaryConflictSearchRoot</maml:name>
           <maml:description>
-            <maml:para>Optional module roots to scan for deterministic binary conflict diagnostics.
+            <maml:para>Optional module roots to scan for deterministic binary conflict diagnostics.&#xD;
 When provided, conflict findings can participate in diagnostics baselines and policy.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -20235,7 +20259,7 @@ When provided, conflict findings can participate in diagnostics baselines and po
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>JsonOnly</maml:name>
           <maml:description>
-            <maml:para>Generates a PowerForge pipeline JSON file and exits without running the build pipeline.
+            <maml:para>Generates a PowerForge pipeline JSON file and exits without running the build pipeline.&#xD;
 Intended for migrating legacy DSL scripts to powerforge CLI configuration.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -20248,7 +20272,7 @@ Intended for migrating legacy DSL scripts to powerforge CLI configuration.</maml
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>JsonPath</maml:name>
           <maml:description>
-            <maml:para>Output path for the generated pipeline JSON file (used with JsonOnly).
+            <maml:para>Output path for the generated pipeline JSON file (used with JsonOnly).&#xD;
 Defaults to powerforge.json in the project root.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -20285,8 +20309,8 @@ Defaults to powerforge.json in the project root.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="ConfigurationGateMode">
           <maml:name>RunMode</maml:name>
           <maml:description>
-            <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Documentation regenerates command Markdown
-and external help without validation/tests/signing/package/install phases, Build runs local build/package lanes,
+            <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Documentation regenerates command Markdown&#xD;
+and external help without validation/tests/signing/package/install phases, Build runs local build/package lanes,&#xD;
 and Publish enables configured publish destinations.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
@@ -20374,7 +20398,7 @@ and Publish enables configured publish destinations.</maml:para>
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>DiagnosticsBinaryConflictSearchRoot</maml:name>
         <maml:description>
-          <maml:para>Optional module roots to scan for deterministic binary conflict diagnostics.
+          <maml:para>Optional module roots to scan for deterministic binary conflict diagnostics.&#xD;
 When provided, conflict findings can participate in diagnostics baselines and policy.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -20603,7 +20627,7 @@ When provided, conflict findings can participate in diagnostics baselines and po
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>JsonOnly</maml:name>
         <maml:description>
-          <maml:para>Generates a PowerForge pipeline JSON file and exits without running the build pipeline.
+          <maml:para>Generates a PowerForge pipeline JSON file and exits without running the build pipeline.&#xD;
 Intended for migrating legacy DSL scripts to powerforge CLI configuration.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -20616,7 +20640,7 @@ Intended for migrating legacy DSL scripts to powerforge CLI configuration.</maml
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>JsonPath</maml:name>
         <maml:description>
-          <maml:para>Output path for the generated pipeline JSON file (used with JsonOnly).
+          <maml:para>Output path for the generated pipeline JSON file (used with JsonOnly).&#xD;
 Defaults to powerforge.json in the project root.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -20767,8 +20791,8 @@ Defaults to powerforge.json in the project root.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="ConfigurationGateMode">
         <maml:name>RunMode</maml:name>
         <maml:description>
-          <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Documentation regenerates command Markdown
-and external help without validation/tests/signing/package/install phases, Build runs local build/package lanes,
+          <maml:para>High-level module build lane. Manifest refreshes PSD1 metadata only, Documentation regenerates command Markdown&#xD;
+and external help without validation/tests/signing/package/install phases, Build runs local build/package lanes,&#xD;
 and Publish enables configured publish destinations.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
@@ -20849,8 +20873,8 @@ and Publish enables configured publish destinations.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Build a module (DSL) and keep docs in sync</maml:title>
-        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {
-    New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md'
+        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {&#xD;
+    New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md'&#xD;
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -20865,9 +20889,9 @@ and Publish enables configured publish destinations.</maml:para>
       </command:example>
       <command:example>
         <maml:title>Enforce consistency and compatibility during build (fail CI on issues)</maml:title>
-        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -ExitCode -Settings {
-    New-ConfigurationFileConsistency -Enable -FailOnInconsistency -AutoFix -CreateBackups -ExportReport
-    New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -ExportReport
+        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -ExitCode -Settings {&#xD;
+    New-ConfigurationFileConsistency -Enable -FailOnInconsistency -AutoFix -CreateBackups -ExportReport&#xD;
+    New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -ExportReport&#xD;
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -20875,8 +20899,8 @@ and Publish enables configured publish destinations.</maml:para>
       </command:example>
       <command:example>
         <maml:title>Publish a .NET project into the module as part of the build</maml:title>
-        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `
-    -CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `
+        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `&#xD;
+    -CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `&#xD;
     -Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -20884,8 +20908,8 @@ and Publish enables configured publish destinations.</maml:para>
       </command:example>
       <command:example>
         <maml:title>Fail CI only on new diagnostics compared to a committed baseline</maml:title>
-        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `
-    -DiagnosticsBaselinePath 'C:\Git\MyModule\.powerforge\module-diagnostics-baseline.json' `
+        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' `&#xD;
+    -DiagnosticsBaselinePath 'C:\Git\MyModule\.powerforge\module-diagnostics-baseline.json' `&#xD;
     -FailOnNewDiagnostics -FailOnDiagnosticsSeverity Warning</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -20893,10 +20917,10 @@ and Publish enables configured publish destinations.</maml:para>
       </command:example>
       <command:example>
         <maml:title>Install missing dependencies during the build and bundle required modules into the package</maml:title>
-        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {
-    New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'
-    New-ConfigurationBuild -Enable -InstallMissingModules -ResolveMissingModulesOnline
-    New-ConfigurationArtefact -Type Packed -Enable -AddRequiredModules -RequiredModulesSource Auto
+        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git' -Settings {&#xD;
+    New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'&#xD;
+    New-ConfigurationBuild -Enable -InstallMissingModules -ResolveMissingModulesOnline&#xD;
+    New-ConfigurationArtefact -Type Packed -Enable -AddRequiredModules -RequiredModulesSource Auto&#xD;
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -20915,7 +20939,7 @@ and Publish enables configured publish destinations.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Executes module tests out-of-process, installs required dependencies, and provides a summary that is suitable for both
+      <maml:para>Executes module tests out-of-process, installs required dependencies, and provides a summary that is suitable for both&#xD;
 local development and CI pipelines.</maml:para>
       <maml:para>For post-processing failures (e.g. emitting JSON summaries), combine it with Get-ModuleTestFailures.</maml:para>
     </maml:description>
@@ -21403,9 +21427,9 @@ local development and CI pipelines.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet is the PowerShell entry point for the same generic plugin export engine used by
-powerforge plugin export. It plans and optionally publishes plugin project outputs into
-folder-based plugin bundles without hardcoding IntelligenceX-specific project lists or manifest
+      <maml:para>This cmdlet is the PowerShell entry point for the same generic plugin export engine used by&#xD;
+powerforge plugin export. It plans and optionally publishes plugin project outputs into&#xD;
+folder-based plugin bundles without hardcoding IntelligenceX-specific project lists or manifest&#xD;
 formats into the engine.</maml:para>
     </maml:description>
     <command:syntax>
@@ -21414,7 +21438,7 @@ formats into the engine.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ConfigPath</maml:name>
           <maml:description>
-            <maml:para>Path to the plugin catalog configuration file. When omitted, the cmdlet searches the current
+            <maml:para>Path to the plugin catalog configuration file. When omitted, the cmdlet searches the current&#xD;
 directory and its parents for standard PowerForge plugin config names.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -21530,7 +21554,7 @@ directory and its parents for standard PowerForge plugin config names.</maml:par
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>ConfigPath</maml:name>
         <maml:description>
-          <maml:para>Path to the plugin catalog configuration file. When omitted, the cmdlet searches the current
+          <maml:para>Path to the plugin catalog configuration file. When omitted, the cmdlet searches the current&#xD;
 directory and its parents for standard PowerForge plugin config names.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -21688,8 +21712,8 @@ directory and its parents for standard PowerForge plugin config names.</maml:par
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet is the PowerShell entry point for the same generic plugin package workflow used by
-powerforge plugin pack. It selects package groups from the shared catalog, runs
+      <maml:para>This cmdlet is the PowerShell entry point for the same generic plugin package workflow used by&#xD;
+powerforge plugin pack. It selects package groups from the shared catalog, runs&#xD;
 dotnet pack, and can optionally push only the packages produced by the current run.</maml:para>
     </maml:description>
     <command:syntax>
@@ -21710,7 +21734,7 @@ dotnet pack, and can optionally push only the packages produced by the current r
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ConfigPath</maml:name>
           <maml:description>
-            <maml:para>Path to the plugin catalog configuration file. When omitted, the cmdlet searches the current
+            <maml:para>Path to the plugin catalog configuration file. When omitted, the cmdlet searches the current&#xD;
 directory and its parents for standard PowerForge plugin config names.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -21886,7 +21910,7 @@ directory and its parents for standard PowerForge plugin config names.</maml:par
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>ConfigPath</maml:name>
         <maml:description>
-          <maml:para>Path to the plugin catalog configuration file. When omitted, the cmdlet searches the current
+          <maml:para>Path to the plugin catalog configuration file. When omitted, the cmdlet searches the current&#xD;
 directory and its parents for standard PowerForge plugin config names.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -22092,8 +22116,8 @@ directory and its parents for standard PowerForge plugin config names.</maml:par
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet is the PowerShell entry point for the same unified release engine used by
-powerforge release. It can coordinate repository package publishing and downloadable
+      <maml:para>This cmdlet is the PowerShell entry point for the same unified release engine used by&#xD;
+powerforge release. It can coordinate repository package publishing and downloadable&#xD;
 tool/app artefacts from one configuration file.</maml:para>
     </maml:description>
     <command:syntax>
@@ -22138,7 +22162,7 @@ tool/app artefacts from one configuration file.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ConfigPath</maml:name>
           <maml:description>
-            <maml:para>Path to the unified release configuration file. When omitted, the cmdlet searches current
+            <maml:para>Path to the unified release configuration file. When omitted, the cmdlet searches current&#xD;
 and parent directories for standard release config file names.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -23797,7 +23821,7 @@ and parent directories for standard release config file names.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>ConfigPath</maml:name>
         <maml:description>
-          <maml:para>Path to the unified release configuration file. When omitted, the cmdlet searches current
+          <maml:para>Path to the unified release configuration file. When omitted, the cmdlet searches current&#xD;
 and parent directories for standard release config file names.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -24645,13 +24669,13 @@ and parent directories for standard release config file names.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>The configuration file follows Schemas/project.build.schema.json in the PSPublishModule repository.
+      <maml:para>The configuration file follows Schemas/project.build.schema.json in the PSPublishModule repository.&#xD;
 Use it to define discovery rules, versioning, staging, NuGet publishing, and GitHub release settings.</maml:para>
-      <maml:para>GitHub tag/release templates support tokens:
-{Project}, {Version}, {PrimaryProject}, {PrimaryVersion}, {Repo},
-{Repository}, {Date}, {UtcDate}, {DateTime}, {UtcDateTime},
-{Timestamp}, {UtcTimestamp}.
-When GitHub release mode is Single and multiple project versions are present, {Version} defaults to
+      <maml:para>GitHub tag/release templates support tokens:&#xD;
+{Project}, {Version}, {PrimaryProject}, {PrimaryVersion}, {Repo},&#xD;
+{Repository}, {Date}, {UtcDate}, {DateTime}, {UtcDateTime},&#xD;
+{Timestamp}, {UtcTimestamp}.&#xD;
+When GitHub release mode is Single and multiple project versions are present, {Version} defaults to&#xD;
 the local date (yyyy.MM.dd) unless a primary project version is available.</maml:para>
     </maml:description>
     <command:syntax>
@@ -27665,7 +27689,7 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>SubscriptionPricePointId</maml:name>
           <maml:description>
-            <maml:para>Subscription price point resource id for a paid offer. Paid offers accept one territory per invocation
+            <maml:para>Subscription price point resource id for a paid offer. Paid offers accept one territory per invocation&#xD;
 because App Store Connect price points are territory-specific.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -27840,7 +27864,7 @@ because App Store Connect price points are territory-specific.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>SubscriptionPricePointId</maml:name>
         <maml:description>
-          <maml:para>Subscription price point resource id for a paid offer. Paid offers accept one territory per invocation
+          <maml:para>Subscription price point resource id for a paid offer. Paid offers accept one territory per invocation&#xD;
 because App Store Connect price points are territory-specific.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -28036,8 +28060,8 @@ because App Store Connect price points are territory-specific.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Emits an Apple app configuration segment consumed by Invoke-ModuleBuild / Build-Module.
-The segment prepares local Xcode project version metadata. App Store Connect metadata is kept as
+      <maml:para>Emits an Apple app configuration segment consumed by Invoke-ModuleBuild / Build-Module.&#xD;
+The segment prepares local Xcode project version metadata. App Store Connect metadata is kept as&#xD;
 configuration for future read-only checks and publish/review commands.</maml:para>
     </maml:description>
     <command:syntax>
@@ -28155,7 +28179,7 @@ configuration for future read-only checks and publish/review commands.</maml:par
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
           <maml:name>ProjectPath</maml:name>
           <maml:description>
-            <maml:para>Path to a .xcodeproj directory or project.pbxproj file.
+            <maml:para>Path to a .xcodeproj directory or project.pbxproj file.&#xD;
 Relative paths resolve from the pipeline project root.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
@@ -28280,7 +28304,7 @@ Relative paths resolve from the pipeline project root.</maml:para>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
           <maml:name>ProjectPath</maml:name>
           <maml:description>
-            <maml:para>Path to a .xcodeproj directory or project.pbxproj file.
+            <maml:para>Path to a .xcodeproj directory or project.pbxproj file.&#xD;
 Relative paths resolve from the pipeline project root.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
@@ -28429,7 +28453,7 @@ Relative paths resolve from the pipeline project root.</maml:para>
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="Path,FullName">
         <maml:name>ProjectPath</maml:name>
         <maml:description>
-          <maml:para>Path to a .xcodeproj directory or project.pbxproj file.
+          <maml:para>Path to a .xcodeproj directory or project.pbxproj file.&#xD;
 Relative paths resolve from the pipeline project root.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
@@ -28507,15 +28531,15 @@ Relative paths resolve from the pipeline project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Artefacts are created after the module is built into staging. Use Packed (ZIP) for distribution and
+      <maml:para>Artefacts are created after the module is built into staging. Use Packed (ZIP) for distribution and&#xD;
 Unpacked (folder) for inspection or offline installation.</maml:para>
-      <maml:para>When -AddRequiredModules is enabled, required modules are copied from locally available modules (Get-Module -ListAvailable) and,
+      <maml:para>When -AddRequiredModules is enabled, required modules are copied from locally available modules (Get-Module -ListAvailable) and,&#xD;
 when configured, downloaded (via Save-PSResource/Save-Module) before being copied into the artefact.</maml:para>
-      <maml:para>Only RequiredModule dependencies participate in artefact bundling. ExternalModule dependencies are
-intentionally excluded because they represent dependencies that should remain separately installed on the target
+      <maml:para>Only RequiredModule dependencies participate in artefact bundling. ExternalModule dependencies are&#xD;
+intentionally excluded because they represent dependencies that should remain separately installed on the target&#xD;
 machine.</maml:para>
-      <maml:para>RequiredModulesSource controls the packaging strategy: Installed means local-only copy,
-Auto means prefer local and download when missing, and Download means always download. When omitted,
+      <maml:para>RequiredModulesSource controls the packaging strategy: Installed means local-only copy,&#xD;
+Auto means prefer local and download when missing, and Download means always download. When omitted,&#xD;
 the default is Installed.</maml:para>
       <maml:para>Use -ID to link an artefact to a publish step (New-ConfigurationPublish) and publish only a specific artefact.</maml:para>
       <maml:para>For a broader dependency workflow explanation, see about_ModuleDependencies.</maml:para>
@@ -28526,7 +28550,7 @@ the default is Installed.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="RequiredModules">
           <maml:name>AddRequiredModules</maml:name>
           <maml:description>
-            <maml:para>Add RequiredModule dependencies to the artefact by copying or downloading them. This does not include
+            <maml:para>Add RequiredModule dependencies to the artefact by copying or downloading them. This does not include&#xD;
 ExternalModule dependencies.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -28755,7 +28779,7 @@ ExternalModule dependencies.</maml:para>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RequiredModulesExcludeModuleName</maml:name>
           <maml:description>
-            <maml:para>Required module names that should not be copied into this artefact when -AddRequiredModules is enabled.
+            <maml:para>Required module names that should not be copied into this artefact when -AddRequiredModules is enabled.&#xD;
 This only affects artefact bundling; it does not remove modules from the generated manifest.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -28768,7 +28792,7 @@ This only affects artefact bundling; it does not remove modules from the generat
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RequiredModulesPath</maml:name>
           <maml:description>
-            <maml:para>Path where required modules will be copied to. When omitted, PowerForge uses the default module layout under
+            <maml:para>Path where required modules will be copied to. When omitted, PowerForge uses the default module layout under&#xD;
 the artefact output.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -28781,7 +28805,7 @@ the artefact output.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RequiredModulesRepository</maml:name>
           <maml:description>
-            <maml:para>Repository name used when downloading required modules (Save-PSResource / Save-Module). Set this
+            <maml:para>Repository name used when downloading required modules (Save-PSResource / Save-Module). Set this&#xD;
 when packaging should resolve from a specific gallery or private feed.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -28794,8 +28818,8 @@ when packaging should resolve from a specific gallery or private feed.</maml:par
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RequiredModulesSource</maml:name>
           <maml:description>
-            <maml:para>Source used when resolving required modules (Auto / Installed / Download). When omitted,
-PowerForge defaults to Installed, which means packaging expects the dependency to already exist on the
+            <maml:para>Source used when resolving required modules (Auto / Installed / Download). When omitted,&#xD;
+PowerForge defaults to Installed, which means packaging expects the dependency to already exist on the&#xD;
 machine.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">RequiredModulesSource</command:parameterValue>
@@ -28813,7 +28837,7 @@ machine.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RequiredModulesTool</maml:name>
           <maml:description>
-            <maml:para>Tool used when downloading required modules (Save-PSResource / Save-Module). Auto prefers
+            <maml:para>Tool used when downloading required modules (Save-PSResource / Save-Module). Auto prefers&#xD;
 PSResourceGet and falls back to PowerShellGet when necessary.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">ModuleSaveTool</command:parameterValue>
@@ -28864,7 +28888,7 @@ PSResourceGet and falls back to PowerShellGet when necessary.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="RequiredModules">
         <maml:name>AddRequiredModules</maml:name>
         <maml:description>
-          <maml:para>Add RequiredModule dependencies to the artefact by copying or downloading them. This does not include
+          <maml:para>Add RequiredModule dependencies to the artefact by copying or downloading them. This does not include&#xD;
 ExternalModule dependencies.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -29093,7 +29117,7 @@ ExternalModule dependencies.</maml:para>
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>RequiredModulesExcludeModuleName</maml:name>
         <maml:description>
-          <maml:para>Required module names that should not be copied into this artefact when -AddRequiredModules is enabled.
+          <maml:para>Required module names that should not be copied into this artefact when -AddRequiredModules is enabled.&#xD;
 This only affects artefact bundling; it does not remove modules from the generated manifest.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -29106,7 +29130,7 @@ This only affects artefact bundling; it does not remove modules from the generat
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>RequiredModulesPath</maml:name>
         <maml:description>
-          <maml:para>Path where required modules will be copied to. When omitted, PowerForge uses the default module layout under
+          <maml:para>Path where required modules will be copied to. When omitted, PowerForge uses the default module layout under&#xD;
 the artefact output.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -29119,7 +29143,7 @@ the artefact output.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>RequiredModulesRepository</maml:name>
         <maml:description>
-          <maml:para>Repository name used when downloading required modules (Save-PSResource / Save-Module). Set this
+          <maml:para>Repository name used when downloading required modules (Save-PSResource / Save-Module). Set this&#xD;
 when packaging should resolve from a specific gallery or private feed.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -29132,8 +29156,8 @@ when packaging should resolve from a specific gallery or private feed.</maml:par
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>RequiredModulesSource</maml:name>
         <maml:description>
-          <maml:para>Source used when resolving required modules (Auto / Installed / Download). When omitted,
-PowerForge defaults to Installed, which means packaging expects the dependency to already exist on the
+          <maml:para>Source used when resolving required modules (Auto / Installed / Download). When omitted,&#xD;
+PowerForge defaults to Installed, which means packaging expects the dependency to already exist on the&#xD;
 machine.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">RequiredModulesSource</command:parameterValue>
@@ -29151,7 +29175,7 @@ machine.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>RequiredModulesTool</maml:name>
         <maml:description>
-          <maml:para>Tool used when downloading required modules (Save-PSResource / Save-Module). Auto prefers
+          <maml:para>Tool used when downloading required modules (Save-PSResource / Save-Module). Auto prefers&#xD;
 PSResourceGet and falls back to PowerShellGet when necessary.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">ModuleSaveTool</command:parameterValue>
@@ -29258,13 +29282,13 @@ PSResourceGet and falls back to PowerShellGet when necessary.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet emits build configuration that is consumed by Invoke-ModuleBuild / Build-Module.
+      <maml:para>This cmdlet emits build configuration that is consumed by Invoke-ModuleBuild / Build-Module.&#xD;
 It controls how the module is merged, signed, versioned, installed, and how optional .NET publishing is performed.</maml:para>
-      <maml:para>Dependency-related options in this cmdlet affect the build machine, not artefact packaging. Use
-InstallMissingModules when the build host needs missing RequiredModule or
+      <maml:para>Dependency-related options in this cmdlet affect the build machine, not artefact packaging. Use&#xD;
+InstallMissingModules when the build host needs missing RequiredModule or&#xD;
 ExternalModule dependencies installed before merge/import/test steps run.</maml:para>
-      <maml:para>If you want dependencies copied into ZIP/unpacked artefacts, configure that separately with
-New-ConfigurationArtefact -AddRequiredModules. Build-time installation and artefact packaging are designed
+      <maml:para>If you want dependencies copied into ZIP/unpacked artefacts, configure that separately with&#xD;
+New-ConfigurationArtefact -AddRequiredModules. Build-time installation and artefact packaging are designed&#xD;
 as separate decisions because many teams want one without the other.</maml:para>
       <maml:para>For a broader dependency workflow explanation, see about_ModuleDependencies.</maml:para>
     </maml:description>
@@ -29394,7 +29418,7 @@ as separate decisions because many teams want one without the other.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallMissingModules</maml:name>
           <maml:description>
-            <maml:para>Install missing module dependencies (RequiredModule/ExternalModule) before build. This affects
+            <maml:para>Install missing module dependencies (RequiredModule/ExternalModule) before build. This affects&#xD;
 the build host only; it does not bundle modules into artefacts.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -29407,7 +29431,7 @@ the build host only; it does not bundle modules into artefacts.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallMissingModulesCredentialSecret</maml:name>
           <maml:description>
-            <maml:para>Credential secret or token for dependency installation. Prefer the file-path form in CI when you do not want
+            <maml:para>Credential secret or token for dependency installation. Prefer the file-path form in CI when you do not want&#xD;
 the secret value embedded directly in scripts.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -29420,7 +29444,7 @@ the secret value embedded directly in scripts.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallMissingModulesCredentialSecretFilePath</maml:name>
           <maml:description>
-            <maml:para>Path to a file containing the credential secret or token. This is often the safest option for automation and
+            <maml:para>Path to a file containing the credential secret or token. This is often the safest option for automation and&#xD;
 CI agents.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -29433,7 +29457,7 @@ CI agents.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallMissingModulesCredentialUserName</maml:name>
           <maml:description>
-            <maml:para>Credential user name for dependency installation. This is usually paired with
+            <maml:para>Credential user name for dependency installation. This is usually paired with&#xD;
 InstallMissingModulesCredentialSecret or InstallMissingModulesCredentialSecretFilePath.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -29446,7 +29470,7 @@ InstallMissingModulesCredentialSecret or InstallMissingModulesCredentialSecretFi
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallMissingModulesForce</maml:name>
           <maml:description>
-            <maml:para>Force re-install or update even if dependencies are already installed. Useful when you want the build host to
+            <maml:para>Force re-install or update even if dependencies are already installed. Useful when you want the build host to&#xD;
 re-sync against the repository instead of accepting the current local state.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -29459,7 +29483,7 @@ re-sync against the repository instead of accepting the current local state.</ma
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallMissingModulesPrerelease</maml:name>
           <maml:description>
-            <maml:para>Allow prerelease versions when installing dependencies. Use this only when the dependency declaration and
+            <maml:para>Allow prerelease versions when installing dependencies. Use this only when the dependency declaration and&#xD;
 repository policy intentionally allow prerelease packages.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -29472,7 +29496,7 @@ repository policy intentionally allow prerelease packages.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>InstallMissingModulesRepository</maml:name>
           <maml:description>
-            <maml:para>Repository name used for dependency installation (defaults to PSGallery). Set this when your build
+            <maml:para>Repository name used for dependency installation (defaults to PSGallery). Set this when your build&#xD;
 should resolve dependencies from a named private feed or alternate gallery.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -29897,7 +29921,7 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ResolveMissingModulesOnline</maml:name>
           <maml:description>
-            <maml:para>Resolve Auto/Latest dependency versions from the repository without installing.
+            <maml:para>Resolve Auto/Latest dependency versions from the repository without installing.&#xD;
 When not explicitly set, this is auto-enabled if any RequiredModules use Auto/Latest/Guid Auto.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -29946,7 +29970,7 @@ When not explicitly set, this is auto-enabled if any RequiredModules use Auto/La
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>SignIncludeBinaries</maml:name>
           <maml:description>
-            <maml:para>When signing is enabled, binaries are signed by default (e.g., .dll, .cat).
+            <maml:para>When signing is enabled, binaries are signed by default (e.g., .dll, .cat).&#xD;
 Use -SignIncludeBinaries:$false to opt out.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -30019,7 +30043,7 @@ Use -SignIncludeBinaries:$false to opt out.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>SyncNETProjectVersion</maml:name>
           <maml:description>
-            <maml:para>Synchronize the source .NET project version with the resolved module/manifest version before staging.
+            <maml:para>Synchronize the source .NET project version with the resolved module/manifest version before staging.&#xD;
 This is opt-in and updates the source .csproj file when a project path can be resolved.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -30092,7 +30116,7 @@ This is opt-in and updates the source .csproj file when a project path can be re
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>WarnIfRequiredModulesOutdated</maml:name>
           <maml:description>
-            <maml:para>Warn if RequiredModule entries are older than the latest version available in the repository. This is a
+            <maml:para>Warn if RequiredModule entries are older than the latest version available in the repository. This is a&#xD;
 reporting hint and does not change the manifest or install anything by itself.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -30228,7 +30252,7 @@ reporting hint and does not change the manifest or install anything by itself.</
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallMissingModules</maml:name>
         <maml:description>
-          <maml:para>Install missing module dependencies (RequiredModule/ExternalModule) before build. This affects
+          <maml:para>Install missing module dependencies (RequiredModule/ExternalModule) before build. This affects&#xD;
 the build host only; it does not bundle modules into artefacts.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -30241,7 +30265,7 @@ the build host only; it does not bundle modules into artefacts.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallMissingModulesCredentialSecret</maml:name>
         <maml:description>
-          <maml:para>Credential secret or token for dependency installation. Prefer the file-path form in CI when you do not want
+          <maml:para>Credential secret or token for dependency installation. Prefer the file-path form in CI when you do not want&#xD;
 the secret value embedded directly in scripts.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -30254,7 +30278,7 @@ the secret value embedded directly in scripts.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallMissingModulesCredentialSecretFilePath</maml:name>
         <maml:description>
-          <maml:para>Path to a file containing the credential secret or token. This is often the safest option for automation and
+          <maml:para>Path to a file containing the credential secret or token. This is often the safest option for automation and&#xD;
 CI agents.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -30267,7 +30291,7 @@ CI agents.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallMissingModulesCredentialUserName</maml:name>
         <maml:description>
-          <maml:para>Credential user name for dependency installation. This is usually paired with
+          <maml:para>Credential user name for dependency installation. This is usually paired with&#xD;
 InstallMissingModulesCredentialSecret or InstallMissingModulesCredentialSecretFilePath.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -30280,7 +30304,7 @@ InstallMissingModulesCredentialSecret or InstallMissingModulesCredentialSecretFi
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallMissingModulesForce</maml:name>
         <maml:description>
-          <maml:para>Force re-install or update even if dependencies are already installed. Useful when you want the build host to
+          <maml:para>Force re-install or update even if dependencies are already installed. Useful when you want the build host to&#xD;
 re-sync against the repository instead of accepting the current local state.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -30293,7 +30317,7 @@ re-sync against the repository instead of accepting the current local state.</ma
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallMissingModulesPrerelease</maml:name>
         <maml:description>
-          <maml:para>Allow prerelease versions when installing dependencies. Use this only when the dependency declaration and
+          <maml:para>Allow prerelease versions when installing dependencies. Use this only when the dependency declaration and&#xD;
 repository policy intentionally allow prerelease packages.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -30306,7 +30330,7 @@ repository policy intentionally allow prerelease packages.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>InstallMissingModulesRepository</maml:name>
         <maml:description>
-          <maml:para>Repository name used for dependency installation (defaults to PSGallery). Set this when your build
+          <maml:para>Repository name used for dependency installation (defaults to PSGallery). Set this when your build&#xD;
 should resolve dependencies from a named private feed or alternate gallery.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -30731,7 +30755,7 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>ResolveMissingModulesOnline</maml:name>
         <maml:description>
-          <maml:para>Resolve Auto/Latest dependency versions from the repository without installing.
+          <maml:para>Resolve Auto/Latest dependency versions from the repository without installing.&#xD;
 When not explicitly set, this is auto-enabled if any RequiredModules use Auto/Latest/Guid Auto.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -30780,7 +30804,7 @@ When not explicitly set, this is auto-enabled if any RequiredModules use Auto/La
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>SignIncludeBinaries</maml:name>
         <maml:description>
-          <maml:para>When signing is enabled, binaries are signed by default (e.g., .dll, .cat).
+          <maml:para>When signing is enabled, binaries are signed by default (e.g., .dll, .cat).&#xD;
 Use -SignIncludeBinaries:$false to opt out.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -30853,7 +30877,7 @@ Use -SignIncludeBinaries:$false to opt out.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>SyncNETProjectVersion</maml:name>
         <maml:description>
-          <maml:para>Synchronize the source .NET project version with the resolved module/manifest version before staging.
+          <maml:para>Synchronize the source .NET project version with the resolved module/manifest version before staging.&#xD;
 This is opt-in and updates the source .csproj file when a project path can be resolved.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -30926,7 +30950,7 @@ This is opt-in and updates the source .csproj file when a project path can be re
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>WarnIfRequiredModulesOutdated</maml:name>
         <maml:description>
-          <maml:para>Warn if RequiredModule entries are older than the latest version available in the repository. This is a
+          <maml:para>Warn if RequiredModule entries are older than the latest version available in the repository. This is a&#xD;
 reporting hint and does not change the manifest or install anything by itself.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -31005,7 +31029,7 @@ reporting hint and does not change the manifest or install anything by itself.</
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Used by the build pipeline to declare which commands should be imported from an external module at build time.
+      <maml:para>Used by the build pipeline to declare which commands should be imported from an external module at build time.&#xD;
 This helps make build scripts deterministic and explicit about their dependencies.</maml:para>
     </maml:description>
     <command:syntax>
@@ -31116,7 +31140,7 @@ This helps make build scripts deterministic and explicit about their dependencie
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Adds a compatibility validation step to the build pipeline. This can be used to enforce that the module source is compatible
+      <maml:para>Adds a compatibility validation step to the build pipeline. This can be used to enforce that the module source is compatible&#xD;
 with Windows PowerShell 5.1 and/or PowerShell 7+.</maml:para>
     </maml:description>
     <command:syntax>
@@ -31419,12 +31443,12 @@ with Windows PowerShell 5.1 and/or PowerShell 7+.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Delivery configuration is used to bundle “internals” (docs, examples, tools, configuration files) into a module and optionally
+      <maml:para>Delivery configuration is used to bundle “internals” (docs, examples, tools, configuration files) into a module and optionally&#xD;
 generate public helper commands (Install-&lt;ModuleName&gt; / Update-&lt;ModuleName&gt;) that can copy these files to a target folder.</maml:para>
       <maml:para>This is intended for “script packages” where the module contains additional artifacts that should be deployed alongside it.</maml:para>
-      <maml:para>Generated install helpers default to merge behavior. Generated update helpers default to refresh behavior, which
-overwrites package files while keeping local files that are not part of the package. Use IncludePaths
-and ExcludePaths to scope which package files are managed, then use PreservePaths
+      <maml:para>Generated install helpers default to merge behavior. Generated update helpers default to refresh behavior, which&#xD;
+overwrites package files while keeping local files that are not part of the package. Use IncludePaths&#xD;
+and ExcludePaths to scope which package files are managed, then use PreservePaths&#xD;
 and OverwritePaths to fine-tune collision behavior for managed relative paths.</maml:para>
     </maml:description>
     <command:syntax>
@@ -31475,7 +31499,7 @@ and OverwritePaths to fine-tune collision behavior for managed relative paths.</
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ExcludePaths</maml:name>
           <maml:description>
-            <maml:para>Optional wildcard patterns (relative to InternalsPath) that generated Install-/Update- helpers should not copy, refresh, or consider package-owned.
+            <maml:para>Optional wildcard patterns (relative to InternalsPath) that generated Install-/Update- helpers should not copy, refresh, or consider package-owned.&#xD;
 Exclusions win over IncludePaths. Use this for local-only or user-owned package-adjacent paths such as Config/local/** or Config/config.json.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -31524,8 +31548,8 @@ Exclusions win over IncludePaths. Use this for local-only or user-owned package-
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>IncludePaths</maml:name>
           <maml:description>
-            <maml:para>Optional wildcard patterns (relative to InternalsPath) that define which package files generated Install-/Update- helpers manage.
-Use this when a module ships mixed content but only selected folders should be copied or refreshed, for example Config/*.sample.json and Scripts/*.ps1.
+            <maml:para>Optional wildcard patterns (relative to InternalsPath) that define which package files generated Install-/Update- helpers manage.&#xD;
+Use this when a module ships mixed content but only selected folders should be copied or refreshed, for example Config/*.sample.json and Scripts/*.ps1.&#xD;
 When omitted, all files under InternalsPath are managed.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -31640,7 +31664,7 @@ When omitted, all files under InternalsPath are managed.</maml:para>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>OverwritePaths</maml:name>
           <maml:description>
-            <maml:para>Optional wildcard patterns (relative to Internals) that should be overwritten during merge installs by generated Install-/Update- helpers.
+            <maml:para>Optional wildcard patterns (relative to Internals) that should be overwritten during merge installs by generated Install-/Update- helpers.&#xD;
 Example: Artefacts/**.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -31653,7 +31677,7 @@ Example: Artefacts/**.</maml:para>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>PreservePaths</maml:name>
           <maml:description>
-            <maml:para>Optional wildcard patterns (relative to Internals) that should be preserved during merge or refresh installs by generated Install-/Update- helpers.
+            <maml:para>Optional wildcard patterns (relative to Internals) that should be preserved during merge or refresh installs by generated Install-/Update- helpers.&#xD;
 Example: Config/**.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -31801,7 +31825,7 @@ Example: Config/**.</maml:para>
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>ExcludePaths</maml:name>
         <maml:description>
-          <maml:para>Optional wildcard patterns (relative to InternalsPath) that generated Install-/Update- helpers should not copy, refresh, or consider package-owned.
+          <maml:para>Optional wildcard patterns (relative to InternalsPath) that generated Install-/Update- helpers should not copy, refresh, or consider package-owned.&#xD;
 Exclusions win over IncludePaths. Use this for local-only or user-owned package-adjacent paths such as Config/local/** or Config/config.json.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -31850,8 +31874,8 @@ Exclusions win over IncludePaths. Use this for local-only or user-owned package-
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>IncludePaths</maml:name>
         <maml:description>
-          <maml:para>Optional wildcard patterns (relative to InternalsPath) that define which package files generated Install-/Update- helpers manage.
-Use this when a module ships mixed content but only selected folders should be copied or refreshed, for example Config/*.sample.json and Scripts/*.ps1.
+          <maml:para>Optional wildcard patterns (relative to InternalsPath) that define which package files generated Install-/Update- helpers manage.&#xD;
+Use this when a module ships mixed content but only selected folders should be copied or refreshed, for example Config/*.sample.json and Scripts/*.ps1.&#xD;
 When omitted, all files under InternalsPath are managed.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -31966,7 +31990,7 @@ When omitted, all files under InternalsPath are managed.</maml:para>
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>OverwritePaths</maml:name>
         <maml:description>
-          <maml:para>Optional wildcard patterns (relative to Internals) that should be overwritten during merge installs by generated Install-/Update- helpers.
+          <maml:para>Optional wildcard patterns (relative to Internals) that should be overwritten during merge installs by generated Install-/Update- helpers.&#xD;
 Example: Artefacts/**.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -31979,7 +32003,7 @@ Example: Artefacts/**.</maml:para>
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>PreservePaths</maml:name>
         <maml:description>
-          <maml:para>Optional wildcard patterns (relative to Internals) that should be preserved during merge or refresh installs by generated Install-/Update- helpers.
+          <maml:para>Optional wildcard patterns (relative to Internals) that should be preserved during merge or refresh installs by generated Install-/Update- helpers.&#xD;
 Example: Config/**.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -32143,12 +32167,12 @@ Example: Config/**.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet emits documentation configuration segments that are consumed by Invoke-ModuleBuild / Build-Module.
-It controls markdown generation (in -Path), optional external help generation (MAML, e.g. en-US\&lt;ModuleName&gt;-help.xml),
-and project-root documentation sync. When -Enable is used, PowerForge generates documentation, cleans stale files in the configured docs folder,
+      <maml:para>This cmdlet emits documentation configuration segments that are consumed by Invoke-ModuleBuild / Build-Module.&#xD;
+It controls markdown generation (in -Path), optional external help generation (MAML, e.g. en-US\&lt;ModuleName&gt;-help.xml),&#xD;
+and project-root documentation sync. When -Enable is used, PowerForge generates documentation, cleans stale files in the configured docs folder,&#xD;
 and updates the project documentation path by default.</maml:para>
-      <maml:para>About topics are supported via about_*.help.txt / about_*.txt / about_*.md / about_*.markdown files present in the module source. When enabled,
-these are converted into markdown pages under Docs\About. Additional source roots can be provided via
+      <maml:para>About topics are supported via about_*.help.txt / about_*.txt / about_*.md / about_*.markdown files present in the module source. When enabled,&#xD;
+these are converted into markdown pages under Docs\About. Additional source roots can be provided via&#xD;
 AboutTopicsSourcePath.</maml:para>
     </maml:description>
     <command:syntax>
@@ -32157,7 +32181,7 @@ AboutTopicsSourcePath.</maml:para>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>AboutTopicsSourcePath</maml:name>
           <maml:description>
-            <maml:para>Optional extra source paths for about_* topic files (.help.txt, .txt, .md, .markdown).
+            <maml:para>Optional extra source paths for about_* topic files (.help.txt, .txt, .md, .markdown).&#xD;
 Relative paths are resolved from the staging root (for example: 'Help\About').</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -32266,7 +32290,7 @@ Relative paths are resolved from the staging root (for example: 'Help\About').</
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>SyncExternalHelpToProjectRoot</maml:name>
           <maml:description>
-            <maml:para>When enabled, the generated external help file is also synced
+            <maml:para>When enabled, the generated external help file is also synced&#xD;
 back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -32282,7 +32306,7 @@ back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>AboutTopicsSourcePath</maml:name>
         <maml:description>
-          <maml:para>Optional extra source paths for about_* topic files (.help.txt, .txt, .md, .markdown).
+          <maml:para>Optional extra source paths for about_* topic files (.help.txt, .txt, .md, .markdown).&#xD;
 Relative paths are resolved from the staging root (for example: 'Help\About').</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -32391,7 +32415,7 @@ Relative paths are resolved from the staging root (for example: 'Help\About').</
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>SyncExternalHelpToProjectRoot</maml:name>
         <maml:description>
-          <maml:para>When enabled, the generated external help file is also synced
+          <maml:para>When enabled, the generated external help file is also synced&#xD;
 back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -32779,7 +32803,7 @@ back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Create benchmark gate with metrics</maml:title>
-        <dev:code>$m = New-ConfigurationDotNetBenchmarkMetric -Name 'storage.ms' -Source JsonPath -Path 'storage.ms'
+        <dev:code>$m = New-ConfigurationDotNetBenchmarkMetric -Name 'storage.ms' -Source JsonPath -Path 'storage.ms'&#xD;
 New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.json' -BaselinePath 'Build\Baselines\storage.json' -Metrics $m</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -34253,8 +34277,8 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet is the DSL root for DotNet publish authoring in PSPublishModule.
-It accepts optional global options and merges child objects emitted by -Settings such as:
+      <maml:para>This cmdlet is the DSL root for DotNet publish authoring in PSPublishModule.&#xD;
+It accepts optional global options and merges child objects emitted by -Settings such as:&#xD;
 New-ConfigurationDotNetTarget, New-ConfigurationDotNetInstaller, and New-ConfigurationDotNetSign.</maml:para>
     </maml:description>
     <command:syntax>
@@ -34766,8 +34790,8 @@ New-ConfigurationDotNetTarget, New-ConfigurationDotNetInstaller, and New-Configu
     <command:examples>
       <command:example>
         <maml:title>Create a basic DotNet publish spec from DSL</maml:title>
-        <dev:code>New-ConfigurationDotNetPublish -IncludeSchema -ProjectRoot '.' -Configuration 'Release' -Settings {
-    New-ConfigurationDotNetTarget -Name 'PowerForge.Cli' -ProjectPath 'PowerForge.Cli/PowerForge.Cli.csproj' -Framework 'net10.0' -Runtimes 'win-x64' -Style PortableCompat -Zip
+        <dev:code>New-ConfigurationDotNetPublish -IncludeSchema -ProjectRoot '.' -Configuration 'Release' -Settings {&#xD;
+    New-ConfigurationDotNetTarget -Name 'PowerForge.Cli' -ProjectPath 'PowerForge.Cli/PowerForge.Cli.csproj' -Framework 'net10.0' -Runtimes 'win-x64' -Style PortableCompat -Zip&#xD;
 }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -35081,7 +35105,7 @@ New-ConfigurationDotNetTarget, New-ConfigurationDotNetInstaller, and New-Configu
     <command:examples>
       <command:example>
         <maml:title>Create service package options</maml:title>
-        <dev:code>$lifecycle = New-ConfigurationDotNetServiceLifecycle -Enabled
+        <dev:code>$lifecycle = New-ConfigurationDotNetServiceLifecycle -Enabled&#xD;
 New-ConfigurationDotNetService -ServiceName 'My.Service' -GenerateInstallScript -GenerateUninstallScript -Lifecycle $lifecycle</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -35120,7 +35144,7 @@ New-ConfigurationDotNetService -ServiceName 'My.Service' -GenerateInstallScript 
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ExpectedValue</maml:name>
           <maml:description>
-            <maml:para>Optional expected JSON scalar value at JsonPath.
+            <maml:para>Optional expected JSON scalar value at JsonPath.&#xD;
 When omitted, the check only verifies that the path exists.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -35145,7 +35169,7 @@ When omitted, the check only verifies that the path exists.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>JsonPath</maml:name>
           <maml:description>
-            <maml:para>Optional dot-separated JSON path to validate in the response body.
+            <maml:para>Optional dot-separated JSON path to validate in the response body.&#xD;
 Array indexes can be expressed as property[0].</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -35199,7 +35223,7 @@ Array indexes can be expressed as property[0].</maml:para>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Uri</maml:name>
           <maml:description>
-            <maml:para>Absolute HTTP or HTTPS endpoint to poll.
+            <maml:para>Absolute HTTP or HTTPS endpoint to poll.&#xD;
 Supports service lifecycle tokens such as {serviceName}, {outputDir}, and {executablePath}.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
@@ -35227,7 +35251,7 @@ Supports service lifecycle tokens such as {serviceName}, {outputDir}, and {execu
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>ExpectedValue</maml:name>
         <maml:description>
-          <maml:para>Optional expected JSON scalar value at JsonPath.
+          <maml:para>Optional expected JSON scalar value at JsonPath.&#xD;
 When omitted, the check only verifies that the path exists.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -35252,7 +35276,7 @@ When omitted, the check only verifies that the path exists.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>JsonPath</maml:name>
         <maml:description>
-          <maml:para>Optional dot-separated JSON path to validate in the response body.
+          <maml:para>Optional dot-separated JSON path to validate in the response body.&#xD;
 Array indexes can be expressed as property[0].</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -35306,7 +35330,7 @@ Array indexes can be expressed as property[0].</maml:para>
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Uri</maml:name>
         <maml:description>
-          <maml:para>Absolute HTTP or HTTPS endpoint to poll.
+          <maml:para>Absolute HTTP or HTTPS endpoint to poll.&#xD;
 Supports service lifecycle tokens such as {serviceName}, {outputDir}, and {executablePath}.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
@@ -36429,7 +36453,7 @@ Supports service lifecycle tokens such as {serviceName}, {outputDir}, and {execu
     <command:examples>
       <command:example>
         <maml:title>Create state preservation options</maml:title>
-        <dev:code>$rule = New-ConfigurationDotNetStateRule -SourcePath 'config.json' -Overwrite
+        <dev:code>$rule = New-ConfigurationDotNetStateRule -SourcePath 'config.json' -Overwrite&#xD;
 New-ConfigurationDotNetState -Enabled -Rules $rule -StoragePath 'Artifacts/DotNetPublish/State/{target}/{rid}/{framework}/{style}'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -37238,11 +37262,11 @@ New-ConfigurationDotNetState -Enabled -Rules $rule -StoragePath 'Artifacts/DotNe
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Lifecycle actions run PowerShell at a named module pipeline context point such as AfterStaging,
-AfterManifest, or BeforePublish. PowerForge writes a stable JSON context file before each
+      <maml:para>Lifecycle actions run PowerShell at a named module pipeline context point such as AfterStaging,&#xD;
+AfterManifest, or BeforePublish. PowerForge writes a stable JSON context file before each&#xD;
 action and exposes its path through the POWERFORGE_CONTEXT environment variable.</maml:para>
-      <maml:para>Use lifecycle actions for project-specific preparation, generated-file adjustments, artifact checks, and
-release guardrails that need a precise pipeline context. Configuration segment order does not control
+      <maml:para>Use lifecycle actions for project-specific preparation, generated-file adjustments, artifact checks, and&#xD;
+release guardrails that need a precise pipeline context. Configuration segment order does not control&#xD;
 execution order; the At value does.</maml:para>
     </maml:description>
     <command:syntax>
@@ -37879,9 +37903,9 @@ execution order; the At value does.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>External asset bundles are for files that should be carried inside a module package but are not authored as normal
-source files, such as offline installers, tooling archives, generated payloads, or mirrored third-party packages.
-PowerForge downloads or copies the declared files before staging, computes SHA256 values, and writes a manifest
+      <maml:para>External asset bundles are for files that should be carried inside a module package but are not authored as normal&#xD;
+source files, such as offline installers, tooling archives, generated payloads, or mirrored third-party packages.&#xD;
+PowerForge downloads or copies the declared files before staging, computes SHA256 values, and writes a manifest&#xD;
 alongside the bundle.</maml:para>
     </maml:description>
     <command:syntax>
@@ -38147,8 +38171,8 @@ alongside the bundle.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>File entries are passed to New-ConfigurationExternalAsset. Each entry declares where the build pipeline
-obtains a file from, where it lands inside the output folder, and which runtime or architecture metadata should be
+      <maml:para>File entries are passed to New-ConfigurationExternalAsset. Each entry declares where the build pipeline&#xD;
+obtains a file from, where it lands inside the output folder, and which runtime or architecture metadata should be&#xD;
 written to the generated manifest.</maml:para>
     </maml:description>
     <command:syntax>
@@ -38342,7 +38366,7 @@ written to the generated manifest.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Adds a file-consistency validation step to the pipeline. This can enforce required encoding/line-ending rules
+      <maml:para>Adds a file-consistency validation step to the pipeline. This can enforce required encoding/line-ending rules&#xD;
 and (optionally) auto-fix issues during a build.</maml:para>
     </maml:description>
     <command:syntax>
@@ -38921,7 +38945,7 @@ and (optionally) auto-fix issues during a build.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Produces a formatting configuration segment used by the build pipeline to normalize generated output
+      <maml:para>Produces a formatting configuration segment used by the build pipeline to normalize generated output&#xD;
 (merged PSM1/PSD1) and optionally apply formatting back to the project root.</maml:para>
     </maml:description>
     <command:syntax>
@@ -39899,7 +39923,7 @@ and (optionally) auto-fix issues during a build.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Controls which modules are imported during a pipeline run (the module under build itself and/or its RequiredModules).
+      <maml:para>Controls which modules are imported during a pipeline run (the module under build itself and/or its RequiredModules).&#xD;
 This is primarily used by test and documentation steps that execute PowerShell code.</maml:para>
     </maml:description>
     <command:syntax>
@@ -40408,7 +40432,7 @@ This is primarily used by test and documentation steps that execute PowerShell c
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Emits a manifest configuration segment that is later applied to the module .psd1 during a build.
+      <maml:para>Emits a manifest configuration segment that is later applied to the module .psd1 during a build.&#xD;
 Use this to define identity and metadata (version, GUID, author, tags, links) in a build script / JSON pipeline.</maml:para>
     </maml:description>
     <command:syntax>
@@ -40927,24 +40951,24 @@ Use this to define identity and metadata (version, GUID, author, tags, links) in
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Emits module dependency configuration segments. These are later used to patch the module manifest and (optionally)
+      <maml:para>Emits module dependency configuration segments. These are later used to patch the module manifest and (optionally)&#xD;
 install/package dependencies during a build.</maml:para>
-      <maml:para>Use RequiredModule for dependencies that should appear in the manifest and can also be bundled into build
-artefacts when New-ConfigurationArtefact -AddRequiredModules is enabled. Use ExternalModule for
-dependencies that must exist on the target system but should not be bundled into artefacts. Use
-EmbeddedModule for dependencies that should be bundled under Internals\Modules and installed/imported
+      <maml:para>Use RequiredModule for dependencies that should appear in the manifest and can also be bundled into build&#xD;
+artefacts when New-ConfigurationArtefact -AddRequiredModules is enabled. Use ExternalModule for&#xD;
+dependencies that must exist on the target system but should not be bundled into artefacts. Use&#xD;
+EmbeddedModule for dependencies that should be bundled under Internals\Modules and installed/imported&#xD;
 later by explicit path with Install-ModuleDependency / Import-ModuleDependency.</maml:para>
-      <maml:para>RequiredModule entries are written to the manifest RequiredModules. ExternalModule entries
-are written to PrivateData.PSData.ExternalModuleDependencies. EmbeddedModule entries are copied
-into the built module internals and are not emitted as manifest dependencies. ApprovedModule entries are
+      <maml:para>RequiredModule entries are written to the manifest RequiredModules. ExternalModule entries&#xD;
+are written to PrivateData.PSData.ExternalModuleDependencies. EmbeddedModule entries are copied&#xD;
+into the built module internals and are not emitted as manifest dependencies. ApprovedModule entries are&#xD;
 used by merge/missing-function workflows and are not emitted as manifest dependencies.</maml:para>
-      <maml:para>Built-in Microsoft.PowerShell.* modules are ignored during manifest refresh because they are inbox runtime
+      <maml:para>Built-in Microsoft.PowerShell.* modules are ignored during manifest refresh because they are inbox runtime&#xD;
 modules, not gallery-resolvable dependencies.</maml:para>
-      <maml:para>Version and Guid values set to Auto or Latest are resolved from installed modules by default. When
-New-ConfigurationBuild -ResolveMissingModulesOnline is enabled, repository results can be used without
+      <maml:para>Version and Guid values set to Auto or Latest are resolved from installed modules by default. When&#xD;
+New-ConfigurationBuild -ResolveMissingModulesOnline is enabled, repository results can be used without&#xD;
 installing the dependency first.</maml:para>
-      <maml:para>Choose only one versioning style per dependency: a minimum version (-Version or
--MinimumVersion) or an exact version (-RequiredVersion). Mixing them for the same module is treated
+      <maml:para>Choose only one versioning style per dependency: a minimum version (-Version or&#xD;
+-MinimumVersion) or an exact version (-RequiredVersion). Mixing them for the same module is treated&#xD;
 as invalid input.</maml:para>
     </maml:description>
     <command:syntax>
@@ -40953,7 +40977,7 @@ as invalid input.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Guid</maml:name>
           <maml:description>
-            <maml:para>GUID of the dependency module (or Auto). This is most useful when you want manifest validation to lock
+            <maml:para>GUID of the dependency module (or Auto). This is most useful when you want manifest validation to lock&#xD;
 onto a specific module identity across repositories.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -40966,7 +40990,7 @@ onto a specific module identity across repositories.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>MinimumVersion</maml:name>
           <maml:description>
-            <maml:para>Minimum version of the dependency module (preferred over -Version). Use this when any newer compatible
+            <maml:para>Minimum version of the dependency module (preferred over -Version). Use this when any newer compatible&#xD;
 version is acceptable.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -40979,7 +41003,7 @@ version is acceptable.</maml:para>
         <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Name</maml:name>
           <maml:description>
-            <maml:para>Name of the PowerShell module(s) that your module depends on. Multiple names emit one configuration segment per
+            <maml:para>Name of the PowerShell module(s) that your module depends on. Multiple names emit one configuration segment per&#xD;
 module using the same dependency settings.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
@@ -40992,7 +41016,7 @@ module using the same dependency settings.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RequiredVersion</maml:name>
           <maml:description>
-            <maml:para>Required version of the dependency module (exact match). Use this when consumers and packaging must resolve the
+            <maml:para>Required version of the dependency module (exact match). Use this when consumers and packaging must resolve the&#xD;
 exact same version.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -41005,9 +41029,9 @@ exact same version.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Type</maml:name>
           <maml:description>
-            <maml:para>Choose between RequiredModule, ExternalModule, EmbeddedModule, and ApprovedModule.
-RequiredModule is used for manifest and optional packaging, ExternalModule is install-only,
-EmbeddedModule is bundled under Internals for explicit install/import by path, and ApprovedModule
+            <maml:para>Choose between RequiredModule, ExternalModule, EmbeddedModule, and ApprovedModule.&#xD;
+RequiredModule is used for manifest and optional packaging, ExternalModule is install-only,&#xD;
+EmbeddedModule is bundled under Internals for explicit install/import by path, and ApprovedModule&#xD;
 is merge-only.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">ModuleDependencyKind</command:parameterValue>
@@ -41026,7 +41050,7 @@ is merge-only.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Version</maml:name>
           <maml:description>
-            <maml:para>Minimum version of the dependency module (or Auto/Latest). This is treated the same as
+            <maml:para>Minimum version of the dependency module (or Auto/Latest). This is treated the same as&#xD;
 -MinimumVersion and cannot be combined with -RequiredVersion.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -41060,7 +41084,7 @@ is merge-only.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Guid</maml:name>
         <maml:description>
-          <maml:para>GUID of the dependency module (or Auto). This is most useful when you want manifest validation to lock
+          <maml:para>GUID of the dependency module (or Auto). This is most useful when you want manifest validation to lock&#xD;
 onto a specific module identity across repositories.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -41073,7 +41097,7 @@ onto a specific module identity across repositories.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>MinimumVersion</maml:name>
         <maml:description>
-          <maml:para>Minimum version of the dependency module (preferred over -Version). Use this when any newer compatible
+          <maml:para>Minimum version of the dependency module (preferred over -Version). Use this when any newer compatible&#xD;
 version is acceptable.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -41086,7 +41110,7 @@ version is acceptable.</maml:para>
       <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Name</maml:name>
         <maml:description>
-          <maml:para>Name of the PowerShell module(s) that your module depends on. Multiple names emit one configuration segment per
+          <maml:para>Name of the PowerShell module(s) that your module depends on. Multiple names emit one configuration segment per&#xD;
 module using the same dependency settings.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
@@ -41099,7 +41123,7 @@ module using the same dependency settings.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>RequiredVersion</maml:name>
         <maml:description>
-          <maml:para>Required version of the dependency module (exact match). Use this when consumers and packaging must resolve the
+          <maml:para>Required version of the dependency module (exact match). Use this when consumers and packaging must resolve the&#xD;
 exact same version.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -41112,9 +41136,9 @@ exact same version.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Type</maml:name>
         <maml:description>
-          <maml:para>Choose between RequiredModule, ExternalModule, EmbeddedModule, and ApprovedModule.
-RequiredModule is used for manifest and optional packaging, ExternalModule is install-only,
-EmbeddedModule is bundled under Internals for explicit install/import by path, and ApprovedModule
+          <maml:para>Choose between RequiredModule, ExternalModule, EmbeddedModule, and ApprovedModule.&#xD;
+RequiredModule is used for manifest and optional packaging, ExternalModule is install-only,&#xD;
+EmbeddedModule is bundled under Internals for explicit install/import by path, and ApprovedModule&#xD;
 is merge-only.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">ModuleDependencyKind</command:parameterValue>
@@ -41133,7 +41157,7 @@ is merge-only.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Version</maml:name>
         <maml:description>
-          <maml:para>Minimum version of the dependency module (or Auto/Latest). This is treated the same as
+          <maml:para>Minimum version of the dependency module (or Auto/Latest). This is treated the same as&#xD;
 -MinimumVersion and cannot be combined with -RequiredVersion.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -41255,11 +41279,11 @@ is merge-only.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet emits the same configuration segment types as the lower-level
-New-ConfigurationFormat, New-ConfigurationDocumentation,
-New-ConfigurationValidation, New-ConfigurationFileConsistency,
-New-ConfigurationCompatibility, New-ConfigurationImportModule, and
-New-ConfigurationBuild commands. Use it when a module wrapper should stay thin
+      <maml:para>This cmdlet emits the same configuration segment types as the lower-level&#xD;
+New-ConfigurationFormat, New-ConfigurationDocumentation,&#xD;
+New-ConfigurationValidation, New-ConfigurationFileConsistency,&#xD;
+New-ConfigurationCompatibility, New-ConfigurationImportModule, and&#xD;
+New-ConfigurationBuild commands. Use it when a module wrapper should stay thin&#xD;
 and only declare project-specific values.</maml:para>
     </maml:description>
     <command:syntax>
@@ -42422,7 +42446,7 @@ and only declare project-specific values.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Missing module-backed commands fail the build by default. Use this command for optional dependencies where you
+      <maml:para>Missing module-backed commands fail the build by default. Use this command for optional dependencies where you&#xD;
 want selected missing modules or commands to be ignored. -Force keeps the legacy broad opt-out behavior.</maml:para>
     </maml:description>
     <command:syntax>
@@ -42581,7 +42605,7 @@ want selected missing modules or commands to be ignored. -Force keeps the legacy
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet mirrors the repository package build settings normally authored in project.build.json, allowing
+      <maml:para>This cmdlet mirrors the repository package build settings normally authored in project.build.json, allowing&#xD;
 Build-Module { } to remain the primary authoring surface for combined module and package publishing.</maml:para>
     </maml:description>
     <command:syntax>
@@ -42955,6 +42979,18 @@ Build-Module { } to remain the primary authoring surface for combined module and
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IncludeSymbols</maml:name>
+          <maml:description>
+            <maml:para>Whether portable .snupkg symbol packages should be created.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -43707,6 +43743,18 @@ Build-Module { } to remain the primary authoring surface for combined module and
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>IncludeSymbols</maml:name>
+        <maml:description>
+          <maml:para>Whether portable .snupkg symbol packages should be created.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Name</maml:name>
         <maml:description>
           <maml:para>Optional friendly name for this package build lane.</maml:para>
@@ -44119,7 +44167,7 @@ Build-Module { } to remain the primary authoring surface for combined module and
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Placeholders are applied during merge/packaging so you can inject build-time values (versions, build IDs, timestamps)
+      <maml:para>Placeholders are applied during merge/packaging so you can inject build-time values (versions, build IDs, timestamps)&#xD;
 without hardcoding them into source files.</maml:para>
     </maml:description>
     <command:syntax>
@@ -44498,7 +44546,7 @@ without hardcoding them into source files.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Use this cmdlet inside Build-Module { } when package build details already live in a JSON file and the
+      <maml:para>Use this cmdlet inside Build-Module { } when package build details already live in a JSON file and the&#xD;
 module build should coordinate with that package lane.</maml:para>
     </maml:description>
     <command:syntax>
@@ -44556,6 +44604,18 @@ module build should coordinate with that package lane.</maml:para>
           <maml:name>Enabled</maml:name>
           <maml:description>
             <maml:para>Whether this project build lane is enabled. Defaults to true.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IncludeSymbols</maml:name>
+          <maml:description>
+            <maml:para>Whether portable symbol packages should be created, overriding the referenced JSON when set.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -44739,6 +44799,18 @@ module build should coordinate with that package lane.</maml:para>
         <maml:name>Enabled</maml:name>
         <maml:description>
           <maml:para>Whether this project build lane is enabled. Defaults to true.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>IncludeSymbols</maml:name>
+        <maml:description>
+          <maml:para>Whether portable symbol packages should be created, overriding the referenced JSON when set.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -46604,13 +46676,13 @@ module build should coordinate with that package lane.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet emits publish configuration consumed by Invoke-ModuleBuild / Build-Module.
-Use -Type to choose a destination. For repository publishing, -Tool selects the provider
+      <maml:para>This cmdlet emits publish configuration consumed by Invoke-ModuleBuild / Build-Module.&#xD;
+Use -Type to choose a destination. For repository publishing, -Tool selects the provider&#xD;
 (PowerShellGet/PSResourceGet/ManagedModule/Auto).</maml:para>
-      <maml:para>For private repositories (for example Azure DevOps Artifacts, JFrog Artifactory, GitHub Packages, or private NuGet v3 feeds), provide repository URIs
-and (optionally) credentials, or use provider-specific preset parameters to resolve those URIs automatically.
+      <maml:para>For private repositories (for example Azure DevOps Artifacts, JFrog Artifactory, GitHub Packages, or private NuGet v3 feeds), provide repository URIs&#xD;
+and (optionally) credentials, or use provider-specific preset parameters to resolve those URIs automatically.&#xD;
 To avoid secrets in source control, pass API keys/tokens via -FilePath or environment-specific tooling.</maml:para>
-      <maml:para>JFrog Artifactory can be configured directly with -JFrogBaseUri and -JFrogRepository.
+      <maml:para>JFrog Artifactory can be configured directly with -JFrogBaseUri and -JFrogRepository.&#xD;
 For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -ApiKey only when the feed requires a separate NuGet API key for package push.</maml:para>
     </maml:description>
     <command:syntax>
@@ -48925,7 +48997,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Emits a test configuration segment that instructs the pipeline to run Pester tests after the module is merged/built.
+      <maml:para>Emits a test configuration segment that instructs the pipeline to run Pester tests after the module is merged/built.&#xD;
 Use this when you want builds to fail fast on test failures.</maml:para>
     </maml:description>
     <command:syntax>
@@ -49060,7 +49132,7 @@ Use this when you want builds to fail fast on test failures.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Adds a single validation segment that can run structure, documentation, test, binary, and csproj checks.
+      <maml:para>Adds a single validation segment that can run structure, documentation, test, binary, and csproj checks.&#xD;
 Each check can be configured as Off/Warning/Error to control whether it is informational or blocking.</maml:para>
       <maml:para>Encoding and line-ending enforcement is handled by New-ConfigurationFileConsistency.</maml:para>
     </maml:description>
@@ -50250,8 +50322,8 @@ Each check can be configured as Off/Warning/Error to control whether it is infor
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Emits an Xcode project version configuration segment consumed by Invoke-ModuleBuild /
-Build-Module. Use it when a release pipeline should keep Apple app project versions in
+      <maml:para>Emits an Xcode project version configuration segment consumed by Invoke-ModuleBuild /&#xD;
+Build-Module. Use it when a release pipeline should keep Apple app project versions in&#xD;
 sync with the build recipe.</maml:para>
     </maml:description>
     <command:syntax>
@@ -50296,7 +50368,7 @@ sync with the build recipe.</maml:para>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProjectPath,FullName">
           <maml:name>Path</maml:name>
           <maml:description>
-            <maml:para>Path to a .xcodeproj directory or project.pbxproj file.
+            <maml:para>Path to a .xcodeproj directory or project.pbxproj file.&#xD;
 Relative paths resolve from the pipeline project root.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
@@ -50336,7 +50408,7 @@ Relative paths resolve from the pipeline project root.</maml:para>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProjectPath,FullName">
           <maml:name>Path</maml:name>
           <maml:description>
-            <maml:para>Path to a .xcodeproj directory or project.pbxproj file.
+            <maml:para>Path to a .xcodeproj directory or project.pbxproj file.&#xD;
 Relative paths resolve from the pipeline project root.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
@@ -50400,7 +50472,7 @@ Relative paths resolve from the pipeline project root.</maml:para>
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="0" aliases="ProjectPath,FullName">
         <maml:name>Path</maml:name>
         <maml:description>
-          <maml:para>Path to a .xcodeproj directory or project.pbxproj file.
+          <maml:para>Path to a .xcodeproj directory or project.pbxproj file.&#xD;
 Relative paths resolve from the pipeline project root.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
@@ -50476,7 +50548,7 @@ Relative paths resolve from the pipeline project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Use this cmdlet for JSON-first onboarding of the DotNet publish engine.
+      <maml:para>Use this cmdlet for JSON-first onboarding of the DotNet publish engine.&#xD;
 The generated config can be executed with Invoke-DotNetPublish -ConfigPath ....</maml:para>
     </maml:description>
     <command:syntax>
@@ -50776,7 +50848,7 @@ The generated config can be executed with Invoke-DotNetPublish -ConfigPath ....<
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.String
+          <maml:name>System.String&#xD;
 PowerForge.DotNetPublishConfigScaffoldResult</maml:name>
         </dev:type>
       </command:returnValue>
@@ -51295,7 +51367,7 @@ PowerForge.DotNetPublishConfigScaffoldResult</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Use this cmdlet to scaffold about topic source files that are later converted by
+      <maml:para>Use this cmdlet to scaffold about topic source files that are later converted by&#xD;
 Invoke-ModuleBuild documentation generation into markdown pages under Docs\About.</maml:para>
     </maml:description>
     <command:syntax>
@@ -51511,8 +51583,8 @@ Invoke-ModuleBuild documentation generation into markdown pages under Docs\About
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Use this cmdlet to assemble a repository-level release config from the build configs the repo
-already has, typically Build/project.build.json and
+      <maml:para>Use this cmdlet to assemble a repository-level release config from the build configs the repo&#xD;
+already has, typically Build/project.build.json and&#xD;
 Build/powerforge.dotnetpublish.json.</maml:para>
     </maml:description>
     <command:syntax>
@@ -51780,7 +51852,7 @@ Build/powerforge.dotnetpublish.json.</maml:para>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.String
+          <maml:name>System.String&#xD;
 PowerForge.PowerForgeReleaseConfigScaffoldResult</maml:name>
         </dev:type>
       </command:returnValue>
@@ -52109,7 +52181,7 @@ PowerForge.PowerForgeReleaseConfigScaffoldResult</maml:name>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.String
+          <maml:name>System.String&#xD;
 PowerForge.PowerForgeProjectConfigurationScaffoldResult</maml:name>
         </dev:type>
       </command:returnValue>
@@ -53945,7 +54017,7 @@ PowerForge.PowerForgeProjectConfigurationScaffoldResult</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Reads project metadata from *.csproj, resolves the release version (unless overridden),
+      <maml:para>Reads project metadata from *.csproj, resolves the release version (unless overridden),&#xD;
 creates a GitHub release, and uploads the specified ZIP asset.</maml:para>
       <maml:para>For private repositories, use a token with the minimal required scope and prefer providing it via an environment variable.</maml:para>
     </maml:description>
@@ -54297,7 +54369,7 @@ creates a GitHub release, and uploads the specified ZIP asset.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This managed publish surface creates a NuGet package from a module folder and publishes it to a local folder feed
+      <maml:para>This managed publish surface creates a NuGet package from a module folder and publishes it to a local folder feed&#xD;
 or NuGet-compatible package publish endpoint.</maml:para>
     </maml:description>
     <command:syntax>
@@ -54884,7 +54956,7 @@ or NuGet-compatible package publish endpoint.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>SkipDuplicate</maml:name>
           <maml:description>
-            <maml:para>When set, passes --skip-duplicate to dotnet nuget push.
+            <maml:para>When set, passes --skip-duplicate to dotnet nuget push.&#xD;
 This makes repeated publishing runs idempotent when the package already exists.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -54960,7 +55032,7 @@ This makes repeated publishing runs idempotent when the package already exists.<
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>SkipDuplicate</maml:name>
           <maml:description>
-            <maml:para>When set, passes --skip-duplicate to dotnet nuget push.
+            <maml:para>When set, passes --skip-duplicate to dotnet nuget push.&#xD;
 This makes repeated publishing runs idempotent when the package already exists.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -55024,7 +55096,7 @@ This makes repeated publishing runs idempotent when the package already exists.<
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>SkipDuplicate</maml:name>
         <maml:description>
-          <maml:para>When set, passes --skip-duplicate to dotnet nuget push.
+          <maml:para>When set, passes --skip-duplicate to dotnet nuget push.&#xD;
 This makes repeated publishing runs idempotent when the package already exists.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -55110,7 +55182,7 @@ This makes repeated publishing runs idempotent when the package already exists.<
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Signs PowerShell scripts/manifests (and optionally binaries) using Authenticode.
+      <maml:para>Signs PowerShell scripts/manifests (and optionally binaries) using Authenticode.&#xD;
 When running in CI, prefer using a certificate from the Windows certificate store and referencing it by thumbprint.</maml:para>
     </maml:description>
     <command:syntax>
@@ -55949,7 +56021,7 @@ When running in CI, prefer using a certificate from the Windows certificate stor
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Uses the PowerShell parser (AST) to remove comments safely rather than relying on fragile regex-only approaches.
+      <maml:para>Uses the PowerShell parser (AST) to remove comments safely rather than relying on fragile regex-only approaches.&#xD;
 Useful as a preprocessing step when producing merged/packed scripts.</maml:para>
     </maml:description>
     <command:syntax>
@@ -56279,7 +56351,7 @@ Useful as a preprocessing step when producing merged/packed scripts.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Removing a profile deletes only PSPublishModule's non-secret repository settings. It does not unregister native
+      <maml:para>Removing a profile deletes only PSPublishModule's non-secret repository settings. It does not unregister native&#xD;
 PowerShell repository state or clear external credential-provider token caches.</maml:para>
     </maml:description>
     <command:syntax>
@@ -56418,7 +56490,7 @@ PowerShell repository state or clear external credential-provider token caches.<
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Designed for build/CI cleanup scenarios where removing generated artifacts (bin/obj, packed outputs, temporary files)
+      <maml:para>Designed for build/CI cleanup scenarios where removing generated artifacts (bin/obj, packed outputs, temporary files)&#xD;
 should be predictable and safe. Supports -WhatIf, retries and optional backups.</maml:para>
     </maml:description>
     <command:syntax>
@@ -56993,9 +57065,9 @@ should be predictable and safe. Supports -WhatIf, retries and optional backups.<
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This command is the managed operator surface for module estate maintenance. It
-inventories installed modules, plans stale-version, receipt-drift, source,
-scope, family, and cleanup actions, and can apply the plan through the
+      <maml:para>This command is the managed operator surface for module estate maintenance. It&#xD;
+inventories installed modules, plans stale-version, receipt-drift, source,&#xD;
+scope, family, and cleanup actions, and can apply the plan through the&#xD;
 managed delivery engine.</maml:para>
     </maml:description>
     <command:syntax>
@@ -57816,7 +57888,7 @@ managed delivery engine.</maml:para>
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String[]
+          <maml:name>System.String[]&#xD;
 PSPublishModule.ModuleStateInventoryResult</maml:name>
         </dev:type>
       </command:inputType>
@@ -57995,7 +58067,7 @@ PSPublishModule.ModuleStateInventoryResult</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This command uses the same managed C# repository and archive engine as Install-ManagedModule, but requires
+      <maml:para>This command uses the same managed C# repository and archive engine as Install-ManagedModule, but requires&#xD;
 an explicit destination root instead of installing into the default PowerShell module paths.</maml:para>
     </maml:description>
     <command:syntax>
@@ -58783,7 +58855,7 @@ an explicit destination root instead of installing into the default PowerShell m
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.ManagedModuleInstallResult
+          <maml:name>PowerForge.ManagedModuleInstallResult&#xD;
 PowerForge.ManagedModuleInstallPlan</maml:name>
         </dev:type>
       </command:returnValue>
@@ -59416,7 +59488,7 @@ PowerForge.ManagedModuleInstallPlan</maml:name>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.ManagedScriptSaveResult
+          <maml:name>PowerForge.ManagedScriptSaveResult&#xD;
 PowerForge.ManagedScriptSavePlan</maml:name>
         </dev:type>
       </command:returnValue>
@@ -59447,7 +59519,7 @@ PowerForge.ManagedScriptSavePlan</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet uses the GitHub REST API to create a release and upload assets. It is a lower-level building block used by
+      <maml:para>This cmdlet uses the GitHub REST API to create a release and upload assets. It is a lower-level building block used by&#xD;
 higher-level helpers (such as Publish-GitHubReleaseAsset) and can also be used directly in CI pipelines.</maml:para>
       <maml:para>Provide the token via an environment variable to avoid leaking secrets into logs or history.</maml:para>
     </maml:description>
@@ -59577,7 +59649,7 @@ higher-level helpers (such as Publish-GitHubReleaseAsset) and can also be used d
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ReuseExistingReleaseOnConflict</maml:name>
           <maml:description>
-            <maml:para>When true (default), a 422 tag conflict reuses the existing release.
+            <maml:para>When true (default), a 422 tag conflict reuses the existing release.&#xD;
 When false, the cmdlet fails on existing tags.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
@@ -59725,7 +59797,7 @@ When false, the cmdlet fails on existing tags.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>ReuseExistingReleaseOnConflict</maml:name>
         <maml:description>
-          <maml:para>When true (default), a 422 tag conflict reuses the existing release.
+          <maml:para>When true (default), a 422 tag conflict reuses the existing release.&#xD;
 When false, the cmdlet fails on existing tags.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
@@ -61091,8 +61163,8 @@ When false, the cmdlet fails on existing tags.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>The catalog stores local repository metadata only. It does not mirror package blobs unless a later package cache
-feature is explicitly enabled. Managed module commands can use this metadata as an opt-in fallback when live
+      <maml:para>The catalog stores local repository metadata only. It does not mirror package blobs unless a later package cache&#xD;
+feature is explicitly enabled. Managed module commands can use this metadata as an opt-in fallback when live&#xD;
 repository metadata is unavailable.</maml:para>
     </maml:description>
     <command:syntax>
@@ -61346,7 +61418,7 @@ repository metadata is unavailable.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Profiles store non-secret repository shape, trust, bootstrap, and publish-source settings used by the managed
+      <maml:para>Profiles store non-secret repository shape, trust, bootstrap, and publish-source settings used by the managed&#xD;
 module lifecycle commands. Secrets stay in credentials, environment variables, secret files, or provider sessions.</maml:para>
     </maml:description>
     <command:syntax>
@@ -62035,7 +62107,7 @@ module lifecycle commands. Secrets stay in credentials, environment variables, s
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Updates version numbers in:
+      <maml:para>Updates version numbers in:&#xD;
 C# projects (*.csproj)PowerShell module manifests (*.psd1)PowerShell build scripts that reference Invoke-ModuleBuild</maml:para>
       <maml:para>Use -VersionType to increment one component, or -NewVersion to set an explicit version.</maml:para>
     </maml:description>
@@ -62243,10 +62315,10 @@ C# projects (*.csproj)PowerShell module manifests (*.psd1)PowerShell build scrip
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Updates all MARKETING_VERSION values in a .xcodeproj directory or
-raw project.pbxproj file. When -BuildNumber is provided, it also
+      <maml:para>Updates all MARKETING_VERSION values in a .xcodeproj directory or&#xD;
+raw project.pbxproj file. When -BuildNumber is provided, it also&#xD;
 updates all CURRENT_PROJECT_VERSION values.</maml:para>
-      <maml:para>This command intentionally edits local Xcode project metadata only. App Store
+      <maml:para>This command intentionally edits local Xcode project metadata only. App Store&#xD;
 Connect metadata and build selection belong to higher-level Apple release commands.</maml:para>
     </maml:description>
     <command:syntax>
@@ -62429,7 +62501,7 @@ Connect metadata and build selection belong to higher-level Apple release comman
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ExamplesLayout</maml:name>
           <maml:description>
-            <maml:para>Controls how examples are rendered: ProseFirst (remarks then code), MamlDefault (code then remarks), or AllAsCode.
+            <maml:para>Controls how examples are rendered: ProseFirst (remarks then code), MamlDefault (code then remarks), or AllAsCode.&#xD;
 Default is ProseFirst.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -62541,7 +62613,7 @@ Default is ProseFirst.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Mode</maml:name>
           <maml:description>
-            <maml:para>Selection policy for standard tabs when Local and Remote exist (applies only when -Online):
+            <maml:para>Selection policy for standard tabs when Local and Remote exist (applies only when -Online):&#xD;
 PreferLocal (default), PreferRemote, or All.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -62631,7 +62703,7 @@ PreferLocal (default), PreferRemote, or All.</maml:para>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryPaths</maml:name>
           <maml:description>
-            <maml:para>Repository-relative folders to enumerate and display (e.g., 'docs', 'articles').
+            <maml:para>Repository-relative folders to enumerate and display (e.g., 'docs', 'articles').&#xD;
 Only .md/.markdown/.txt files are rendered.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -62644,7 +62716,7 @@ Only .md/.markdown/.txt files are rendered.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryToken</maml:name>
           <maml:description>
-            <maml:para>Personal Access Token for private repositories. Alternatively set environment variables:
+            <maml:para>Personal Access Token for private repositories. Alternatively set environment variables:&#xD;
 GitHub: PG_GITHUB_TOKEN or GITHUB_TOKEN; Azure DevOps: PG_AZDO_PAT or AZURE_DEVOPS_EXT_PAT.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -62732,7 +62804,7 @@ GitHub: PG_GITHUB_TOKEN or GITHUB_TOKEN; Azure DevOps: PG_AZDO_PAT or AZURE_DEVO
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ExamplesLayout</maml:name>
           <maml:description>
-            <maml:para>Controls how examples are rendered: ProseFirst (remarks then code), MamlDefault (code then remarks), or AllAsCode.
+            <maml:para>Controls how examples are rendered: ProseFirst (remarks then code), MamlDefault (code then remarks), or AllAsCode.&#xD;
 Default is ProseFirst.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -62844,7 +62916,7 @@ Default is ProseFirst.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Mode</maml:name>
           <maml:description>
-            <maml:para>Selection policy for standard tabs when Local and Remote exist (applies only when -Online):
+            <maml:para>Selection policy for standard tabs when Local and Remote exist (applies only when -Online):&#xD;
 PreferLocal (default), PreferRemote, or All.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -62934,7 +63006,7 @@ PreferLocal (default), PreferRemote, or All.</maml:para>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryPaths</maml:name>
           <maml:description>
-            <maml:para>Repository-relative folders to enumerate and display (e.g., 'docs', 'articles').
+            <maml:para>Repository-relative folders to enumerate and display (e.g., 'docs', 'articles').&#xD;
 Only .md/.markdown/.txt files are rendered.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -62947,7 +63019,7 @@ Only .md/.markdown/.txt files are rendered.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryToken</maml:name>
           <maml:description>
-            <maml:para>Personal Access Token for private repositories. Alternatively set environment variables:
+            <maml:para>Personal Access Token for private repositories. Alternatively set environment variables:&#xD;
 GitHub: PG_GITHUB_TOKEN or GITHUB_TOKEN; Azure DevOps: PG_AZDO_PAT or AZURE_DEVOPS_EXT_PAT.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -63047,7 +63119,7 @@ GitHub: PG_GITHUB_TOKEN or GITHUB_TOKEN; Azure DevOps: PG_AZDO_PAT or AZURE_DEVO
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ExamplesLayout</maml:name>
           <maml:description>
-            <maml:para>Controls how examples are rendered: ProseFirst (remarks then code), MamlDefault (code then remarks), or AllAsCode.
+            <maml:para>Controls how examples are rendered: ProseFirst (remarks then code), MamlDefault (code then remarks), or AllAsCode.&#xD;
 Default is ProseFirst.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -63159,7 +63231,7 @@ Default is ProseFirst.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Mode</maml:name>
           <maml:description>
-            <maml:para>Selection policy for standard tabs when Local and Remote exist (applies only when -Online):
+            <maml:para>Selection policy for standard tabs when Local and Remote exist (applies only when -Online):&#xD;
 PreferLocal (default), PreferRemote, or All.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -63237,7 +63309,7 @@ PreferLocal (default), PreferRemote, or All.</maml:para>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryPaths</maml:name>
           <maml:description>
-            <maml:para>Repository-relative folders to enumerate and display (e.g., 'docs', 'articles').
+            <maml:para>Repository-relative folders to enumerate and display (e.g., 'docs', 'articles').&#xD;
 Only .md/.markdown/.txt files are rendered.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -63250,7 +63322,7 @@ Only .md/.markdown/.txt files are rendered.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryToken</maml:name>
           <maml:description>
-            <maml:para>Personal Access Token for private repositories. Alternatively set environment variables:
+            <maml:para>Personal Access Token for private repositories. Alternatively set environment variables:&#xD;
 GitHub: PG_GITHUB_TOKEN or GITHUB_TOKEN; Azure DevOps: PG_AZDO_PAT or AZURE_DEVOPS_EXT_PAT.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -63326,7 +63398,7 @@ GitHub: PG_GITHUB_TOKEN or GITHUB_TOKEN; Azure DevOps: PG_AZDO_PAT or AZURE_DEVO
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ExamplesLayout</maml:name>
           <maml:description>
-            <maml:para>Controls how examples are rendered: ProseFirst (remarks then code), MamlDefault (code then remarks), or AllAsCode.
+            <maml:para>Controls how examples are rendered: ProseFirst (remarks then code), MamlDefault (code then remarks), or AllAsCode.&#xD;
 Default is ProseFirst.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -63438,7 +63510,7 @@ Default is ProseFirst.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Mode</maml:name>
           <maml:description>
-            <maml:para>Selection policy for standard tabs when Local and Remote exist (applies only when -Online):
+            <maml:para>Selection policy for standard tabs when Local and Remote exist (applies only when -Online):&#xD;
 PreferLocal (default), PreferRemote, or All.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -63528,7 +63600,7 @@ PreferLocal (default), PreferRemote, or All.</maml:para>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryPaths</maml:name>
           <maml:description>
-            <maml:para>Repository-relative folders to enumerate and display (e.g., 'docs', 'articles').
+            <maml:para>Repository-relative folders to enumerate and display (e.g., 'docs', 'articles').&#xD;
 Only .md/.markdown/.txt files are rendered.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -63541,7 +63613,7 @@ Only .md/.markdown/.txt files are rendered.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryToken</maml:name>
           <maml:description>
-            <maml:para>Personal Access Token for private repositories. Alternatively set environment variables:
+            <maml:para>Personal Access Token for private repositories. Alternatively set environment variables:&#xD;
 GitHub: PG_GITHUB_TOKEN or GITHUB_TOKEN; Azure DevOps: PG_AZDO_PAT or AZURE_DEVOPS_EXT_PAT.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -63629,7 +63701,7 @@ GitHub: PG_GITHUB_TOKEN or GITHUB_TOKEN; Azure DevOps: PG_AZDO_PAT or AZURE_DEVO
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>ExamplesLayout</maml:name>
         <maml:description>
-          <maml:para>Controls how examples are rendered: ProseFirst (remarks then code), MamlDefault (code then remarks), or AllAsCode.
+          <maml:para>Controls how examples are rendered: ProseFirst (remarks then code), MamlDefault (code then remarks), or AllAsCode.&#xD;
 Default is ProseFirst.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -63741,7 +63813,7 @@ Default is ProseFirst.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Mode</maml:name>
         <maml:description>
-          <maml:para>Selection policy for standard tabs when Local and Remote exist (applies only when -Online):
+          <maml:para>Selection policy for standard tabs when Local and Remote exist (applies only when -Online):&#xD;
 PreferLocal (default), PreferRemote, or All.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -63855,7 +63927,7 @@ PreferLocal (default), PreferRemote, or All.</maml:para>
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>RepositoryPaths</maml:name>
         <maml:description>
-          <maml:para>Repository-relative folders to enumerate and display (e.g., 'docs', 'articles').
+          <maml:para>Repository-relative folders to enumerate and display (e.g., 'docs', 'articles').&#xD;
 Only .md/.markdown/.txt files are rendered.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
@@ -63868,7 +63940,7 @@ Only .md/.markdown/.txt files are rendered.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>RepositoryToken</maml:name>
         <maml:description>
-          <maml:para>Personal Access Token for private repositories. Alternatively set environment variables:
+          <maml:para>Personal Access Token for private repositories. Alternatively set environment variables:&#xD;
 GitHub: PG_GITHUB_TOKEN or GITHUB_TOKEN; Azure DevOps: PG_AZDO_PAT or AZURE_DEVOPS_EXT_PAT.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -63930,7 +64002,7 @@ GitHub: PG_GITHUB_TOKEN or GITHUB_TOKEN; Azure DevOps: PG_AZDO_PAT or AZURE_DEVO
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String
+          <maml:name>System.String&#xD;
 System.Management.Automation.PSModuleInfo</maml:name>
         </dev:type>
       </command:inputType>
@@ -64138,7 +64210,7 @@ System.Management.Automation.PSModuleInfo</maml:name>
     </command:details>
     <maml:description>
       <maml:para>This cmdlet supports two common workflows:</maml:para>
-      <maml:para>When -ExpectedVersion contains an X placeholder (e.g. 1.2.X),
+      <maml:para>When -ExpectedVersion contains an X placeholder (e.g. 1.2.X),&#xD;
 the cmdlet resolves the next patch version. When an exact version is provided, it is returned as-is.</maml:para>
     </maml:description>
     <command:syntax>
@@ -64254,7 +64326,7 @@ the cmdlet resolves the next patch version. When an exact version is provided, i
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.String
+          <maml:name>System.String&#xD;
 PowerForge.ModuleVersionStepResult</maml:name>
         </dev:type>
       </command:returnValue>
@@ -65779,7 +65851,7 @@ PowerForge.ModuleVersionStepResult</maml:name>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.Boolean
+          <maml:name>System.Boolean&#xD;
 PowerForge.AppleAppReleaseDriftReport</maml:name>
         </dev:type>
       </command:returnValue>
@@ -66494,7 +66566,7 @@ PowerForge.AppleAppReleaseDriftReport</maml:name>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.Boolean
+          <maml:name>System.Boolean&#xD;
 PowerForge.AppStoreConnectScreenshotSyncValidationResult</maml:name>
         </dev:type>
       </command:returnValue>
@@ -66800,9 +66872,9 @@ PowerForge.AppStoreConnectScreenshotSyncValidationResult</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Test-IsolatedModuleProfile resolves the selected profile and module source, validates the
-profile's minimum version, checks the expected script, manifest, binary, dependency, and
-support files, and returns a detailed validation result without copying or importing the
+      <maml:para>Test-IsolatedModuleProfile resolves the selected profile and module source, validates the&#xD;
+profile's minimum version, checks the expected script, manifest, binary, dependency, and&#xD;
+support files, and returns a detailed validation result without copying or importing the&#xD;
 generated wrapper.</maml:para>
     </maml:description>
     <command:syntax>
@@ -66918,7 +66990,7 @@ generated wrapper.</maml:para>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.IsolatedModuleProfileValidationResult
+          <maml:name>PowerForge.IsolatedModuleProfileValidationResult&#xD;
 System.Boolean</maml:name>
         </dev:type>
       </command:returnValue>
@@ -67036,8 +67108,8 @@ System.Boolean</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This command removes modules from the selected managed module root without invoking PowerShellGet or
-PSResourceGet. It follows PSResourceGet-shaped uninstall selection semantics while adding managed
+      <maml:para>This command removes modules from the selected managed module root without invoking PowerShellGet or&#xD;
+PSResourceGet. It follows PSResourceGet-shaped uninstall selection semantics while adding managed&#xD;
 dependency and loaded-module safety checks.</maml:para>
     </maml:description>
     <command:syntax>
@@ -67310,7 +67382,7 @@ dependency and loaded-module safety checks.</maml:para>
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String[]
+          <maml:name>System.String[]&#xD;
 System.String</maml:name>
         </dev:type>
       </command:inputType>
@@ -67318,7 +67390,7 @@ System.String</maml:name>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.ManagedModuleUninstallResult
+          <maml:name>PowerForge.ManagedModuleUninstallResult&#xD;
 PowerForge.ManagedModuleUninstallPlan</maml:name>
         </dev:type>
       </command:returnValue>
@@ -67656,7 +67728,7 @@ PowerForge.ManagedModuleUninstallPlan</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This command inspects the selected module root and updates only when the repository contains a newer selected
+      <maml:para>This command inspects the selected module root and updates only when the repository contains a newer selected&#xD;
 version, or installs the target when the selected scope has no copy.</maml:para>
     </maml:description>
     <command:syntax>
@@ -68656,7 +68728,7 @@ version, or installs the target when the selected scope has no copy.</maml:para>
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>PowerForge.ManagedModuleUpdateResult
+          <maml:name>PowerForge.ManagedModuleUpdateResult&#xD;
 PowerForge.ManagedModuleUpdatePlan</maml:name>
         </dev:type>
       </command:returnValue>
