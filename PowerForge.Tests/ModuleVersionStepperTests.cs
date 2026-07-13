@@ -71,6 +71,44 @@ public sealed class ModuleVersionStepperTests
     }
 
     [Fact]
+    public void Step_UsesGalleryBaselineWhenTheRawFeedConfirmsNoPublishedVersions()
+    {
+        using var client = new HttpClient(new FakeCandidateReservationHandler());
+        var stepper = new ModuleVersionStepper(
+            new NullLogger(),
+            new StubPowerShellRunner(new PowerShellRunResult(1, string.Empty, "Find-PSResource reported no matching package.", "pwsh.exe")),
+            client);
+
+        var result = stepper.Step("3.0.X", moduleName: "PSPublishModule", localPsd1Path: null, repository: "PSGallery");
+
+        Assert.Equal("3.0.0", result.Version);
+        Assert.Equal(ModuleVersionSource.Repository, result.CurrentVersionSource);
+        Assert.Null(result.CurrentVersion);
+    }
+
+    [Fact]
+    public void Step_LocalPsd1VersioningDoesNotQueryPowerShellGallery()
+    {
+        using var directory = new TemporaryDirectory();
+        var manifestPath = Path.Combine(directory.Path, "OfflineModule.psd1");
+        File.WriteAllText(manifestPath, "@{ ModuleVersion = '1.2.3' }");
+
+        var handler = new ThrowingPowerShellGalleryHandler("Gallery socket unavailable.");
+        using var client = new HttpClient(handler);
+        var stepper = new ModuleVersionStepper(
+            new NullLogger(),
+            new StubPowerShellRunner(new PowerShellRunResult(1, string.Empty, "Find-PSResource socket unavailable.", "pwsh.exe")),
+            client);
+
+        var result = stepper.Step("1.2.X", moduleName: "OfflineModule", localPsd1Path: manifestPath, repository: "PSGallery");
+
+        Assert.Equal("1.2.4", result.Version);
+        Assert.Equal(ModuleVersionSource.LocalPsd1, result.CurrentVersionSource);
+        Assert.Equal("1.2.3", result.CurrentVersion);
+        Assert.Equal(0, handler.RequestCount);
+    }
+
+    [Fact]
     public void Step_ReportsBothGalleryFailuresWithoutScanningFromBaseVersion()
     {
         var handler = new ThrowingPowerShellGalleryHandler("Gallery socket unavailable.");

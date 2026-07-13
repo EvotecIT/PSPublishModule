@@ -71,7 +71,8 @@ public sealed class ModuleVersionStepper
 
         var (current, source) = ResolveCurrentVersion(expectedVersion, moduleName, localPsd1Path, repository, prerelease);
         var proposed = ComputeNextVersion(expectedVersion, current);
-        proposed = EnsureResolvedVersionIsAvailable(expectedVersion, moduleName, repository, prerelease, proposed);
+        if (source != ModuleVersionSource.LocalPsd1)
+            proposed = EnsureResolvedVersionIsAvailable(expectedVersion, moduleName, repository, prerelease, proposed);
 
         return new ModuleVersionStepResult(
             expectedVersion: expectedVersion,
@@ -146,6 +147,8 @@ public sealed class ModuleVersionStepper
 
                     if (galleryVersion is not null)
                         return (galleryVersion, ModuleVersionSource.Repository);
+
+                    return (null, ModuleVersionSource.Repository);
                 }
                 catch (Exception ex) when (IsGalleryLookupFailure(ex))
                 {
