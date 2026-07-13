@@ -554,15 +554,40 @@ public sealed partial class AppStoreConnectClient : IDisposable
 
     private async Task<T[]> GetArrayAsync<T>(string relativeUrl, Func<JsonElement, T> parse, CancellationToken cancellationToken)
     {
-        using var doc = await GetJsonAsync(relativeUrl, cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("App Store Connect API request returned no response body.");
-        if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
-            return Array.Empty<T>();
-
         var list = new List<T>();
-        foreach (var item in data.EnumerateArray())
-            list.Add(parse(item));
+        var visitedPages = new HashSet<string>(StringComparer.Ordinal);
+        string? nextPage = relativeUrl;
+        while (true)
+        {
+            var currentPage = nextPage;
+            if (currentPage is null)
+                break;
+            if (!visitedPages.Add(currentPage))
+                throw new InvalidOperationException($"App Store Connect API returned a repeated pagination link: {currentPage}");
+
+            using var doc = await GetJsonAsync(currentPage, cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("App Store Connect API request returned no response body.");
+            if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in data.EnumerateArray())
+                    list.Add(parse(item));
+            }
+
+            nextPage = GetNextPageLink(doc.RootElement);
+        }
+
         return list.ToArray();
+    }
+
+    private static string? GetNextPageLink(JsonElement root)
+    {
+        if (!root.TryGetProperty("links", out var links) || links.ValueKind != JsonValueKind.Object)
+            return null;
+        if (!links.TryGetProperty("next", out var next) || next.ValueKind != JsonValueKind.String)
+            return null;
+
+        var value = next.GetString();
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
     private async Task<T> PostSingleAsync<T>(string relativeUrl, object body, Func<JsonElement, T> parse, CancellationToken cancellationToken)

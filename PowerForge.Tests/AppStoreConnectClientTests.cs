@@ -12,7 +12,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class AppStoreConnectClientTests
+public sealed partial class AppStoreConnectClientTests
 {
     [Fact]
     public void CreateToken_CreatesThreePartJwt()
