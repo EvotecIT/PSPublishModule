@@ -59,7 +59,7 @@ public sealed partial class DotNetRepositoryReleaseService
             if (project.Packages.Count == 0)
                 return (false, $"Publish preflight failed: {project.ProjectName} has no packages to publish.");
 
-            foreach (var pkg in project.Packages)
+            foreach (var pkg in project.Packages.Concat(project.SymbolPackages))
             {
                 if (!spec.WhatIf && !File.Exists(pkg))
                     return (false, $"Publish preflight failed: package not found: {pkg}");

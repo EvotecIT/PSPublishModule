@@ -28,6 +28,7 @@ internal sealed class ProjectBuildConfiguration
     public bool? UpdateVersions { get; set; }
     public bool? Build { get; set; }
     public string? PackStrategy { get; set; }
+    public bool? IncludeSymbols { get; set; }
     public bool? PublishNuget { get; set; }
     public bool? PublishGitHub { get; set; }
     public bool? CreateReleaseZip { get; set; }

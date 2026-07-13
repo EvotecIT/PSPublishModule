@@ -51,6 +51,10 @@ public sealed class NewConfigurationProjectBuildCommand : PSCmdlet
     [Parameter]
     public SwitchParameter Build { get; set; }
 
+    /// <summary>Whether portable symbol packages should be created, overriding the referenced JSON when set.</summary>
+    [Parameter]
+    public SwitchParameter IncludeSymbols { get; set; }
+
     /// <summary>Whether NuGet packages should be published, overriding the referenced JSON when set.</summary>
     [Parameter]
     public SwitchParameter PublishNuget { get; set; }
@@ -94,6 +98,7 @@ public sealed class NewConfigurationProjectBuildCommand : PSCmdlet
                 ProvideLocalNuGetFeed = ProvideLocalNuGetFeed.IsPresent,
                 UpdateVersions = BoundSwitch(nameof(UpdateVersions), UpdateVersions),
                 Build = BoundSwitch(nameof(Build), Build),
+                IncludeSymbols = BoundSwitch(nameof(IncludeSymbols), IncludeSymbols),
                 PublishNuget = BoundSwitch(nameof(PublishNuget), PublishNuget),
                 PublishGitHub = BoundSwitch(nameof(PublishGitHub), PublishGitHub),
                 CreateReleaseZip = BoundSwitch(nameof(CreateReleaseZip), CreateReleaseZip),
@@ -205,6 +210,9 @@ public sealed class NewConfigurationPackageBuildCommand : PSCmdlet
 
     /// <summary>Pack strategy, for example PerProject or MSBuild.</summary>
     [Parameter] public string? PackStrategy { get; set; }
+
+    /// <summary>Whether portable <c>.snupkg</c> symbol packages should be created.</summary>
+    [Parameter] public SwitchParameter IncludeSymbols { get; set; }
 
     /// <summary>Whether NuGet packages should be published.</summary>
     [Parameter] public SwitchParameter PublishNuget { get; set; }
@@ -347,6 +355,7 @@ public sealed class NewConfigurationPackageBuildCommand : PSCmdlet
                 UpdateVersions = BoundSwitch(nameof(UpdateVersions), UpdateVersions),
                 Build = BoundSwitch(nameof(Build), Build),
                 PackStrategy = Normalize(PackStrategy),
+                IncludeSymbols = BoundSwitch(nameof(IncludeSymbols), IncludeSymbols),
                 PublishNuget = BoundSwitch(nameof(PublishNuget), PublishNuget),
                 PublishGitHub = BoundSwitch(nameof(PublishGitHub), PublishGitHub),
                 CreateReleaseZip = BoundSwitch(nameof(CreateReleaseZip), CreateReleaseZip),

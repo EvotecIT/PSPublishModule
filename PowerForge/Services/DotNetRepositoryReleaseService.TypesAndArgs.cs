@@ -21,6 +21,7 @@ public sealed partial class DotNetRepositoryReleaseService
         public string? ErrorMessage { get; set; }
         public TimeSpan Duration { get; set; }
         public List<string> Packages { get; } = new();
+        public List<string> SymbolPackages { get; } = new();
     }
 
     private sealed class AssemblySigningPlan

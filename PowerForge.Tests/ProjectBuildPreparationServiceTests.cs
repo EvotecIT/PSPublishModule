@@ -90,6 +90,7 @@ public sealed class ProjectBuildPreparationServiceTests
                 CertificateStore = "LocalMachine",
                 Configuration = "Debug",
                 PackStrategy = "MSBuild",
+                IncludeSymbols = true,
                 PublishNuget = true,
                 PublishGitHub = true
             };
@@ -109,6 +110,7 @@ public sealed class ProjectBuildPreparationServiceTests
             Assert.Equal(CertificateStoreLocation.LocalMachine, context.Spec.CertificateStore);
             Assert.Equal("Debug", context.Spec.Configuration);
             Assert.Equal(DotNetRepositoryPackStrategy.MSBuild, context.Spec.PackStrategy);
+            Assert.True(context.Spec.IncludeSymbols);
         }
         finally
         {

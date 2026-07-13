@@ -46,6 +46,8 @@ public sealed partial class DotNetRepositoryReleaseService
                 return result;
             }
             spec.RootPath = root;
+            if (!string.IsNullOrWhiteSpace(spec.PublishSource))
+                spec.PublishSource = ResolvePublishSource(spec.PublishSource!, root);
 
             var include = BuildNameSet(spec.IncludeProjects);
             var exclude = BuildNameSet(spec.ExcludeProjects);
@@ -362,7 +364,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         }
                         else
                         {
-                            _logger.Success($"MSBuild batch pack produced {batchPackResult.Packages.Count} package(s) in {FormatDuration(batchPackResult.Duration)}.");
+                            _logger.Success($"MSBuild batch pack produced {batchPackResult.Packages.Count} package(s) and {batchPackResult.SymbolPackages.Count} symbol package(s) in {FormatDuration(batchPackResult.Duration)}.");
                         }
                     }
                 }
@@ -388,6 +390,12 @@ public sealed partial class DotNetRepositoryReleaseService
                         var planned = ResolvePackagePath(spec, project, project.NewVersion!);
                         if (!string.IsNullOrWhiteSpace(planned))
                             project.Packages.Add(planned!);
+                        if (spec.IncludeSymbols)
+                        {
+                            var plannedSymbols = ResolveSymbolPackagePath(spec, project, project.NewVersion!);
+                            if (!string.IsNullOrWhiteSpace(plannedSymbols))
+                                project.SymbolPackages.Add(plannedSymbols!);
+                        }
                         continue;
                     }
 
@@ -422,6 +430,23 @@ public sealed partial class DotNetRepositoryReleaseService
                     foreach (var pkg in filtered)
                         project.Packages.Add(pkg);
 
+                    if (spec.IncludeSymbols)
+                    {
+                        var filteredSymbols = FilterPackages(packResult.SymbolPackages, project.PackageId, project.NewVersion!);
+                        foreach (var symbolPackage in filteredSymbols)
+                            project.SymbolPackages.Add(symbolPackage);
+
+                        if (filteredSymbols.Count == 0)
+                        {
+                            project.ErrorMessage = $"No symbol package found for version {project.NewVersion}.";
+                            _logger.Warn($"{project.ProjectName}: {project.ErrorMessage}");
+                            result.Success = false;
+                            if (spec.PublishFailFast)
+                                return result;
+                            continue;
+                        }
+                    }
+
                     var ignored = packResult.Packages.Except(filtered, StringComparer.OrdinalIgnoreCase).ToArray();
                     // In batch mode, ignored packages are normally packages for other batched projects.
                     if (ignored.Length > 0 && batchPackResult is null)
@@ -432,7 +457,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         var packTiming = batchPackResult is null
                             ? $" in {FormatDuration(packResult.Duration)}"
                             : " from MSBuild batch";
-                        _logger.Success($"{project.ProjectName}: package workflow produced {filtered.Count} package(s){packTiming}.");
+                        _logger.Success($"{project.ProjectName}: package workflow produced {filtered.Count} package(s) and {project.SymbolPackages.Count} symbol package(s){packTiming}.");
                     }
 
                     if (spec.CreateReleaseZip && !string.IsNullOrWhiteSpace(project.NewVersion))
@@ -466,7 +491,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 {
                     var packagesToSign = packable
                         .Where(project => string.IsNullOrWhiteSpace(project.ErrorMessage))
-                        .SelectMany(project => project.Packages)
+                        .SelectMany(project => project.Packages.Concat(project.SymbolPackages))
                         .Where(package => !string.IsNullOrWhiteSpace(package))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToArray();
@@ -517,54 +542,101 @@ public sealed partial class DotNetRepositoryReleaseService
                 result.PublishSource = source;
 
                 var orderedProjects = SortProjectsForPublish(packable);
-                var packages = orderedProjects.SelectMany(p => p.Packages)
-                    .Where(p => !string.IsNullOrWhiteSpace(p))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
+                var publishSymbolsSeparately = spec.IncludeSymbols && IsLocalPublishSource(source);
+                var packages = GetPackagesForPublish(orderedProjects, publishSymbolsSeparately);
 
                 var packageLookup = orderedProjects
-                    .SelectMany(p => p.Packages.Select(pkg => new { Package = pkg, Project = p }))
+                    .SelectMany(p => (publishSymbolsSeparately
+                            ? p.Packages.Concat(p.SymbolPackages)
+                            : p.Packages)
+                        .Select(pkg => new { Package = pkg, Project = p }))
                     .GroupBy(x => x.Package, StringComparer.OrdinalIgnoreCase)
                     .ToDictionary(g => g.Key, g => g.First().Project, StringComparer.OrdinalIgnoreCase);
 
                 var publishWatch = Stopwatch.StartNew();
                 foreach (var pkg in packages)
                 {
+                    packageLookup.TryGetValue(pkg, out var project);
+                    var publishedArtifacts = GetPublishedArtifacts(
+                        project,
+                        pkg,
+                        includeCompanionSymbols: !publishSymbolsSeparately);
                     if (spec.WhatIf)
                     {
-                        result.PublishedPackages.Add(pkg);
+                        result.PublishedPackages.AddRange(publishedArtifacts);
+                        continue;
+                    }
+
+                    if (publishSymbolsSeparately &&
+                        !CanPublishSymbolPackage(
+                            pkg,
+                            (IEnumerable<string>?)project?.Packages ?? Array.Empty<string>(),
+                            primaryPackage =>
+                                result.PublishedPackages.Contains(primaryPackage, StringComparer.OrdinalIgnoreCase) ||
+                                result.SkippedDuplicatePackages.Contains(primaryPackage, StringComparer.OrdinalIgnoreCase),
+                            out var primaryPackage))
+                    {
+                        var blockedResult = CreateBlockedCompanionResult(pkg, primaryPackage);
+                        result.Success = false;
+                        result.FailedPackages.Add(pkg);
+                        _logger.Warn(blockedResult.Message!);
+                        if (project is not null && string.IsNullOrWhiteSpace(project.ErrorMessage))
+                            project.ErrorMessage = blockedResult.Message;
+                        if (spec.PublishFailFast)
+                        {
+                            result.ErrorMessage = blockedResult.Message;
+                            return result;
+                        }
+
                         continue;
                     }
 
                     _logger.Info($"Publishing {Path.GetFileName(pkg)}...");
                     var packagePublishWatch = Stopwatch.StartNew();
-                    var push = PushPackage(pkg, spec.PublishApiKey!, source, spec.SkipDuplicate, out var pushResult);
+                    var pushResult = PushPackage(
+                        pkg,
+                        spec.PublishApiKey!,
+                        source,
+                        spec.SkipDuplicate,
+                        suppressCompanionSymbols: !spec.IncludeSymbols || publishSymbolsSeparately,
+                        workingDirectory: root);
                     packagePublishWatch.Stop();
-                    if (push)
+                    var artifactOutcomes = ClassifyPublishedArtifacts(
+                        publishedArtifacts,
+                        pushResult,
+                        spec.SkipDuplicate);
+                    foreach (var artifact in publishedArtifacts)
                     {
-                        if (pushResult.Outcome == PackagePushOutcome.SkippedDuplicate)
+                        switch (artifactOutcomes[artifact])
                         {
-                            result.SkippedDuplicatePackages.Add(pkg);
-                            _logger.Info($"Skipped duplicate {Path.GetFileName(pkg)} in {FormatDuration(packagePublishWatch.Elapsed)}; package already exists in the feed.");
-                        }
-                        else
-                        {
-                            result.PublishedPackages.Add(pkg);
-                            _logger.Success($"Published {Path.GetFileName(pkg)} in {FormatDuration(packagePublishWatch.Elapsed)}.");
+                            case PackagePushOutcome.SkippedDuplicate:
+                                result.SkippedDuplicatePackages.Add(artifact);
+                                _logger.Info($"Skipped duplicate {Path.GetFileName(artifact)} in {FormatDuration(packagePublishWatch.Elapsed)}; package already exists in the feed.");
+                                break;
+                            case PackagePushOutcome.Published:
+                                result.PublishedPackages.Add(artifact);
+                                _logger.Success($"Published {Path.GetFileName(artifact)} in {FormatDuration(packagePublishWatch.Elapsed)}.");
+                                break;
+                            default:
+                                result.FailedPackages.Add(artifact);
+                                _logger.Warn($"NuGet push failed for {artifact} after {FormatDuration(packagePublishWatch.Elapsed)}: {pushResult.Message}");
+                                break;
                         }
                     }
-                    else
+
+                    var failedArtifacts = publishedArtifacts
+                        .Where(artifact => artifactOutcomes[artifact] == PackagePushOutcome.Failed)
+                        .ToArray();
+                    if (failedArtifacts.Length > 0)
                     {
                         result.Success = false;
-                        result.FailedPackages.Add(pkg);
                         var error = pushResult.Message;
-                        _logger.Warn($"NuGet push failed for {pkg} after {FormatDuration(packagePublishWatch.Elapsed)}: {error}");
-                        if (packageLookup.TryGetValue(pkg, out var project) && string.IsNullOrWhiteSpace(project.ErrorMessage))
-                            project.ErrorMessage = $"Publish failed for {Path.GetFileName(pkg)}: {error}";
+                        if (project is not null && string.IsNullOrWhiteSpace(project.ErrorMessage))
+                            project.ErrorMessage = $"Publish failed for {string.Join(", ", failedArtifacts.Select(Path.GetFileName))}: {error}";
                         if (spec.PublishFailFast)
                         {
                             if (string.IsNullOrWhiteSpace(result.ErrorMessage))
-                                result.ErrorMessage = $"Publish failed for {Path.GetFileName(pkg)}.";
+                                result.ErrorMessage = $"Publish failed for {string.Join(", ", failedArtifacts.Select(Path.GetFileName))}.";
                             return result;
                         }
                     }
@@ -622,7 +694,7 @@ public sealed partial class DotNetRepositoryReleaseService
             if (!string.IsNullOrWhiteSpace(project.ErrorMessage))
                 continue;
 
-            if (project.Packages.Any(package => failedPackages.Contains(package)))
+            if (project.Packages.Concat(project.SymbolPackages).Any(package => failedPackages.Contains(package)))
                 project.ErrorMessage = message;
         }
     }

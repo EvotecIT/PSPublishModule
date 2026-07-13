@@ -186,7 +186,7 @@ public sealed partial class ModulePipelineRunner
         return destination switch
         {
             PackageBuildPublishDestination.NuGet => HasAllArtifacts(release.Projects
-                .SelectMany(project => project.Packages)
+                .SelectMany(project => project.Packages.Concat(project.SymbolPackages))
                 .Where(package => !string.IsNullOrWhiteSpace(package))),
             PackageBuildPublishDestination.GitHub => HasAllArtifacts(release.Projects
                 .Select(project => project.ReleaseZipPath)
@@ -221,7 +221,7 @@ public sealed partial class ModulePipelineRunner
         switch (destination)
         {
             case PackageBuildPublishDestination.NuGet:
-                PublishExistingNuGetPackages(release, configuration, configPath);
+                PublishExistingNuGetPackages(release, configuration, configPath, existing.RootPath);
                 break;
             case PackageBuildPublishDestination.GitHub:
                 PublishExistingGitHubRelease(existing, release, configuration, configPath);
@@ -232,7 +232,8 @@ public sealed partial class ModulePipelineRunner
     private void PublishExistingNuGetPackages(
         DotNetRepositoryReleaseResult release,
         ProjectBuildConfiguration configuration,
-        string configPath)
+        string configPath,
+        string repositoryRoot)
     {
         var configDirectory = Path.GetDirectoryName(configPath);
         if (string.IsNullOrWhiteSpace(configDirectory))
@@ -243,31 +244,104 @@ public sealed partial class ModulePipelineRunner
         if (string.IsNullOrWhiteSpace(apiKey))
             throw new InvalidOperationException("PublishApiKey is required when package NuGet publishing is enabled.");
 
-        var source = string.IsNullOrWhiteSpace(feed.PublishSource)
+        var configuredSource = string.IsNullOrWhiteSpace(feed.PublishSource)
             ? ProjectBuildPackageFeedResolver.GetDefaultPublishSource()
             : feed.PublishSource!.Trim();
+        var source = DotNetRepositoryReleaseService.ResolvePublishSource(
+            configuredSource,
+            string.IsNullOrWhiteSpace(repositoryRoot) ? configDirectory : repositoryRoot,
+            nuGetConfigSearchRoot: configDirectory);
         release.PublishSource = source;
-        var packages = release.Projects
-            .SelectMany(project => project.Packages)
-            .Where(package => !string.IsNullOrWhiteSpace(package))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var publishSymbolsSeparately = (configuration.IncludeSymbols ?? false) &&
+            DotNetRepositoryReleaseService.IsLocalPublishSource(source);
+        var packages = DotNetRepositoryReleaseService.GetPackagesForPublish(
+            release.Projects,
+            includeSymbolPackages: publishSymbolsSeparately);
 
         _logger.Info($"Publishing {packages.Length} existing package(s) from earlier package build.");
-        var publish = new NuGetPackagePublishService(_logger).ExecutePackages(
+        var publish = new NuGetPackagePublishService(
+            _logger,
+            workingDirectory: configDirectory).ExecutePackages(
             packages,
             apiKey!,
             source,
             configuration.SkipDuplicate ?? true,
-            configuration.PublishFailFast ?? true);
+            configuration.PublishFailFast ?? true,
+            suppressCompanionSymbols: !(configuration.IncludeSymbols ?? false) || publishSymbolsSeparately);
 
-        release.PublishedPackages.AddRange(publish.PublishedItems);
-        release.FailedPackages.AddRange(publish.FailedItems);
+        ApplyPublishedNuGetArtifactOutcomes(
+            release,
+            publish,
+            publishSymbolsSeparately,
+            configuration.SkipDuplicate ?? true);
         if (!publish.Success)
         {
             release.Success = false;
             release.ErrorMessage = publish.ErrorMessage ?? "One or more packages failed to publish.";
             throw new InvalidOperationException(release.ErrorMessage);
+        }
+    }
+
+    internal static void ApplyPublishedNuGetArtifactOutcomes(
+        DotNetRepositoryReleaseResult release,
+        NuGetPackagePublishResult publish,
+        bool publishSymbolsSeparately = false,
+        bool skipDuplicate = true)
+    {
+        var publishedPrimaryPackages = new HashSet<string>(publish.PublishedItems, StringComparer.OrdinalIgnoreCase);
+        var skippedPrimaryPackages = new HashSet<string>(publish.SkippedDuplicateItems, StringComparer.OrdinalIgnoreCase);
+        var failedPrimaryPackages = new HashSet<string>(publish.FailedItems, StringComparer.OrdinalIgnoreCase);
+        var publishedArtifacts = new HashSet<string>(release.PublishedPackages, StringComparer.OrdinalIgnoreCase);
+        var skippedArtifacts = new HashSet<string>(release.SkippedDuplicatePackages, StringComparer.OrdinalIgnoreCase);
+        var failedArtifacts = new HashSet<string>(release.FailedPackages, StringComparer.OrdinalIgnoreCase);
+        var attemptedPackages = publish.PackagePushResults.Keys
+            .Concat(publish.PublishedItems)
+            .Concat(publish.FailedItems)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        foreach (var package in attemptedPackages)
+        {
+            var project = release.Projects.FirstOrDefault(candidate =>
+                candidate.Packages.Contains(package, StringComparer.OrdinalIgnoreCase) ||
+                candidate.SymbolPackages.Contains(package, StringComparer.OrdinalIgnoreCase));
+            var artifacts = DotNetRepositoryReleaseService.GetPublishedArtifacts(
+                project,
+                package,
+                includeCompanionSymbols: !publishSymbolsSeparately);
+            if (!publish.PackagePushResults.TryGetValue(package, out var pushResult))
+            {
+                pushResult = new DotNetRepositoryReleaseService.PackagePushResult
+                {
+                    Outcome = failedPrimaryPackages.Contains(package)
+                        ? DotNetRepositoryReleaseService.PackagePushOutcome.Failed
+                        : skippedPrimaryPackages.Contains(package)
+                            ? DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate
+                            : publishedPrimaryPackages.Contains(package)
+                                ? DotNetRepositoryReleaseService.PackagePushOutcome.Published
+                                : DotNetRepositoryReleaseService.PackagePushOutcome.Failed
+                };
+            }
+
+            var outcomes = DotNetRepositoryReleaseService.ClassifyPublishedArtifacts(
+                artifacts,
+                pushResult,
+                skipDuplicate);
+            foreach (var artifact in artifacts)
+            {
+                if (outcomes[artifact] == DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate)
+                {
+                    if (skippedArtifacts.Add(artifact))
+                        release.SkippedDuplicatePackages.Add(artifact);
+                }
+                else if (outcomes[artifact] == DotNetRepositoryReleaseService.PackagePushOutcome.Published)
+                {
+                    if (publishedArtifacts.Add(artifact))
+                        release.PublishedPackages.Add(artifact);
+                }
+                else if (failedArtifacts.Add(artifact))
+                {
+                    release.FailedPackages.Add(artifact);
+                }
+            }
         }
     }
 
@@ -498,6 +572,8 @@ public sealed partial class ModulePipelineRunner
             target.UpdateVersions = reference.UpdateVersions;
         if (reference.Build is not null)
             target.Build = reference.Build;
+        if (reference.IncludeSymbols is not null)
+            target.IncludeSymbols = reference.IncludeSymbols;
         if (reference.PublishNuget is not null)
             target.PublishNuget = reference.PublishNuget;
         if (reference.PublishGitHub is not null)
@@ -764,6 +840,7 @@ public sealed partial class ModulePipelineRunner
             UpdateVersions = source.UpdateVersions,
             Build = source.Build,
             PackStrategy = source.PackStrategy,
+            IncludeSymbols = source.IncludeSymbols,
             PublishNuget = source.PublishNuget,
             PublishGitHub = source.PublishGitHub,
             CreateReleaseZip = source.CreateReleaseZip,

@@ -21,6 +21,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
 
             var packageOutput = Path.Combine(root.FullName, "Artifacts", "NuGet");
             var packagePath = Path.Combine(packageOutput, "HtmlTinkerX.2.0.1-beta1.nupkg");
+            var symbolPackagePath = Path.Combine(packageOutput, "HtmlTinkerX.2.0.1-beta1.snupkg");
             GitHubReleasePublishRequest? gitHubRequest = null;
 
             var runner = new ModulePipelineRunner(
@@ -35,6 +36,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                 {
                     Directory.CreateDirectory(packageOutput);
                     File.WriteAllText(packagePath, "package");
+                    File.WriteAllText(symbolPackagePath, "symbols");
 
                     var release = new DotNetRepositoryReleaseResult { Success = true };
                     var project = new DotNetRepositoryProjectResult
@@ -45,6 +47,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                         NewVersion = "2.0.1-beta1+build.7"
                     };
                     project.Packages.Add(packagePath);
+                    project.SymbolPackages.Add(symbolPackagePath);
                     release.Projects.Add(project);
 
                     return new ProjectBuildHostExecutionResult
@@ -90,7 +93,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                         {
                             Name = "Packages",
                             RootPath = "Sources",
-                            BuildBeforeModule = true
+                            BuildBeforeModule = true,
+                            IncludeSymbols = true
                         }
                     },
                     new ConfigurationArtefactSegment
@@ -149,9 +153,10 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Assert.Equal(Path.GetFullPath(resolvedStageRoot), result.ReleaseCoordinationResult!.StageRoot);
             Assert.Equal("1.2.3", result.ReleaseCoordinationResult.ModuleVersion);
             Assert.Equal("2.0.1-beta1+build.7", result.ReleaseCoordinationResult.ReleaseVersion);
-            Assert.Equal(4, gitHubRequest.AssetFilePaths.Count);
+            Assert.Equal(5, gitHubRequest.AssetFilePaths.Count);
             Assert.Contains(gitHubRequest.AssetFilePaths, path => path.StartsWith(Path.Combine(resolvedStageRoot, "modules"), StringComparison.OrdinalIgnoreCase));
             Assert.Contains(gitHubRequest.AssetFilePaths, path => string.Equals(path, Path.Combine(resolvedStageRoot, "nuget", Path.GetFileName(packagePath)), StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(gitHubRequest.AssetFilePaths, path => string.Equals(path, Path.Combine(resolvedStageRoot, "nuget", Path.GetFileName(symbolPackagePath)), StringComparison.OrdinalIgnoreCase));
             Assert.Contains(gitHubRequest.AssetFilePaths, path => string.Equals(path, Path.Combine(resolvedStageRoot, "metadata", "release-manifest.json"), StringComparison.OrdinalIgnoreCase));
             Assert.Contains(gitHubRequest.AssetFilePaths, path => string.Equals(path, Path.Combine(resolvedStageRoot, "metadata", "SHA256SUMS.txt"), StringComparison.OrdinalIgnoreCase));
             Assert.All(gitHubRequest.AssetFilePaths, path => Assert.True(File.Exists(path), path));
@@ -161,7 +166,9 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Assert.Equal("1.2.3", releaseManifest.RootElement.GetProperty("moduleVersion").GetString());
             Assert.Equal("2.0.1-beta1+build.7", releaseManifest.RootElement.GetProperty("releaseVersion").GetString());
             Assert.Contains("HtmlTinkerX.2.0.1-beta1.nupkg", manifestJson, StringComparison.Ordinal);
+            Assert.Contains("HtmlTinkerX.2.0.1-beta1.snupkg", manifestJson, StringComparison.Ordinal);
             Assert.Contains("nuget/HtmlTinkerX.2.0.1-beta1.nupkg", File.ReadAllText(Path.Combine(resolvedStageRoot, "metadata", "SHA256SUMS.txt")), StringComparison.Ordinal);
+            Assert.Contains("nuget/HtmlTinkerX.2.0.1-beta1.snupkg", File.ReadAllText(Path.Combine(resolvedStageRoot, "metadata", "SHA256SUMS.txt")), StringComparison.Ordinal);
             Assert.Single(result.PublishResults);
             Assert.Equal(gitHubRequest.AssetFilePaths.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase), result.PublishResults[0].AssetPaths.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase));
         }

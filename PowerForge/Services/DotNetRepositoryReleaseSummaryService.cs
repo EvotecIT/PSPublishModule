@@ -24,7 +24,7 @@ public sealed class DotNetRepositoryReleaseSummaryService
                 ProjectName = project.ProjectName,
                 IsPackable = project.IsPackable,
                 VersionDisplay = BuildVersionDisplay(project),
-                PackageCount = project.Packages.Count,
+                PackageCount = project.Packages.Count + project.SymbolPackages.Count,
                 Status = ResolveStatus(project),
                 ErrorMessage = project.ErrorMessage?.Trim() ?? string.Empty,
                 ErrorPreview = TrimForSummary(project.ErrorMessage, maxErrorLength)
@@ -39,7 +39,7 @@ public sealed class DotNetRepositoryReleaseSummaryService
                 ProjectCount = result.Projects.Count,
                 PackableCount = result.Projects.Count(p => p.IsPackable),
                 FailedProjectCount = result.Projects.Count(p => !string.IsNullOrWhiteSpace(p.ErrorMessage)),
-                PackageCount = result.Projects.Sum(p => p.Packages.Count),
+                PackageCount = result.Projects.Sum(p => p.Packages.Count + p.SymbolPackages.Count),
                 PublishedPackageCount = result.PublishedPackages.Count,
                 SkippedDuplicatePackageCount = result.SkippedDuplicatePackages.Count,
                 FailedPublishCount = result.FailedPackages.Count,

@@ -44,6 +44,9 @@ public sealed class ProjectBuildConfigurationReference
     /// <summary>Whether package projects should be built/packed, overriding the referenced JSON when set.</summary>
     public bool? Build { get; set; }
 
+    /// <summary>Whether portable symbol packages should be created, overriding the referenced JSON when set.</summary>
+    public bool? IncludeSymbols { get; set; }
+
     /// <summary>Whether NuGet packages should be published, overriding the referenced JSON when set.</summary>
     public bool? PublishNuget { get; set; }
 
@@ -160,6 +163,9 @@ public sealed class PackageBuildConfiguration
 
     /// <summary>Pack strategy, for example PerProject or MSBuild.</summary>
     public string? PackStrategy { get; set; }
+
+    /// <summary>Whether portable <c>.snupkg</c> symbol packages should be created.</summary>
+    public bool? IncludeSymbols { get; set; }
 
     /// <summary>Whether NuGet packages should be published.</summary>
     public bool? PublishNuget { get; set; }

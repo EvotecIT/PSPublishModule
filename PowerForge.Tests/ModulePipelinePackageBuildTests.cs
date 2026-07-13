@@ -648,8 +648,10 @@ public sealed partial class ModulePipelinePackageBuildTests
         }
     }
 
-    [Fact]
-    public void Run_DoesNotReusePackageBuildWhenSomeNuGetArtifactsAreMissing()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Run_DoesNotReusePackageBuildWhenSomeNuGetArtifactsAreMissing(bool missingSymbolPackage)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
@@ -661,7 +663,12 @@ public sealed partial class ModulePipelinePackageBuildTests
             var packageOutput = Directory.CreateDirectory(Path.Combine(root.FullName, "Artifacts", "NuGet"));
             var existingPackage = Path.Combine(packageOutput.FullName, "Dependency.Z.1.0.0.nupkg");
             var missingPackage = Path.Combine(packageOutput.FullName, "Consumer.A.1.0.0.nupkg");
+            var missingSymbol = Path.Combine(packageOutput.FullName, "Consumer.A.1.0.0.snupkg");
             File.WriteAllText(existingPackage, "package");
+            if (missingSymbolPackage)
+            {
+                File.WriteAllText(missingPackage, "package");
+            }
 
             var calls = new List<PackageBuildCall>();
             var runner = new ModulePipelineRunner(
@@ -690,6 +697,10 @@ public sealed partial class ModulePipelinePackageBuildTests
                         IsPackable = true
                     });
                     release.Projects[1].Packages.Add(missingPackage);
+                    if (missingSymbolPackage)
+                    {
+                        release.Projects[1].SymbolPackages.Add(missingSymbol);
+                    }
 
                     return new ProjectBuildHostExecutionResult
                     {
@@ -725,6 +736,7 @@ public sealed partial class ModulePipelinePackageBuildTests
                             RootPath = "Sources",
                             BuildBeforeModule = true,
                             Build = true,
+                            IncludeSymbols = missingSymbolPackage,
                             PublishNuget = true,
                             PublishApiKey = "key"
                         }

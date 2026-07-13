@@ -8,11 +8,11 @@ public sealed class DotNetNuGetPushRequest
     /// <summary>
     /// Initializes a new instance of the <see cref="DotNetNuGetPushRequest"/> class.
     /// </summary>
-    /// <param name="packagePath">Package path to push.</param>
+    /// <param name="packagePath">Package path to push. Relative paths are resolved from <paramref name="workingDirectory" /> when supplied, or from the current process directory otherwise.</param>
     /// <param name="apiKey">API key passed to the feed.</param>
-    /// <param name="source">Feed source URL or name.</param>
+    /// <param name="source">Feed source URL, name, or local path. Explicit relative paths are resolved from <paramref name="workingDirectory" />.</param>
     /// <param name="skipDuplicate">When true, passes <c>--skip-duplicate</c>.</param>
-    /// <param name="workingDirectory">Optional working directory override.</param>
+    /// <param name="workingDirectory">Optional NuGet configuration and process context.</param>
     /// <param name="timeout">Optional timeout override.</param>
     public DotNetNuGetPushRequest(
         string packagePath,
@@ -21,6 +21,35 @@ public sealed class DotNetNuGetPushRequest
         bool skipDuplicate = true,
         string? workingDirectory = null,
         TimeSpan? timeout = null)
+        : this(
+            packagePath,
+            apiKey,
+            source,
+            skipDuplicate,
+            workingDirectory,
+            timeout,
+            suppressCompanionSymbols: false)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DotNetNuGetPushRequest"/> class.
+    /// </summary>
+    /// <param name="packagePath">Package path to push. Relative paths are resolved from <paramref name="workingDirectory" /> when supplied, or from the current process directory otherwise.</param>
+    /// <param name="apiKey">API key passed to the feed.</param>
+    /// <param name="source">Feed source URL, name, or local path. Explicit relative paths are resolved from <paramref name="workingDirectory" />.</param>
+    /// <param name="skipDuplicate">When true, passes <c>--skip-duplicate</c>.</param>
+    /// <param name="workingDirectory">Optional NuGet configuration and process context.</param>
+    /// <param name="timeout">Optional timeout override.</param>
+    /// <param name="suppressCompanionSymbols">When true, passes <c>--no-symbols</c>.</param>
+    public DotNetNuGetPushRequest(
+        string packagePath,
+        string apiKey,
+        string source,
+        bool skipDuplicate,
+        string? workingDirectory,
+        TimeSpan? timeout,
+        bool suppressCompanionSymbols)
     {
         PackagePath = packagePath;
         ApiKey = apiKey;
@@ -28,10 +57,12 @@ public sealed class DotNetNuGetPushRequest
         SkipDuplicate = skipDuplicate;
         WorkingDirectory = workingDirectory;
         Timeout = timeout;
+        SuppressCompanionSymbols = suppressCompanionSymbols;
     }
 
     /// <summary>
-    /// Gets the package path to push.
+    /// Gets the package path to push. Relative paths are resolved from <see cref="WorkingDirectory" /> when supplied,
+    /// or from the current process directory otherwise.
     /// </summary>
     public string PackagePath { get; }
 
@@ -41,7 +72,7 @@ public sealed class DotNetNuGetPushRequest
     public string ApiKey { get; }
 
     /// <summary>
-    /// Gets the feed source URL or name.
+    /// Gets the feed source URL, name, or local path. Explicit relative paths are resolved from <see cref="WorkingDirectory" />.
     /// </summary>
     public string Source { get; }
 
@@ -51,7 +82,8 @@ public sealed class DotNetNuGetPushRequest
     public bool SkipDuplicate { get; }
 
     /// <summary>
-    /// Gets the optional working directory override.
+    /// Gets the optional NuGet configuration and process context. When implicit symbol publication is enabled,
+    /// the client may stage the primary and companion packages beneath this directory for one-command publication.
     /// </summary>
     public string? WorkingDirectory { get; }
 
@@ -59,4 +91,9 @@ public sealed class DotNetNuGetPushRequest
     /// Gets the optional timeout override.
     /// </summary>
     public TimeSpan? Timeout { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether implicit companion symbol publication should be suppressed.
+    /// </summary>
+    public bool SuppressCompanionSymbols { get; }
 }

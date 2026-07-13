@@ -143,7 +143,8 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
                 Roots = resolvedRoots,
                 ApiKey = apiKey,
                 Source = source,
-                SkipDuplicate = SkipDuplicate.IsPresent
+                SkipDuplicate = SkipDuplicate.IsPresent,
+                WorkingDirectory = SessionState.Path.GetUnresolvedProviderPathFromPSPath(".")
             }, package => ShouldProcess(package, $"Publish NuGet package to {source}"));
 
             WriteObject(ToCmdletResult(serviceResult, source, profileName, repositoryName));

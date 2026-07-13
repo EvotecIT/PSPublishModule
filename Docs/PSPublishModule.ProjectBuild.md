@@ -283,6 +283,7 @@ Example configuration
   "UpdateVersions": true,
   "Build": true,
   "PackStrategy": "MSBuild",
+  "IncludeSymbols": true,
   "PublishNuget": true,
   "PublishGitHub": true,
   "CreateReleaseZip": true,
@@ -332,9 +333,11 @@ Staging and outputs
   planned `.nupkg` names, and release zip names. Otherwise it falls back to the csproj file name.
 - `CleanStaging`: if true, deletes the staging directory before a run. It does not clean project `bin`/`obj` directories; package correctness comes from the release rebuild and package-payload provenance check.
 - `PlanOutputPath`: optional file path for a JSON plan output.
+- `IncludeSymbols`: when true, produces portable `.snupkg` files for every packable project. Plan output includes their expected paths, and build output discovery rejects stale symbol packages just as it does stale primary packages.
 
 NuGet publishing
 - `PublishNuget`: enable `dotnet nuget push`.
+- Portable `.snupkg` files produced by the same build are published immediately after their primary `.nupkg` and are included in unified staged release assets and manifests.
 - `PublishApiKey` / `PublishApiKeyFilePath` / `PublishApiKeyEnvName`: API key sources.
 - `PublishFailFast`: stop on first publish/signing error.
 - `SkipDuplicate`: pass `--skip-duplicate` to `dotnet nuget push`.

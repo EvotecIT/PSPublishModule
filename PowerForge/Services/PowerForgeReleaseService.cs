@@ -2893,7 +2893,7 @@ internal sealed class PowerForgeReleaseService
 
     private static IEnumerable<PowerForgeReleaseAssetEntry> CreatePackageAssetEntries(DotNetRepositoryProjectResult project)
     {
-        foreach (var package in project.Packages.Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)))
+        foreach (var package in project.Packages.Concat(project.SymbolPackages).Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)))
         {
             yield return new PowerForgeReleaseAssetEntry
             {
@@ -3213,6 +3213,7 @@ internal sealed class PowerForgeReleaseService
                 project.PackageId,
                 project.NewVersion,
                 Packages = project.Packages.ToArray(),
+                SymbolPackages = project.SymbolPackages.ToArray(),
                 project.ReleaseZipPath
             }).ToArray()
         };

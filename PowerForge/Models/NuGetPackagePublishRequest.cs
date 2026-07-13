@@ -8,4 +8,5 @@ internal sealed class NuGetPackagePublishRequest
     public string ApiKey { get; set; } = string.Empty;
     public string Source { get; set; } = "https://api.nuget.org/v3/index.json";
     public bool SkipDuplicate { get; set; }
+    public string? WorkingDirectory { get; set; }
 }

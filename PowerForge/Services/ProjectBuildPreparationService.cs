@@ -104,6 +104,7 @@ internal sealed class ProjectBuildPreparationService
             OutputPath = context.OutputPath,
             ReleaseZipOutputPath = context.ReleaseZipOutputPath,
             PackStrategy = packStrategy,
+            IncludeSymbols = config.IncludeSymbols ?? false,
             CertificateThumbprint = config.CertificateThumbprint,
             CertificateStore = ProjectBuildSupportService.ParseCertificateStore(config.CertificateStore),
             TimeStampServer = config.TimeStampServer,

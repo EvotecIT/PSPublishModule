@@ -47,6 +47,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 Configuration = "Release",
                 OutputPath = Path.Combine(root.FullName, "Artefacts", "packages"),
                 Pack = true,
+                IncludeSymbols = true,
                 Publish = true,
                 WhatIf = true,
                 PublishApiKey = "dummy",
@@ -62,8 +63,11 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.True(string.IsNullOrWhiteSpace(result.ErrorMessage), result.ErrorMessage);
             var project = Assert.Single(result.Projects, p => p.IsPackable);
             var pkg = Assert.Single(project.Packages);
+            var symbols = Assert.Single(project.SymbolPackages);
             Assert.False(File.Exists(pkg));
+            Assert.False(File.Exists(symbols));
             Assert.Contains(pkg, result.PublishedPackages, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(symbols, result.PublishedPackages, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {
@@ -202,6 +206,172 @@ public sealed class DotNetRepositoryReleaseServiceTests
         Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.Published, result.Outcome);
     }
 
+    [Fact]
+    public void ClassifyPublishedArtifacts_PreservesMixedDuplicateAndPublishedOutcomes()
+    {
+        var primary = "Sample.1.0.0.nupkg";
+        var symbols = "Sample.1.0.0.snupkg";
+        var pushResult = new DotNetRepositoryReleaseService.PackagePushResult
+        {
+            Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate,
+            Message = string.Join(Environment.NewLine, new[]
+            {
+                $"Pushing {primary}...",
+                $"Package '{primary}' already exists and cannot be modified. The server returned 409 (Conflict).",
+                $"Pushing {symbols}...",
+                "Your package was pushed."
+            })
+        };
+
+        var outcomes = DotNetRepositoryReleaseService.ClassifyPublishedArtifacts(
+            new[] { primary, symbols },
+            pushResult,
+            skipDuplicate: true);
+
+        Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate, outcomes[primary]);
+        Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.Published, outcomes[symbols]);
+    }
+
+    [Theory]
+    [InlineData("Artefacts/Feed")]
+    [InlineData(@"Artefacts\Feed")]
+    public void ResolvePublishSource_ResolvesRelativeLocalFeedFromRepositoryRoot(string configuredSource)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+
+        var source = DotNetRepositoryReleaseService.ResolvePublishSource(configuredSource, root);
+
+        Assert.Equal(Path.GetFullPath(Path.Combine(root, "Artefacts", "Feed")), source);
+    }
+
+    [Fact]
+    public void ResolvePublishSource_ResolvesFileUriToLocalPath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var feed = Path.Combine(root, "Artefacts", "Local Feed");
+        var fileUri = new Uri(feed).AbsoluteUri;
+
+        var source = DotNetRepositoryReleaseService.ResolvePublishSource(fileUri, root);
+
+        Assert.Equal(Path.GetFullPath(feed), source);
+    }
+
+    [Fact]
+    public void ResolvePublishSource_PreservesNamedSourceWhenMatchingDirectoryExists()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Contoso"));
+
+            var source = DotNetRepositoryReleaseService.ResolvePublishSource("Contoso", root.FullName);
+
+            Assert.Equal("Contoso", source);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ResolvePublishSource_ResolvesNamedLocalSourceFromNuGetConfig()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root.FullName, "NuGet.config"),
+                "<configuration><packageSources><clear /><add key=\"LocalFeed\" value=\"Artifacts/Feed\" /></packageSources></configuration>");
+            var configSearchRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Build"));
+
+            var source = DotNetRepositoryReleaseService.ResolvePublishSource(
+                "LocalFeed",
+                Path.Combine(root.FullName, "Sources"),
+                nuGetConfigSearchRoot: configSearchRoot.FullName);
+
+            Assert.Equal(
+                Path.GetFullPath(Path.Combine(root.FullName, "Artifacts", "Feed")),
+                source);
+            Assert.True(DotNetRepositoryReleaseService.IsLocalPublishSource(source));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ResolvePublishSource_PreservesNamedRemoteSourceFromNuGetConfig()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root.FullName, "NuGet.config"),
+                "<configuration><packageSources><clear /><add key=\"PrivateFeed\" value=\"https://packages.example.test/v3/index.json\" /></packageSources></configuration>");
+
+            var source = DotNetRepositoryReleaseService.ResolvePublishSource(
+                "PrivateFeed",
+                Path.Combine(root.FullName, "artifacts"),
+                nuGetConfigSearchRoot: root.FullName);
+
+            Assert.Equal("PrivateFeed", source);
+            Assert.False(DotNetRepositoryReleaseService.IsLocalPublishSource(source));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void GetPackagesForPublish_PushesOnlyPrimaryPackages()
+    {
+        var first = new DotNetRepositoryProjectResult { ProjectName = "First" };
+        first.Packages.Add("First.1.0.0.nupkg");
+        first.SymbolPackages.Add("First.1.0.0.snupkg");
+        var second = new DotNetRepositoryProjectResult { ProjectName = "Second" };
+        second.Packages.Add("Second.2.0.0.nupkg");
+        second.SymbolPackages.Add("Second.2.0.0.snupkg");
+
+        var packages = DotNetRepositoryReleaseService.GetPackagesForPublish(new[] { first, second });
+
+        Assert.Equal(new[]
+        {
+            "First.1.0.0.nupkg",
+            "Second.2.0.0.nupkg"
+        }, packages);
+    }
+
+    [Fact]
+    public void GetPublishedArtifacts_ReportsSymbolUploadedWithPrimaryPackage()
+    {
+        var project = new DotNetRepositoryProjectResult { ProjectName = "Sample" };
+        project.Packages.Add("Sample.1.0.0.nupkg");
+        project.SymbolPackages.Add("Sample.1.0.0.snupkg");
+        project.SymbolPackages.Add("Other.1.0.0.snupkg");
+
+        var artifacts = DotNetRepositoryReleaseService.GetPublishedArtifacts(
+            project,
+            "Sample.1.0.0.nupkg");
+
+        Assert.Equal(new[]
+        {
+            "Sample.1.0.0.nupkg",
+            "Sample.1.0.0.snupkg"
+        }, artifacts);
+    }
+
     [Theory]
     [InlineData(false, "Build")]
     [InlineData(true, "Rebuild")]
@@ -313,6 +483,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 OutputPath = outputPath,
                 Pack = true,
                 PackStrategy = DotNetRepositoryPackStrategy.MSBuild,
+                IncludeSymbols = true,
                 Publish = false,
                 UpdateVersions = false,
                 CreateReleaseZip = false
@@ -326,6 +497,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.All(result.Projects.Where(project => project.IsPackable), project =>
             {
                 Assert.Single(project.Packages);
+                Assert.Single(project.SymbolPackages);
                 Assert.True(string.IsNullOrWhiteSpace(project.ErrorMessage), project.ErrorMessage);
             });
         }
@@ -446,6 +618,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 OutputPath = Path.Combine(root.FullName, "packages"),
                 ReleaseZipOutputPath = Path.Combine(root.FullName, "releases"),
                 Pack = true,
+                IncludeSymbols = true,
                 Publish = false,
                 UpdateVersions = false,
                 CreateReleaseZip = true,
@@ -481,7 +654,9 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.True(File.Exists(signedMarker));
             var project = Assert.Single(result.Projects, item => item.IsPackable);
             Assert.Single(project.Packages);
+            Assert.Single(project.SymbolPackages);
             Assert.True(File.Exists(project.Packages[0]));
+            Assert.True(File.Exists(project.SymbolPackages[0]));
             Assert.True(File.Exists(project.ReleaseZipPath));
         }
         finally
@@ -529,6 +704,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 Configuration = "Release",
                 OutputPath = Path.Combine(root.FullName, "packages"),
                 Pack = true,
+                IncludeSymbols = true,
                 Publish = true,
                 PublishApiKey = "key",
                 PublishSource = localFeed.FullName,
@@ -547,7 +723,9 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 (_, _) => "ABCDEF").Execute(spec);
 
             Assert.False(result.Success);
-            Assert.Single(packagesSeenBySigner);
+            Assert.Equal(2, packagesSeenBySigner.Length);
+            Assert.Contains(packagesSeenBySigner, package => package.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(packagesSeenBySigner, package => package.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase));
             Assert.Empty(result.PublishedPackages);
             Assert.Empty(Directory.EnumerateFiles(localFeed.FullName, "*.nupkg", SearchOption.AllDirectories));
             var project = Assert.Single(result.Projects, item => item.IsPackable);
@@ -1173,13 +1351,16 @@ public sealed class DotNetRepositoryReleaseServiceTests
         try
         {
             var existing = Path.Combine(root.FullName, "Sample.Package.1.0.0.nupkg");
-            var symbols = Path.Combine(root.FullName, "Sample.Package.1.0.0.symbols.nupkg");
+            var legacySymbols = Path.Combine(root.FullName, "Sample.Package.1.0.0.symbols.nupkg");
+            var symbols = Path.Combine(root.FullName, "Sample.Package.1.0.0.snupkg");
             File.WriteAllText(existing, "old");
+            File.WriteAllText(legacySymbols, "legacy symbols");
             File.WriteAllText(symbols, "symbols");
 
             var snapshot = DotNetRepositoryReleaseService.SnapshotPackages(root.FullName);
 
             Assert.False(DotNetRepositoryReleaseService.WasPackageCreatedOrChanged(snapshot, existing));
+            Assert.False(DotNetRepositoryReleaseService.WasPackageCreatedOrChanged(snapshot, symbols));
 
             File.WriteAllText(existing, "changed package");
             var created = Path.Combine(root.FullName, "Sample.Package.1.0.1.nupkg");
@@ -1190,7 +1371,8 @@ public sealed class DotNetRepositoryReleaseServiceTests
 
             File.Delete(existing);
             Assert.False(DotNetRepositoryReleaseService.WasPackageCreatedOrChanged(snapshot, existing));
-            Assert.DoesNotContain(symbols, snapshot.Keys, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(symbols, snapshot.Keys, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain(legacySymbols, snapshot.Keys, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {

@@ -62,6 +62,9 @@ public sealed class DotNetRepositoryReleaseSpec
     /// <summary>When true, runs dotnet pack.</summary>
     public bool Pack { get; set; } = true;
 
+    /// <summary>When true, creates portable <c>.snupkg</c> symbol packages alongside primary packages.</summary>
+    public bool IncludeSymbols { get; set; }
+
     /// <summary>Strategy used for packing selected projects.</summary>
     public DotNetRepositoryPackStrategy PackStrategy { get; set; } = DotNetRepositoryPackStrategy.PerProject;
 

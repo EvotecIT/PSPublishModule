@@ -8,6 +8,136 @@ namespace PowerForge.Tests;
 public sealed partial class ModulePipelinePackageBuildTests
 {
     [Fact]
+    public void ApplyPublishedNuGetArtifactOutcomes_PreservesMixedPrimaryAndSymbolResults()
+    {
+        var primary = Path.Combine(Path.GetTempPath(), "Sample.1.0.0.nupkg");
+        var symbols = Path.Combine(Path.GetTempPath(), "Sample.1.0.0.snupkg");
+        var release = new DotNetRepositoryReleaseResult();
+        release.Projects.Add(new DotNetRepositoryProjectResult
+        {
+            Packages = { primary },
+            SymbolPackages = { symbols }
+        });
+        var publish = new NuGetPackagePublishResult();
+        publish.PublishedItems.Add(primary);
+        publish.SkippedDuplicateItems.Add(primary);
+        publish.PackagePushResults[primary] = new DotNetRepositoryReleaseService.PackagePushResult
+        {
+            Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate,
+            Message = string.Join(Environment.NewLine, new[]
+            {
+                $"Pushing {Path.GetFileName(primary)}...",
+                $"Package '{Path.GetFileName(primary)}' already exists and cannot be modified.",
+                $"Pushing {Path.GetFileName(symbols)}...",
+                "Your package was pushed."
+            })
+        };
+
+        ModulePipelineRunner.ApplyPublishedNuGetArtifactOutcomes(release, publish);
+
+        Assert.Equal(new[] { symbols }, release.PublishedPackages);
+        Assert.Equal(new[] { primary }, release.SkippedDuplicatePackages);
+    }
+
+    [Fact]
+    public void ApplyPublishedNuGetArtifactOutcomes_RecordsRemoteCompanionFailure()
+    {
+        var primary = Path.Combine(Path.GetTempPath(), "Sample.1.0.0.nupkg");
+        var symbols = Path.Combine(Path.GetTempPath(), "Sample.1.0.0.snupkg");
+        var release = new DotNetRepositoryReleaseResult();
+        release.Projects.Add(new DotNetRepositoryProjectResult
+        {
+            Packages = { primary },
+            SymbolPackages = { symbols }
+        });
+        var publish = new NuGetPackagePublishResult { Success = false };
+        publish.FailedItems.Add(primary);
+        publish.PackagePushResults[primary] = new DotNetRepositoryReleaseService.PackagePushResult
+        {
+            Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
+            Message = string.Join(Environment.NewLine, new[]
+            {
+                $"Pushing {Path.GetFileName(primary)}...",
+                "Your package was pushed.",
+                $"Pushing {Path.GetFileName(symbols)}...",
+                "Response status code does not indicate success: 400 (The symbol package is invalid)."
+            })
+        };
+
+        ModulePipelineRunner.ApplyPublishedNuGetArtifactOutcomes(release, publish);
+
+        Assert.Equal(new[] { primary }, release.PublishedPackages);
+        Assert.Equal(new[] { symbols }, release.FailedPackages);
+    }
+
+    [Fact]
+    public void ApplyPublishedNuGetArtifactOutcomes_HonorsDisabledSkipDuplicatePolicy()
+    {
+        var primary = Path.Combine(Path.GetTempPath(), "Sample.1.0.0.nupkg");
+        var symbols = Path.Combine(Path.GetTempPath(), "Sample.1.0.0.snupkg");
+        var release = new DotNetRepositoryReleaseResult();
+        release.Projects.Add(new DotNetRepositoryProjectResult
+        {
+            Packages = { primary },
+            SymbolPackages = { symbols }
+        });
+        var publish = new NuGetPackagePublishResult { Success = false };
+        publish.FailedItems.Add(primary);
+        publish.PackagePushResults[primary] = new DotNetRepositoryReleaseService.PackagePushResult
+        {
+            Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
+            Message = string.Join(Environment.NewLine, new[]
+            {
+                $"Pushing {Path.GetFileName(primary)}...",
+                "Your package was pushed.",
+                $"Pushing {Path.GetFileName(symbols)}...",
+                $"Package '{Path.GetFileName(symbols)}' already exists and cannot be modified. The server returned 409 (Conflict)."
+            })
+        };
+
+        ModulePipelineRunner.ApplyPublishedNuGetArtifactOutcomes(
+            release,
+            publish,
+            skipDuplicate: false);
+
+        Assert.Equal(new[] { primary }, release.PublishedPackages);
+        Assert.Equal(new[] { symbols }, release.FailedPackages);
+        Assert.Empty(release.SkippedDuplicatePackages);
+    }
+
+    [Fact]
+    public void ApplyPublishedNuGetArtifactOutcomes_TreatsLocalSymbolsAsSeparatePushes()
+    {
+        var primary = Path.Combine(Path.GetTempPath(), "Sample.1.0.0.nupkg");
+        var symbols = Path.Combine(Path.GetTempPath(), "Sample.1.0.0.snupkg");
+        var release = new DotNetRepositoryReleaseResult();
+        release.Projects.Add(new DotNetRepositoryProjectResult
+        {
+            Packages = { primary },
+            SymbolPackages = { symbols }
+        });
+        var publish = new NuGetPackagePublishResult();
+        publish.PublishedItems.Add(primary);
+        publish.PublishedItems.Add(symbols);
+        publish.PackagePushResults[primary] = new DotNetRepositoryReleaseService.PackagePushResult
+        {
+            Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Published
+        };
+        publish.PackagePushResults[symbols] = new DotNetRepositoryReleaseService.PackagePushResult
+        {
+            Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Published
+        };
+
+        ModulePipelineRunner.ApplyPublishedNuGetArtifactOutcomes(
+            release,
+            publish,
+            publishSymbolsSeparately: true);
+
+        Assert.Equal(new[] { primary, symbols }, release.PublishedPackages);
+        Assert.Empty(release.FailedPackages);
+    }
+
+    [Fact]
     public void Run_DoesNotPublishPackageLaneWithoutExplicitPublishIntent()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

@@ -50,4 +50,100 @@ public sealed partial class DotNetRepositoryReleaseService
         return list;
     }
 
+    internal static string[] GetPackagesForPublish(
+        IEnumerable<DotNetRepositoryProjectResult> projects,
+        bool includeSymbolPackages = false)
+        => projects
+            .Where(static project => project is not null)
+            .SelectMany(project => includeSymbolPackages
+                ? project.Packages.Concat(project.SymbolPackages)
+                : project.Packages)
+            .Where(static package => !string.IsNullOrWhiteSpace(package))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    internal static string[] GetPublishedArtifacts(
+        DotNetRepositoryProjectResult? project,
+        string package,
+        bool includeCompanionSymbols = true)
+    {
+        if (project is null || string.IsNullOrWhiteSpace(package))
+            return string.IsNullOrWhiteSpace(package) ? Array.Empty<string>() : new[] { package };
+
+        if (!includeCompanionSymbols ||
+            package.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase))
+        {
+            return new[] { package };
+        }
+
+        var packageName = Path.GetFileNameWithoutExtension(package);
+        return new[] { package }
+            .Concat(project.SymbolPackages.Where(symbolPackage =>
+                string.Equals(
+                    Path.GetFileNameWithoutExtension(symbolPackage),
+                    packageName,
+                    StringComparison.OrdinalIgnoreCase)))
+            .Where(static artifact => !string.IsNullOrWhiteSpace(artifact))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Determines whether a resolved NuGet publish source is a filesystem feed rather than a named or HTTP source.
+    /// </summary>
+    internal static bool IsLocalPublishSource(string source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            return false;
+
+        var trimmed = source.Trim();
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+            return uri.IsFile;
+
+        return Path.IsPathRooted(PathValueResolver.NormalizeSeparators(trimmed));
+    }
+
+    /// <summary>
+    /// Resolves explicit filesystem sources and named local sources while preserving named remote sources.
+    /// </summary>
+    /// <param name="source">Configured source URL, path, or NuGet.config key.</param>
+    /// <param name="repositoryRoot">Repository root used for explicit relative paths.</param>
+    /// <param name="nuGetConfigSearchRoot">Optional directory whose NuGet.config hierarchy should resolve named sources.</param>
+    /// <returns>A normalized local path, or the original URL/source key.</returns>
+    internal static string ResolvePublishSource(
+        string source,
+        string repositoryRoot,
+        string? nuGetConfigSearchRoot = null)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            return source;
+
+        var trimmed = source.Trim();
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absoluteUri))
+        {
+            if (!absoluteUri.IsFile)
+                return trimmed;
+
+            return Path.GetFullPath(absoluteUri.LocalPath);
+        }
+
+        var normalized = PathValueResolver.NormalizeSeparators(trimmed);
+        if (Path.IsPathRooted(normalized))
+            return Path.GetFullPath(normalized);
+
+        // Bare values can be NuGet.config source keys, so only explicit path syntax is rooted here.
+        if (normalized.IndexOf(Path.DirectorySeparatorChar) >= 0 ||
+            normalized.StartsWith(".", StringComparison.Ordinal))
+        {
+            return PathValueResolver.Resolve(repositoryRoot, normalized);
+        }
+
+        return TryResolveNamedLocalPublishSource(
+            trimmed,
+            string.IsNullOrWhiteSpace(nuGetConfigSearchRoot) ? repositoryRoot : nuGetConfigSearchRoot!,
+            out var namedLocalSource)
+            ? namedLocalSource
+            : trimmed;
+    }
+
 }
