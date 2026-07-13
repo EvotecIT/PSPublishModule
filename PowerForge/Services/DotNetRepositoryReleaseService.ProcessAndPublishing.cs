@@ -216,9 +216,17 @@ public sealed partial class DotNetRepositoryReleaseService
         };
     }
 
+    /// <summary>
+    /// Classifies each artifact mentioned by a combined primary and symbol package push transcript.
+    /// </summary>
+    /// <param name="artifacts">Primary and companion artifacts attempted by the push.</param>
+    /// <param name="pushResult">Overall process outcome and transcript.</param>
+    /// <param name="skipDuplicate">Whether duplicate conflicts are permitted to become skipped outcomes.</param>
+    /// <returns>The outcome for each artifact.</returns>
     internal static IReadOnlyDictionary<string, PackagePushOutcome> ClassifyPublishedArtifacts(
         IReadOnlyList<string> artifacts,
-        PackagePushResult pushResult)
+        PackagePushResult pushResult,
+        bool skipDuplicate)
     {
         var outcomes = artifacts.ToDictionary(
             artifact => artifact,
@@ -244,7 +252,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 }
             }
 
-            if (currentArtifact is not null && LooksLikeSkippedDuplicate(line))
+            if (skipDuplicate && currentArtifact is not null && LooksLikeSkippedDuplicate(line))
                 outcomes[currentArtifact] = PackagePushOutcome.SkippedDuplicate;
             else if (currentArtifact is not null && LooksLikePublished(line))
                 outcomes[currentArtifact] = PackagePushOutcome.Published;

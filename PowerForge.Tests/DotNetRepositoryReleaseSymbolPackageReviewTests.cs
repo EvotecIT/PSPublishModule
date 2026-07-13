@@ -38,7 +38,34 @@ public sealed class DotNetRepositoryReleaseSymbolPackageReviewTests
 
         var outcomes = DotNetRepositoryReleaseService.ClassifyPublishedArtifacts(
             new[] { primary, symbols },
-            pushResult);
+            pushResult,
+            skipDuplicate: true);
+
+        Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.Published, outcomes[primary]);
+        Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.Failed, outcomes[symbols]);
+    }
+
+    [Fact]
+    public void ClassifyPublishedArtifacts_PreservesConflictFailureWhenSkipDuplicateIsDisabled()
+    {
+        var primary = "Sample.1.0.0.nupkg";
+        var symbols = "Sample.1.0.0.snupkg";
+        var pushResult = new DotNetRepositoryReleaseService.PackagePushResult
+        {
+            Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
+            Message = string.Join(Environment.NewLine, new[]
+            {
+                $"Pushing {primary}...",
+                "Your package was pushed.",
+                $"Pushing {symbols}...",
+                $"Package '{symbols}' already exists and cannot be modified. The server returned 409 (Conflict)."
+            })
+        };
+
+        var outcomes = DotNetRepositoryReleaseService.ClassifyPublishedArtifacts(
+            new[] { primary, symbols },
+            pushResult,
+            skipDuplicate: false);
 
         Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.Published, outcomes[primary]);
         Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.Failed, outcomes[symbols]);

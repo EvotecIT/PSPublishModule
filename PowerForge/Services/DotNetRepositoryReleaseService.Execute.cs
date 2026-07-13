@@ -576,7 +576,10 @@ public sealed partial class DotNetRepositoryReleaseService
                         spec.SkipDuplicate,
                         suppressCompanionSymbols: !spec.IncludeSymbols || publishSymbolsSeparately);
                     packagePublishWatch.Stop();
-                    var artifactOutcomes = ClassifyPublishedArtifacts(publishedArtifacts, pushResult);
+                    var artifactOutcomes = ClassifyPublishedArtifacts(
+                        publishedArtifacts,
+                        pushResult,
+                        spec.SkipDuplicate);
                     foreach (var artifact in publishedArtifacts)
                     {
                         switch (artifactOutcomes[artifact])

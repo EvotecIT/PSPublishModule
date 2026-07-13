@@ -121,10 +121,9 @@ public sealed partial class DotNetRepositoryReleaseService
         if (Path.IsPathRooted(normalized))
             return Path.GetFullPath(normalized);
 
-        var localCandidate = Path.Combine(repositoryRoot, normalized);
+        // Bare values can be NuGet.config source keys, so only explicit path syntax is rooted here.
         if (normalized.IndexOf(Path.DirectorySeparatorChar) >= 0 ||
-            normalized.StartsWith(".", StringComparison.Ordinal) ||
-            Directory.Exists(localCandidate))
+            normalized.StartsWith(".", StringComparison.Ordinal))
         {
             return PathValueResolver.Resolve(repositoryRoot, normalized);
         }

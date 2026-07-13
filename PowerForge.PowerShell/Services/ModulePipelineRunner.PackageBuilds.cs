@@ -266,7 +266,11 @@ public sealed partial class ModulePipelineRunner
             configuration.PublishFailFast ?? true,
             suppressCompanionSymbols: !(configuration.IncludeSymbols ?? false) || publishSymbolsSeparately);
 
-        ApplyPublishedNuGetArtifactOutcomes(release, publish, publishSymbolsSeparately);
+        ApplyPublishedNuGetArtifactOutcomes(
+            release,
+            publish,
+            publishSymbolsSeparately,
+            configuration.SkipDuplicate ?? true);
         if (!publish.Success)
         {
             release.Success = false;
@@ -278,7 +282,8 @@ public sealed partial class ModulePipelineRunner
     internal static void ApplyPublishedNuGetArtifactOutcomes(
         DotNetRepositoryReleaseResult release,
         NuGetPackagePublishResult publish,
-        bool publishSymbolsSeparately = false)
+        bool publishSymbolsSeparately = false,
+        bool skipDuplicate = true)
     {
         var publishedPrimaryPackages = new HashSet<string>(publish.PublishedItems, StringComparer.OrdinalIgnoreCase);
         var skippedPrimaryPackages = new HashSet<string>(publish.SkippedDuplicateItems, StringComparer.OrdinalIgnoreCase);
@@ -313,7 +318,10 @@ public sealed partial class ModulePipelineRunner
                 };
             }
 
-            var outcomes = DotNetRepositoryReleaseService.ClassifyPublishedArtifacts(artifacts, pushResult);
+            var outcomes = DotNetRepositoryReleaseService.ClassifyPublishedArtifacts(
+                artifacts,
+                pushResult,
+                skipDuplicate);
             foreach (var artifact in artifacts)
             {
                 if (outcomes[artifact] == DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate)

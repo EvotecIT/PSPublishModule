@@ -225,7 +225,8 @@ public sealed class DotNetRepositoryReleaseServiceTests
 
         var outcomes = DotNetRepositoryReleaseService.ClassifyPublishedArtifacts(
             new[] { primary, symbols },
-            pushResult);
+            pushResult,
+            skipDuplicate: true);
 
         Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate, outcomes[primary]);
         Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.Published, outcomes[symbols]);
@@ -253,6 +254,27 @@ public sealed class DotNetRepositoryReleaseServiceTests
         var source = DotNetRepositoryReleaseService.ResolvePublishSource(fileUri, root);
 
         Assert.Equal(Path.GetFullPath(feed), source);
+    }
+
+    [Fact]
+    public void ResolvePublishSource_PreservesNamedSourceWhenMatchingDirectoryExists()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root.FullName, "Contoso"));
+
+            var source = DotNetRepositoryReleaseService.ResolvePublishSource("Contoso", root.FullName);
+
+            Assert.Equal("Contoso", source);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
     }
 
     [Fact]
