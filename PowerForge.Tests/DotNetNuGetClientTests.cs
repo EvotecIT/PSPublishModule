@@ -98,11 +98,14 @@ public sealed class DotNetNuGetClientTests
 
         ProcessRunRequest? captured = null;
         string? stagedPackagePath = null;
+        string? pushedSource = null;
         var processRunner = new StubProcessRunner(request =>
         {
             captured = request;
             var responseFile = request.Arguments.Single()[1..];
-            stagedPackagePath = File.ReadAllLines(responseFile)[2];
+            var responseFileLines = File.ReadAllLines(responseFile);
+            stagedPackagePath = responseFileLines[2];
+            pushedSource = responseFileLines[6];
             Assert.True(File.Exists(stagedPackagePath));
             Assert.True(File.Exists(Path.ChangeExtension(stagedPackagePath, ".snupkg")));
             return new ProcessRunResult(0, "ok", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
@@ -116,7 +119,7 @@ public sealed class DotNetNuGetClientTests
             var result = await client.PushPackageAsync(new DotNetNuGetPushRequest(
                 packagePath,
                 "key",
-                "PrivateFeed",
+                "./feed",
                 skipDuplicate: true,
                 workingDirectory: configurationDirectory.FullName,
                 timeout: null,
@@ -127,6 +130,7 @@ public sealed class DotNetNuGetClientTests
             Assert.StartsWith(configurationDirectory.FullName, captured!.WorkingDirectory, StringComparison.OrdinalIgnoreCase);
             Assert.NotEqual(configurationDirectory.FullName, captured.WorkingDirectory);
             Assert.NotEqual(packagePath, stagedPackagePath);
+            Assert.Equal(Path.Combine(configurationDirectory.FullName, "feed"), pushedSource);
             Assert.False(Directory.Exists(captured.WorkingDirectory));
             Assert.True(File.Exists(packagePath));
             Assert.True(File.Exists(symbolPackagePath));
@@ -149,10 +153,13 @@ public sealed class DotNetNuGetClientTests
 
         ProcessRunRequest? captured = null;
         string? pushedPackagePath = null;
+        string? pushedSource = null;
         var processRunner = new StubProcessRunner(request =>
         {
             captured = request;
-            pushedPackagePath = File.ReadAllLines(request.Arguments.Single()[1..])[2];
+            var responseFileLines = File.ReadAllLines(request.Arguments.Single()[1..]);
+            pushedPackagePath = responseFileLines[2];
+            pushedSource = responseFileLines[6];
             return new ProcessRunResult(0, "ok", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
         });
         var client = new DotNetNuGetClient(
@@ -164,7 +171,7 @@ public sealed class DotNetNuGetClientTests
             var result = await client.PushPackageAsync(new DotNetNuGetPushRequest(
                 packagePath,
                 "key",
-                "PrivateFeed",
+                "./feed",
                 skipDuplicate: true,
                 workingDirectory: root.FullName,
                 timeout: null,
@@ -174,6 +181,7 @@ public sealed class DotNetNuGetClientTests
             Assert.NotNull(captured);
             Assert.Equal(packageDirectory.FullName, captured!.WorkingDirectory);
             Assert.Equal(packagePath, pushedPackagePath);
+            Assert.Equal(Path.Combine(root.FullName, "feed"), pushedSource);
         }
         finally
         {

@@ -10,7 +10,7 @@ public sealed class DotNetNuGetPushRequest
     /// </summary>
     /// <param name="packagePath">Package path to push.</param>
     /// <param name="apiKey">API key passed to the feed.</param>
-    /// <param name="source">Feed source URL or name.</param>
+    /// <param name="source">Feed source URL, name, or local path. Explicit relative paths are resolved from <paramref name="workingDirectory" />.</param>
     /// <param name="skipDuplicate">When true, passes <c>--skip-duplicate</c>.</param>
     /// <param name="workingDirectory">Optional NuGet configuration and process context.</param>
     /// <param name="timeout">Optional timeout override.</param>
@@ -37,7 +37,7 @@ public sealed class DotNetNuGetPushRequest
     /// </summary>
     /// <param name="packagePath">Package path to push.</param>
     /// <param name="apiKey">API key passed to the feed.</param>
-    /// <param name="source">Feed source URL or name.</param>
+    /// <param name="source">Feed source URL, name, or local path. Explicit relative paths are resolved from <paramref name="workingDirectory" />.</param>
     /// <param name="skipDuplicate">When true, passes <c>--skip-duplicate</c>.</param>
     /// <param name="workingDirectory">Optional NuGet configuration and process context.</param>
     /// <param name="timeout">Optional timeout override.</param>
@@ -71,7 +71,7 @@ public sealed class DotNetNuGetPushRequest
     public string ApiKey { get; }
 
     /// <summary>
-    /// Gets the feed source URL or name.
+    /// Gets the feed source URL, name, or local path. Explicit relative paths are resolved from <see cref="WorkingDirectory" />.
     /// </summary>
     public string Source { get; }
 

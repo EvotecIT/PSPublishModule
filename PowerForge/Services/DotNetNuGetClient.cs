@@ -55,7 +55,10 @@ public sealed class DotNetNuGetClient
             pushContext = PreparePushExecutionContext(request);
             File.WriteAllText(
                 responseFilePath,
-                BuildPushResponseFileContent(request, pushContext.Value.PackagePath));
+                BuildPushResponseFileContent(
+                    request,
+                    pushContext.Value.PackagePath,
+                    pushContext.Value.Source));
 
             var processResult = await _processRunner.RunAsync(
                 new ProcessRunRequest(
@@ -147,7 +150,8 @@ public sealed class DotNetNuGetClient
 
     private static string BuildPushResponseFileContent(
         DotNetNuGetPushRequest request,
-        string packagePath)
+        string packagePath,
+        string source)
     {
         // dotnet response files treat each line as one argument and preserve quote characters.
         // Writing shell-style quotes here therefore passes the quotes into options such as --source.
@@ -158,7 +162,7 @@ public sealed class DotNetNuGetClient
             "--api-key",
             request.ApiKey,
             "--source",
-            request.Source
+            source
         };
 
         if (request.SkipDuplicate)
@@ -176,17 +180,18 @@ public sealed class DotNetNuGetClient
     private static PushExecutionContext PreparePushExecutionContext(DotNetNuGetPushRequest request)
     {
         var workingDirectory = ResolveWorkingDirectory(request.WorkingDirectory, request.PackagePath);
+        var source = ResolvePushSource(request.Source, workingDirectory);
         if (request.SuppressCompanionSymbols ||
             string.IsNullOrWhiteSpace(request.WorkingDirectory) ||
             request.PackagePath.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase) ||
             !request.PackagePath.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase))
         {
-            return new PushExecutionContext(request.PackagePath, workingDirectory, stagingDirectory: null);
+            return new PushExecutionContext(request.PackagePath, source, workingDirectory, stagingDirectory: null);
         }
 
         var symbolPackagePath = Path.ChangeExtension(request.PackagePath, ".snupkg");
         if (!File.Exists(symbolPackagePath))
-            return new PushExecutionContext(request.PackagePath, workingDirectory, stagingDirectory: null);
+            return new PushExecutionContext(request.PackagePath, source, workingDirectory, stagingDirectory: null);
 
         var configurationDirectory = Path.GetFullPath(workingDirectory);
         if (!Directory.Exists(configurationDirectory))
@@ -196,7 +201,7 @@ public sealed class DotNetNuGetClient
         if (!string.IsNullOrWhiteSpace(packageDirectory) &&
             IsSameOrChildDirectory(packageDirectory!, configurationDirectory))
         {
-            return new PushExecutionContext(request.PackagePath, packageDirectory!, stagingDirectory: null);
+            return new PushExecutionContext(request.PackagePath, source, packageDirectory!, stagingDirectory: null);
         }
 
         var stagingDirectory = Path.Combine(
@@ -209,7 +214,7 @@ public sealed class DotNetNuGetClient
             var stagedSymbolPackagePath = Path.Combine(stagingDirectory, Path.GetFileName(symbolPackagePath));
             File.Copy(request.PackagePath, stagedPackagePath);
             File.Copy(symbolPackagePath, stagedSymbolPackagePath);
-            return new PushExecutionContext(stagedPackagePath, stagingDirectory, stagingDirectory);
+            return new PushExecutionContext(stagedPackagePath, source, stagingDirectory, stagingDirectory);
         }
         catch
         {
@@ -225,6 +230,27 @@ public sealed class DotNetNuGetClient
         var normalizedCandidate = candidate.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return string.Equals(normalizedCandidate, normalizedRoot, comparison) ||
                normalizedCandidate.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, comparison);
+    }
+
+    /// <summary>
+    /// Anchors explicit relative filesystem sources to the caller's NuGet configuration context before
+    /// companion-symbol handling moves the process into a package or staging directory. Bare NuGet.config
+    /// source names and absolute URIs retain their original meaning.
+    /// </summary>
+    private static string ResolvePushSource(string source, string workingDirectory)
+    {
+        var trimmed = source.Trim();
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out _))
+            return trimmed;
+
+        var normalized = PathValueResolver.NormalizeSeparators(trimmed);
+        if (Path.IsPathRooted(normalized))
+            return Path.GetFullPath(normalized);
+
+        return normalized.StartsWith(".", StringComparison.Ordinal) ||
+               normalized.IndexOf(Path.DirectorySeparatorChar) >= 0
+            ? PathValueResolver.Resolve(workingDirectory, normalized)
+            : trimmed;
     }
 
     private static string ResolveWorkingDirectory(string? workingDirectory, string packagePath)
@@ -287,15 +313,18 @@ public sealed class DotNetNuGetClient
     {
         public PushExecutionContext(
             string packagePath,
+            string source,
             string workingDirectory,
             string? stagingDirectory)
         {
             PackagePath = packagePath;
+            Source = source;
             WorkingDirectory = workingDirectory;
             StagingDirectory = stagingDirectory;
         }
 
         public string PackagePath { get; }
+        public string Source { get; }
         public string WorkingDirectory { get; }
         public string? StagingDirectory { get; }
     }
