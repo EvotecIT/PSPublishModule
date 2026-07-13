@@ -109,7 +109,7 @@ public sealed class PowerShellGalleryVersionFeedClient
         XNamespace d = "http://schemas.microsoft.com/ado/2007/08/dataservices";
         var returnedVersion = document.Descendants(d + "Version").FirstOrDefault()?.Value?.Trim();
 
-        if (!string.Equals(returnedVersion, version.Trim(), StringComparison.OrdinalIgnoreCase))
+        if (!AreEquivalentPackageVersions(returnedVersion, version))
         {
             var returnedDescription = string.IsNullOrWhiteSpace(returnedVersion)
                 ? "no version metadata"
@@ -119,6 +119,35 @@ public sealed class PowerShellGalleryVersionFeedClient
         }
 
         return true;
+    }
+
+    private static bool AreEquivalentPackageVersions(string? returnedVersion, string requestedVersion)
+    {
+        if (!IsValidPackageVersion(returnedVersion) || !IsValidPackageVersion(requestedVersion))
+            return false;
+
+        return ManagedModuleVersionComparer.Instance.Compare(returnedVersion!, requestedVersion) == 0;
+    }
+
+    private static bool IsValidPackageVersion(string? version)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+            return false;
+
+        var value = version!.Trim();
+        var plusIndex = value.IndexOf('+');
+        if (plusIndex >= 0)
+            value = value.Substring(0, plusIndex);
+
+        var dashIndex = value.IndexOf('-');
+        if (dashIndex >= 0)
+        {
+            if (dashIndex == value.Length - 1)
+                return false;
+            value = value.Substring(0, dashIndex);
+        }
+
+        return Version.TryParse(value, out _);
     }
 
     private static IEnumerable<PowerShellGalleryPackageVersion> ParseEntries(XDocument document, bool includePrerelease)

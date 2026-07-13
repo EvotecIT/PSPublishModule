@@ -71,7 +71,7 @@ public sealed class ModuleVersionStepper
 
         var (current, source) = ResolveCurrentVersion(expectedVersion, moduleName, localPsd1Path, repository, prerelease);
         var proposed = ComputeNextVersion(expectedVersion, current);
-        if (source != ModuleVersionSource.LocalPsd1)
+        if (source != ModuleVersionSource.LocalPsd1 || current is null)
             proposed = EnsureResolvedVersionIsAvailable(expectedVersion, moduleName, repository, prerelease, proposed);
 
         return new ModuleVersionStepResult(
@@ -174,6 +174,11 @@ public sealed class ModuleVersionStepper
                 return (ver, ModuleVersionSource.Repository);
             }
 
+            return (null, ModuleVersionSource.Repository);
+        }
+        catch (Exception ex) when (ModulePublisher.IsRepositoryPackageNotFound(moduleName!, ex))
+        {
+            _logger.Verbose($"No existing repository version was found for '{moduleName}' on '{repository}'. Using the version-pattern baseline.");
             return (null, ModuleVersionSource.Repository);
         }
         catch (Exception ex)

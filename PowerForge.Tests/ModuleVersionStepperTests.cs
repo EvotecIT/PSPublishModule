@@ -109,6 +109,58 @@ public sealed class ModuleVersionStepperTests
     }
 
     [Fact]
+    public void Step_MissingLocalPsd1DoesNotUseAnUnverifiedBaselineCandidate()
+    {
+        using var directory = new TemporaryDirectory();
+        var manifestPath = Path.Combine(directory.Path, "MissingModule.psd1");
+        using var client = new HttpClient(new FakeCandidateReservationHandler("3.0.0"));
+        var stepper = new ModuleVersionStepper(
+            new NullLogger(),
+            new StubPowerShellRunner(new PowerShellRunResult(1, string.Empty, "Find-PSResource should not run.", "pwsh.exe")),
+            client);
+
+        var result = stepper.Step("3.0.X", moduleName: "PSPublishModule", localPsd1Path: manifestPath, repository: "PSGallery");
+
+        Assert.Equal("3.0.1", result.Version);
+        Assert.Equal(ModuleVersionSource.LocalPsd1, result.CurrentVersionSource);
+        Assert.Null(result.CurrentVersion);
+    }
+
+    [Fact]
+    public void Step_TreatsNuGetNormalizedExactMetadataAsAnExistingVersion()
+    {
+        using var client = new HttpClient(new NormalizedVersionHandler());
+        var stepper = new ModuleVersionStepper(
+            new NullLogger(),
+            new StubPowerShellRunner(new PowerShellRunResult(1, string.Empty, "Find-PSResource should not run.", "pwsh.exe")),
+            client);
+
+        var result = stepper.Step("1.2.3.X", moduleName: "PSPublishModule", localPsd1Path: null, repository: "PSGallery");
+
+        Assert.Equal("1.2.3.1", result.Version);
+        Assert.Equal(ModuleVersionSource.Repository, result.CurrentVersionSource);
+        Assert.Equal("1.2.3.0", result.CurrentVersion);
+    }
+
+    [Fact]
+    public void Step_UsesBaselineWhenPrivateRepositoryReportsPackageNotFound()
+    {
+        var stepper = new ModuleVersionStepper(
+            new NullLogger(),
+            new StubPowerShellRunner(new PowerShellRunResult(
+                1,
+                string.Empty,
+                "Package with name 'PrivateModule' could not be found in repository 'InternalRepo'.",
+                "pwsh.exe")));
+
+        var result = stepper.Step("1.0.X", moduleName: "PrivateModule", localPsd1Path: null, repository: "InternalRepo");
+
+        Assert.Equal("1.0.0", result.Version);
+        Assert.Equal(ModuleVersionSource.Repository, result.CurrentVersionSource);
+        Assert.Null(result.CurrentVersion);
+    }
+
+    [Fact]
     public void Step_ReportsBothGalleryFailuresWithoutScanningFromBaseVersion()
     {
         var handler = new ThrowingPowerShellGalleryHandler("Gallery socket unavailable.");
@@ -420,6 +472,31 @@ public sealed class ModuleVersionStepperTests
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/atom+xml")
             });
+        }
+    }
+
+    private sealed class NormalizedVersionHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri?.ToString() ?? string.Empty;
+            if (uri.Contains("FindPackagesById", StringComparison.OrdinalIgnoreCase))
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(BuildVersionFeed("1.2.2"), Encoding.UTF8, "application/atom+xml")
+                });
+            }
+
+            if (uri.Contains("1.2.3.0", StringComparison.OrdinalIgnoreCase))
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(BuildVersionEntry("1.2.3"), Encoding.UTF8, "application/atom+xml")
+                });
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         }
     }
 
