@@ -165,9 +165,9 @@ internal static class ReleaseHubRenderer
                 sb.Append("<section class=\"pf-release-group\" data-release-group=\"")
                     .Append(Html(group.Key))
                     .Append("\">");
-                sb.Append("<h4 class=\"pf-release-group-title\">")
+                sb.Append("<h3 class=\"pf-release-group-title\">")
                     .Append(Html(FormatGroupingLabel(mode, group.Key)))
-                    .Append("</h4>");
+                    .Append("</h3>");
             }
 
             sb.Append("<div class=\"pf-release-buttons-list\">");

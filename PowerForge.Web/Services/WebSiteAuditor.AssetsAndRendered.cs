@@ -831,7 +831,6 @@ public static partial class WebSiteAuditor
     let merged = white;
     for (let i = layers.length - 1; i >= 0; i--) {
       merged = composite(layers[i], merged);
-      if (merged.a >= 0.999) break;
     }
 
     return merged;

@@ -1047,6 +1047,7 @@ body.pf-api-docs .api-suite-search-filter{
         var namespaceGroups = types
             .GroupBy(static t => string.IsNullOrWhiteSpace(t.Namespace) ? "(global)" : t.Namespace)
             .OrderBy(static g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static g => g.Key, StringComparer.Ordinal)
             .ToList();
         var mainTypes = GetMainTypes(types, options);
         var mainTypeNames = new HashSet<string>(mainTypes.Select(static t => t.Name), StringComparer.OrdinalIgnoreCase);
@@ -1276,7 +1277,9 @@ body.pf-api-docs .api-suite-search-filter{
         var namespaceGroups = types
             .GroupBy(static t => string.IsNullOrWhiteSpace(t.Namespace) ? "(global)" : t.Namespace)
             .OrderBy(static g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static g => g.Key, StringComparer.Ordinal)
             .ToList();
+        var namespaceAnchors = BuildUniqueNamespaceAnchorIds(namespaceGroups.Select(static group => group.Key));
         var primaryKindPluralLabel = ResolvePrimaryKindPluralLabel(types);
 
         html.Line("<div class=\"api-overview ev-page-body\">");
@@ -1344,7 +1347,7 @@ body.pf-api-docs .api-suite-search-filter{
                     html.Line($"<p class=\"section-desc\">Browse all {types.Count} {primaryKindPluralLabel} organized by namespace.</p>");
                     foreach (var group in namespaceGroups)
                     {
-                        AppendOverviewNamespaceGroup(html, group, baseUrl, typeDisplayNames);
+                        AppendOverviewNamespaceGroup(html, group, namespaceAnchors[group.Key], baseUrl, typeDisplayNames);
                     }
                 }
                 html.Line("</section>");
@@ -1358,6 +1361,7 @@ body.pf-api-docs .api-suite-search-filter{
     private static void AppendOverviewNamespaceGroup(
         HtmlFragmentBuilder html,
         IGrouping<string, ApiTypeModel> group,
+        string anchor,
         string baseUrl,
         IReadOnlyDictionary<string, string> typeDisplayNames)
     {
@@ -1366,7 +1370,6 @@ body.pf-api-docs .api-suite-search-filter{
 
         const int visibleLimit = 24;
         var namespaceName = group.Key;
-        var anchor = BuildNamespaceAnchorId(namespaceName);
         var ordered = group.OrderBy(static t => t.Name, StringComparer.OrdinalIgnoreCase).ToList();
         var total = ordered.Count;
         var hasOverflow = total > visibleLimit;
@@ -1437,6 +1440,28 @@ body.pf-api-docs .api-suite-search-filter{
         normalized = normalized.Replace("(global)", "global", StringComparison.OrdinalIgnoreCase);
         normalized = SlugDashRegex.Replace(SlugNonAlnumRegex.Replace(normalized, "-"), "-").Trim('-');
         return string.IsNullOrWhiteSpace(normalized) ? "namespace-global" : "namespace-" + normalized;
+    }
+
+    private static IReadOnlyDictionary<string, string> BuildUniqueNamespaceAnchorIds(IEnumerable<string> namespaceNames)
+    {
+        var anchors = new Dictionary<string, string>(StringComparer.Ordinal);
+        var emitted = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var namespaceName in namespaceNames)
+        {
+            var baseAnchor = BuildNamespaceAnchorId(namespaceName);
+            var anchor = baseAnchor;
+            var suffix = 2;
+            while (!emitted.Add(anchor))
+            {
+                anchor = $"{baseAnchor}-{suffix}";
+                suffix++;
+            }
+
+            anchors[namespaceName] = anchor;
+        }
+
+        return anchors;
     }
 
     private static string RenderApiGlyphSpan(string containerClass, string glyphClass, string glyph)
