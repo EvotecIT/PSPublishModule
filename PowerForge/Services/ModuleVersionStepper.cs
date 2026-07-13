@@ -119,24 +119,39 @@ public sealed class ModuleVersionStepper
             }
         }
 
+        Exception? galleryLookupFailure = null;
         if (string.Equals(repository, "PSGallery", StringComparison.OrdinalIgnoreCase))
         {
+            Version? galleryVersion = null;
             try
             {
-                var galleryVersion = TryResolveCurrentVersionFromPowerShellGalleryFeed(moduleName!, prerelease);
-                var reservedVersion = TryResolveReservedPowerShellGalleryVersion(expectedVersion, moduleName!, galleryVersion, prerelease);
-                if (reservedVersion is not null && (galleryVersion is null || reservedVersion.CompareTo(galleryVersion) > 0))
-                {
-                    _logger.Verbose($"PowerShell Gallery reserved version for '{moduleName}' was resolved from the exact package metadata endpoint ({reservedVersion}).");
-                    return (reservedVersion, ModuleVersionSource.Repository);
-                }
-
-                if (galleryVersion is not null)
-                    return (galleryVersion, ModuleVersionSource.Repository);
+                galleryVersion = TryResolveCurrentVersionFromPowerShellGalleryFeed(moduleName!, prerelease);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (IsGalleryLookupFailure(ex))
             {
+                galleryLookupFailure = ex;
                 _logger.Warn($"Couldn't resolve current version from the raw PowerShell Gallery feed: {ex.Message}");
+            }
+
+            if (galleryLookupFailure is null)
+            {
+                try
+                {
+                    var reservedVersion = TryResolveReservedPowerShellGalleryVersion(expectedVersion, moduleName!, galleryVersion, prerelease);
+                    if (reservedVersion is not null && (galleryVersion is null || reservedVersion.CompareTo(galleryVersion) > 0))
+                    {
+                        _logger.Verbose($"PowerShell Gallery reserved version for '{moduleName}' was resolved from the exact package metadata endpoint ({reservedVersion}).");
+                        return (reservedVersion, ModuleVersionSource.Repository);
+                    }
+
+                    if (galleryVersion is not null)
+                        return (galleryVersion, ModuleVersionSource.Repository);
+                }
+                catch (Exception ex) when (IsGalleryLookupFailure(ex))
+                {
+                    galleryLookupFailure = ex;
+                    _logger.Warn($"Couldn't resolve reserved versions from the PowerShell Gallery exact-package endpoint: {ex.Message}");
+                }
             }
         }
 
@@ -161,7 +176,12 @@ public sealed class ModuleVersionStepper
         catch (Exception ex)
         {
             _logger.Warn($"Couldn't resolve current version from repository: {ex.Message}");
-            return (null, ModuleVersionSource.Repository);
+            throw CreateCurrentVersionResolutionException(
+                expectedVersion,
+                moduleName!,
+                repository,
+                galleryLookupFailure,
+                ex);
         }
     }
 
@@ -224,22 +244,78 @@ public sealed class ModuleVersionStepper
         }
 
         var candidateText = proposedVersion;
+        var firstCandidateText = candidateText;
+        var lastExistingCandidateText = candidateText;
         const int maxProbeCount = 24;
 
         for (var index = 0; index < maxProbeCount; index++)
         {
-            if (!_powerShellGalleryFeed.VersionExists(moduleName!, candidateText, timeout: TimeSpan.FromSeconds(20)))
-                return candidateText;
+            try
+            {
+                if (!_powerShellGalleryFeed.VersionExists(moduleName!, candidateText, timeout: TimeSpan.FromSeconds(20)))
+                    return candidateText;
+            }
+            catch (Exception ex)
+            {
+                throw CreateVersionAvailabilityException(moduleName!, candidateText, ex);
+            }
 
             if (!TryParseRepositoryVersion(candidateText, out var candidateVersion))
                 return candidateText;
 
+            lastExistingCandidateText = candidateText;
             candidateText = ComputeNextVersion(expectedVersion, candidateVersion);
         }
 
         throw new InvalidOperationException(
-            $"Unable to resolve a free PowerShell Gallery version for '{moduleName}' from expected version '{expectedVersion}' after {maxProbeCount} probes.");
+            $"PowerShell Gallery reports that all {maxProbeCount} candidate versions from '{firstCandidateText}' through '{lastExistingCandidateText}' already exist for '{moduleName}' while resolving expected version '{expectedVersion}'. " +
+            "No free version was selected. Current-version discovery may be stale or the version pattern may be exhausted; retry after verifying Gallery access or provide an exact module version.");
     }
+
+    private static InvalidOperationException CreateCurrentVersionResolutionException(
+        string expectedVersion,
+        string moduleName,
+        string repository,
+        Exception? galleryLookupFailure,
+        Exception repositoryLookupFailure)
+    {
+        if (galleryLookupFailure is not null &&
+            string.Equals(repository, "PSGallery", StringComparison.OrdinalIgnoreCase))
+        {
+            return new InvalidOperationException(
+                $"Unable to resolve the current version of '{moduleName}' for auto-version pattern '{expectedVersion}' because both PowerShell Gallery lookup paths failed. " +
+                "No candidate version was selected. Verify network access to https://www.powershellgallery.com:443 and retry, or provide an exact module version for an intentional offline/local build. " +
+                $"Gallery lookup: {DescribeLookupFailure(galleryLookupFailure)} Repository 'PSGallery': {DescribeLookupFailure(repositoryLookupFailure)}",
+                new AggregateException(galleryLookupFailure, repositoryLookupFailure));
+        }
+
+        return new InvalidOperationException(
+            $"Unable to resolve the current version of '{moduleName}' for auto-version pattern '{expectedVersion}' from repository '{repository}' because the repository lookup failed. " +
+            "No candidate version was selected. Verify repository access and retry, or provide an exact module version for an intentional offline/local build. " +
+            $"Repository error: {DescribeLookupFailure(repositoryLookupFailure)}",
+            repositoryLookupFailure);
+    }
+
+    private static InvalidOperationException CreateVersionAvailabilityException(
+        string moduleName,
+        string candidateVersion,
+        Exception lookupFailure)
+        => new(
+            $"Unable to verify whether PowerShell Gallery version '{candidateVersion}' is available for '{moduleName}' because the exact-version Gallery request failed. " +
+            "No version was selected to avoid reusing an existing package version. Verify network access to https://www.powershellgallery.com:443 and retry. " +
+            $"Gallery error: {DescribeLookupFailure(lookupFailure)}",
+            lookupFailure);
+
+    private static string DescribeLookupFailure(Exception exception)
+        => exception is OperationCanceledException
+            ? "The request timed out or was canceled."
+            : exception.Message;
+
+    private static bool IsGalleryLookupFailure(Exception exception)
+        => exception is HttpRequestException ||
+           exception is OperationCanceledException ||
+           exception is InvalidDataException ||
+           exception is System.Xml.XmlException;
 
     private Version? TryResolveCurrentVersionFromPowerShellGalleryFeed(string moduleName, bool prerelease)
     {

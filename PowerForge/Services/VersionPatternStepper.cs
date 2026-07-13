@@ -43,6 +43,13 @@ internal static class VersionPatternStepper
         }
 
         var baseline = currentVersion ?? new Version(0, 0, 0, 0);
+        if (currentVersion is not null && CompareFixedPrefix(prepared, currentVersion, stepIndex) < 0)
+        {
+            throw new InvalidOperationException(
+                $"ExpectedVersion pattern '{expectedVersion}' cannot produce a version greater than current version '{currentVersion}' because its fixed prefix is lower. " +
+                "Choose a pattern with the same or a higher fixed prefix, or provide an exact version.");
+        }
+
         var stepValue = currentVersion is null ? 1 : GetPart(currentVersion, stepIndex);
         if (stepValue < 0) stepValue = 0;
 
@@ -62,6 +69,20 @@ internal static class VersionPatternStepper
         }
 
         return candidate.ToString();
+    }
+
+    private static int CompareFixedPrefix(int?[] prepared, Version currentVersion, int stepIndex)
+    {
+        for (var index = 0; index < stepIndex; index++)
+        {
+            var expectedPart = prepared[index] ?? 0;
+            var currentPart = GetPart(currentVersion, index);
+            var comparison = expectedPart.CompareTo(currentPart);
+            if (comparison != 0)
+                return comparison;
+        }
+
+        return 0;
     }
 
     private static int GetPart(Version v, int index)

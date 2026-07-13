@@ -1835,7 +1835,7 @@ $packageOptions['PlanOutputPath'] = 'Build/package-options-plan.json'
                 {
                     Name = moduleName,
                     SourcePath = root.FullName,
-                    Version = "1.2.X"
+                    Version = "1.2.3"
                 },
                 Segments = new IConfigurationSegment[]
                 {

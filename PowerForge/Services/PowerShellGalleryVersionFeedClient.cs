@@ -1,6 +1,7 @@
+using System.Globalization;
+using System.Net;
 using System.Net.Http;
 using System.Xml.Linq;
-using System.Globalization;
 
 namespace PowerForge;
 
@@ -76,6 +77,9 @@ public sealed class PowerShellGalleryVersionFeedClient
     /// Checks whether the exact package/version exists in the gallery metadata endpoint,
     /// including versions that are unlisted or removed from the public feed listing.
     /// </summary>
+    /// <exception cref="HttpRequestException">The Gallery request failed or returned an unexpected HTTP status.</exception>
+    /// <exception cref="TaskCanceledException">The Gallery request timed out.</exception>
+    /// <exception cref="InvalidDataException">The Gallery returned successful but mismatched package metadata.</exception>
     public bool VersionExists(
         string packageId,
         string version,
@@ -94,19 +98,27 @@ public sealed class PowerShellGalleryVersionFeedClient
             Uri.EscapeDataString(packageId.Trim()),
             Uri.EscapeDataString(version.Trim()));
 
-        try
-        {
-            using var response = _client.GetAsync(requestUri, token).GetAwaiter().GetResult();
-            return response.IsSuccessStatusCode;
-        }
-        catch (TaskCanceledException)
-        {
+        using var response = _client.GetAsync(requestUri, token).GetAwaiter().GetResult();
+        if (response.StatusCode == HttpStatusCode.NotFound)
             return false;
-        }
-        catch (HttpRequestException)
+
+        response.EnsureSuccessStatusCode();
+
+        var xml = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        var document = XDocument.Parse(xml);
+        XNamespace d = "http://schemas.microsoft.com/ado/2007/08/dataservices";
+        var returnedVersion = document.Descendants(d + "Version").FirstOrDefault()?.Value?.Trim();
+
+        if (!string.Equals(returnedVersion, version.Trim(), StringComparison.OrdinalIgnoreCase))
         {
-            return false;
+            var returnedDescription = string.IsNullOrWhiteSpace(returnedVersion)
+                ? "no version metadata"
+                : $"version '{returnedVersion}'";
+            throw new InvalidDataException(
+                $"PowerShell Gallery exact-version lookup for '{packageId.Trim()}' version '{version.Trim()}' returned HTTP {(int)response.StatusCode} but contained {returnedDescription}.");
         }
+
+        return true;
     }
 
     private static IEnumerable<PowerShellGalleryPackageVersion> ParseEntries(XDocument document, bool includePrerelease)
