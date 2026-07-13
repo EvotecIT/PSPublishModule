@@ -231,36 +231,6 @@ public sealed class DotNetRepositoryReleaseServiceTests
         Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.Published, outcomes[symbols]);
     }
 
-    [Fact]
-    public void CreateNuGetPushStartInfo_UsesPackageDirectory()
-    {
-        var packageDirectory = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
-        var packagePath = Path.Combine(packageDirectory, "Sample.1.0.0.nupkg");
-
-        var startInfo = DotNetRepositoryReleaseService.CreateNuGetPushStartInfo(
-            packagePath,
-            "key",
-            "https://api.nuget.org/v3/index.json",
-            skipDuplicate: true);
-
-        Assert.Equal(Path.GetFullPath(packageDirectory), startInfo.WorkingDirectory);
-    }
-
-    [Fact]
-    public void CreateNuGetPushStartInfo_SuppressesImplicitCompanionSymbolsWhenRequested()
-    {
-        var packagePath = Path.Combine(Path.GetTempPath(), "Sample.1.0.0.nupkg");
-
-        var startInfo = DotNetRepositoryReleaseService.CreateNuGetPushStartInfo(
-            packagePath,
-            "key",
-            "https://api.nuget.org/v3/index.json",
-            skipDuplicate: true,
-            suppressCompanionSymbols: true);
-
-        Assert.Contains("--no-symbols", startInfo.ArgumentList);
-    }
-
     [Theory]
     [InlineData("Artefacts/Feed")]
     [InlineData(@"Artefacts\Feed")]
@@ -271,6 +241,18 @@ public sealed class DotNetRepositoryReleaseServiceTests
         var source = DotNetRepositoryReleaseService.ResolvePublishSource(configuredSource, root);
 
         Assert.Equal(Path.GetFullPath(Path.Combine(root, "Artefacts", "Feed")), source);
+    }
+
+    [Fact]
+    public void ResolvePublishSource_ResolvesFileUriToLocalPath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var feed = Path.Combine(root, "Artefacts", "Local Feed");
+        var fileUri = new Uri(feed).AbsoluteUri;
+
+        var source = DotNetRepositoryReleaseService.ResolvePublishSource(fileUri, root);
+
+        Assert.Equal(Path.GetFullPath(feed), source);
     }
 
     [Fact]

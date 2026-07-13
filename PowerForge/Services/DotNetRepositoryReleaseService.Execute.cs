@@ -569,13 +569,12 @@ public sealed partial class DotNetRepositoryReleaseService
 
                     _logger.Info($"Publishing {Path.GetFileName(pkg)}...");
                     var packagePublishWatch = Stopwatch.StartNew();
-                    PushPackage(
+                    var pushResult = PushPackage(
                         pkg,
                         spec.PublishApiKey!,
                         source,
                         spec.SkipDuplicate,
-                        suppressCompanionSymbols: !spec.IncludeSymbols || publishSymbolsSeparately,
-                        out var pushResult);
+                        suppressCompanionSymbols: !spec.IncludeSymbols || publishSymbolsSeparately);
                     packagePublishWatch.Stop();
                     var artifactOutcomes = ClassifyPublishedArtifacts(publishedArtifacts, pushResult);
                     foreach (var artifact in publishedArtifacts)

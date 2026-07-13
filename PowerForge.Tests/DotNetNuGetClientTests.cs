@@ -25,6 +25,9 @@ public sealed class DotNetNuGetClientTests
                 packagePath: @"C:\repo\Artifacts\Test.1.0.0.nupkg",
                 apiKey: "secret",
                 source: "https://api.nuget.org/v3/index.json",
+                skipDuplicate: true,
+                workingDirectory: null,
+                timeout: null,
                 suppressCompanionSymbols: true));
 
             Assert.NotNull(captured);
@@ -54,6 +57,32 @@ public sealed class DotNetNuGetClientTests
         {
             try { Directory.Delete(runtimeDirectory, recursive: true); } catch { }
         }
+    }
+
+    [Fact]
+    public void PushRequest_RetainsOriginalSixArgumentConstructor()
+    {
+        var constructor = typeof(DotNetNuGetPushRequest).GetConstructor(new[]
+        {
+            typeof(string),
+            typeof(string),
+            typeof(string),
+            typeof(bool),
+            typeof(string),
+            typeof(TimeSpan?)
+        });
+
+        Assert.NotNull(constructor);
+        var request = Assert.IsType<DotNetNuGetPushRequest>(constructor!.Invoke(new object?[]
+        {
+            "Sample.1.0.0.nupkg",
+            "key",
+            "https://api.nuget.org/v3/index.json",
+            true,
+            null,
+            null
+        }));
+        Assert.False(request.SuppressCompanionSymbols);
     }
 
     [Fact]

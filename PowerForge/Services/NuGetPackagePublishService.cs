@@ -180,17 +180,10 @@ internal sealed class NuGetPackagePublishService
         string source,
         bool skipDuplicate,
         bool suppressCompanionSymbols)
-    {
-        var result = new DotNetNuGetClient()
-            .PushPackageAsync(new DotNetNuGetPushRequest(
-                packagePath,
-                apiKey,
-                source,
-                skipDuplicate,
-                suppressCompanionSymbols: suppressCompanionSymbols))
-            .GetAwaiter()
-            .GetResult();
-
-        return DotNetRepositoryReleaseService.ClassifyNuGetPushOutcome(result.ExitCode, skipDuplicate, result.StdErr, result.StdOut);
-    }
+        => DotNetRepositoryReleaseService.PushPackage(
+            packagePath,
+            apiKey,
+            source,
+            skipDuplicate,
+            suppressCompanionSymbols);
 }

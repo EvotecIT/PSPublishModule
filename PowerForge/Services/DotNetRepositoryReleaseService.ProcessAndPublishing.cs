@@ -253,41 +253,32 @@ public sealed partial class DotNetRepositoryReleaseService
         return outcomes;
     }
 
-    private static bool PushPackage(
+    internal static PackagePushResult PushPackage(
         string packagePath,
         string apiKey,
         string source,
         bool skipDuplicate,
-        bool suppressCompanionSymbols,
-        out PackagePushResult result)
+        bool suppressCompanionSymbols)
     {
         if (IsLocalPublishSource(source) &&
             packagePath.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase))
         {
-            return CopySymbolPackageToLocalFeed(packagePath, source, skipDuplicate, out result);
+            CopySymbolPackageToLocalFeed(packagePath, source, skipDuplicate, out var localResult);
+            return localResult;
         }
 
-        result = new PackagePushResult();
-        var psi = CreateNuGetPushStartInfo(packagePath, apiKey, source, skipDuplicate, suppressCompanionSymbols);
-
-        using var p = Process.Start(psi);
-        if (p is null)
-        {
-            result = new PackagePushResult
-            {
-                Outcome = PackagePushOutcome.Failed,
-                Message = "Failed to start dotnet."
-            };
-            return false;
-        }
-        // Start both stream reads before waiting to avoid pipe-buffer deadlocks.
-        var stdoutTask = p.StandardOutput.ReadToEndAsync();
-        var stderrTask = p.StandardError.ReadToEndAsync();
-        p.WaitForExit();
-        var stdOut = stdoutTask.GetAwaiter().GetResult();
-        var stdErr = stderrTask.GetAwaiter().GetResult();
-        result = ClassifyNuGetPushOutcome(p.ExitCode, skipDuplicate, stdErr, stdOut);
-        return result.Outcome != PackagePushOutcome.Failed;
+        var push = new DotNetNuGetClient()
+            .PushPackageAsync(new DotNetNuGetPushRequest(
+                packagePath,
+                apiKey,
+                source,
+                skipDuplicate,
+                workingDirectory: null,
+                timeout: null,
+                suppressCompanionSymbols: suppressCompanionSymbols))
+            .GetAwaiter()
+            .GetResult();
+        return ClassifyNuGetPushOutcome(push.ExitCode, skipDuplicate, push.StdErr, push.StdOut);
     }
 
     /// <summary>
@@ -353,49 +344,6 @@ public sealed partial class DotNetRepositoryReleaseService
             };
             return false;
         }
-    }
-
-    internal static ProcessStartInfo CreateNuGetPushStartInfo(
-        string packagePath,
-        string apiKey,
-        string source,
-        bool skipDuplicate,
-        bool suppressCompanionSymbols = false)
-    {
-        var packageDirectory = Path.GetDirectoryName(Path.GetFullPath(packagePath));
-        var psi = new ProcessStartInfo
-        {
-            FileName = "dotnet",
-            WorkingDirectory = string.IsNullOrWhiteSpace(packageDirectory) ? Environment.CurrentDirectory : packageDirectory,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        ProcessStartInfoEncoding.TryApplyUtf8(psi);
-
-#if NET472
-        var args = new List<string>
-        {
-            "nuget", "push", packagePath,
-            "--api-key", apiKey,
-            "--source", source
-        };
-        if (skipDuplicate) args.Add("--skip-duplicate");
-        if (suppressCompanionSymbols) args.Add("--no-symbols");
-        psi.Arguments = BuildWindowsArgumentString(args);
-#else
-        psi.ArgumentList.Add("nuget");
-        psi.ArgumentList.Add("push");
-        psi.ArgumentList.Add(packagePath);
-        psi.ArgumentList.Add("--api-key");
-        psi.ArgumentList.Add(apiKey);
-        psi.ArgumentList.Add("--source");
-        psi.ArgumentList.Add(source);
-        if (skipDuplicate) psi.ArgumentList.Add("--skip-duplicate");
-        if (suppressCompanionSymbols) psi.ArgumentList.Add("--no-symbols");
-#endif
-        return psi;
     }
 
     private static void LogProcessOutput(ILogger logger, string projectName, string operation, string stdOut, string stdErr)

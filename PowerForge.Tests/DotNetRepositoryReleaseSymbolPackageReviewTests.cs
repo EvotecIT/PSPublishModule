@@ -63,6 +63,35 @@ public sealed class DotNetRepositoryReleaseSymbolPackageReviewTests
     }
 
     [Fact]
+    public void PushPackage_CopiesExplicitSymbolPackageIntoLocalFeed()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var packageDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "packages"));
+            var localFeed = Directory.CreateDirectory(Path.Combine(root.FullName, "feed"));
+            var primary = Path.Combine(localFeed.FullName, "Sample.1.0.0.nupkg");
+            var symbols = Path.Combine(packageDirectory.FullName, "Sample.1.0.0.snupkg");
+            File.WriteAllText(primary, "primary");
+            File.WriteAllText(symbols, "symbols");
+
+            var result = DotNetRepositoryReleaseService.PushPackage(
+                symbols,
+                "unused-for-local-feed",
+                new Uri(localFeed.FullName).AbsoluteUri,
+                skipDuplicate: true,
+                suppressCompanionSymbols: true);
+
+            Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.Published, result.Outcome);
+            Assert.True(File.Exists(Path.Combine(localFeed.FullName, Path.GetFileName(symbols))));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Execute_WithSymbolsAndLocalFeed_PublishesBothArtifacts()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

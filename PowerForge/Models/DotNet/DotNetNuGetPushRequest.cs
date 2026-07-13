@@ -14,15 +14,42 @@ public sealed class DotNetNuGetPushRequest
     /// <param name="skipDuplicate">When true, passes <c>--skip-duplicate</c>.</param>
     /// <param name="workingDirectory">Optional working directory override.</param>
     /// <param name="timeout">Optional timeout override.</param>
-    /// <param name="suppressCompanionSymbols">When true, passes <c>--no-symbols</c>.</param>
     public DotNetNuGetPushRequest(
         string packagePath,
         string apiKey,
         string source,
         bool skipDuplicate = true,
         string? workingDirectory = null,
-        TimeSpan? timeout = null,
-        bool suppressCompanionSymbols = false)
+        TimeSpan? timeout = null)
+        : this(
+            packagePath,
+            apiKey,
+            source,
+            skipDuplicate,
+            workingDirectory,
+            timeout,
+            suppressCompanionSymbols: false)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DotNetNuGetPushRequest"/> class.
+    /// </summary>
+    /// <param name="packagePath">Package path to push.</param>
+    /// <param name="apiKey">API key passed to the feed.</param>
+    /// <param name="source">Feed source URL or name.</param>
+    /// <param name="skipDuplicate">When true, passes <c>--skip-duplicate</c>.</param>
+    /// <param name="workingDirectory">Optional working directory override.</param>
+    /// <param name="timeout">Optional timeout override.</param>
+    /// <param name="suppressCompanionSymbols">When true, passes <c>--no-symbols</c>.</param>
+    public DotNetNuGetPushRequest(
+        string packagePath,
+        string apiKey,
+        string source,
+        bool skipDuplicate,
+        string? workingDirectory,
+        TimeSpan? timeout,
+        bool suppressCompanionSymbols)
     {
         PackagePath = packagePath;
         ApiKey = apiKey;
