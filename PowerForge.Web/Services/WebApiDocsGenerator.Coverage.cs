@@ -644,7 +644,12 @@ public static partial class WebApiDocsGenerator
                value.IndexOf("%7D", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
-    private static bool IsGitHubRepoMismatchHint(string? sourcePath, Uri url, out string hint)
+    /// <summary>
+    /// Detects a likely duplicated repository prefix in a generated GitHub source link.
+    /// Leading relative path segments are ignored because portable PDB paths can point outside
+    /// the checkout root before URL generation normalizes them.
+    /// </summary>
+    internal static bool IsGitHubRepoMismatchHint(string? sourcePath, Uri url, out string hint)
     {
         hint = string.Empty;
         if (string.IsNullOrWhiteSpace(sourcePath))
@@ -652,10 +657,13 @@ public static partial class WebApiDocsGenerator
         if (!string.Equals(url.Host, "github.com", StringComparison.OrdinalIgnoreCase))
             return false;
 
-        var segments = sourcePath
-            .Replace('\\', '/')
+        var segments = TrimLeadingRelativeSegments(sourcePath.Replace('\\', '/'))
             .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (segments.Length < 2 || !string.Equals(segments[0], segments[1], StringComparison.OrdinalIgnoreCase))
+        var repoSegmentIndex = segments.Length >= 3 && string.Equals(segments[0], "_", StringComparison.Ordinal)
+            ? 1
+            : 0;
+        if (segments.Length < repoSegmentIndex + 2 ||
+            !string.Equals(segments[repoSegmentIndex], segments[repoSegmentIndex + 1], StringComparison.OrdinalIgnoreCase))
             return false;
 
         var uriSegments = url.AbsolutePath
@@ -663,7 +671,7 @@ public static partial class WebApiDocsGenerator
         if (uriSegments.Length < 2)
             return false;
 
-        var inferredRepo = segments[0];
+        var inferredRepo = segments[repoSegmentIndex];
         var urlRepo = uriSegments[1];
         if (string.Equals(inferredRepo, urlRepo, StringComparison.OrdinalIgnoreCase))
             return false;
