@@ -21,6 +21,7 @@ public sealed class WebApiDocsGeneratorAccessibilityTests
                   <members>
                     <member name="T:Sample.QR.Upper"><summary>Upper namespace.</summary></member>
                     <member name="T:Sample.Qr.Mixed"><summary>Mixed namespace.</summary></member>
+                    <member name="T:Sample.Qr._2.Suffixed"><summary>Suffix-like namespace.</summary></member>
                   </members>
                 </doc>
                 """);
@@ -35,10 +36,11 @@ public sealed class WebApiDocsGeneratorAccessibilityTests
                 BaseUrl = "/api"
             });
 
-            Assert.Equal(2, result.TypeCount);
+            Assert.Equal(3, result.TypeCount);
             var html = File.ReadAllText(Path.Combine(outputPath, "index.html"));
             Assert.Single(Regex.Matches(html, "id=\"namespace-sample-qr\"", RegexOptions.IgnoreCase).Cast<Match>());
             Assert.Single(Regex.Matches(html, "id=\"namespace-sample-qr-2\"", RegexOptions.IgnoreCase).Cast<Match>());
+            Assert.Single(Regex.Matches(html, "id=\"namespace-sample-qr-2-2\"", RegexOptions.IgnoreCase).Cast<Match>());
         }
         finally
         {

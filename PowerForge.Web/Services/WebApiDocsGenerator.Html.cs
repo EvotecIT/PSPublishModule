@@ -1445,15 +1445,20 @@ body.pf-api-docs .api-suite-search-filter{
     private static IReadOnlyDictionary<string, string> BuildUniqueNamespaceAnchorIds(IEnumerable<string> namespaceNames)
     {
         var anchors = new Dictionary<string, string>(StringComparer.Ordinal);
-        var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
+        var emitted = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var namespaceName in namespaceNames)
         {
             var baseAnchor = BuildNamespaceAnchorId(namespaceName);
-            occurrences.TryGetValue(baseAnchor, out var occurrence);
-            occurrence++;
-            occurrences[baseAnchor] = occurrence;
-            anchors[namespaceName] = occurrence == 1 ? baseAnchor : $"{baseAnchor}-{occurrence}";
+            var anchor = baseAnchor;
+            var suffix = 2;
+            while (!emitted.Add(anchor))
+            {
+                anchor = $"{baseAnchor}-{suffix}";
+                suffix++;
+            }
+
+            anchors[namespaceName] = anchor;
         }
 
         return anchors;
