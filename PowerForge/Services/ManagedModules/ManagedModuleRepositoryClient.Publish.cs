@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -121,6 +122,11 @@ public sealed partial class ManagedModuleRepositoryClient
             () =>
             {
                 var request = CreateRequest(HttpMethod.Put, new Uri(publishAddress), credential, "application/json");
+                // NuGet-compatible endpoints and intermediaries can reset HTTP/2 multipart uploads.
+                request.Version = HttpVersion.Version11;
+#if !NET472
+                request.VersionPolicy = HttpVersionPolicy.RequestVersionExact;
+#endif
                 request.Headers.TryAddWithoutValidation(NuGetClientVersionHeader, NuGetPublishProtocolClientVersion);
                 var packageContent = new StreamContent(File.OpenRead(package));
                 packageContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");

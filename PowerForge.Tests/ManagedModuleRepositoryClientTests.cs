@@ -973,6 +973,7 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.Equal("package", publishRequest.MultipartPartName);
         Assert.Equal("Company.Tools.1.0.0.nupkg", publishRequest.MultipartFileName);
         Assert.Equal("application/octet-stream", publishRequest.MultipartPartContentType);
+        Assert.Equal(HttpVersion.Version11, publishRequest.Version);
     }
 
     [Fact]
@@ -1347,6 +1348,7 @@ public sealed class ManagedModuleRepositoryClientTests
                 apiKey,
                 nuGetClientVersion,
                 request.Headers.UserAgent.ToString(),
+                request.Version,
                 request.Content?.Headers.ContentType?.MediaType,
                 multipart?.Count() ?? 0,
                 firstPart?.Headers.ContentDisposition?.Name?.Trim('"'),
@@ -1720,6 +1722,7 @@ public sealed class ManagedModuleRepositoryClientTests
             string? apiKey,
             string? nuGetClientVersion,
             string userAgent,
+            Version version,
             string? contentType,
             int multipartPartCount,
             string? multipartPartName,
@@ -1732,6 +1735,7 @@ public sealed class ManagedModuleRepositoryClientTests
             ApiKey = apiKey;
             NuGetClientVersion = nuGetClientVersion;
             UserAgent = userAgent;
+            Version = version;
             ContentType = contentType;
             MultipartPartCount = multipartPartCount;
             MultipartPartName = multipartPartName;
@@ -1750,6 +1754,8 @@ public sealed class ManagedModuleRepositoryClientTests
         public string? NuGetClientVersion { get; }
 
         public string UserAgent { get; }
+
+        public Version Version { get; }
 
         public string? ContentType { get; }
 

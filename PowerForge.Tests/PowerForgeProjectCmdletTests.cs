@@ -286,6 +286,12 @@ public sealed class PowerForgeProjectCmdletTests
         Assert.Contains(segments, static segment => segment is ConfigurationBuildSegment);
         Assert.DoesNotContain(segments, static segment => segment is ConfigurationDocumentationSegment);
 
+        var mergedPsm1Formatting = segments
+            .OfType<ConfigurationFormattingSegment>()
+            .Select(static segment => segment.Options.Merge.FormatCodePSM1)
+            .Single(static formatting => formatting is not null);
+        Assert.False(mergedPsm1Formatting!.FormatterSettings!.Rules.PSPlaceCloseBrace!.NewLineAfter);
+
         var build = segments.OfType<ConfigurationBuildSegment>().Single().BuildModule;
         Assert.True(build.Enable);
         Assert.True(build.Merge);

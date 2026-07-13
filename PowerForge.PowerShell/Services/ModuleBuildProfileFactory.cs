@@ -38,7 +38,7 @@ internal sealed class ModuleBuildProfileFactory
             PlaceOpenBraceNewLineAfter = true,
             PlaceOpenBraceIgnoreOneLineBlock = false,
             PlaceCloseBraceEnable = true,
-            PlaceCloseBraceNewLineAfter = true,
+            PlaceCloseBraceNewLineAfter = false,
             PlaceCloseBraceIgnoreOneLineBlock = false,
             PlaceCloseBraceNoEmptyLineBefore = true,
             UseConsistentIndentationEnable = true,
