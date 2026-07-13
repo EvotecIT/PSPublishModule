@@ -159,6 +159,7 @@ public sealed partial class AppStoreConnectClient
     {
         return duration switch
         {
+            AppStoreConnectSubscriptionOfferDuration.OneDay => "ONE_DAY",
             AppStoreConnectSubscriptionOfferDuration.ThreeDays => "THREE_DAYS",
             AppStoreConnectSubscriptionOfferDuration.OneWeek => "ONE_WEEK",
             AppStoreConnectSubscriptionOfferDuration.TwoWeeks => "TWO_WEEKS",

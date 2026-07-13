@@ -5,6 +5,9 @@ namespace PowerForge;
 /// </summary>
 public enum AppStoreConnectSubscriptionOfferDuration
 {
+    /// <summary>One day.</summary>
+    OneDay,
+
     /// <summary>Three days.</summary>
     ThreeDays,
 

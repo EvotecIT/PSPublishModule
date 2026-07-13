@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.53
+Help Version: 3.0.55
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -96,6 +96,12 @@ Reads App Store Connect screenshot sets for an App Store version localization.
 
 ### [Get-AppStoreConnectSubscription](Get-AppStoreConnectSubscription.md)
 Reads App Store Connect auto-renewable subscription products for an app.
+
+### [Get-AppStoreConnectSubscriptionIntroductoryOffer](Get-AppStoreConnectSubscriptionIntroductoryOffer.md)
+Reads App Store Connect introductory offers for an auto-renewable subscription.
+
+### [Get-AppStoreConnectSubscriptionPrice](Get-AppStoreConnectSubscriptionPrice.md)
+Reads App Store Connect prices configured for an auto-renewable subscription.
 
 ### [Get-AppStoreConnectVersion](Get-AppStoreConnectVersion.md)
 Reads App Store version information from App Store Connect.
@@ -236,6 +242,9 @@ Creates an App Store Connect TestFlight beta tester.
 
 ### [New-AppStoreConnectScreenshotSet](New-AppStoreConnectScreenshotSet.md)
 Creates an App Store Connect screenshot set for an App Store version localization.
+
+### [New-AppStoreConnectSubscriptionIntroductoryOffer](New-AppStoreConnectSubscriptionIntroductoryOffer.md)
+Creates an App Store Connect introductory offer for an auto-renewable subscription.
 
 ### [New-BenchmarkSuite](New-BenchmarkSuite.md)
 Declares a PowerShell benchmark suite.

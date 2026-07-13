@@ -49,10 +49,15 @@ public sealed class NewAppStoreConnectSubscriptionIntroductoryOfferCommand : PSC
     /// <summary>Optional offer end date.</summary>
     [Parameter] public DateTime? EndDate { get; set; }
 
-    /// <summary>Required subscription price point resource id for paid offers.</summary>
+    /// <summary>
+    /// Subscription price point resource id for a paid offer. Paid offers accept one territory per invocation
+    /// because App Store Connect price points are territory-specific.
+    /// </summary>
     [Parameter] public string? SubscriptionPricePointId { get; set; }
 
-    /// <summary>Territory resource ids for the offer.</summary>
+    /// <summary>
+    /// Territory resource ids for the offer. Free trials may target multiple territories; paid offers accept one.
+    /// </summary>
     [Parameter(Mandatory = true)]
     [ValidateNotNullOrEmpty]
     public string[] TerritoryId { get; set; } = Array.Empty<string>();
@@ -64,6 +69,22 @@ public sealed class NewAppStoreConnectSubscriptionIntroductoryOfferCommand : PSC
             .Where(static territoryId => !string.IsNullOrWhiteSpace(territoryId))
             .Select(static territoryId => territoryId.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var isPaidOffer = OfferMode != AppStoreConnectSubscriptionOfferMode.FreeTrial;
+        if (isPaidOffer && territoryIds.Length > 1)
+        {
+            throw new PSArgumentException(
+                "Paid introductory offers require a territory-specific subscription price point. " +
+                "Create one territory per command invocation with its matching SubscriptionPricePointId.");
+        }
+        if (isPaidOffer && string.IsNullOrWhiteSpace(SubscriptionPricePointId))
+        {
+            throw new PSArgumentException(
+                "SubscriptionPricePointId is required for paid introductory offers.",
+                nameof(SubscriptionPricePointId));
+        }
+
+        territoryIds = territoryIds
             .Where(territoryId => ShouldProcess(
                 $"{SubscriptionId}/{territoryId}",
                 $"Create {Duration} {OfferMode} introductory offer"))

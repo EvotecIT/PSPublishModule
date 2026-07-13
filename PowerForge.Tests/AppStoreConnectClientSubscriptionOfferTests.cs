@@ -88,8 +88,12 @@ public sealed partial class AppStoreConnectClientTests
             Assert.Single(handler.RequestUris).ToString());
     }
 
-    [Fact]
-    public async Task CreateSubscriptionIntroductoryOffer_PostsFreeTrialRequest()
+    [Theory]
+    [InlineData(AppStoreConnectSubscriptionOfferDuration.OneDay, "ONE_DAY")]
+    [InlineData(AppStoreConnectSubscriptionOfferDuration.TwoWeeks, "TWO_WEEKS")]
+    public async Task CreateSubscriptionIntroductoryOffer_PostsFreeTrialRequest(
+        AppStoreConnectSubscriptionOfferDuration duration,
+        string expectedDuration)
     {
         var handler = new SequenceHandler(
             new SequenceResponse(HttpStatusCode.Created,
@@ -114,7 +118,7 @@ public sealed partial class AppStoreConnectClientTests
 
         var offer = await client.CreateSubscriptionIntroductoryOfferAsync(
             "subscription-1",
-            AppStoreConnectSubscriptionOfferDuration.TwoWeeks,
+            duration,
             AppStoreConnectSubscriptionOfferMode.FreeTrial,
             territoryId: "POL");
 
@@ -125,7 +129,7 @@ public sealed partial class AppStoreConnectClientTests
             Assert.Single(handler.RequestUris).ToString());
         var body = Assert.Single(handler.RequestBodies);
         Assert.Contains("\"type\":\"subscriptionIntroductoryOffers\"", body, StringComparison.Ordinal);
-        Assert.Contains("\"duration\":\"TWO_WEEKS\"", body, StringComparison.Ordinal);
+        Assert.Contains($"\"duration\":\"{expectedDuration}\"", body, StringComparison.Ordinal);
         Assert.Contains("\"offerMode\":\"FREE_TRIAL\"", body, StringComparison.Ordinal);
         Assert.Contains("\"numberOfPeriods\":1", body, StringComparison.Ordinal);
         Assert.Contains("\"type\":\"subscriptions\",\"id\":\"subscription-1\"", body, StringComparison.Ordinal);
