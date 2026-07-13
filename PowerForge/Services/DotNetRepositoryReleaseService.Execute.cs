@@ -542,10 +542,14 @@ public sealed partial class DotNetRepositoryReleaseService
                 result.PublishSource = source;
 
                 var orderedProjects = SortProjectsForPublish(packable);
-                var packages = GetPackagesForPublish(orderedProjects);
+                var publishSymbolsSeparately = spec.IncludeSymbols && IsLocalPublishSource(source);
+                var packages = GetPackagesForPublish(orderedProjects, publishSymbolsSeparately);
 
                 var packageLookup = orderedProjects
-                    .SelectMany(p => p.Packages.Select(pkg => new { Package = pkg, Project = p }))
+                    .SelectMany(p => (publishSymbolsSeparately
+                            ? p.Packages.Concat(p.SymbolPackages)
+                            : p.Packages)
+                        .Select(pkg => new { Package = pkg, Project = p }))
                     .GroupBy(x => x.Package, StringComparer.OrdinalIgnoreCase)
                     .ToDictionary(g => g.Key, g => g.First().Project, StringComparer.OrdinalIgnoreCase);
 
@@ -553,7 +557,10 @@ public sealed partial class DotNetRepositoryReleaseService
                 foreach (var pkg in packages)
                 {
                     packageLookup.TryGetValue(pkg, out var project);
-                    var publishedArtifacts = GetPublishedArtifacts(project, pkg);
+                    var publishedArtifacts = GetPublishedArtifacts(
+                        project,
+                        pkg,
+                        includeCompanionSymbols: !publishSymbolsSeparately);
                     if (spec.WhatIf)
                     {
                         result.PublishedPackages.AddRange(publishedArtifacts);
@@ -562,43 +569,47 @@ public sealed partial class DotNetRepositoryReleaseService
 
                     _logger.Info($"Publishing {Path.GetFileName(pkg)}...");
                     var packagePublishWatch = Stopwatch.StartNew();
-                    var push = PushPackage(
+                    PushPackage(
                         pkg,
                         spec.PublishApiKey!,
                         source,
                         spec.SkipDuplicate,
-                        suppressCompanionSymbols: !spec.IncludeSymbols,
+                        suppressCompanionSymbols: !spec.IncludeSymbols || publishSymbolsSeparately,
                         out var pushResult);
                     packagePublishWatch.Stop();
-                    if (push)
+                    var artifactOutcomes = ClassifyPublishedArtifacts(publishedArtifacts, pushResult);
+                    foreach (var artifact in publishedArtifacts)
                     {
-                        var artifactOutcomes = ClassifyPublishedArtifacts(publishedArtifacts, pushResult);
-                        foreach (var artifact in publishedArtifacts)
+                        switch (artifactOutcomes[artifact])
                         {
-                            if (artifactOutcomes[artifact] == PackagePushOutcome.SkippedDuplicate)
-                            {
+                            case PackagePushOutcome.SkippedDuplicate:
                                 result.SkippedDuplicatePackages.Add(artifact);
                                 _logger.Info($"Skipped duplicate {Path.GetFileName(artifact)} in {FormatDuration(packagePublishWatch.Elapsed)}; package already exists in the feed.");
-                            }
-                            else
-                            {
+                                break;
+                            case PackagePushOutcome.Published:
                                 result.PublishedPackages.Add(artifact);
                                 _logger.Success($"Published {Path.GetFileName(artifact)} in {FormatDuration(packagePublishWatch.Elapsed)}.");
-                            }
+                                break;
+                            default:
+                                result.FailedPackages.Add(artifact);
+                                _logger.Warn($"NuGet push failed for {artifact} after {FormatDuration(packagePublishWatch.Elapsed)}: {pushResult.Message}");
+                                break;
                         }
                     }
-                    else
+
+                    var failedArtifacts = publishedArtifacts
+                        .Where(artifact => artifactOutcomes[artifact] == PackagePushOutcome.Failed)
+                        .ToArray();
+                    if (failedArtifacts.Length > 0)
                     {
                         result.Success = false;
-                        result.FailedPackages.Add(pkg);
                         var error = pushResult.Message;
-                        _logger.Warn($"NuGet push failed for {pkg} after {FormatDuration(packagePublishWatch.Elapsed)}: {error}");
                         if (project is not null && string.IsNullOrWhiteSpace(project.ErrorMessage))
-                            project.ErrorMessage = $"Publish failed for {Path.GetFileName(pkg)}: {error}";
+                            project.ErrorMessage = $"Publish failed for {string.Join(", ", failedArtifacts.Select(Path.GetFileName))}: {error}";
                         if (spec.PublishFailFast)
                         {
                             if (string.IsNullOrWhiteSpace(result.ErrorMessage))
-                                result.ErrorMessage = $"Publish failed for {Path.GetFileName(pkg)}.";
+                                result.ErrorMessage = $"Publish failed for {string.Join(", ", failedArtifacts.Select(Path.GetFileName))}.";
                             return result;
                         }
                     }

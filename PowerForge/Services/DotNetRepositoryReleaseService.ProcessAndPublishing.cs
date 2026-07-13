@@ -220,15 +220,13 @@ public sealed partial class DotNetRepositoryReleaseService
         IReadOnlyList<string> artifacts,
         PackagePushResult pushResult)
     {
-        var outcomes = new Dictionary<string, PackagePushOutcome>(StringComparer.OrdinalIgnoreCase);
-        if (pushResult.Outcome != PackagePushOutcome.SkippedDuplicate)
-        {
-            foreach (var artifact in artifacts)
-                outcomes[artifact] = pushResult.Outcome;
+        var outcomes = artifacts.ToDictionary(
+            artifact => artifact,
+            _ => pushResult.Outcome,
+            StringComparer.OrdinalIgnoreCase);
+        if (pushResult.Outcome == PackagePushOutcome.Published || artifacts.Count <= 1)
             return outcomes;
-        }
 
-        var skippedArtifacts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string? currentArtifact = null;
         var lines = (pushResult.Message ?? string.Empty)
             .Replace("\r\n", "\n")
@@ -247,21 +245,9 @@ public sealed partial class DotNetRepositoryReleaseService
             }
 
             if (currentArtifact is not null && LooksLikeSkippedDuplicate(line))
-                skippedArtifacts.Add(currentArtifact);
-        }
-
-        if (skippedArtifacts.Count == 0)
-        {
-            foreach (var artifact in artifacts)
-                outcomes[artifact] = PackagePushOutcome.SkippedDuplicate;
-            return outcomes;
-        }
-
-        foreach (var artifact in artifacts)
-        {
-            outcomes[artifact] = skippedArtifacts.Contains(artifact)
-                ? PackagePushOutcome.SkippedDuplicate
-                : PackagePushOutcome.Published;
+                outcomes[currentArtifact] = PackagePushOutcome.SkippedDuplicate;
+            else if (currentArtifact is not null && LooksLikePublished(line))
+                outcomes[currentArtifact] = PackagePushOutcome.Published;
         }
 
         return outcomes;
@@ -275,6 +261,12 @@ public sealed partial class DotNetRepositoryReleaseService
         bool suppressCompanionSymbols,
         out PackagePushResult result)
     {
+        if (IsLocalPublishSource(source) &&
+            packagePath.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase))
+        {
+            return CopySymbolPackageToLocalFeed(packagePath, source, skipDuplicate, out result);
+        }
+
         result = new PackagePushResult();
         var psi = CreateNuGetPushStartInfo(packagePath, apiKey, source, skipDuplicate, suppressCompanionSymbols);
 
@@ -296,6 +288,71 @@ public sealed partial class DotNetRepositoryReleaseService
         var stdErr = stderrTask.GetAwaiter().GetResult();
         result = ClassifyNuGetPushOutcome(p.ExitCode, skipDuplicate, stdErr, stdOut);
         return result.Outcome != PackagePushOutcome.Failed;
+    }
+
+    /// <summary>
+    /// Copies a symbol package beside its primary package because dotnet nuget push can exit successfully
+    /// without copying a directly supplied .snupkg to a local or UNC source.
+    /// </summary>
+    private static bool CopySymbolPackageToLocalFeed(
+        string packagePath,
+        string source,
+        bool skipDuplicate,
+        out PackagePushResult result)
+    {
+        try
+        {
+            var localFeed = Uri.TryCreate(source, UriKind.Absolute, out var uri) && uri.IsFile
+                ? uri.LocalPath
+                : source;
+            localFeed = Path.GetFullPath(localFeed);
+            if (!Directory.Exists(localFeed))
+                throw new DirectoryNotFoundException($"Local NuGet feed not found: {localFeed}");
+
+            var symbolFileName = Path.GetFileName(packagePath);
+            var primaryFileName = Path.GetFileNameWithoutExtension(packagePath) + ".nupkg";
+            var primaryPath = Directory
+                .EnumerateFiles(localFeed, primaryFileName, SearchOption.AllDirectories)
+                .OrderBy(path => string.Equals(
+                    Path.GetDirectoryName(path),
+                    localFeed,
+                    StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .FirstOrDefault();
+            var destinationDirectory = primaryPath is null
+                ? localFeed
+                : Path.GetDirectoryName(primaryPath) ?? localFeed;
+            var destinationPath = Path.Combine(destinationDirectory, symbolFileName);
+
+            if (File.Exists(destinationPath))
+            {
+                if (!skipDuplicate)
+                    throw new IOException($"Symbol package already exists in the local feed: {destinationPath}");
+
+                result = new PackagePushResult
+                {
+                    Outcome = PackagePushOutcome.SkippedDuplicate,
+                    Message = $"Symbol package already exists in the local feed: {destinationPath}"
+                };
+                return true;
+            }
+
+            File.Copy(packagePath, destinationPath, overwrite: false);
+            result = new PackagePushResult
+            {
+                Outcome = PackagePushOutcome.Published,
+                Message = $"Copied symbol package to local feed: {destinationPath}"
+            };
+            return true;
+        }
+        catch (Exception ex)
+        {
+            result = new PackagePushResult
+            {
+                Outcome = PackagePushOutcome.Failed,
+                Message = ex.Message
+            };
+            return false;
+        }
     }
 
     internal static ProcessStartInfo CreateNuGetPushStartInfo(
@@ -501,8 +558,17 @@ public sealed partial class DotNetRepositoryReleaseService
 
         return text.IndexOf("already exists", StringComparison.OrdinalIgnoreCase) >= 0 ||
                text.IndexOf("409 (Conflict)", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               text.IndexOf("cannot be modified", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               text.IndexOf("skip duplicate", StringComparison.OrdinalIgnoreCase) >= 0;
+               text.IndexOf("cannot be modified", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool LooksLikePublished(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        return text.IndexOf("package was pushed", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               text.IndexOf("successfully pushed", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               text.IndexOf("successfully published", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     internal enum PackagePushOutcome

@@ -50,20 +50,31 @@ public sealed partial class DotNetRepositoryReleaseService
         return list;
     }
 
-    internal static string[] GetPackagesForPublish(IEnumerable<DotNetRepositoryProjectResult> projects)
+    internal static string[] GetPackagesForPublish(
+        IEnumerable<DotNetRepositoryProjectResult> projects,
+        bool includeSymbolPackages = false)
         => projects
             .Where(static project => project is not null)
-            .SelectMany(static project => project.Packages)
+            .SelectMany(project => includeSymbolPackages
+                ? project.Packages.Concat(project.SymbolPackages)
+                : project.Packages)
             .Where(static package => !string.IsNullOrWhiteSpace(package))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
     internal static string[] GetPublishedArtifacts(
         DotNetRepositoryProjectResult? project,
-        string package)
+        string package,
+        bool includeCompanionSymbols = true)
     {
         if (project is null || string.IsNullOrWhiteSpace(package))
             return string.IsNullOrWhiteSpace(package) ? Array.Empty<string>() : new[] { package };
+
+        if (!includeCompanionSymbols ||
+            package.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase))
+        {
+            return new[] { package };
+        }
 
         var packageName = Path.GetFileNameWithoutExtension(package);
         return new[] { package }
@@ -75,6 +86,21 @@ public sealed partial class DotNetRepositoryReleaseService
             .Where(static artifact => !string.IsNullOrWhiteSpace(artifact))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    /// <summary>
+    /// Determines whether a resolved NuGet publish source is a filesystem feed rather than a named or HTTP source.
+    /// </summary>
+    internal static bool IsLocalPublishSource(string source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            return false;
+
+        var trimmed = source.Trim();
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+            return uri.IsFile;
+
+        return Path.IsPathRooted(PathValueResolver.NormalizeSeparators(trimmed));
     }
 
     internal static string ResolvePublishSource(string source, string repositoryRoot)
