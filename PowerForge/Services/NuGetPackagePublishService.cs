@@ -78,9 +78,9 @@ internal sealed class NuGetPackagePublishService
                     request.ApiKey,
                     request.Source,
                     request.SkipDuplicate,
-                    _workingDirectory,
+                    request.WorkingDirectory ?? _workingDirectory,
                     timeout: null,
-                    suppressCompanionSymbols: false))
+                    suppressCompanionSymbols: true))
                 ?? new DotNetRepositoryReleaseService.PackagePushResult
                 {
                     Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,

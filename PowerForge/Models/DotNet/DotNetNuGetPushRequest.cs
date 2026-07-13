@@ -12,7 +12,7 @@ public sealed class DotNetNuGetPushRequest
     /// <param name="apiKey">API key passed to the feed.</param>
     /// <param name="source">Feed source URL or name.</param>
     /// <param name="skipDuplicate">When true, passes <c>--skip-duplicate</c>.</param>
-    /// <param name="workingDirectory">Optional working directory override.</param>
+    /// <param name="workingDirectory">Optional NuGet configuration and process context.</param>
     /// <param name="timeout">Optional timeout override.</param>
     public DotNetNuGetPushRequest(
         string packagePath,
@@ -39,7 +39,7 @@ public sealed class DotNetNuGetPushRequest
     /// <param name="apiKey">API key passed to the feed.</param>
     /// <param name="source">Feed source URL or name.</param>
     /// <param name="skipDuplicate">When true, passes <c>--skip-duplicate</c>.</param>
-    /// <param name="workingDirectory">Optional working directory override.</param>
+    /// <param name="workingDirectory">Optional NuGet configuration and process context.</param>
     /// <param name="timeout">Optional timeout override.</param>
     /// <param name="suppressCompanionSymbols">When true, passes <c>--no-symbols</c>.</param>
     public DotNetNuGetPushRequest(
@@ -81,7 +81,8 @@ public sealed class DotNetNuGetPushRequest
     public bool SkipDuplicate { get; }
 
     /// <summary>
-    /// Gets the optional working directory override.
+    /// Gets the optional NuGet configuration and process context. When implicit symbol publication is enabled,
+    /// the client may stage the primary and companion packages beneath this directory for one-command publication.
     /// </summary>
     public string? WorkingDirectory { get; }
 

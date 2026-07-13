@@ -48,15 +48,19 @@ public sealed class DotNetNuGetClient
 
         Directory.CreateDirectory(_runtimeDirectoryRoot);
         var responseFilePath = Path.Combine(_runtimeDirectoryRoot, $"nuget-push-{Guid.NewGuid():N}.rsp");
+        PushExecutionContext? pushContext = null;
 
         try
         {
-            File.WriteAllText(responseFilePath, BuildPushResponseFileContent(request));
+            pushContext = PreparePushExecutionContext(request);
+            File.WriteAllText(
+                responseFilePath,
+                BuildPushResponseFileContent(request, pushContext.Value.PackagePath));
 
             var processResult = await _processRunner.RunAsync(
                 new ProcessRunRequest(
                     _dotNetExecutable,
-                    ResolveWorkingDirectory(request.WorkingDirectory, request.PackagePath),
+                    pushContext.Value.WorkingDirectory,
                     [$"@{responseFilePath}"],
                     request.Timeout ?? _defaultTimeout),
                 cancellationToken).ConfigureAwait(false);
@@ -75,6 +79,8 @@ public sealed class DotNetNuGetClient
         finally
         {
             TryDeleteFile(responseFilePath);
+            if (pushContext?.StagingDirectory is string stagingDirectory)
+                TryDeleteDirectory(stagingDirectory);
         }
     }
 
@@ -139,14 +145,16 @@ public sealed class DotNetNuGetClient
                 : FirstLine(processResult.StdErr) ?? FirstLine(processResult.StdOut) ?? $"dotnet nuget sign failed with exit code {processResult.ExitCode}.");
     }
 
-    private static string BuildPushResponseFileContent(DotNetNuGetPushRequest request)
+    private static string BuildPushResponseFileContent(
+        DotNetNuGetPushRequest request,
+        string packagePath)
     {
         // dotnet response files treat each line as one argument and preserve quote characters.
         // Writing shell-style quotes here therefore passes the quotes into options such as --source.
         var lines = new List<string> {
             "nuget",
             "push",
-            request.PackagePath,
+            packagePath,
             "--api-key",
             request.ApiKey,
             "--source",
@@ -159,6 +167,64 @@ public sealed class DotNetNuGetClient
             lines.Add("--no-symbols");
 
         return string.Join(Environment.NewLine, lines);
+    }
+
+    /// <summary>
+    /// Keeps the NuGet.config lookup context while placing an implicit companion symbol package beside
+    /// the primary package in the process working directory, as required by <c>dotnet nuget push</c>.
+    /// </summary>
+    private static PushExecutionContext PreparePushExecutionContext(DotNetNuGetPushRequest request)
+    {
+        var workingDirectory = ResolveWorkingDirectory(request.WorkingDirectory, request.PackagePath);
+        if (request.SuppressCompanionSymbols ||
+            string.IsNullOrWhiteSpace(request.WorkingDirectory) ||
+            request.PackagePath.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase) ||
+            !request.PackagePath.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase))
+        {
+            return new PushExecutionContext(request.PackagePath, workingDirectory, stagingDirectory: null);
+        }
+
+        var symbolPackagePath = Path.ChangeExtension(request.PackagePath, ".snupkg");
+        if (!File.Exists(symbolPackagePath))
+            return new PushExecutionContext(request.PackagePath, workingDirectory, stagingDirectory: null);
+
+        var configurationDirectory = Path.GetFullPath(workingDirectory);
+        if (!Directory.Exists(configurationDirectory))
+            throw new DirectoryNotFoundException($"NuGet push working directory not found: {configurationDirectory}");
+
+        var packageDirectory = Path.GetDirectoryName(Path.GetFullPath(request.PackagePath));
+        if (!string.IsNullOrWhiteSpace(packageDirectory) &&
+            IsSameOrChildDirectory(packageDirectory!, configurationDirectory))
+        {
+            return new PushExecutionContext(request.PackagePath, packageDirectory!, stagingDirectory: null);
+        }
+
+        var stagingDirectory = Path.Combine(
+            configurationDirectory,
+            $".powerforge-nuget-push-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(stagingDirectory);
+            var stagedPackagePath = Path.Combine(stagingDirectory, Path.GetFileName(request.PackagePath));
+            var stagedSymbolPackagePath = Path.Combine(stagingDirectory, Path.GetFileName(symbolPackagePath));
+            File.Copy(request.PackagePath, stagedPackagePath);
+            File.Copy(symbolPackagePath, stagedSymbolPackagePath);
+            return new PushExecutionContext(stagedPackagePath, stagingDirectory, stagingDirectory);
+        }
+        catch
+        {
+            TryDeleteDirectory(stagingDirectory);
+            throw;
+        }
+    }
+
+    private static bool IsSameOrChildDirectory(string candidate, string root)
+    {
+        var comparison = FrameworkCompatibility.PathStringComparison();
+        var normalizedRoot = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedCandidate = candidate.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return string.Equals(normalizedCandidate, normalizedRoot, comparison) ||
+               normalizedCandidate.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, comparison);
     }
 
     private static string ResolveWorkingDirectory(string? workingDirectory, string packagePath)
@@ -186,6 +252,19 @@ public sealed class DotNetNuGetClient
         }
     }
 
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, recursive: true);
+        }
+        catch
+        {
+            // Best-effort cleanup only.
+        }
+    }
+
     private static string? FirstLine(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -203,4 +282,21 @@ public sealed class DotNetNuGetClient
         => string.IsNullOrWhiteSpace(runtimeDirectoryRoot)
             ? Path.Combine(Path.GetTempPath(), "PowerForge", "runtime", "dotnet-nuget")
             : runtimeDirectoryRoot!;
+
+    private readonly struct PushExecutionContext
+    {
+        public PushExecutionContext(
+            string packagePath,
+            string workingDirectory,
+            string? stagingDirectory)
+        {
+            PackagePath = packagePath;
+            WorkingDirectory = workingDirectory;
+            StagingDirectory = stagingDirectory;
+        }
+
+        public string PackagePath { get; }
+        public string WorkingDirectory { get; }
+        public string? StagingDirectory { get; }
+    }
 }

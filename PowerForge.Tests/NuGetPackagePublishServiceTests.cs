@@ -66,6 +66,47 @@ public sealed class NuGetPackagePublishServiceTests
     }
 
     [Fact]
+    public void Execute_UsesCallerContextAndSuppressesImplicitSymbols()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-nuget-publish-caller-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            var packagePath = Path.Combine(root.FullName, "Sample.1.0.0.nupkg");
+            File.WriteAllText(packagePath, "pkg");
+            File.WriteAllText(Path.ChangeExtension(packagePath, ".snupkg"), "symbols");
+
+            DotNetNuGetPushRequest? captured = null;
+            var service = new NuGetPackagePublishService(
+                new NullLogger(),
+                request =>
+                {
+                    captured = request;
+                    return new DotNetRepositoryReleaseService.PackagePushResult
+                    {
+                        Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Published
+                    };
+                });
+
+            var result = service.Execute(new NuGetPackagePublishRequest
+            {
+                Roots = new[] { root.FullName },
+                ApiKey = "key",
+                Source = "PrivateFeed",
+                WorkingDirectory = root.FullName
+            });
+
+            Assert.True(result.Success);
+            Assert.NotNull(captured);
+            Assert.Equal(root.FullName, captured!.WorkingDirectory);
+            Assert.True(captured.SuppressCompanionSymbols);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void ExecutePackages_PublishesOnlyExplicitPackagePaths()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-nuget-publish-explicit-" + Guid.NewGuid().ToString("N")));
