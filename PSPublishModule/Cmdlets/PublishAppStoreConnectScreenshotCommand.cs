@@ -1,5 +1,6 @@
 using System;
 using System.Management.Automation;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -9,7 +10,7 @@ namespace PSPublishModule;
 /// </summary>
 [Cmdlet(VerbsData.Publish, "AppStoreConnectScreenshot", SupportsShouldProcess = true)]
 [OutputType(typeof(AppStoreConnectScreenshotUploadResult))]
-public sealed class PublishAppStoreConnectScreenshotCommand : PSCmdlet
+public sealed class PublishAppStoreConnectScreenshotCommand : AsyncPSCmdlet
 {
     /// <summary>Issuer ID from App Store Connect API keys.</summary>
     [Parameter(Mandatory = true)] public string IssuerId { get; set; } = string.Empty;
@@ -38,7 +39,7 @@ public sealed class PublishAppStoreConnectScreenshotCommand : PSCmdlet
     public string Path { get; set; } = string.Empty;
 
     /// <summary>Uploads and commits the screenshot file.</summary>
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         var resolvedPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path);
         if (!ShouldProcess(resolvedPath, $"Upload App Store Connect screenshot to set '{ScreenshotSetId}'"))
@@ -47,7 +48,7 @@ public sealed class PublishAppStoreConnectScreenshotCommand : PSCmdlet
         var privateKeyPath = AppStoreConnectCommandSupport.ResolvePrivateKeyPath(SessionState, PrivateKeyPath);
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
-        var result = client.UploadScreenshotAsync(ScreenshotSetId, resolvedPath).GetAwaiter().GetResult();
+        var result = await client.UploadScreenshotAsync(ScreenshotSetId, resolvedPath, CancelToken);
         WriteObject(result);
     }
 }

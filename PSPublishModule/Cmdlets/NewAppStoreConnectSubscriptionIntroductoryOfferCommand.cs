@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Management.Automation;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -10,7 +11,7 @@ namespace PSPublishModule;
 /// </summary>
 [Cmdlet(VerbsCommon.New, "AppStoreConnectSubscriptionIntroductoryOffer", SupportsShouldProcess = true, ConfirmImpact = ConfirmImpact.Medium)]
 [OutputType(typeof(AppStoreConnectSubscriptionIntroductoryOfferInfo))]
-public sealed class NewAppStoreConnectSubscriptionIntroductoryOfferCommand : PSCmdlet
+public sealed class NewAppStoreConnectSubscriptionIntroductoryOfferCommand : AsyncPSCmdlet
 {
     /// <summary>Issuer ID from App Store Connect API keys.</summary>
     [Parameter(Mandatory = true)] public string IssuerId { get; set; } = string.Empty;
@@ -63,7 +64,7 @@ public sealed class NewAppStoreConnectSubscriptionIntroductoryOfferCommand : PSC
     public string[] TerritoryId { get; set; } = Array.Empty<string>();
 
     /// <summary>Creates a subscription introductory offer.</summary>
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         var territoryIds = TerritoryId
             .Where(static territoryId => !string.IsNullOrWhiteSpace(territoryId))
@@ -97,7 +98,7 @@ public sealed class NewAppStoreConnectSubscriptionIntroductoryOfferCommand : PSC
         using var client = new AppStoreConnectClient(credential);
         foreach (var territoryId in territoryIds)
         {
-            var offer = client.CreateSubscriptionIntroductoryOfferAsync(
+            var offer = await client.CreateSubscriptionIntroductoryOfferAsync(
                 SubscriptionId,
                 Duration,
                 OfferMode,
@@ -105,7 +106,8 @@ public sealed class NewAppStoreConnectSubscriptionIntroductoryOfferCommand : PSC
                 NumberOfPeriods,
                 StartDate,
                 EndDate,
-                SubscriptionPricePointId).GetAwaiter().GetResult();
+                SubscriptionPricePointId,
+                CancelToken);
             WriteObject(offer);
         }
     }

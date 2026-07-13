@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -8,7 +9,7 @@ namespace PSPublishModule;
 /// </summary>
 [Cmdlet(VerbsLifecycle.Submit, "AppStoreConnectTestFlightBuildForReview", SupportsShouldProcess = true)]
 [OutputType(typeof(AppStoreConnectBetaAppReviewSubmissionResult))]
-public sealed class SubmitAppStoreConnectTestFlightBuildForReviewCommand : PSCmdlet
+public sealed class SubmitAppStoreConnectTestFlightBuildForReviewCommand : AsyncPSCmdlet
 {
     /// <summary>Issuer ID from App Store Connect API keys.</summary>
     [Parameter(Mandatory = true)] public string IssuerId { get; set; } = string.Empty;
@@ -41,7 +42,7 @@ public sealed class SubmitAppStoreConnectTestFlightBuildForReviewCommand : PSCmd
     [Parameter] public SwitchParameter AllowUnprocessedBuild { get; set; }
 
     /// <summary>Submits a TestFlight build to Beta App Review for external testing.</summary>
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         var target = $"{AppId.Trim()} {Platform} {VersionString.Trim()} ({BuildNumber.Trim()})";
         if (!ShouldProcess(target, "Submit App Store Connect TestFlight build to Beta App Review"))
@@ -51,14 +52,14 @@ public sealed class SubmitAppStoreConnectTestFlightBuildForReviewCommand : PSCmd
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
         var service = new AppStoreConnectBetaAppReviewSubmissionService(client);
-        var result = service.SubmitAsync(new AppStoreConnectBetaAppReviewSubmissionRequest
+        var result = await service.SubmitAsync(new AppStoreConnectBetaAppReviewSubmissionRequest
         {
             AppId = AppId,
             VersionString = VersionString,
             BuildNumber = BuildNumber,
             Platform = Platform,
             RequireValidBuild = !AllowUnprocessedBuild.IsPresent
-        }).GetAwaiter().GetResult();
+        }, CancelToken);
 
         WriteObject(result);
     }

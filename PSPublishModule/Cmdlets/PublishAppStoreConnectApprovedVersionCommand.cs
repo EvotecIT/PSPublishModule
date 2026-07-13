@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -8,7 +9,7 @@ namespace PSPublishModule;
 /// </summary>
 [Cmdlet(VerbsData.Publish, "AppStoreConnectApprovedVersion", SupportsShouldProcess = true)]
 [OutputType(typeof(AppStoreConnectVersionReleaseResult))]
-public sealed class PublishAppStoreConnectApprovedVersionCommand : PSCmdlet
+public sealed class PublishAppStoreConnectApprovedVersionCommand : AsyncPSCmdlet
 {
     /// <summary>Issuer ID from App Store Connect API keys.</summary>
     [Parameter(Mandatory = true)] public string IssuerId { get; set; } = string.Empty;
@@ -38,7 +39,7 @@ public sealed class PublishAppStoreConnectApprovedVersionCommand : PSCmdlet
     [Parameter] public SwitchParameter AllowNonPendingDeveloperRelease { get; set; }
 
     /// <summary>Requests release of an approved App Store version.</summary>
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         var target = $"{AppId.Trim()} {Platform} {VersionString.Trim()}";
         if (!ShouldProcess(target, "Publish approved App Store Connect version"))
@@ -48,13 +49,13 @@ public sealed class PublishAppStoreConnectApprovedVersionCommand : PSCmdlet
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
         using var client = new AppStoreConnectClient(credential);
         var service = new AppStoreConnectVersionReleaseService(client);
-        var result = service.ReleaseAsync(new AppStoreConnectVersionReleaseRequest
+        var result = await service.ReleaseAsync(new AppStoreConnectVersionReleaseRequest
         {
             AppId = AppId,
             VersionString = VersionString,
             Platform = Platform,
             RequirePendingDeveloperRelease = !AllowNonPendingDeveloperRelease.IsPresent
-        }).GetAwaiter().GetResult();
+        }, CancelToken);
 
         WriteObject(result);
     }

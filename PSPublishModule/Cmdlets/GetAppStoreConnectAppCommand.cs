@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -8,7 +9,7 @@ namespace PSPublishModule;
 /// </summary>
 [Cmdlet(VerbsCommon.Get, "AppStoreConnectApp")]
 [OutputType(typeof(AppStoreConnectAppInfo))]
-public sealed class GetAppStoreConnectAppCommand : PSCmdlet
+public sealed class GetAppStoreConnectAppCommand : AsyncPSCmdlet
 {
     /// <summary>Issuer ID from App Store Connect API keys.</summary>
     [Parameter(Mandatory = true)] public string IssuerId { get; set; } = string.Empty;
@@ -41,7 +42,7 @@ public sealed class GetAppStoreConnectAppCommand : PSCmdlet
     [Parameter(ParameterSetName = "Find")] public int Limit { get; set; } = 20;
 
     /// <summary>Reads app information from App Store Connect.</summary>
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         var privateKeyPath = AppStoreConnectCommandSupport.ResolvePrivateKeyPath(SessionState, PrivateKeyPath);
         var credential = AppStoreConnectCommandSupport.CreateCredential(IssuerId, KeyId, PrivateKey, privateKeyPath, TokenLifetimeMinutes);
@@ -49,12 +50,12 @@ public sealed class GetAppStoreConnectAppCommand : PSCmdlet
 
         if (ParameterSetName == "ById")
         {
-            var app = client.GetAppAsync(AppId!).GetAwaiter().GetResult();
+            var app = await client.GetAppAsync(AppId!, CancelToken);
             if (app is not null) WriteObject(app);
             return;
         }
 
-        var apps = client.FindAppsAsync(BundleId, Name, Platform, Limit).GetAwaiter().GetResult();
+        var apps = await client.FindAppsAsync(BundleId, Name, Platform, Limit, CancelToken);
         WriteObject(apps, enumerateCollection: true);
     }
 }

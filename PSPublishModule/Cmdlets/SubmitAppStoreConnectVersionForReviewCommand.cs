@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Management.Automation;
 using System.Text.Json;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -11,7 +12,7 @@ namespace PSPublishModule;
 /// </summary>
 [Cmdlet(VerbsLifecycle.Submit, "AppStoreConnectVersionForReview", SupportsShouldProcess = true)]
 [OutputType(typeof(AppStoreConnectReviewSubmissionResult))]
-public sealed class SubmitAppStoreConnectVersionForReviewCommand : PSCmdlet
+public sealed class SubmitAppStoreConnectVersionForReviewCommand : AsyncPSCmdlet
 {
     /// <summary>Issuer ID from App Store Connect API keys.</summary>
     [Parameter(Mandatory = true)] public string IssuerId { get; set; } = string.Empty;
@@ -65,7 +66,7 @@ public sealed class SubmitAppStoreConnectVersionForReviewCommand : PSCmdlet
     [Parameter] public SwitchParameter AllowNotReady { get; set; }
 
     /// <summary>Submits the Distribution version to App Review.</summary>
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         var target = $"{AppId.Trim()} {Platform} {VersionString.Trim()} ({BuildNumber.Trim()})";
         if (!ShouldProcess(target, "Submit App Store Connect version to App Review"))
@@ -76,7 +77,7 @@ public sealed class SubmitAppStoreConnectVersionForReviewCommand : PSCmdlet
         var screenshotSpec = ResolveScreenshotSpec();
         using var client = new AppStoreConnectClient(credential);
         var service = new AppStoreConnectReviewSubmissionService(client);
-        var result = service.SubmitAsync(new AppStoreConnectReviewSubmissionRequest
+        var result = await service.SubmitAsync(new AppStoreConnectReviewSubmissionRequest
         {
             AppId = AppId,
             VersionString = VersionString,
@@ -93,7 +94,7 @@ public sealed class SubmitAppStoreConnectVersionForReviewCommand : PSCmdlet
                 MinimumScreenshotsPerSet = MinimumScreenshotsPerSet,
                 ScreenshotSpec = screenshotSpec
             }
-        }).GetAwaiter().GetResult();
+        }, CancelToken);
 
         WriteObject(result);
     }
