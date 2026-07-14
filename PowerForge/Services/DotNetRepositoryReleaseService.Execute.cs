@@ -642,7 +642,9 @@ public sealed partial class DotNetRepositoryReleaseService
                     }
                 }
                 publishWatch.Stop();
-                var publishSummary = $"NuGet publish phase completed in {FormatDuration(publishWatch.Elapsed)} ({result.PublishedPackages.Count} published, {result.SkippedDuplicatePackages.Count} skipped duplicate, {result.FailedPackages.Count} failed).";
+                var publishSummary = spec.WhatIf
+                    ? $"NuGet publish plan prepared in {FormatDuration(publishWatch.Elapsed)} ({result.PublishedPackages.Count} package artifact(s) would be published)."
+                    : $"NuGet publish phase completed in {FormatDuration(publishWatch.Elapsed)} ({result.PublishedPackages.Count} published, {result.SkippedDuplicatePackages.Count} skipped duplicate, {result.FailedPackages.Count} failed).";
                 if (result.FailedPackages.Count == 0)
                     _logger.Success(publishSummary);
                 else
