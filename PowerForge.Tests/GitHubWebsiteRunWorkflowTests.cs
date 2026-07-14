@@ -19,6 +19,19 @@ public sealed class GitHubWebsiteRunWorkflowTests
     }
 
     [Fact]
+    public void WebsiteCiWorkflow_ShouldAllowArtifactInspection()
+    {
+        var repoRoot = FindRepoRoot();
+        var workflowPath = Path.Combine(repoRoot, ".github", "workflows", "powerforge-website-ci.yml");
+
+        Assert.True(File.Exists(workflowPath), $"Website workflow not found: {workflowPath}");
+
+        var workflowYaml = File.ReadAllText(workflowPath);
+
+        Assert.Contains("actions: read", workflowYaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WebsiteRunWorkflow_ShouldInheritCallerPermissions()
     {
         var repoRoot = FindRepoRoot();

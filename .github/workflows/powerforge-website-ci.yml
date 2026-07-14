@@ -76,6 +76,8 @@ on:
         required: false
 
 permissions:
+  # The generated quality preset performs a read-only artifact cleanup preview.
+  actions: read
   contents: read
   packages: read
 

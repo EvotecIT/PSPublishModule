@@ -79,6 +79,7 @@ public class WebSiteScaffolderTests
 
             var workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "website-ci.yml"));
             Assert.Contains("POWERFORGE_LOCK_PATH: ./.powerforge/engine-lock.json", workflow, StringComparison.Ordinal);
+            Assert.Contains("actions: read", workflow, StringComparison.Ordinal);
             Assert.Contains("packages: read", workflow, StringComparison.Ordinal);
             Assert.Contains("uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-ci.yml@main", workflow, StringComparison.Ordinal);
             Assert.Contains("website_root: .", workflow, StringComparison.Ordinal);
