@@ -592,6 +592,83 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void GetPreBuildProjectPaths_LeavesUnversionedTargetsInMixedInstallerPlans()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var cli = CreateProject(root, "Cli/Cli.csproj");
+            var spec = CreateBaseSpec(root, app);
+            spec.DotNet.Restore = true;
+            spec.DotNet.Build = true;
+            spec.DotNet.NoBuildInPublish = true;
+            spec.Targets = new[]
+            {
+                spec.Targets[0],
+                new DotNetPublishTarget
+                {
+                    Name = "cli",
+                    ProjectPath = cli,
+                    Publish = new DotNetPublishPublishOptions
+                    {
+                        Framework = "net10.0",
+                        Runtimes = new[] { "win-x64" },
+                        Style = DotNetPublishStyle.PortableCompat,
+                        UseStaging = false
+                    }
+                }
+            };
+            spec.Installers = new[]
+            {
+                new DotNetPublishInstaller
+                {
+                    Id = "app.msi",
+                    PrepareFromTarget = "app",
+                    Authoring = CreateSimpleAuthoring("ProductFiles"),
+                    Versioning = new DotNetPublishMsiVersionOptions
+                    {
+                        Enabled = true,
+                        Major = 26,
+                        Minor = 6,
+                        FloorDateUtc = "2026-06-01",
+                        Monotonic = false,
+                        ApplyToPublish = true
+                    }
+                }
+            };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            var projectPaths = DotNetPublishPipelineRunner.GetPreBuildProjectPaths(plan, "win-x64");
+
+            Assert.Equal(new[] { Path.GetFullPath(cli) }, projectPaths);
+            Assert.Empty(DotNetPublishPipelineRunner.GetPreBuildProjectPaths(plan, "linux-x64"));
+
+            var cliPlan = Assert.Single(plan.Targets, target => target.Name == "cli");
+            var combination = Assert.Single(cliPlan.Combinations);
+            var buildArguments = DotNetPublishPipelineRunner.BuildPreBuildArguments(
+                plan,
+                cliPlan,
+                combination.Framework,
+                combination.Runtime,
+                combination.Style);
+
+            Assert.Equal("build", buildArguments[0]);
+            Assert.Contains("--no-restore", buildArguments);
+            Assert.Contains("--self-contained", buildArguments);
+            Assert.Contains("/p:PublishSingleFile=true", buildArguments);
+            Assert.Contains("-f", buildArguments);
+            Assert.Contains("-r", buildArguments);
+            Assert.DoesNotContain("--no-build", buildArguments);
+            Assert.DoesNotContain("--output", buildArguments);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_ApplyToPublishMsiVersions_AdvancesMonotonicStateAcrossCombinations()
     {
         var root = CreateTempRoot();

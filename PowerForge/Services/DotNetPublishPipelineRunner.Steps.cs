@@ -210,46 +210,105 @@ public sealed partial class DotNetPublishPipelineRunner
     private void Build(DotNetPublishPlan plan, string? runtime)
     {
         var workDir = plan.ProjectRoot;
-        var props = BuildMsBuildPropertyArgs(plan.MsBuildProperties);
-
-        if (PlanUsesPublishMsiVersionProperties(plan))
+        var built = false;
+        foreach (var target in plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
         {
-            _logger.Info("Build skipped because one or more installers apply resolved MSI versions to publish; publish steps will build isolated payloads.");
-            return;
-        }
+            var allCombinations = target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>();
+            var combinations = allCombinations
+                .Where(combination => string.IsNullOrWhiteSpace(runtime)
+                    || string.Equals(combination.Runtime, runtime, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
 
-        if (!string.IsNullOrWhiteSpace(runtime))
-        {
-            foreach (var p in plan.Targets.Select(t => t.ProjectPath).Distinct(StringComparer.OrdinalIgnoreCase))
+            if (combinations.Length == 0)
             {
-                _logger.Info($"Build ({runtime}) -> {p}");
+                if (allCombinations.Length > 0)
+                    continue;
 
-                var args = new List<string> { "build", p, "-c", plan.Configuration, "--nologo" };
-                args.AddRange(new[] { "-r", runtime! });
-                if (plan.Restore) args.Add("--no-restore");
-                args.AddRange(props);
+                if (!TargetRequiresPreBuild(plan, target, runtime))
+                    continue;
 
-                RunDotnet(workDir, args, plan.EnvironmentVariables);
+                _logger.Info($"Build -> {target.ProjectPath}");
+                var fallbackArgs = new List<string> { "build", target.ProjectPath, "-c", plan.Configuration, "--nologo" };
+                if (!string.IsNullOrWhiteSpace(runtime)) fallbackArgs.AddRange(new[] { "-r", runtime! });
+                if (plan.Restore) fallbackArgs.Add("--no-restore");
+                fallbackArgs.AddRange(BuildMsBuildPropertyArgs(plan.MsBuildProperties));
+                RunDotnet(workDir, fallbackArgs, plan.EnvironmentVariables);
+                built = true;
+                continue;
             }
 
-            return;
+            foreach (var combination in combinations)
+            {
+                var framework = combination.Framework ?? string.Empty;
+                var targetRuntime = combination.Runtime ?? string.Empty;
+                if (TargetUsesPublishMsiVersionProperties(plan, target.Name, framework, targetRuntime, combination.Style))
+                    continue;
+
+                _logger.Info($"Build {target.Name} ({framework}, {targetRuntime}, {combination.Style}) -> {target.ProjectPath}");
+                RunDotnet(
+                    workDir,
+                    BuildPreBuildArguments(plan, target, framework, targetRuntime, combination.Style),
+                    plan.EnvironmentVariables);
+                built = true;
+            }
         }
 
-        if (!string.IsNullOrWhiteSpace(plan.SolutionPath))
-        {
-            _logger.Info($"Build -> {plan.SolutionPath}");
-            var args = new List<string> { "build", plan.SolutionPath!, "-c", plan.Configuration, "--nologo" };
-            if (plan.Restore) args.Add("--no-restore");
-            args.AddRange(props);
-            RunDotnet(workDir, args, plan.EnvironmentVariables);
-            return;
-        }
+        if (!built)
+            _logger.Info("Build skipped because every target builds an isolated versioned payload during publish.");
+    }
 
-        foreach (var p in plan.Targets.Select(t => t.ProjectPath).Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            _logger.Info($"Build -> {p}");
-            RunDotnet(workDir, new[] { "build", p, "-c", plan.Configuration, "--nologo" }.Concat(props).ToArray(), plan.EnvironmentVariables);
-        }
+    internal static List<string> BuildPreBuildArguments(
+        DotNetPublishPlan plan,
+        DotNetPublishTargetPlan target,
+        string framework,
+        string runtime,
+        DotNetPublishStyle style)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+
+        var args = new List<string> { "build", target.ProjectPath, "-c", plan.Configuration, "--nologo" };
+        if (!string.IsNullOrWhiteSpace(framework)) args.AddRange(new[] { "-f", framework });
+        if (!string.IsNullOrWhiteSpace(runtime)) args.AddRange(new[] { "-r", runtime });
+        if (plan.Restore) args.Add("--no-restore");
+        AppendPublishStyleArgs(args, target.Publish, style);
+        args.AddRange(BuildMsBuildPropertyArgs(BuildPublishMsBuildProperties(plan, target, framework, runtime, style)));
+        return args;
+    }
+
+    internal static string[] GetPreBuildProjectPaths(DotNetPublishPlan plan, string? runtime)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+
+        return (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+            .Where(target => TargetRequiresPreBuild(plan, target, runtime))
+            .Select(target => target.ProjectPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool TargetRequiresPreBuild(
+        DotNetPublishPlan plan,
+        DotNetPublishTargetPlan target,
+        string? runtime)
+    {
+        var allCombinations = target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>();
+        if (allCombinations.Length == 0)
+            return true;
+
+        var combinations = allCombinations
+            .Where(combination => string.IsNullOrWhiteSpace(runtime)
+                || string.Equals(combination.Runtime, runtime, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (combinations.Length == 0)
+            return false;
+
+        return combinations.Any(combination => !TargetUsesPublishMsiVersionProperties(
+            plan,
+            target.Name,
+            combination.Framework ?? string.Empty,
+            combination.Runtime ?? string.Empty,
+            combination.Style));
     }
 
     private DotNetPublishArtefactResult Publish(DotNetPublishPlan plan, string targetName, string framework, string rid, DotNetPublishStyle? styleOverride)
@@ -510,10 +569,6 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
     }
-
-    private static bool PlanUsesPublishMsiVersionProperties(DotNetPublishPlan plan)
-        => (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
-            .Any(installer => installer.Versioning?.Enabled == true && installer.Versioning.ApplyToPublish);
 
     private static bool TargetUsesPublishMsiVersionProperties(
         DotNetPublishPlan plan,

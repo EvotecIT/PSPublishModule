@@ -140,6 +140,11 @@ try {
     throw "Code signing certificate not configured or not found. Provide CertificateThumbprint/CertificatePFXPath/CertificatePFXBase64 (and password for PFX)."
   }
 
+  $now = [DateTime]::UtcNow
+  if ($now -lt $cert.NotBefore.ToUniversalTime() -or $now -gt $cert.NotAfter.ToUniversalTime()) {
+    throw ("Code signing certificate '{0}' is outside its validity period ({1:u} through {2:u})." -f $cert.Thumbprint, $cert.NotBefore.ToUniversalTime(), $cert.NotAfter.ToUniversalTime())
+  }
+
   $thisTp = ($cert.Thumbprint -replace '\s','').ToUpperInvariant()
 
   # Enumerate files (include patterns, then apply exclude substrings)
@@ -225,7 +230,7 @@ try {
         $status = if ($r) { [string]$r.Status } else { 'Unknown' }
         if ($status -eq 'UnknownError') { $unknownError++ }
 
-        if ($status -eq 'Valid' -or $status -eq 'UnknownError') {
+        if ($status -eq 'Valid') {
           if ($wasSigned) { $resigned++ } else { $signedNew++ }
         } else {
           $failed++
@@ -284,7 +289,7 @@ try {
         $status = if ($r) { [string]$r.Status } else { 'Unknown' }
         if ($status -eq 'UnknownError') { $unknownError++ }
 
-        if ($status -eq 'Valid' -or $status -eq 'UnknownError') {
+        if ($status -eq 'Valid') {
           if ($wasSigned) { $resigned++ } else { $signedNew++ }
         } else {
           $failed++
