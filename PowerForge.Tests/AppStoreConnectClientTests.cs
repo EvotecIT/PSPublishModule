@@ -441,7 +441,7 @@ public sealed partial class AppStoreConnectClientTests
 
         Assert.True(result.CreatedVersion);
         Assert.True(result.SelectedBuild);
-        Assert.Equal("version-1", result.Version.Id);
+        Assert.Equal("version-1", result.Version?.Id);
         Assert.Equal("build-5", result.Build?.Id);
         Assert.Equal(
             new[] { HttpMethod.Get, HttpMethod.Post, HttpMethod.Get, HttpMethod.Get, new HttpMethod("PATCH") },

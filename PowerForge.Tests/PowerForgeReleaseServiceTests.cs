@@ -603,7 +603,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(request.RequireValidBuild);
 
             var appResult = Assert.Single(result.AppleApps);
-            Assert.Equal("version-1", appResult.Distribution?.Version.Id);
+            Assert.Equal("version-1", appResult.Distribution?.Version?.Id);
             Assert.Equal("build-5", appResult.Distribution?.Build?.Id);
         }
         finally

@@ -17,7 +17,7 @@ public sealed class AppStoreConnectReleasePreparationService
     }
 
     /// <summary>
-    /// Ensures the App Store version exists, optionally selects a processed build, and optionally syncs screenshots.
+    /// Ensures the App Store version exists when needed and applies the requested version- or app-scoped release metadata.
     /// </summary>
     public async Task<AppStoreConnectReleasePreparationResult> PrepareAsync(
         AppStoreConnectReleasePreparationRequest request,
@@ -27,35 +27,44 @@ public sealed class AppStoreConnectReleasePreparationService
             throw new ArgumentNullException(nameof(request));
         if (string.IsNullOrWhiteSpace(request.AppId))
             throw new ArgumentException("AppId is required.", nameof(request));
-        if (string.IsNullOrWhiteSpace(request.VersionString))
+        var requiresVersion = request.CreateVersion ||
+                              request.SelectBuild ||
+                              request.MetadataSpec is not null ||
+                              request.ScreenshotSpec is not null ||
+                              request.CheckReadiness;
+        if (requiresVersion && string.IsNullOrWhiteSpace(request.VersionString))
             throw new ArgumentException("VersionString is required.", nameof(request));
-        if (request.SelectBuild && string.IsNullOrWhiteSpace(request.BuildNumber))
-            throw new ArgumentException("BuildNumber is required when SelectBuild is enabled.", nameof(request));
+        if ((request.SelectBuild || request.CheckReadiness) && string.IsNullOrWhiteSpace(request.BuildNumber))
+            throw new ArgumentException("BuildNumber is required when build selection or release readiness is enabled.", nameof(request));
 
         var appId = request.AppId.Trim();
-        var versionString = request.VersionString.Trim();
-        var buildNumber = request.BuildNumber.Trim();
+        var versionString = request.VersionString?.Trim() ?? string.Empty;
+        var buildNumber = request.BuildNumber?.Trim() ?? string.Empty;
         var messages = new List<string>();
         var createdVersion = false;
-        var versions = await _client.GetVersionsAsync(
-            appId,
-            versionString,
-            request.Platform,
-            limit: 10,
-            cancellationToken).ConfigureAwait(false);
-        var version = versions.FirstOrDefault();
-        if (version is null)
+        AppStoreConnectVersionInfo? version = null;
+        if (requiresVersion)
         {
-            if (!request.CreateVersion)
-                throw new InvalidOperationException($"App Store version '{versionString}' was not found for app '{appId}' and platform '{request.Platform}'.");
+            var versions = await _client.GetVersionsAsync(
+                appId,
+                versionString,
+                request.Platform,
+                limit: 10,
+                cancellationToken).ConfigureAwait(false);
+            version = versions.FirstOrDefault();
+            if (version is null)
+            {
+                if (!request.CreateVersion)
+                    throw new InvalidOperationException($"App Store version '{versionString}' was not found for app '{appId}' and platform '{request.Platform}'.");
 
-            version = await _client.CreateVersionAsync(appId, versionString, request.Platform, cancellationToken).ConfigureAwait(false);
-            createdVersion = true;
-            messages.Add($"Created App Store version '{versionString}' for platform '{request.Platform}'.");
-        }
-        else
-        {
-            messages.Add($"Found App Store version '{versionString}' for platform '{request.Platform}'.");
+                version = await _client.CreateVersionAsync(appId, versionString, request.Platform, cancellationToken).ConfigureAwait(false);
+                createdVersion = true;
+                messages.Add($"Created App Store version '{versionString}' for platform '{request.Platform}'.");
+            }
+            else
+            {
+                messages.Add($"Found App Store version '{versionString}' for platform '{request.Platform}'.");
+            }
         }
 
         AppStoreConnectBuildInfo? build = null;
@@ -76,7 +85,7 @@ public sealed class AppStoreConnectReleasePreparationService
             if (request.RequireValidBuild)
                 ValidateBuildIsSelectable(build, buildNumber);
 
-            previousBuildId = await _client.GetVersionBuildIdAsync(version.Id, cancellationToken).ConfigureAwait(false);
+            previousBuildId = await _client.GetVersionBuildIdAsync(version!.Id, cancellationToken).ConfigureAwait(false);
             if (string.Equals(previousBuildId, build.Id, StringComparison.OrdinalIgnoreCase))
             {
                 messages.Add($"Build '{buildNumber}' is already selected for App Store version '{versionString}'.");
@@ -92,7 +101,7 @@ public sealed class AppStoreConnectReleasePreparationService
         AppStoreConnectVersionMetadataSyncResult? metadata = null;
         if (request.MetadataSpec is not null)
         {
-            var metadataSpec = CreateMetadataSpecForVersion(request.MetadataSpec, appId, versionString, request.Platform, version.Id);
+            var metadataSpec = CreateMetadataSpecForVersion(request.MetadataSpec, appId, versionString, request.Platform, version!.Id);
             metadata = await new AppStoreConnectVersionMetadataSyncService(_client).SyncAsync(
                 new AppStoreConnectVersionMetadataSyncRequest { Spec = metadataSpec },
                 cancellationToken).ConfigureAwait(false);
@@ -112,7 +121,7 @@ public sealed class AppStoreConnectReleasePreparationService
         AppStoreConnectScreenshotSyncResult? screenshots = null;
         if (request.ScreenshotSpec is not null)
         {
-            var screenshotSpec = CreateScreenshotSpecForVersion(request.ScreenshotSpec, appId, versionString, request.Platform, version.Id);
+            var screenshotSpec = CreateScreenshotSpecForVersion(request.ScreenshotSpec, appId, versionString, request.Platform, version!.Id);
             screenshots = await new AppStoreConnectScreenshotSyncService(_client).SyncAsync(
                 new AppStoreConnectScreenshotSyncRequest
                 {

@@ -110,7 +110,7 @@ public sealed partial class AppStoreConnectClientTests
                         "appStoreState": "READY_FOR_SALE"
                       }
                     },
-                    { "id": "info-editable", "type": "appInfos", "attributes": { "state": "READY_FOR_REVIEW" } }
+                    { "id": "info-editable", "type": "appInfos", "attributes": { "state": "WAITING_FOR_REVIEW" } }
                   ]
                 }
                 """),
@@ -164,5 +164,71 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal("https://tactra.dev/privacy/", result.After.PrivacyPolicyUrl);
         Assert.Equal(new[] { "privacyPolicyUrl" }, result.UpdatedFields);
         Assert.Contains("appInfos/info-editable/appInfoLocalizations", handler.RequestUris[1].ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReleasePreparationService_SyncsAppInfoWithoutVersionOrBuildLookup()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    { "id": "info-editable", "type": "appInfos", "attributes": { "state": "PREPARE_FOR_SUBMISSION" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "info-loc-1",
+                      "type": "appInfoLocalizations",
+                      "attributes": {
+                        "locale": "en-US",
+                        "privacyPolicyUrl": "https://old.example/privacy/"
+                      }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": {
+                    "id": "info-loc-1",
+                    "type": "appInfoLocalizations",
+                    "attributes": {
+                      "locale": "en-US",
+                      "privacyPolicyUrl": "https://tactra.dev/privacy/"
+                    }
+                  }
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectReleasePreparationService(client);
+
+        var result = await service.PrepareAsync(new AppStoreConnectReleasePreparationRequest
+        {
+            AppId = "app-1",
+            CreateVersion = false,
+            SelectBuild = false,
+            AppInfoMetadataSpec = new AppStoreConnectAppInfoMetadataSpec
+            {
+                AppId = "app-1",
+                Locale = "en-US",
+                Metadata = new AppStoreConnectAppInfoLocalizationUpdate
+                {
+                    PrivacyPolicyUrl = "https://tactra.dev/privacy/"
+                }
+            }
+        });
+
+        Assert.Null(result.Version);
+        Assert.NotNull(result.AppInfoMetadata);
+        Assert.Equal("https://tactra.dev/privacy/", result.AppInfoMetadata!.After.PrivacyPolicyUrl);
+        Assert.DoesNotContain(handler.RequestUris, uri => uri.AbsolutePath.Contains("appStoreVersions", StringComparison.Ordinal));
     }
 }

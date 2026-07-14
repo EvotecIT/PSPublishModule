@@ -228,7 +228,10 @@ Sync-AppStoreConnectAppInfoMetadata `
 
 Apple locks App Information for a version that is already Ready for Distribution. Create the
 next editable App Store version first; the sync service selects its editable App
-Information resource and refuses to silently update a locked resource.
+Information resource and refuses to silently update a locked resource. Every App Information
+config must declare `appId`, so a config can never be applied to another app by accident.
+App Information-only runs do not require a version or build number because these fields belong
+to the app-level resource rather than an App Store version.
 
 ## Screenshot Upload Flow
 

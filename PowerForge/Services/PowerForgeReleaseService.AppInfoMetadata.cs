@@ -19,6 +19,8 @@ internal sealed partial class PowerForgeReleaseService
                 var json = File.ReadAllText(path);
                 var spec = JsonSerializer.Deserialize<AppStoreConnectAppInfoMetadataSpec>(json, CreateJsonOptions())
                     ?? throw new InvalidOperationException($"Unable to deserialize App Information metadata config: {path}");
+                if (string.IsNullOrWhiteSpace(spec.AppId))
+                    throw new InvalidOperationException($"App Information metadata config must declare AppId: {path}");
                 return (spec, path);
             })
             .ToArray();
@@ -30,7 +32,6 @@ internal sealed partial class PowerForgeReleaseService
     {
         var matches = specs
             .Where(candidate =>
-                string.IsNullOrWhiteSpace(candidate.Spec.AppId) ||
                 string.Equals(candidate.Spec.AppId.Trim(), app.AppStoreConnectAppId, StringComparison.OrdinalIgnoreCase))
             .ToArray();
         if (matches.Length > 1)

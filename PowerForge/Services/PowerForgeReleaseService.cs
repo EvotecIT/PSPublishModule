@@ -1014,7 +1014,13 @@ internal sealed partial class PowerForgeReleaseService
 
             if ((plan.PrepareDistribution || plan.SyncScreenshots || plan.SyncMetadata || plan.SyncAppInfo || plan.CheckReleaseReadiness) && result.Success)
             {
-                var distributionValues = ResolveAppleDistributionValues(app, result.VersionUpdate);
+                var needsVersionDistribution = plan.PrepareDistribution ||
+                                               plan.SyncScreenshots ||
+                                               plan.SyncMetadata ||
+                                               plan.CheckReleaseReadiness;
+                var distributionValues = needsVersionDistribution
+                    ? ResolveAppleDistributionValues(app, result.VersionUpdate)
+                    : (MarketingVersion: string.Empty, BuildNumber: string.Empty);
                 var matchingScreenshotSpec = plan.SyncScreenshots || plan.CheckReleaseReadiness
                     ? ResolveMatchingScreenshotSpec(screenshotSpecs, app, distributionValues.MarketingVersion)
                     : null;
@@ -3388,13 +3394,14 @@ internal sealed partial class PowerForgeReleaseService
                     result.Distribution.VersionString,
                     result.Distribution.BuildNumber,
                     Platform = result.Distribution.Platform.ToString(),
-                    VersionId = result.Distribution.Version.Id,
+                    VersionId = result.Distribution.Version?.Id,
                     BuildId = result.Distribution.Build?.Id,
                     result.Distribution.CreatedVersion,
                     result.Distribution.SelectedBuild,
                     result.Distribution.PreviousBuildId,
                     ScreenshotSetCount = result.Distribution.Screenshots?.ScreenshotSets.Length ?? 0,
                     MetadataUpdatedFields = result.Distribution.Metadata?.UpdatedFields ?? Array.Empty<string>(),
+                    AppInfoMetadataUpdatedFields = result.Distribution.AppInfoMetadata?.UpdatedFields ?? Array.Empty<string>(),
                     ReadinessReady = result.Distribution.Readiness?.IsReady,
                     ReadinessChecks = result.Distribution.Readiness?.Checks.Select(check => new
                     {

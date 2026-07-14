@@ -68,8 +68,8 @@ public sealed class AppStoreConnectReleasePreparationResult
     /// <summary>Prepared Apple platform.</summary>
     public ApplePlatform Platform { get; set; } = ApplePlatform.iOS;
 
-    /// <summary>Matched or created App Store version.</summary>
-    public AppStoreConnectVersionInfo Version { get; set; } = new();
+    /// <summary>Matched or created App Store version when version-scoped preparation was requested.</summary>
+    public AppStoreConnectVersionInfo? Version { get; set; }
 
     /// <summary>Matched App Store Connect build.</summary>
     public AppStoreConnectBuildInfo? Build { get; set; }

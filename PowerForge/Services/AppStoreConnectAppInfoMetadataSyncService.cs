@@ -9,6 +9,7 @@ public sealed class AppStoreConnectAppInfoMetadataSyncService
     {
         "PREPARE_FOR_SUBMISSION",
         "READY_FOR_REVIEW",
+        "WAITING_FOR_REVIEW",
         "INVALID_BINARY",
         "DEVELOPER_REJECTED",
         "METADATA_REJECTED",
