@@ -127,3 +127,5 @@ if ($PSEdition -ne 'Core') {
         . $LibrariesScript
     }
 }
+
+{{DesktopTypeAcceleratorBlock}}

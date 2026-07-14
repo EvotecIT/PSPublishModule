@@ -289,7 +289,12 @@ internal static partial class ModuleBootstrapperGenerator
                     ["TypeAcceleratorBlock"] = BuildTypeAcceleratorBlock(
                         assemblyTypeAcceleratorMode,
                         assemblyTypeAccelerators,
-                        assemblyTypeAcceleratorAssemblies)
+                        assemblyTypeAcceleratorAssemblies),
+                    ["DesktopTypeAcceleratorBlock"] = BuildDesktopTypeAcceleratorBlock(
+                        assemblyTypeAcceleratorMode,
+                        assemblyTypeAccelerators,
+                        assemblyTypeAcceleratorAssemblies,
+                        "[IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder)")
                 })
             : string.Empty;
 
@@ -1334,11 +1339,12 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
 
     if ($script:PowerForgeAssemblyTypeAcceleratorCleanupRegistered -ne $true) {{
         $script:PowerForgeAssemblyTypeAcceleratorCleanupRegistered = $true
+        $RegisteredPowerForgeTypeAccelerators = $script:PowerForgeRegisteredAssemblyTypeAccelerators
         $PreviousPowerForgeOnRemove = $ExecutionContext.SessionState.Module.OnRemove
         $ExecutionContext.SessionState.Module.OnRemove = {{
             try {{
                 $TypeAccelerators = [psobject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
-                if ($null -eq $TypeAccelerators -or $null -eq $script:PowerForgeRegisteredAssemblyTypeAccelerators) {{
+                if ($null -eq $TypeAccelerators -or $null -eq $RegisteredPowerForgeTypeAccelerators) {{
                     return
                 }}
 
@@ -1349,7 +1355,7 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
                 }}
 
                 $Existing = $GetTypeAccelerators.GetValue($null)
-                foreach ($Entry in @($script:PowerForgeRegisteredAssemblyTypeAccelerators.GetEnumerator())) {{
+                foreach ($Entry in @($RegisteredPowerForgeTypeAccelerators.GetEnumerator())) {{
                     if ($Existing.ContainsKey($Entry.Key) -and [object]::ReferenceEquals($Existing[$Entry.Key], $Entry.Value)) {{
                         $RemoveTypeAccelerator.Invoke($null, @($Entry.Key)) | Out-Null
                     }}

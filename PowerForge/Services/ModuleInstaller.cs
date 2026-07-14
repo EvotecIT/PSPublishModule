@@ -431,6 +431,27 @@ public sealed class ModuleInstaller
 
     private static string NextRevision(string baseVersion, IEnumerable<string> existing)
     {
+        if (Version.TryParse(baseVersion, out var parsedBaseVersion) && parsedBaseVersion.Build >= 0)
+        {
+            var versionFamily = $"{parsedBaseVersion.Major}.{parsedBaseVersion.Minor}.{parsedBaseVersion.Build}";
+            var maxRevision = Math.Max(parsedBaseVersion.Revision, 0);
+
+            foreach (var candidate in existing)
+            {
+                if (!Version.TryParse(candidate, out var parsedCandidate) ||
+                    parsedCandidate.Major != parsedBaseVersion.Major ||
+                    parsedCandidate.Minor != parsedBaseVersion.Minor ||
+                    parsedCandidate.Build != parsedBaseVersion.Build)
+                {
+                    continue;
+                }
+
+                maxRevision = Math.Max(maxRevision, Math.Max(parsedCandidate.Revision, 0));
+            }
+
+            return $"{versionFamily}.{maxRevision + 1}";
+        }
+
         // Accept v, v.x patterns
         var prefix = Regex.Escape(baseVersion) + "(?:\\.(\\d+))?$";
         var re = new Regex(prefix, RegexOptions.IgnoreCase);

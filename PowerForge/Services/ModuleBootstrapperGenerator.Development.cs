@@ -35,6 +35,13 @@ internal static partial class ModuleBootstrapperGenerator
                 ["RuntimeHandlerBlock"] = handleRuntimes
                     ? IndentPowerShell(BuildDevelopmentRuntimeHandlerBlock().TrimEnd(), 12)
                     : string.Empty,
+                ["DesktopTypeAcceleratorBlock"] = IndentPowerShell(
+                    BuildDesktopTypeAcceleratorBlock(
+                        assemblyTypeAcceleratorMode,
+                        assemblyTypeAccelerators,
+                        assemblyTypeAcceleratorAssemblies,
+                        "[IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)").TrimEnd(),
+                    12),
                 ["AssemblyLoadContextImportBlock"] = BuildDevelopmentAssemblyLoadContextImportBlock(
                     moduleName,
                     libraryName,
