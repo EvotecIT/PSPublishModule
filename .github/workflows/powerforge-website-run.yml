@@ -100,6 +100,7 @@ jobs:
     timeout-minutes: ${{ inputs.timeout_minutes }}
     env:
       POWERFORGE_RUNNER_CACHE_ROOT: ${{ github.workspace }}/.cache/powerforge-runner
+      NUGET_PACKAGES: ${{ runner.temp }}/powerforge-website-nuget-packages
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/powerforge-runner/ms-playwright
       DOTNET_BUNDLE_EXTRACT_BASE_DIR: ${{ github.workspace }}/.cache/powerforge-runner/dotnet-bundle
       BUN_INSTALL_CACHE_DIR: ${{ github.workspace }}/.cache/powerforge-runner/bun-install-cache
@@ -159,16 +160,17 @@ jobs:
       - name: Cache NuGet packages
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/packages.lock.json') }}
+          path: ${{ env.NUGET_PACKAGES }}
+          key: powerforge-website-nuget-v1-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/packages.lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-nuget-
+            powerforge-website-nuget-v1-${{ runner.os }}-
 
       - name: Initialize transient tool cache directories
         shell: pwsh
         run: |
           foreach ($path in @(
             $env:POWERFORGE_RUNNER_CACHE_ROOT,
+            $env:NUGET_PACKAGES,
             $env:PLAYWRIGHT_BROWSERS_PATH,
             $env:DOTNET_BUNDLE_EXTRACT_BASE_DIR,
             $env:BUN_INSTALL_CACHE_DIR,
