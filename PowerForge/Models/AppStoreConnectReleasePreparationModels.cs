@@ -35,6 +35,9 @@ public sealed class AppStoreConnectReleasePreparationRequest
     /// <summary>Optional localized metadata sync configuration to run after the version exists.</summary>
     public AppStoreConnectVersionMetadataSpec? MetadataSpec { get; set; }
 
+    /// <summary>App-level metadata sync configurations to apply once per app.</summary>
+    public AppStoreConnectAppInfoMetadataSpec[] AppInfoMetadataSpecs { get; set; } = Array.Empty<AppStoreConnectAppInfoMetadataSpec>();
+
     /// <summary>Deletes existing screenshots before uploading screenshots from the local spec.</summary>
     public bool ReplaceScreenshots { get; set; }
 
@@ -65,8 +68,8 @@ public sealed class AppStoreConnectReleasePreparationResult
     /// <summary>Prepared Apple platform.</summary>
     public ApplePlatform Platform { get; set; } = ApplePlatform.iOS;
 
-    /// <summary>Matched or created App Store version.</summary>
-    public AppStoreConnectVersionInfo Version { get; set; } = new();
+    /// <summary>Matched or created App Store version when version-scoped preparation was requested.</summary>
+    public AppStoreConnectVersionInfo? Version { get; set; }
 
     /// <summary>Matched App Store Connect build.</summary>
     public AppStoreConnectBuildInfo? Build { get; set; }
@@ -85,6 +88,9 @@ public sealed class AppStoreConnectReleasePreparationResult
 
     /// <summary>Metadata sync result when metadata was configured.</summary>
     public AppStoreConnectVersionMetadataSyncResult? Metadata { get; set; }
+
+    /// <summary>App-level metadata sync results when App Information metadata was configured.</summary>
+    public AppStoreConnectAppInfoMetadataSyncResult[] AppInfoMetadataResults { get; set; } = Array.Empty<AppStoreConnectAppInfoMetadataSyncResult>();
 
     /// <summary>Release readiness result when requested.</summary>
     public AppStoreConnectReleaseReadinessResult? Readiness { get; set; }

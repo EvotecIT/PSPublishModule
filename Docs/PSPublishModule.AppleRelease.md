@@ -122,6 +122,8 @@ that need one release file to describe iPhone, iPad, macOS, and store-delivery l
     "Upload": false,
     "PrepareDistribution": true,
     "SelectBuildForDistribution": true,
+    "SyncAppInfo": true,
+    "AppInfoConfigPath": "build/appstore-metadata/app-info.json",
     "SyncScreenshots": true,
     "ScreenshotConfigPaths": [
       "build/appstore-screenshots/ios.json",
@@ -181,15 +183,57 @@ and `xcodebuild -exportArchive` helpers as `New-AppleAppArchive` and
 ## Current Boundary
 
 These helpers automate signed binary archive/upload, App Store version preparation,
-processed build selection, and screenshot sync. `AppleApps.PrepareDistribution`
+processed build selection, version metadata, app-level App Information, and screenshot
+sync. `AppleApps.PrepareDistribution`
 creates the App Store version when needed, finds the matching uploaded build by
 marketing version/build number/platform, and attaches it once App Store Connect reports
-the build as `VALID`. `AppleApps.SyncScreenshots` runs the same screenshot sync engine
+the build as `VALID`. `AppleApps.SyncAppInfo` updates localized app-level fields such as
+the name, subtitle, and privacy policy URL from `AppInfoConfigPath` or
+`AppInfoConfigPaths`. `AppleApps.SyncScreenshots` runs the same screenshot sync engine
 from the unified release flow for matching screenshot config files.
 
-Localized text metadata, pricing, review submission, phased release controls, and final
-manual release/submission decisions still need dedicated App Store Connect automation
-before they should be driven by this lane.
+Pricing, phased release controls, and final approved-version release decisions remain
+explicit App Store Connect operations. Keep `SubmitForReview` and
+`ReleaseApprovedVersion` disabled in committed consumer configuration until the release
+run is intentionally performing those actions.
+
+## App Information Metadata
+
+App-level metadata is separate from version localizations in App Store Connect. Use it
+for the localized app name, subtitle, and privacy policy URL:
+
+```json
+{
+  "appId": "6775426723",
+  "locale": "en-US",
+  "metadata": {
+    "name": "Tactra Remote",
+    "subtitle": "Premium Home Assistant remote",
+    "privacyPolicyUrl": "https://tactra.dev/privacy/"
+  }
+}
+```
+
+Inspect and sync the editable App Information resource with:
+
+```powershell
+Get-AppStoreConnectAppInformation `
+    -IssuerId $issuerId -KeyId $keyId -PrivateKeyPath $keyPath `
+    -AppId $appId
+
+Sync-AppStoreConnectAppInfoMetadata `
+    -IssuerId $issuerId -KeyId $keyId -PrivateKeyPath $keyPath `
+    -ConfigPath '.\appstoreconnect-app-info.json'
+```
+
+Apple locks App Information for a version that is already Ready for Distribution. Create the
+next editable App Store version first; the sync service selects its editable App
+Information resource and refuses to silently update a locked resource. Every App Information
+config must declare `appId`, so a config can never be applied to another app by accident.
+App Information-only runs do not require a version or build number because these fields belong
+to the app-level resource rather than an App Store version. Use one config per app and locale;
+the unified release applies every matching locale once per unique app id even when iOS and macOS
+targets share that app, and fails when a selected app has no matching config.
 
 ## Screenshot Upload Flow
 

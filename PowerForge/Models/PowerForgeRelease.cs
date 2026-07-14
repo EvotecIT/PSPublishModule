@@ -316,6 +316,10 @@ internal sealed class PowerForgeAppleReleaseOptions
 
     public string[] MetadataConfigPaths { get; set; } = Array.Empty<string>();
 
+    public string? AppInfoConfigPath { get; set; }
+
+    public string[] AppInfoConfigPaths { get; set; } = Array.Empty<string>();
+
     public bool PrepareDistribution { get; set; }
 
     public bool SelectBuildForDistribution { get; set; } = true;
@@ -323,6 +327,8 @@ internal sealed class PowerForgeAppleReleaseOptions
     public bool AllowUnprocessedDistributionBuild { get; set; }
 
     public bool SyncMetadata { get; set; }
+
+    public bool SyncAppInfo { get; set; }
 
     public bool SyncScreenshots { get; set; }
 
@@ -381,6 +387,10 @@ internal sealed class PowerForgeAppleReleasePlan
 
     public string[] MetadataConfigPaths { get; set; } = Array.Empty<string>();
 
+    public string? AppInfoConfigPath { get; set; }
+
+    public string[] AppInfoConfigPaths { get; set; } = Array.Empty<string>();
+
     public bool PrepareDistribution { get; set; }
 
     public bool SelectBuildForDistribution { get; set; } = true;
@@ -388,6 +398,8 @@ internal sealed class PowerForgeAppleReleasePlan
     public bool AllowUnprocessedDistributionBuild { get; set; }
 
     public bool SyncMetadata { get; set; }
+
+    public bool SyncAppInfo { get; set; }
 
     public bool ReplaceScreenshots { get; set; }
 
