@@ -22,14 +22,19 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
     {
         var actions = new List<XElement>();
         var sequence = new XElement(WixNamespace + "InstallExecuteSequence");
-        string? upgradeSequenceTail = null;
+        var upgradePreparationActions = new List<UpgradePreparationAction>();
         foreach (var service in definition.Components.OfType<PowerForgeInstallerServiceComponent>())
         {
             if (service.ScriptInstall is null)
                 continue;
 
-            upgradeSequenceTail = EmitServiceActions(service, actions, sequence, upgradeSequenceTail);
+            EmitServiceActions(service, actions, sequence, upgradePreparationActions);
         }
+
+        AddUpgradePreparationSequenceRows(
+            sequence,
+            upgradePreparationActions,
+            definition.Product.MajorUpgradeSchedule);
 
         foreach (var action in actions)
             yield return action;
@@ -54,11 +59,11 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         yield return ids.SetUninstallServiceId;
     }
 
-    private static string? EmitServiceActions(
+    private static void EmitServiceActions(
         PowerForgeInstallerServiceComponent service,
         ICollection<XElement> actions,
         XElement sequence,
-        string? upgradeSequenceTail)
+        ICollection<UpgradePreparationAction> upgradePreparationActions)
     {
         var script = service.ScriptInstall!;
         var ids = BuildIds(service.Id);
@@ -113,39 +118,35 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         }
 
         actions.Add(CreateSetInstallCommand(ids.SetInstallStandardId, ids.InstallServiceId, script.Command));
-        return AddSequenceRows(sequence, ids, script, standardCondition, upgradeCondition, uninstallCondition, upgradeSequenceTail);
+        AddSequenceRows(
+            sequence,
+            ids,
+            script,
+            standardCondition,
+            upgradeCondition,
+            uninstallCondition,
+            upgradePreparationActions);
     }
 
-    private static string? AddSequenceRows(
+    private static void AddSequenceRows(
         XElement sequence,
         ServiceScriptActionIds ids,
         PowerForgeInstallerServiceScriptInstall script,
         string standardCondition,
         string upgradeCondition,
         string uninstallCondition,
-        string? upgradeSequenceTail)
+        ICollection<UpgradePreparationAction> upgradePreparationActions)
     {
-        string? tail = upgradeSequenceTail;
         if (script.BackupExistingImagePath)
         {
-            AddUpgradeSequenceRow(sequence, ids.SetBackupCommandId, tail, upgradeCondition);
-            sequence.Add(new XElement(
-                WixNamespace + "Custom",
-                new XAttribute("Action", ids.BackupImagePathId),
-                new XAttribute("After", ids.SetBackupCommandId),
-                new XAttribute("Condition", upgradeCondition)));
-            tail = ids.BackupImagePathId;
+            upgradePreparationActions.Add(new UpgradePreparationAction(ids.SetBackupCommandId, upgradeCondition));
+            upgradePreparationActions.Add(new UpgradePreparationAction(ids.BackupImagePathId, upgradeCondition));
         }
 
         if (script.StopServiceForUpgrade)
         {
-            AddUpgradeSequenceRow(sequence, ids.SetStopServiceId, tail, upgradeCondition);
-            sequence.Add(new XElement(
-                WixNamespace + "Custom",
-                new XAttribute("Action", ids.StopServiceId),
-                new XAttribute("After", ids.SetStopServiceId),
-                new XAttribute("Condition", upgradeCondition)));
-            tail = ids.StopServiceId;
+            upgradePreparationActions.Add(new UpgradePreparationAction(ids.SetStopServiceId, upgradeCondition));
+            upgradePreparationActions.Add(new UpgradePreparationAction(ids.StopServiceId, upgradeCondition));
         }
 
         if (!string.IsNullOrWhiteSpace(script.UpgradeCommand))
@@ -181,24 +182,47 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             new XAttribute("Action", ids.InstallServiceId),
             new XAttribute("Before", "InstallFinalize"),
             new XAttribute("Condition", script.Condition)));
-        return tail;
     }
 
-    private static void AddUpgradeSequenceRow(
+    private static void AddUpgradePreparationSequenceRows(
         XElement sequence,
-        string actionId,
-        string? afterActionId,
-        string condition)
+        IReadOnlyList<UpgradePreparationAction> actions,
+        PowerForgeInstallerMajorUpgradeSchedule schedule)
     {
-        var element = new XElement(
-            WixNamespace + "Custom",
-            new XAttribute("Action", actionId),
-            new XAttribute("Condition", condition));
-        if (string.IsNullOrWhiteSpace(afterActionId))
-            element.Add(new XAttribute("Before", "RemoveExistingProducts"));
-        else
-            element.Add(new XAttribute("After", afterActionId!));
-        sequence.Add(element);
+        if (actions.Count == 0)
+            return;
+
+        string anchor = schedule is PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecute or
+            PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecuteAgain or
+            PowerForgeInstallerMajorUpgradeSchedule.AfterInstallFinalize
+                ? "InstallFiles"
+                : "RemoveExistingProducts";
+
+        for (int index = 0; index < actions.Count; index++)
+        {
+            var action = actions[index];
+            string before = index + 1 < actions.Count
+                ? actions[index + 1].ActionId
+                : anchor;
+            sequence.Add(new XElement(
+                WixNamespace + "Custom",
+                new XAttribute("Action", action.ActionId),
+                new XAttribute("Before", before),
+                new XAttribute("Condition", action.Condition)));
+        }
+    }
+
+    private sealed class UpgradePreparationAction
+    {
+        public UpgradePreparationAction(string actionId, string condition)
+        {
+            ActionId = actionId;
+            Condition = condition;
+        }
+
+        public string ActionId { get; }
+
+        public string Condition { get; }
     }
 
     private static XElement CreateQuietExecAction(string id, string execute, bool hideTarget = false)

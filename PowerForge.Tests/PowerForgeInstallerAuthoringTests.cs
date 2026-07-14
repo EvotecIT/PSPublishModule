@@ -223,16 +223,16 @@ public sealed class PowerForgeInstallerAuthoringTests
             ((string?)e.Attribute("Condition"))?.Contains("NOT (WIX_UPGRADE_DETECTED OR " + serviceExistsPropertyId + ")", StringComparison.Ordinal) == true));
         Assert.NotNull(sequenceRows.SingleOrDefault(e =>
             (string?)e.Attribute("Action") == "ServiceComponent.SetBackupCommand" &&
-            (string?)e.Attribute("Before") == "RemoveExistingProducts"));
+            (string?)e.Attribute("Before") == "ServiceComponent.BackupImagePath"));
         Assert.NotNull(sequenceRows.SingleOrDefault(e =>
             (string?)e.Attribute("Action") == "ServiceComponent.BackupImagePath" &&
-            (string?)e.Attribute("After") == "ServiceComponent.SetBackupCommand"));
+            (string?)e.Attribute("Before") == "ServiceComponent.SetStopService"));
         Assert.NotNull(sequenceRows.SingleOrDefault(e =>
             (string?)e.Attribute("Action") == "ServiceComponent.SetStopService" &&
-            (string?)e.Attribute("After") == "ServiceComponent.BackupImagePath"));
+            (string?)e.Attribute("Before") == "ServiceComponent.StopService"));
         Assert.NotNull(sequenceRows.SingleOrDefault(e =>
             (string?)e.Attribute("Action") == "ServiceComponent.StopService" &&
-            (string?)e.Attribute("After") == "ServiceComponent.SetStopService"));
+            (string?)e.Attribute("Before") == "RemoveExistingProducts"));
     }
 
     [Fact]
@@ -696,6 +696,33 @@ public sealed class PowerForgeInstallerAuthoringTests
             Assert.Contains("INSTALL_CONDITIONAL_SERVICE=1", condition, StringComparison.Ordinal);
             Assert.Contains("WIX_UPGRADE_DETECTED", condition, StringComparison.Ordinal);
         });
+    }
+
+    [Theory]
+    [InlineData(PowerForgeInstallerMajorUpgradeSchedule.AfterInstallValidate, "RemoveExistingProducts")]
+    [InlineData(PowerForgeInstallerMajorUpgradeSchedule.AfterInstallInitialize, "RemoveExistingProducts")]
+    [InlineData(PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecute, "InstallFiles")]
+    [InlineData(PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecuteAgain, "InstallFiles")]
+    [InlineData(PowerForgeInstallerMajorUpgradeSchedule.AfterInstallFinalize, "InstallFiles")]
+    public void EmitSource_SequencesUpgradePreparationBeforeDestructiveUpgradeWork(
+        PowerForgeInstallerMajorUpgradeSchedule schedule,
+        string expectedAnchor)
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Product.MajorUpgradeSchedule = schedule;
+        definition.Components.Clear();
+        AddScriptService(definition, "ServiceComponent");
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+        var rows = doc.Descendants(Wix + "InstallExecuteSequence")
+            .Descendants(Wix + "Custom")
+            .ToDictionary(row => (string)row.Attribute("Action")!, StringComparer.Ordinal);
+
+        Assert.Equal("ServiceComponent.BackupImagePath", (string?)rows["ServiceComponent.SetBackupCommand"].Attribute("Before"));
+        Assert.Equal("ServiceComponent.SetStopService", (string?)rows["ServiceComponent.BackupImagePath"].Attribute("Before"));
+        Assert.Equal("ServiceComponent.StopService", (string?)rows["ServiceComponent.SetStopService"].Attribute("Before"));
+        Assert.Equal(expectedAnchor, (string?)rows["ServiceComponent.StopService"].Attribute("Before"));
     }
 
     [Fact]

@@ -22,14 +22,28 @@ public sealed class PowerForgeInstallerUpgradePreservationTests
             Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
             dataFolderName);
         var installedConfig = Path.Combine(installedDirectory, "settings.json");
+        var upgradeCode = Guid.NewGuid().ToString("B").ToUpperInvariant();
+        var componentGuid = Guid.NewGuid().ToString("B").ToUpperInvariant();
         string? v1Msi = null;
         string? v2Msi = null;
 
         Directory.CreateDirectory(root);
         try
         {
-            v1Msi = await CompileInstallerAsync(root, dataFolderName, "1.0.0", "v1-default");
-            v2Msi = await CompileInstallerAsync(root, dataFolderName, "1.0.1", "v2-default");
+            v1Msi = await CompileInstallerAsync(
+                root,
+                dataFolderName,
+                "1.0.0",
+                "v1-default",
+                upgradeCode,
+                componentGuid);
+            v2Msi = await CompileInstallerAsync(
+                root,
+                dataFolderName,
+                "1.0.1",
+                "v2-default",
+                upgradeCode,
+                componentGuid);
 
             await RunMsiExecAsync(root, "install-v1.log", "/i", v1Msi);
             Assert.Equal("v1-default", await File.ReadAllTextAsync(installedConfig));
@@ -55,14 +69,16 @@ public sealed class PowerForgeInstallerUpgradePreservationTests
         string root,
         string dataFolderName,
         string version,
-        string defaultConfig)
+        string defaultConfig,
+        string upgradeCode,
+        string componentGuid)
     {
         var versionRoot = Path.Combine(root, version);
         Directory.CreateDirectory(versionRoot);
         var payloadFile = Path.Combine(versionRoot, "settings.json");
         await File.WriteAllTextAsync(payloadFile, defaultConfig);
 
-        var definition = CreateInstaller(dataFolderName, version, payloadFile);
+        var definition = CreateInstaller(dataFolderName, version, payloadFile, upgradeCode, componentGuid);
         var workspace = Path.Combine(versionRoot, "installer");
         var result = await new PowerForgeWixInstallerCompiler().CompileAsync(
             definition,
@@ -91,7 +107,9 @@ public sealed class PowerForgeInstallerUpgradePreservationTests
     private static PowerForgeInstallerDefinition CreateInstaller(
         string dataFolderName,
         string version,
-        string payloadFile)
+        string payloadFile,
+        string upgradeCode,
+        string componentGuid)
     {
         var definition = new PowerForgeInstallerDefinition
         {
@@ -100,7 +118,7 @@ public sealed class PowerForgeInstallerUpgradePreservationTests
                 Name = "PowerForge Upgrade Preservation Proof",
                 Manufacturer = "Evotec",
                 Version = version,
-                UpgradeCode = "{6D245057-9D02-43FA-A2A9-235DB5DD1BD9}",
+                UpgradeCode = upgradeCode,
                 Scope = PowerForgeInstallerScope.PerMachine,
                 MajorUpgradeSchedule = PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecute
             },
@@ -123,11 +141,11 @@ public sealed class PowerForgeInstallerUpgradePreservationTests
         {
             Id = "MutableConfiguration",
             DirectoryRefId = "UpgradeProofDataFolder",
-            Guid = "{0E869D63-C3C2-4B61-8D70-46255A108E1E}",
+            Guid = componentGuid,
             FileId = "MutableConfigurationFile",
             Source = payloadFile,
             Name = "settings.json",
-            Permanent = true,
+            Permanent = false,
             NeverOverwrite = true
         });
 
