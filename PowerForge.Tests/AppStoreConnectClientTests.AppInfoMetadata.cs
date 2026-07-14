@@ -167,6 +167,41 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task AppInfoMetadataSyncService_RejectsAppInfoIdFromAnotherApp()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    { "id": "info-for-app-1", "type": "appInfos", "attributes": { "state": "PREPARE_FOR_SUBMISSION" } }
+                  ]
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectAppInfoMetadataSyncService(client);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.SyncAsync(
+            new AppStoreConnectAppInfoMetadataSyncRequest
+            {
+                Spec = new AppStoreConnectAppInfoMetadataSpec
+                {
+                    AppId = "app-1",
+                    AppInfoId = "info-for-another-app",
+                    Locale = "en-US",
+                    Metadata = new AppStoreConnectAppInfoLocalizationUpdate
+                    {
+                        PrivacyPolicyUrl = "https://tactra.dev/privacy/"
+                    }
+                }
+            }));
+
+        Assert.Contains("does not belong to app 'app-1'", exception.Message, StringComparison.Ordinal);
+        Assert.Single(handler.RequestUris);
+    }
+
+    [Fact]
     public async Task ReleasePreparationService_SyncsAppInfoWithoutVersionOrBuildLookup()
     {
         var handler = new SequenceHandler(

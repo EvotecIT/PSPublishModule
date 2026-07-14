@@ -67,15 +67,14 @@ public sealed class AppStoreConnectAppInfoMetadataSyncService
         AppStoreConnectAppInfoMetadataSpec spec,
         CancellationToken cancellationToken)
     {
+        var appInfos = await _client.GetAppInfosAsync(spec.AppId, limit: 50, cancellationToken).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(spec.AppInfoId))
         {
-            return new AppStoreConnectAppInformationInfo
-            {
-                Id = spec.AppInfoId!.Trim()
-            };
+            var requestedAppInfoId = spec.AppInfoId!.Trim();
+            return appInfos.FirstOrDefault(info => string.Equals(info.Id, requestedAppInfoId, StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException($"App Information resource '{requestedAppInfoId}' does not belong to app '{spec.AppId}'.");
         }
 
-        var appInfos = await _client.GetAppInfosAsync(spec.AppId, limit: 50, cancellationToken).ConfigureAwait(false);
         var editable = appInfos.FirstOrDefault(IsEditable);
         if (editable is not null)
             return editable;

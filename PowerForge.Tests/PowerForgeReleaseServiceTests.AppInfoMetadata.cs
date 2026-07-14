@@ -81,9 +81,11 @@ public sealed partial class PowerForgeReleaseServiceTests
             WriteAppInfoConfig(root, includeAppId: true);
             var requests = new List<AppStoreConnectReleasePreparationRequest>();
             var service = CreateAppInfoReleaseService(requests);
+            var spec = CreateAppInfoReleaseSpec(keyPath);
+            spec.AppleApps!.AllowProvisioningUpdates = false;
 
             var result = service.Execute(
-                CreateAppInfoReleaseSpec(keyPath),
+                spec,
                 new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json")

@@ -810,7 +810,7 @@ internal sealed partial class PowerForgeReleaseService
         {
             if (appStoreConnectApiConfiguredCount != 3)
                 throw new InvalidOperationException("AppleApps App Store Connect API-key authentication requires AppStoreConnectApiKeyPath, AppStoreConnectApiKeyId, and AppStoreConnectApiIssuerId.");
-            if (!options.AllowProvisioningUpdates)
+            if ((options.Archive || options.Upload) && !options.AllowProvisioningUpdates)
                 throw new InvalidOperationException("AppleApps App Store Connect API-key authentication requires AllowProvisioningUpdates=true so xcodebuild can use the credentials.");
             if (!File.Exists(appStoreConnectApiKeyPath))
                 throw new FileNotFoundException($"AppleApps App Store Connect API key file was not found: {appStoreConnectApiKeyPath}", appStoreConnectApiKeyPath);
