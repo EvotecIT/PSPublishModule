@@ -452,6 +452,120 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task ReleasePreparationService_ChecksRemoteScreenshotsWithoutLocalScreenshotSync()
+    {
+        var versionResponse = new SequenceResponse(HttpStatusCode.OK,
+            """
+            {
+              "data": [
+                {
+                  "id": "version-1",
+                  "type": "appStoreVersions",
+                  "attributes": { "versionString": "1.0.5", "platform": "IOS" }
+                }
+              ]
+            }
+            """);
+        var handler = new SequenceHandler(
+            versionResponse,
+            versionResponse,
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "build-9",
+                      "type": "builds",
+                      "attributes": { "version": "9", "processingState": "VALID", "expired": false },
+                      "relationships": { "preReleaseVersion": { "data": { "id": "pre-1", "type": "preReleaseVersions" } } }
+                    }
+                  ],
+                  "included": [
+                    { "id": "pre-1", "type": "preReleaseVersions", "attributes": { "version": "1.0.5", "platform": "IOS" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": { "id": "build-9", "type": "builds" } }"""),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "loc-1",
+                      "type": "appStoreVersionLocalizations",
+                      "attributes": {
+                        "locale": "en-US",
+                        "description": "Premium remote.",
+                        "keywords": "media,remote",
+                        "supportUrl": "https://example.test/support"
+                      }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "set-1",
+                      "type": "appScreenshotSets",
+                      "attributes": { "screenshotDisplayType": "APP_IPHONE_65" }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "shot-1",
+                      "type": "appScreenshots",
+                      "attributes": {
+                        "fileName": "01.png",
+                        "assetDeliveryState": { "state": "COMPLETE" }
+                      }
+                    }
+                  ]
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectReleasePreparationService(client);
+
+        var result = await service.PrepareAsync(new AppStoreConnectReleasePreparationRequest
+        {
+            AppId = "app-1",
+            VersionString = "1.0.5",
+            BuildNumber = "9",
+            Platform = ApplePlatform.iOS,
+            CreateVersion = false,
+            SelectBuild = false,
+            CheckReadiness = true,
+            ReadinessRequest = new AppStoreConnectReleaseReadinessRequest
+            {
+                ScreenshotSpec = new AppStoreConnectScreenshotSyncSpec
+                {
+                    ScreenshotSets = new[]
+                    {
+                        new AppStoreConnectScreenshotSetSyncSpec
+                        {
+                            ScreenshotDisplayType = "APP_IPHONE_65",
+                            Path = "missing-local-screenshots"
+                        }
+                    }
+                }
+            }
+        });
+
+        Assert.Null(result.Screenshots);
+        Assert.True(result.Readiness?.IsReady);
+        Assert.Equal("APP_IPHONE_65", Assert.Single(result.Readiness!.ScreenshotSets).ScreenshotDisplayType);
+        Assert.Equal(7, handler.RequestUris.Count);
+    }
+
+    [Fact]
     public async Task GetSubscriptionsForAppAsync_ListsGroupsAndSubscriptions()
     {
         var handler = new SequenceHandler(

@@ -280,7 +280,7 @@ public sealed class AppStoreConnectReleasePreparationService
             RequireCompleteScreenshots = source.RequireCompleteScreenshots,
             MinimumScreenshotsPerSet = source.MinimumScreenshotsPerSet,
             RequiredScreenshotDisplayTypes = source.RequiredScreenshotDisplayTypes,
-            ScreenshotSpec = screenshotSpec
+            ScreenshotSpec = screenshotSpec ?? source.ScreenshotSpec
         };
     }
 }
