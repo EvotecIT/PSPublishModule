@@ -1044,11 +1044,17 @@ internal sealed partial class PowerForgeReleaseService
                     CreateVersion = plan.PrepareDistribution,
                     SelectBuild = plan.PrepareDistribution && plan.SelectBuildForDistribution,
                     RequireValidBuild = !plan.AllowUnprocessedDistributionBuild,
-                    ScreenshotSpec = matchingScreenshotSpec?.Spec,
+                    ScreenshotSpec = plan.SyncScreenshots ? matchingScreenshotSpec?.Spec : null,
                     MetadataSpec = matchingMetadataSpec?.Spec,
                     AppInfoMetadataSpecs = appInfoMetadataSpecs,
                     ReplaceScreenshots = plan.ReplaceScreenshots,
                     CheckReadiness = plan.CheckReleaseReadiness,
+                    ReadinessRequest = plan.CheckReleaseReadiness && matchingScreenshotSpec is not null
+                        ? new AppStoreConnectReleaseReadinessRequest
+                        {
+                            ScreenshotSpec = matchingScreenshotSpec.Value.Spec
+                        }
+                        : null,
                     BaseDirectory = matchingScreenshotSpec is null
                         ? matchingMetadataSpec is null
                             ? plan.ProjectRoot
