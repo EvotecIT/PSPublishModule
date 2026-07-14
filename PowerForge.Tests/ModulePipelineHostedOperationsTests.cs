@@ -2080,6 +2080,16 @@ public sealed class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
+    public void SigningScript_FailsClosedForInvalidCertificatesAndUnknownSignatures()
+    {
+        var script = EmbeddedScripts.Load("Scripts/Signing/Sign-Module.ps1");
+
+        Assert.Contains("outside its validity period", script, StringComparison.Ordinal);
+        Assert.Contains("if ($status -eq 'Valid')", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("$status -eq 'Valid' -or $status -eq 'UnknownError'", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RunTestsAfterMerge_IncludesFailedTestNamesAndMessages()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
