@@ -22,7 +22,7 @@ internal static class PowerShellBenchmarkResultMerger
             Summary = summary,
             Comparison = suite.Comparisons
                 .Where(comparison => !string.IsNullOrWhiteSpace(comparison.Baseline))
-                .SelectMany(comparison => GetComparisonMetrics(comparison).SelectMany(metric => summarizer.Compare(summary, comparison.Baseline, metric)))
+                .SelectMany(comparison => GetComparisonMetrics(comparison).SelectMany(metric => summarizer.Compare(summary, comparison.Baseline, metric, comparison.TieTolerance)))
                 .ToArray(),
             Metadata = PowerShellBenchmarkEnvironmentMetadata.Build(suite)
         };

@@ -447,9 +447,14 @@ public sealed class AddBenchmarkComparisonCommand : BenchmarkDslCommand
     [Parameter]
     public string[]? Metric { get; set; }
 
+    /// <summary>Fractional tolerance used to label practically equivalent results, such as <c>0.05</c> for five percent.</summary>
+    [Parameter]
+    [ValidateRange(0d, double.MaxValue)]
+    public double TieTolerance { get; set; }
+
     /// <inheritdoc />
     protected override void ProcessRecord()
-        => PowerShellBenchmarkDslRuntime.Compare(Dimension, Baseline, Metric);
+        => PowerShellBenchmarkDslRuntime.Compare(Dimension, Baseline, Metric, TieTolerance);
 }
 
 /// <summary>

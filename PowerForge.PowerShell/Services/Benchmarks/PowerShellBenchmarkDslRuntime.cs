@@ -381,11 +381,22 @@ public static class PowerShellBenchmarkDslRuntime
     /// <param name="baseline">Baseline value.</param>
     /// <param name="metric">Metric names.</param>
     public static void Compare(string dimension, string baseline, string[]? metric)
+        => Compare(dimension, baseline, metric, tieTolerance: 0);
+
+    /// <summary>
+    /// Adds a comparison definition with a practical tie tolerance.
+    /// </summary>
+    /// <param name="dimension">Dimension name.</param>
+    /// <param name="baseline">Baseline value.</param>
+    /// <param name="metric">Metric names.</param>
+    /// <param name="tieTolerance">Fractional tolerance used to label practically equivalent results, such as <c>0.05</c> for five percent.</param>
+    public static void Compare(string dimension, string baseline, string[]? metric, double tieTolerance)
         => RequireSuite().Comparisons.Add(new PowerShellBenchmarkComparison
         {
             Dimension = string.IsNullOrWhiteSpace(dimension) ? "Engine" : dimension.Trim(),
             Baseline = baseline ?? string.Empty,
-            Metrics = metric is { Length: > 0 } ? metric : new[] { "MedianMs" }
+            Metrics = metric is { Length: > 0 } ? metric : new[] { "MedianMs" },
+            TieTolerance = tieTolerance
         });
 
     /// <summary>
@@ -484,8 +495,8 @@ try {
             ["engine"] = Call("Engine", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
             ["operation"] = Call("Operation", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
             ["metric"] = Call("Metric", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
-            ["compare"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric) $arguments = [object[]]::new(3); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
-            ["comparison"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric) $arguments = [object[]]::new(3); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
+            ["compare"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric, [ValidateRange(0, [double]::MaxValue)] [double] $TieTolerance) $arguments = [object[]]::new(4); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; $arguments[3] = $TieTolerance; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
+            ["comparison"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric, [ValidateRange(0, [double]::MaxValue)] [double] $TieTolerance) $arguments = [object[]]::new(4); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; $arguments[3] = $TieTolerance; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
             ["readme"] = Call("Readme", "param([Parameter(Position=0)] [string] $Path, [string] $Block, [string] $Renderer)", "[object[]] @($Path, $Block, $Renderer)"),
             ["artifacts"] = "param([Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) $arguments = [object[]]::new(1); $arguments[0] = $Values; __PowerForgeBenchmarkDslInvoke -Name 'Artifacts' -Arguments $arguments",
             ["input"] = InputBody,
@@ -508,7 +519,7 @@ try {
             ["Add-BenchmarkSkipRule"] = Call("Skip", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
             ["Add-BenchmarkValidation"] = Call("Validate", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
             ["Add-BenchmarkMetric"] = Call("Metric", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
-            ["Add-BenchmarkComparison"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric) $arguments = [object[]]::new(3); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
+            ["Add-BenchmarkComparison"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric, [ValidateRange(0, [double]::MaxValue)] [double] $TieTolerance) $arguments = [object[]]::new(4); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; $arguments[3] = $TieTolerance; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
             ["Add-BenchmarkReadmeBlock"] = Call("Readme", "param([Parameter(Position=0)] [string] $Path, [string] $Block, [string] $Renderer)", "[object[]] @($Path, $Block, $Renderer)"),
             ["Set-BenchmarkArtifacts"] = "param([Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) $arguments = [object[]]::new(1); $arguments[0] = $Values; __PowerForgeBenchmarkDslInvoke -Name 'Artifacts' -Arguments $arguments",
             ["Get-BenchmarkInput"] = InputBody,
@@ -763,9 +774,10 @@ try {
         setter.AddCommand("Set-Item")
             .AddArgument("Function:compare")
             .AddParameter("Value", ScriptBlock.Create("""
-param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric)
+param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric, [ValidateRange(0, [double]::MaxValue)] [double] $TieTolerance)
 $parameters = @{ Dimension = $Dimension; Baseline = $Baseline }
 if ($PSBoundParameters.ContainsKey('Metric')) { $parameters['Metric'] = $Metric }
+if ($PSBoundParameters.ContainsKey('TieTolerance')) { $parameters['TieTolerance'] = $TieTolerance }
 Add-BenchmarkComparison @parameters
 """))
             .AddParameter("Force")

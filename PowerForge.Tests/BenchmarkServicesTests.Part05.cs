@@ -702,6 +702,7 @@ benchmark 'comparison-default' {
 
         Assert.Equal("Engine", comparison.Dimension);
         Assert.Equal("Managed", comparison.Baseline);
+        Assert.Equal(0, comparison.TieTolerance);
     }
 
     [Fact]

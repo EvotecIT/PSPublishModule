@@ -203,7 +203,7 @@ public sealed class PowerShellBenchmarkRunner
         {
             result.Comparison = suite.Comparisons
                 .Where(c => !string.IsNullOrWhiteSpace(c.Baseline))
-                .SelectMany(c => GetComparisonMetrics(c).SelectMany(m => summarizer.Compare(summary, c.Baseline, m)))
+                .SelectMany(c => GetComparisonMetrics(c).SelectMany(m => summarizer.Compare(summary, c.Baseline, m, c.TieTolerance)))
                 .ToArray();
         }
         catch

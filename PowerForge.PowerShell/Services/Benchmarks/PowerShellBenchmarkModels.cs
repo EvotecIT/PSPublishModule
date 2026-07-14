@@ -192,6 +192,9 @@ public sealed class PowerShellBenchmarkComparison
 
     /// <summary>Metric names to compare.</summary>
     public string[] Metrics { get; set; } = { "MedianMs" };
+
+    /// <summary>Fractional tolerance used to label practically equivalent results, such as <c>0.05</c> for five percent.</summary>
+    public double TieTolerance { get; set; }
 }
 
 /// <summary>

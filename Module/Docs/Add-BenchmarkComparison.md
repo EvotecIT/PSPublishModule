@@ -11,7 +11,7 @@ Adds a benchmark comparison definition.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Add-BenchmarkComparison [[-Dimension] <string>] -Baseline <string> [-Metric <string[]>] [<CommonParameters>]
+Add-BenchmarkComparison [[-Dimension] <string>] -Baseline <string> [-Metric <string[]>] [-TieTolerance <double>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -64,6 +64,22 @@ Metric names.
 
 ```yaml
 Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -TieTolerance
+Fractional tolerance used to label practically equivalent results, such as 0.05 for five percent.
+
+```yaml
+Type: Double
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
