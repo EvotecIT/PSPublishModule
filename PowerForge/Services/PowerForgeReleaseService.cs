@@ -945,6 +945,10 @@ internal sealed partial class PowerForgeReleaseService
         var appInfoSpecs = plan.SyncAppInfo
             ? LoadAppleAppInfoSpecs(plan)
             : Array.Empty<(AppStoreConnectAppInfoMetadataSpec Spec, string ConfigPath)>();
+        var appInfoSpecsByAppId = plan.SyncAppInfo
+            ? IndexAppInfoSpecsByAppId(appInfoSpecs, plan.Apps)
+            : new Dictionary<string, AppStoreConnectAppInfoMetadataSpec[]>(StringComparer.OrdinalIgnoreCase);
+        var pendingAppInfoAppIds = new HashSet<string>(appInfoSpecsByAppId.Keys, StringComparer.OrdinalIgnoreCase);
         foreach (var app in plan.Apps)
         {
             var result = new PowerForgeAppleAppReleaseResult
@@ -1012,7 +1016,10 @@ internal sealed partial class PowerForgeReleaseService
                 }
             }
 
-            if ((plan.PrepareDistribution || plan.SyncScreenshots || plan.SyncMetadata || plan.SyncAppInfo || plan.CheckReleaseReadiness) && result.Success)
+            var appInfoMetadataSpecs = plan.SyncAppInfo && pendingAppInfoAppIds.Remove(app.AppStoreConnectAppId!)
+                ? appInfoSpecsByAppId[app.AppStoreConnectAppId!]
+                : Array.Empty<AppStoreConnectAppInfoMetadataSpec>();
+            if ((plan.PrepareDistribution || plan.SyncScreenshots || plan.SyncMetadata || appInfoMetadataSpecs.Length > 0 || plan.CheckReleaseReadiness) && result.Success)
             {
                 var needsVersionDistribution = plan.PrepareDistribution ||
                                                plan.SyncScreenshots ||
@@ -1027,10 +1034,6 @@ internal sealed partial class PowerForgeReleaseService
                 var matchingMetadataSpec = plan.SyncMetadata
                     ? ResolveMatchingMetadataSpec(metadataSpecs, app, distributionValues.MarketingVersion)
                     : null;
-                var matchingAppInfoSpec = plan.SyncAppInfo
-                    ? ResolveMatchingAppInfoSpec(appInfoSpecs, app)
-                    : null;
-
                 result.Distribution = _prepareAppleDistribution(new AppStoreConnectReleasePreparationRequest
                 {
                     Credential = CreateAppStoreConnectCredential(plan),
@@ -1043,7 +1046,7 @@ internal sealed partial class PowerForgeReleaseService
                     RequireValidBuild = !plan.AllowUnprocessedDistributionBuild,
                     ScreenshotSpec = matchingScreenshotSpec?.Spec,
                     MetadataSpec = matchingMetadataSpec?.Spec,
-                    AppInfoMetadataSpec = matchingAppInfoSpec?.Spec,
+                    AppInfoMetadataSpecs = appInfoMetadataSpecs,
                     ReplaceScreenshots = plan.ReplaceScreenshots,
                     CheckReadiness = plan.CheckReleaseReadiness,
                     BaseDirectory = matchingScreenshotSpec is null
@@ -3401,7 +3404,10 @@ internal sealed partial class PowerForgeReleaseService
                     result.Distribution.PreviousBuildId,
                     ScreenshotSetCount = result.Distribution.Screenshots?.ScreenshotSets.Length ?? 0,
                     MetadataUpdatedFields = result.Distribution.Metadata?.UpdatedFields ?? Array.Empty<string>(),
-                    AppInfoMetadataUpdatedFields = result.Distribution.AppInfoMetadata?.UpdatedFields ?? Array.Empty<string>(),
+                    AppInfoMetadataUpdatedFields = result.Distribution.AppInfoMetadataResults
+                        .SelectMany(metadata => metadata.UpdatedFields)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray(),
                     ReadinessReady = result.Distribution.Readiness?.IsReady,
                     ReadinessChecks = result.Distribution.Readiness?.Checks.Select(check => new
                     {

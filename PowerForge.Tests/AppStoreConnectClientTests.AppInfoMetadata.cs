@@ -205,6 +205,42 @@ public sealed partial class AppStoreConnectClientTests
                     }
                   }
                 }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    { "id": "info-editable", "type": "appInfos", "attributes": { "state": "PREPARE_FOR_SUBMISSION" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "info-loc-2",
+                      "type": "appInfoLocalizations",
+                      "attributes": {
+                        "locale": "pl-PL",
+                        "privacyPolicyUrl": "https://old.example/pl/privacy/"
+                      }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": {
+                    "id": "info-loc-2",
+                    "type": "appInfoLocalizations",
+                    "attributes": {
+                      "locale": "pl-PL",
+                      "privacyPolicyUrl": "https://tactra.dev/pl/privacy/"
+                    }
+                  }
+                }
                 """));
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
         using var client = new AppStoreConnectClient(CreateCredential(), http);
@@ -215,20 +251,33 @@ public sealed partial class AppStoreConnectClientTests
             AppId = "app-1",
             CreateVersion = false,
             SelectBuild = false,
-            AppInfoMetadataSpec = new AppStoreConnectAppInfoMetadataSpec
+            AppInfoMetadataSpecs = new[]
             {
-                AppId = "app-1",
-                Locale = "en-US",
-                Metadata = new AppStoreConnectAppInfoLocalizationUpdate
+                new AppStoreConnectAppInfoMetadataSpec
                 {
-                    PrivacyPolicyUrl = "https://tactra.dev/privacy/"
+                    AppId = "app-1",
+                    Locale = "en-US",
+                    Metadata = new AppStoreConnectAppInfoLocalizationUpdate
+                    {
+                        PrivacyPolicyUrl = "https://tactra.dev/privacy/"
+                    }
+                },
+                new AppStoreConnectAppInfoMetadataSpec
+                {
+                    AppId = "app-1",
+                    Locale = "pl-PL",
+                    Metadata = new AppStoreConnectAppInfoLocalizationUpdate
+                    {
+                        PrivacyPolicyUrl = "https://tactra.dev/pl/privacy/"
+                    }
                 }
             }
         });
 
         Assert.Null(result.Version);
-        Assert.NotNull(result.AppInfoMetadata);
-        Assert.Equal("https://tactra.dev/privacy/", result.AppInfoMetadata!.After.PrivacyPolicyUrl);
+        Assert.Equal(2, result.AppInfoMetadataResults.Length);
+        Assert.Equal("https://tactra.dev/privacy/", result.AppInfoMetadataResults[0].After.PrivacyPolicyUrl);
+        Assert.Equal("https://tactra.dev/pl/privacy/", result.AppInfoMetadataResults[1].After.PrivacyPolicyUrl);
         Assert.DoesNotContain(handler.RequestUris, uri => uri.AbsolutePath.Contains("appStoreVersions", StringComparison.Ordinal));
     }
 }

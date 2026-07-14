@@ -231,7 +231,9 @@ next editable App Store version first; the sync service selects its editable App
 Information resource and refuses to silently update a locked resource. Every App Information
 config must declare `appId`, so a config can never be applied to another app by accident.
 App Information-only runs do not require a version or build number because these fields belong
-to the app-level resource rather than an App Store version.
+to the app-level resource rather than an App Store version. Use one config per app and locale;
+the unified release applies every matching locale once per unique app id even when iOS and macOS
+targets share that app, and fails when a selected app has no matching config.
 
 ## Screenshot Upload Flow
 

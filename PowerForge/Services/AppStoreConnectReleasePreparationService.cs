@@ -108,14 +108,15 @@ public sealed class AppStoreConnectReleasePreparationService
             messages.Add("Synchronized App Store version metadata.");
         }
 
-        AppStoreConnectAppInfoMetadataSyncResult? appInfoMetadata = null;
-        if (request.AppInfoMetadataSpec is not null)
+        var appInfoMetadataResults = new List<AppStoreConnectAppInfoMetadataSyncResult>();
+        foreach (var sourceSpec in request.AppInfoMetadataSpecs ?? Array.Empty<AppStoreConnectAppInfoMetadataSpec>())
         {
-            var appInfoMetadataSpec = CreateAppInfoMetadataSpec(request.AppInfoMetadataSpec, appId);
-            appInfoMetadata = await new AppStoreConnectAppInfoMetadataSyncService(_client).SyncAsync(
+            var appInfoMetadataSpec = CreateAppInfoMetadataSpec(sourceSpec, appId);
+            var appInfoMetadata = await new AppStoreConnectAppInfoMetadataSyncService(_client).SyncAsync(
                 new AppStoreConnectAppInfoMetadataSyncRequest { Spec = appInfoMetadataSpec },
                 cancellationToken).ConfigureAwait(false);
-            messages.Add("Synchronized App Store App Information metadata.");
+            appInfoMetadataResults.Add(appInfoMetadata);
+            messages.Add($"Synchronized App Store App Information metadata for locale '{appInfoMetadataSpec.Locale}'.");
         }
 
         AppStoreConnectScreenshotSyncResult? screenshots = null;
@@ -164,7 +165,7 @@ public sealed class AppStoreConnectReleasePreparationService
             PreviousBuildId = previousBuildId,
             Screenshots = screenshots,
             Metadata = metadata,
-            AppInfoMetadata = appInfoMetadata,
+            AppInfoMetadataResults = appInfoMetadataResults.ToArray(),
             Readiness = readiness,
             Messages = messages.ToArray()
         };

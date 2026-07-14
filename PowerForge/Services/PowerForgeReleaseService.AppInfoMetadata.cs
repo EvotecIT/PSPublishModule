@@ -26,7 +26,7 @@ internal sealed partial class PowerForgeReleaseService
             .ToArray();
     }
 
-    private static (AppStoreConnectAppInfoMetadataSpec Spec, string ConfigPath)? ResolveMatchingAppInfoSpec(
+    private static AppStoreConnectAppInfoMetadataSpec[] ResolveMatchingAppInfoSpecs(
         (AppStoreConnectAppInfoMetadataSpec Spec, string ConfigPath)[] specs,
         PowerForgeAppleAppReleaseTargetPlan app)
     {
@@ -34,9 +34,30 @@ internal sealed partial class PowerForgeReleaseService
             .Where(candidate =>
                 string.Equals(candidate.Spec.AppId.Trim(), app.AppStoreConnectAppId, StringComparison.OrdinalIgnoreCase))
             .ToArray();
-        if (matches.Length > 1)
-            throw new InvalidOperationException($"Multiple App Information metadata configs match Apple app '{app.Name}'.");
+        if (matches.Length == 0)
+            throw new InvalidOperationException($"No App Information metadata config matches Apple app '{app.Name}' ({app.AppStoreConnectAppId}).");
 
-        return matches.Length == 0 ? null : matches[0];
+        var duplicateLocale = matches
+            .GroupBy(candidate => candidate.Spec.Locale?.Trim() ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateLocale is not null)
+            throw new InvalidOperationException($"Multiple App Information metadata configs match Apple app '{app.Name}' and locale '{duplicateLocale.Key}'.");
+
+        return matches.Select(static candidate => candidate.Spec).ToArray();
+    }
+
+    private static Dictionary<string, AppStoreConnectAppInfoMetadataSpec[]> IndexAppInfoSpecsByAppId(
+        (AppStoreConnectAppInfoMetadataSpec Spec, string ConfigPath)[] specs,
+        PowerForgeAppleAppReleaseTargetPlan[] apps)
+    {
+        var indexed = new Dictionary<string, AppStoreConnectAppInfoMetadataSpec[]>(StringComparer.OrdinalIgnoreCase);
+        foreach (var app in apps)
+        {
+            var appId = app.AppStoreConnectAppId!;
+            if (!indexed.ContainsKey(appId))
+                indexed.Add(appId, ResolveMatchingAppInfoSpecs(specs, app));
+        }
+
+        return indexed;
     }
 }

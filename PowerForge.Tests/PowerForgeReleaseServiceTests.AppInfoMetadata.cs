@@ -95,7 +95,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal(string.Empty, request.BuildNumber);
             Assert.False(request.CreateVersion);
             Assert.False(request.SelectBuild);
-            Assert.NotNull(request.AppInfoMetadataSpec);
+            Assert.Single(request.AppInfoMetadataSpecs);
         }
         finally
         {
@@ -130,6 +130,86 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void Execute_AppleApps_AppliesMultipleAppInfoLocalesOnceForSharedApp()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
+            File.WriteAllText(keyPath, "private-key");
+            WriteAppInfoConfig(root, "app-info-en.json", "app-1", "en-US");
+            WriteAppInfoConfig(root, "app-info-pl.json", "app-1", "pl-PL");
+            var requests = new List<AppStoreConnectReleasePreparationRequest>();
+            var service = CreateAppInfoReleaseService(requests);
+            var spec = CreateAppInfoReleaseSpec(keyPath);
+            spec.AppleApps!.AppInfoConfigPath = null;
+            spec.AppleApps.AppInfoConfigPaths = new[] { "app-info-en.json", "app-info-pl.json" };
+            spec.AppleApps.Apps = new[]
+            {
+                new AppleAppConfiguration
+                {
+                    Name = "Tactra iOS",
+                    ProjectPath = "Tactra.xcodeproj",
+                    Scheme = "Tactra",
+                    Platform = ApplePlatform.iOS,
+                    AppStoreConnectAppId = "app-1"
+                },
+                new AppleAppConfiguration
+                {
+                    Name = "Tactra Mac",
+                    ProjectPath = "Tactra.xcodeproj",
+                    Scheme = "TactraMac",
+                    Platform = ApplePlatform.macOS,
+                    AppStoreConnectAppId = "app-1"
+                }
+            };
+
+            var result = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                });
+
+            Assert.True(result.Success);
+            var request = Assert.Single(requests);
+            Assert.Equal(new[] { "en-US", "pl-PL" }, request.AppInfoMetadataSpecs.Select(item => item.Locale).OrderBy(item => item).ToArray());
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleApps_RejectsMissingAppInfoConfigMatch()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
+            File.WriteAllText(keyPath, "private-key");
+            WriteAppInfoConfig(root, "app-info.json", "app-2", "en-US");
+            var service = CreateAppInfoReleaseService(new List<AppStoreConnectReleasePreparationRequest>());
+
+            var exception = Assert.Throws<InvalidOperationException>(() => service.Execute(
+                CreateAppInfoReleaseSpec(keyPath),
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                }));
+
+            Assert.Contains("No App Information metadata config matches", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private static PowerForgeReleaseService CreateAppInfoReleaseService(
         List<AppStoreConnectReleasePreparationRequest> requests)
         => new(
@@ -150,9 +230,12 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     AppId = request.AppId,
                     Platform = request.Platform,
-                    AppInfoMetadata = new AppStoreConnectAppInfoMetadataSyncResult
+                    AppInfoMetadataResults = new[]
                     {
-                        UpdatedFields = new[] { "privacyPolicyUrl" }
+                        new AppStoreConnectAppInfoMetadataSyncResult
+                        {
+                            UpdatedFields = new[] { "privacyPolicyUrl" }
+                        }
                     }
                 };
             });
@@ -204,5 +287,19 @@ public sealed partial class PowerForgeReleaseServiceTests
               }
               """;
         File.WriteAllText(Path.Combine(root, "app-info.json"), json);
+    }
+
+    private static void WriteAppInfoConfig(string root, string fileName, string appId, string locale)
+    {
+        File.WriteAllText(Path.Combine(root, fileName),
+            $$"""
+              {
+                "appId": "{{appId}}",
+                "locale": "{{locale}}",
+                "metadata": {
+                  "privacyPolicyUrl": "https://tactra.dev/privacy/"
+                }
+              }
+              """);
     }
 }
