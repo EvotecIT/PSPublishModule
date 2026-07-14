@@ -3,7 +3,7 @@ using System.Diagnostics;
 
 namespace PowerForge.Tests;
 
-public sealed class PowerForgeReleaseServiceTests
+public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
     public void ToolReleasePlan_AppliesOverridesAcrossSelectedTarget()

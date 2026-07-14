@@ -8,7 +8,7 @@ namespace PowerForge;
 /// <summary>
 /// Orchestrates package and tool release workflows from one unified configuration.
 /// </summary>
-internal sealed class PowerForgeReleaseService
+internal sealed partial class PowerForgeReleaseService
 {
     private static readonly JsonSerializerOptions DotNetToolsJsonOptions = CreateJsonOptions();
     private static readonly JsonSerializerOptions WorkspaceValidationJsonOptions = CreateJsonOptions();
@@ -733,6 +733,13 @@ internal sealed class PowerForgeReleaseService
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(path => ResolveOutputPath(projectRoot, path))
             .ToArray();
+        var appInfoConfigPath = string.IsNullOrWhiteSpace(options.AppInfoConfigPath)
+            ? null
+            : ResolveOutputPath(projectRoot, options.AppInfoConfigPath!);
+        var appInfoConfigPaths = (options.AppInfoConfigPaths ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => ResolveOutputPath(projectRoot, path))
+            .ToArray();
 
         var selectedTargets = NormalizeStrings(selectedTargetNames);
         var configuredApps = (options.Apps ?? Array.Empty<AppleAppConfiguration>())
@@ -754,9 +761,9 @@ internal sealed class PowerForgeReleaseService
 
         if (apps.Length == 0)
             throw new InvalidOperationException("AppleApps.Apps must contain at least one enabled app entry.");
-        if ((options.PrepareDistribution || options.SyncScreenshots || options.SyncMetadata || options.CheckReleaseReadiness || options.DistributeTestFlight || options.SubmitTestFlightBetaReview || options.SubmitForReview || options.ReleaseApprovedVersion) &&
+        if ((options.PrepareDistribution || options.SyncScreenshots || options.SyncMetadata || options.SyncAppInfo || options.CheckReleaseReadiness || options.DistributeTestFlight || options.SubmitTestFlightBetaReview || options.SubmitForReview || options.ReleaseApprovedVersion) &&
             apps.Any(app => string.IsNullOrWhiteSpace(app.AppStoreConnectAppId)))
-            throw new InvalidOperationException("AppleApps PrepareDistribution, SyncMetadata, SyncScreenshots, CheckReleaseReadiness, DistributeTestFlight, SubmitTestFlightBetaReview, SubmitForReview, or ReleaseApprovedVersion requires AppStoreConnectAppId for every selected app.");
+            throw new InvalidOperationException("AppleApps PrepareDistribution, SyncMetadata, SyncAppInfo, SyncScreenshots, CheckReleaseReadiness, DistributeTestFlight, SubmitTestFlightBetaReview, SubmitForReview, or ReleaseApprovedVersion requires AppStoreConnectAppId for every selected app.");
         if (options.DistributeTestFlight &&
             NormalizeStrings(options.TestFlightBetaGroupIds).Length == 0 &&
             NormalizeStrings(options.TestFlightBetaGroupNames).Length == 0)
@@ -765,6 +772,8 @@ internal sealed class PowerForgeReleaseService
             throw new InvalidOperationException("AppleApps SyncScreenshots requires ScreenshotConfigPath or ScreenshotConfigPaths.");
         if (options.SyncMetadata && metadataConfigPath is null && metadataConfigPaths.Length == 0)
             throw new InvalidOperationException("AppleApps SyncMetadata requires MetadataConfigPath or MetadataConfigPaths.");
+        if (options.SyncAppInfo && appInfoConfigPath is null && appInfoConfigPaths.Length == 0)
+            throw new InvalidOperationException("AppleApps SyncAppInfo requires AppInfoConfigPath or AppInfoConfigPaths.");
         if (!options.Archive && apps.Any(app => app.VersionUpdateRequested))
             throw new InvalidOperationException("Apple app version updates require AppleApps.Archive=true. Set Archive=true to build a fresh archive after updating versions, or remove version update fields when reusing an existing archive.");
         if (validateReusableArchives && !options.Archive && options.Upload)
@@ -795,8 +804,8 @@ internal sealed class PowerForgeReleaseService
                 Environment.GetEnvironmentVariable("ASC_ISSUER_ID"))
             : options.AppStoreConnectApiIssuerId?.Trim();
         var appStoreConnectApiConfiguredCount = (appStoreConnectApiKeyPath is null ? 0 : 1) + (appStoreConnectApiKeyId is null ? 0 : 1) + (appStoreConnectApiIssuerId is null ? 0 : 1);
-        if ((options.PrepareDistribution || options.SyncScreenshots || options.SyncMetadata || options.CheckReleaseReadiness || options.DistributeTestFlight || options.SubmitTestFlightBetaReview || options.SubmitForReview || options.ReleaseApprovedVersion) && appStoreConnectApiConfiguredCount != 3)
-            throw new InvalidOperationException("AppleApps PrepareDistribution, SyncMetadata, SyncScreenshots, CheckReleaseReadiness, DistributeTestFlight, SubmitTestFlightBetaReview, SubmitForReview, or ReleaseApprovedVersion requires AppStoreConnectApiKeyPath, AppStoreConnectApiKeyId, and AppStoreConnectApiIssuerId.");
+        if ((options.PrepareDistribution || options.SyncScreenshots || options.SyncMetadata || options.SyncAppInfo || options.CheckReleaseReadiness || options.DistributeTestFlight || options.SubmitTestFlightBetaReview || options.SubmitForReview || options.ReleaseApprovedVersion) && appStoreConnectApiConfiguredCount != 3)
+            throw new InvalidOperationException("AppleApps PrepareDistribution, SyncMetadata, SyncAppInfo, SyncScreenshots, CheckReleaseReadiness, DistributeTestFlight, SubmitTestFlightBetaReview, SubmitForReview, or ReleaseApprovedVersion requires AppStoreConnectApiKeyPath, AppStoreConnectApiKeyId, and AppStoreConnectApiIssuerId.");
         if (appStoreConnectApiConfiguredCount != 0)
         {
             if (appStoreConnectApiConfiguredCount != 3)
@@ -818,10 +827,13 @@ internal sealed class PowerForgeReleaseService
             ScreenshotConfigPaths = screenshotConfigPaths,
             MetadataConfigPath = metadataConfigPath,
             MetadataConfigPaths = metadataConfigPaths,
+            AppInfoConfigPath = appInfoConfigPath,
+            AppInfoConfigPaths = appInfoConfigPaths,
             PrepareDistribution = options.PrepareDistribution,
             SelectBuildForDistribution = options.SelectBuildForDistribution,
             AllowUnprocessedDistributionBuild = options.AllowUnprocessedDistributionBuild,
             SyncMetadata = options.SyncMetadata,
+            SyncAppInfo = options.SyncAppInfo,
             ReplaceScreenshots = options.ReplaceScreenshots,
             CheckReleaseReadiness = options.CheckReleaseReadiness,
             DistributeTestFlight = options.DistributeTestFlight,
@@ -930,6 +942,9 @@ internal sealed class PowerForgeReleaseService
         var metadataSpecs = plan.SyncMetadata
             ? LoadAppleMetadataSpecs(plan)
             : Array.Empty<(AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)>();
+        var appInfoSpecs = plan.SyncAppInfo
+            ? LoadAppleAppInfoSpecs(plan)
+            : Array.Empty<(AppStoreConnectAppInfoMetadataSpec Spec, string ConfigPath)>();
         foreach (var app in plan.Apps)
         {
             var result = new PowerForgeAppleAppReleaseResult
@@ -997,7 +1012,7 @@ internal sealed class PowerForgeReleaseService
                 }
             }
 
-            if ((plan.PrepareDistribution || plan.SyncScreenshots || plan.SyncMetadata || plan.CheckReleaseReadiness) && result.Success)
+            if ((plan.PrepareDistribution || plan.SyncScreenshots || plan.SyncMetadata || plan.SyncAppInfo || plan.CheckReleaseReadiness) && result.Success)
             {
                 var distributionValues = ResolveAppleDistributionValues(app, result.VersionUpdate);
                 var matchingScreenshotSpec = plan.SyncScreenshots || plan.CheckReleaseReadiness
@@ -1005,6 +1020,9 @@ internal sealed class PowerForgeReleaseService
                     : null;
                 var matchingMetadataSpec = plan.SyncMetadata
                     ? ResolveMatchingMetadataSpec(metadataSpecs, app, distributionValues.MarketingVersion)
+                    : null;
+                var matchingAppInfoSpec = plan.SyncAppInfo
+                    ? ResolveMatchingAppInfoSpec(appInfoSpecs, app)
                     : null;
 
                 result.Distribution = _prepareAppleDistribution(new AppStoreConnectReleasePreparationRequest
@@ -1019,6 +1037,7 @@ internal sealed class PowerForgeReleaseService
                     RequireValidBuild = !plan.AllowUnprocessedDistributionBuild,
                     ScreenshotSpec = matchingScreenshotSpec?.Spec,
                     MetadataSpec = matchingMetadataSpec?.Spec,
+                    AppInfoMetadataSpec = matchingAppInfoSpec?.Spec,
                     ReplaceScreenshots = plan.ReplaceScreenshots,
                     CheckReadiness = plan.CheckReleaseReadiness,
                     BaseDirectory = matchingScreenshotSpec is null
@@ -3273,6 +3292,7 @@ internal sealed class PowerForgeReleaseService
                 plan.Upload,
                 plan.SyncScreenshots,
                 plan.SyncMetadata,
+                plan.SyncAppInfo,
                 plan.PrepareDistribution,
                 plan.SelectBuildForDistribution,
                 plan.AllowUnprocessedDistributionBuild,
@@ -3280,6 +3300,8 @@ internal sealed class PowerForgeReleaseService
                 plan.ScreenshotConfigPaths,
                 plan.MetadataConfigPath,
                 plan.MetadataConfigPaths,
+                plan.AppInfoConfigPath,
+                plan.AppInfoConfigPaths,
                 plan.ReplaceScreenshots,
                 plan.CheckReleaseReadiness,
                 plan.DistributeTestFlight,

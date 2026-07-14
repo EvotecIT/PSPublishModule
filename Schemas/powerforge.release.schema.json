@@ -274,10 +274,16 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "AppInfoConfigPath": { "type": [ "string", "null" ] },
+        "AppInfoConfigPaths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "PrepareDistribution": { "type": "boolean" },
         "SelectBuildForDistribution": { "type": "boolean" },
         "AllowUnprocessedDistributionBuild": { "type": "boolean" },
         "SyncMetadata": { "type": "boolean" },
+        "SyncAppInfo": { "type": "boolean" },
         "SyncScreenshots": { "type": "boolean" },
         "ReplaceScreenshots": { "type": "boolean" },
         "CheckReleaseReadiness": { "type": "boolean" },

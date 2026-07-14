@@ -99,6 +99,16 @@ public sealed class AppStoreConnectReleasePreparationService
             messages.Add("Synchronized App Store version metadata.");
         }
 
+        AppStoreConnectAppInfoMetadataSyncResult? appInfoMetadata = null;
+        if (request.AppInfoMetadataSpec is not null)
+        {
+            var appInfoMetadataSpec = CreateAppInfoMetadataSpec(request.AppInfoMetadataSpec, appId);
+            appInfoMetadata = await new AppStoreConnectAppInfoMetadataSyncService(_client).SyncAsync(
+                new AppStoreConnectAppInfoMetadataSyncRequest { Spec = appInfoMetadataSpec },
+                cancellationToken).ConfigureAwait(false);
+            messages.Add("Synchronized App Store App Information metadata.");
+        }
+
         AppStoreConnectScreenshotSyncResult? screenshots = null;
         if (request.ScreenshotSpec is not null)
         {
@@ -145,6 +155,7 @@ public sealed class AppStoreConnectReleasePreparationService
             PreviousBuildId = previousBuildId,
             Screenshots = screenshots,
             Metadata = metadata,
+            AppInfoMetadata = appInfoMetadata,
             Readiness = readiness,
             Messages = messages.ToArray()
         };
@@ -209,6 +220,23 @@ public sealed class AppStoreConnectReleasePreparationService
             VersionString = versionString,
             VersionId = versionId,
             Platform = platform,
+            Locale = source.Locale,
+            Metadata = source.Metadata
+        };
+    }
+
+    private static AppStoreConnectAppInfoMetadataSpec CreateAppInfoMetadataSpec(
+        AppStoreConnectAppInfoMetadataSpec source,
+        string appId)
+    {
+        if (!string.IsNullOrWhiteSpace(source.AppId) &&
+            !string.Equals(source.AppId.Trim(), appId, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"App Information metadata config AppId '{source.AppId}' does not match release app id '{appId}'.");
+
+        return new AppStoreConnectAppInfoMetadataSpec
+        {
+            AppId = appId,
+            AppInfoId = source.AppInfoId,
             Locale = source.Locale,
             Metadata = source.Metadata
         };
