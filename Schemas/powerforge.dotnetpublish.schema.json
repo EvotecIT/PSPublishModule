@@ -152,6 +152,10 @@
       "type": "string",
       "enum": ["PerMachine", "PerUser"]
     },
+    "PowerForgeInstallerMajorUpgradeSchedule": {
+      "type": "string",
+      "enum": ["AfterInstallValidate", "AfterInstallInitialize", "AfterInstallExecute", "AfterInstallExecuteAgain", "AfterInstallFinalize"]
+    },
     "PowerForgeInstallerInputKind": {
       "type": "string",
       "enum": ["Text", "Password", "FilePath", "FolderPath", "Checkbox", "RadioGroup", "ComboBox", "LicenseKey"]
@@ -165,6 +169,7 @@
         "Version": { "type": "string", "minLength": 1 },
         "UpgradeCode": { "type": "string", "minLength": 1 },
         "Scope": { "$ref": "#/$defs/PowerForgeInstallerScope" },
+        "MajorUpgradeSchedule": { "$ref": "#/$defs/PowerForgeInstallerMajorUpgradeSchedule" },
         "DowngradeErrorMessage": { "type": "string" }
       },
       "required": ["Name", "UpgradeCode"]

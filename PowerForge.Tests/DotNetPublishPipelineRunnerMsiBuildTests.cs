@@ -932,6 +932,8 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
 
             var spec = CreateBaseSpec(root, app);
             var authoring = CreateSimpleAuthoring("ProductFiles");
+            authoring.Product.MajorUpgradeSchedule =
+                PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecute;
             authoring.ExitLaunch = new PowerForgeInstallerExitLaunch
             {
                 Text = "Open app",
@@ -983,6 +985,9 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
             var installerPlan = Assert.Single(plan.Installers);
             Assert.NotNull(installerPlan.Authoring);
+            Assert.Equal(
+                PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecute,
+                installerPlan.Authoring!.Product.MajorUpgradeSchedule);
             Assert.Equal("ProductFiles", installerPlan.HarvestComponentGroupId);
             Assert.NotNull(installerPlan.Authoring!.ExitLaunch);
             Assert.Equal("Open app", installerPlan.Authoring.ExitLaunch!.Text);

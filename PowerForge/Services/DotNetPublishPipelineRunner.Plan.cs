@@ -896,6 +896,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 Version = definition.Product.Version,
                 UpgradeCode = definition.Product.UpgradeCode,
                 Scope = definition.Product.Scope,
+                MajorUpgradeSchedule = definition.Product.MajorUpgradeSchedule,
                 DowngradeErrorMessage = definition.Product.DowngradeErrorMessage
             },
             InstallDirectoryId = definition.InstallDirectoryId,
