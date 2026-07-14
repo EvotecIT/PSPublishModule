@@ -14,6 +14,19 @@ internal static class PowerForgeWixInstallerFormatting
         return scope == PowerForgeInstallerScope.PerUser ? "LocalAppDataFolder" : "ProgramFiles64Folder";
     }
 
+    internal static string ToWixMajorUpgradeSchedule(PowerForgeInstallerMajorUpgradeSchedule schedule)
+    {
+        return schedule switch
+        {
+            PowerForgeInstallerMajorUpgradeSchedule.AfterInstallValidate => "afterInstallValidate",
+            PowerForgeInstallerMajorUpgradeSchedule.AfterInstallInitialize => "afterInstallInitialize",
+            PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecute => "afterInstallExecute",
+            PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecuteAgain => "afterInstallExecuteAgain",
+            PowerForgeInstallerMajorUpgradeSchedule.AfterInstallFinalize => "afterInstallFinalize",
+            _ => throw new ArgumentOutOfRangeException(nameof(schedule), schedule, "Unsupported major-upgrade schedule.")
+        };
+    }
+
     internal static string EscapeFormattedText(string value)
     {
         var builder = new StringBuilder(value.Length);

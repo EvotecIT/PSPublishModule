@@ -41,9 +41,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             new XAttribute("UpgradeCode", definition.Product.UpgradeCode),
             new XAttribute("Scope", PowerForgeWixInstallerFormatting.ToWixScope(definition.Product.Scope)),
             new XAttribute("Compressed", "yes"),
-            new XElement(
-                WixNamespace + "MajorUpgrade",
-                new XAttribute("DowngradeErrorMessage", definition.Product.DowngradeErrorMessage)),
+            EmitMajorUpgrade(definition.Product),
             new XElement(WixNamespace + "MediaTemplate", new XAttribute("EmbedCab", "yes")));
 
         EmitLaunchConditions(package, definition);
@@ -64,6 +62,22 @@ public sealed class PowerForgeWixInstallerSourceEmitter
 
         var document = new XDocument(new XDeclaration("1.0", "utf-8", null), root);
         return document.ToString(SaveOptions.None);
+    }
+
+    private static XElement EmitMajorUpgrade(PowerForgeInstallerProduct product)
+    {
+        var element = new XElement(
+            WixNamespace + "MajorUpgrade",
+            new XAttribute("DowngradeErrorMessage", product.DowngradeErrorMessage));
+
+        if (product.MajorUpgradeSchedule != PowerForgeInstallerMajorUpgradeSchedule.AfterInstallValidate)
+        {
+            element.Add(new XAttribute(
+                "Schedule",
+                PowerForgeWixInstallerFormatting.ToWixMajorUpgradeSchedule(product.MajorUpgradeSchedule)));
+        }
+
+        return element;
     }
 
     /// <summary>

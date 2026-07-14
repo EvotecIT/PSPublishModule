@@ -110,6 +110,12 @@ public sealed class PowerForgeInstallerProduct
     public PowerForgeInstallerScope Scope { get; set; } = PowerForgeInstallerScope.PerMachine;
 
     /// <summary>
+    /// Point in the install execute sequence where the previous product is removed during a major upgrade.
+    /// </summary>
+    public PowerForgeInstallerMajorUpgradeSchedule MajorUpgradeSchedule { get; set; } =
+        PowerForgeInstallerMajorUpgradeSchedule.AfterInstallValidate;
+
+    /// <summary>
     /// Downgrade message shown when a newer version is installed.
     /// </summary>
     public string DowngradeErrorMessage { get; set; } = "A newer version of [ProductName] is already installed.";
@@ -176,6 +182,37 @@ public enum PowerForgeInstallerScope
     /// Install for the current user.
     /// </summary>
     PerUser
+}
+
+/// <summary>
+/// Removal schedule used by WiX for a major upgrade.
+/// </summary>
+public enum PowerForgeInstallerMajorUpgradeSchedule
+{
+    /// <summary>
+    /// Remove the installed product before installing the new product. This is the WiX default.
+    /// </summary>
+    AfterInstallValidate,
+
+    /// <summary>
+    /// Remove the installed product after initialization and before the new install executes.
+    /// </summary>
+    AfterInstallInitialize,
+
+    /// <summary>
+    /// Install the new product first, then remove components that are absent from the new product.
+    /// </summary>
+    AfterInstallExecute,
+
+    /// <summary>
+    /// Remove the previous product after install execution is repeated.
+    /// </summary>
+    AfterInstallExecuteAgain,
+
+    /// <summary>
+    /// Remove the previous product after the new product is fully installed.
+    /// </summary>
+    AfterInstallFinalize
 }
 
 /// <summary>

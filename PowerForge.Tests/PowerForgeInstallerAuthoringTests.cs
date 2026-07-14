@@ -10,6 +10,29 @@ public sealed class PowerForgeInstallerAuthoringTests
     private static readonly XNamespace Util = "http://wixtoolset.org/schemas/v4/wxs/util";
 
     [Fact]
+    public void EmitSource_UsesConfiguredMajorUpgradeSchedule()
+    {
+        var definition = CreateMonitoringInstaller();
+        definition.Product.MajorUpgradeSchedule = PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecute;
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var majorUpgrade = XDocument.Parse(xml).Descendants(Wix + "MajorUpgrade").Single();
+
+        Assert.Equal("afterInstallExecute", (string?)majorUpgrade.Attribute("Schedule"));
+    }
+
+    [Fact]
+    public void EmitSource_OmitsDefaultMajorUpgradeSchedule()
+    {
+        var definition = CreateMonitoringInstaller();
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var majorUpgrade = XDocument.Parse(xml).Descendants(Wix + "MajorUpgrade").Single();
+
+        Assert.Null(majorUpgrade.Attribute("Schedule"));
+    }
+
+    [Fact]
     public void EmitSource_ModelsServiceProgramDataInputsAndPayloadGroup()
     {
         var definition = CreateMonitoringInstaller();
