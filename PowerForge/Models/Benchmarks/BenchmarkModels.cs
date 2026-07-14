@@ -251,6 +251,12 @@ public sealed class BenchmarkComparisonRow
 
     /// <summary>Metric name used for comparison.</summary>
     public string Metric { get; set; } = "MedianMs";
+
+    /// <summary>
+    /// Optional relative tolerance used to label practically equivalent duration results as ties.
+    /// A value of <c>0.05</c> treats results within five percent of the fastest result as tied.
+    /// </summary>
+    public double TieTolerance { get; set; }
 }
 
 /// <summary>

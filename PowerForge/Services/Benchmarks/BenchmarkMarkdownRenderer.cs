@@ -91,7 +91,7 @@ public sealed class BenchmarkMarkdownRenderer
         markdown.AppendLine(" --- |");
 
         foreach (var group in rows
-                     .GroupBy(r => string.Join("\u001f", r.Scenario, FormatVariables(r.Variables), r.Operation, r.Host, r.Os, r.RunMode, r.Metric, r.BaselineEngine), StringComparer.Ordinal)
+                     .GroupBy(r => string.Join("\u001f", r.Scenario, FormatVariables(r.Variables), r.Operation, r.Host, r.Os, r.RunMode, r.Metric, r.BaselineEngine, r.TieTolerance.ToString("G17", CultureInfo.InvariantCulture)), StringComparer.Ordinal)
                      .OrderBy(g => DisplayScenario(g.First()), StringComparer.OrdinalIgnoreCase)
                      .ThenBy(g => g.First().Operation, StringComparer.OrdinalIgnoreCase)
                      .ThenBy(g => g.First().Host, StringComparer.OrdinalIgnoreCase)
@@ -163,16 +163,31 @@ public sealed class BenchmarkMarkdownRenderer
         if (successful.Length == 0)
             return "No successful rows";
 
-        var fastest = successful[0].Engine;
+        var fastest = successful[0];
         var baselineSucceeded = successful.Any(row => string.Equals(row.Engine, baseline, StringComparison.OrdinalIgnoreCase));
         if (!baselineSucceeded)
             return $"{baseline} failed";
         if (successful.Length == 1)
             return $"{baseline} only successful";
-        if (string.Equals(fastest, baseline, StringComparison.OrdinalIgnoreCase))
+
+        var tieTolerance = Math.Max(0, successful[0].TieTolerance);
+        if (tieTolerance > 0)
+        {
+            var tiedEngines = successful
+                .Where(row => row.Actual!.Value <= fastest.Actual!.Value * (1 + tieTolerance))
+                .Select(row => row.Engine)
+                .ToArray();
+            if (tiedEngines.Any(engine => string.Equals(engine, baseline, StringComparison.OrdinalIgnoreCase)) && tiedEngines.Length > 1)
+            {
+                var peers = tiedEngines.Where(engine => !string.Equals(engine, baseline, StringComparison.OrdinalIgnoreCase));
+                return $"{baseline} tied with {string.Join(", ", peers)}";
+            }
+        }
+
+        if (string.Equals(fastest.Engine, baseline, StringComparison.OrdinalIgnoreCase))
             return $"{baseline} fastest";
 
-        return $"{baseline} slower than {fastest}";
+        return $"{baseline} slower than {fastest.Engine}";
     }
 
     private static bool IsDefaultDurationMetric(string? metric)
