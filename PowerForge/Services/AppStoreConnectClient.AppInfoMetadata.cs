@@ -45,7 +45,7 @@ public sealed partial class AppStoreConnectClient
             ["limit"] = ClampLimit(limit).ToString(CultureInfo.InvariantCulture)
         };
         if (!string.IsNullOrWhiteSpace(locale))
-            query["filter[locale]"] = locale.Trim();
+            query["filter[locale]"] = locale!.Trim();
 
         return GetArrayAsync(
             $"appInfos/{Uri.EscapeDataString(appInfoId.Trim())}/appInfoLocalizations" + BuildQuery(query),

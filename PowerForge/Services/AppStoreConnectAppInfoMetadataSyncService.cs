@@ -70,7 +70,7 @@ public sealed class AppStoreConnectAppInfoMetadataSyncService
         {
             return new AppStoreConnectAppInformationInfo
             {
-                Id = spec.AppInfoId.Trim()
+                Id = spec.AppInfoId!.Trim()
             };
         }
 
