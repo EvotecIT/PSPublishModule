@@ -592,7 +592,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
-    public void GetPreBuildProjectPaths_LeavesUnversionedTargetsInMixedInstallerPlans()
+    public void Plan_LeavesUnversionedTargetPreBuildInMixedInstallerPlans()
     {
         var root = CreateTempRoot();
         try
@@ -639,10 +639,11 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             };
 
             var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
-            var projectPaths = DotNetPublishPipelineRunner.GetPreBuildProjectPaths(plan, "win-x64");
-
-            Assert.Equal(new[] { Path.GetFullPath(cli) }, projectPaths);
-            Assert.Empty(DotNetPublishPipelineRunner.GetPreBuildProjectPaths(plan, "linux-x64"));
+            var buildStep = Assert.Single(plan.Steps, step => step.Kind == DotNetPublishStepKind.Build);
+            Assert.Equal("cli", buildStep.TargetName);
+            Assert.Equal("net10.0", buildStep.Framework);
+            Assert.Equal("win-x64", buildStep.Runtime);
+            Assert.Equal(DotNetPublishStyle.PortableCompat, buildStep.Style);
 
             var cliPlan = Assert.Single(plan.Targets, target => target.Name == "cli");
             var combination = Assert.Single(cliPlan.Combinations);
@@ -661,6 +662,66 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             Assert.Contains("-r", buildArguments);
             Assert.DoesNotContain("--no-build", buildArguments);
             Assert.DoesNotContain("--output", buildArguments);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_NoBuildPublish_InterleavesEachStyleBuildWithItsPublish()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var spec = CreateBaseSpec(root, app);
+            spec.DotNet.Build = true;
+            spec.DotNet.NoBuildInPublish = true;
+            spec.Targets[0].Publish.Styles = new[]
+            {
+                DotNetPublishStyle.FrameworkDependent,
+                DotNetPublishStyle.PortableCompat
+            };
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            var buildAndPublishSteps = plan.Steps
+                .Where(step => step.Kind == DotNetPublishStepKind.Build || step.Kind == DotNetPublishStepKind.Publish)
+                .ToArray();
+
+            Assert.Collection(
+                buildAndPublishSteps,
+                step => AssertCombinationStep(step, DotNetPublishStepKind.Build, DotNetPublishStyle.FrameworkDependent),
+                step => AssertCombinationStep(step, DotNetPublishStepKind.Publish, DotNetPublishStyle.FrameworkDependent),
+                step => AssertCombinationStep(step, DotNetPublishStepKind.Build, DotNetPublishStyle.PortableCompat),
+                step => AssertCombinationStep(step, DotNetPublishStepKind.Publish, DotNetPublishStyle.PortableCompat));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_GlobalBuild_PreservesConfiguredSolutionPath()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var solution = Path.Combine(root, "App.sln");
+            File.WriteAllText(solution, string.Empty);
+            var spec = CreateBaseSpec(root, app);
+            spec.DotNet.Build = true;
+            spec.DotNet.NoBuildInPublish = false;
+            spec.DotNet.SolutionPath = solution;
+
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            var buildStep = Assert.Single(plan.Steps, step => step.Kind == DotNetPublishStepKind.Build);
+
+            Assert.Null(buildStep.TargetName);
+            Assert.Equal(new[] { Path.GetFullPath(solution) }, DotNetPublishPipelineRunner.GetGlobalBuildPaths(plan, runtime: null));
         }
         finally
         {
@@ -1967,6 +2028,18 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     {
         var floor = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         return (int)(utcDate - floor).TotalDays;
+    }
+
+    private static void AssertCombinationStep(
+        DotNetPublishStep step,
+        DotNetPublishStepKind kind,
+        DotNetPublishStyle style)
+    {
+        Assert.Equal(kind, step.Kind);
+        Assert.Equal("app", step.TargetName);
+        Assert.Equal("net10.0", step.Framework);
+        Assert.Equal("win-x64", step.Runtime);
+        Assert.Equal(style, step.Style);
     }
 
     private static DotNetPublishSpec CreateBaseSpec(string root, string projectPath)

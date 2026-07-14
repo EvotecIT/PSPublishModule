@@ -357,31 +357,39 @@ public sealed partial class DotNetPublishPipelineRunner
 
         AddCommandHookSteps(steps, hooks, DotNetPublishCommandHookPhase.BeforeBuild, cfg, targetName: null, framework: null, runtime: null, style: null, bundleId: null);
 
-        if (spec.DotNet.Build)
+        var buildPerCombination = spec.DotNet.Build
+            && spec.DotNet.NoBuildInPublish
+            && distinctRuntimes.Length > 0;
+
+        if (spec.DotNet.Build && !buildPerCombination)
         {
-            if (spec.DotNet.NoBuildInPublish && distinctRuntimes.Length > 0)
-            {
-                foreach (var rid in distinctRuntimes)
-                {
-                    steps.Add(new DotNetPublishStep
-                    {
-                        Key = $"build:{rid}",
-                        Kind = DotNetPublishStepKind.Build,
-                        Title = "Build",
-                        Runtime = rid
-                    });
-                }
-            }
-            else
-            {
-                steps.Add(new DotNetPublishStep { Key = "build", Kind = DotNetPublishStepKind.Build, Title = "Build" });
-            }
+            steps.Add(new DotNetPublishStep { Key = "build", Kind = DotNetPublishStepKind.Build, Title = "Build" });
         }
 
         foreach (var t in targets)
         {
             foreach (var combo in t.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
             {
+                if (buildPerCombination && !TargetUsesPublishMsiVersionProperties(
+                    installers,
+                    msiVersions,
+                    t.Name,
+                    combo.Framework,
+                    combo.Runtime,
+                    combo.Style))
+                {
+                    steps.Add(new DotNetPublishStep
+                    {
+                        Key = $"build:{t.Name}:{combo.Framework}:{combo.Runtime}:{combo.Style}",
+                        Kind = DotNetPublishStepKind.Build,
+                        Title = "Build",
+                        TargetName = t.Name,
+                        Framework = combo.Framework,
+                        Runtime = combo.Runtime,
+                        Style = combo.Style
+                    });
+                }
+
                 AddCommandHookSteps(steps, hooks, DotNetPublishCommandHookPhase.BeforeTargetPublish, cfg, t.Name, combo.Framework, combo.Runtime, combo.Style, bundleId: null);
 
                 var key = $"publish:{t.Name}:{combo.Framework}:{combo.Runtime}:{combo.Style}";

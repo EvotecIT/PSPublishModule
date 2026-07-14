@@ -207,54 +207,70 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private void Build(DotNetPublishPlan plan, string? runtime)
+    private void Build(DotNetPublishPlan plan, DotNetPublishStep step)
     {
-        var workDir = plan.ProjectRoot;
-        var built = false;
-        foreach (var target in plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+        if (!string.IsNullOrWhiteSpace(step.TargetName))
         {
-            var allCombinations = target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>();
-            var combinations = allCombinations
-                .Where(combination => string.IsNullOrWhiteSpace(runtime)
-                    || string.Equals(combination.Runtime, runtime, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-
-            if (combinations.Length == 0)
-            {
-                if (allCombinations.Length > 0)
-                    continue;
-
-                if (!TargetRequiresPreBuild(plan, target, runtime))
-                    continue;
-
-                _logger.Info($"Build -> {target.ProjectPath}");
-                var fallbackArgs = new List<string> { "build", target.ProjectPath, "-c", plan.Configuration, "--nologo" };
-                if (!string.IsNullOrWhiteSpace(runtime)) fallbackArgs.AddRange(new[] { "-r", runtime! });
-                if (plan.Restore) fallbackArgs.Add("--no-restore");
-                fallbackArgs.AddRange(BuildMsBuildPropertyArgs(plan.MsBuildProperties));
-                RunDotnet(workDir, fallbackArgs, plan.EnvironmentVariables);
-                built = true;
-                continue;
-            }
-
-            foreach (var combination in combinations)
-            {
-                var framework = combination.Framework ?? string.Empty;
-                var targetRuntime = combination.Runtime ?? string.Empty;
-                if (TargetUsesPublishMsiVersionProperties(plan, target.Name, framework, targetRuntime, combination.Style))
-                    continue;
-
-                _logger.Info($"Build {target.Name} ({framework}, {targetRuntime}, {combination.Style}) -> {target.ProjectPath}");
-                RunDotnet(
-                    workDir,
-                    BuildPreBuildArguments(plan, target, framework, targetRuntime, combination.Style),
-                    plan.EnvironmentVariables);
-                built = true;
-            }
+            BuildTargetCombination(plan, step);
+            return;
         }
 
-        if (!built)
-            _logger.Info("Build skipped because every target builds an isolated versioned payload during publish.");
+        BuildGlobal(plan, step.Runtime);
+    }
+
+    private void BuildTargetCombination(DotNetPublishPlan plan, DotNetPublishStep step)
+    {
+        var target = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+            .FirstOrDefault(candidate => string.Equals(candidate.Name, step.TargetName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"Build target not found: {step.TargetName}");
+        var framework = step.Framework ?? string.Empty;
+        var runtime = step.Runtime ?? string.Empty;
+        var style = step.Style ?? target.Publish.Style;
+
+        if (TargetUsesPublishMsiVersionProperties(plan, target.Name, framework, runtime, style))
+        {
+            _logger.Info($"Build skipped for {target.Name} ({framework}, {runtime}, {style}) because publish builds an isolated versioned MSI payload.");
+            return;
+        }
+
+        _logger.Info($"Build {target.Name} ({framework}, {runtime}, {style}) -> {target.ProjectPath}");
+        RunDotnet(
+            plan.ProjectRoot,
+            BuildPreBuildArguments(plan, target, framework, runtime, style),
+            plan.EnvironmentVariables);
+    }
+
+    private void BuildGlobal(DotNetPublishPlan plan, string? runtime)
+    {
+        var workDir = plan.ProjectRoot;
+        var props = BuildMsBuildPropertyArgs(plan.MsBuildProperties);
+        foreach (var path in GetGlobalBuildPaths(plan, runtime))
+        {
+            var label = string.IsNullOrWhiteSpace(runtime) ? string.Empty : $" ({runtime})";
+            _logger.Info($"Build{label} -> {path}");
+
+            var args = new List<string> { "build", path, "-c", plan.Configuration, "--nologo" };
+            if (!string.IsNullOrWhiteSpace(runtime))
+            {
+                args.AddRange(new[] { "-r", runtime! });
+                if (plan.Restore) args.Add("--no-restore");
+            }
+            args.AddRange(props);
+            RunDotnet(workDir, args, plan.EnvironmentVariables);
+        }
+    }
+
+    internal static string[] GetGlobalBuildPaths(DotNetPublishPlan plan, string? runtime)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+
+        if (string.IsNullOrWhiteSpace(runtime) && !string.IsNullOrWhiteSpace(plan.SolutionPath))
+            return new[] { plan.SolutionPath! };
+
+        return (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+            .Select(target => target.ProjectPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     internal static List<string> BuildPreBuildArguments(
@@ -274,41 +290,6 @@ public sealed partial class DotNetPublishPipelineRunner
         AppendPublishStyleArgs(args, target.Publish, style);
         args.AddRange(BuildMsBuildPropertyArgs(BuildPublishMsBuildProperties(plan, target, framework, runtime, style)));
         return args;
-    }
-
-    internal static string[] GetPreBuildProjectPaths(DotNetPublishPlan plan, string? runtime)
-    {
-        if (plan is null) throw new ArgumentNullException(nameof(plan));
-
-        return (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
-            .Where(target => TargetRequiresPreBuild(plan, target, runtime))
-            .Select(target => target.ProjectPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
-    private static bool TargetRequiresPreBuild(
-        DotNetPublishPlan plan,
-        DotNetPublishTargetPlan target,
-        string? runtime)
-    {
-        var allCombinations = target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>();
-        if (allCombinations.Length == 0)
-            return true;
-
-        var combinations = allCombinations
-            .Where(combination => string.IsNullOrWhiteSpace(runtime)
-                || string.Equals(combination.Runtime, runtime, StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        if (combinations.Length == 0)
-            return false;
-
-        return combinations.Any(combination => !TargetUsesPublishMsiVersionProperties(
-            plan,
-            target.Name,
-            combination.Framework ?? string.Empty,
-            combination.Runtime ?? string.Empty,
-            combination.Style));
     }
 
     private DotNetPublishArtefactResult Publish(DotNetPublishPlan plan, string targetName, string framework, string rid, DotNetPublishStyle? styleOverride)
@@ -576,13 +557,28 @@ public sealed partial class DotNetPublishPipelineRunner
         string framework,
         string runtime,
         DotNetPublishStyle style)
+        => TargetUsesPublishMsiVersionProperties(
+            plan.Installers,
+            plan.MsiVersions,
+            targetName,
+            framework,
+            runtime,
+            style);
+
+    private static bool TargetUsesPublishMsiVersionProperties(
+        IEnumerable<DotNetPublishInstallerPlan> installers,
+        IReadOnlyDictionary<string, DotNetPublishMsiVersionPlan> msiVersions,
+        string targetName,
+        string framework,
+        string runtime,
+        DotNetPublishStyle style)
     {
-        return (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
+        return (installers ?? Array.Empty<DotNetPublishInstallerPlan>())
             .Where(installer => string.Equals(installer.PrepareFromTarget, targetName, StringComparison.OrdinalIgnoreCase))
             .Any(installer =>
                 installer.Versioning?.Enabled == true
                 && installer.Versioning.ApplyToPublish
-                && FindResolvedMsiVersion(plan, installer.Id, targetName, framework, runtime, style) is not null);
+                && msiVersions.ContainsKey(BuildMsiVersionKey(installer.Id, targetName, framework, runtime, style)));
     }
 
     private static string[] ResolvePublishVersionProperties(DotNetPublishMsiVersionOptions versioning)

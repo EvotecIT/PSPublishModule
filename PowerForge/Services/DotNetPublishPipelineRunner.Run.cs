@@ -53,7 +53,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             Clean(plan);
                             break;
                         case DotNetPublishStepKind.Build:
-                            Build(plan, step.Runtime);
+                            Build(plan, step);
                             break;
                         case DotNetPublishStepKind.Publish:
                             artefacts.Add(Publish(plan, step.TargetName!, step.Framework ?? string.Empty, step.Runtime!, step.Style));
