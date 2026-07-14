@@ -54,6 +54,7 @@ if ($PowerForgeDevelopmentEnabled) {
                     & $ImportModule $PowerForgeDevelopmentBinaryPath -ErrorAction Stop
                 }
             }
+{{DesktopTypeAcceleratorBlock}}
             $PowerForgeDevelopmentBinaryLoaded = $true
         } catch {
             if ($ErrorActionPreference -eq 'Stop') {

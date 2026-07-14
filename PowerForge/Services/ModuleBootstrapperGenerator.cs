@@ -75,6 +75,7 @@ internal static partial class ModuleBootstrapperGenerator
             assemblyTypeAcceleratorMode: assemblyTypeAcceleratorMode,
             assemblyTypeAccelerators: assemblyTypeAccelerators,
             assemblyTypeAcceleratorAssemblies: assemblyTypeAcceleratorAssemblies,
+            ignoreLibrariesOnLoad: ignoreLibrariesOnLoad,
             conditionalFunctionDependencies: conditionalFunctionDependencies,
             developmentBinaries: developmentBinaries,
             moduleRoot: root);
@@ -265,6 +266,7 @@ internal static partial class ModuleBootstrapperGenerator
         AssemblyTypeAcceleratorExportMode assemblyTypeAcceleratorMode,
         IReadOnlyList<string>? assemblyTypeAccelerators,
         IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies,
+        IReadOnlyList<string>? ignoreLibrariesOnLoad,
         IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies,
         ModuleDevelopmentBinaryBootstrapperOptions? developmentBinaries = null,
         string? moduleRoot = null)
@@ -289,7 +291,15 @@ internal static partial class ModuleBootstrapperGenerator
                     ["TypeAcceleratorBlock"] = BuildTypeAcceleratorBlock(
                         assemblyTypeAcceleratorMode,
                         assemblyTypeAccelerators,
-                        assemblyTypeAcceleratorAssemblies)
+                        assemblyTypeAcceleratorAssemblies),
+                    ["DesktopTypeAcceleratorBlock"] = IndentPowerShell(
+                        BuildDesktopTypeAcceleratorBlock(
+                            assemblyTypeAcceleratorMode,
+                            assemblyTypeAccelerators,
+                            assemblyTypeAcceleratorAssemblies,
+                            "[IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder)",
+                            ignoreLibrariesOnLoad).TrimEnd(),
+                        4)
                 })
             : string.Empty;
 
@@ -308,6 +318,7 @@ internal static partial class ModuleBootstrapperGenerator
                 assemblyTypeAcceleratorMode,
                 assemblyTypeAccelerators,
                 assemblyTypeAcceleratorAssemblies,
+                ignoreLibrariesOnLoad,
                 developmentBinaries);
 
             binaryLoaderBlock = string.IsNullOrWhiteSpace(binaryLoaderBlock)
@@ -1334,11 +1345,12 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
 
     if ($script:PowerForgeAssemblyTypeAcceleratorCleanupRegistered -ne $true) {{
         $script:PowerForgeAssemblyTypeAcceleratorCleanupRegistered = $true
+        $RegisteredPowerForgeTypeAccelerators = $script:PowerForgeRegisteredAssemblyTypeAccelerators
         $PreviousPowerForgeOnRemove = $ExecutionContext.SessionState.Module.OnRemove
         $ExecutionContext.SessionState.Module.OnRemove = {{
             try {{
                 $TypeAccelerators = [psobject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
-                if ($null -eq $TypeAccelerators -or $null -eq $script:PowerForgeRegisteredAssemblyTypeAccelerators) {{
+                if ($null -eq $TypeAccelerators -or $null -eq $RegisteredPowerForgeTypeAccelerators) {{
                     return
                 }}
 
@@ -1349,7 +1361,7 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {{
                 }}
 
                 $Existing = $GetTypeAccelerators.GetValue($null)
-                foreach ($Entry in @($script:PowerForgeRegisteredAssemblyTypeAccelerators.GetEnumerator())) {{
+                foreach ($Entry in @($RegisteredPowerForgeTypeAccelerators.GetEnumerator())) {{
                     if ($Existing.ContainsKey($Entry.Key) -and [object]::ReferenceEquals($Existing[$Entry.Key], $Entry.Value)) {{
                         $RemoveTypeAccelerator.Invoke($null, @($Entry.Key)) | Out-Null
                     }}

@@ -96,6 +96,48 @@ public sealed class InstallManifestVersioningTests
         }
     }
 
+    [Fact]
+    public void InstallFromStaging_IncrementsExistingFourthComponentWithoutCreatingInvalidFivePartVersion()
+    {
+        var temp = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "Foo";
+            var staging = Path.Combine(temp.FullName, "staging");
+            var roots = Path.Combine(temp.FullName, "roots");
+            Directory.CreateDirectory(staging);
+            Directory.CreateDirectory(roots);
+
+            WriteMinimalModule(staging, moduleName, "3.0.57.2");
+
+            var pipeline = ModuleBuildPipelineFactory.Create(new NullLogger());
+            var spec = new ModuleInstallSpec
+            {
+                Name = moduleName,
+                Version = "3.0.57.2",
+                StagingPath = staging,
+                Strategy = InstallationStrategy.AutoRevision,
+                KeepVersions = 10,
+                Roots = new[] { roots },
+                UpdateManifestToResolvedVersion = true
+            };
+
+            var result = pipeline.InstallFromStaging(spec);
+
+            Assert.Equal("3.0.57.3", result.Version);
+            Assert.Contains(Path.Combine(roots, moduleName, "3.0.57.3"), result.InstalledPaths, StringComparer.OrdinalIgnoreCase);
+
+            var installedPsd1 = Path.Combine(roots, moduleName, "3.0.57.3", $"{moduleName}.psd1");
+            Assert.True(ManifestEditor.TryGetTopLevelString(installedPsd1, "ModuleVersion", out var installedVersion));
+            Assert.Equal("3.0.57.3", installedVersion);
+            Assert.True(Version.TryParse(installedVersion, out _));
+        }
+        finally
+        {
+            try { temp.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
     {
         Directory.CreateDirectory(moduleRoot);
