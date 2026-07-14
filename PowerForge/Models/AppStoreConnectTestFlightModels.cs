@@ -25,6 +25,9 @@ public sealed class AppStoreConnectBetaGroupInfo
 
     /// <summary>Whether this is an internal beta group when reported by App Store Connect.</summary>
     public bool? IsInternalGroup { get; set; }
+
+    /// <summary>Whether the group automatically receives access to every eligible build.</summary>
+    public bool? HasAccessToAllBuilds { get; set; }
 }
 
 /// <summary>

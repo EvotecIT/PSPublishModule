@@ -50,9 +50,9 @@ public sealed class AppStoreConnectTestFlightDistributionService
         var messages = new List<string>();
         foreach (var group in groups)
         {
-            if (group.IsInternalGroup == true)
+            if (group.IsInternalGroup == true && group.HasAccessToAllBuilds == true)
             {
-                messages.Add($"Internal beta group '{group.Name ?? group.Id}' receives eligible builds automatically; skipped explicit build assignment.");
+                messages.Add($"Internal beta group '{group.Name ?? group.Id}' has access to all builds; skipped explicit build assignment.");
                 continue;
             }
 
@@ -60,20 +60,14 @@ public sealed class AppStoreConnectTestFlightDistributionService
             messages.Add($"Added build '{request.BuildNumber}' to beta group '{group.Name ?? group.Id}'.");
         }
 
-        var testerGroups = groups
-            .Where(static group => group.IsInternalGroup != true)
-            .ToArray();
         var testers = new List<AppStoreConnectBetaTesterInfo>();
         foreach (var testerSpec in request.Testers ?? Array.Empty<AppStoreConnectBetaTesterSpec>())
         {
-            if (testerGroups.Length == 0)
-                throw new InvalidOperationException("Beta testers cannot be added to internal TestFlight groups; configure at least one external beta group.");
-
-            var tester = await ResolveTesterAsync(testerSpec, request.CreateMissingTesters, testerGroups, cancellationToken).ConfigureAwait(false);
-            testers.Add(tester);
-            foreach (var group in testerGroups)
-                await _client.AddBetaTestersToBetaGroupAsync(group.Id, new[] { tester.Id }, cancellationToken).ConfigureAwait(false);
-            messages.Add($"Added beta tester '{tester.Email ?? tester.Id}' to {testerGroups.Length} external beta group(s).");
+            var resolution = await ResolveTesterAsync(testerSpec, request.CreateMissingTesters, groups, cancellationToken).ConfigureAwait(false);
+            testers.Add(resolution.Tester);
+            foreach (var group in resolution.TargetGroups)
+                await _client.AddBetaTestersToBetaGroupAsync(group.Id, new[] { resolution.Tester.Id }, cancellationToken).ConfigureAwait(false);
+            messages.Add($"Added beta tester '{resolution.Tester.Email ?? resolution.Tester.Id}' to {resolution.TargetGroups.Length} beta group(s).");
         }
 
         return new AppStoreConnectTestFlightDistributionResult
@@ -121,7 +115,7 @@ public sealed class AppStoreConnectTestFlightDistributionService
             .ToArray();
     }
 
-    private async Task<AppStoreConnectBetaTesterInfo> ResolveTesterAsync(
+    private async Task<(AppStoreConnectBetaTesterInfo Tester, AppStoreConnectBetaGroupInfo[] TargetGroups)> ResolveTesterAsync(
         AppStoreConnectBetaTesterSpec testerSpec,
         bool createMissing,
         AppStoreConnectBetaGroupInfo[] groups,
@@ -132,16 +126,23 @@ public sealed class AppStoreConnectTestFlightDistributionService
 
         var existing = (await _client.GetBetaTestersAsync(testerSpec.Email.Trim(), limit: 10, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
         if (existing is not null)
-            return existing;
+            return (existing, groups);
         if (!createMissing)
             throw new InvalidOperationException($"Beta tester '{testerSpec.Email}' was not found and CreateMissingTesters is false.");
 
-        return await _client.CreateBetaTesterAsync(
+        var targetGroups = groups
+            .Where(static group => group.IsInternalGroup != true)
+            .ToArray();
+        if (targetGroups.Length == 0)
+            throw new InvalidOperationException($"Beta tester '{testerSpec.Email}' was not found. New external testers cannot be created for internal-only TestFlight groups.");
+
+        var created = await _client.CreateBetaTesterAsync(
             testerSpec.Email,
             testerSpec.FirstName,
             testerSpec.LastName,
-            groups.Select(static group => group.Id).ToArray(),
+            targetGroups.Select(static group => group.Id).ToArray(),
             cancellationToken).ConfigureAwait(false);
+        return (created, targetGroups);
     }
 
     private static void ValidateBuildIsDistributable(AppStoreConnectBuildInfo build, string buildNumber)
