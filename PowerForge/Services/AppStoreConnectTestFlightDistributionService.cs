@@ -130,19 +130,16 @@ public sealed class AppStoreConnectTestFlightDistributionService
         if (!createMissing)
             throw new InvalidOperationException($"Beta tester '{testerSpec.Email}' was not found and CreateMissingTesters is false.");
 
-        var targetGroups = groups
-            .Where(static group => group.IsInternalGroup != true)
-            .ToArray();
-        if (targetGroups.Length == 0)
-            throw new InvalidOperationException($"Beta tester '{testerSpec.Email}' was not found. New external testers cannot be created for internal-only TestFlight groups.");
+        if (groups.Any(static group => group.IsInternalGroup == true))
+            throw new InvalidOperationException($"Beta tester '{testerSpec.Email}' was not found. Testers assigned to internal TestFlight groups must already exist in App Store Connect.");
 
         var created = await _client.CreateBetaTesterAsync(
             testerSpec.Email,
             testerSpec.FirstName,
             testerSpec.LastName,
-            targetGroups.Select(static group => group.Id).ToArray(),
+            groups.Select(static group => group.Id).ToArray(),
             cancellationToken).ConfigureAwait(false);
-        return (created, targetGroups);
+        return (created, groups);
     }
 
     private static void ValidateBuildIsDistributable(AppStoreConnectBuildInfo build, string buildNumber)
