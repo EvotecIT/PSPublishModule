@@ -1076,6 +1076,228 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task TestFlightDistributionService_SkipsOnlyAutomaticInternalGroupBuildAssignment()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "build-9",
+                      "type": "builds",
+                      "attributes": { "version": "9", "processingState": "VALID", "expired": false },
+                      "relationships": { "preReleaseVersion": { "data": { "id": "pre-1", "type": "preReleaseVersions" } } }
+                    }
+                  ],
+                  "included": [
+                    { "id": "pre-1", "type": "preReleaseVersions", "attributes": { "version": "1.0.5", "platform": "IOS" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "group-internal",
+                      "type": "betaGroups",
+                      "attributes": { "name": "Home", "isInternalGroup": true, "hasAccessToAllBuilds": true }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "group-manual-internal",
+                      "type": "betaGroups",
+                      "attributes": { "name": "Manual Internal", "isInternalGroup": true, "hasAccessToAllBuilds": false }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "group-external",
+                      "type": "betaGroups",
+                      "attributes": { "name": "Discord Testers", "isInternalGroup": false }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.NoContent, string.Empty),
+            new SequenceResponse(HttpStatusCode.NoContent, string.Empty));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectTestFlightDistributionService(client);
+
+        var result = await service.DistributeAsync(new AppStoreConnectTestFlightDistributionRequest
+        {
+            AppId = "app-1",
+            VersionString = "1.0.5",
+            BuildNumber = "9",
+            Platform = ApplePlatform.iOS,
+            BetaGroupNames = new[] { "Home", "Manual Internal", "Discord Testers" }
+        });
+
+        Assert.Equal(3, result.BetaGroups.Length);
+        Assert.Contains(result.Messages, message => message.Contains("skipped explicit build assignment", StringComparison.Ordinal));
+        Assert.Contains(result.Messages, message => message.Contains("Manual Internal", StringComparison.Ordinal));
+        Assert.Contains(result.Messages, message => message.Contains("Discord Testers", StringComparison.Ordinal));
+        Assert.Equal(6, handler.RequestUris.Count);
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-manual-internal/relationships/builds", handler.RequestUris[4].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-external/relationships/builds", handler.RequestUris[5].ToString());
+        Assert.DoesNotContain(handler.RequestUris, uri => uri.ToString().Contains("group-internal/relationships/builds", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task TestFlightDistributionService_AssignsExistingTesterToManualInternalGroup()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "build-9",
+                      "type": "builds",
+                      "attributes": { "version": "9", "processingState": "VALID", "expired": false },
+                      "relationships": { "preReleaseVersion": { "data": { "id": "pre-1", "type": "preReleaseVersions" } } }
+                    }
+                  ],
+                  "included": [
+                    { "id": "pre-1", "type": "preReleaseVersions", "attributes": { "version": "1.0.5", "platform": "IOS" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "group-manual-internal",
+                      "type": "betaGroups",
+                      "attributes": { "name": "Manual Internal", "isInternalGroup": true, "hasAccessToAllBuilds": false }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.NoContent, string.Empty),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "tester-internal",
+                      "type": "betaTesters",
+                      "attributes": { "email": "internal@example.test", "firstName": "Internal", "lastName": "User" }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.NoContent, string.Empty));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectTestFlightDistributionService(client);
+
+        var result = await service.DistributeAsync(new AppStoreConnectTestFlightDistributionRequest
+        {
+            AppId = "app-1",
+            VersionString = "1.0.5",
+            BuildNumber = "9",
+            Platform = ApplePlatform.iOS,
+            BetaGroupNames = new[] { "Manual Internal" },
+            Testers = new[]
+            {
+                new AppStoreConnectBetaTesterSpec { Email = "internal@example.test" }
+            }
+        });
+
+        Assert.Equal("internal@example.test", Assert.Single(result.Testers).Email);
+        Assert.Equal(5, handler.RequestUris.Count);
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-manual-internal/relationships/builds", handler.RequestUris[2].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-manual-internal/relationships/betaTesters", handler.RequestUris[4].ToString());
+    }
+
+    [Fact]
+    public async Task TestFlightDistributionService_RejectsMissingTesterWhenAnyTargetGroupIsInternal()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "build-9",
+                      "type": "builds",
+                      "attributes": { "version": "9", "processingState": "VALID", "expired": false },
+                      "relationships": { "preReleaseVersion": { "data": { "id": "pre-1", "type": "preReleaseVersions" } } }
+                    }
+                  ],
+                  "included": [
+                    { "id": "pre-1", "type": "preReleaseVersions", "attributes": { "version": "1.0.5", "platform": "IOS" } }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "group-manual-internal",
+                      "type": "betaGroups",
+                      "attributes": { "name": "Manual Internal", "isInternalGroup": true, "hasAccessToAllBuilds": false }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "group-external",
+                      "type": "betaGroups",
+                      "attributes": { "name": "Discord Testers", "isInternalGroup": false }
+                    }
+                  ]
+                }
+                """),
+            new SequenceResponse(HttpStatusCode.NoContent, string.Empty),
+            new SequenceResponse(HttpStatusCode.NoContent, string.Empty),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectTestFlightDistributionService(client);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.DistributeAsync(
+            new AppStoreConnectTestFlightDistributionRequest
+            {
+                AppId = "app-1",
+                VersionString = "1.0.5",
+                BuildNumber = "9",
+                Platform = ApplePlatform.iOS,
+                BetaGroupNames = new[] { "Manual Internal", "Discord Testers" },
+                Testers = new[]
+                {
+                    new AppStoreConnectBetaTesterSpec { Email = "missing@example.test" }
+                }
+            }));
+
+        Assert.Contains("must already exist in App Store Connect", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(6, handler.RequestUris.Count);
+        Assert.DoesNotContain(handler.RequestUris, uri =>
+            string.Equals(uri.AbsolutePath, "/v1/betaTesters", StringComparison.Ordinal) &&
+            !string.IsNullOrEmpty(handler.RequestBodies[handler.RequestUris.IndexOf(uri)]));
+    }
+
+    [Fact]
     public async Task BetaAppReviewSubmissionService_SubmitsBuildForExternalTesting()
     {
         var handler = new SequenceHandler(

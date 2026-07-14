@@ -50,6 +50,12 @@ public sealed class AppStoreConnectTestFlightDistributionService
         var messages = new List<string>();
         foreach (var group in groups)
         {
+            if (group.IsInternalGroup == true && group.HasAccessToAllBuilds == true)
+            {
+                messages.Add($"Internal beta group '{group.Name ?? group.Id}' has access to all builds; skipped explicit build assignment.");
+                continue;
+            }
+
             await _client.AddBuildsToBetaGroupAsync(group.Id, new[] { build.Id }, cancellationToken).ConfigureAwait(false);
             messages.Add($"Added build '{request.BuildNumber}' to beta group '{group.Name ?? group.Id}'.");
         }
@@ -57,11 +63,11 @@ public sealed class AppStoreConnectTestFlightDistributionService
         var testers = new List<AppStoreConnectBetaTesterInfo>();
         foreach (var testerSpec in request.Testers ?? Array.Empty<AppStoreConnectBetaTesterSpec>())
         {
-            var tester = await ResolveTesterAsync(testerSpec, request.CreateMissingTesters, groups, cancellationToken).ConfigureAwait(false);
-            testers.Add(tester);
-            foreach (var group in groups)
-                await _client.AddBetaTestersToBetaGroupAsync(group.Id, new[] { tester.Id }, cancellationToken).ConfigureAwait(false);
-            messages.Add($"Added beta tester '{tester.Email ?? tester.Id}' to {groups.Length} beta group(s).");
+            var resolution = await ResolveTesterAsync(testerSpec, request.CreateMissingTesters, groups, cancellationToken).ConfigureAwait(false);
+            testers.Add(resolution.Tester);
+            foreach (var group in resolution.TargetGroups)
+                await _client.AddBetaTestersToBetaGroupAsync(group.Id, new[] { resolution.Tester.Id }, cancellationToken).ConfigureAwait(false);
+            messages.Add($"Added beta tester '{resolution.Tester.Email ?? resolution.Tester.Id}' to {resolution.TargetGroups.Length} beta group(s).");
         }
 
         return new AppStoreConnectTestFlightDistributionResult
@@ -109,7 +115,7 @@ public sealed class AppStoreConnectTestFlightDistributionService
             .ToArray();
     }
 
-    private async Task<AppStoreConnectBetaTesterInfo> ResolveTesterAsync(
+    private async Task<(AppStoreConnectBetaTesterInfo Tester, AppStoreConnectBetaGroupInfo[] TargetGroups)> ResolveTesterAsync(
         AppStoreConnectBetaTesterSpec testerSpec,
         bool createMissing,
         AppStoreConnectBetaGroupInfo[] groups,
@@ -120,16 +126,20 @@ public sealed class AppStoreConnectTestFlightDistributionService
 
         var existing = (await _client.GetBetaTestersAsync(testerSpec.Email.Trim(), limit: 10, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
         if (existing is not null)
-            return existing;
+            return (existing, groups);
         if (!createMissing)
             throw new InvalidOperationException($"Beta tester '{testerSpec.Email}' was not found and CreateMissingTesters is false.");
 
-        return await _client.CreateBetaTesterAsync(
+        if (groups.Any(static group => group.IsInternalGroup == true))
+            throw new InvalidOperationException($"Beta tester '{testerSpec.Email}' was not found. Testers assigned to internal TestFlight groups must already exist in App Store Connect.");
+
+        var created = await _client.CreateBetaTesterAsync(
             testerSpec.Email,
             testerSpec.FirstName,
             testerSpec.LastName,
             groups.Select(static group => group.Id).ToArray(),
             cancellationToken).ConfigureAwait(false);
+        return (created, groups);
     }
 
     private static void ValidateBuildIsDistributable(AppStoreConnectBuildInfo build, string buildNumber)

@@ -249,7 +249,8 @@ public sealed partial class AppStoreConnectClient
             PublicLinkLimit = GetInt32(attrs, "publicLinkLimit"),
             PublicLink = GetString(attrs, "publicLink"),
             FeedbackEnabled = GetBool(attrs, "feedbackEnabled"),
-            IsInternalGroup = GetBool(attrs, "isInternalGroup")
+            IsInternalGroup = GetBool(attrs, "isInternalGroup"),
+            HasAccessToAllBuilds = GetBool(attrs, "hasAccessToAllBuilds")
         };
     }
 
