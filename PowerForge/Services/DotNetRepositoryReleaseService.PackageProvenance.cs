@@ -242,14 +242,6 @@ public sealed partial class DotNetRepositoryReleaseService
         string projectName,
         ILogger logger)
     {
-        var declaredFrameworks = ReadTargetFrameworks(csproj)
-            .Where(static framework => !string.IsNullOrWhiteSpace(framework))
-            .Select(static framework => framework!.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (declaredFrameworks.Length > 0)
-            return declaredFrameworks.Cast<string?>().ToArray();
-
         foreach (var propertyName in new[] { "TargetFrameworks", "TargetFramework" })
         {
             var exitCode = RunDotnetMsBuildGetProperty(
@@ -276,6 +268,14 @@ public sealed partial class DotNetRepositoryReleaseService
             if (evaluatedFrameworks.Length > 0)
                 return evaluatedFrameworks.Cast<string?>().ToArray();
         }
+
+        var declaredFrameworks = ReadTargetFrameworks(csproj)
+            .Where(static framework => !string.IsNullOrWhiteSpace(framework))
+            .Select(static framework => framework!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (declaredFrameworks.Length > 0)
+            return declaredFrameworks.Cast<string?>().ToArray();
 
         return new string?[] { null };
     }
