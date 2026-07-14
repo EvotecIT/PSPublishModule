@@ -39,7 +39,25 @@ public sealed class BenchmarkSummaryService
     /// <param name="metric">Metric name to compare.</param>
     /// <returns>Comparison rows.</returns>
     public BenchmarkComparisonRow[] Compare(IEnumerable<BenchmarkSummaryRow> summary, string baselineEngine, string metric = "MedianMs")
+        => Compare(summary, baselineEngine, metric, tieTolerance: 0);
+
+    /// <summary>
+    /// Creates comparison rows against a baseline engine with a practical tie tolerance.
+    /// </summary>
+    /// <param name="summary">Summary rows.</param>
+    /// <param name="baselineEngine">Baseline engine name.</param>
+    /// <param name="metric">Metric name to compare.</param>
+    /// <param name="tieTolerance">Fractional tolerance used to label practically equivalent results, such as <c>0.05</c> for five percent.</param>
+    /// <returns>Comparison rows.</returns>
+    public BenchmarkComparisonRow[] Compare(
+        IEnumerable<BenchmarkSummaryRow> summary,
+        string baselineEngine,
+        string metric,
+        double tieTolerance)
     {
+        if (double.IsNaN(tieTolerance) || double.IsInfinity(tieTolerance) || tieTolerance < 0)
+            throw new ArgumentOutOfRangeException(nameof(tieTolerance), "Tie tolerance must be a finite non-negative number.");
+
         var rows = (summary ?? Array.Empty<BenchmarkSummaryRow>()).ToArray();
         var result = new List<BenchmarkComparisonRow>();
         foreach (var group in rows.GroupBy(r => MakeKey(r.Suite, r.Scenario, r.Operation, string.Empty, r.Host, r.Os, r.RunMode, ComparisonVariables(r.Variables)), StringComparer.Ordinal))
@@ -69,6 +87,7 @@ public sealed class BenchmarkSummaryService
                     Metric = metric,
                     Actual = actual,
                     Baseline = baselineValue,
+                    TieTolerance = tieTolerance,
                     Ratio = actual.HasValue && baselineValue.HasValue && Math.Abs(baselineValue.Value) > double.Epsilon
                         ? actual.Value / baselineValue.Value
                         : null

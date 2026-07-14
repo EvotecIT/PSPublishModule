@@ -65,7 +65,7 @@ benchmark 'managed-modules' -out 'Ignore/Benchmarks/ManagedModules' {
         }
     }
 
-    comparison Engine -Baseline Managed -Metric MedianMs
+    comparison Engine -Baseline Managed -Metric MedianMs -TieTolerance 0.05
     readme 'README.MD' -Block 'managed-module-benchmark-table' -Renderer ComparisonTable
     artifacts Json, Csv, Markdown
 }
@@ -75,6 +75,10 @@ Benchmark declaration words are real PSPublishModule commands. The shorter DSL
 keywords are aliases over the explicit command names, so a spec can use a compact
 Pester-style form while still being backed by normal PowerShell parameter
 binding.
+
+`-TieTolerance` is a fractional threshold for practical equivalence. For
+example, `0.05` labels results within five percent of the fastest successful
+engine as tied. Omitting it preserves exact ranking.
 
 | Short form | Explicit form |
 | --- | --- |

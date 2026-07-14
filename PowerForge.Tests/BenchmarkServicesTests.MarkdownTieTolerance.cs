@@ -5,6 +5,31 @@ namespace PowerForge.Tests;
 public sealed partial class BenchmarkServicesTests
 {
     [Fact]
+    public void BenchmarkDsl_PropagatesTieToleranceToGeneratedComparisonRows()
+    {
+        var root = CreateTempRoot();
+        var escapedRoot = root.Replace("'", "''");
+        var script = System.Management.Automation.ScriptBlock.Create($$"""
+benchmark 'ties' -out '{{escapedRoot}}' {
+    policy -Warmup 0 -Iterations 1
+    axis Operation Run
+    axis Engine Managed, Other
+    engine Managed { operation Run { param($case, $run) } }
+    engine Other { operation Run { param($case, $run) } }
+    comparison Engine -Baseline Managed -Metric MedianMs -TieTolerance 0.05
+}
+""");
+
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script));
+        var comparison = Assert.Single(suite.Comparisons);
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+
+        Assert.Equal(0.05, comparison.TieTolerance);
+        Assert.Equal(2, result.Comparison.Length);
+        Assert.All(result.Comparison, row => Assert.Equal(0.05, row.TieTolerance));
+    }
+
+    [Fact]
     public void MarkdownRenderer_LabelsDurationResultsWithinConfiguredToleranceAsTied()
     {
         var markdown = new BenchmarkMarkdownRenderer().RenderComparisonTable(new[]
