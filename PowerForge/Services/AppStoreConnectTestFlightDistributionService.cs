@@ -50,18 +50,30 @@ public sealed class AppStoreConnectTestFlightDistributionService
         var messages = new List<string>();
         foreach (var group in groups)
         {
+            if (group.IsInternalGroup == true)
+            {
+                messages.Add($"Internal beta group '{group.Name ?? group.Id}' receives eligible builds automatically; skipped explicit build assignment.");
+                continue;
+            }
+
             await _client.AddBuildsToBetaGroupAsync(group.Id, new[] { build.Id }, cancellationToken).ConfigureAwait(false);
             messages.Add($"Added build '{request.BuildNumber}' to beta group '{group.Name ?? group.Id}'.");
         }
 
+        var testerGroups = groups
+            .Where(static group => group.IsInternalGroup != true)
+            .ToArray();
         var testers = new List<AppStoreConnectBetaTesterInfo>();
         foreach (var testerSpec in request.Testers ?? Array.Empty<AppStoreConnectBetaTesterSpec>())
         {
-            var tester = await ResolveTesterAsync(testerSpec, request.CreateMissingTesters, groups, cancellationToken).ConfigureAwait(false);
+            if (testerGroups.Length == 0)
+                throw new InvalidOperationException("Beta testers cannot be added to internal TestFlight groups; configure at least one external beta group.");
+
+            var tester = await ResolveTesterAsync(testerSpec, request.CreateMissingTesters, testerGroups, cancellationToken).ConfigureAwait(false);
             testers.Add(tester);
-            foreach (var group in groups)
+            foreach (var group in testerGroups)
                 await _client.AddBetaTestersToBetaGroupAsync(group.Id, new[] { tester.Id }, cancellationToken).ConfigureAwait(false);
-            messages.Add($"Added beta tester '{tester.Email ?? tester.Id}' to {groups.Length} beta group(s).");
+            messages.Add($"Added beta tester '{tester.Email ?? tester.Id}' to {testerGroups.Length} external beta group(s).");
         }
 
         return new AppStoreConnectTestFlightDistributionResult
