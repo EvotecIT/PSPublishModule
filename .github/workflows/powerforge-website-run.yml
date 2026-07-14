@@ -159,16 +159,19 @@ jobs:
       - name: Cache NuGet packages
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/packages.lock.json') }}
+          path: ${{ runner.temp }}/powerforge-website-nuget-packages
+          key: powerforge-website-nuget-v1-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/packages.lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-nuget-
+            powerforge-website-nuget-v1-${{ runner.os }}-
 
       - name: Initialize transient tool cache directories
         shell: pwsh
+        env:
+          NUGET_PACKAGES: ${{ runner.temp }}/powerforge-website-nuget-packages
         run: |
           foreach ($path in @(
             $env:POWERFORGE_RUNNER_CACHE_ROOT,
+            $env:NUGET_PACKAGES,
             $env:PLAYWRIGHT_BROWSERS_PATH,
             $env:DOTNET_BUNDLE_EXTRACT_BASE_DIR,
             $env:BUN_INSTALL_CACHE_DIR,
@@ -182,6 +185,7 @@ jobs:
       - name: Run website pipeline
         shell: pwsh
         env:
+          NUGET_PACKAGES: ${{ runner.temp }}/powerforge-website-nuget-packages
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.repository_read_token || github.token }}
           LICENSING_PACKAGES_TOKEN: ${{ secrets.repository_read_token || github.token }}

@@ -77,6 +77,29 @@ public sealed class GitHubWebsiteRunWorkflowTests
     }
 
     [Fact]
+    public void WebsiteRunWorkflow_ShouldScopeNuGetCacheToTheWebsiteJob()
+    {
+        var repoRoot = FindRepoRoot();
+        var workflowPath = Path.Combine(repoRoot, ".github", "workflows", "powerforge-website-run.yml");
+
+        Assert.True(File.Exists(workflowPath), $"Website workflow not found: {workflowPath}");
+
+        var workflowYaml = File.ReadAllText(workflowPath);
+
+        var nugetEnvironmentLines = workflowYaml
+            .Split('\n')
+            .Where(static line => line.Contains("NUGET_PACKAGES:", StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.Equal(2, nugetEnvironmentLines.Length);
+        Assert.All(nugetEnvironmentLines, static line => Assert.StartsWith("          NUGET_PACKAGES:", line, StringComparison.Ordinal));
+        Assert.Contains("path: ${{ runner.temp }}/powerforge-website-nuget-packages", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("powerforge-website-nuget-v1-${{ runner.os }}-", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("$env:NUGET_PACKAGES", workflowYaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("path: ~/.nuget/packages", workflowYaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WebsiteRunWorkflow_ShouldRemoveTransientToolCacheRoot()
     {
         var repoRoot = FindRepoRoot();
