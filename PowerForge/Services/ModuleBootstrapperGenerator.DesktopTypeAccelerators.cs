@@ -6,10 +6,14 @@ internal static partial class ModuleBootstrapperGenerator
         AssemblyTypeAcceleratorExportMode mode,
         IReadOnlyList<string>? typeNames,
         IReadOnlyList<string>? assemblyNames,
-        string libraryDirectoryExpression)
+        string libraryDirectoryExpression,
+        IReadOnlyList<string>? ignoreLibrariesOnLoad = null)
     {
         var normalizedTypes = NormalizePowerShellStringArray(typeNames);
         var normalizedAssemblies = NormalizePowerShellStringArray(assemblyNames);
+        var ignoredLibraryFileNames = NormalizeFileNameSet(ignoreLibrariesOnLoad)
+            .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         if (mode == AssemblyTypeAcceleratorExportMode.None)
             return string.Empty;
 
@@ -24,6 +28,7 @@ internal static partial class ModuleBootstrapperGenerator
         $Mode = '{mode}'
         $RequestedTypes = {BuildPowerShellArrayLiteral(normalizedTypes)}
         $RequestedAssemblies = {BuildPowerShellArrayLiteral(normalizedAssemblies)}
+        $IgnoredLibraryFileNames = {BuildPowerShellArrayLiteral(ignoredLibraryFileNames)}
 
         if ([string]::IsNullOrWhiteSpace($LibraryDirectory) -or -not (Test-Path -LiteralPath $LibraryDirectory)) {{
             Write-Warning -Message 'Module library directory was not available. Desktop dependency type exposure is disabled.'
@@ -61,33 +66,99 @@ internal static partial class ModuleBootstrapperGenerator
             $script:PowerForgeRegisteredAssemblyTypeAccelerators = @{{}}
         }}
 
+        $ResolvedPowerForgeDesktopAssemblies = @{{}}
+        $FailedPowerForgeDesktopAssemblies = @{{}}
+        $LibraryDirectoryFullPath = [IO.Path]::GetFullPath($LibraryDirectory)
+        $LibraryDirectoryPrefix = $LibraryDirectoryFullPath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+
+        $TestPowerForgeDesktopIgnoredAssembly = {{
+            param([Parameter(Mandatory = $true)] $Assembly)
+
+            return $IgnoredLibraryFileNames -contains ($Assembly.GetName().Name + '.dll')
+        }}
+
+        $TestPowerForgeDesktopModuleAssembly = {{
+            param([Parameter(Mandatory = $true)] $Assembly)
+
+            if ($Assembly.IsDynamic) {{
+                return $false
+            }}
+
+            try {{
+                if ([string]::IsNullOrWhiteSpace($Assembly.Location)) {{
+                    return $false
+                }}
+
+                $AssemblyFullPath = [IO.Path]::GetFullPath($Assembly.Location)
+                return $AssemblyFullPath.StartsWith($LibraryDirectoryPrefix, [StringComparison]::OrdinalIgnoreCase)
+            }} catch {{
+                return $false
+            }}
+        }}
+
         $ImportPowerForgeDesktopAssembly = {{
             param([Parameter(Mandatory = $true)][string] $AssemblyName)
 
             $SimpleName = [IO.Path]::GetFileNameWithoutExtension($AssemblyName)
+            $AssemblyFileName = $SimpleName + '.dll'
+            if ($IgnoredLibraryFileNames -contains $AssemblyFileName) {{
+                $FailedPowerForgeDesktopAssemblies[$SimpleName] = $true
+                return $null
+            }}
+
+            if ($ResolvedPowerForgeDesktopAssemblies.ContainsKey($SimpleName)) {{
+                return $ResolvedPowerForgeDesktopAssemblies[$SimpleName]
+            }}
+            if ($FailedPowerForgeDesktopAssemblies.ContainsKey($SimpleName)) {{
+                return $null
+            }}
+
             foreach ($Assembly in [AppDomain]::CurrentDomain.GetAssemblies()) {{
-                if ($Assembly.GetName().Name -eq $SimpleName) {{
+                if ($Assembly.GetName().Name -eq $SimpleName -and (& $TestPowerForgeDesktopModuleAssembly -Assembly $Assembly)) {{
+                    $ResolvedPowerForgeDesktopAssemblies[$SimpleName] = $Assembly
                     return $Assembly
                 }}
             }}
 
-            $AssemblyPath = [IO.Path]::Combine($LibraryDirectory, $SimpleName + '.dll')
-            if (-not (Test-Path -LiteralPath $AssemblyPath)) {{
-                return $null
+            $AssemblyPath = [IO.Path]::Combine($LibraryDirectory, $AssemblyFileName)
+            if (Test-Path -LiteralPath $AssemblyPath) {{
+                try {{
+                    $LoadedAssembly = [System.Reflection.Assembly]::LoadFrom($AssemblyPath)
+                    if (& $TestPowerForgeDesktopModuleAssembly -Assembly $LoadedAssembly) {{
+                        $ResolvedPowerForgeDesktopAssemblies[$SimpleName] = $LoadedAssembly
+                        return $LoadedAssembly
+                    }}
+
+                    $FailedPowerForgeDesktopAssemblies[$SimpleName] = $true
+                    Write-Warning -Message ""Desktop assembly '$SimpleName' resolved outside the module library directory. Skipping type accelerator exposure to avoid registering the wrong assembly version.""
+                    return $null
+                }} catch {{
+                    $FailedPowerForgeDesktopAssemblies[$SimpleName] = $true
+                    Write-Warning -Message ""Could not load Desktop assembly '$SimpleName' for type accelerator exposure: $($_.Exception.Message)""
+                    return $null
+                }}
             }}
 
-            try {{
-                return [System.Reflection.Assembly]::LoadFrom($AssemblyPath)
-            }} catch {{
-                Write-Warning -Message ""Could not load Desktop assembly '$SimpleName' for type accelerator exposure: $($_.Exception.Message)""
-                return $null
+            foreach ($Assembly in [AppDomain]::CurrentDomain.GetAssemblies()) {{
+                if ($Assembly.GetName().Name -eq $SimpleName) {{
+                    $ResolvedPowerForgeDesktopAssemblies[$SimpleName] = $Assembly
+                    return $Assembly
+                }}
             }}
+
+            $FailedPowerForgeDesktopAssemblies[$SimpleName] = $true
+            return $null
         }}
 
         $FindPowerForgeDesktopType = {{
             param([Parameter(Mandatory = $true)][string] $TypeName)
 
             foreach ($Assembly in [AppDomain]::CurrentDomain.GetAssemblies()) {{
+                if ((& $TestPowerForgeDesktopIgnoredAssembly -Assembly $Assembly) -or
+                    -not (& $TestPowerForgeDesktopModuleAssembly -Assembly $Assembly)) {{
+                    continue
+                }}
+
                 $Type = $Assembly.GetType($TypeName, $false, $false)
                 if ($null -ne $Type) {{
                     return $Type
@@ -95,8 +166,30 @@ internal static partial class ModuleBootstrapperGenerator
             }}
 
             foreach ($File in Get-ChildItem -LiteralPath $LibraryDirectory -Filter '*.dll' -File -ErrorAction SilentlyContinue) {{
+                if ($IgnoredLibraryFileNames -contains $File.Name) {{
+                    continue
+                }}
+
                 $Assembly = & $ImportPowerForgeDesktopAssembly -AssemblyName $File.BaseName
                 if ($null -eq $Assembly) {{
+                    continue
+                }}
+
+                $Type = $Assembly.GetType($TypeName, $false, $false)
+                if ($null -ne $Type) {{
+                    return $Type
+                }}
+            }}
+
+            foreach ($Assembly in [AppDomain]::CurrentDomain.GetAssemblies()) {{
+                if (& $TestPowerForgeDesktopIgnoredAssembly -Assembly $Assembly) {{
+                    continue
+                }}
+
+                $AssemblyFileName = $Assembly.GetName().Name + '.dll'
+                if (Test-Path -LiteralPath ([IO.Path]::Combine($LibraryDirectory, $AssemblyFileName))) {{
+                    # A module-owned assembly with this identity exists but could not be selected above. Do not
+                    # silently fall back to a globally loaded copy with a different location or version.
                     continue
                 }}
 

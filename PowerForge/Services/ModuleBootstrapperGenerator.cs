@@ -75,6 +75,7 @@ internal static partial class ModuleBootstrapperGenerator
             assemblyTypeAcceleratorMode: assemblyTypeAcceleratorMode,
             assemblyTypeAccelerators: assemblyTypeAccelerators,
             assemblyTypeAcceleratorAssemblies: assemblyTypeAcceleratorAssemblies,
+            ignoreLibrariesOnLoad: ignoreLibrariesOnLoad,
             conditionalFunctionDependencies: conditionalFunctionDependencies,
             developmentBinaries: developmentBinaries,
             moduleRoot: root);
@@ -265,6 +266,7 @@ internal static partial class ModuleBootstrapperGenerator
         AssemblyTypeAcceleratorExportMode assemblyTypeAcceleratorMode,
         IReadOnlyList<string>? assemblyTypeAccelerators,
         IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies,
+        IReadOnlyList<string>? ignoreLibrariesOnLoad,
         IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies,
         ModuleDevelopmentBinaryBootstrapperOptions? developmentBinaries = null,
         string? moduleRoot = null)
@@ -290,11 +292,14 @@ internal static partial class ModuleBootstrapperGenerator
                         assemblyTypeAcceleratorMode,
                         assemblyTypeAccelerators,
                         assemblyTypeAcceleratorAssemblies),
-                    ["DesktopTypeAcceleratorBlock"] = BuildDesktopTypeAcceleratorBlock(
-                        assemblyTypeAcceleratorMode,
-                        assemblyTypeAccelerators,
-                        assemblyTypeAcceleratorAssemblies,
-                        "[IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder)")
+                    ["DesktopTypeAcceleratorBlock"] = IndentPowerShell(
+                        BuildDesktopTypeAcceleratorBlock(
+                            assemblyTypeAcceleratorMode,
+                            assemblyTypeAccelerators,
+                            assemblyTypeAcceleratorAssemblies,
+                            "[IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder)",
+                            ignoreLibrariesOnLoad).TrimEnd(),
+                        4)
                 })
             : string.Empty;
 
@@ -313,6 +318,7 @@ internal static partial class ModuleBootstrapperGenerator
                 assemblyTypeAcceleratorMode,
                 assemblyTypeAccelerators,
                 assemblyTypeAcceleratorAssemblies,
+                ignoreLibrariesOnLoad,
                 developmentBinaries);
 
             binaryLoaderBlock = string.IsNullOrWhiteSpace(binaryLoaderBlock)

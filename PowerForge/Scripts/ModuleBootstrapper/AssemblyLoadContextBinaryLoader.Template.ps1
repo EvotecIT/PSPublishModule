@@ -50,7 +50,8 @@ if ($PSEdition -eq 'Core') {
     $LibFolder = $FrameworkNet
 }
 
-{{RuntimeHandlerBlock}}try {
+{{RuntimeHandlerBlock}}$PowerForgeDesktopBinaryLoaded = $false
+try {
     $ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
     $ModuleAssemblyPath = [IO.Path]::Combine($PSScriptRoot, 'Lib', $LibFolder, $Library)
 
@@ -111,6 +112,10 @@ if ($PSEdition -eq 'Core') {
         $Type = "$Class" -as [Type]
         & $ImportModule -Force -Assembly ($Type.Assembly)
     }
+
+    if ($PSEdition -ne 'Core') {
+        $PowerForgeDesktopBinaryLoaded = $true
+    }
 } catch {
     if ($ErrorActionPreference -eq 'Stop') {
         throw
@@ -119,13 +124,13 @@ if ($PSEdition -eq 'Core') {
     }
 }
 
-if ($PSEdition -ne 'Core') {
+if ($PSEdition -ne 'Core' -and $PowerForgeDesktopBinaryLoaded) {
     # Core loads dependencies through the module-scoped AssemblyLoadContext above. Dot-sourcing the libraries script
     # there would load dependency DLLs into the default context and undo the isolation this template exists to provide.
     $LibrariesScript = [IO.Path]::Combine($PSScriptRoot, '{{ModuleName}}.Libraries.ps1')
     if (Test-Path -LiteralPath $LibrariesScript) {
         . $LibrariesScript
     }
-}
 
 {{DesktopTypeAcceleratorBlock}}
+}

@@ -12,6 +12,7 @@ internal static partial class ModuleBootstrapperGenerator
         AssemblyTypeAcceleratorExportMode assemblyTypeAcceleratorMode,
         IReadOnlyList<string>? assemblyTypeAccelerators,
         IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies,
+        IReadOnlyList<string>? ignoreLibrariesOnLoad,
         ModuleDevelopmentBinaryBootstrapperOptions options)
     {
         var binaryRootExpression = BuildPowerShellPathExpression(moduleRoot, options.BinaryRootPath);
@@ -40,7 +41,8 @@ internal static partial class ModuleBootstrapperGenerator
                         assemblyTypeAcceleratorMode,
                         assemblyTypeAccelerators,
                         assemblyTypeAcceleratorAssemblies,
-                        "[IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)").TrimEnd(),
+                        "[IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)",
+                        ignoreLibrariesOnLoad).TrimEnd(),
                     12),
                 ["AssemblyLoadContextImportBlock"] = BuildDevelopmentAssemblyLoadContextImportBlock(
                     moduleName,
