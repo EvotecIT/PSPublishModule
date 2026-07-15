@@ -327,9 +327,9 @@ internal static partial class WebPipelineRunner
         if (!string.IsNullOrWhiteSpace(manifest.Kind))
             project.Kind = manifest.Kind!.Trim();
         if (manifest.Brand is not null)
-            project.Brand = manifest.Brand;
+            MergeManifestBrand(project, manifest.Brand);
         if (manifest.Product is not null)
-            project.Product = manifest.Product;
+            MergeManifestProduct(project, manifest.Product);
         if (manifest.Aliases is { Count: > 0 })
         {
             project.Aliases = manifest.Aliases

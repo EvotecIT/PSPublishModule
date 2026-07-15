@@ -88,7 +88,8 @@ public class WebPipelineRunnerProjectCatalogProductTests
             var page = File.ReadAllText(Path.Combine(root, "content", "projects", "casaray.md"));
             Assert.Contains("layout: product", page, StringComparison.Ordinal);
             Assert.Contains("meta.project_kind: \"product\"", page, StringComparison.Ordinal);
-            Assert.Contains("meta.product:", page, StringComparison.Ordinal);
+            Assert.Contains("meta.product_presentation:", page, StringComparison.Ordinal);
+            Assert.DoesNotContain("meta.product:", page, StringComparison.Ordinal);
             Assert.Contains("width: 1200", page, StringComparison.Ordinal);
             Assert.Contains("height: 1600", page, StringComparison.Ordinal);
             Assert.Contains("meta.software.application_category: \"UtilitiesApplication\"", page, StringComparison.Ordinal);
@@ -234,6 +235,205 @@ public class WebPipelineRunnerProjectCatalogProductTests
             Assert.Contains("label: \"Visit product website\"", page, StringComparison.Ordinal);
             Assert.Contains("url: \"https://product.example/\"", page, StringComparison.Ordinal);
             Assert.DoesNotContain("meta.software.download_url", page, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ProjectCatalog_DerivesPrimaryActionFromDownloadsBeforeSource()
+    {
+        var root = CreateTestRoot("downloads-product");
+
+        try
+        {
+            WriteCatalog(root,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "downloads-product",
+                      "name": "Downloads Product",
+                      "kind": "product",
+                      "mode": "hub-full",
+                      "githubRepo": "EvotecIT/DownloadsProduct",
+                      "description": "A product distributed from a downloads page.",
+                      "links": {
+                        "downloads": "https://product.example/downloads/",
+                        "source": "https://github.com/EvotecIT/DownloadsProduct",
+                        "support": "https://product.example/support/",
+                        "privacy": "https://product.example/privacy/"
+                      },
+                      "brand": {
+                        "accent": "#123456",
+                        "icon": "/assets/products/downloads/icon.png",
+                        "iconWidth": 256,
+                        "iconHeight": 256
+                      },
+                      "product": {
+                        "category": "Utilities",
+                        "tagline": "Download the product directly.",
+                        "platforms": ["Windows"],
+                        "media": [
+                          {
+                            "src": "/assets/products/downloads/home.png",
+                            "alt": "Downloads Product home screen",
+                            "width": 1200,
+                            "height": 800,
+                            "role": "hero",
+                            "frame": "wide",
+                            "fit": "contain"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+                """);
+            var pipelinePath = WritePipeline(root);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            var page = File.ReadAllText(Path.Combine(root, "content", "projects", "downloads-product.md"));
+            Assert.Contains("label: \"Download\"", page, StringComparison.Ordinal);
+            Assert.Contains("url: \"https://product.example/downloads/\"", page, StringComparison.Ordinal);
+            Assert.DoesNotContain("label: \"View source\"", page, StringComparison.Ordinal);
+            Assert.Contains("meta.software.download_url: \"https://product.example/downloads/\"", page, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ProjectCatalog_MergesPartialManifestProductPresentationOverCuratedCatalog()
+    {
+        var root = CreateTestRoot("partial-manifest-product");
+
+        try
+        {
+            var catalogPath = WriteCatalog(root,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "curated-product",
+                      "name": "Curated Product",
+                      "kind": "product",
+                      "mode": "hub-full",
+                      "githubRepo": "EvotecIT/CuratedProduct",
+                      "description": "A curated product profile.",
+                      "links": {
+                        "source": "https://github.com/EvotecIT/CuratedProduct",
+                        "support": "/projects/curated-product/#support",
+                        "privacy": "/projects/curated-product/#privacy"
+                      },
+                      "brand": {
+                        "accent": "#123456",
+                        "icon": "/assets/products/curated/icon.png",
+                        "iconWidth": 256,
+                        "iconHeight": 256,
+                        "socialImage": "/assets/products/curated/social.png",
+                        "socialImageWidth": 1200,
+                        "socialImageHeight": 630
+                      },
+                      "product": {
+                        "layout": "product",
+                        "category": "Original category",
+                        "tagline": "Curated tagline.",
+                        "applicationCategory": "UtilitiesApplication",
+                        "platforms": ["Windows", "macOS"],
+                        "availability": "available",
+                        "primaryAction": {
+                          "label": "View source",
+                          "url": "https://github.com/EvotecIT/CuratedProduct"
+                        },
+                        "highlights": [
+                          { "title": "Curated", "text": "Retain this highlight." }
+                        ],
+                        "media": [
+                          {
+                            "src": "/assets/products/curated/home.png",
+                            "alt": "Curated Product home screen",
+                            "width": 1200,
+                            "height": 800,
+                            "role": "hero",
+                            "frame": "wide",
+                            "fit": "contain"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var manifestRoot = Path.Combine(root, "projects-sources", "curated-product", "WebsiteArtifacts");
+            Directory.CreateDirectory(manifestRoot);
+            File.WriteAllText(Path.Combine(manifestRoot, "project-manifest.json"),
+                """
+                {
+                  "slug": "curated-product",
+                  "brand": {
+                    "accent": "#654321"
+                  },
+                  "product": {
+                    "category": "Manifest category",
+                    "primaryAction": {
+                      "label": "Install now"
+                    }
+                  }
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-catalog",
+                      "catalog": "./data/projects/catalog.json",
+                      "sourcesRoot": "./projects-sources",
+                      "contentRoot": "./content/projects",
+                      "summaryPath": "./summary.json",
+                      "importManifests": true,
+                      "allowCreateProjects": false,
+                      "applyCuration": false,
+                      "mergeTelemetry": false,
+                      "mergeReleaseTelemetry": false,
+                      "generatePages": true,
+                      "generateSections": false,
+                      "forceOverwriteExisting": true,
+                      "validate": true,
+                      "failOnWarnings": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            using var normalized = JsonDocument.Parse(File.ReadAllText(catalogPath));
+            var project = normalized.RootElement.GetProperty("projects")[0];
+            var brand = project.GetProperty("brand");
+            var product = project.GetProperty("product");
+            Assert.Equal("#654321", brand.GetProperty("accent").GetString());
+            Assert.Equal("/assets/products/curated/icon.png", brand.GetProperty("icon").GetString());
+            Assert.Equal(256, brand.GetProperty("iconWidth").GetInt32());
+            Assert.Equal("/assets/products/curated/social.png", brand.GetProperty("socialImage").GetString());
+            Assert.Equal("Manifest category", product.GetProperty("category").GetString());
+            Assert.Equal("Curated tagline.", product.GetProperty("tagline").GetString());
+            Assert.Equal(2, product.GetProperty("platforms").GetArrayLength());
+            Assert.Single(product.GetProperty("media").EnumerateArray());
+            Assert.Single(product.GetProperty("highlights").EnumerateArray());
+            Assert.Equal("Install now", product.GetProperty("primaryAction").GetProperty("label").GetString());
+            Assert.Equal("https://github.com/EvotecIT/CuratedProduct", product.GetProperty("primaryAction").GetProperty("url").GetString());
         }
         finally
         {

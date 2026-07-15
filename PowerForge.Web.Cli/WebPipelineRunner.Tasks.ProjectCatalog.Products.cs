@@ -103,6 +103,7 @@ internal static partial class WebPipelineRunner
         var externalUrl = NormalizeOptionalString(project.ExternalUrl);
         var websiteUrl = TryGetDictionaryValue(links, "website");
         var appStoreUrl = TryGetDictionaryValue(links, "appStore");
+        var downloadsUrl = TryGetDictionaryValue(links, "downloads");
         var sourceUrl = TryGetDictionaryValue(links, "source");
         if (product.PrimaryAction is null)
         {
@@ -112,15 +113,22 @@ internal static partial class WebPipelineRunner
                 product.PrimaryAction = new ProductActionData { Label = "Visit product website", Url = websiteUrl };
             else if (!string.IsNullOrWhiteSpace(appStoreUrl))
                 product.PrimaryAction = new ProductActionData { Label = "Get the app", Url = appStoreUrl };
+            else if (!string.IsNullOrWhiteSpace(downloadsUrl))
+                product.PrimaryAction = new ProductActionData { Label = "Download", Url = downloadsUrl };
             else if (!string.IsNullOrWhiteSpace(sourceUrl))
                 product.PrimaryAction = new ProductActionData { Label = "View source", Url = sourceUrl };
         }
 
+        var secondaryDownloadUrl = appStoreUrl ?? downloadsUrl;
         if (product.SecondaryAction is null &&
-            !string.IsNullOrWhiteSpace(appStoreUrl) &&
-            !string.Equals(product.PrimaryAction?.Url, appStoreUrl, StringComparison.OrdinalIgnoreCase))
+            !string.IsNullOrWhiteSpace(secondaryDownloadUrl) &&
+            !string.Equals(product.PrimaryAction?.Url, secondaryDownloadUrl, StringComparison.OrdinalIgnoreCase))
         {
-            product.SecondaryAction = new ProductActionData { Label = "View on the App Store", Url = appStoreUrl };
+            product.SecondaryAction = new ProductActionData
+            {
+                Label = !string.IsNullOrWhiteSpace(appStoreUrl) ? "View on the App Store" : "Download",
+                Url = secondaryDownloadUrl
+            };
         }
 
         if (string.IsNullOrWhiteSpace(product.AvailabilityLabel))
@@ -146,6 +154,66 @@ internal static partial class WebPipelineRunner
         action.Label = NormalizeOptionalString(action.Label);
         action.Url = NormalizeOptionalString(action.Url);
         return string.IsNullOrWhiteSpace(action.Label) && string.IsNullOrWhiteSpace(action.Url) ? null : action;
+    }
+
+    private static void MergeManifestBrand(ProjectCatalogEntry project, ProjectBrandData manifestBrand)
+    {
+        project.Brand ??= new ProjectBrandData();
+        var target = project.Brand;
+
+        if (!string.IsNullOrWhiteSpace(manifestBrand.Accent))
+            target.Accent = manifestBrand.Accent;
+        if (!string.IsNullOrWhiteSpace(manifestBrand.Icon))
+            target.Icon = manifestBrand.Icon;
+        if (manifestBrand.IconWidth > 0)
+            target.IconWidth = manifestBrand.IconWidth;
+        if (manifestBrand.IconHeight > 0)
+            target.IconHeight = manifestBrand.IconHeight;
+        if (!string.IsNullOrWhiteSpace(manifestBrand.SocialImage))
+            target.SocialImage = manifestBrand.SocialImage;
+        if (manifestBrand.SocialImageWidth > 0)
+            target.SocialImageWidth = manifestBrand.SocialImageWidth;
+        if (manifestBrand.SocialImageHeight > 0)
+            target.SocialImageHeight = manifestBrand.SocialImageHeight;
+    }
+
+    private static void MergeManifestProduct(ProjectCatalogEntry project, ProductPresentationData manifestProduct)
+    {
+        project.Product ??= new ProductPresentationData();
+        var target = project.Product;
+
+        if (!string.IsNullOrWhiteSpace(manifestProduct.Layout))
+            target.Layout = manifestProduct.Layout;
+        if (!string.IsNullOrWhiteSpace(manifestProduct.Category))
+            target.Category = manifestProduct.Category;
+        if (!string.IsNullOrWhiteSpace(manifestProduct.Tagline))
+            target.Tagline = manifestProduct.Tagline;
+        if (!string.IsNullOrWhiteSpace(manifestProduct.ApplicationCategory))
+            target.ApplicationCategory = manifestProduct.ApplicationCategory;
+        if (manifestProduct.Platforms is { Length: > 0 })
+            target.Platforms = manifestProduct.Platforms;
+        if (!string.IsNullOrWhiteSpace(manifestProduct.Availability))
+            target.Availability = manifestProduct.Availability;
+        if (!string.IsNullOrWhiteSpace(manifestProduct.AvailabilityLabel))
+            target.AvailabilityLabel = manifestProduct.AvailabilityLabel;
+        if (manifestProduct.PrimaryAction is not null)
+            target.PrimaryAction = MergeManifestProductAction(target.PrimaryAction, manifestProduct.PrimaryAction);
+        if (manifestProduct.SecondaryAction is not null)
+            target.SecondaryAction = MergeManifestProductAction(target.SecondaryAction, manifestProduct.SecondaryAction);
+        if (manifestProduct.Highlights is { Count: > 0 })
+            target.Highlights = manifestProduct.Highlights;
+        if (manifestProduct.Media is { Count: > 0 })
+            target.Media = manifestProduct.Media;
+    }
+
+    private static ProductActionData MergeManifestProductAction(ProductActionData? target, ProductActionData manifestAction)
+    {
+        target ??= new ProductActionData();
+        if (!string.IsNullOrWhiteSpace(manifestAction.Label))
+            target.Label = manifestAction.Label;
+        if (!string.IsNullOrWhiteSpace(manifestAction.Url))
+            target.Url = manifestAction.Url;
+        return target;
     }
 
     private static string[] NormalizeProductStringArray(string[]? values)
@@ -332,7 +400,7 @@ internal static partial class WebPipelineRunner
             return;
 
         var product = project.Product;
-        lines.Add("meta.product:");
+        lines.Add("meta.product_presentation:");
         AddNestedString(lines, 2, "category", product.Category);
         AddNestedString(lines, 2, "tagline", product.Tagline);
         AddNestedString(lines, 2, "application_category", product.ApplicationCategory);
