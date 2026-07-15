@@ -77,11 +77,8 @@ internal static partial class WebCliCommandHandlers
         foreach (var path in manifest.Paths ?? Array.Empty<PowerForgeServerPath>())
         {
             if (string.IsNullOrWhiteSpace(path.Path)) continue;
-            var test = path.Kind?.Equals("directory", StringComparison.OrdinalIgnoreCase) == true
-                ? $"test -d {ShellQuote(path.Path)}"
-                : $"test -e {ShellQuote(path.Path)}";
             AddBooleanCheck(checks, $"path.{path.Id ?? path.Path}", "paths", $"Managed path exists: {path.Path}",
-                ExecuteRemote(sshCommand, target, test).Success,
+                ExecuteRemote(sshCommand, target, BuildManagedPathCheckCommand(path)).Success,
                 path.Kind ?? "exists",
                 path.Path);
         }
@@ -90,7 +87,7 @@ internal static partial class WebCliCommandHandlers
         {
             if (string.IsNullOrWhiteSpace(path.Path)) continue;
             AddCommandCheck(checks, $"path.{path.Id ?? path.Path}.target", "paths", $"Managed symlink resolves: {path.Path}",
-                ExecuteRemote(sshCommand, target, $"readlink -f {ShellQuote(path.Path)}"), "symlink target");
+                ExecuteRemote(sshCommand, target, BuildManagedSymlinkTargetCommand(path.Path)), "symlink target");
         }
 
         InspectSystemdUnits(sshCommand, target, manifest.Systemd?.Services, "service", checks);
@@ -182,6 +179,15 @@ internal static partial class WebCliCommandHandlers
 
     private static ProcessResult ExecuteRemote(string sshCommand, string target, string command)
         => RunProcessCaptureText(sshCommand, BuildSshArguments(target, command));
+
+    internal static string BuildManagedPathCheckCommand(PowerForgeServerPath path)
+    {
+        var predicate = path.Kind?.Equals("directory", StringComparison.OrdinalIgnoreCase) == true ? "-d" : "-e";
+        return $"sudo -n test {predicate} {ShellQuote(path.Path ?? string.Empty)}";
+    }
+
+    internal static string BuildManagedSymlinkTargetCommand(string path)
+        => $"sudo -n readlink -f {ShellQuote(path)}";
 
     private static void InspectSystemdUnits(
         string sshCommand,
