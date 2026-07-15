@@ -1072,6 +1072,12 @@ public sealed class DotNetPublishEnvironmentVariable
     public bool Required { get; set; }
 
     /// <summary>
+    /// When true, resolves the value as a path relative to the dotnet publish project root.
+    /// Absolute values remain absolute.
+    /// </summary>
+    public bool ResolvePathRelativeToProjectRoot { get; set; }
+
+    /// <summary>
     /// Indicates that the value is sensitive and should not be written to logs.
     /// </summary>
     public bool Secret { get; set; } = true;

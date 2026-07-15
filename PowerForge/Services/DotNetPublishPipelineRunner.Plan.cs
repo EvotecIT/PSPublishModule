@@ -560,6 +560,7 @@ public sealed partial class DotNetPublishPipelineRunner
             MsBuildProperties = msbuildProps,
             EnvironmentVariables = ResolveDotNetEnvironmentVariables(
                 spec.DotNet.EnvironmentVariables,
+                projectRoot,
                 enforceRequiredEnvironmentVariables),
             Targets = targets.ToArray(),
             Bundles = bundles,
@@ -731,6 +732,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 FromEnvironmentVariable = value.FromEnvironmentVariable,
                 FromEnvironmentVariables = (value.FromEnvironmentVariables ?? Array.Empty<string>()).ToArray(),
                 Required = value.Required,
+                ResolvePathRelativeToProjectRoot = value.ResolvePathRelativeToProjectRoot,
                 Secret = value.Secret
             };
         }
@@ -740,6 +742,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static Dictionary<string, string?> ResolveDotNetEnvironmentVariables(
         Dictionary<string, DotNetPublishEnvironmentVariable>? environmentVariables,
+        string projectRoot,
         bool enforceRequired)
     {
         var resolved = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
@@ -775,6 +778,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     $"Required dotnet environment variable '{targetName}' could not be resolved. " +
                     $"Set one of: {sourceList}.");
             }
+
+            if (value is not null && definition.ResolvePathRelativeToProjectRoot)
+                value = ResolvePath(projectRoot, value);
 
             if (value is not null)
                 resolved[targetName] = value;
