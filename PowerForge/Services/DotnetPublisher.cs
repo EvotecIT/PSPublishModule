@@ -105,36 +105,47 @@ public sealed class DotnetPublisher
             throw new InvalidOperationException("No supported frameworks were provided for dotnet publish.");
 
         var maxCpuCountArgument = isWindows ? "/m:1" : "-m:1";
-
-        foreach (var tfm in requestedFrameworks)
+        var versionIsolationProps = CreateVersionIsolationProps();
+        try
         {
-            var publishDir = useIsolatedArtifacts
-                ? Path.Combine(artifacts!, "publish", tfm)
-                : Path.Combine(projDir, "bin", configuration, tfm, "publish");
-            var dependencyArgs = BuildDependencyArguments(
-                configuration,
-                tfm,
-                useIsolatedArtifacts,
-                artifacts,
-                maxCpuCountArgument,
-                restoreSources);
-            RunDotnet(projDir, dependencyArgs, tfm, "dependency build");
+            foreach (var tfm in requestedFrameworks)
+            {
+                var publishDir = useIsolatedArtifacts
+                    ? Path.Combine(artifacts!, "publish", tfm)
+                    : Path.Combine(projDir, "bin", configuration, tfm, "publish");
+                var dependencyArgs = BuildDependencyArguments(
+                    configuration,
+                    tfm,
+                    useIsolatedArtifacts,
+                    artifacts,
+                    maxCpuCountArgument,
+                    restoreSources);
+                RunDotnet(projDir, dependencyArgs, tfm, "dependency build");
 
-            var args = BuildPublishArguments(
-                configuration,
-                version,
-                tfm,
-                useIsolatedArtifacts,
-                artifacts,
-                maxCpuCountArgument,
-                publishDir,
-                restoreSources);
-            RunDotnet(projDir, args, tfm, "publish");
+                var args = BuildPublishArguments(
+                    projectPath,
+                    versionIsolationProps,
+                    configuration,
+                    version,
+                    tfm,
+                    useIsolatedArtifacts,
+                    artifacts,
+                    maxCpuCountArgument,
+                    publishDir,
+                    restoreSources);
+                RunDotnet(projDir, args, tfm, "publish");
 
-            if (!Directory.Exists(publishDir))
-                throw new DirectoryNotFoundException($"Publish directory not found: {publishDir}");
+                if (!Directory.Exists(publishDir))
+                    throw new DirectoryNotFoundException($"Publish directory not found: {publishDir}");
 
-            result[tfm] = publishDir;
+                result[tfm] = publishDir;
+            }
+        }
+        finally
+        {
+            try { File.Delete(versionIsolationProps); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         return result;
@@ -162,6 +173,8 @@ public sealed class DotnetPublisher
     }
 
     internal static IReadOnlyList<string> BuildPublishArguments(
+        string projectPath,
+        string versionIsolationProps,
         string configuration,
         string version,
         string tfm,
@@ -178,10 +191,9 @@ public sealed class DotnetPublisher
             "-nologo",
             "--verbosity", "minimal",
             "--no-restore",
-            "-p:BuildProjectReferences=false",
-            $"-p:Version={version}",
-            $"-p:AssemblyVersion={version}",
-            $"-p:FileVersion={version}",
+            $"-p:PowerForgeRootProject={Path.GetFullPath(projectPath)}",
+            $"-p:PowerForgeRootVersion={version}",
+            $"-p:CustomBeforeMicrosoftCommonProps={Path.GetFullPath(versionIsolationProps)}",
             "--framework", tfm
         };
 
@@ -193,6 +205,20 @@ public sealed class DotnetPublisher
         }
 
         return args;
+    }
+
+    private static string CreateVersionIsolationProps()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"PowerForge.VersionIsolation.{Guid.NewGuid():N}.props");
+        File.WriteAllText(path,
+            "<Project>" + Environment.NewLine +
+            "  <PropertyGroup Condition=\"'$(MSBuildProjectFullPath)' == '$(PowerForgeRootProject)'\">" + Environment.NewLine +
+            "    <Version>$(PowerForgeRootVersion)</Version>" + Environment.NewLine +
+            "    <AssemblyVersion>$(PowerForgeRootVersion)</AssemblyVersion>" + Environment.NewLine +
+            "    <FileVersion>$(PowerForgeRootVersion)</FileVersion>" + Environment.NewLine +
+            "  </PropertyGroup>" + Environment.NewLine +
+            "</Project>" + Environment.NewLine);
+        return path;
     }
 
     private static void AppendSharedBuildArguments(

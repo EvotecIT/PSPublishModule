@@ -14,6 +14,8 @@ public sealed class DotnetPublisherTests
         var sourceB = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "Feed B");
 
         var args = DotnetPublisher.BuildPublishArguments(
+            projectPath: Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "Module.csproj"),
+            versionIsolationProps: Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "PowerForge.VersionIsolation.props"),
             configuration: "Release",
             version: "1.2.3",
             tfm: "net10.0",
@@ -29,7 +31,9 @@ public sealed class DotnetPublisherTests
             StringComparison.Ordinal));
         Assert.Single(args, arg => arg.StartsWith("-p:RestoreAdditionalProjectSources=", StringComparison.Ordinal));
         Assert.Contains("--no-restore", args);
-        Assert.Contains("-p:BuildProjectReferences=false", args);
+        Assert.DoesNotContain("-p:BuildProjectReferences=false", args);
+        Assert.DoesNotContain(args, arg => arg.StartsWith("-p:Version=", StringComparison.Ordinal));
+        Assert.Contains(args, arg => arg.StartsWith("-p:PowerForgeRootVersion=1.2.3", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -54,17 +58,24 @@ public sealed class DotnetPublisherTests
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "DotnetPublisher", Guid.NewGuid().ToString("N"));
         var dependencyDirectory = Path.Combine(root, "Dependency");
+        var transitiveDirectory = Path.Combine(root, "Transitive");
         var moduleDirectory = Path.Combine(root, "Module");
         var artifacts = Path.Combine(root, "artifacts");
         Directory.CreateDirectory(dependencyDirectory);
+        Directory.CreateDirectory(transitiveDirectory);
         Directory.CreateDirectory(moduleDirectory);
 
         try
         {
+            File.WriteAllText(Path.Combine(transitiveDirectory, "Transitive.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><AssemblyVersion>4.5.6.0</AssemblyVersion><FileVersion>4.5.6.0</FileVersion></PropertyGroup><ItemGroup><None Include=\"transitive-content.txt\" CopyToOutputDirectory=\"PreserveNewest\" CopyToPublishDirectory=\"PreserveNewest\" /></ItemGroup></Project>");
+            File.WriteAllText(Path.Combine(transitiveDirectory, "Transitive.cs"),
+                "namespace Transitive; public sealed class Value { public string Text => \"transitive\"; }");
+            File.WriteAllText(Path.Combine(transitiveDirectory, "transitive-content.txt"), "transitive publish content");
             File.WriteAllText(Path.Combine(dependencyDirectory, "Dependency.csproj"),
-                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><AssemblyVersion>2.3.4.0</AssemblyVersion><FileVersion>2.3.4.0</FileVersion></PropertyGroup></Project>");
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><AssemblyVersion>2.3.4.0</AssemblyVersion><FileVersion>2.3.4.0</FileVersion></PropertyGroup><ItemGroup><ProjectReference Include=\"..\\Transitive\\Transitive.csproj\" /></ItemGroup></Project>");
             File.WriteAllText(Path.Combine(dependencyDirectory, "Dependency.cs"),
-                "namespace Dependency; public sealed class Value { public string Text => \"dependency\"; }");
+                "namespace Dependency; public sealed class Value { public string Text => new Transitive.Value().Text; }");
             var moduleProject = Path.Combine(moduleDirectory, "Module.csproj");
             File.WriteAllText(moduleProject,
                 "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup><ItemGroup><ProjectReference Include=\"..\\Dependency\\Dependency.csproj\" /></ItemGroup></Project>");
@@ -81,6 +92,8 @@ public sealed class DotnetPublisherTests
 
             Assert.Equal(new Version(9, 8, 7, 0), AssemblyName.GetAssemblyName(Path.Combine(publishDirectory, "Module.dll")).Version);
             Assert.Equal(new Version(2, 3, 4, 0), AssemblyName.GetAssemblyName(Path.Combine(publishDirectory, "Dependency.dll")).Version);
+            Assert.Equal(new Version(4, 5, 6, 0), AssemblyName.GetAssemblyName(Path.Combine(publishDirectory, "Transitive.dll")).Version);
+            Assert.Equal("transitive publish content", File.ReadAllText(Path.Combine(publishDirectory, "transitive-content.txt")));
         }
         finally
         {
