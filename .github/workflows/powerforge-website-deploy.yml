@@ -325,6 +325,7 @@ jobs:
           DEPLOYMENT_PRIVATE_KEY: ${{ secrets.deployment_ssh_private_key }}
           DEPLOYMENT_KNOWN_HOSTS: ${{ secrets.deployment_ssh_known_hosts }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare_api_token }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.cloudflare_zone_id }}
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:DEPLOYMENT_SITE -notmatch '^[a-z0-9][a-z0-9.-]{0,62}$') {
@@ -410,6 +411,7 @@ jobs:
           DEPLOYMENT_PRIVATE_KEY: ${{ secrets.deployment_ssh_private_key }}
           DEPLOYMENT_KNOWN_HOSTS: ${{ secrets.deployment_ssh_known_hosts }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare_api_token }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.cloudflare_zone_id }}
         run: |
           $ErrorActionPreference = 'Stop'
           $sshRoot = Join-Path $env:RUNNER_TEMP 'powerforge-deployment-ssh'
@@ -426,15 +428,18 @@ jobs:
             (Join-Path $env:RUNNER_TEMP 'powerforge-site/deployment.json')
           )
           if (-not [string]::IsNullOrWhiteSpace($env:DEPLOYMENT_CLOUDFLARE_ZONE)) {
-            $headers = @{ Authorization = "Bearer $($env:CLOUDFLARE_API_TOKEN)" }
-            $zoneName = [Uri]::EscapeDataString($env:DEPLOYMENT_CLOUDFLARE_ZONE)
-            $zoneResponse = Invoke-RestMethod -Method Get -Uri "https://api.cloudflare.com/client/v4/zones?name=$zoneName&status=active&per_page=2" -Headers $headers
-            if (-not $zoneResponse.success -or @($zoneResponse.result).Count -ne 1) {
-              throw "Cloudflare did not return exactly one active zone for '$($env:DEPLOYMENT_CLOUDFLARE_ZONE)'."
+            $zoneId = [string]$env:CLOUDFLARE_ZONE_ID
+            if ([string]::IsNullOrWhiteSpace($zoneId)) {
+              $headers = @{ Authorization = "Bearer $($env:CLOUDFLARE_API_TOKEN)" }
+              $zoneName = [Uri]::EscapeDataString($env:DEPLOYMENT_CLOUDFLARE_ZONE)
+              $zoneResponse = Invoke-RestMethod -Method Get -Uri "https://api.cloudflare.com/client/v4/zones?name=$zoneName&status=active&per_page=5" -Headers $headers
+              if (-not $zoneResponse.success -or @($zoneResponse.result).Count -ne 1) {
+                throw "Cloudflare did not return exactly one active zone for '$($env:DEPLOYMENT_CLOUDFLARE_ZONE)'."
+              }
+              $zoneId = [string]$zoneResponse.result[0].id
             }
-            $zoneId = [string]$zoneResponse.result[0].id
             if ($zoneId -notmatch '^[A-Fa-f0-9]{32}$') {
-              throw 'Cloudflare returned an invalid zone id.'
+              throw 'cloudflare_zone_id is invalid and zone discovery did not return a valid id.'
             }
             $cloudflareTokenPath = Join-Path $sshRoot 'cloudflare-api.token'
             $cloudflareZonePath = Join-Path $sshRoot 'cloudflare-zone-id'

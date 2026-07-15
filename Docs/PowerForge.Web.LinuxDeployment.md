@@ -36,6 +36,7 @@ jobs:
       deployment_cloudflare_zone: example.com
     secrets:
       cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      cloudflare_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
       deployment_ssh_private_key: ${{ secrets.WEBSITE_DEPLOY_SSH_PRIVATE_KEY }}
       deployment_ssh_known_hosts: ${{ secrets.WEBSITE_DEPLOY_SSH_KNOWN_HOSTS }}
 ```
@@ -65,9 +66,12 @@ by another account. It atomically promotes a timestamped release, purges Cloudfl
 without disabling proxying, verifies the exact source SHA through both the origin and
 public URL, and rolls back the symlink if any check fails.
 
-When `deployment_cloudflare_zone` is set, the workflow resolves exactly one active
-zone with `cloudflare_api_token` and transfers the token and zone id only inside the
-temporary deployment staging. The promoter copies them into root-only staging,
+When `deployment_cloudflare_zone` is set, the workflow uses `cloudflare_zone_id`
+directly and transfers the token and zone id only inside temporary deployment
+staging. A least-privilege cache-purge token therefore does not need Zone Read. If
+the zone-id secret is absent, the workflow may discover exactly one active zone by
+name; that fallback also requires Zone Read and uses Cloudflare's valid page size.
+The promoter copies the credentials into root-only staging,
 purges before exact-SHA verification, and erases them on every success or failure.
 This keeps Cloudflare proxying and cache analytics enabled without storing a broad
 CI token permanently on the web host. Sites may instead use a scoped, root-owned

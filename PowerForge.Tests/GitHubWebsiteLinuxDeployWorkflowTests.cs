@@ -56,6 +56,8 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("^/tmp/powerforge-([0-9]+)-([0-9]+)-", script, StringComparison.Ordinal);
         Assert.Contains("BASH_REMATCH[3]", script, StringComparison.Ordinal);
         Assert.Contains("deployment_cloudflare_zone", ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml"), StringComparison.Ordinal);
+        Assert.Contains("CLOUDFLARE_ZONE_ID", ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml"), StringComparison.Ordinal);
+        Assert.Contains("per_page=5", ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml"), StringComparison.Ordinal);
         Assert.Contains("cloudflare-api.token", script, StringComparison.Ordinal);
         Assert.Contains("Ephemeral Cloudflare zone id does not match", script, StringComparison.Ordinal);
     }
