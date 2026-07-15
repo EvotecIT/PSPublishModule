@@ -58,7 +58,7 @@ internal sealed class PublishConfigurationFactory
 
         var apiKeyToUse = request.ParameterSetName switch
         {
-            "ApiFromFile" when !string.IsNullOrWhiteSpace(apiKeyFilePathToUse) => string.Empty,
+            "ApiFromFile" => string.Empty,
             "AzureArtifacts" => AzureArtifactsApiKeyPlaceholder,
             "JFrog" when !string.IsNullOrWhiteSpace(apiKeyFilePathToUse) => string.Empty,
             _ => ValidateSingleLineSecret(request.ApiKey, nameof(PublishConfigurationRequest.ApiKey))

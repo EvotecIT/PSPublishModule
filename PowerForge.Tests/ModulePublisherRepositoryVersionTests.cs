@@ -105,14 +105,17 @@ public sealed class ModulePublisherRepositoryVersionTests
     }
 
     [Fact]
-    public void ResolvePublishApiKey_RejectsDeferredMultilineSecret()
+    public void ResolvePublishApiKey_RejectsDeferredMultilineSecretAtPublishRuntime()
     {
-        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".ps1");
-        File.WriteAllText(path, "Write-Host 'not a key'" + Environment.NewLine + "Write-Host 'still not a key'");
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N")));
         try
         {
+            var path = Path.Combine(root.FullName, "gallery.key");
+            File.WriteAllText(path, "first-line" + Environment.NewLine + "second-line");
+
             var ex = Assert.Throws<ArgumentException>(() => ModulePublisher.ResolvePublishApiKey(
-                new PublishConfiguration { ApiKeyFilePath = path }));
+                new PublishConfiguration { ApiKeyFilePath = path },
+                root.FullName));
 
             Assert.Contains("multi-line secret", ex.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("single line", ex.Message, StringComparison.OrdinalIgnoreCase);
@@ -120,8 +123,7 @@ public sealed class ModulePublisherRepositoryVersionTests
         }
         finally
         {
-            if (File.Exists(path))
-                File.Delete(path);
+            try { root.Delete(recursive: true); } catch { }
         }
     }
 

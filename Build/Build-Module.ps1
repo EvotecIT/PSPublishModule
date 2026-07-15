@@ -1,5 +1,8 @@
 [CmdletBinding()]
 param(
+    [Alias('ConfigurationGateMode')]
+    [ValidateSet('Manifest', 'Documentation', 'Build', 'Publish')]
+    [string] $RunMode = 'Build',
     [ValidateSet('auto', 'net10.0', 'net8.0')][string] $Framework = 'auto',
     [ValidateSet('Release', 'Debug')][string] $Configuration = 'Release',
     [switch] $NoBuild,
@@ -17,6 +20,7 @@ if ($PSBoundParameters.ContainsKey('JsonPath')) {
 }
 
 $invoke = @{
+    RunMode        = $RunMode
     Framework      = $Framework
     Configuration  = $Configuration
 }

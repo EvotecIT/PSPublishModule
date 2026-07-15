@@ -133,6 +133,22 @@ public sealed class PSPublishModuleManifestContractTests
     }
 
     [Fact]
+    public void Self_build_defaults_to_build_gate_and_forwards_run_mode_once()
+    {
+        var repoRoot = RepoRootLocator.Find();
+        var wrapperScript = File.ReadAllText(Path.Combine(repoRoot, "Build", "Build-Module.ps1"));
+        var selfBuildScript = File.ReadAllText(Path.Combine(repoRoot, "Module", "Build", "Build-ModuleSelf.ps1"));
+        var buildScript = File.ReadAllText(Path.Combine(repoRoot, "Module", "Build", "Build-Module.ps1"));
+
+        Assert.Contains("[string] $RunMode = 'Build'", wrapperScript, StringComparison.Ordinal);
+        Assert.Contains("RunMode        = $RunMode", wrapperScript, StringComparison.Ordinal);
+        Assert.Contains("[string] $RunMode = 'Build'", selfBuildScript, StringComparison.Ordinal);
+        Assert.Contains("RunMode        = $RunMode", selfBuildScript, StringComparison.Ordinal);
+        Assert.Contains("New-ConfigurationGate -Mode $RunMode", buildScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("$buildParams.RunMode", buildScript, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Module_exports_embedded_dependency_cmdlets()
     {
         var repoRoot = RepoRootLocator.Find();

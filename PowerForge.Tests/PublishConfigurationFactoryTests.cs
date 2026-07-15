@@ -5,22 +5,21 @@ namespace PowerForge.Tests;
 public sealed class PublishConfigurationFactoryTests
 {
     [Fact]
-    public void Create_defers_enabled_publish_api_key_file_until_runtime()
+    public void Create_defers_enabled_publish_api_key_file_until_publish_runtime()
     {
-        var missingPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".txt");
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".txt");
         var factory = new PublishConfigurationFactory();
 
         var segment = factory.Create(new PublishConfigurationRequest
         {
             ParameterSetName = "ApiFromFile",
             Type = PublishDestination.PowerShellGallery,
-            FilePath = missingPath,
-            FilePathSpecified = true,
+            FilePath = path,
             Enabled = true
         });
 
         Assert.Equal(string.Empty, segment.Configuration.ApiKey);
-        Assert.Equal(missingPath, segment.Configuration.ApiKeyFilePath);
+        Assert.Equal(path, segment.Configuration.ApiKeyFilePath);
         Assert.Equal(PublishDestination.PowerShellGallery, segment.Configuration.Destination);
         Assert.True(segment.Configuration.Enabled);
     }
@@ -166,6 +165,33 @@ public sealed class PublishConfigurationFactoryTests
         }));
 
         Assert.Contains("ApiKey", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_defers_multiline_publish_api_key_validation_until_publish_runtime()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".ps1");
+        File.WriteAllText(path, "Write-Host 'not a key'" + Environment.NewLine + "Write-Host 'still not a key'");
+        try
+        {
+            var factory = new PublishConfigurationFactory();
+
+            var segment = factory.Create(new PublishConfigurationRequest
+            {
+                ParameterSetName = "ApiFromFile",
+                Type = PublishDestination.PowerShellGallery,
+                FilePath = path,
+                Enabled = true
+            });
+
+            Assert.Equal(string.Empty, segment.Configuration.ApiKey);
+            Assert.Equal(path, segment.Configuration.ApiKeyFilePath);
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
     }
 
     [Theory]
