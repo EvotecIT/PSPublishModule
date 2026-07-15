@@ -131,6 +131,57 @@ public sealed class DotNetPublishPipelineRunnerEnvironmentTests
     }
 
     [Fact]
+    public void Plan_ResolvesConfiguredEnvironmentPathAgainstProjectRoot()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var projectPath = CreateProject(root);
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(
+                new DotNetPublishSpec
+                {
+                    Profile = "msi",
+                    Profiles = new[]
+                    {
+                        new DotNetPublishProfile
+                        {
+                            Name = "msi",
+                            Default = true,
+                            Targets = new[] { "app" },
+                            Runtimes = new[] { "win-x64" }
+                        }
+                    },
+                    DotNet = new DotNetPublishDotNetOptions
+                    {
+                        ProjectRoot = root,
+                        Restore = false,
+                        Build = false,
+                        Runtimes = new[] { "win-x64" },
+                        EnvironmentVariables = new Dictionary<string, DotNetPublishEnvironmentVariable>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["NUGET_PACKAGES"] = new()
+                            {
+                                Value = Path.Combine("Artifacts", ".nuget", "packages"),
+                                ResolvePathRelativeToProjectRoot = true,
+                                Secret = false
+                            }
+                        }
+                    },
+                    Targets = new[] { NewTarget(projectPath) }
+                },
+                configPath: null);
+
+            Assert.Equal(
+                Path.GetFullPath(Path.Combine(root, "Artifacts", ".nuget", "packages")),
+                plan.EnvironmentVariables["NUGET_PACKAGES"]);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_PreservesTwoArgumentOverloadForBinaryCompatibility()
     {
         var overload = typeof(DotNetPublishPipelineRunner).GetMethod(
