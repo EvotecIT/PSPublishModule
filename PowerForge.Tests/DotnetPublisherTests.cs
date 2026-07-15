@@ -15,7 +15,7 @@ public sealed class DotnetPublisherTests
 
         var args = DotnetPublisher.BuildPublishArguments(
             projectPath: Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "Module.csproj"),
-            versionIsolationProps: Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "PowerForge.VersionIsolation.props"),
+            versionIsolationTargets: Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "PowerForge.VersionIsolation.targets"),
             configuration: "Release",
             version: "1.2.3",
             tfm: "net10.0",
@@ -34,6 +34,7 @@ public sealed class DotnetPublisherTests
         Assert.DoesNotContain("-p:BuildProjectReferences=false", args);
         Assert.DoesNotContain(args, arg => arg.StartsWith("-p:Version=", StringComparison.Ordinal));
         Assert.Contains(args, arg => arg.StartsWith("-p:PowerForgeRootVersion=1.2.3", StringComparison.Ordinal));
+        Assert.Contains(args, arg => arg.StartsWith("-p:CustomAfterMicrosoftCommonTargets=", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -78,7 +79,7 @@ public sealed class DotnetPublisherTests
                 "namespace Dependency; public sealed class Value { public string Text => new Transitive.Value().Text; }");
             var moduleProject = Path.Combine(moduleDirectory, "Module.csproj");
             File.WriteAllText(moduleProject,
-                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup><ItemGroup><ProjectReference Include=\"..\\Dependency\\Dependency.csproj\" /></ItemGroup></Project>");
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Version>1.0.0</Version><AssemblyVersion>1.0.0.0</AssemblyVersion><FileVersion>1.0.0.0</FileVersion></PropertyGroup><ItemGroup><ProjectReference Include=\"..\\Dependency\\Dependency.csproj\" /></ItemGroup></Project>");
             File.WriteAllText(Path.Combine(moduleDirectory, "Module.cs"),
                 "namespace Module; public sealed class Value { public string Text => new Dependency.Value().Text; }");
 
