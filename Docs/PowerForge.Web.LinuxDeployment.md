@@ -7,22 +7,78 @@ This pattern is the reusable baseline for static PowerForge.Web sites hosted on 
 ## Goals
 
 - Build deploy artifacts from a clean checkout.
+- Build on the runner required by each website instead of assuming the web host can build it.
 - Publish each deploy into a timestamped release directory.
 - Promote the release by moving a `current` symlink.
+- Record the exact source commit, PowerForge commit, workflow run, and artifact checksum.
+- Roll back automatically when origin or public smoke checks fail.
 - Keep generated web-server redirect artifacts in sync.
-- Run cheap hourly change checks without rebuilding when nothing changed.
 - Keep provider-specific cache purges in environment variables, not in repo files.
 
-## Repository Flow
+## CI Artifact Flow (Recommended)
 
-Use one website checkout and, when developing against a local engine checkout, one engine checkout:
+Use `.github/workflows/powerforge-website-deploy.yml` with `deployment_target: linux`.
+The build still runs on `runner_labels_json`, so Windows-only and Linux-compatible
+sites use the same publication contract without moving their toolchains onto the web
+server.
+
+```yaml
+jobs:
+  website:
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-deploy.yml@<full-commit-sha>
+    with:
+      website_root: Website
+      pipeline_config: Website/pipeline.json
+      deployment_target: linux
+      deployment_site: example.com
+      deployment_host: deploy.example.com
+      deployment_url: https://example.com
+    secrets:
+      deployment_ssh_private_key: ${{ secrets.WEBSITE_DEPLOY_SSH_PRIVATE_KEY }}
+      deployment_ssh_known_hosts: ${{ secrets.WEBSITE_DEPLOY_SSH_KNOWN_HOSTS }}
+```
+
+The workflow:
+
+1. runs the normal PowerForge CI pipeline and quality guardrails
+2. archives the validated `_site` output on its native build runner
+3. records exact source and engine SHAs plus the artifact SHA-256
+4. transfers the artifact through a pinned SSH host key
+5. invokes the root-owned server promoter for an allowlisted site id
+
+Install `Deployment/Linux/powerforge-site-deploy.sh` as
+`/usr/local/sbin/powerforge-site-deploy`. Install one root-owned configuration from
+`Deployment/Linux/powerforge-site.env.example` under
+`/etc/powerforge/sites/<site>.env`. The workflow cannot provide release roots,
+Cloudflare credentials, origin addresses, or smoke policy; those remain trusted host
+configuration.
+
+Give each repository a separate deployment key and a protected GitHub environment.
+Restrict its server account/sudo rule to the expected site argument. Do not share one
+unrestricted deployment key across every repository.
+
+The promoter rejects path traversal, links, special files, checksum mismatches,
+unconfigured site ids, mutable site configuration, and workflow staging files owned
+by another account. It atomically promotes a timestamped release, purges Cloudflare
+without disabling proxying, verifies the exact source SHA through both the origin and
+public URL, and rolls back the symlink if any check fails.
+
+## Host Build Flow (Special Case)
+
+Some sites intentionally regenerate from changing external inputs even when Git has
+not changed. Those sites may retain a host-side daily rebuild as a safety lane. Use
+one website checkout and one engine checkout:
 
 ```text
 /srv/example/Website
 /srv/example/PSPublishModule
 ```
 
-The deploy script should fetch both repositories, reset them to configured branches, and compare the current commits with the last successful deploy metadata. If both commits are unchanged and `DEPLOY_ONLY_ON_CHANGE=1`, exit successfully without running the pipeline.
+The deploy script should fetch both repositories, reset them to configured branches,
+and compare current commits with the last successful metadata. It must install every
+runtime dependency required by the strict pipeline, including the configured
+Playwright browser. Prefer the CI artifact flow for normal commits so host tool drift
+cannot silently stop publication.
 
 Recommended environment variables:
 
@@ -36,12 +92,12 @@ DEPLOY_ONLY_ON_CHANGE=0
 DEPLOY_STATE_ROOT=/srv/example/deploy-state/website
 ```
 
-## Timers
+## Optional Timers
 
 Use two timers:
 
 - Daily full rebuild: catches generated content, external data, feeds, and slow-moving maintenance work.
-- Hourly change rebuild: fetches repositories and deploys only when `Website` or the engine commit changed.
+- Hourly change rebuild: only for sites that intentionally use the host-build flow.
 
 Example change-check service:
 

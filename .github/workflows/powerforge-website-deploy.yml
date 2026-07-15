@@ -81,6 +81,38 @@ on:
         required: false
         type: boolean
         default: false
+      deployment_target:
+        required: false
+        type: string
+        default: "github-pages"
+      deployment_site:
+        required: false
+        type: string
+        default: ""
+      deployment_host:
+        required: false
+        type: string
+        default: ""
+      deployment_user:
+        required: false
+        type: string
+        default: "powerforge-deploy"
+      deployment_port:
+        required: false
+        type: number
+        default: 22
+      deployment_environment:
+        required: false
+        type: string
+        default: "production"
+      deployment_url:
+        required: false
+        type: string
+        default: ""
+      publisher_runner_labels_json:
+        required: false
+        type: string
+        default: '["ubuntu-latest"]'
     secrets:
       indexnow_key:
         required: false
@@ -90,13 +122,15 @@ on:
         required: false
       cloudflare_zone_id:
         required: false
+      deployment_ssh_private_key:
+        required: false
+      deployment_ssh_known_hosts:
+        required: false
 
 permissions:
   actions: write
   contents: read
   packages: read
-  pages: write
-  id-token: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -119,10 +153,15 @@ jobs:
       - name: Validate deploy guardrails
         shell: pwsh
         env:
+          DEPLOYMENT_TARGET: ${{ inputs.deployment_target }}
           PIPELINE_CONFIG: ${{ inputs.pipeline_config }}
           REQUIRE_SEO_DOCTOR_GUARDRAIL: ${{ inputs.require_seo_doctor_guardrail }}
         run: |
           $ErrorActionPreference = 'Stop'
+
+          if ($env:DEPLOYMENT_TARGET -notin @('github-pages', 'linux')) {
+            throw "Unsupported deployment_target '$($env:DEPLOYMENT_TARGET)'. Expected github-pages or linux."
+          }
 
           if ($env:REQUIRE_SEO_DOCTOR_GUARDRAIL -ne 'true') {
             Write-Host 'SEO doctor deploy guardrail disabled for this workflow call.'
@@ -231,8 +270,10 @@ jobs:
       powerforge_web_tag: ${{ inputs.powerforge_web_tag }}
       pipeline_mode: ci
       use_playwright_cache: true
-      upload_pages_artifact: true
+      upload_pages_artifact: ${{ inputs.deployment_target == 'github-pages' }}
       pages_artifact_path: ${{ inputs.site_output_path }}
+      site_artifact_name: ${{ inputs.deployment_target == 'linux' && 'powerforge-site' || '' }}
+      site_artifact_path: ${{ inputs.site_output_path }}
     secrets:
       indexnow_key: ${{ secrets.indexnow_key }}
       repository_read_token: ${{ secrets.repository_read_token }}
@@ -240,6 +281,7 @@ jobs:
       cloudflare_zone_id: ${{ secrets.cloudflare_zone_id }}
 
   deploy:
+    if: ${{ inputs.deployment_target == 'github-pages' }}
     needs: build
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     environment:
@@ -253,9 +295,123 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
 
+  deploy-linux:
+    if: ${{ inputs.deployment_target == 'linux' }}
+    needs: build
+    runs-on: ${{ fromJson(inputs.publisher_runner_labels_json) }}
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    environment:
+      name: ${{ inputs.deployment_environment }}
+      url: ${{ inputs.deployment_url }}
+    steps:
+      - name: Validate Linux deployment inputs
+        shell: pwsh
+        env:
+          DEPLOYMENT_HOST: ${{ inputs.deployment_host }}
+          DEPLOYMENT_PORT: ${{ inputs.deployment_port }}
+          DEPLOYMENT_SITE: ${{ inputs.deployment_site }}
+          DEPLOYMENT_USER: ${{ inputs.deployment_user }}
+          DEPLOYMENT_PRIVATE_KEY: ${{ secrets.deployment_ssh_private_key }}
+          DEPLOYMENT_KNOWN_HOSTS: ${{ secrets.deployment_ssh_known_hosts }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:DEPLOYMENT_SITE -notmatch '^[a-z0-9][a-z0-9.-]{0,62}$') {
+            throw 'deployment_site must be a lowercase DNS-style site identifier.'
+          }
+          if ($env:DEPLOYMENT_HOST -notmatch '^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$') {
+            throw 'deployment_host must be a DNS name or IPv4 address.'
+          }
+          if ($env:DEPLOYMENT_USER -notmatch '^[a-z_][a-z0-9_-]{0,31}$') {
+            throw 'deployment_user is not a valid Linux account name.'
+          }
+          $port = 0
+          if (-not [int]::TryParse($env:DEPLOYMENT_PORT, [ref] $port) -or $port -lt 1 -or $port -gt 65535) {
+            throw 'deployment_port must be an integer from 1 through 65535.'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:DEPLOYMENT_PRIVATE_KEY)) {
+            throw 'deployment_ssh_private_key is required for Linux deployment.'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:DEPLOYMENT_KNOWN_HOSTS)) {
+            throw 'deployment_ssh_known_hosts is required; host key scanning at deploy time is intentionally disabled.'
+          }
+
+      - name: Download validated site artifact
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: powerforge-site
+          path: ${{ runner.temp }}/powerforge-site
+
+      - name: Create deployment provenance
+        shell: pwsh
+        env:
+          SOURCE_REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          ENGINE_REPOSITORY: ${{ needs.build.outputs.engine_repository }}
+          ENGINE_SHA: ${{ needs.build.outputs.engine_sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $artifactPath = Join-Path $env:RUNNER_TEMP 'powerforge-site/artifact.tar'
+          if (-not (Test-Path -LiteralPath $artifactPath -PathType Leaf)) {
+            throw "Downloaded site artifact not found: $artifactPath"
+          }
+          $metadata = [ordered]@{
+            schemaVersion = 1
+            sourceRepository = $env:SOURCE_REPOSITORY
+            sourceSha = $env:SOURCE_SHA
+            engineRepository = $env:ENGINE_REPOSITORY
+            engineSha = $env:ENGINE_SHA
+            workflowRunId = '${{ github.run_id }}'
+            workflowRunAttempt = '${{ github.run_attempt }}'
+            artifactSha256 = (Get-FileHash -LiteralPath $artifactPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            deployedAtUtc = [DateTimeOffset]::UtcNow.ToString('O')
+          }
+          $metadata | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-site/deployment.json') -Encoding utf8NoBOM
+
+      - name: Publish and promote Linux release
+        shell: pwsh
+        env:
+          DEPLOYMENT_HOST: ${{ inputs.deployment_host }}
+          DEPLOYMENT_PORT: ${{ inputs.deployment_port }}
+          DEPLOYMENT_SITE: ${{ inputs.deployment_site }}
+          DEPLOYMENT_USER: ${{ inputs.deployment_user }}
+          DEPLOYMENT_PRIVATE_KEY: ${{ secrets.deployment_ssh_private_key }}
+          DEPLOYMENT_KNOWN_HOSTS: ${{ secrets.deployment_ssh_known_hosts }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sshRoot = Join-Path $HOME '.ssh'
+          New-Item -ItemType Directory -Force -Path $sshRoot | Out-Null
+          Set-Content -LiteralPath (Join-Path $sshRoot 'id_ed25519') -Value $env:DEPLOYMENT_PRIVATE_KEY -Encoding utf8NoBOM
+          Set-Content -LiteralPath (Join-Path $sshRoot 'known_hosts') -Value $env:DEPLOYMENT_KNOWN_HOSTS -Encoding utf8NoBOM
+          chmod 700 $sshRoot
+          chmod 600 (Join-Path $sshRoot 'id_ed25519') (Join-Path $sshRoot 'known_hosts')
+
+          $remoteBase = "/tmp/powerforge-${{ github.run_id }}-${{ github.run_attempt }}"
+          $target = "$($env:DEPLOYMENT_USER)@$($env:DEPLOYMENT_HOST)"
+          $sshOptions = @('-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes')
+          $scpArgs = @('-P', $env:DEPLOYMENT_PORT) + $sshOptions + @((Join-Path $env:RUNNER_TEMP 'powerforge-site/artifact.tar'), (Join-Path $env:RUNNER_TEMP 'powerforge-site/deployment.json'), "${target}:${remoteBase}/")
+          ssh @sshOptions -p $env:DEPLOYMENT_PORT $target "install -d -m 0700 '$remoteBase'"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          scp @scpArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ssh @sshOptions -p $env:DEPLOYMENT_PORT $target "sudo /usr/local/sbin/powerforge-site-deploy --site '$($env:DEPLOYMENT_SITE)' --archive '$remoteBase/artifact.tar' --metadata '$remoteBase/deployment.json'"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Cleanup remote staging
+        if: ${{ always() }}
+        continue-on-error: true
+        shell: pwsh
+        env:
+          DEPLOYMENT_HOST: ${{ inputs.deployment_host }}
+          DEPLOYMENT_PORT: ${{ inputs.deployment_port }}
+          DEPLOYMENT_USER: ${{ inputs.deployment_user }}
+        run: |
+          $remoteBase = "/tmp/powerforge-${{ github.run_id }}-${{ github.run_attempt }}"
+          $target = "$($env:DEPLOYMENT_USER)@$($env:DEPLOYMENT_HOST)"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -p $env:DEPLOYMENT_PORT $target "rm -rf -- '$remoteBase'"
+
   post-deploy:
-    if: ${{ inputs.post_deploy_pipeline_config != '' }}
-    needs: deploy
+    if: ${{ always() && inputs.post_deploy_pipeline_config != '' && ((inputs.deployment_target == 'github-pages' && needs.deploy.result == 'success') || (inputs.deployment_target == 'linux' && needs.deploy-linux.result == 'success')) }}
+    needs: [deploy, deploy-linux]
     uses: ./.github/workflows/powerforge-website-run.yml
     with:
       website_root: ${{ inputs.website_root }}
