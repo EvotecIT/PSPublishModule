@@ -4,7 +4,7 @@ set -Eeuo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 deploy_script="$repo_root/Deployment/Linux/powerforge-site-deploy.sh"
 test_root="$(mktemp -d)"
-trap 'rm -rf "$test_root" /tmp/powerforge-91001-1 /tmp/powerforge-91002-1 /tmp/powerforge-91003-1' EXIT
+trap 'rm -rf "$test_root" /tmp/powerforge-91001-1 /tmp/powerforge-91002-1 /tmp/powerforge-91003-1 /tmp/powerforge-91004-1' EXIT
 
 mkdir -p "$test_root/config" "$test_root/locks" "$test_root/site" "$test_root/bin"
 cat >"$test_root/config/example.env" <<EOF
@@ -64,6 +64,8 @@ env \
 
 grep -Fq 'release-one' "$test_root/site/current/index.html"
 grep -Fq "$sha_one" "$test_root/site/current/_powerforge/deployment.json"
+[[ "$(stat -L -c '%a' "$test_root/site/current")" == '755' ]]
+[[ "$(stat -c '%a' "$test_root/site/current/index.html")" == '644' ]]
 first_release="$(readlink -f "$test_root/site/current")"
 
 create_deployment 91002 "$sha_two" 'release-two'
@@ -109,5 +111,23 @@ if find "$test_root/first-site/releases" -mindepth 1 -maxdepth 1 -type d | grep 
   echo 'Failed first release was not removed.' >&2
   exit 1
 fi
+
+mkdir -p "$test_root/cloudflare-site"
+cat >"$test_root/config/cloudflare.env" <<EOF
+SITE_ROOT=$test_root/cloudflare-site
+PUBLIC_URL=https://cloudflare.example.test
+CLOUDFLARE_PURGE_ENABLED=1
+EOF
+create_deployment 91004 '4444444444444444444444444444444444444444' 'cloudflare-preflight-failure'
+if env \
+  PATH="$test_root/bin:$PATH" \
+  FAKE_SITE_ROOT="$test_root/cloudflare-site" \
+  POWERFORGE_SITE_CONFIG_ROOT="$test_root/config" \
+  POWERFORGE_SITE_LOCK_ROOT="$test_root/locks" \
+  "$deploy_script" --site cloudflare --archive /tmp/powerforge-91004-1/artifact.tar --metadata /tmp/powerforge-91004-1/deployment.json; then
+  echo 'Expected incomplete Cloudflare configuration to fail preflight.' >&2
+  exit 1
+fi
+[[ ! -e "$test_root/cloudflare-site/current" ]]
 
 echo 'powerforge-site-deploy integration tests passed.'

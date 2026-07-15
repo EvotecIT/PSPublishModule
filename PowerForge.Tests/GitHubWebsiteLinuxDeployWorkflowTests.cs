@@ -13,6 +13,9 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("deployment_ssh_private_key", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment_ssh_known_hosts", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("ssh-keyscan", workflow, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("deployment_artifact_retention_days", workflow, StringComparison.Ordinal);
+        Assert.Contains("$env:RUNNER_TEMP 'powerforge-deployment-ssh'", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("Join-Path $HOME '.ssh'", workflow, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -41,6 +44,8 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("Origin endpoint did not serve", script, StringComparison.Ordinal);
         Assert.Contains("rolling back", script, StringComparison.Ordinal);
         Assert.Contains("mv -Tf", script, StringComparison.Ordinal);
+        Assert.Contains("umask 022", script, StringComparison.Ordinal);
+        Assert.Contains("CLOUDFLARE_ZONE_ID is required", script, StringComparison.Ordinal);
     }
 
     private static string ReadRepoFile(params string[] relativePath)

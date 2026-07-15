@@ -96,6 +96,10 @@ on:
         required: false
         type: string
         default: ""
+      site_artifact_retention_days:
+        required: false
+        type: number
+        default: 7
     secrets:
       indexnow_key:
         required: false
@@ -350,7 +354,7 @@ jobs:
         with:
           name: ${{ inputs.site_artifact_name }}
           path: ${{ runner.temp }}/artifact.tar
-          retention-days: 1
+          retention-days: ${{ inputs.site_artifact_retention_days }}
           if-no-files-found: error
 
       - name: Cleanup transient tool caches

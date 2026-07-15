@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-umask 027
+umask 022
 
 CONFIG_ROOT="${POWERFORGE_SITE_CONFIG_ROOT:-/etc/powerforge/sites}"
 LOCK_ROOT="${POWERFORGE_SITE_LOCK_ROOT:-/var/lock}"
@@ -80,6 +80,11 @@ source "$config_path"
 if [[ -n "$ORIGIN_ADDRESS" || -n "$ORIGIN_HOST" ]]; then
   [[ -n "$ORIGIN_ADDRESS" && "$ORIGIN_HOST" =~ ^[A-Za-z0-9.-]+$ ]] || fail 'ORIGIN_ADDRESS and ORIGIN_HOST must be configured together.'
 fi
+if [[ "$CLOUDFLARE_PURGE_ENABLED" == '1' ]]; then
+  [[ "${CLOUDFLARE_ZONE_ID:-}" =~ ^[A-Za-z0-9]+$ ]] || fail 'CLOUDFLARE_ZONE_ID is required when purge is enabled.'
+  [[ "${CLOUDFLARE_API_TOKEN_FILE:-}" == /* && -s "$CLOUDFLARE_API_TOKEN_FILE" ]] || fail 'CLOUDFLARE_API_TOKEN_FILE must be an absolute, non-empty readable file when purge is enabled.'
+  [[ -r "$CLOUDFLARE_API_TOKEN_FILE" ]] || fail 'Cloudflare API token file is not readable.'
+fi
 
 archive="$(realpath -e "$archive")"
 metadata="$(realpath -e "$metadata")"
@@ -135,9 +140,6 @@ release_dir="$SITE_ROOT/releases/$release_id"
 
 purge_cloudflare() {
   [[ "$CLOUDFLARE_PURGE_ENABLED" == '1' ]] || return 0
-  : "${CLOUDFLARE_ZONE_ID:?CLOUDFLARE_ZONE_ID is required when purge is enabled}"
-  : "${CLOUDFLARE_API_TOKEN_FILE:?CLOUDFLARE_API_TOKEN_FILE is required when purge is enabled}"
-  [[ -r "$CLOUDFLARE_API_TOKEN_FILE" ]] || fail 'Cloudflare API token file is not readable.'
   local response
   response="$(curl -fsS --retry 3 --max-time 30 \
     -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \

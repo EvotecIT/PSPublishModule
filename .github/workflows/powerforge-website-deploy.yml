@@ -113,6 +113,10 @@ on:
         required: false
         type: string
         default: '["ubuntu-latest"]'
+      deployment_artifact_retention_days:
+        required: false
+        type: number
+        default: 7
     secrets:
       indexnow_key:
         required: false
@@ -274,6 +278,7 @@ jobs:
       pages_artifact_path: ${{ inputs.site_output_path }}
       site_artifact_name: ${{ inputs.deployment_target == 'linux' && 'powerforge-site' || '' }}
       site_artifact_path: ${{ inputs.site_output_path }}
+      site_artifact_retention_days: ${{ inputs.deployment_artifact_retention_days }}
     secrets:
       indexnow_key: ${{ secrets.indexnow_key }}
       repository_read_token: ${{ secrets.repository_read_token }}
@@ -378,16 +383,18 @@ jobs:
           DEPLOYMENT_KNOWN_HOSTS: ${{ secrets.deployment_ssh_known_hosts }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $sshRoot = Join-Path $HOME '.ssh'
+          $sshRoot = Join-Path $env:RUNNER_TEMP 'powerforge-deployment-ssh'
           New-Item -ItemType Directory -Force -Path $sshRoot | Out-Null
-          Set-Content -LiteralPath (Join-Path $sshRoot 'id_ed25519') -Value $env:DEPLOYMENT_PRIVATE_KEY -Encoding utf8NoBOM
-          Set-Content -LiteralPath (Join-Path $sshRoot 'known_hosts') -Value $env:DEPLOYMENT_KNOWN_HOSTS -Encoding utf8NoBOM
+          $keyPath = Join-Path $sshRoot 'id_ed25519'
+          $knownHostsPath = Join-Path $sshRoot 'known_hosts'
+          Set-Content -LiteralPath $keyPath -Value $env:DEPLOYMENT_PRIVATE_KEY -Encoding utf8NoBOM
+          Set-Content -LiteralPath $knownHostsPath -Value $env:DEPLOYMENT_KNOWN_HOSTS -Encoding utf8NoBOM
           chmod 700 $sshRoot
-          chmod 600 (Join-Path $sshRoot 'id_ed25519') (Join-Path $sshRoot 'known_hosts')
+          chmod 600 $keyPath $knownHostsPath
 
           $remoteBase = "/tmp/powerforge-${{ github.run_id }}-${{ github.run_attempt }}"
           $target = "$($env:DEPLOYMENT_USER)@$($env:DEPLOYMENT_HOST)"
-          $sshOptions = @('-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes')
+          $sshOptions = @('-i', $keyPath, '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHostsPath")
           $scpArgs = @('-P', $env:DEPLOYMENT_PORT) + $sshOptions + @((Join-Path $env:RUNNER_TEMP 'powerforge-site/artifact.tar'), (Join-Path $env:RUNNER_TEMP 'powerforge-site/deployment.json'), "${target}:${remoteBase}/")
           ssh @sshOptions -p $env:DEPLOYMENT_PORT $target "install -d -m 0700 '$remoteBase'"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -396,7 +403,7 @@ jobs:
           ssh @sshOptions -p $env:DEPLOYMENT_PORT $target "sudo /usr/local/sbin/powerforge-site-deploy --site '$($env:DEPLOYMENT_SITE)' --archive '$remoteBase/artifact.tar' --metadata '$remoteBase/deployment.json'"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Cleanup remote staging
+      - name: Cleanup deployment credentials and remote staging
         if: ${{ always() }}
         continue-on-error: true
         shell: pwsh
@@ -405,9 +412,20 @@ jobs:
           DEPLOYMENT_PORT: ${{ inputs.deployment_port }}
           DEPLOYMENT_USER: ${{ inputs.deployment_user }}
         run: |
+          $sshRoot = Join-Path $env:RUNNER_TEMP 'powerforge-deployment-ssh'
+          $keyPath = Join-Path $sshRoot 'id_ed25519'
+          $knownHostsPath = Join-Path $sshRoot 'known_hosts'
           $remoteBase = "/tmp/powerforge-${{ github.run_id }}-${{ github.run_attempt }}"
           $target = "$($env:DEPLOYMENT_USER)@$($env:DEPLOYMENT_HOST)"
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -p $env:DEPLOYMENT_PORT $target "rm -rf -- '$remoteBase'"
+          try {
+            if ((Test-Path -LiteralPath $keyPath) -and (Test-Path -LiteralPath $knownHostsPath)) {
+              ssh -i $keyPath -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$knownHostsPath" -p $env:DEPLOYMENT_PORT $target "rm -rf -- '$remoteBase'"
+            }
+          } finally {
+            if (Test-Path -LiteralPath $sshRoot) {
+              Remove-Item -LiteralPath $sshRoot -Recurse -Force
+            }
+          }
 
   post-deploy:
     if: ${{ always() && inputs.post_deploy_pipeline_config != '' && ((inputs.deployment_target == 'github-pages' && needs.deploy.result == 'success') || (inputs.deployment_target == 'linux' && needs.deploy-linux.result == 'success')) }}
