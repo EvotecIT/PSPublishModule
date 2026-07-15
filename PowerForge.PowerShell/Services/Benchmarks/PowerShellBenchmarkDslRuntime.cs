@@ -656,7 +656,14 @@ try {
         => InvokeWithNativeExitCheck(scriptBlock, functionsToDefine);
 
     private static Collection<PSObject> InvokeWithNativeExitCheck(ScriptBlock scriptBlock, Hashtable? functionsToDefine)
-        => NativeExitAwareInvokeWrapper.InvokeWithContext(functionsToDefine, CreateInvocationVariables(), new object[] { scriptBlock, Array.Empty<object>(), true, typeof(PowerShellNativeExitCodeTracker) });
+    {
+        // GetNewClosure binds settings to a dynamic module. Run the wrapper in that
+        // module so its injected DSL functions and variables remain visible.
+        var wrapper = scriptBlock.Module is null
+            ? NativeExitAwareInvokeWrapper
+            : scriptBlock.Module.NewBoundScriptBlock(NativeExitAwareInvokeWrapper);
+        return wrapper.InvokeWithContext(functionsToDefine, CreateInvocationVariables(), new object[] { scriptBlock, Array.Empty<object>(), true, typeof(PowerShellNativeExitCodeTracker) });
+    }
 
     private static readonly ScriptBlock NativeExitAwareInvokeWrapper =
         ScriptBlock.Create(EmbeddedScripts.Load("Scripts/Benchmarks/Invoke-NativeExitAwareBlock.ps1"));
