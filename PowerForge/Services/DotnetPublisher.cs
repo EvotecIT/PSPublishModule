@@ -105,7 +105,7 @@ public sealed class DotnetPublisher
             throw new InvalidOperationException("No supported frameworks were provided for dotnet publish.");
 
         var maxCpuCountArgument = isWindows ? "/m:1" : "-m:1";
-        var versionIsolationProps = CreateVersionIsolationProps();
+        var versionIsolationTargets = CreateVersionIsolationTargets();
         try
         {
             foreach (var tfm in requestedFrameworks)
@@ -124,7 +124,7 @@ public sealed class DotnetPublisher
 
                 var args = BuildPublishArguments(
                     projectPath,
-                    versionIsolationProps,
+                    versionIsolationTargets,
                     configuration,
                     version,
                     tfm,
@@ -143,7 +143,7 @@ public sealed class DotnetPublisher
         }
         finally
         {
-            try { File.Delete(versionIsolationProps); }
+            try { File.Delete(versionIsolationTargets); }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
@@ -174,7 +174,7 @@ public sealed class DotnetPublisher
 
     internal static IReadOnlyList<string> BuildPublishArguments(
         string projectPath,
-        string versionIsolationProps,
+        string versionIsolationTargets,
         string configuration,
         string version,
         string tfm,
@@ -193,7 +193,7 @@ public sealed class DotnetPublisher
             "--no-restore",
             $"-p:PowerForgeRootProject={Path.GetFullPath(projectPath)}",
             $"-p:PowerForgeRootVersion={version}",
-            $"-p:CustomBeforeMicrosoftCommonProps={Path.GetFullPath(versionIsolationProps)}",
+            $"-p:CustomAfterMicrosoftCommonTargets={Path.GetFullPath(versionIsolationTargets)}",
             "--framework", tfm
         };
 
@@ -207,9 +207,9 @@ public sealed class DotnetPublisher
         return args;
     }
 
-    private static string CreateVersionIsolationProps()
+    private static string CreateVersionIsolationTargets()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"PowerForge.VersionIsolation.{Guid.NewGuid():N}.props");
+        var path = Path.Combine(Path.GetTempPath(), $"PowerForge.VersionIsolation.{Guid.NewGuid():N}.targets");
         File.WriteAllText(path,
             "<Project>" + Environment.NewLine +
             "  <PropertyGroup Condition=\"'$(MSBuildProjectFullPath)' == '$(PowerForgeRootProject)'\">" + Environment.NewLine +
