@@ -208,14 +208,14 @@ Invoke-ModuleBuild @buildParams -Settings {
     New-ConfigurationModuleBuildProfile @newConfigurationProfileSplat
 
     New-ConfigurationArtefact -Type Unpacked -Enable -Path (Join-Path $artefactsRoot 'Unpacked/<TagModuleVersionWithPreRelease>') -RequiredModulesPath (Join-Path $artefactsRoot 'Unpacked/<TagModuleVersionWithPreRelease>/Modules') -AddRequiredModules -CopyFiles @{
-        "Examples\Step01.CreateModuleProject.ps1" = "Examples\Step01.CreateModuleProject.ps1"
-        "Examples\Step02.BuildModuleOver.ps1"     = "Examples\Step02.BuildModuleOver.ps1"
+        "Examples\Step01.CreateModuleProject.ps1"     = "Examples\Step01.CreateModuleProject.ps1"
+        "Examples\Step02.BuildModuleOver.ps1"         = "Examples\Step02.BuildModuleOver.ps1"
         "Examples\Example.ModuleLifecycleActions.ps1" = "Examples\Example.ModuleLifecycleActions.ps1"
     } -CopyFilesRelative
 
     New-ConfigurationArtefact -Type Packed -Enable -Path (Join-Path $artefactsRoot 'PackedWithModules') -IncludeTagName -ID 'ToGitHub' -AddRequiredModules -CopyFiles @{
-        "Examples\Step01.CreateModuleProject.ps1" = "Examples\Step01.CreateModuleProject.ps1"
-        "Examples\Step02.BuildModuleOver.ps1"     = "Examples\Step02.BuildModuleOver.ps1"
+        "Examples\Step01.CreateModuleProject.ps1"     = "Examples\Step01.CreateModuleProject.ps1"
+        "Examples\Step02.BuildModuleOver.ps1"         = "Examples\Step02.BuildModuleOver.ps1"
         "Examples\Example.ModuleLifecycleActions.ps1" = "Examples\Example.ModuleLifecycleActions.ps1"
     } -CopyFilesRelative -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>-FullPackage.zip"
 
@@ -228,8 +228,8 @@ Invoke-ModuleBuild @buildParams -Settings {
 
     # global options for publishing to github/psgallery
     # you can use FilePath where APIKey are saved in clear text or use APIKey directly
-    #New-ConfigurationPublish -Type PowerShellGallery -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt' -Enabled:$true
-    #New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHub' -OverwriteTagName '<TagModuleVersionWithPreRelease>' -GenerateReleaseNotes
+    New-ConfigurationPublish -Type PowerShellGallery -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt' -Enabled:$true
+    New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHub' -OverwriteTagName '<TagModuleVersionWithPreRelease>' -GenerateReleaseNotes
 
 
     # Optional one-time maintainer preflight: installs prerequisites, registers/probes the feed, and primes cached Entra/Azure DevOps auth when needed.
