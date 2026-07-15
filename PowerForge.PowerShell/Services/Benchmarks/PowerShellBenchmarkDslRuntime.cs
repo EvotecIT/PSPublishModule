@@ -229,6 +229,19 @@ public static class PowerShellBenchmarkDslRuntime
     /// <param name="cooldownMilliseconds">Optional delay between measured samples.</param>
     /// <param name="outlierMode">Optional summary outlier policy.</param>
     public static void Policy(int? warmup, int? iteration, string? runMode, string? order, int? cooldownMilliseconds, string? outlierMode)
+        => Policy(warmup, iteration, runMode, order, memoryCleanup: null, cooldownMilliseconds, outlierMode);
+
+    /// <summary>
+    /// Applies benchmark execution policy to the current DSL suite.
+    /// </summary>
+    /// <param name="warmup">Optional warmup iteration count.</param>
+    /// <param name="iteration">Optional measured iteration count.</param>
+    /// <param name="runMode">Optional run mode label.</param>
+    /// <param name="order">Optional work-item ordering strategy.</param>
+    /// <param name="memoryCleanup">Optional managed-memory cleanup policy.</param>
+    /// <param name="cooldownMilliseconds">Optional delay between measured samples.</param>
+    /// <param name="outlierMode">Optional summary outlier policy.</param>
+    public static void Policy(int? warmup, int? iteration, string? runMode, string? order, string? memoryCleanup, int? cooldownMilliseconds, string? outlierMode)
     {
         var suite = RequireSuite();
         if (warmup.HasValue)
@@ -239,6 +252,8 @@ public static class PowerShellBenchmarkDslRuntime
             suite.RunMode = runMode!;
         if (!string.IsNullOrWhiteSpace(order))
             suite.RunOrder = ParseEnum<PowerShellBenchmarkRunOrder>(order!, "run order");
+        if (!string.IsNullOrWhiteSpace(memoryCleanup))
+            suite.MemoryCleanup = ParseEnum<PowerShellBenchmarkMemoryCleanupMode>(memoryCleanup!, "memory cleanup mode");
         if (cooldownMilliseconds.HasValue)
             suite.CooldownMilliseconds = Math.Max(0, cooldownMilliseconds.Value);
         if (!string.IsNullOrWhiteSpace(outlierMode))
@@ -501,7 +516,7 @@ try {
             ["data"] = Call("Data", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
             ["skip"] = Call("Skip", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
             ["validate"] = Call("Validate", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
-            ["policy"] = "param([int] $Warmup, [Alias('Iterations')] [int] $Iteration, [string] $RunMode, [object] $Order, [int] $CooldownMilliseconds, [object] $OutlierMode) $w=$null; $i=$null; $c=$null; if ($PSBoundParameters.ContainsKey('Warmup')) { $w=$Warmup }; if ($PSBoundParameters.ContainsKey('Iteration')) { $i=$Iteration }; if ($PSBoundParameters.ContainsKey('CooldownMilliseconds')) { $c=$CooldownMilliseconds }; $arguments = [object[]]::new(6); $arguments[0] = $w; $arguments[1] = $i; $arguments[2] = $RunMode; $arguments[3] = [string] $Order; $arguments[4] = $c; $arguments[5] = [string] $OutlierMode; __PowerForgeBenchmarkDslInvoke -Name 'Policy' -Arguments $arguments",
+            ["policy"] = "param([int] $Warmup, [Alias('Iterations')] [int] $Iteration, [string] $RunMode, [object] $Order, [object] $MemoryCleanup, [int] $CooldownMilliseconds, [object] $OutlierMode) $w=$null; $i=$null; $c=$null; if ($PSBoundParameters.ContainsKey('Warmup')) { $w=$Warmup }; if ($PSBoundParameters.ContainsKey('Iteration')) { $i=$Iteration }; if ($PSBoundParameters.ContainsKey('CooldownMilliseconds')) { $c=$CooldownMilliseconds }; $arguments = [object[]]::new(7); $arguments[0] = $w; $arguments[1] = $i; $arguments[2] = $RunMode; $arguments[3] = [string] $Order; $arguments[4] = [string] $MemoryCleanup; $arguments[5] = $c; $arguments[6] = [string] $OutlierMode; __PowerForgeBenchmarkDslInvoke -Name 'Policy' -Arguments $arguments",
             ["profile"] = Call("Profile", "param([Parameter(Position=0)] [string] $Name, [string] $Cleanup)", "[object[]] @($Name, $Cleanup)"),
             ["cleanup"] = Call("Cleanup", "param([Parameter(Position=0)] [string] $Name)", "[object[]] @($Name)"),
             ["engine"] = Call("Engine", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
@@ -523,7 +538,7 @@ try {
             ["Add-BenchmarkAxis"] = "param([Parameter(Position=0)] [string] $Name, [Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) $arguments = [object[]]::new(2); $arguments[0] = $Name; $arguments[1] = $Values; __PowerForgeBenchmarkDslInvoke -Name 'Axis' -Arguments $arguments",
             ["Set-BenchmarkSetup"] = Call("Setup", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
             ["Set-BenchmarkDataFactory"] = Call("Data", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
-            ["Set-BenchmarkPolicy"] = "param([int] $Warmup, [Alias('Iterations')] [int] $Iteration, [string] $RunMode, [object] $Order, [int] $CooldownMilliseconds, [object] $OutlierMode) $w=$null; $i=$null; $c=$null; if ($PSBoundParameters.ContainsKey('Warmup')) { $w=$Warmup }; if ($PSBoundParameters.ContainsKey('Iteration')) { $i=$Iteration }; if ($PSBoundParameters.ContainsKey('CooldownMilliseconds')) { $c=$CooldownMilliseconds }; $arguments = [object[]]::new(6); $arguments[0] = $w; $arguments[1] = $i; $arguments[2] = $RunMode; $arguments[3] = [string] $Order; $arguments[4] = $c; $arguments[5] = [string] $OutlierMode; __PowerForgeBenchmarkDslInvoke -Name 'Policy' -Arguments $arguments",
+            ["Set-BenchmarkPolicy"] = "param([int] $Warmup, [Alias('Iterations')] [int] $Iteration, [string] $RunMode, [object] $Order, [object] $MemoryCleanup, [int] $CooldownMilliseconds, [object] $OutlierMode) $w=$null; $i=$null; $c=$null; if ($PSBoundParameters.ContainsKey('Warmup')) { $w=$Warmup }; if ($PSBoundParameters.ContainsKey('Iteration')) { $i=$Iteration }; if ($PSBoundParameters.ContainsKey('CooldownMilliseconds')) { $c=$CooldownMilliseconds }; $arguments = [object[]]::new(7); $arguments[0] = $w; $arguments[1] = $i; $arguments[2] = $RunMode; $arguments[3] = [string] $Order; $arguments[4] = [string] $MemoryCleanup; $arguments[5] = $c; $arguments[6] = [string] $OutlierMode; __PowerForgeBenchmarkDslInvoke -Name 'Policy' -Arguments $arguments",
             ["Set-BenchmarkProfile"] = Call("Profile", "param([Parameter(Position=0)] [string] $Name, [string] $Cleanup)", "[object[]] @($Name, $Cleanup)"),
             ["Set-BenchmarkCleanup"] = Call("Cleanup", "param([Parameter(Position=0)] [string] $Name)", "[object[]] @($Name)"),
             ["Add-BenchmarkEngine"] = Call("Engine", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),

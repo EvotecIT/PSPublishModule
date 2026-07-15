@@ -14,6 +14,7 @@ internal sealed class PowerShellBenchmarkChildRunnerRequest
     public int IterationCount { get; set; }
     public string RunMode { get; set; } = string.Empty;
     public string RunOrder { get; set; } = string.Empty;
+    public string MemoryCleanup { get; set; } = string.Empty;
     public int CooldownMilliseconds { get; set; }
     public string OutlierMode { get; set; } = string.Empty;
     public string SuiteName { get; set; } = string.Empty;

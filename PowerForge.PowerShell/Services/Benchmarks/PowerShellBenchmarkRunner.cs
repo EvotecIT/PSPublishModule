@@ -10,7 +10,7 @@ namespace PowerForge;
 /// <summary>
 /// Executes PowerShell-authored benchmark suites in the current host process.
 /// </summary>
-public sealed class PowerShellBenchmarkRunner
+public sealed partial class PowerShellBenchmarkRunner
 {
     /// <summary>
     /// Expands a suite into concrete work items without executing measurements.
@@ -149,7 +149,7 @@ public sealed class PowerShellBenchmarkRunner
         var samples = new List<BenchmarkSample>();
         var workItems = PlanInCurrentRunspace(suite, allowExternalHosts: false);
         ValidateComparisonWorkItems(suite, workItems);
-        var runnable = new List<PowerShellBenchmarkWorkItem>();
+        var pending = new List<PowerShellBenchmarkWorkItem>();
         foreach (var item in workItems)
         {
             if (item.IsSkipped)
@@ -158,31 +158,17 @@ public sealed class PowerShellBenchmarkRunner
                 continue;
             }
 
-            var warmupFailed = false;
-            for (var warmup = 0; warmup < Math.Max(0, suite.WarmupCount); warmup++)
-            {
-                var warmupSample = InvokeMeasuredIteration(suite, item, ToPsObject(item.Values), -warmup - 1, runId, recordSample: false);
-                if (warmupSample.Status == BenchmarkSampleStatus.Failed)
-                {
-                    samples.Add(warmupSample);
-                    warmupFailed = true;
-                    break;
-                }
-            }
-
-            if (warmupFailed)
-                continue;
-
-            runnable.Add(item);
+            pending.Add(item);
         }
 
-        for (var iteration = 0; iteration < Math.Max(1, suite.IterationCount); iteration++)
+        if (suite.RunOrder == PowerShellBenchmarkRunOrder.GroupedRotated)
         {
-            foreach (var item in OrderWorkItems(runnable, iteration, suite.RunOrder))
-            {
-                samples.Add(InvokeMeasuredIteration(suite, item, ToPsObject(item.Values), iteration, runId, recordSample: true));
-                ApplyCooldown(suite);
-            }
+            RunGroupedMeasurements(suite, pending, runId, samples);
+        }
+        else
+        {
+            var runnable = WarmUpWorkItems(suite, pending, runId, samples);
+            RunInterleavedMeasurements(suite, runnable, runId, samples);
         }
 
         var summarizer = new BenchmarkSummaryService();
@@ -251,6 +237,8 @@ public sealed class PowerShellBenchmarkRunner
             var data = CaptureData(InvokeOptional(suite.Data, caseObject, runObject));
             SetProperty(runObject, "Data", data);
 
+            stage = "Memory cleanup";
+            ApplyMemoryCleanup(suite);
             stage = iteration < 0 ? "Warmup operation" : "Operation";
             operationStopwatch = Stopwatch.StartNew();
             InvokeStrict(item.Handler, caseObject, runObject);
@@ -565,40 +553,20 @@ public sealed class PowerShellBenchmarkRunner
     private static string ComparisonGroupKey(string suite, PowerShellBenchmarkWorkItem item)
         => string.Join("\u001f", suite, item.Scenario, item.Operation, item.Host, GetOperatingSystemLabel(), FormatVariables(ToVariables(item.Values)));
 
-    private static IEnumerable<PowerShellBenchmarkWorkItem> OrderWorkItems(IReadOnlyList<PowerShellBenchmarkWorkItem> items, int iteration, PowerShellBenchmarkRunOrder order)
-        => order switch
-        {
-            PowerShellBenchmarkRunOrder.Sequential => items,
-            PowerShellBenchmarkRunOrder.Randomized => Randomize(items, iteration),
-            _ => Rotate(items, iteration)
-        };
-
-    private static IEnumerable<PowerShellBenchmarkWorkItem> Rotate(IReadOnlyList<PowerShellBenchmarkWorkItem> items, int iteration)
-    {
-        if (items.Count == 0)
-            yield break;
-        var offset = iteration % items.Count;
-        for (var i = 0; i < items.Count; i++)
-            yield return items[(offset + i) % items.Count];
-    }
-
-    private static IEnumerable<PowerShellBenchmarkWorkItem> Randomize(IReadOnlyList<PowerShellBenchmarkWorkItem> items, int iteration)
-    {
-        var ordered = items.ToArray();
-        var random = new Random(unchecked((iteration + 1) * 397) ^ ordered.Length);
-        for (var i = ordered.Length - 1; i > 0; i--)
-        {
-            var j = random.Next(i + 1);
-            (ordered[i], ordered[j]) = (ordered[j], ordered[i]);
-        }
-
-        return ordered;
-    }
-
     private static void ApplyCooldown(PowerShellBenchmarkSuite suite)
     {
         if (suite.CooldownMilliseconds > 0)
             System.Threading.Thread.Sleep(suite.CooldownMilliseconds);
+    }
+
+    private static void ApplyMemoryCleanup(PowerShellBenchmarkSuite suite)
+    {
+        if (suite.MemoryCleanup != PowerShellBenchmarkMemoryCleanupMode.BeforeIteration)
+            return;
+
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: false);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: false);
     }
 
     private static Collection<PSObject> InvokeOptional(ScriptBlock? block, PSObject caseObject, PSObject runObject)

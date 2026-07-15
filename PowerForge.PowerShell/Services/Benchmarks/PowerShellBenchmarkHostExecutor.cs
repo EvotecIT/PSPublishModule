@@ -34,6 +34,9 @@ public sealed class PowerShellBenchmarkHostRunRequest
     /// <summary>Run order after caller-side overrides.</summary>
     public PowerShellBenchmarkRunOrder RunOrder { get; set; } = PowerShellBenchmarkRunOrder.Rotated;
 
+    /// <summary>Managed-memory cleanup after caller-side overrides.</summary>
+    public PowerShellBenchmarkMemoryCleanupMode MemoryCleanup { get; set; } = PowerShellBenchmarkMemoryCleanupMode.None;
+
     /// <summary>Delay between measured samples, in milliseconds.</summary>
     public int CooldownMilliseconds { get; set; }
 
@@ -195,6 +198,7 @@ public sealed class PowerShellBenchmarkHostExecutor
             IterationCount = request.IterationCount,
             RunMode = request.RunMode ?? string.Empty,
             RunOrder = request.RunOrder.ToString(),
+            MemoryCleanup = request.MemoryCleanup.ToString(),
             CooldownMilliseconds = request.CooldownMilliseconds,
             OutlierMode = request.OutlierMode.ToString(),
             SuiteName = request.SuiteName ?? string.Empty,

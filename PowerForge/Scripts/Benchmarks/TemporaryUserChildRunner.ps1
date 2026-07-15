@@ -62,6 +62,9 @@ if (-not [string]::IsNullOrWhiteSpace($request.RunMode)) {
 if (-not [string]::IsNullOrWhiteSpace($request.RunOrder)) {
     $suite.RunOrder = [PowerForge.PowerShellBenchmarkRunOrder] $request.RunOrder
 }
+if (-not [string]::IsNullOrWhiteSpace($request.MemoryCleanup)) {
+    $suite.MemoryCleanup = [PowerForge.PowerShellBenchmarkMemoryCleanupMode] $request.MemoryCleanup
+}
 if (-not [string]::IsNullOrWhiteSpace($request.OutlierMode)) {
     $suite.OutlierMode = [PowerForge.PowerShellBenchmarkOutlierMode] $request.OutlierMode
 }
