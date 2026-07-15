@@ -73,6 +73,56 @@ benchmark 'gate' {
         Assert.Contains("competitor Other failed", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ComparisonGate_RejectsPartiallyFailedCompetitorLaneWithTiming()
+    {
+        var suite = CreateGateSuite(tieTolerance: 0.05);
+        var summary = new BenchmarkSummaryService().Summarize(new[]
+        {
+            GateSample("Managed", BenchmarkSampleStatus.Succeeded, 100, 0),
+            GateSample("Other", BenchmarkSampleStatus.Succeeded, 90, 0),
+            GateSample("Other", BenchmarkSampleStatus.Failed, 0, 1)
+        });
+        var competitor = Assert.Single(summary, row => row.Engine == "Other");
+
+        Assert.Equal("Failed", competitor.Status);
+        Assert.Equal(90, competitor.MedianMs);
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => PowerShellBenchmarkComparisonEvaluator.ValidateGates(suite, summary));
+
+        Assert.Contains("competitor Other failed", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HostExecutor_ChildRequestDefersComparisonGateValidation()
+    {
+        var request = new PowerShellBenchmarkHostRunRequest
+        {
+            SpecPath = "suite.benchmark.ps1",
+            WorkingDirectory = "work",
+            OutputRoot = "output"
+        };
+
+        var child = PowerShellBenchmarkHostExecutor.CreateChildRequest(
+            request,
+            "Current",
+            "pwsh",
+            "result.json",
+            "readme-paths.txt",
+            DateTimeOffset.UtcNow);
+
+        Assert.False(child.ValidateComparisonGates);
+    }
+
+    [Fact]
+    public void HostChildRunner_DisablesComparisonGatesOnlyWhenRequested()
+    {
+        var script = PowerForgeScripts.Load("Scripts/Benchmarks/TemporaryUserChildRunner.ps1");
+
+        Assert.Contains("'ValidateComparisonGates'", script, StringComparison.Ordinal);
+        Assert.Contains("$comparison.RequireBaselineFastest = $false", script, StringComparison.Ordinal);
+    }
+
     private static PowerShellBenchmarkSuite CreateGateSuite(double tieTolerance)
     {
         var suite = new PowerShellBenchmarkSuite { Name = "gate" };
@@ -103,5 +153,25 @@ benchmark 'gate' {
             MinMs = median,
             MaxMs = median,
             P95Ms = median
+        };
+
+    private static BenchmarkSample GateSample(
+        string engine,
+        BenchmarkSampleStatus status,
+        double durationMs,
+        int iteration)
+        => new()
+        {
+            RunId = "run",
+            Suite = "gate",
+            Scenario = "case",
+            Operation = "Run",
+            Engine = engine,
+            Host = "Current",
+            Os = "Windows",
+            RunMode = "standard",
+            Iteration = iteration,
+            Status = status,
+            DurationMs = durationMs
         };
 }

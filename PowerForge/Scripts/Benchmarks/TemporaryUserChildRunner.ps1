@@ -88,6 +88,11 @@ for ($index = 0; $index -lt $suite.ReadmeBlocks.Count -and $index -lt $readmePat
 if ($request.PSObject.Properties.Name -contains 'UpdateReadmeBlocks' -and -not $request.UpdateReadmeBlocks) {
     $suite.ReadmeBlocks.Clear()
 }
+if ($request.PSObject.Properties.Name -contains 'ValidateComparisonGates' -and -not $request.ValidateComparisonGates) {
+    foreach ($comparison in @($suite.Comparisons)) {
+        $comparison.RequireBaselineFastest = $false
+    }
+}
 try {
     $result = [PowerForge.PowerShellBenchmarkRunner]::new().Run($suite)
     [PowerForge.BenchmarkJson]::Write($request.ResultPath, $result)

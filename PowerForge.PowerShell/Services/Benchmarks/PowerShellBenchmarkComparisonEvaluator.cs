@@ -49,7 +49,8 @@ internal static class PowerShellBenchmarkComparisonEvaluator
                 continue;
 
             var failedCompetitors = competitors
-                .Where(row => !row.Actual.HasValue && !string.Equals(row.Status, "Skipped", StringComparison.OrdinalIgnoreCase))
+                .Where(row => IsFailed(row)
+                              || (!row.Actual.HasValue && !IsSkipped(row)))
                 .Select(row => row.Engine)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
@@ -59,13 +60,15 @@ internal static class PowerShellBenchmarkComparisonEvaluator
                 continue;
             }
 
-            var successfulCompetitors = competitors.Where(static row => row.Actual.HasValue).ToArray();
+            var successfulCompetitors = competitors
+                .Where(static row => row.Actual.HasValue && !IsFailed(row))
+                .ToArray();
             if (successfulCompetitors.Length == 0)
                 continue;
 
             var baseline = group.FirstOrDefault(row =>
                 string.Equals(row.Engine, comparison.Baseline, StringComparison.OrdinalIgnoreCase));
-            if (baseline?.Actual is null)
+            if (baseline?.Actual is null || IsFailed(baseline))
             {
                 failures.Add($"{Describe(group.First())}: baseline {comparison.Baseline} failed");
                 continue;
@@ -89,6 +92,12 @@ internal static class PowerShellBenchmarkComparisonEvaluator
         => comparison.Metrics is null || comparison.Metrics.Length == 0
             ? new[] { "MedianMs" }
             : comparison.Metrics;
+
+    private static bool IsFailed(BenchmarkComparisonRow row)
+        => string.Equals(row.Status, "Failed", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSkipped(BenchmarkComparisonRow row)
+        => string.Equals(row.Status, "Skipped", StringComparison.OrdinalIgnoreCase);
 
     private static string GroupKey(BenchmarkComparisonRow row)
         => string.Join(

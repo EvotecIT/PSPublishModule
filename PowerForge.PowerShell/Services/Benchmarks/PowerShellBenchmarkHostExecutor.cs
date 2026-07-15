@@ -166,7 +166,7 @@ public sealed class PowerShellBenchmarkHostExecutor
         }
     }
 
-    private static PowerShellBenchmarkChildRunnerRequest CreateChildRequest(
+    internal static PowerShellBenchmarkChildRunnerRequest CreateChildRequest(
         PowerShellBenchmarkHostRunRequest request,
         string host,
         string executable,
@@ -203,7 +203,8 @@ public sealed class PowerShellBenchmarkHostExecutor
             Selection = selection,
             ModulePaths = PowerShellBenchmarkTemporaryUserExecutor.GetImportableCallerModulePaths(),
             RunStartedUtc = started.ToString("O"),
-            UpdateReadmeBlocks = false
+            UpdateReadmeBlocks = false,
+            ValidateComparisonGates = false
         };
     }
 

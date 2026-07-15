@@ -23,4 +23,11 @@ internal sealed class PowerShellBenchmarkChildRunnerRequest
     public string[] ModulePaths { get; set; } = Array.Empty<string>();
     public string RunStartedUtc { get; set; } = string.Empty;
     public bool UpdateReadmeBlocks { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether the child process should enforce comparison gates. Multi-host children defer
+    /// enforcement until the parent has merged every host result so a gate failure remains a comparison
+    /// failure instead of being converted into an external-host execution failure.
+    /// </summary>
+    public bool ValidateComparisonGates { get; set; } = true;
 }
