@@ -80,6 +80,31 @@ This keeps Cloudflare proxying and cache analytics enabled without storing a bro
 CI token permanently on the web host. Sites may instead use a scoped, root-owned
 host token file when that is their preferred recovery model.
 
+## Cloudflare Origin Trust
+
+For Apache hosts that receive traffic through Cloudflare, install the generic
+`Deployment/Linux/powerforge-cloudflare-origin-sync.sh` helper and its systemd
+service/timer. It downloads Cloudflare's published IPv4 and IPv6 ranges over HTTPS,
+validates every CIDR, refreshes the Cloudflare-specific UFW rules, and generates an Apache
+`mod_remoteip` configuration that trusts `CF-Connecting-IP` only from those edge
+networks. This preserves Cloudflare proxy/cache analytics while restoring the real
+browser address to Apache logs and upstream services.
+
+```bash
+sudo install -m 0755 Deployment/Linux/powerforge-cloudflare-origin-sync.sh /usr/local/sbin/powerforge-cloudflare-origin-sync
+sudo install -m 0644 Deployment/Linux/systemd/powerforge-cloudflare-origin-sync.service /etc/systemd/system/powerforge-cloudflare-origin-sync.service
+sudo install -m 0644 Deployment/Linux/systemd/powerforge-cloudflare-origin-sync.timer /etc/systemd/system/powerforge-cloudflare-origin-sync.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now powerforge-cloudflare-origin-sync.timer
+sudo systemctl start powerforge-cloudflare-origin-sync.service
+```
+
+The service optionally reads `/etc/powerforge/cloudflare-origin.env`; use
+`Deployment/Linux/powerforge-cloudflare-origin.env.example` as the starting point.
+Set `POWERFORGE_CLOUDFLARE_MANAGE_UFW=0` only when another firewall owner manages
+the Cloudflare origin rules. The synchronizer validates Apache before reload and
+restores the previous generated configuration if validation or reload fails.
+
 ## Host Build Flow (Special Case)
 
 Some sites intentionally regenerate from changing external inputs even when Git has

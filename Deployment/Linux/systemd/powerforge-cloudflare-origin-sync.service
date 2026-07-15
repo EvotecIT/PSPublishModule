@@ -1,0 +1,9 @@
+[Unit]
+Description=Synchronize Cloudflare origin networks for PowerForge-hosted sites
+After=network-online.target apache2.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/powerforge/cloudflare-origin.env
+ExecStart=/usr/local/sbin/powerforge-cloudflare-origin-sync
