@@ -62,6 +62,9 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.DoesNotContain("CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare_api_token }}", workflow, StringComparison.Ordinal);
         Assert.Contains("CLOUDFLARE_ZONE_ID", workflow, StringComparison.Ordinal);
         Assert.Contains("per_page=5", workflow, StringComparison.Ordinal);
+        string environmentExample = ReadRepoFile("Deployment", "Linux", "powerforge-site.env.example");
+        Assert.Contains("deployment_cloudflare_api_token", environmentExample, StringComparison.Ordinal);
+        Assert.DoesNotContain("workflow's cloudflare_api_token secret", environmentExample, StringComparison.Ordinal);
         Assert.Contains("cloudflare-api.token", script, StringComparison.Ordinal);
         Assert.Contains("Ephemeral Cloudflare zone id does not match", script, StringComparison.Ordinal);
     }
