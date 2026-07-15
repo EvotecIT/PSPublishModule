@@ -15,9 +15,8 @@ public sealed class DotnetPublisherTests
 
         var args = DotnetPublisher.BuildPublishArguments(
             projectPath: Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "Module.csproj"),
-            versionIsolationTargets: Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "PowerForge.VersionIsolation.targets"),
+            versionIsolationProfile: Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "PowerForge.VersionIsolation.pubxml"),
             configuration: "Release",
-            version: "1.2.3",
             tfm: "net10.0",
             useIsolatedArtifacts: true,
             artifacts: Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "artifacts"),
@@ -33,8 +32,9 @@ public sealed class DotnetPublisherTests
         Assert.Contains("--no-restore", args);
         Assert.DoesNotContain("-p:BuildProjectReferences=false", args);
         Assert.DoesNotContain(args, arg => arg.StartsWith("-p:Version=", StringComparison.Ordinal));
-        Assert.Contains(args, arg => arg.StartsWith("-p:PowerForgeRootVersion=1.2.3", StringComparison.Ordinal));
-        Assert.Contains(args, arg => arg.StartsWith("-p:CustomAfterMicrosoftCommonTargets=", StringComparison.Ordinal));
+        Assert.Contains(args, arg => arg.StartsWith("-p:PublishProfileFullPath=", StringComparison.Ordinal));
+        Assert.Contains(args, arg => arg.StartsWith("-p:ProjectToOverrideProjectExtensionsPath=", StringComparison.Ordinal));
+        Assert.DoesNotContain(args, arg => arg.StartsWith("-p:CustomAfterMicrosoftCommonTargets=", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -79,7 +79,9 @@ public sealed class DotnetPublisherTests
                 "namespace Dependency; public sealed class Value { public string Text => new Transitive.Value().Text; }");
             var moduleProject = Path.Combine(moduleDirectory, "Module.csproj");
             File.WriteAllText(moduleProject,
-                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Version>1.0.0</Version><AssemblyVersion>1.0.0.0</AssemblyVersion><FileVersion>1.0.0.0</FileVersion></PropertyGroup><ItemGroup><ProjectReference Include=\"..\\Dependency\\Dependency.csproj\" /></ItemGroup></Project>");
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Version>1.0.0</Version><AssemblyVersion>1.0.0.0</AssemblyVersion><FileVersion>1.0.0.0</FileVersion><CustomAfterMicrosoftCommonTargets>$(MSBuildProjectDirectory)/Custom.After.targets</CustomAfterMicrosoftCommonTargets></PropertyGroup><ItemGroup><ProjectReference Include=\"..\\Dependency\\Dependency.csproj\" /></ItemGroup></Project>");
+            File.WriteAllText(Path.Combine(moduleDirectory, "Custom.After.targets"),
+                "<Project><Target Name=\"PreserveCustomAfterHook\" AfterTargets=\"Publish\"><WriteLinesToFile File=\"$(PublishDir)custom-after-hook.txt\" Lines=\"custom hook preserved\" Overwrite=\"true\" /></Target></Project>");
             File.WriteAllText(Path.Combine(moduleDirectory, "Module.cs"),
                 "namespace Module; public sealed class Value { public string Text => new Dependency.Value().Text; }");
 
@@ -95,6 +97,7 @@ public sealed class DotnetPublisherTests
             Assert.Equal(new Version(2, 3, 4, 0), AssemblyName.GetAssemblyName(Path.Combine(publishDirectory, "Dependency.dll")).Version);
             Assert.Equal(new Version(4, 5, 6, 0), AssemblyName.GetAssemblyName(Path.Combine(publishDirectory, "Transitive.dll")).Version);
             Assert.Equal("transitive publish content", File.ReadAllText(Path.Combine(publishDirectory, "transitive-content.txt")));
+            Assert.Equal("custom hook preserved", File.ReadAllText(Path.Combine(publishDirectory, "custom-after-hook.txt")).Trim());
         }
         finally
         {

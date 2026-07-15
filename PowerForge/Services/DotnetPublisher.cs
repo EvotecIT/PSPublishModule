@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Xml.Linq;
 
 namespace PowerForge;
 
@@ -105,7 +106,7 @@ public sealed class DotnetPublisher
             throw new InvalidOperationException("No supported frameworks were provided for dotnet publish.");
 
         var maxCpuCountArgument = isWindows ? "/m:1" : "-m:1";
-        var versionIsolationTargets = CreateVersionIsolationTargets();
+        var versionIsolationProfile = CreateVersionIsolationProfile(version);
         try
         {
             foreach (var tfm in requestedFrameworks)
@@ -124,9 +125,8 @@ public sealed class DotnetPublisher
 
                 var args = BuildPublishArguments(
                     projectPath,
-                    versionIsolationTargets,
+                    versionIsolationProfile,
                     configuration,
-                    version,
                     tfm,
                     useIsolatedArtifacts,
                     artifacts,
@@ -143,7 +143,7 @@ public sealed class DotnetPublisher
         }
         finally
         {
-            try { File.Delete(versionIsolationTargets); }
+            try { File.Delete(versionIsolationProfile); }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
@@ -174,9 +174,8 @@ public sealed class DotnetPublisher
 
     internal static IReadOnlyList<string> BuildPublishArguments(
         string projectPath,
-        string versionIsolationTargets,
+        string versionIsolationProfile,
         string configuration,
-        string version,
         string tfm,
         bool useIsolatedArtifacts,
         string? artifacts,
@@ -191,9 +190,8 @@ public sealed class DotnetPublisher
             "-nologo",
             "--verbosity", "minimal",
             "--no-restore",
-            $"-p:PowerForgeRootProject={Path.GetFullPath(projectPath)}",
-            $"-p:PowerForgeRootVersion={version}",
-            $"-p:CustomAfterMicrosoftCommonTargets={Path.GetFullPath(versionIsolationTargets)}",
+            $"-p:PublishProfileFullPath={Path.GetFullPath(versionIsolationProfile)}",
+            $"-p:ProjectToOverrideProjectExtensionsPath={Path.GetFullPath(projectPath)}",
             "--framework", tfm
         };
 
@@ -207,17 +205,16 @@ public sealed class DotnetPublisher
         return args;
     }
 
-    private static string CreateVersionIsolationTargets()
+    private static string CreateVersionIsolationProfile(string version)
     {
-        var path = Path.Combine(Path.GetTempPath(), $"PowerForge.VersionIsolation.{Guid.NewGuid():N}.targets");
-        File.WriteAllText(path,
-            "<Project>" + Environment.NewLine +
-            "  <PropertyGroup Condition=\"'$(MSBuildProjectFullPath)' == '$(PowerForgeRootProject)'\">" + Environment.NewLine +
-            "    <Version>$(PowerForgeRootVersion)</Version>" + Environment.NewLine +
-            "    <AssemblyVersion>$(PowerForgeRootVersion)</AssemblyVersion>" + Environment.NewLine +
-            "    <FileVersion>$(PowerForgeRootVersion)</FileVersion>" + Environment.NewLine +
-            "  </PropertyGroup>" + Environment.NewLine +
-            "</Project>" + Environment.NewLine);
+        var path = Path.Combine(Path.GetTempPath(), $"PowerForge.VersionIsolation.{Guid.NewGuid():N}.pubxml");
+        new XDocument(
+            new XElement("Project",
+                new XElement("PropertyGroup",
+                    new XElement("Version", version),
+                    new XElement("AssemblyVersion", version),
+                    new XElement("FileVersion", version))))
+            .Save(path);
         return path;
     }
 

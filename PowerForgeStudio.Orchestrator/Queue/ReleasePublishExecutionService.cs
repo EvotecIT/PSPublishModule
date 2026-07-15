@@ -535,20 +535,21 @@ public sealed partial class ReleasePublishExecutionService
             return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "Module publish", destination, "No publishable module package path was captured from the build artefacts.");
         }
 
-        if (string.IsNullOrWhiteSpace(publishConfig.ApiKey) && !HasRepositoryAuthentication(publishConfig.Repository))
-        {
-            return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "Module publish", destination, "Module publish is enabled but no API key or repository credential was resolved.");
-        }
-
         try
         {
+            var apiKey = ModulePublisher.ResolvePublishApiKey(publishConfig, repository.RootPath);
+            if (string.IsNullOrWhiteSpace(apiKey) && !HasRepositoryAuthentication(publishConfig.Repository))
+            {
+                return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "Module publish", destination, "Module publish is enabled but no API key or repository credential was resolved.");
+            }
+
             var publishResult = await _publishRepositoryAsync(
                 new RepositoryPublishRequest {
                     Path = packageDetails.PackagePath,
                     IsNupkg = false,
                     RepositoryName = destination,
                     Tool = publishConfig.Tool,
-                    ApiKey = string.IsNullOrWhiteSpace(publishConfig.ApiKey) ? null : publishConfig.ApiKey,
+                    ApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
                     Repository = publishConfig.Repository,
                     SkipDependenciesCheck = true,
                     SkipModuleManifestValidate = false
@@ -596,26 +597,34 @@ public sealed partial class ReleasePublishExecutionService
             return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "GitHub release", null, "GitHub publishing requires UserName.");
         }
 
-        if (string.IsNullOrWhiteSpace(publishConfig.ApiKey))
+        try
         {
-            return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "GitHub release", null, "GitHub publishing is enabled but no token was resolved.");
+            var apiKey = ModulePublisher.ResolvePublishApiKey(publishConfig, repository.RootPath);
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "GitHub release", null, "GitHub publishing is enabled but no token was resolved.");
+            }
+
+            var repoName = string.IsNullOrWhiteSpace(publishConfig.RepositoryName) ? repository.Name : publishConfig.RepositoryName!.Trim();
+            var tag = new ModulePublishTagBuilder().BuildTag(publishConfig, packageDetails.ModuleName, packageDetails.Version, packageDetails.PreRelease);
+            var isPreRelease = !string.IsNullOrWhiteSpace(packageDetails.PreRelease) && !publishConfig.DoNotMarkAsPreRelease;
+
+            var execution = await PublishGitHubReleaseAsync(repository.RootPath, publishConfig.UserName!, repoName, apiKey, tag, tag, packageDetails.ZipAssets, publishConfig.GenerateReleaseNotes, isPreRelease, cancellationToken);
+            return ReleaseQueueReceiptFactory.CreatePublishReceipt(
+                repository.RootPath,
+                repository.Name,
+                ReleaseBuildAdapterKind.ModuleBuild.ToString(),
+                "GitHub release",
+                "GitHub",
+                execution.ReleaseUrl ?? $"{publishConfig.UserName}/{repoName}",
+                execution.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
+                execution.Succeeded ? $"GitHub release {tag} published." : execution.ErrorMessage!,
+                packageDetails.ZipAssets.FirstOrDefault());
         }
-
-        var repoName = string.IsNullOrWhiteSpace(publishConfig.RepositoryName) ? repository.Name : publishConfig.RepositoryName!.Trim();
-        var tag = new ModulePublishTagBuilder().BuildTag(publishConfig, packageDetails.ModuleName, packageDetails.Version, packageDetails.PreRelease);
-        var isPreRelease = !string.IsNullOrWhiteSpace(packageDetails.PreRelease) && !publishConfig.DoNotMarkAsPreRelease;
-
-        var execution = await PublishGitHubReleaseAsync(repository.RootPath, publishConfig.UserName!, repoName, publishConfig.ApiKey!, tag, tag, packageDetails.ZipAssets, publishConfig.GenerateReleaseNotes, isPreRelease, cancellationToken);
-        return ReleaseQueueReceiptFactory.CreatePublishReceipt(
-            repository.RootPath,
-            repository.Name,
-            ReleaseBuildAdapterKind.ModuleBuild.ToString(),
-            "GitHub release",
-            "GitHub",
-            execution.ReleaseUrl ?? $"{publishConfig.UserName}/{repoName}",
-            execution.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
-            execution.Succeeded ? $"GitHub release {tag} published." : execution.ErrorMessage!,
-            packageDetails.ZipAssets.FirstOrDefault());
+        catch (Exception ex)
+        {
+            return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "GitHub release", null, FirstLine(ex.Message) ?? "GitHub publish secret could not be resolved.");
+        }
     }
 
     private static bool HasRepositoryAuthentication(PublishRepositoryConfiguration? repository)
