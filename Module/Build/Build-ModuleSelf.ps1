@@ -2,6 +2,9 @@
 # Builds PowerForge.Cli and runs `powerforge pipeline` using the same configuration as Build-Module.ps1.
 [CmdletBinding()]
 param(
+    [Alias('ConfigurationGateMode')]
+    [ValidateSet('Manifest', 'Documentation', 'Build', 'Publish')]
+    [string] $RunMode = 'Build',
     [ValidateSet('auto', 'net10.0', 'net8.0')][string] $Framework = 'auto',
     [ValidateSet('Release', 'Debug')][string] $Configuration = 'Release',
     [switch] $NoBuild,
@@ -103,6 +106,7 @@ try {
     $buildArgs = @{
         JsonOnly       = $true
         JsonPath       = $configPath
+        RunMode        = $RunMode
         Configuration  = $Configuration
         Framework      = $Framework
         NoDotnetBuild  = $true

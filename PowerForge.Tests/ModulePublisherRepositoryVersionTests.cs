@@ -105,6 +105,29 @@ public sealed class ModulePublisherRepositoryVersionTests
     }
 
     [Fact]
+    public void ResolvePublishApiKey_RejectsDeferredMultilineSecretAtPublishRuntime()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var path = Path.Combine(root.FullName, "gallery.key");
+            File.WriteAllText(path, "first-line" + Environment.NewLine + "second-line");
+
+            var ex = Assert.Throws<ArgumentException>(() => ModulePublisher.ResolvePublishApiKey(
+                new PublishConfiguration { ApiKeyFilePath = path },
+                root.FullName));
+
+            Assert.Contains("multi-line secret", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("single line", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("not a script", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void EnsureVersionIsGreaterThanRepository_UsesUnlistedPowerShellGalleryVersions()
     {
         using var client = new HttpClient(new FakePowerShellGalleryFeedHandler());
