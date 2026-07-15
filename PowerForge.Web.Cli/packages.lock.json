@@ -50,8 +50,8 @@
       },
       "HtmlTinkerX": {
         "type": "Transitive",
-        "resolved": "2.0.18",
-        "contentHash": "7d8DcjnNgGVaSUbAj/2U6i5PhrZWlWknbGL5hsS/9DF90PJIzm7lx48z6qO4b9WuyTILVxigdcozeSCwuheS6g==",
+        "resolved": "2.0.19",
+        "contentHash": "aN1x0cqwonG/JNSYxCBtqTTCq1nyaEYiX6WdQvvkGpfYlLKuFjKD+4HfXSfBl1KZqC6SdIUZz3oXAib5AyB8vQ==",
         "dependencies": {
           "AngleSharp": "1.4.1-beta.523",
           "AngleSharp.Css": "1.0.0-beta.213",
@@ -170,7 +170,7 @@
       "powerforge.web": {
         "type": "Project",
         "dependencies": {
-          "HtmlTinkerX": "[2.0.18, )",
+          "HtmlTinkerX": "[2.0.19, )",
           "Magick.NET-Q8-AnyCPU": "[14.14.0, )",
           "OfficeIMO.Markdown": "[0.6.13, )",
           "PowerForge": "[1.0.0, )",
@@ -250,8 +250,8 @@
       },
       "HtmlTinkerX": {
         "type": "Transitive",
-        "resolved": "2.0.18",
-        "contentHash": "7d8DcjnNgGVaSUbAj/2U6i5PhrZWlWknbGL5hsS/9DF90PJIzm7lx48z6qO4b9WuyTILVxigdcozeSCwuheS6g==",
+        "resolved": "2.0.19",
+        "contentHash": "aN1x0cqwonG/JNSYxCBtqTTCq1nyaEYiX6WdQvvkGpfYlLKuFjKD+4HfXSfBl1KZqC6SdIUZz3oXAib5AyB8vQ==",
         "dependencies": {
           "AngleSharp": "1.4.1-beta.523",
           "AngleSharp.Css": "1.0.0-beta.213",
@@ -364,7 +364,7 @@
       "powerforge.web": {
         "type": "Project",
         "dependencies": {
-          "HtmlTinkerX": "[2.0.18, )",
+          "HtmlTinkerX": "[2.0.19, )",
           "Magick.NET-Q8-AnyCPU": "[14.14.0, )",
           "OfficeIMO.Markdown": "[0.6.13, )",
           "PowerForge": "[1.0.0, )",
