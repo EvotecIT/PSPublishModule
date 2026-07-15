@@ -33,7 +33,9 @@ jobs:
       deployment_site: example.com
       deployment_host: deploy.example.com
       deployment_url: https://example.com
+      deployment_cloudflare_zone: example.com
     secrets:
+      cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       deployment_ssh_private_key: ${{ secrets.WEBSITE_DEPLOY_SSH_PRIVATE_KEY }}
       deployment_ssh_known_hosts: ${{ secrets.WEBSITE_DEPLOY_SSH_KNOWN_HOSTS }}
 ```
@@ -62,6 +64,14 @@ unconfigured site ids, mutable site configuration, and workflow staging files ow
 by another account. It atomically promotes a timestamped release, purges Cloudflare
 without disabling proxying, verifies the exact source SHA through both the origin and
 public URL, and rolls back the symlink if any check fails.
+
+When `deployment_cloudflare_zone` is set, the workflow resolves exactly one active
+zone with `cloudflare_api_token` and transfers the token and zone id only inside the
+temporary deployment staging. The promoter copies them into root-only staging,
+purges before exact-SHA verification, and erases them on every success or failure.
+This keeps Cloudflare proxying and cache analytics enabled without storing a broad
+CI token permanently on the web host. Sites may instead use a scoped, root-owned
+host token file when that is their preferred recovery model.
 
 ## Host Build Flow (Special Case)
 

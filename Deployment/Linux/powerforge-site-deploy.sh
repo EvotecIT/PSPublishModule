@@ -80,6 +80,8 @@ source "$config_path"
 : "${RELEASES_TO_KEEP:=5}"
 : "${SMOKE_PATHS:=/}"
 : "${CLOUDFLARE_PURGE_ENABLED:=0}"
+: "${CLOUDFLARE_ZONE_ID:=}"
+: "${CLOUDFLARE_API_TOKEN_FILE:=}"
 : "${ORIGIN_ADDRESS:=}"
 : "${ORIGIN_HOST:=}"
 
@@ -88,13 +90,16 @@ source "$config_path"
 [[ "$TRUSTED_STAGE_ROOT" == /* && "$TRUSTED_STAGE_ROOT" != '/' ]] || fail 'Trusted staging root must be an absolute non-root path.'
 [[ "$PUBLIC_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || fail 'PUBLIC_URL must be an HTTPS origin without a path.'
 [[ "$RELEASES_TO_KEEP" =~ ^[1-9][0-9]*$ ]] || fail 'RELEASES_TO_KEEP must be a positive integer.'
+[[ "$CLOUDFLARE_PURGE_ENABLED" == '0' || "$CLOUDFLARE_PURGE_ENABLED" == '1' ]] || fail 'CLOUDFLARE_PURGE_ENABLED must be 0 or 1.'
 if [[ -n "$ORIGIN_ADDRESS" || -n "$ORIGIN_HOST" ]]; then
   [[ -n "$ORIGIN_ADDRESS" && "$ORIGIN_HOST" =~ ^[A-Za-z0-9.-]+$ ]] || fail 'ORIGIN_ADDRESS and ORIGIN_HOST must be configured together.'
 fi
 if [[ "$CLOUDFLARE_PURGE_ENABLED" == '1' ]]; then
-  [[ "${CLOUDFLARE_ZONE_ID:-}" =~ ^[A-Za-z0-9]+$ ]] || fail 'CLOUDFLARE_ZONE_ID is required when purge is enabled.'
-  [[ "${CLOUDFLARE_API_TOKEN_FILE:-}" == /* && -s "$CLOUDFLARE_API_TOKEN_FILE" ]] || fail 'CLOUDFLARE_API_TOKEN_FILE must be an absolute, non-empty readable file when purge is enabled.'
-  [[ -r "$CLOUDFLARE_API_TOKEN_FILE" ]] || fail 'Cloudflare API token file is not readable.'
+  [[ -z "$CLOUDFLARE_ZONE_ID" || "$CLOUDFLARE_ZONE_ID" =~ ^[A-Fa-f0-9]{32}$ ]] || fail 'CLOUDFLARE_ZONE_ID must be a 32-character hexadecimal id.'
+  if [[ -n "$CLOUDFLARE_API_TOKEN_FILE" ]]; then
+    [[ "$CLOUDFLARE_API_TOKEN_FILE" == /* && -s "$CLOUDFLARE_API_TOKEN_FILE" ]] || fail 'CLOUDFLARE_API_TOKEN_FILE must be an absolute, non-empty readable file.'
+    [[ -r "$CLOUDFLARE_API_TOKEN_FILE" ]] || fail 'Cloudflare API token file is not readable.'
+  fi
 fi
 
 archive="$(realpath -e "$archive")"
@@ -111,13 +116,41 @@ if [[ -n "${SUDO_UID:-}" ]]; then
   [[ "$(stat -c '%u' "$metadata")" -eq "$SUDO_UID" ]] || fail 'Metadata owner does not match the invoking deployment account.'
 fi
 
+workflow_cloudflare_token="$workflow_stage/cloudflare-api.token"
+workflow_cloudflare_zone="$workflow_stage/cloudflare-zone-id"
+if [[ -e "$workflow_cloudflare_token" || -L "$workflow_cloudflare_token" || -e "$workflow_cloudflare_zone" || -L "$workflow_cloudflare_zone" ]]; then
+  [[ "$CLOUDFLARE_PURGE_ENABLED" == '1' ]] || fail 'Ephemeral Cloudflare credentials were provided but purge is disabled.'
+  [[ -f "$workflow_cloudflare_token" && ! -L "$workflow_cloudflare_token" && -s "$workflow_cloudflare_token" ]] || fail 'Ephemeral Cloudflare token must be a non-empty regular file.'
+  [[ -f "$workflow_cloudflare_zone" && ! -L "$workflow_cloudflare_zone" && -s "$workflow_cloudflare_zone" ]] || fail 'Ephemeral Cloudflare zone id must be a non-empty regular file.'
+  if [[ -n "${SUDO_UID:-}" ]]; then
+    [[ "$(stat -c '%u' "$workflow_cloudflare_token")" -eq "$SUDO_UID" ]] || fail 'Cloudflare token owner does not match the invoking deployment account.'
+    [[ "$(stat -c '%u' "$workflow_cloudflare_zone")" -eq "$SUDO_UID" ]] || fail 'Cloudflare zone owner does not match the invoking deployment account.'
+  fi
+fi
 install -d -m 0700 "$TRUSTED_STAGE_ROOT"
 trusted_stage="$(mktemp -d "${TRUSTED_STAGE_ROOT}/${site}.XXXXXXXX")"
 chmod 0700 "$trusted_stage"
 install -m 0600 "$archive" "$trusted_stage/artifact.tar"
 install -m 0600 "$metadata" "$trusted_stage/deployment.json"
+if [[ -f "$workflow_cloudflare_token" ]]; then
+  install -m 0600 "$workflow_cloudflare_token" "$trusted_stage/cloudflare-api.token"
+  install -m 0600 "$workflow_cloudflare_zone" "$trusted_stage/cloudflare-zone-id"
+  ephemeral_zone_id="$(tr -d '[:space:]' <"$trusted_stage/cloudflare-zone-id")"
+  [[ "$ephemeral_zone_id" =~ ^[A-Fa-f0-9]{32}$ ]] || fail 'Ephemeral Cloudflare zone id is invalid.'
+  if [[ -n "$CLOUDFLARE_ZONE_ID" && "${CLOUDFLARE_ZONE_ID,,}" != "${ephemeral_zone_id,,}" ]]; then
+    fail 'Ephemeral Cloudflare zone id does not match the host configuration.'
+  fi
+  CLOUDFLARE_ZONE_ID="${ephemeral_zone_id,,}"
+  CLOUDFLARE_API_TOKEN_FILE="$trusted_stage/cloudflare-api.token"
+fi
 archive="$trusted_stage/artifact.tar"
 metadata="$trusted_stage/deployment.json"
+
+if [[ "$CLOUDFLARE_PURGE_ENABLED" == '1' ]]; then
+  CLOUDFLARE_ZONE_ID="${CLOUDFLARE_ZONE_ID,,}"
+  [[ "$CLOUDFLARE_ZONE_ID" =~ ^[a-f0-9]{32}$ ]] || fail 'Cloudflare zone id is required when purge is enabled.'
+  [[ "$CLOUDFLARE_API_TOKEN_FILE" == /* && -s "$CLOUDFLARE_API_TOKEN_FILE" && -r "$CLOUDFLARE_API_TOKEN_FILE" ]] || fail 'A readable Cloudflare API token is required when purge is enabled.'
+fi
 
 json_string() {
   local key="$1"

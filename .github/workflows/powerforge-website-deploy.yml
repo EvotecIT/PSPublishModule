@@ -105,6 +105,11 @@ on:
         required: false
         type: string
         default: "production"
+      deployment_cloudflare_zone:
+        description: Optional Cloudflare zone name for an ephemeral deploy-time cache token.
+        required: false
+        type: string
+        default: ""
       deployment_url:
         required: false
         type: string
@@ -316,8 +321,10 @@ jobs:
           DEPLOYMENT_PORT: ${{ inputs.deployment_port }}
           DEPLOYMENT_SITE: ${{ inputs.deployment_site }}
           DEPLOYMENT_USER: ${{ inputs.deployment_user }}
+          DEPLOYMENT_CLOUDFLARE_ZONE: ${{ inputs.deployment_cloudflare_zone }}
           DEPLOYMENT_PRIVATE_KEY: ${{ secrets.deployment_ssh_private_key }}
           DEPLOYMENT_KNOWN_HOSTS: ${{ secrets.deployment_ssh_known_hosts }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare_api_token }}
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:DEPLOYMENT_SITE -notmatch '^[a-z0-9][a-z0-9.-]{0,62}$') {
@@ -338,6 +345,14 @@ jobs:
           }
           if ([string]::IsNullOrWhiteSpace($env:DEPLOYMENT_KNOWN_HOSTS)) {
             throw 'deployment_ssh_known_hosts is required; host key scanning at deploy time is intentionally disabled.'
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:DEPLOYMENT_CLOUDFLARE_ZONE)) {
+            if ($env:DEPLOYMENT_CLOUDFLARE_ZONE -notmatch '^[A-Za-z0-9.-]+$') {
+              throw 'deployment_cloudflare_zone must be a DNS zone name.'
+            }
+            if ([string]::IsNullOrWhiteSpace($env:CLOUDFLARE_API_TOKEN)) {
+              throw 'cloudflare_api_token is required when deployment_cloudflare_zone is configured.'
+            }
           }
 
       - name: Download validated site artifact
@@ -391,8 +406,10 @@ jobs:
           DEPLOYMENT_PORT: ${{ inputs.deployment_port }}
           DEPLOYMENT_SITE: ${{ inputs.deployment_site }}
           DEPLOYMENT_USER: ${{ inputs.deployment_user }}
+          DEPLOYMENT_CLOUDFLARE_ZONE: ${{ inputs.deployment_cloudflare_zone }}
           DEPLOYMENT_PRIVATE_KEY: ${{ secrets.deployment_ssh_private_key }}
           DEPLOYMENT_KNOWN_HOSTS: ${{ secrets.deployment_ssh_known_hosts }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare_api_token }}
         run: |
           $ErrorActionPreference = 'Stop'
           $sshRoot = Join-Path $env:RUNNER_TEMP 'powerforge-deployment-ssh'
@@ -404,10 +421,33 @@ jobs:
           chmod 700 $sshRoot
           chmod 600 $keyPath $knownHostsPath
 
+          $deploymentSources = @(
+            (Join-Path $env:RUNNER_TEMP 'powerforge-site/artifact.tar')
+            (Join-Path $env:RUNNER_TEMP 'powerforge-site/deployment.json')
+          )
+          if (-not [string]::IsNullOrWhiteSpace($env:DEPLOYMENT_CLOUDFLARE_ZONE)) {
+            $headers = @{ Authorization = "Bearer $($env:CLOUDFLARE_API_TOKEN)" }
+            $zoneName = [Uri]::EscapeDataString($env:DEPLOYMENT_CLOUDFLARE_ZONE)
+            $zoneResponse = Invoke-RestMethod -Method Get -Uri "https://api.cloudflare.com/client/v4/zones?name=$zoneName&status=active&per_page=2" -Headers $headers
+            if (-not $zoneResponse.success -or @($zoneResponse.result).Count -ne 1) {
+              throw "Cloudflare did not return exactly one active zone for '$($env:DEPLOYMENT_CLOUDFLARE_ZONE)'."
+            }
+            $zoneId = [string]$zoneResponse.result[0].id
+            if ($zoneId -notmatch '^[A-Fa-f0-9]{32}$') {
+              throw 'Cloudflare returned an invalid zone id.'
+            }
+            $cloudflareTokenPath = Join-Path $sshRoot 'cloudflare-api.token'
+            $cloudflareZonePath = Join-Path $sshRoot 'cloudflare-zone-id'
+            Set-Content -LiteralPath $cloudflareTokenPath -Value $env:CLOUDFLARE_API_TOKEN -Encoding utf8NoBOM -NoNewline
+            Set-Content -LiteralPath $cloudflareZonePath -Value $zoneId.ToLowerInvariant() -Encoding ascii -NoNewline
+            chmod 600 $cloudflareTokenPath $cloudflareZonePath
+            $deploymentSources += $cloudflareTokenPath, $cloudflareZonePath
+          }
+
           $remoteBase = "/tmp/powerforge-${{ github.run_id }}-${{ github.run_attempt }}-$($env:DEPLOYMENT_SITE)"
           $target = "$($env:DEPLOYMENT_USER)@$($env:DEPLOYMENT_HOST)"
           $sshOptions = @('-i', $keyPath, '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHostsPath")
-          $scpArgs = @('-P', $env:DEPLOYMENT_PORT) + $sshOptions + @((Join-Path $env:RUNNER_TEMP 'powerforge-site/artifact.tar'), (Join-Path $env:RUNNER_TEMP 'powerforge-site/deployment.json'), "${target}:${remoteBase}/")
+          $scpArgs = @('-P', $env:DEPLOYMENT_PORT) + $sshOptions + $deploymentSources + @("${target}:${remoteBase}/")
           ssh @sshOptions -p $env:DEPLOYMENT_PORT $target "install -d -m 0700 '$remoteBase'"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           scp @scpArgs

@@ -4,7 +4,7 @@ set -Eeuo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 deploy_script="$repo_root/Deployment/Linux/powerforge-site-deploy.sh"
 test_root="$(mktemp -d)"
-trap 'rm -rf "$test_root" /tmp/powerforge-91001-1-example /tmp/powerforge-91002-1-example /tmp/powerforge-91003-1-first /tmp/powerforge-91004-1-cloudflare /tmp/powerforge-91007-1-example /tmp/powerforge-91008-1-example /tmp/powerforge-9' EXIT
+trap 'rm -rf "$test_root" /tmp/powerforge-91001-1-example /tmp/powerforge-91002-1-example /tmp/powerforge-91003-1-first /tmp/powerforge-91004-1-cloudflare /tmp/powerforge-91005-1-cloudflare /tmp/powerforge-91006-1-cloudflare-mismatch /tmp/powerforge-91007-1-example /tmp/powerforge-91008-1-example /tmp/powerforge-9' EXIT
 
 mkdir -p "$test_root/config" "$test_root/locks" "$test_root/site" "$test_root/bin"
 export POWERFORGE_SITE_TRUSTED_STAGE_ROOT="$test_root/trusted-stage"
@@ -21,6 +21,10 @@ cat >"$test_root/bin/curl" <<'EOF'
 set -e
 if [[ "${FAKE_CURL_FAIL:-0}" == '1' ]]; then
   exit 22
+fi
+if [[ "$*" == *'api.cloudflare.com'* ]]; then
+  printf '{"success":true}\n'
+  exit 0
 fi
 if [[ -n "${FAKE_STALE_MARKER:-}" ]]; then
   cat "$FAKE_STALE_MARKER"
@@ -162,6 +166,41 @@ if env \
   exit 1
 fi
 [[ ! -e "$test_root/cloudflare-site/current" ]]
+
+create_deployment 91005 '5555555555555555555555555555555555555555' 'ephemeral-cloudflare-release' cloudflare
+printf 'test-token' >/tmp/powerforge-91005-1-cloudflare/cloudflare-api.token
+printf 'abcdefabcdefabcdefabcdefabcdefab' >/tmp/powerforge-91005-1-cloudflare/cloudflare-zone-id
+env \
+  PATH="$test_root/bin:$PATH" \
+  FAKE_SITE_ROOT="$test_root/cloudflare-site" \
+  POWERFORGE_SITE_CONFIG_ROOT="$test_root/config" \
+  POWERFORGE_SITE_LOCK_ROOT="$test_root/locks" \
+  "$deploy_script" --site cloudflare --archive /tmp/powerforge-91005-1-cloudflare/artifact.tar --metadata /tmp/powerforge-91005-1-cloudflare/deployment.json
+grep -Fq 'ephemeral-cloudflare-release' "$test_root/cloudflare-site/current/index.html"
+[[ ! -e "$test_root/cloudflare-site/current/cloudflare-api.token" ]]
+[[ ! -e /tmp/powerforge-91005-1-cloudflare ]]
+
+mkdir -p "$test_root/cloudflare-mismatch-site"
+cat >"$test_root/config/cloudflare-mismatch.env" <<EOF
+SITE_ROOT=$test_root/cloudflare-mismatch-site
+PUBLIC_URL=https://cloudflare-mismatch.example.test
+CLOUDFLARE_PURGE_ENABLED=1
+CLOUDFLARE_ZONE_ID=11111111111111111111111111111111
+EOF
+create_deployment 91006 '6666666666666666666666666666666666666666' 'cloudflare-zone-mismatch' cloudflare-mismatch
+printf 'test-token' >/tmp/powerforge-91006-1-cloudflare-mismatch/cloudflare-api.token
+printf 'abcdefabcdefabcdefabcdefabcdefab' >/tmp/powerforge-91006-1-cloudflare-mismatch/cloudflare-zone-id
+if env \
+  PATH="$test_root/bin:$PATH" \
+  FAKE_SITE_ROOT="$test_root/cloudflare-mismatch-site" \
+  POWERFORGE_SITE_CONFIG_ROOT="$test_root/config" \
+  POWERFORGE_SITE_LOCK_ROOT="$test_root/locks" \
+  "$deploy_script" --site cloudflare-mismatch --archive /tmp/powerforge-91006-1-cloudflare-mismatch/artifact.tar --metadata /tmp/powerforge-91006-1-cloudflare-mismatch/deployment.json; then
+  echo 'Expected mismatched workflow and host Cloudflare zones to fail preflight.' >&2
+  exit 1
+fi
+[[ ! -e "$test_root/cloudflare-mismatch-site/current" ]]
+
 if [[ -d "$POWERFORGE_SITE_TRUSTED_STAGE_ROOT" ]] && find "$POWERFORGE_SITE_TRUSTED_STAGE_ROOT" -mindepth 1 -maxdepth 1 | grep -q .; then
   echo 'Root-owned deployment staging was not cleaned.' >&2
   exit 1
