@@ -29,6 +29,7 @@ public sealed class CloudflareOriginSyncDeploymentTests
         Assert.Contains("ufw --force delete allow", script, StringComparison.Ordinal);
         Assert.Contains("apachectl configtest", script, StringComparison.Ordinal);
         Assert.Contains("restore_apache_configuration", script, StringComparison.Ordinal);
+        Assert.Contains("module or configuration enablement failed", script, StringComparison.Ordinal);
         Assert.Contains("systemctl reload", script, StringComparison.Ordinal);
         Assert.Contains("install -m 0644 \"$tmp_dir/cidrs.txt\" \"$state_file\"", script, StringComparison.Ordinal);
     }

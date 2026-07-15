@@ -145,8 +145,10 @@ restore_apache_configuration() {
 }
 
 install -m 0644 "$tmp_dir/apache.conf" "$apache_conf_file"
-a2enmod remoteip >/dev/null
-a2enconf "$apache_conf_name" >/dev/null
+if ! a2enmod remoteip >/dev/null || ! a2enconf "$apache_conf_name" >/dev/null; then
+  restore_apache_configuration
+  fail 'Apache module or configuration enablement failed; previous configuration restored'
+fi
 if ! apachectl configtest >/dev/null; then
   restore_apache_configuration
   fail 'Apache configuration validation failed; previous configuration restored'
