@@ -1622,7 +1622,7 @@ internal static partial class WebPipelineRunner
             var projectLastModified = ResolveProjectSitemapLastModified(project, outputPath, projectFingerprint);
             if (!string.IsNullOrWhiteSpace(projectLastModified))
                 lines.Add($"sitemap.lastmod: {YamlQuote(projectLastModified)}");
-            AppendProjectFrontMatterExtensions(lines, project);
+            AppendProjectFrontMatterExtensions(lines, project, includeProductPresentation: true);
             lines.Add("meta.generated_by: powerforge.project-catalog");
             lines.Add("---");
             lines.Add(string.Empty);
@@ -1857,7 +1857,7 @@ internal static partial class WebPipelineRunner
                 var projectLastModified = ResolveProjectSitemapLastModified(project, outputPath, projectFingerprint);
                 if (!string.IsNullOrWhiteSpace(projectLastModified))
                     lines.Add($"sitemap.lastmod: {YamlQuote(projectLastModified)}");
-                AppendProjectFrontMatterExtensions(lines, project);
+                AppendProjectFrontMatterExtensions(lines, project, includeProductPresentation: false);
                 var externalCanonical = contentMode.Equals("external", StringComparison.OrdinalIgnoreCase)
                     ? GetProjectExternalSectionCanonicalLink(project, section)
                     : null;
@@ -2522,12 +2522,16 @@ internal static partial class WebPipelineRunner
         return candidates;
     }
 
-    private static void AppendProjectFrontMatterExtensions(List<string> lines, ProjectCatalogEntry project)
+    private static void AppendProjectFrontMatterExtensions(
+        List<string> lines,
+        ProjectCatalogEntry project,
+        bool includeProductPresentation)
     {
         if (!string.IsNullOrWhiteSpace(project.ContentMode))
             WriteMetaString(lines, "meta.project_content_mode", project.ContentMode);
 
-        AppendProductFrontMatterExtensions(lines, project);
+        if (includeProductPresentation)
+            AppendProductFrontMatterExtensions(lines, project);
 
         if (project.Links is { Count: > 0 })
         {

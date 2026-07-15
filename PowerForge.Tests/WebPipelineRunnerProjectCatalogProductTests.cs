@@ -134,6 +134,11 @@ public class WebPipelineRunnerProjectCatalogProductTests
                         "support": "/projects/authimo/#support",
                         "privacy": "/projects/authimo/#privacy"
                       },
+                      "surfaces": {
+                        "docs": true,
+                        "apiDotNet": true,
+                        "examples": true
+                      },
                       "brand": {
                         "accent": "#1976D2",
                         "icon": "/assets/products/authimo/icon.png",
@@ -159,7 +164,7 @@ public class WebPipelineRunnerProjectCatalogProductTests
                   ]
                 }
                 """);
-            var pipelinePath = WritePipeline(root);
+            var pipelinePath = WritePipeline(root, generateSections: true);
 
             var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
 
@@ -170,6 +175,15 @@ public class WebPipelineRunnerProjectCatalogProductTests
             Assert.Contains("label: \"View source\"", page, StringComparison.Ordinal);
             Assert.Contains("url: \"https://github.com/EvotecIT/AuthIMO\"", page, StringComparison.Ordinal);
             Assert.DoesNotContain("meta.software.download_url", page, StringComparison.Ordinal);
+
+            foreach (var section in new[] { "docs", "api", "examples" })
+            {
+                var sectionPage = File.ReadAllText(Path.Combine(root, "content", "projects", $"authimo.{section}.md"));
+                Assert.Contains($"meta.project_section: \"{section}\"", sectionPage, StringComparison.Ordinal);
+                Assert.Contains("meta.project_link_source: \"https://github.com/EvotecIT/AuthIMO\"", sectionPage, StringComparison.Ordinal);
+                Assert.DoesNotContain("meta.product_presentation:", sectionPage, StringComparison.Ordinal);
+                Assert.DoesNotContain("meta.software.", sectionPage, StringComparison.Ordinal);
+            }
         }
         finally
         {
@@ -581,10 +595,10 @@ public class WebPipelineRunnerProjectCatalogProductTests
         return catalogPath;
     }
 
-    private static string WritePipeline(string root)
+    private static string WritePipeline(string root, bool generateSections = false)
     {
         var pipelinePath = Path.Combine(root, "pipeline.json");
-        File.WriteAllText(pipelinePath,
+        var pipeline =
             """
             {
               "steps": [
@@ -606,7 +620,10 @@ public class WebPipelineRunnerProjectCatalogProductTests
                 }
               ]
             }
-            """);
+            """;
+        if (generateSections)
+            pipeline = pipeline.Replace("\"generateSections\": false", "\"generateSections\": true", StringComparison.Ordinal);
+        File.WriteAllText(pipelinePath, pipeline);
         return pipelinePath;
     }
 
