@@ -17,8 +17,8 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("deployment_artifact_retention_days", workflow, StringComparison.Ordinal);
         Assert.Contains("$env:RUNNER_TEMP 'powerforge-deployment-ssh'", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("Join-Path $HOME '.ssh'", workflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("      pages: write", workflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("      id-token: write", workflow, StringComparison.Ordinal);
+        Assert.Contains("      pages: write", workflow, StringComparison.Ordinal);
+        Assert.Contains("      id-token: write", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("vars.POWERFORGE_DEPLOY_HOST", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("steps.deployment_target.outputs.host", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment_host:\n        description:", normalizedWorkflow, StringComparison.Ordinal);

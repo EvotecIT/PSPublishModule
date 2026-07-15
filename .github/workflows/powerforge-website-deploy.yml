@@ -141,6 +141,11 @@ on:
       deployment_ssh_known_hosts:
         required: false
 
+permissions:
+  actions: write
+  contents: read
+  packages: read
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
@@ -152,8 +157,6 @@ jobs:
   guardrails:
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: 10
-    permissions:
-      contents: read
     steps:
       - name: Checkout caller repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -264,10 +267,6 @@ jobs:
   build:
     needs: guardrails
     uses: ./.github/workflows/powerforge-website-run.yml
-    permissions:
-      actions: write
-      contents: read
-      packages: read
     with:
       website_root: ${{ inputs.website_root }}
       pipeline_config: ${{ inputs.pipeline_config }}
@@ -303,6 +302,9 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
@@ -316,9 +318,6 @@ jobs:
     environment:
       name: ${{ inputs.deployment_environment }}
       url: ${{ inputs.deployment_url }}
-    permissions:
-      actions: read
-      contents: read
     steps:
       - name: Validate Linux deployment inputs
         shell: pwsh
@@ -494,10 +493,6 @@ jobs:
     if: ${{ always() && inputs.post_deploy_pipeline_config != '' && ((inputs.deployment_target == 'github-pages' && needs.deploy.result == 'success') || (inputs.deployment_target == 'linux' && needs.deploy-linux.result == 'success')) }}
     needs: [deploy, deploy-linux]
     uses: ./.github/workflows/powerforge-website-run.yml
-    permissions:
-      actions: write
-      contents: read
-      packages: read
     with:
       website_root: ${{ inputs.website_root }}
       pipeline_config: ${{ inputs.post_deploy_pipeline_config }}
