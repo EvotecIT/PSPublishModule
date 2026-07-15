@@ -88,6 +88,10 @@ for health_url in $PUBLIC_HEALTH_URLS; do
   [[ "$health_url" =~ ^https://[^[:space:]]+$ ]] || fail "Public health URL must use HTTPS: $health_url"
 done
 
+mkdir -p "$LOCK_ROOT"
+exec 9>"${LOCK_ROOT}/powerforge-service-${service_id}.lock"
+flock -n 9 || fail "Another deployment is active for $service_id."
+
 archive="$(realpath -e "$archive")"
 metadata="$(realpath -e "$metadata")"
 [[ -f "$archive" && ! -L "$archive" ]] || fail 'Artifact must be a regular file, not a symlink.'
@@ -134,10 +138,6 @@ while IFS= read -r listing; do
 done < <(tar -tvf "$archive")
 
 mkdir -p "$SERVICE_ROOT/releases"
-mkdir -p "$LOCK_ROOT"
-exec 9>"${LOCK_ROOT}/powerforge-service-${service_id}.lock"
-flock -n 9 || fail "Another deployment is active for $service_id."
-
 release_id="$(date -u +%Y%m%d%H%M%S)-${run_id}-${run_attempt}-${source_sha:0:12}"
 release_dir="$SERVICE_ROOT/releases/$release_id"
 [[ ! -e "$release_dir" ]] || fail "Release already exists: $release_id"
@@ -153,6 +153,8 @@ verify_health() {
     response="$(health_response "$url")"
     if [[ "$REQUIRE_HEALTH_PROVENANCE" == '1' ]]; then
       grep -Eq "\"sourceSha\"[[:space:]]*:[[:space:]]*\"${source_sha}\"" <<<"$response" || fail "Health endpoint did not report promoted source SHA: $url"
+      grep -Eq "\"workflowRunId\"[[:space:]]*:[[:space:]]*\"${run_id}\"" <<<"$response" || fail "Health endpoint did not report promoted workflow run: $url"
+      grep -Eq "\"workflowRunAttempt\"[[:space:]]*:[[:space:]]*\"${run_attempt}\"" <<<"$response" || fail "Health endpoint did not report promoted workflow attempt: $url"
     fi
   done
 }

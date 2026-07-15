@@ -11,7 +11,7 @@ The service must:
 - run from a stable `current` symlink under `SERVICE_ROOT`
 - keep secrets and mutable state outside the release directory
 - read `_powerforge/deployment.json` from the current release
-- expose the deployed `sourceSha` through each configured health endpoint
+- expose the deployed `sourceSha`, `workflowRunId`, and `workflowRunAttempt` through each configured health endpoint
 - use a systemd unit whose restart is safe during deployment and rollback
 
 The provenance health contract is enabled by default. Set `REQUIRE_HEALTH_PROVENANCE=0` only for a deliberate transitional deployment; a successful HTTP response alone does not prove which release is serving traffic.
@@ -104,7 +104,7 @@ The root promoter:
 3. Rejects checksum mismatches, path traversal, links, and special files.
 4. Extracts a timestamped release and writes `_powerforge/deployment.json`.
 5. Atomically switches `current` and restarts the configured systemd unit.
-6. Requires local and public health endpoints to report the promoted source SHA.
+6. Requires local and public health endpoints to report the promoted source SHA and workflow run identity.
 7. Restores the previous symlink and restarts it when deployment or health verification fails.
 8. Stops the service after a failed first deployment and removes the failed release.
 9. Retains the configured number of known-good releases.

@@ -33,6 +33,9 @@ public sealed class GitHubServiceLinuxDeployWorkflowTests
         Assert.Contains("systemctl restart", script, StringComparison.Ordinal);
         Assert.Contains("systemctl stop", script, StringComparison.Ordinal);
         Assert.Contains("sourceSha", script, StringComparison.Ordinal);
+        Assert.Contains("workflowRunId", script, StringComparison.Ordinal);
+        Assert.Contains("workflowRunAttempt", script, StringComparison.Ordinal);
+        Assert.True(script.IndexOf("flock -n", StringComparison.Ordinal) < script.IndexOf("realpath -e", StringComparison.Ordinal));
     }
 
     private static string ReadRepoFile(params string[] relativePath)
