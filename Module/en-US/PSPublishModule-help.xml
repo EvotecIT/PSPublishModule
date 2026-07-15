@@ -19138,6 +19138,18 @@ updates csproj versions, packs, and optionally publishes packages.</maml:para>
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>Invoke-DotNetRepositoryRelease</maml:name>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AlignPackageVersions</maml:name>
+          <maml:description>
+            <maml:para>Align projects sharing an X-pattern to one next version based on the highest current package version in that group.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>CertificateStore</maml:name>
           <maml:description>
             <maml:para>Certificate store location used when searching for the signing certificate.</maml:para>
@@ -19520,6 +19532,18 @@ updates csproj versions, packs, and optionally publishes packages.</maml:para>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>AlignPackageVersions</maml:name>
+        <maml:description>
+          <maml:para>Align projects sharing an X-pattern to one next version based on the highest current package version in that group.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>CertificateStore</maml:name>
         <maml:description>
@@ -43118,6 +43142,18 @@ Build-Module { } to remain the primary authoring surface for combined module and
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>New-ConfigurationPackageBuild</maml:name>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AlignPackageVersions</maml:name>
+          <maml:description>
+            <maml:para>Align projects sharing an X-pattern to one next version based on the highest current package version in that group.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Build</maml:name>
           <maml:description>
             <maml:para>Whether package projects should be built/packed.</maml:para>
@@ -43876,6 +43912,18 @@ Build-Module { } to remain the primary authoring surface for combined module and
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>AlignPackageVersions</maml:name>
+        <maml:description>
+          <maml:para>Align projects sharing an X-pattern to one next version based on the highest current package version in that group.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Build</maml:name>
         <maml:description>

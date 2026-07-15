@@ -10,6 +10,7 @@ internal sealed class DotNetRepositoryReleasePreparationRequest
     public IDictionary? ExpectedVersionMap { get; set; }
     public bool ExpectedVersionMapAsInclude { get; set; }
     public bool ExpectedVersionMapUseWildcards { get; set; }
+    public bool AlignPackageVersions { get; set; }
     public string[]? IncludeProject { get; set; }
     public string[]? ExcludeProject { get; set; }
     public string[]? ExcludeDirectories { get; set; }

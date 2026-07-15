@@ -24,6 +24,7 @@ public sealed class DotNetRepositoryReleasePreparationServiceTests
                 ExpectedVersion = "1.2.X",
                 ExpectedVersionMap = new Hashtable { ["ProjectA"] = "2.0.0" },
                 ExpectedVersionMapAsInclude = true,
+                AlignPackageVersions = true,
                 NugetCredentialUserName = "user",
                 NugetCredentialSecretFilePath = secretPath,
                 PublishApiKeyEnvName = envName,
@@ -44,6 +45,7 @@ public sealed class DotNetRepositoryReleasePreparationServiceTests
             Assert.Equal(Path.Combine(root.FullName, "repo"), context.RootPath);
             Assert.Equal("1.2.X", context.Spec.ExpectedVersion);
             Assert.True(context.Spec.ExpectedVersionMapAsInclude);
+            Assert.True(context.Spec.AlignPackageVersions);
             Assert.Equal("2.0.0", context.Spec.ExpectedVersionsByProject!["ProjectA"]);
             Assert.Equal("user", context.Spec.VersionSourceCredential!.UserName);
             Assert.Equal("from-file", context.Spec.VersionSourceCredential.Secret);

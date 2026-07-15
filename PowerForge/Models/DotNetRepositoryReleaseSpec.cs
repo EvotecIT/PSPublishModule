@@ -41,6 +41,17 @@ public sealed class DotNetRepositoryReleaseSpec
     /// </summary>
     public bool ExpectedVersionMapUseWildcards { get; set; }
 
+    /// <summary>
+    /// When true, projects using the same X-pattern are stepped from the highest current
+    /// package version found across that group and receive one aligned next version.
+    /// </summary>
+    public bool AlignPackageVersions { get; set; }
+
+    /// <summary>
+    /// Project-build version tracks that need package-version alignment after project discovery.
+    /// </summary>
+    internal IReadOnlyList<ProjectBuildVersionAlignmentGroup>? VersionAlignmentGroups { get; set; }
+
     /// <summary>Sources used to resolve the current package version (v3 index or local path).</summary>
     public string[]? VersionSources { get; set; }
 

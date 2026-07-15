@@ -825,6 +825,7 @@ public sealed partial class ModulePipelineRunner
             VersionTracks = MapVersionTracks(source.VersionTracks),
             ExpectedVersionMapAsInclude = source.ExpectedVersionMapAsInclude,
             ExpectedVersionMapUseWildcards = source.ExpectedVersionMapUseWildcards,
+            AlignPackageVersions = source.AlignPackageVersions,
             IncludeProjects = source.IncludeProjects,
             ExcludeProjects = source.ExcludeProjects,
             ExcludeDirectories = source.ExcludeDirectories,

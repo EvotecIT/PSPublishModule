@@ -166,6 +166,9 @@ public sealed class NewConfigurationPackageBuildCommand : PSCmdlet
     /// <summary>When true, <c>ExpectedVersionMap</c> keys support wildcard matching.</summary>
     [Parameter] public SwitchParameter ExpectedVersionMapUseWildcards { get; set; }
 
+    /// <summary>Align projects sharing an X-pattern to one next version based on the highest current package version in that group.</summary>
+    [Parameter] public SwitchParameter AlignPackageVersions { get; set; }
+
     /// <summary>Project names to include.</summary>
     [Parameter] public string[]? IncludeProjects { get; set; }
 
@@ -340,6 +343,7 @@ public sealed class NewConfigurationPackageBuildCommand : PSCmdlet
                 VersionTracks = PackageBuildConfiguration.ToVersionTracksDictionary(VersionTracks),
                 ExpectedVersionMapAsInclude = ExpectedVersionMapAsInclude.IsPresent,
                 ExpectedVersionMapUseWildcards = ExpectedVersionMapUseWildcards.IsPresent,
+                AlignPackageVersions = AlignPackageVersions.IsPresent,
                 IncludeProjects = IncludeProjects,
                 ExcludeProjects = ExcludeProjects,
                 ExcludeDirectories = ExcludeDirectories,
