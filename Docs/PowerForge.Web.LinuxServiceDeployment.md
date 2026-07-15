@@ -127,7 +127,9 @@ package job, without persisted checkout credentials or GitHub workflow-command f
 paths. It should run contract tests and prepare generated output when needed.
 `service-root` is resolved and canonicalized after that script completes, so it may
 point at either committed source or a generated release directory without escaping
-the caller repository.
+the caller repository. Service artifacts are retained for seven days by default so
+manual protected-environment approval can outlive a short queue or weekend; override
+`artifact-retention-days` only when the repository has a different approval policy.
 
 ## Promotion And Rollback
 

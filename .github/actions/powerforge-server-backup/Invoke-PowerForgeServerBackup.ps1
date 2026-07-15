@@ -57,10 +57,14 @@ if (-not $manifestPath.StartsWith($workspacePrefix, [StringComparison]::Ordinal)
 $engineRoot = [IO.Path]::GetFullPath((Join-Path $env:GITHUB_ACTION_PATH '../../..'))
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 
-$captureAlias = [string]$manifest.target.sshAlias
+$captureAlias = if ([string]::IsNullOrWhiteSpace([string]$manifest.target.sshAlias)) {
+    'powerforge-capture'
+} else {
+    [string]$manifest.target.sshAlias
+}
 $captureHost = [string]$manifest.target.host
 if ($captureAlias -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$') {
-    throw 'The backup action requires target.sshAlias with a safe SSH alias.'
+    throw 'target.sshAlias must be a safe SSH alias when specified.'
 }
 if ($captureHost -notmatch '^[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$') {
     throw 'target.host is not a valid hostname or IP address.'
@@ -93,9 +97,16 @@ if (-not [int]::TryParse([string]$manifest.backupTarget.retention.keepLatest, [r
     $keepLatest -lt 1 -or $keepLatest -gt 365) {
     throw 'backupTarget.retention.keepLatest must be from 1 through 365.'
 }
-if (-not [string]::Equals([string]$manifest.backupTarget.encryption, 'age', [StringComparison]::OrdinalIgnoreCase) -or
-    [string]::IsNullOrWhiteSpace([string]$manifest.backupTarget.recipient)) {
-    throw 'Automated encrypted capture requires backupTarget.encryption=age and a public recipient.'
+if (-not [string]::Equals([string]$manifest.backupTarget.encryption, 'age', [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Automated encrypted capture requires backupTarget.encryption=age.'
+}
+$recipient = [string]$manifest.backupTarget.recipient
+if ([string]::IsNullOrWhiteSpace($recipient)) {
+    $recipientEnvName = [string]$manifest.backupTarget.recipientEnv
+    if ($recipientEnvName -notmatch '^[A-Za-z_][A-Za-z0-9_]*$' -or
+        [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($recipientEnvName, 'Process'))) {
+        throw 'Automated encrypted capture requires backupTarget.recipient or a populated recipientEnv variable.'
+    }
 }
 
 $runnerTemp = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd([IO.Path]::DirectorySeparatorChar)
@@ -138,6 +149,7 @@ Host $captureAlias
 
 Host github.com-powerforge-backup
   HostName github.com
+  HostKeyAlias github.com
   User git
   Port 22
   IdentityFile $backupKey

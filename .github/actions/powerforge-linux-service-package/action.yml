@@ -15,7 +15,7 @@ inputs:
   artifact-retention-days:
     description: Number of days to retain the service artifact.
     required: false
-    default: "1"
+    default: "7"
 
 outputs:
   artifact-name:
