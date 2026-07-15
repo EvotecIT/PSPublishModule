@@ -446,29 +446,35 @@ internal static partial class WebCliCommandHandlers
         return RunProcessCaptureBinary(sshCommand, BuildSshArguments(target, script), outputPath);
     }
 
-    private static string BuildRemoteTarScript(PowerForgeServerManagedFile[] files)
+    internal static string BuildRemoteTarScript(PowerForgeServerManagedFile[] files)
     {
-        var paths = files
-            .Select(static file => file.Target)
-            .Where(static target => !string.IsNullOrWhiteSpace(target))
-            .Select(static target => target!)
+        var captureFiles = files
+            .Where(static file => !string.IsNullOrWhiteSpace(file.Target))
+            .Select(static file => new { Target = file.Target!, file.Required })
             .ToArray();
-        if (paths.Length == 0)
+        if (captureFiles.Length == 0)
             throw new InvalidOperationException("No target paths are defined for capture.");
 
-        foreach (var path in paths)
+        foreach (var file in captureFiles)
         {
+            var path = file.Target;
             if (path.Any(static c => !(char.IsLetterOrDigit(c) || c is '/' or '.' or '_' or '-' or '*' or '?' or '[' or ']')))
                 throw new InvalidOperationException($"Capture path contains unsupported characters: {path}");
         }
 
-        return "set -e; sudo -n tar -czf - --ignore-failed-read " + string.Join(' ', paths);
+        var script = new StringBuilder("set -e; sudo -n tar -czf - ");
+        if (!captureFiles.Any(static file => file.Required))
+            script.Append("--ignore-failed-read ");
+        script
+            .AppendJoin(' ', captureFiles.Select(static file => file.Target));
+        return script.ToString();
     }
 
-    private static string BuildRemoteEncryptedTarScript(PowerForgeServerManagedFile[] files, string recipient)
+    internal static string BuildRemoteEncryptedTarScript(PowerForgeServerManagedFile[] files, string recipient)
     {
         var tarScript = BuildRemoteTarScript(files);
-        return $"{tarScript} | age -r {ShellQuote(recipient)} -o -";
+        var pipeline = $"{tarScript} | age -r {ShellQuote(recipient)} -o -";
+        return $"bash -o pipefail -c {ShellQuote(pipeline)}";
     }
 
     private static string ShellQuote(string value)

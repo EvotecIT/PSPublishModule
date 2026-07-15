@@ -1,0 +1,413 @@
+name: PowerForge Server Backup
+
+on:
+  workflow_call:
+    inputs:
+      manifest_path:
+        description: Repository-relative PowerForge server recovery manifest.
+        required: true
+        type: string
+      capture_user:
+        description: Dedicated least-privilege SSH account used for capture.
+        required: true
+        type: string
+      deployment_environment:
+        required: false
+        type: string
+        default: production
+      runner_labels_json:
+        required: false
+        type: string
+        default: '["ubuntu-latest"]'
+      timeout_minutes:
+        required: false
+        type: number
+        default: 30
+      dotnet_version:
+        required: false
+        type: string
+        default: 10.0.x
+      powerforge_repository:
+        required: true
+        type: string
+      powerforge_ref:
+        description: Exact PowerForge commit used to run the capture contract.
+        required: true
+        type: string
+    secrets:
+      repository_read_token:
+        required: false
+      server_ssh_private_key:
+        required: false
+      server_ssh_known_hosts:
+        required: false
+      backup_repository_ssh_private_key:
+        required: false
+      backup_repository_ssh_known_hosts:
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: powerforge-server-backup-${{ github.repository }}-${{ inputs.manifest_path }}
+  cancel-in-progress: false
+
+jobs:
+  capture-and-publish:
+    runs-on: ${{ fromJson(inputs.runner_labels_json) }}
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    environment:
+      name: ${{ inputs.deployment_environment }}
+    steps:
+      - name: Checkout caller repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ github.token }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Checkout PowerForge source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ inputs.powerforge_repository }}
+          ref: ${{ inputs.powerforge_ref }}
+          path: .powerforge-source
+          token: ${{ secrets.repository_read_token || github.token }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+        with:
+          dotnet-version: ${{ inputs.dotnet_version }}
+
+      - name: Validate manifest and backup policy
+        shell: pwsh
+        env:
+          CAPTURE_USER_INPUT: ${{ inputs.capture_user }}
+          MANIFEST_PATH_INPUT: ${{ inputs.manifest_path }}
+          POWERFORGE_REF_INPUT: ${{ inputs.powerforge_ref }}
+          POWERFORGE_REPOSITORY_INPUT: ${{ inputs.powerforge_repository }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_OS -ne 'Linux') {
+            throw 'PowerForge server backup requires a Linux runner.'
+          }
+          if ($env:CAPTURE_USER_INPUT -notmatch '^[a-z_][a-z0-9_-]{0,31}$') {
+            throw 'capture_user is not a valid Linux account name.'
+          }
+          if ($env:POWERFORGE_REPOSITORY_INPUT -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
+            throw 'powerforge_repository must be an owner/repository name.'
+          }
+          if ($env:POWERFORGE_REF_INPUT -notmatch '^[a-fA-F0-9]{40}$') {
+            throw 'powerforge_ref must be an exact 40-character commit.'
+          }
+
+          $workspace = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([IO.Path]::DirectorySeparatorChar)
+          $workspacePrefix = $workspace + [IO.Path]::DirectorySeparatorChar
+          $manifestPath = [IO.Path]::GetFullPath((Join-Path $workspace $env:MANIFEST_PATH_INPUT))
+          if (-not $manifestPath.StartsWith($workspacePrefix, [StringComparison]::Ordinal) -or
+              -not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+            throw 'manifest_path must identify a file inside the caller repository.'
+          }
+
+          $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.target.sshAlias -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$') {
+            throw 'The backup workflow requires target.sshAlias with a safe SSH alias.'
+          }
+          if ($manifest.target.host -notmatch '^[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$') {
+            throw 'target.host is not a valid hostname or IP address.'
+          }
+          $capturePort = 0
+          if (-not [int]::TryParse([string]$manifest.target.sshPort, [ref]$capturePort) -or
+              $capturePort -lt 1 -or $capturePort -gt 65535) {
+            throw 'target.sshPort must be an integer from 1 through 65535.'
+          }
+
+          $backupRepository = [string]$manifest.backupTarget.repository
+          $backupBranch = [string]$manifest.backupTarget.branch
+          $backupPath = ([string]$manifest.backupTarget.path).Replace('\', '/')
+          $keepLatest = 0
+          if ($backupRepository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
+            throw 'backupTarget.repository must be an owner/repository name.'
+          }
+          if ($backupBranch -notmatch '^[A-Za-z0-9._/-]+$' -or $backupBranch.Contains('..') -or $backupBranch.StartsWith('/')) {
+            throw 'backupTarget.branch contains unsupported characters.'
+          }
+          if ($backupPath -notmatch '^[A-Za-z0-9._/-]+$' -or $backupPath.Contains('..') -or $backupPath.StartsWith('/')) {
+            throw 'backupTarget.path must be a safe repository-relative path.'
+          }
+          if (-not [int]::TryParse([string]$manifest.backupTarget.retention.keepLatest, [ref]$keepLatest) -or
+              $keepLatest -lt 1 -or $keepLatest -gt 365) {
+            throw 'backupTarget.retention.keepLatest must be from 1 through 365.'
+          }
+          if (-not [string]::Equals([string]$manifest.backupTarget.encryption, 'age', [StringComparison]::OrdinalIgnoreCase) -or
+              [string]::IsNullOrWhiteSpace([string]$manifest.backupTarget.recipient)) {
+            throw 'Automated encrypted capture requires backupTarget.encryption=age and a public recipient.'
+          }
+
+          $engineRoot = [IO.Path]::GetFullPath((Join-Path $workspace '.powerforge-source'))
+          $captureRoot = Join-Path $env:RUNNER_TEMP 'powerforge-server-backup-capture'
+          $backupCheckout = Join-Path $env:RUNNER_TEMP 'powerforge-server-backup-repository'
+          foreach ($stalePath in @($captureRoot, $backupCheckout)) {
+            $resolvedStalePath = [IO.Path]::GetFullPath($stalePath)
+            $runnerTemp = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd([IO.Path]::DirectorySeparatorChar)
+            if (-not $resolvedStalePath.StartsWith($runnerTemp + [IO.Path]::DirectorySeparatorChar, [StringComparison]::Ordinal)) {
+              throw 'Backup staging path escaped the runner temporary directory.'
+            }
+            if (Test-Path -LiteralPath $resolvedStalePath) {
+              Remove-Item -LiteralPath $resolvedStalePath -Recurse -Force
+            }
+          }
+          @{
+            BACKUP_BRANCH = $backupBranch
+            BACKUP_CHECKOUT = $backupCheckout
+            BACKUP_KEEP_LATEST = $keepLatest
+            BACKUP_PATH = $backupPath
+            BACKUP_REPOSITORY = $backupRepository
+            CAPTURE_HOST = [string]$manifest.target.host
+            CAPTURE_PORT = $capturePort
+            CAPTURE_ROOT = $captureRoot
+            CAPTURE_SSH_ALIAS = [string]$manifest.target.sshAlias
+            CAPTURE_USER = $env:CAPTURE_USER_INPUT
+            ENGINE_ROOT = $engineRoot
+            MANIFEST_FULL_PATH = $manifestPath
+          }.GetEnumerator() | ForEach-Object {
+            "$($_.Key)=$($_.Value)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
+
+      - name: Configure isolated SSH identities
+        shell: pwsh
+        env:
+          BACKUP_PRIVATE_KEY: ${{ secrets.backup_repository_ssh_private_key }}
+          BACKUP_KNOWN_HOSTS: ${{ secrets.backup_repository_ssh_known_hosts }}
+          SERVER_PRIVATE_KEY: ${{ secrets.server_ssh_private_key }}
+          SERVER_KNOWN_HOSTS: ${{ secrets.server_ssh_known_hosts }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($value in @($env:BACKUP_PRIVATE_KEY, $env:BACKUP_KNOWN_HOSTS, $env:SERVER_PRIVATE_KEY, $env:SERVER_KNOWN_HOSTS)) {
+            if ([string]::IsNullOrWhiteSpace($value)) {
+              throw 'Server and backup repository SSH keys and pinned known-host entries are required.'
+            }
+          }
+
+          $sshRoot = Join-Path $env:RUNNER_TEMP 'powerforge-server-backup-ssh'
+          New-Item -ItemType Directory -Force -Path $sshRoot | Out-Null
+          $serverKey = Join-Path $sshRoot 'server_ed25519'
+          $serverKnownHosts = Join-Path $sshRoot 'server_known_hosts'
+          $backupKey = Join-Path $sshRoot 'backup_repository_ed25519'
+          $backupKnownHosts = Join-Path $sshRoot 'backup_repository_known_hosts'
+          $configPath = Join-Path $sshRoot 'config'
+          $serverSshCommand = Join-Path $sshRoot 'server-ssh'
+          Set-Content -LiteralPath $serverKey -Value $env:SERVER_PRIVATE_KEY -Encoding utf8NoBOM
+          Set-Content -LiteralPath $serverKnownHosts -Value $env:SERVER_KNOWN_HOSTS -Encoding utf8NoBOM
+          Set-Content -LiteralPath $backupKey -Value $env:BACKUP_PRIVATE_KEY -Encoding utf8NoBOM
+          Set-Content -LiteralPath $backupKnownHosts -Value $env:BACKUP_KNOWN_HOSTS -Encoding utf8NoBOM
+          @"
+          Host $env:CAPTURE_SSH_ALIAS
+            HostName $env:CAPTURE_HOST
+            User $env:CAPTURE_USER
+            Port $env:CAPTURE_PORT
+            IdentityFile $serverKey
+            UserKnownHostsFile $serverKnownHosts
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+
+          Host github.com-powerforge-backup
+            HostName github.com
+            User git
+            Port 22
+            IdentityFile $backupKey
+            UserKnownHostsFile $backupKnownHosts
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+          "@ | Set-Content -LiteralPath $configPath -Encoding utf8NoBOM
+          @'
+          #!/usr/bin/env bash
+          set -Eeuo pipefail
+          exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
+          '@ | Set-Content -LiteralPath $serverSshCommand -Encoding utf8NoBOM
+          chmod 700 $sshRoot
+          chmod 600 $serverKey $serverKnownHosts $backupKey $backupKnownHosts $configPath
+          chmod 700 $serverSshCommand
+          "GIT_SSH_COMMAND=ssh -F $configPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "POWERFORGE_SERVER_SSH_CONFIG=$configPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "SERVER_SSH_COMMAND=$serverSshCommand" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "SSH_CONFIG_PATH=$configPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Verify capture host identity
+        shell: bash
+        run: |
+          "$SERVER_SSH_COMMAND" "$CAPTURE_SSH_ALIAS" 'printf capture-host-ok'
+
+      - name: Build pinned PowerForge capture CLI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $project = Join-Path $env:ENGINE_ROOT 'PowerForge.Web.Cli/PowerForge.Web.Cli.csproj'
+          dotnet build $project -c Release -f net10.0 --nologo
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $cli = Join-Path $env:ENGINE_ROOT 'PowerForge.Web.Cli/bin/Release/net10.0/PowerForge.Web.Cli.dll'
+          if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) {
+            throw "PowerForge capture CLI was not produced: $cli"
+          }
+          "POWERFORGE_CLI=$cli" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Capture and encrypt server recovery state
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet $env:POWERFORGE_CLI server capture `
+            --manifest $env:MANIFEST_FULL_PATH `
+            --out $env:CAPTURE_ROOT `
+            --ssh $env:SERVER_SSH_COMMAND `
+            --encrypt-remote `
+            --fail-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Validate capture and write provenance
+        shell: pwsh
+        env:
+          SOURCE_SHA_INPUT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $requiredFiles = @(
+            'capture-summary.json',
+            'manifest.json',
+            'plain-files.tar.gz',
+            'encrypted-secrets.tar.gz.age',
+            'restore-checklist.md'
+          )
+          foreach ($relativePath in $requiredFiles) {
+            $path = Join-Path $env:CAPTURE_ROOT $relativePath
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -eq 0) {
+              throw "Required capture artifact is missing or empty: $relativePath"
+            }
+          }
+          $summary = Get-Content -LiteralPath (Join-Path $env:CAPTURE_ROOT 'capture-summary.json') -Raw | ConvertFrom-Json
+          if (@($summary.Warnings).Count -ne 0) {
+            throw "Capture summary contains warnings: $($summary.Warnings -join '; ')"
+          }
+          if ($env:SOURCE_SHA_INPUT -notmatch '^[a-f0-9]{40,64}$') {
+            throw 'Unable to resolve exact caller source provenance.'
+          }
+          "SOURCE_SHA=$env:SOURCE_SHA_INPUT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $engineSha = (git -C $env:ENGINE_ROOT rev-parse HEAD).Trim()
+          if ($engineSha -notmatch '^[a-f0-9]{40}$') {
+            throw 'Unable to resolve exact PowerForge engine provenance.'
+          }
+          [ordered]@{
+            schemaVersion = 1
+            sourceRepository = $env:GITHUB_REPOSITORY
+            sourceSha = $env:SOURCE_SHA_INPUT
+            engineRepository = '${{ inputs.powerforge_repository }}'
+            engineSha = $engineSha
+            workflowRunId = $env:GITHUB_RUN_ID
+            workflowRunAttempt = $env:GITHUB_RUN_ATTEMPT
+            capturedAtUtc = [DateTimeOffset]::UtcNow.ToString('O')
+          } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $env:CAPTURE_ROOT 'capture-metadata.json') -Encoding utf8NoBOM
+
+          $hashLines = Get-ChildItem -LiteralPath $env:CAPTURE_ROOT -File -Recurse |
+            Where-Object Name -ne 'SHA256SUMS.txt' |
+            Sort-Object FullName |
+            ForEach-Object {
+              $relative = [IO.Path]::GetRelativePath($env:CAPTURE_ROOT, $_.FullName).Replace('\', '/')
+              "$((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())  $relative"
+            }
+          $hashLines | Set-Content -LiteralPath (Join-Path $env:CAPTURE_ROOT 'SHA256SUMS.txt') -Encoding utf8NoBOM
+
+      - name: Clone private backup repository
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git clone \
+            --single-branch \
+            --branch "$BACKUP_BRANCH" \
+            "git@github.com-powerforge-backup:${BACKUP_REPOSITORY}.git" \
+            "$BACKUP_CHECKOUT"
+
+      - name: Stage timestamped capture and retention
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $checkout = [IO.Path]::GetFullPath($env:BACKUP_CHECKOUT).TrimEnd([IO.Path]::DirectorySeparatorChar)
+          $targetRoot = [IO.Path]::GetFullPath((Join-Path $checkout $env:BACKUP_PATH))
+          if (-not $targetRoot.StartsWith($checkout + [IO.Path]::DirectorySeparatorChar, [StringComparison]::Ordinal)) {
+            throw 'Resolved backup target escaped the backup repository checkout.'
+          }
+          New-Item -ItemType Directory -Force -Path $targetRoot | Out-Null
+          $captureName = '{0}-{1}-{2}' -f [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ'), $env:GITHUB_RUN_ID, $env:GITHUB_RUN_ATTEMPT
+          $destination = Join-Path $targetRoot $captureName
+          New-Item -ItemType Directory -Path $destination | Out-Null
+          Get-ChildItem -LiteralPath $env:CAPTURE_ROOT -Force | Copy-Item -Destination $destination -Recurse -Force
+
+          $keepLatest = [int]$env:BACKUP_KEEP_LATEST
+          $captures = @(Get-ChildItem -LiteralPath $targetRoot -Directory |
+            Where-Object Name -Match '^\d{8}T\d{6}Z-\d+-\d+$' |
+            Sort-Object Name -Descending)
+          foreach ($stale in @($captures | Select-Object -Skip $keepLatest)) {
+            Remove-Item -LiteralPath $stale.FullName -Recurse -Force
+          }
+
+          git -C $checkout config user.name 'PowerForge Server Backup'
+          git -C $checkout config user.email 'powerforge-backup@users.noreply.github.com'
+          git -C $checkout add -- $env:BACKUP_PATH
+          git -C $checkout commit -m "Backup $env:GITHUB_REPOSITORY at $env:SOURCE_SHA"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Publish backup with race-safe retry
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$BACKUP_CHECKOUT"
+          for attempt in 1 2 3; do
+            git fetch origin "$BACKUP_BRANCH"
+            if ! git rebase "origin/$BACKUP_BRANCH"; then
+              git rebase --abort || true
+              exit 1
+            fi
+            mapfile -t captures < <(find "$BACKUP_PATH" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -r)
+            retained=0
+            for capture in "${captures[@]}"; do
+              [[ "$capture" =~ ^[0-9]{8}T[0-9]{6}Z-[0-9]+-[0-9]+$ ]] || continue
+              if (( retained < BACKUP_KEEP_LATEST )); then
+                ((retained += 1))
+                continue
+              fi
+              rm -rf -- "$BACKUP_PATH/$capture"
+            done
+            git add -- "$BACKUP_PATH"
+            if git diff --cached --quiet "origin/$BACKUP_BRANCH"; then
+              echo 'Backup was superseded by a newer retained capture; no publication is required.'
+              exit 0
+            fi
+            if ! git diff --cached --quiet; then
+              git commit --amend --no-edit
+            fi
+            if git push origin "HEAD:$BACKUP_BRANCH"; then
+              exit 0
+            fi
+            sleep "$((attempt * 5))"
+          done
+          echo 'Backup publication failed after three push attempts.' >&2
+          exit 1
+
+      - name: Cleanup isolated credentials and capture staging
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          $runnerTemp = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd([IO.Path]::DirectorySeparatorChar)
+          foreach ($path in @(
+            (Join-Path $runnerTemp 'powerforge-server-backup-ssh'),
+            (Join-Path $runnerTemp 'powerforge-server-backup-capture'),
+            (Join-Path $runnerTemp 'powerforge-server-backup-repository')
+          )) {
+            $resolved = [IO.Path]::GetFullPath($path)
+            if ($resolved.StartsWith($runnerTemp + [IO.Path]::DirectorySeparatorChar, [StringComparison]::Ordinal) -and
+                (Test-Path -LiteralPath $resolved)) {
+              Remove-Item -LiteralPath $resolved -Recurse -Force
+            }
+          }
