@@ -1,8 +1,8 @@
 # PowerForge.Web Linux Service Deployment
 
-PowerForge provides a generic release workflow and a root-owned promoter for small Linux systemd services. It complements server recovery: the workflow deploys reproducible application code, while the recovery manifest captures host configuration, service units, certificates, encrypted secrets, and mutable state.
+PowerForge provides a generic release action and a root-owned promoter for small Linux systemd services. It complements server recovery: the action deploys reproducible application code, while the recovery manifest captures host configuration, service units, certificates, encrypted secrets, and mutable state.
 
-The service repository stays thin. It owns the service code, a validation script, and one workflow call. PowerForge owns packaging, provenance, SSH hygiene, archive validation, atomic promotion, health checks, retention, and rollback.
+The service repository stays thin. It owns the service code, a validation script, and one protected-environment job that invokes the shared action. PowerForge owns checkout, packaging, provenance, SSH hygiene, archive validation, atomic promotion, health checks, retention, and rollback.
 
 ## Runtime Contract
 
@@ -60,7 +60,9 @@ their ownership and copies them into root-only staging before inspection.
 
 ## Caller Workflow
 
-Pin the reusable workflow to an exact PowerForge commit:
+Pin the shared action to an exact PowerForge commit. The job stays in the caller so
+GitHub resolves the `production` environment variables and secrets before the action
+runs:
 
 ```yaml
 name: Deploy service
@@ -76,31 +78,42 @@ on:
 
 jobs:
   deploy:
-    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-service-deploy.yml@POWERFORGE_COMMIT
-    with:
-      service_root: Services/Example
-      service_validation_script: deploy/linux/validate-service.sh
-      deployment_service: example
-      deployment_host: ${{ vars.POWERFORGE_SERVICE_DEPLOY_HOST }}
-      deployment_port: ${{ fromJson(vars.POWERFORGE_SERVICE_DEPLOY_PORT) }}
-      deployment_user: ${{ vars.POWERFORGE_SERVICE_DEPLOY_USER }}
-      deployment_environment: production
-      deployment_url: https://api.example.com/healthz
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://api.example.com/healthz
+    permissions:
+      contents: read
+    steps:
+      - uses: EvotecIT/PSPublishModule/.github/actions/powerforge-linux-service-deploy@POWERFORGE_COMMIT
+        with:
+          service-root: Services/Example
+          service-validation-script: deploy/linux/validate-service.sh
+          deployment-service: example
+          deployment-host: ${{ vars.POWERFORGE_SERVICE_DEPLOY_HOST }}
+          deployment-port: ${{ vars.POWERFORGE_SERVICE_DEPLOY_PORT }}
+          deployment-user: ${{ vars.POWERFORGE_SERVICE_DEPLOY_USER }}
+          deployment-ssh-private-key: ${{ secrets.DEPLOYMENT_SSH_PRIVATE_KEY }}
+          deployment-ssh-known-hosts: ${{ secrets.DEPLOYMENT_SSH_KNOWN_HOSTS }}
+          source-repository: ${{ github.repository }}
+          source-sha: ${{ github.sha }}
+
+concurrency:
+  group: powerforge-service-example
+  cancel-in-progress: false
 ```
 
 Store `DEPLOYMENT_SSH_PRIVATE_KEY` and `DEPLOYMENT_SSH_KNOWN_HOSTS` in the
-protected environment named by `deployment_environment`. GitHub supplies those
-environment secrets directly to the reusable deploy job, so the caller does not
-need repository-level deployment credentials. Callers may still pass
-`deployment_ssh_private_key` and `deployment_ssh_known_hosts` explicitly when
-their security model requires it. The workflow validates both values before it
-downloads or transfers the artifact.
+protected environment named by the caller job. Do not use `secrets: inherit` or
+move this job into a cross-repository reusable workflow; GitHub does not pass the
+caller repository's environment secrets across that boundary. The action validates
+both values before it packages or transfers the artifact.
 
 The optional validation script runs in the checked-out caller repository before packaging. It should run contract tests and prepare generated output when needed. `service_root` is resolved after that script completes, so it may point at either committed source or a generated release directory.
 
 ## Promotion And Rollback
 
-The workflow uploads an artifact unique to `deployment_service`, writes metadata containing the source repository, exact source SHA, workflow run identity, and archive SHA-256, then publishes both files with temporary SSH credentials.
+The action writes metadata containing the source repository, exact source SHA, workflow run identity, and archive SHA-256, then publishes the artifact and metadata with temporary SSH credentials.
 
 The root promoter:
 

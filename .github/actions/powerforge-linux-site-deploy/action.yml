@@ -1,0 +1,98 @@
+name: PowerForge Linux Site Deploy
+description: Publish a validated PowerForge website artifact from a caller-owned protected environment.
+
+inputs:
+  artifact-name:
+    description: Name of the website artifact produced earlier in the same workflow run.
+    required: true
+  deployment-site:
+    description: Host-configured site identifier.
+    required: true
+  deployment-host:
+    description: Target SSH host or IPv4 address.
+    required: true
+  deployment-port:
+    description: Target SSH port.
+    required: false
+    default: "22"
+  deployment-user:
+    description: Least-privileged target deployment account.
+    required: false
+    default: powerforge-deploy
+  deployment-cloudflare-zone:
+    description: Optional Cloudflare zone whose cache is purged during promotion.
+    required: false
+    default: ""
+  deployment-ssh-private-key:
+    description: Private key from the caller job's protected environment.
+    required: true
+  deployment-ssh-known-hosts:
+    description: Pinned SSH known-host entries from the caller job's protected environment.
+    required: true
+  deployment-cloudflare-api-token:
+    description: Optional scoped Cloudflare cache-purge token from the caller job's protected environment.
+    required: false
+    default: ""
+  cloudflare-zone-id:
+    description: Optional pre-resolved Cloudflare zone id.
+    required: false
+    default: ""
+  source-repository:
+    description: Repository that produced the site artifact.
+    required: true
+  source-sha:
+    description: Exact source commit that produced the site artifact.
+    required: true
+  engine-mode:
+    description: Resolved PowerForge engine mode.
+    required: true
+  engine-repository:
+    description: Repository that supplied the PowerForge engine.
+    required: true
+  engine-ref:
+    description: Exact source commit or binary tag used by the engine.
+    required: true
+  engine-sha:
+    description: Exact source engine commit, when source mode is used.
+    required: false
+    default: ""
+  engine-asset:
+    description: Binary engine asset, when binary mode is used.
+    required: false
+    default: ""
+  engine-asset-sha256:
+    description: Binary engine asset digest, when binary mode is used.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Download validated website artifact
+      uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ runner.temp }}/powerforge-site
+
+    - name: Publish and promote Linux website release
+      shell: pwsh
+      env:
+        POWERFORGE_ARTIFACT_PATH: ${{ runner.temp }}/powerforge-site/artifact.tar
+        POWERFORGE_CLOUDFLARE_API_TOKEN: ${{ inputs.deployment-cloudflare-api-token }}
+        POWERFORGE_CLOUDFLARE_ZONE: ${{ inputs.deployment-cloudflare-zone }}
+        POWERFORGE_CLOUDFLARE_ZONE_ID: ${{ inputs.cloudflare-zone-id }}
+        POWERFORGE_DEPLOYMENT_HOST: ${{ inputs.deployment-host }}
+        POWERFORGE_DEPLOYMENT_PORT: ${{ inputs.deployment-port }}
+        POWERFORGE_DEPLOYMENT_SITE: ${{ inputs.deployment-site }}
+        POWERFORGE_DEPLOYMENT_SSH_KNOWN_HOSTS: ${{ inputs.deployment-ssh-known-hosts }}
+        POWERFORGE_DEPLOYMENT_SSH_PRIVATE_KEY: ${{ inputs.deployment-ssh-private-key }}
+        POWERFORGE_DEPLOYMENT_USER: ${{ inputs.deployment-user }}
+        POWERFORGE_ENGINE_ASSET: ${{ inputs.engine-asset }}
+        POWERFORGE_ENGINE_ASSET_SHA256: ${{ inputs.engine-asset-sha256 }}
+        POWERFORGE_ENGINE_MODE: ${{ inputs.engine-mode }}
+        POWERFORGE_ENGINE_REF: ${{ inputs.engine-ref }}
+        POWERFORGE_ENGINE_REPOSITORY: ${{ inputs.engine-repository }}
+        POWERFORGE_ENGINE_SHA: ${{ inputs.engine-sha }}
+        POWERFORGE_SOURCE_REPOSITORY: ${{ inputs.source-repository }}
+        POWERFORGE_SOURCE_SHA: ${{ inputs.source-sha }}
+      run: '& "$env:GITHUB_ACTION_PATH/Invoke-PowerForgeLinuxSiteDeploy.ps1"'

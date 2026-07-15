@@ -23,9 +23,9 @@ public sealed class GitHubServiceLinuxDeployWorkflowTests
         Assert.DoesNotContain("ssh-keyscan", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("$HOME/.ssh", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("--dereference", workflow, StringComparison.Ordinal);
-        Assert.Contains("deployment_host:\n        required: false", normalizedWorkflow, StringComparison.Ordinal);
-        Assert.Contains("vars.POWERFORGE_DEPLOY_HOST || vars.POWERFORGE_WEBSITE_DEPLOY_HOST", workflow, StringComparison.Ordinal);
-        Assert.Contains("steps.deployment_target.outputs.host", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("vars.POWERFORGE_DEPLOY_HOST", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("steps.deployment_target.outputs.host", workflow, StringComparison.Ordinal);
+        Assert.Contains("deployment_host:\n        description:", normalizedWorkflow, StringComparison.Ordinal);
     }
 
     [Fact]

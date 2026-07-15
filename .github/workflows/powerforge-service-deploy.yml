@@ -17,20 +17,19 @@ on:
         required: true
         type: string
       deployment_host:
-        description: Optional explicit host; otherwise resolved from POWERFORGE_DEPLOY_HOST or POWERFORGE_WEBSITE_DEPLOY_HOST in the selected environment.
-        required: false
+        description: Explicit deployment host. Use the PowerForge Linux Service Deploy action when values come from a protected environment.
+        required: true
         type: string
-        default: ""
       deployment_user:
-        description: Optional explicit user; otherwise resolved from POWERFORGE_DEPLOY_USER or POWERFORGE_WEBSITE_DEPLOY_USER, then powerforge-deploy.
+        description: Explicit least-privileged deployment user.
         required: false
         type: string
-        default: ""
+        default: "powerforge-deploy"
       deployment_port:
-        description: Optional explicit port; zero resolves POWERFORGE_DEPLOY_PORT or POWERFORGE_WEBSITE_DEPLOY_PORT, then 22.
+        description: Explicit deployment SSH port.
         required: false
         type: number
-        default: 0
+        default: 22
       deployment_environment:
         required: false
         type: string
@@ -155,55 +154,28 @@ jobs:
       name: ${{ inputs.deployment_environment }}
       url: ${{ inputs.deployment_url }}
     steps:
-      - name: Resolve and validate Linux service deployment inputs
-        id: deployment_target
+      - name: Validate Linux service deployment inputs
         shell: pwsh
         env:
-          DEPLOYMENT_HOST_INPUT: ${{ inputs.deployment_host }}
-          DEPLOYMENT_HOST_ENVIRONMENT: ${{ vars.POWERFORGE_DEPLOY_HOST || vars.POWERFORGE_WEBSITE_DEPLOY_HOST }}
-          DEPLOYMENT_PORT_INPUT: ${{ inputs.deployment_port }}
-          DEPLOYMENT_PORT_ENVIRONMENT: ${{ vars.POWERFORGE_DEPLOY_PORT || vars.POWERFORGE_WEBSITE_DEPLOY_PORT }}
+          DEPLOYMENT_HOST: ${{ inputs.deployment_host }}
+          DEPLOYMENT_PORT: ${{ inputs.deployment_port }}
           DEPLOYMENT_SERVICE: ${{ inputs.deployment_service }}
-          DEPLOYMENT_USER_INPUT: ${{ inputs.deployment_user }}
-          DEPLOYMENT_USER_ENVIRONMENT: ${{ vars.POWERFORGE_DEPLOY_USER || vars.POWERFORGE_WEBSITE_DEPLOY_USER }}
+          DEPLOYMENT_USER: ${{ inputs.deployment_user }}
           DEPLOYMENT_PRIVATE_KEY: ${{ secrets.deployment_ssh_private_key }}
           DEPLOYMENT_KNOWN_HOSTS: ${{ secrets.deployment_ssh_known_hosts }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $deploymentHost = if ([string]::IsNullOrWhiteSpace($env:DEPLOYMENT_HOST_INPUT)) {
-            [string]$env:DEPLOYMENT_HOST_ENVIRONMENT
-          } else {
-            [string]$env:DEPLOYMENT_HOST_INPUT
-          }
-          $deploymentUser = if ([string]::IsNullOrWhiteSpace($env:DEPLOYMENT_USER_INPUT)) {
-            [string]$env:DEPLOYMENT_USER_ENVIRONMENT
-          } else {
-            [string]$env:DEPLOYMENT_USER_INPUT
-          }
-          if ([string]::IsNullOrWhiteSpace($deploymentUser)) {
-            $deploymentUser = 'powerforge-deploy'
-          }
-          $portInput = 0
-          [void][int]::TryParse($env:DEPLOYMENT_PORT_INPUT, [ref] $portInput)
-          $deploymentPort = if ($portInput -gt 0) {
-            $portInput
-          } elseif ([string]::IsNullOrWhiteSpace($env:DEPLOYMENT_PORT_ENVIRONMENT)) {
-            22
-          } else {
-            $env:DEPLOYMENT_PORT_ENVIRONMENT
-          }
-
           if ($env:DEPLOYMENT_SERVICE -notmatch '^[a-z0-9][a-z0-9.-]{0,62}$') {
             throw 'deployment_service must be a lowercase DNS-style service identifier.'
           }
-          if ($deploymentHost -notmatch '^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$') {
+          if ($env:DEPLOYMENT_HOST -notmatch '^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$') {
             throw 'deployment_host must be a DNS name or IPv4 address.'
           }
-          if ($deploymentUser -notmatch '^[a-z_][a-z0-9_-]{0,31}$') {
+          if ($env:DEPLOYMENT_USER -notmatch '^[a-z_][a-z0-9_-]{0,31}$') {
             throw 'deployment_user is not a valid Linux account name.'
           }
           $port = 0
-          if (-not [int]::TryParse($deploymentPort, [ref] $port) -or $port -lt 1 -or $port -gt 65535) {
+          if (-not [int]::TryParse($env:DEPLOYMENT_PORT, [ref] $port) -or $port -lt 1 -or $port -gt 65535) {
             throw 'deployment_port must be an integer from 1 through 65535.'
           }
           if ([string]::IsNullOrWhiteSpace($env:DEPLOYMENT_PRIVATE_KEY)) {
@@ -212,10 +184,6 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:DEPLOYMENT_KNOWN_HOSTS)) {
             throw 'deployment_ssh_known_hosts is required; host key scanning at deploy time is intentionally disabled.'
           }
-
-          "host=$deploymentHost" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "port=$port" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "user=$deploymentUser" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Download validated service artifact
         uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
@@ -248,10 +216,10 @@ jobs:
       - name: Publish and promote Linux service release
         shell: pwsh
         env:
-          DEPLOYMENT_HOST: ${{ steps.deployment_target.outputs.host }}
-          DEPLOYMENT_PORT: ${{ steps.deployment_target.outputs.port }}
+          DEPLOYMENT_HOST: ${{ inputs.deployment_host }}
+          DEPLOYMENT_PORT: ${{ inputs.deployment_port }}
           DEPLOYMENT_SERVICE: ${{ inputs.deployment_service }}
-          DEPLOYMENT_USER: ${{ steps.deployment_target.outputs.user }}
+          DEPLOYMENT_USER: ${{ inputs.deployment_user }}
           DEPLOYMENT_PRIVATE_KEY: ${{ secrets.deployment_ssh_private_key }}
           DEPLOYMENT_KNOWN_HOSTS: ${{ secrets.deployment_ssh_known_hosts }}
         run: |
@@ -281,9 +249,9 @@ jobs:
         continue-on-error: true
         shell: pwsh
         env:
-          DEPLOYMENT_HOST: ${{ steps.deployment_target.outputs.host }}
-          DEPLOYMENT_PORT: ${{ steps.deployment_target.outputs.port }}
-          DEPLOYMENT_USER: ${{ steps.deployment_target.outputs.user }}
+          DEPLOYMENT_HOST: ${{ inputs.deployment_host }}
+          DEPLOYMENT_PORT: ${{ inputs.deployment_port }}
+          DEPLOYMENT_USER: ${{ inputs.deployment_user }}
         run: |
           $sshRoot = Join-Path $env:RUNNER_TEMP 'powerforge-service-deployment-ssh'
           $keyPath = Join-Path $sshRoot 'id_ed25519'
