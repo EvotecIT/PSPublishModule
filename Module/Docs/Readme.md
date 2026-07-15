@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.58
+Help Version: 3.0.59
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -75,6 +75,12 @@ Lists Apple devices available through xcrun devicectl.
 
 ### [Get-AppStoreConnectApp](Get-AppStoreConnectApp.md)
 Reads app information from App Store Connect.
+
+### [Get-AppStoreConnectAppInfoLocalization](Get-AppStoreConnectAppInfoLocalization.md)
+Reads localized app-level information from App Store Connect.
+
+### [Get-AppStoreConnectAppInformation](Get-AppStoreConnectAppInformation.md)
+Reads App Information resources from App Store Connect.
 
 ### [Get-AppStoreConnectBetaGroup](Get-AppStoreConnectBetaGroup.md)
 Reads App Store Connect TestFlight beta groups for an app.
@@ -471,6 +477,9 @@ Saves script resources from a managed repository to an explicit script directory
 ### [Send-GitHubRelease](Send-GitHubRelease.md)
 Creates a new release for the given GitHub repository and optionally uploads assets.
 
+### [Set-AppStoreConnectAppInfoLocalization](Set-AppStoreConnectAppInfoLocalization.md)
+Updates localized app-level information on the App Store.
+
 ### [Set-AppStoreConnectVersionBuild](Set-AppStoreConnectVersionBuild.md)
 Creates or finds an App Store version and selects a processed build for Distribution.
 
@@ -528,6 +537,9 @@ Submits a TestFlight build to Beta App Review for external testing.
 
 ### [Submit-AppStoreConnectVersionForReview](Submit-AppStoreConnectVersionForReview.md)
 Submits a prepared App Store Connect Distribution version to App Review.
+
+### [Sync-AppStoreConnectAppInfoMetadata](Sync-AppStoreConnectAppInfoMetadata.md)
+Syncs localized app-level App Store information from a JSON configuration file.
 
 ### [Sync-AppStoreConnectScreenshots](Sync-AppStoreConnectScreenshots.md)
 Syncs local screenshot folders to App Store Connect screenshot sets.
