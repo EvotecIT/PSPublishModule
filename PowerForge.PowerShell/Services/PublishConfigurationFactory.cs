@@ -56,13 +56,10 @@ internal sealed class PublishConfigurationFactory
             throw new ArgumentException("ApiKey is required when enabling inline-key publish configuration.", nameof(request));
         }
 
-        var shouldResolveApiKeyNow = request.Enabled || string.IsNullOrWhiteSpace(apiKeyFilePathToUse);
         var apiKeyToUse = request.ParameterSetName switch
         {
-            "ApiFromFile" when shouldResolveApiKeyNow && !string.IsNullOrWhiteSpace(apiKeyFilePathToUse) => ReadSingleLineSecretFile(apiKeyFilePathToUse!, nameof(request.FilePath)),
-            "ApiFromFile" => string.Empty,
+            "ApiFromFile" when !string.IsNullOrWhiteSpace(apiKeyFilePathToUse) => string.Empty,
             "AzureArtifacts" => AzureArtifactsApiKeyPlaceholder,
-            "JFrog" when shouldResolveApiKeyNow && !string.IsNullOrWhiteSpace(apiKeyFilePathToUse) => ReadSingleLineSecretFile(apiKeyFilePathToUse!, nameof(request.FilePath)),
             "JFrog" when !string.IsNullOrWhiteSpace(apiKeyFilePathToUse) => string.Empty,
             _ => ValidateSingleLineSecret(request.ApiKey, nameof(PublishConfigurationRequest.ApiKey))
         };

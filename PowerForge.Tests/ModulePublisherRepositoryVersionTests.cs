@@ -105,6 +105,27 @@ public sealed class ModulePublisherRepositoryVersionTests
     }
 
     [Fact]
+    public void ResolvePublishApiKey_RejectsDeferredMultilineSecret()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".ps1");
+        File.WriteAllText(path, "Write-Host 'not a key'" + Environment.NewLine + "Write-Host 'still not a key'");
+        try
+        {
+            var ex = Assert.Throws<ArgumentException>(() => ModulePublisher.ResolvePublishApiKey(
+                new PublishConfiguration { ApiKeyFilePath = path }));
+
+            Assert.Contains("multi-line secret", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("single line", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("not a script", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void EnsureVersionIsGreaterThanRepository_UsesUnlistedPowerShellGalleryVersions()
     {
         using var client = new HttpClient(new FakePowerShellGalleryFeedHandler());
