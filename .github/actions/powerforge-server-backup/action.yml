@@ -29,7 +29,7 @@ outputs:
     description: Repository-relative root that received the encrypted capture.
     value: ${{ steps.backup.outputs.backup-path }}
   capture-name:
-    description: Timestamped capture directory name.
+    description: Timestamped capture directory name, or empty when a concurrent retention update superseded it.
     value: ${{ steps.backup.outputs.capture-name }}
   published-commit:
     description: Exact backup repository commit that was published.

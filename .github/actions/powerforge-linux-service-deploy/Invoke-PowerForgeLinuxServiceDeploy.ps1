@@ -57,9 +57,9 @@ $keyPath = Join-Path $sshRoot 'id_ed25519'
 $knownHostsPath = Join-Path $sshRoot 'known_hosts'
 $remoteBase = "/tmp/powerforge-service-$($env:POWERFORGE_DEPLOYMENT_SERVICE)-$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)"
 $handoffBase = "/tmp/powerforge-service-$($env:POWERFORGE_DEPLOYMENT_SERVICE)"
-$remoteLock = ".powerforge/locks/powerforge-service-$($env:POWERFORGE_DEPLOYMENT_SERVICE).lock"
+$remoteLock = "/tmp/powerforge-service-$($env:POWERFORGE_DEPLOYMENT_SERVICE).lock"
 $target = "$($env:POWERFORGE_DEPLOYMENT_USER)@$($env:POWERFORGE_DEPLOYMENT_HOST)"
-$sshOptions = @('-i', $keyPath, '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHostsPath")
+$sshOptions = @('-i', $keyPath, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHostsPath")
 $remoteCreated = $false
 
 if (-not (Test-Path -LiteralPath $artifactPath -PathType Leaf)) {
@@ -121,7 +121,7 @@ try {
     scp @scpArguments
     Assert-LastExitCode 'Uploading the service deployment payload'
 
-    $handoffCommand = 'install -d -m 0700 ''.powerforge/locks'' && flock -w 900 ''{0}'' sh -c "rm -rf -- ''{1}'' && mv -- ''{2}'' ''{1}'' && sudo /usr/local/sbin/powerforge-service-deploy --service ''{3}''; status=\$?; rm -rf -- ''{1}''; exit \$status"' -f @(
+    $handoffCommand = 'flock -w 900 ''{0}'' sh -c "rm -rf -- ''{1}'' && mv -- ''{2}'' ''{1}'' && sudo /usr/local/sbin/powerforge-service-deploy --service ''{3}''; status=\$?; rm -rf -- ''{1}''; exit \$status"' -f @(
         $remoteLock,
         $handoffBase,
         $remoteBase,

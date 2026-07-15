@@ -15,7 +15,7 @@ function Assert-LastExitCode {
 function Write-ActionOutput {
     param(
         [Parameter(Mandatory)][string] $Name,
-        [Parameter(Mandatory)][string] $Value
+        [Parameter(Mandatory)][AllowEmptyString()][string] $Value
     )
 
     "$Name=$Value" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
@@ -119,6 +119,7 @@ $backupKey = Join-Path $sshRoot 'backup_repository_ed25519'
 $backupKnownHosts = Join-Path $sshRoot 'backup_repository_known_hosts'
 $sshConfig = Join-Path $sshRoot 'config'
 $serverSshCommand = Join-Path $sshRoot 'server-ssh'
+$captureManifestPath = Join-Path $sshRoot 'capture-manifest.json'
 
 foreach ($stagingPath in @($sshRoot, $captureRoot, $backupCheckout)) {
     $resolvedPath = [IO.Path]::GetFullPath($stagingPath)
@@ -158,6 +159,12 @@ Host github.com-powerforge-backup
   IdentitiesOnly yes
   BatchMode yes
 "@ | Set-Content -LiteralPath $sshConfig -Encoding utf8NoBOM
+    if ($manifest.target.PSObject.Properties.Name -contains 'sshAlias') {
+        $manifest.target.sshAlias = $captureAlias
+    } else {
+        $manifest.target | Add-Member -NotePropertyName sshAlias -NotePropertyValue $captureAlias
+    }
+    $manifest | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $captureManifestPath -Encoding utf8NoBOM
     @'
 #!/usr/bin/env bash
 set -Eeuo pipefail
@@ -169,7 +176,8 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
     Assert-LastExitCode 'Protecting the backup SSH credentials'
 
     $env:POWERFORGE_SERVER_SSH_CONFIG = $sshConfig
-    $env:GIT_SSH_COMMAND = "ssh -F $sshConfig"
+    $env:GIT_SSH = $serverSshCommand
+    $env:GIT_SSH_VARIANT = 'ssh'
     & $serverSshCommand $captureAlias 'printf capture-host-ok'
     Assert-LastExitCode 'Verifying the capture host identity'
 
@@ -181,8 +189,9 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
         throw "PowerForge capture CLI was not produced: $cli"
     }
 
-    dotnet $cli server capture --manifest $manifestPath --out $captureRoot --ssh $serverSshCommand --encrypt-remote --fail-on-failure
+    dotnet $cli server capture --manifest $captureManifestPath --out $captureRoot --ssh $serverSshCommand --encrypt-remote --fail-on-failure
     Assert-LastExitCode 'Capturing and encrypting server recovery state'
+    Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $captureRoot 'manifest.json') -Force
 
     foreach ($relativePath in @(
         'capture-summary.json',
@@ -307,9 +316,17 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
     if ($publishedCommit -notmatch '^[a-f0-9]{40}$') {
         throw 'Unable to resolve the published backup commit.'
     }
+    $publishedCapturePath = "$backupPath/$captureName"
+    $publishedCaptureEntry = [string](git -C $checkout ls-tree --name-only $publishedCommit -- $publishedCapturePath)
+    Assert-LastExitCode 'Checking whether the published commit retained this capture'
+    $publishedCaptureName = if ([string]::Equals($publishedCaptureEntry.Trim(), $publishedCapturePath, [StringComparison]::Ordinal)) {
+        $captureName
+    } else {
+        ''
+    }
     Write-ActionOutput -Name 'backup-repository' -Value $backupRepository
     Write-ActionOutput -Name 'backup-path' -Value $backupPath
-    Write-ActionOutput -Name 'capture-name' -Value $captureName
+    Write-ActionOutput -Name 'capture-name' -Value $publishedCaptureName
     Write-ActionOutput -Name 'published-commit' -Value $publishedCommit
 }
 finally {

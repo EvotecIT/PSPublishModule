@@ -78,7 +78,7 @@ $remoteBase = "/tmp/powerforge-$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)-
 $target = "$($env:POWERFORGE_DEPLOYMENT_USER)@$($env:POWERFORGE_DEPLOYMENT_HOST)"
 $keyPath = Join-Path $sshRoot 'id_ed25519'
 $knownHostsPath = Join-Path $sshRoot 'known_hosts'
-$sshOptions = @('-i', $keyPath, '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHostsPath")
+$sshOptions = @('-i', $keyPath, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHostsPath")
 $remoteCreated = $false
 
 try {
