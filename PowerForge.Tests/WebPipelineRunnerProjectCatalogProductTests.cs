@@ -46,6 +46,7 @@ public class WebPipelineRunnerProjectCatalogProductTests
                         "socialImageHeight": 1024
                       },
                       "product": {
+                        "layout": "product",
                         "category": "Smart home",
                         "tagline": "A calm, private control surface for Apple Home.",
                         "applicationCategory": "UtilitiesApplication",
@@ -91,6 +92,7 @@ public class WebPipelineRunnerProjectCatalogProductTests
             Assert.Contains("width: 1200", page, StringComparison.Ordinal);
             Assert.Contains("height: 1600", page, StringComparison.Ordinal);
             Assert.Contains("meta.software.application_category: \"UtilitiesApplication\"", page, StringComparison.Ordinal);
+            Assert.Contains("meta.software.download_url: \"https://apps.apple.com/us/app/casaray/id6778025328\"", page, StringComparison.Ordinal);
             Assert.Contains("meta.social_card_image: \"/assets/products/casaray/social.png\"", page, StringComparison.Ordinal);
             Assert.Contains("meta.social_image_width: 1536", page, StringComparison.Ordinal);
             Assert.Contains("meta.social_image_height: 1024", page, StringComparison.Ordinal);
@@ -162,9 +164,138 @@ public class WebPipelineRunnerProjectCatalogProductTests
 
             Assert.True(result.Success);
             var page = File.ReadAllText(Path.Combine(root, "content", "projects", "authimo.md"));
+            Assert.Contains("layout: project", page, StringComparison.Ordinal);
             Assert.Contains("role: \"hero\"", page, StringComparison.Ordinal);
             Assert.Contains("label: \"View source\"", page, StringComparison.Ordinal);
             Assert.Contains("url: \"https://github.com/EvotecIT/AuthIMO\"", page, StringComparison.Ordinal);
+            Assert.DoesNotContain("meta.software.download_url", page, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ProjectCatalog_DerivesPrimaryActionFromWebsiteWithoutPublishingItAsDownload()
+    {
+        var root = CreateTestRoot("website-product");
+
+        try
+        {
+            WriteCatalog(root,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "website-product",
+                      "name": "Website Product",
+                      "kind": "product",
+                      "mode": "hub-full",
+                      "githubRepo": "EvotecIT/WebsiteProduct",
+                      "description": "A product with a website-only call to action.",
+                      "links": {
+                        "website": "https://product.example/",
+                        "support": "https://product.example/support/",
+                        "privacy": "https://product.example/privacy/"
+                      },
+                      "brand": {
+                        "accent": "#123456",
+                        "icon": "/assets/products/website/icon.png",
+                        "iconWidth": 256,
+                        "iconHeight": 256
+                      },
+                      "product": {
+                        "category": "Utilities",
+                        "tagline": "A website-first product.",
+                        "platforms": ["Web"],
+                        "media": [
+                          {
+                            "src": "/assets/products/website/home.png",
+                            "alt": "Website Product home screen",
+                            "width": 1200,
+                            "height": 800,
+                            "role": "hero",
+                            "frame": "wide",
+                            "fit": "contain"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+                """);
+            var pipelinePath = WritePipeline(root);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            var page = File.ReadAllText(Path.Combine(root, "content", "projects", "website-product.md"));
+            Assert.Contains("label: \"Visit product website\"", page, StringComparison.Ordinal);
+            Assert.Contains("url: \"https://product.example/\"", page, StringComparison.Ordinal);
+            Assert.DoesNotContain("meta.software.download_url", page, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ProjectCatalog_RejectsUnsupportedExplicitMediaRole()
+    {
+        var root = CreateTestRoot("invalid-role");
+
+        try
+        {
+            WriteCatalog(root,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "invalid-role",
+                      "name": "Invalid Role",
+                      "kind": "product",
+                      "mode": "hub-full",
+                      "description": "A deliberately invalid media-role fixture.",
+                      "links": {
+                        "source": "https://github.com/EvotecIT/InvalidRole",
+                        "support": "/projects/invalid-role/#support",
+                        "privacy": "/projects/invalid-role/#privacy"
+                      },
+                      "brand": {
+                        "accent": "#123456",
+                        "icon": "/assets/products/invalid-role/icon.png",
+                        "iconWidth": 256,
+                        "iconHeight": 256
+                      },
+                      "product": {
+                        "category": "Utilities",
+                        "tagline": "An invalid product fixture.",
+                        "platforms": ["Windows"],
+                        "media": [
+                          {
+                            "src": "/assets/products/invalid-role/banner.png",
+                            "alt": "Invalid banner role fixture",
+                            "width": 1200,
+                            "height": 630,
+                            "role": "banner",
+                            "frame": "wide",
+                            "fit": "contain"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+                """);
+            var pipelinePath = WritePipeline(root);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.False(result.Steps[0].Success);
+            Assert.Contains("validation failed", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

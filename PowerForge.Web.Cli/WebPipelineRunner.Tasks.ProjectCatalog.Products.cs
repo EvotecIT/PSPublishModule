@@ -26,6 +26,14 @@ internal static partial class WebPipelineRunner
             .Equals("product", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static string ResolveProjectPageLayout(ProjectCatalogEntry project)
+    {
+        if (!IsProductProject(project))
+            return "project";
+
+        return NormalizeOptionalString(project.Product?.Layout) ?? "project";
+    }
+
     private static void NormalizeProductCatalogContract(
         ProjectCatalogEntry project,
         Dictionary<string, string?> links,
@@ -42,6 +50,7 @@ internal static partial class WebPipelineRunner
 
         project.Product ??= new ProductPresentationData();
         var product = project.Product;
+        product.Layout = NormalizeOptionalString(product.Layout);
         product.Category = NormalizeOptionalString(product.Category);
         product.Tagline = NormalizeOptionalString(product.Tagline);
         product.ApplicationCategory = NormalizeOptionalString(product.ApplicationCategory) ?? "UtilitiesApplication";
@@ -67,7 +76,7 @@ internal static partial class WebPipelineRunner
                 media.Src = NormalizeOptionalString(media.Src);
                 media.Alt = NormalizeOptionalString(media.Alt);
                 media.Caption = NormalizeOptionalString(media.Caption);
-                media.Role = (NormalizeOptionalString(media.Role) ?? "gallery").ToLowerInvariant();
+                media.Role = NormalizeOptionalString(media.Role)?.ToLowerInvariant();
                 media.Frame = (NormalizeOptionalString(media.Frame) ?? "auto").ToLowerInvariant();
                 media.Fit = (NormalizeOptionalString(media.Fit) ?? "contain").ToLowerInvariant();
                 media.Position = NormalizeOptionalString(media.Position);
@@ -79,18 +88,28 @@ internal static partial class WebPipelineRunner
             .ToList();
 
         if (product.Media.Count > 0 && !product.Media.Any(static media => media.Role?.Equals("hero", StringComparison.OrdinalIgnoreCase) == true))
-            product.Media[0].Role = "hero";
+        {
+            var implicitHero = product.Media.FirstOrDefault(static media => string.IsNullOrWhiteSpace(media.Role));
+            if (implicitHero is not null)
+                implicitHero.Role = "hero";
+        }
+
+        foreach (var media in product.Media.Where(static media => string.IsNullOrWhiteSpace(media.Role)))
+            media.Role = "gallery";
 
         product.PrimaryAction = NormalizeProductAction(product.PrimaryAction);
         product.SecondaryAction = NormalizeProductAction(product.SecondaryAction);
 
         var externalUrl = NormalizeOptionalString(project.ExternalUrl);
+        var websiteUrl = TryGetDictionaryValue(links, "website");
         var appStoreUrl = TryGetDictionaryValue(links, "appStore");
         var sourceUrl = TryGetDictionaryValue(links, "source");
         if (product.PrimaryAction is null)
         {
             if (!string.IsNullOrWhiteSpace(externalUrl))
                 product.PrimaryAction = new ProductActionData { Label = "Visit product website", Url = externalUrl };
+            else if (!string.IsNullOrWhiteSpace(websiteUrl))
+                product.PrimaryAction = new ProductActionData { Label = "Visit product website", Url = websiteUrl };
             else if (!string.IsNullOrWhiteSpace(appStoreUrl))
                 product.PrimaryAction = new ProductActionData { Label = "Get the app", Url = appStoreUrl };
             else if (!string.IsNullOrWhiteSpace(sourceUrl))
@@ -155,6 +174,14 @@ internal static partial class WebPipelineRunner
         }
 
         var product = project.Product;
+        if (!string.IsNullOrWhiteSpace(product.Layout) &&
+            !Regex.IsMatch(product.Layout, "^[A-Za-z0-9][A-Za-z0-9._-]*$", RegexOptions.CultureInvariant))
+        {
+            findings.Add(ProjectCatalogFinding.Error(
+                "invalid-product-layout",
+                slug,
+                $"Product layout '{product.Layout}' must be a theme layout name containing only letters, digits, dots, underscores, or hyphens."));
+        }
         RequireProductValue(findings, slug, "missing-product-category", product.Category, "Product projects must define product.category.");
         RequireProductValue(findings, slug, "missing-product-tagline", product.Tagline, "Product projects must define product.tagline.");
         if (product.Platforms is not { Length: > 0 })
@@ -367,7 +394,7 @@ internal static partial class WebPipelineRunner
         WriteMetaString(lines, "meta.software.application_category", product.ApplicationCategory);
         WriteMetaString(lines, "meta.software.operating_system", product.Platforms is { Length: > 0 } ? string.Join(", ", product.Platforms) : null);
         WriteMetaString(lines, "meta.software.version", project.Version);
-        WriteMetaString(lines, "meta.software.download_url", TryGetProjectDictionaryValue(project.Links, "appStore") ?? product.PrimaryAction?.Url);
+        WriteMetaString(lines, "meta.software.download_url", TryGetProjectDictionaryValue(project.Links, "appStore") ?? TryGetProjectDictionaryValue(project.Links, "downloads"));
         WriteMetaString(lines, "meta.software.image", hero?.Src);
         WriteMetaString(lines, "meta.social_image", project.Brand?.SocialImage ?? hero?.Src);
         var socialImageWidth = project.Brand is { SocialImageWidth: > 0 } ? project.Brand.SocialImageWidth : hero?.Width ?? 0;
@@ -433,6 +460,9 @@ internal static partial class WebPipelineRunner
 
     private sealed class ProductPresentationData
     {
+        [JsonPropertyName("layout")]
+        public string? Layout { get; set; }
+
         [JsonPropertyName("category")]
         public string? Category { get; set; }
 

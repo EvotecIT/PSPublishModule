@@ -1575,7 +1575,7 @@ internal static partial class WebPipelineRunner
                 $"title: {YamlQuote(string.IsNullOrWhiteSpace(project.Name) ? slug : project.Name)}",
                 $"description: {YamlQuote(string.IsNullOrWhiteSpace(project.Description) ? $"{slug} project page." : project.Description)}",
                 $"slug: {YamlQuote(slug)}",
-                $"layout: {(IsProductProject(project) ? "product" : "project")}"
+                $"layout: {ResolveProjectPageLayout(project)}"
             };
 
             if (project.Aliases is { Length: > 0 })
