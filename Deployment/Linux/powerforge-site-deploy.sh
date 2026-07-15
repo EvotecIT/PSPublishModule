@@ -10,6 +10,7 @@ site=""
 archive=""
 metadata=""
 promoted=0
+legacy_migrated=0
 previous_target=""
 release_dir=""
 workflow_stage=""
@@ -247,6 +248,9 @@ rollback() {
       rm -f "$SITE_ROOT/current"
     fi
     purge_cloudflare || true
+  elif [[ "$legacy_migrated" == '1' && -n "$previous_target" && -d "$previous_target" && ! -e "$SITE_ROOT/current" ]]; then
+    log 'Promotion failed; restoring the legacy current directory.'
+    mv -T "$previous_target" "$SITE_ROOT/current"
   fi
   [[ -z "$release_dir" || ! -d "$release_dir" || "$release_dir" == "$previous_target" ]] || rm -rf "$release_dir"
   exit "$exit_code"
@@ -261,6 +265,13 @@ install -m 0644 "$metadata" "$release_dir/_powerforge/deployment.json"
 
 if [[ -L "$SITE_ROOT/current" ]]; then
   previous_target="$(readlink -f "$SITE_ROOT/current")"
+elif [[ -e "$SITE_ROOT/current" ]]; then
+  [[ -d "$SITE_ROOT/current" ]] || fail 'Existing current path must be a directory or symlink.'
+  previous_target="$SITE_ROOT/releases/legacy-$(date -u +%Y%m%d%H%M%S)-${source_sha:0:12}"
+  [[ ! -e "$previous_target" ]] || fail "Legacy release already exists: $previous_target"
+  log "Migrating legacy current directory to $previous_target"
+  mv -T "$SITE_ROOT/current" "$previous_target"
+  legacy_migrated=1
 fi
 candidate_link="$SITE_ROOT/.current.${run_id}.${run_attempt}"
 ln -s "$release_dir" "$candidate_link"

@@ -45,6 +45,9 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("Public endpoint did not serve", script, StringComparison.Ordinal);
         Assert.Contains("Origin endpoint did not serve", script, StringComparison.Ordinal);
         Assert.Contains("rolling back", script, StringComparison.Ordinal);
+        Assert.Contains("Migrating legacy current directory", script, StringComparison.Ordinal);
+        Assert.Contains("restoring the legacy current directory", script, StringComparison.Ordinal);
+        Assert.Contains("legacy_migrated=1", script, StringComparison.Ordinal);
         Assert.Contains("mv -Tf", script, StringComparison.Ordinal);
         Assert.Contains("umask 022", script, StringComparison.Ordinal);
         Assert.Contains("Cloudflare zone id is required", script, StringComparison.Ordinal);
