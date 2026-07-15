@@ -27,6 +27,8 @@ Git repositories + recovery manifest + encrypted secrets + deploy pipeline
 
 PowerForge owns the generic workflow. Each website owns a small manifest that names hosts, paths, services, packages, domains, and secrets.
 
+For systemd application releases, pair this recovery model with [PowerForge.Web Linux Service Deployment](PowerForge.Web.LinuxServiceDeployment.md). The service promoter owns reproducible code release and rollback; the recovery manifest owns host rebuild, certificates, encrypted secrets, and mutable state.
+
 ## Engine Commands
 
 The first implementation should expose the same workflow through the CLI and PowerShell module.
