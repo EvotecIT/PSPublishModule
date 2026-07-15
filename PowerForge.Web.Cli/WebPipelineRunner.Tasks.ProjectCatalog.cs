@@ -1267,7 +1267,10 @@ internal static partial class WebPipelineRunner
                 findings.Add(ProjectCatalogFinding.Error("duplicate-hub-path", slug, $"Duplicate hubPath '{hubPath}' detected."));
 
             if (string.IsNullOrWhiteSpace(project.GitHubRepo))
-                findings.Add(ProjectCatalogFinding.Warning("missing-github-repo", slug, "Project should define githubRepo."));
+            {
+                if (!kind.Equals("product", StringComparison.OrdinalIgnoreCase))
+                    findings.Add(ProjectCatalogFinding.Warning("missing-github-repo", slug, "Project should define githubRepo."));
+            }
             else if (!System.Text.RegularExpressions.Regex.IsMatch(project.GitHubRepo!, "^[^/\\s]+/[^/\\s]+$"))
                 findings.Add(ProjectCatalogFinding.Error("invalid-github-repo", slug, $"githubRepo '{project.GitHubRepo}' must match owner/repo."));
 
@@ -1415,7 +1418,8 @@ internal static partial class WebPipelineRunner
 
         if (hasAnySurface &&
             string.IsNullOrWhiteSpace(sourceLink) &&
-            string.IsNullOrWhiteSpace(project.GitHubRepo))
+            string.IsNullOrWhiteSpace(project.GitHubRepo) &&
+            !IsProductProject(project))
         {
             findings.Add(ProjectCatalogFinding.Warning(
                 "surface-missing-source",

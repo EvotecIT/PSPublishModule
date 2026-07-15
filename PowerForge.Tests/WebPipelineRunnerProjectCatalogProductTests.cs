@@ -207,7 +207,6 @@ public class WebPipelineRunnerProjectCatalogProductTests
                       "name": "Website Product",
                       "kind": "product",
                       "mode": "hub-full",
-                      "githubRepo": "EvotecIT/WebsiteProduct",
                       "description": "A product with a website-only call to action.",
                       "links": {
                         "website": "https://product.example/",
@@ -244,7 +243,7 @@ public class WebPipelineRunnerProjectCatalogProductTests
 
             var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
 
-            Assert.True(result.Success);
+            Assert.True(result.Success, result.Steps[0].Message);
             var page = File.ReadAllText(Path.Combine(root, "content", "projects", "website-product.md"));
             Assert.Contains("label: \"Visit product website\"", page, StringComparison.Ordinal);
             Assert.Contains("url: \"https://product.example/\"", page, StringComparison.Ordinal);
