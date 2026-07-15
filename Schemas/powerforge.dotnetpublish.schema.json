@@ -113,6 +113,7 @@
           "items": { "type": "string", "minLength": 1 }
         },
         "Required": { "type": "boolean" },
+        "ResolvePathRelativeToProjectRoot": { "type": "boolean" },
         "Secret": { "type": "boolean" }
       }
     },
