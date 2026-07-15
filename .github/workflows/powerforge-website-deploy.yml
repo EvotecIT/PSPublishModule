@@ -90,17 +90,20 @@ on:
         type: string
         default: ""
       deployment_host:
+        description: Optional explicit host; otherwise resolved from POWERFORGE_DEPLOY_HOST or POWERFORGE_WEBSITE_DEPLOY_HOST in the selected environment.
         required: false
         type: string
         default: ""
       deployment_user:
+        description: Optional explicit user; otherwise resolved from POWERFORGE_DEPLOY_USER or POWERFORGE_WEBSITE_DEPLOY_USER, then powerforge-deploy.
         required: false
         type: string
-        default: "powerforge-deploy"
+        default: ""
       deployment_port:
+        description: Optional explicit port; zero resolves POWERFORGE_DEPLOY_PORT or POWERFORGE_WEBSITE_DEPLOY_PORT, then 22.
         required: false
         type: number
-        default: 22
+        default: 0
       deployment_environment:
         required: false
         type: string
@@ -138,11 +141,6 @@ on:
       deployment_ssh_known_hosts:
         required: false
 
-permissions:
-  actions: write
-  contents: read
-  packages: read
-
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
@@ -154,6 +152,8 @@ jobs:
   guardrails:
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
       - name: Checkout caller repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -264,6 +264,10 @@ jobs:
   build:
     needs: guardrails
     uses: ./.github/workflows/powerforge-website-run.yml
+    permissions:
+      actions: write
+      contents: read
+      packages: read
     with:
       website_root: ${{ inputs.website_root }}
       pipeline_config: ${{ inputs.pipeline_config }}
@@ -299,9 +303,6 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    permissions:
-      pages: write
-      id-token: write
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
@@ -315,14 +316,21 @@ jobs:
     environment:
       name: ${{ inputs.deployment_environment }}
       url: ${{ inputs.deployment_url }}
+    permissions:
+      actions: read
+      contents: read
     steps:
-      - name: Validate Linux deployment inputs
+      - name: Resolve and validate Linux deployment inputs
+        id: deployment_target
         shell: pwsh
         env:
-          DEPLOYMENT_HOST: ${{ inputs.deployment_host }}
-          DEPLOYMENT_PORT: ${{ inputs.deployment_port }}
+          DEPLOYMENT_HOST_INPUT: ${{ inputs.deployment_host }}
+          DEPLOYMENT_HOST_ENVIRONMENT: ${{ vars.POWERFORGE_DEPLOY_HOST || vars.POWERFORGE_WEBSITE_DEPLOY_HOST }}
+          DEPLOYMENT_PORT_INPUT: ${{ inputs.deployment_port }}
+          DEPLOYMENT_PORT_ENVIRONMENT: ${{ vars.POWERFORGE_DEPLOY_PORT || vars.POWERFORGE_WEBSITE_DEPLOY_PORT }}
           DEPLOYMENT_SITE: ${{ inputs.deployment_site }}
-          DEPLOYMENT_USER: ${{ inputs.deployment_user }}
+          DEPLOYMENT_USER_INPUT: ${{ inputs.deployment_user }}
+          DEPLOYMENT_USER_ENVIRONMENT: ${{ vars.POWERFORGE_DEPLOY_USER || vars.POWERFORGE_WEBSITE_DEPLOY_USER }}
           DEPLOYMENT_CLOUDFLARE_ZONE: ${{ inputs.deployment_cloudflare_zone }}
           DEPLOYMENT_PRIVATE_KEY: ${{ secrets.deployment_ssh_private_key }}
           DEPLOYMENT_KNOWN_HOSTS: ${{ secrets.deployment_ssh_known_hosts }}
@@ -330,17 +338,40 @@ jobs:
           CLOUDFLARE_ZONE_ID: ${{ secrets.cloudflare_zone_id }}
         run: |
           $ErrorActionPreference = 'Stop'
+          $deploymentHost = if ([string]::IsNullOrWhiteSpace($env:DEPLOYMENT_HOST_INPUT)) {
+            [string]$env:DEPLOYMENT_HOST_ENVIRONMENT
+          } else {
+            [string]$env:DEPLOYMENT_HOST_INPUT
+          }
+          $deploymentUser = if ([string]::IsNullOrWhiteSpace($env:DEPLOYMENT_USER_INPUT)) {
+            [string]$env:DEPLOYMENT_USER_ENVIRONMENT
+          } else {
+            [string]$env:DEPLOYMENT_USER_INPUT
+          }
+          if ([string]::IsNullOrWhiteSpace($deploymentUser)) {
+            $deploymentUser = 'powerforge-deploy'
+          }
+          $portInput = 0
+          [void][int]::TryParse($env:DEPLOYMENT_PORT_INPUT, [ref] $portInput)
+          $deploymentPort = if ($portInput -gt 0) {
+            $portInput
+          } elseif ([string]::IsNullOrWhiteSpace($env:DEPLOYMENT_PORT_ENVIRONMENT)) {
+            22
+          } else {
+            $env:DEPLOYMENT_PORT_ENVIRONMENT
+          }
+
           if ($env:DEPLOYMENT_SITE -notmatch '^[a-z0-9][a-z0-9.-]{0,62}$') {
             throw 'deployment_site must be a lowercase DNS-style site identifier.'
           }
-          if ($env:DEPLOYMENT_HOST -notmatch '^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$') {
+          if ($deploymentHost -notmatch '^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$') {
             throw 'deployment_host must be a DNS name or IPv4 address.'
           }
-          if ($env:DEPLOYMENT_USER -notmatch '^[a-z_][a-z0-9_-]{0,31}$') {
+          if ($deploymentUser -notmatch '^[a-z_][a-z0-9_-]{0,31}$') {
             throw 'deployment_user is not a valid Linux account name.'
           }
           $port = 0
-          if (-not [int]::TryParse($env:DEPLOYMENT_PORT, [ref] $port) -or $port -lt 1 -or $port -gt 65535) {
+          if (-not [int]::TryParse($deploymentPort, [ref] $port) -or $port -lt 1 -or $port -gt 65535) {
             throw 'deployment_port must be an integer from 1 through 65535.'
           }
           if ([string]::IsNullOrWhiteSpace($env:DEPLOYMENT_PRIVATE_KEY)) {
@@ -357,6 +388,10 @@ jobs:
               throw 'deployment_cloudflare_api_token is required when deployment_cloudflare_zone is configured.'
             }
           }
+
+          "host=$deploymentHost" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "port=$port" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "user=$deploymentUser" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Download validated site artifact
         uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
@@ -405,10 +440,10 @@ jobs:
       - name: Publish and promote Linux release
         shell: pwsh
         env:
-          DEPLOYMENT_HOST: ${{ inputs.deployment_host }}
-          DEPLOYMENT_PORT: ${{ inputs.deployment_port }}
+          DEPLOYMENT_HOST: ${{ steps.deployment_target.outputs.host }}
+          DEPLOYMENT_PORT: ${{ steps.deployment_target.outputs.port }}
           DEPLOYMENT_SITE: ${{ inputs.deployment_site }}
-          DEPLOYMENT_USER: ${{ inputs.deployment_user }}
+          DEPLOYMENT_USER: ${{ steps.deployment_target.outputs.user }}
           DEPLOYMENT_CLOUDFLARE_ZONE: ${{ inputs.deployment_cloudflare_zone }}
           DEPLOYMENT_PRIVATE_KEY: ${{ secrets.deployment_ssh_private_key }}
           DEPLOYMENT_KNOWN_HOSTS: ${{ secrets.deployment_ssh_known_hosts }}
@@ -467,9 +502,9 @@ jobs:
         continue-on-error: true
         shell: pwsh
         env:
-          DEPLOYMENT_HOST: ${{ inputs.deployment_host }}
-          DEPLOYMENT_PORT: ${{ inputs.deployment_port }}
-          DEPLOYMENT_USER: ${{ inputs.deployment_user }}
+          DEPLOYMENT_HOST: ${{ steps.deployment_target.outputs.host }}
+          DEPLOYMENT_PORT: ${{ steps.deployment_target.outputs.port }}
+          DEPLOYMENT_USER: ${{ steps.deployment_target.outputs.user }}
         run: |
           $sshRoot = Join-Path $env:RUNNER_TEMP 'powerforge-deployment-ssh'
           $keyPath = Join-Path $sshRoot 'id_ed25519'
@@ -490,6 +525,10 @@ jobs:
     if: ${{ always() && inputs.post_deploy_pipeline_config != '' && ((inputs.deployment_target == 'github-pages' && needs.deploy.result == 'success') || (inputs.deployment_target == 'linux' && needs.deploy-linux.result == 'success')) }}
     needs: [deploy, deploy-linux]
     uses: ./.github/workflows/powerforge-website-run.yml
+    permissions:
+      actions: write
+      contents: read
+      packages: read
     with:
       website_root: ${{ inputs.website_root }}
       pipeline_config: ${{ inputs.post_deploy_pipeline_config }}
