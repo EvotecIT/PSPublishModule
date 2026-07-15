@@ -312,6 +312,10 @@ internal static partial class WebCliCommandHandlers
         }
     }
 
+    internal static string? ResolveServerPlanOutputDirectory(string[] subArgs)
+        => TryGetOptionValue(subArgs, "--out") ??
+           TryGetOptionValue(subArgs, "--output-dir");
+
     private static string? ResolveBackupRecipient(PowerForgeServerRecoveryManifest manifest)
     {
         if (!string.IsNullOrWhiteSpace(manifest.BackupTarget?.Recipient))

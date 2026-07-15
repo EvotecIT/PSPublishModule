@@ -1,8 +1,8 @@
 # PowerForge.Web Linux Service Deployment
 
-PowerForge provides a generic release workflow and a root-owned promoter for small Linux systemd services. It complements server recovery: the workflow deploys reproducible application code, while the recovery manifest captures host configuration, service units, certificates, encrypted secrets, and mutable state.
+PowerForge provides generic package and deployment actions plus a root-owned promoter for small Linux systemd services. It complements server recovery: the actions deploy reproducible application code, while the recovery manifest captures host configuration, service units, certificates, encrypted secrets, and mutable state.
 
-The service repository stays thin. It owns the service code, a validation script, and one workflow call. PowerForge owns packaging, provenance, SSH hygiene, archive validation, atomic promotion, health checks, retention, and rollback.
+The service repository stays thin. It owns the service code, a validation script, a secret-free package job, and a protected-environment deployment job. PowerForge owns checkout, packaging, artifact publication, provenance, SSH hygiene, archive validation, atomic promotion, health checks, retention, and rollback.
 
 ## Runtime Contract
 
@@ -60,7 +60,10 @@ their ownership and copies them into root-only staging before inspection.
 
 ## Caller Workflow
 
-Pin the reusable workflow to an exact PowerForge commit:
+Pin both shared actions to the same exact PowerForge commit. Validation and packaging
+run in a job with no protected environment. The deployment job downloads that exact
+workflow artifact and owns the `production` environment so repository code never runs
+in a process or job that can access deployment credentials:
 
 ```yaml
 name: Deploy service
@@ -75,32 +78,67 @@ on:
   workflow_dispatch:
 
 jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: EvotecIT/PSPublishModule/.github/actions/powerforge-linux-service-package@POWERFORGE_COMMIT
+        with:
+          service-root: Services/Example
+          service-validation-script: deploy/linux/validate-service.sh
+          artifact-name: powerforge-service-example
+
   deploy:
-    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-service-deploy.yml@POWERFORGE_COMMIT
-    with:
-      service_root: Services/Example
-      service_validation_script: deploy/linux/validate-service.sh
-      deployment_service: example
-      deployment_host: ${{ vars.POWERFORGE_SERVICE_DEPLOY_HOST }}
-      deployment_port: ${{ fromJson(vars.POWERFORGE_SERVICE_DEPLOY_PORT) }}
-      deployment_user: ${{ vars.POWERFORGE_SERVICE_DEPLOY_USER }}
-      deployment_environment: production
-      deployment_url: https://api.example.com/healthz
+    needs: package
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://api.example.com/healthz
+    permissions:
+      contents: read
+    steps:
+      - uses: EvotecIT/PSPublishModule/.github/actions/powerforge-linux-service-deploy@POWERFORGE_COMMIT
+        with:
+          artifact-name: powerforge-service-example
+          deployment-service: example
+          deployment-host: ${{ vars.POWERFORGE_SERVICE_DEPLOY_HOST }}
+          deployment-port: ${{ vars.POWERFORGE_SERVICE_DEPLOY_PORT }}
+          deployment-user: ${{ vars.POWERFORGE_SERVICE_DEPLOY_USER }}
+          deployment-ssh-private-key: ${{ secrets.DEPLOYMENT_SSH_PRIVATE_KEY }}
+          deployment-ssh-known-hosts: ${{ secrets.DEPLOYMENT_SSH_KNOWN_HOSTS }}
+          source-repository: ${{ github.repository }}
+          source-sha: ${{ github.sha }}
+
+concurrency:
+  group: powerforge-service-example
+  cancel-in-progress: false
 ```
 
 Store `DEPLOYMENT_SSH_PRIVATE_KEY` and `DEPLOYMENT_SSH_KNOWN_HOSTS` in the
-protected environment named by `deployment_environment`. GitHub supplies those
-environment secrets directly to the reusable deploy job, so the caller does not
-need repository-level deployment credentials. Callers may still pass
-`deployment_ssh_private_key` and `deployment_ssh_known_hosts` explicitly when
-their security model requires it. The workflow validates both values before it
-downloads or transfers the artifact.
+protected environment named by the caller job. Do not use `secrets: inherit` or
+move this job into a cross-repository reusable workflow; GitHub does not pass the
+caller repository's environment secrets across that boundary. The deploy action
+validates both values before it transfers the already packaged artifact.
 
-The optional validation script runs in the checked-out caller repository before packaging. It should run contract tests and prepare generated output when needed. `service_root` is resolved after that script completes, so it may point at either committed source or a generated release directory.
+The protected deployment action rejects `pull_request`, `pull_request_target`, and
+`merge_group` events. The optional validation script runs only in the secret-free
+package job, without persisted checkout credentials or GitHub workflow-command file
+paths. It should run contract tests and prepare generated output when needed.
+`service-root` is resolved and canonicalized after that script completes, so it may
+point at either committed source or a generated release directory without escaping
+the caller repository. Service artifacts are retained for seven days by default so
+manual protected-environment approval can outlive a short queue or weekend; override
+`artifact-retention-days` only when the repository has a different approval policy.
 
 ## Promotion And Rollback
 
-The workflow uploads an artifact unique to `deployment_service`, writes metadata containing the source repository, exact source SHA, workflow run identity, and archive SHA-256, then publishes both files with temporary SSH credentials.
+The package action binds the archive SHA-256 to the source repository, exact source
+SHA, and workflow run in an immutable artifact sidecar. The deployment action verifies
+that binding before it writes SSH credentials, then emits the runtime deployment
+metadata and transfers both files. Each run uploads into a unique remote staging
+directory; a deployment-account lock serializes the atomic handoff into the fixed
+root-promoter path.
 
 The root promoter:
 

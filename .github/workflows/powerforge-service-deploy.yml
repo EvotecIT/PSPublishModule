@@ -17,13 +17,16 @@ on:
         required: true
         type: string
       deployment_host:
+        description: Explicit deployment host. Use the PowerForge Linux Service Deploy action when values come from a protected environment.
         required: true
         type: string
       deployment_user:
+        description: Explicit least-privileged deployment user.
         required: false
         type: string
         default: "powerforge-deploy"
       deployment_port:
+        description: Explicit deployment SSH port.
         required: false
         type: number
         default: 22

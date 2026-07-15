@@ -3,6 +3,26 @@ namespace PowerForge.Tests;
 public sealed class ServerRecoveryBootstrapPlanTests
 {
     [Fact]
+    public void JsonOutputMode_DoesNotBecomePlanOutputDirectory()
+    {
+        var outputDirectory = PowerForge.Web.Cli.WebCliCommandHandlers.ResolveServerPlanOutputDirectory(
+            ["--output", "json"]);
+
+        Assert.Null(outputDirectory);
+    }
+
+    [Theory]
+    [InlineData("--out")]
+    [InlineData("--output-dir")]
+    public void PlanOutputDirectory_AcceptsDocumentedOptions(string option)
+    {
+        var outputDirectory = PowerForge.Web.Cli.WebCliCommandHandlers.ResolveServerPlanOutputDirectory(
+            [option, "recovery-plan"]);
+
+        Assert.Equal("recovery-plan", outputDirectory);
+    }
+
+    [Fact]
     public void BuildPlan_CreatesAccountsBeforeOwnedPathsAndChecksRepositoryPrerequisites()
     {
         var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest

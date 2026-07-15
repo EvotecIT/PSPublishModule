@@ -1,6 +1,6 @@
 # PowerForge.Web Linux Deployment Pattern
 
-Last updated: 2026-05-02
+Last updated: 2026-07-15
 
 This pattern is the reusable baseline for static PowerForge.Web sites hosted on Linux with Apache or another file-based web server.
 
@@ -17,31 +17,67 @@ This pattern is the reusable baseline for static PowerForge.Web sites hosted on 
 
 ## CI Artifact Flow (Recommended)
 
-Use `.github/workflows/powerforge-website-deploy.yml` with `deployment_target: linux`.
+Keep the reusable build and the protected deployment as separate jobs. GitHub does
+not pass a caller repository's environment secrets into a cross-repository reusable
+workflow. The deployment job must therefore belong to the caller repository, name
+the protected environment itself, and invoke the pinned shared composite action.
+The protected deployment action rejects `pull_request`, `pull_request_target`, and
+`merge_group` events; invoke it only from a trusted `push` or `workflow_dispatch`
+job after the build artifact has passed its normal validation lane.
 The build still runs on `runner_labels_json`, so Windows-only and Linux-compatible
 sites use the same publication contract without moving their toolchains onto the web
 server.
 
 ```yaml
 jobs:
-  website:
-    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-deploy.yml@<full-commit-sha>
+  build:
+    permissions:
+      actions: write
+      contents: read
+      packages: read
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-run.yml@POWERFORGE_COMMIT
     with:
       website_root: Website
       pipeline_config: Website/pipeline.json
-      deployment_target: linux
-      deployment_site: example.com
-      deployment_host: deploy.example.com
-      deployment_url: https://example.com
-      deployment_cloudflare_zone: example.com
-    secrets:
-      deployment_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      cloudflare_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
-      deployment_ssh_private_key: ${{ secrets.WEBSITE_DEPLOY_SSH_PRIVATE_KEY }}
-      deployment_ssh_known_hosts: ${{ secrets.WEBSITE_DEPLOY_SSH_KNOWN_HOSTS }}
+      site_artifact_name: powerforge-site-example.com
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://example.com
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: EvotecIT/PSPublishModule/.github/actions/powerforge-linux-site-deploy@POWERFORGE_COMMIT
+        with:
+          artifact-name: powerforge-site-example.com
+          deployment-site: example.com
+          deployment-host: ${{ vars.POWERFORGE_WEBSITE_DEPLOY_HOST }}
+          deployment-port: ${{ vars.POWERFORGE_WEBSITE_DEPLOY_PORT }}
+          deployment-user: ${{ vars.POWERFORGE_WEBSITE_DEPLOY_USER }}
+          deployment-cloudflare-zone: example.com
+          deployment-ssh-private-key: ${{ secrets.WEBSITE_DEPLOY_SSH_PRIVATE_KEY }}
+          deployment-ssh-known-hosts: ${{ secrets.WEBSITE_DEPLOY_SSH_KNOWN_HOSTS }}
+          deployment-cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare-zone-id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          source-repository: ${{ github.repository }}
+          source-sha: ${{ github.sha }}
+          engine-mode: ${{ needs.build.outputs.engine_mode }}
+          engine-repository: ${{ needs.build.outputs.engine_repository }}
+          engine-ref: ${{ needs.build.outputs.engine_ref }}
+          engine-sha: ${{ needs.build.outputs.engine_sha }}
+          engine-asset: ${{ needs.build.outputs.engine_asset }}
+          engine-asset-sha256: ${{ needs.build.outputs.engine_asset_sha256 }}
+
+concurrency:
+  group: powerforge-site-example.com
+  cancel-in-progress: false
 ```
 
-The workflow:
+This two-job lane:
 
 1. runs the normal PowerForge CI pipeline and quality guardrails
 2. archives the validated `_site` output on its native build runner
@@ -71,15 +107,15 @@ moved into the release history and becomes the rollback target. This lets the sh
 promoter take over a legacy in-place site without a consumer-specific migration
 script or an unprotected delete-and-replace step.
 
-When `deployment_cloudflare_zone` is set, the workflow uses `cloudflare_zone_id`
-directly and transfers the deploy-only `deployment_cloudflare_api_token` and zone
+When `deployment-cloudflare-zone` is set, the action uses `cloudflare-zone-id`
+directly and transfers the deploy-only `deployment-cloudflare-api-token` and zone
 id only inside temporary deployment staging. A least-privilege cache-purge token
 therefore does not need Zone Read. If
-the zone-id secret is absent, the workflow may discover exactly one active zone by
+the zone-id secret is absent, the action may discover exactly one active zone by
 name; that fallback also requires Zone Read and uses Cloudflare's valid page size.
 The promoter copies the credentials into root-only staging,
 purges before exact-SHA verification, and erases them on every success or failure.
-The normal `cloudflare_api_token` remains isolated to the website pipeline and is
+The normal website-pipeline Cloudflare token remains isolated to the build and is
 never reused for Linux promotion.
 This keeps Cloudflare proxying and cache analytics enabled without storing a broad
 CI token permanently on the web host. Sites may instead use a scoped, root-owned
