@@ -93,7 +93,13 @@ public sealed partial class ModulePublisher
         };
     }
 
-    internal static string ResolvePublishApiKey(PublishConfiguration publish, string? basePath = null)
+    /// <summary>
+    /// Resolves an inline or file-backed publish API key immediately before a publish operation.
+    /// </summary>
+    /// <param name="publish">Publish configuration containing the key or deferred key path.</param>
+    /// <param name="basePath">Optional project root used to resolve relative key paths.</param>
+    /// <returns>The resolved single-line key, or an empty string when no key source is configured.</returns>
+    public static string ResolvePublishApiKey(PublishConfiguration publish, string? basePath = null)
     {
         if (publish is null) throw new ArgumentNullException(nameof(publish));
 
