@@ -110,7 +110,7 @@ public sealed class GitHubWebsiteRunWorkflowTests
         var workflowYaml = File.ReadAllText(workflowPath);
 
         Assert.Contains("Initialize transient tool cache directories", workflowYaml, StringComparison.Ordinal);
-        Assert.Contains("Cleanup transient tool caches before Pages artifact", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("Cleanup transient tool caches before site artifact", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("Cleanup transient tool caches", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("GetFullPath($env:POWERFORGE_RUNNER_CACHE_ROOT)", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("GetFullPath($env:GITHUB_WORKSPACE)", workflowYaml, StringComparison.Ordinal);

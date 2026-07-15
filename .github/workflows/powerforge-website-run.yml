@@ -2,6 +2,25 @@ name: PowerForge Website Run
 
 on:
   workflow_call:
+    outputs:
+      engine_repository:
+        description: Repository used to build the website.
+        value: ${{ jobs.website-run.outputs.engine_repository }}
+      engine_sha:
+        description: Exact PowerForge commit used to build the website.
+        value: ${{ jobs.website-run.outputs.engine_sha }}
+      engine_mode:
+        description: Resolved source or binary engine mode.
+        value: ${{ jobs.website-run.outputs.engine_mode }}
+      engine_ref:
+        description: Exact source commit or binary release tag used to build.
+        value: ${{ jobs.website-run.outputs.engine_ref }}
+      engine_asset:
+        description: Binary release asset used to build, when applicable.
+        value: ${{ jobs.website-run.outputs.engine_asset }}
+      engine_asset_sha256:
+        description: Exact binary release asset digest, when applicable.
+        value: ${{ jobs.website-run.outputs.engine_asset_sha256 }}
     inputs:
       website_root:
         required: true
@@ -81,6 +100,18 @@ on:
         required: false
         type: string
         default: ""
+      site_artifact_name:
+        required: false
+        type: string
+        default: ""
+      site_artifact_path:
+        required: false
+        type: string
+        default: ""
+      site_artifact_retention_days:
+        required: false
+        type: number
+        default: 7
     secrets:
       indexnow_key:
         required: false
@@ -96,6 +127,13 @@ env:
 
 jobs:
   website-run:
+    outputs:
+      engine_repository: ${{ steps.engine_provenance.outputs.repository }}
+      engine_sha: ${{ steps.engine_provenance.outputs.sha }}
+      engine_mode: ${{ steps.engine_provenance.outputs.mode }}
+      engine_ref: ${{ steps.engine_provenance.outputs.ref }}
+      engine_asset: ${{ steps.engine_provenance.outputs.asset }}
+      engine_asset_sha256: ${{ steps.engine_provenance.outputs.asset_sha256 }}
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     env:
@@ -194,6 +232,7 @@ jobs:
           POWERFORGE_REPOSITORY_TOKEN: ${{ secrets.repository_read_token }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare_api_token }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.cloudflare_zone_id }}
+          POWERFORGE_RUNNER_RESULT_PATH: ${{ runner.temp }}/powerforge-website-runner-result.json
         run: |
           $runnerArgs = @(
             'website-runner',
@@ -207,7 +246,8 @@ jobs:
             '--powerforge-repository-override', '${{ inputs.powerforge_repository_override }}',
             '--powerforge-ref-override', '${{ inputs.powerforge_ref_override }}',
             '--powerforge-tool-lock-path', '${{ inputs.powerforge_tool_lock_path }}',
-            '--powerforge-web-tag', '${{ inputs.powerforge_web_tag }}'
+            '--powerforge-web-tag', '${{ inputs.powerforge_web_tag }}',
+            '--result-path', $env:POWERFORGE_RUNNER_RESULT_PATH
           )
 
           if ('${{ inputs.maintenance_mode_note }}' -eq 'true') {
@@ -215,6 +255,56 @@ jobs:
           }
 
           dotnet run --framework net10.0 -p:RestoreLockedMode=false --project ./.powerforge-runner/PowerForge.Web.Cli/PowerForge.Web.Cli.csproj -- $runnerArgs
+
+      - name: Resolve actual PowerForge engine provenance
+        id: engine_provenance
+        shell: pwsh
+        env:
+          POWERFORGE_RUNNER_RESULT_PATH: ${{ runner.temp }}/powerforge-website-runner-result.json
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path -LiteralPath $env:POWERFORGE_RUNNER_RESULT_PATH -PathType Leaf)) {
+            throw "Website runner result not found: $($env:POWERFORGE_RUNNER_RESULT_PATH)"
+          }
+          $result = Get-Content -LiteralPath $env:POWERFORGE_RUNNER_RESULT_PATH -Raw | ConvertFrom-Json
+          $mode = [string]$result.engineMode
+          $repository = [string]$result.repository
+          if ($mode -notin @('source', 'binary')) {
+            throw "Website runner returned unsupported engine mode '$mode'."
+          }
+          if ($repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
+            throw "Website runner returned invalid engine repository '$repository'."
+          }
+
+          $ref = ''
+          $sha = ''
+          $asset = ''
+          $assetSha256 = ''
+          if ($mode -eq 'source') {
+            $ref = [string]$result.ref
+            if ($ref -notmatch '^[0-9a-fA-F]{40,64}$') {
+              throw "Website runner returned invalid source engine commit '$ref'."
+            }
+            $ref = $ref.ToLowerInvariant()
+            $sha = $ref
+          } else {
+            $ref = [string]$result.tag
+            $asset = [string]$result.asset
+            $assetSha256 = [string]$result.assetSha256
+            if ([string]::IsNullOrWhiteSpace($ref) -or [string]::IsNullOrWhiteSpace($asset)) {
+              throw 'Website runner did not report the binary release tag and asset.'
+            }
+            if ($assetSha256 -notmatch '^[0-9a-f]{64}$') {
+              throw "Website runner returned invalid binary asset SHA-256 '$assetSha256'."
+            }
+          }
+
+          "mode=$mode" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "repository=$repository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "ref=$ref" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "sha=$sha" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "asset=$asset" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "asset_sha256=$assetSha256" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload website reports
         if: always()
@@ -227,8 +317,8 @@ jobs:
             ./${{ inputs.website_root }}/_site/_reports/**
           if-no-files-found: ignore
 
-      - name: Cleanup transient tool caches before Pages artifact
-        if: ${{ inputs.upload_pages_artifact || inputs.validate_pages_artifact }}
+      - name: Cleanup transient tool caches before site artifact
+        if: ${{ inputs.upload_pages_artifact || inputs.validate_pages_artifact || inputs.site_artifact_name != '' }}
         shell: pwsh
         run: |
           $cacheRoot = [System.IO.Path]::GetFullPath($env:POWERFORGE_RUNNER_CACHE_ROOT)
@@ -238,55 +328,55 @@ jobs:
             Remove-Item -LiteralPath $cacheRoot -Recurse -Force
           }
 
-      - name: Archive Pages artifact
-        if: ${{ (inputs.upload_pages_artifact || inputs.validate_pages_artifact) && runner.os == 'Linux' }}
+      - name: Archive site artifact
+        if: ${{ (inputs.upload_pages_artifact || inputs.validate_pages_artifact || inputs.site_artifact_name != '') && runner.os == 'Linux' }}
         shell: sh
         env:
-          PAGES_ARTIFACT_PATH: ${{ inputs.pages_artifact_path || format('./{0}/_site', inputs.website_root) }}
+          SITE_ARTIFACT_PATH: ${{ inputs.site_artifact_path || inputs.pages_artifact_path || format('./{0}/_site', inputs.website_root) }}
         run: |
-          echo "::group::Archive Pages artifact"
+          echo "::group::Archive site artifact"
           tar \
             --dereference --hard-dereference \
-            --directory "$PAGES_ARTIFACT_PATH" \
+            --directory "$SITE_ARTIFACT_PATH" \
             -cf "$RUNNER_TEMP/artifact.tar" \
             --exclude=.git \
             --exclude=.github \
             .
           echo "::endgroup::"
 
-      - name: Archive Pages artifact
-        if: ${{ (inputs.upload_pages_artifact || inputs.validate_pages_artifact) && runner.os == 'macOS' }}
+      - name: Archive site artifact
+        if: ${{ (inputs.upload_pages_artifact || inputs.validate_pages_artifact || inputs.site_artifact_name != '') && runner.os == 'macOS' }}
         shell: sh
         env:
-          PAGES_ARTIFACT_PATH: ${{ inputs.pages_artifact_path || format('./{0}/_site', inputs.website_root) }}
+          SITE_ARTIFACT_PATH: ${{ inputs.site_artifact_path || inputs.pages_artifact_path || format('./{0}/_site', inputs.website_root) }}
         run: |
-          echo "::group::Archive Pages artifact"
+          echo "::group::Archive site artifact"
           gtar \
             --dereference --hard-dereference \
-            --directory "$PAGES_ARTIFACT_PATH" \
+            --directory "$SITE_ARTIFACT_PATH" \
             -cf "$RUNNER_TEMP/artifact.tar" \
             --exclude=.git \
             --exclude=.github \
             .
           echo "::endgroup::"
 
-      - name: Archive Pages artifact
-        if: ${{ (inputs.upload_pages_artifact || inputs.validate_pages_artifact) && runner.os == 'Windows' }}
+      - name: Archive site artifact
+        if: ${{ (inputs.upload_pages_artifact || inputs.validate_pages_artifact || inputs.site_artifact_name != '') && runner.os == 'Windows' }}
         shell: pwsh
         env:
-          PAGES_ARTIFACT_PATH: ${{ inputs.pages_artifact_path || format('./{0}/_site', inputs.website_root) }}
+          SITE_ARTIFACT_PATH: ${{ inputs.site_artifact_path || inputs.pages_artifact_path || format('./{0}/_site', inputs.website_root) }}
         run: |
-          Write-Host "::group::Archive Pages artifact"
-          $resolvedArtifactPath = [System.IO.Path]::GetFullPath($env:PAGES_ARTIFACT_PATH)
+          Write-Host "::group::Archive site artifact"
+          $resolvedArtifactPath = [System.IO.Path]::GetFullPath($env:SITE_ARTIFACT_PATH)
           if (-not (Test-Path -LiteralPath $resolvedArtifactPath)) {
-            throw "Pages artifact path not found: $resolvedArtifactPath"
+            throw "Site artifact path not found: $resolvedArtifactPath"
           }
 
           $tempRoot = [System.IO.Path]::GetPathRoot($env:RUNNER_TEMP)
           $freeBytes = ([System.IO.DriveInfo]::new($tempRoot)).AvailableFreeSpace
           $sourceBytes = (Get-ChildItem -LiteralPath $resolvedArtifactPath -Recurse -Force -File | Measure-Object -Property Length -Sum).Sum
           $requiredBytes = [Math]::Max(1GB, [int64]($sourceBytes * 1.1))
-          Write-Host ("Pages artifact source: {0:n0} bytes; runner temp free: {1:n0} bytes; required estimate: {2:n0} bytes" -f $sourceBytes, $freeBytes, $requiredBytes)
+          Write-Host ("Site artifact source: {0:n0} bytes; runner temp free: {1:n0} bytes; required estimate: {2:n0} bytes" -f $sourceBytes, $freeBytes, $requiredBytes)
           if ($freeBytes -lt $requiredBytes) {
             throw "Not enough free space on $tempRoot to archive Pages artifact. Free $freeBytes bytes, estimated need $requiredBytes bytes for $resolvedArtifactPath."
           }
@@ -314,6 +404,15 @@ jobs:
           name: github-pages
           path: ${{ runner.temp }}/artifact.tar
           retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload site artifact
+        if: ${{ inputs.site_artifact_name != '' }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: ${{ inputs.site_artifact_name }}
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: ${{ inputs.site_artifact_retention_days }}
           if-no-files-found: error
 
       - name: Cleanup transient tool caches
