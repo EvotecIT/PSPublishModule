@@ -101,20 +101,16 @@ archive="$(realpath -e "$archive")"
 metadata="$(realpath -e "$metadata")"
 [[ -f "$archive" && ! -L "$archive" ]] || fail 'Artifact must be a regular file, not a symlink.'
 [[ -f "$metadata" && ! -L "$metadata" ]] || fail 'Metadata must be a regular file, not a symlink.'
-case "$archive" in
-  /tmp/powerforge-[0-9]*-[0-9]*/artifact.tar) ;;
-  *) fail 'Artifact is outside the workflow staging path.' ;;
-esac
-case "$metadata" in
-  /tmp/powerforge-[0-9]*-[0-9]*/deployment.json) ;;
-  *) fail 'Metadata is outside the workflow staging path.' ;;
-esac
+workflow_stage="$(dirname "$archive")"
+[[ "$workflow_stage" =~ ^/tmp/powerforge-([0-9]+)-([0-9]+)-([a-z0-9][a-z0-9.-]{0,62})$ ]] || fail 'Artifact is outside the workflow staging path.'
+[[ "${BASH_REMATCH[3]}" == "$site" ]] || fail 'Artifact staging site does not match the configured site.'
+[[ "$archive" == "$workflow_stage/artifact.tar" ]] || fail 'Artifact filename is invalid.'
+[[ "$metadata" == "$workflow_stage/deployment.json" ]] || fail 'Metadata must share the artifact workflow staging directory.'
 if [[ -n "${SUDO_UID:-}" ]]; then
   [[ "$(stat -c '%u' "$archive")" -eq "$SUDO_UID" ]] || fail 'Artifact owner does not match the invoking deployment account.'
   [[ "$(stat -c '%u' "$metadata")" -eq "$SUDO_UID" ]] || fail 'Metadata owner does not match the invoking deployment account.'
 fi
 
-workflow_stage="$(dirname "$archive")"
 install -d -m 0700 "$TRUSTED_STAGE_ROOT"
 trusted_stage="$(mktemp -d "${TRUSTED_STAGE_ROOT}/${site}.XXXXXXXX")"
 chmod 0700 "$trusted_stage"
@@ -181,11 +177,17 @@ verify_release() {
   local public_marker
   public_marker="$(smoke_url "$PUBLIC_URL" "$marker_path")"
   grep -Eq "\"sourceSha\"[[:space:]]*:[[:space:]]*\"${source_sha}\"" <<<"$public_marker" || fail 'Public endpoint did not serve the promoted source SHA.'
+  grep -Eq "\"artifactSha256\"[[:space:]]*:[[:space:]]*\"${artifact_sha}\"" <<<"$public_marker" || fail 'Public endpoint did not serve the promoted artifact.'
+  grep -Eq "\"workflowRunId\"[[:space:]]*:[[:space:]]*\"${run_id}\"" <<<"$public_marker" || fail 'Public endpoint did not serve the promoted workflow run.'
+  grep -Eq "\"workflowRunAttempt\"[[:space:]]*:[[:space:]]*\"${run_attempt}\"" <<<"$public_marker" || fail 'Public endpoint did not serve the promoted workflow attempt.'
 
   if [[ -n "$ORIGIN_ADDRESS" ]]; then
     local origin_marker
     origin_marker="$(smoke_url "https://${ORIGIN_HOST}" "$marker_path" --resolve "${ORIGIN_HOST}:443:${ORIGIN_ADDRESS}")"
     grep -Eq "\"sourceSha\"[[:space:]]*:[[:space:]]*\"${source_sha}\"" <<<"$origin_marker" || fail 'Origin endpoint did not serve the promoted source SHA.'
+    grep -Eq "\"artifactSha256\"[[:space:]]*:[[:space:]]*\"${artifact_sha}\"" <<<"$origin_marker" || fail 'Origin endpoint did not serve the promoted artifact.'
+    grep -Eq "\"workflowRunId\"[[:space:]]*:[[:space:]]*\"${run_id}\"" <<<"$origin_marker" || fail 'Origin endpoint did not serve the promoted workflow run.'
+    grep -Eq "\"workflowRunAttempt\"[[:space:]]*:[[:space:]]*\"${run_attempt}\"" <<<"$origin_marker" || fail 'Origin endpoint did not serve the promoted workflow attempt.'
   fi
 
   local smoke_path

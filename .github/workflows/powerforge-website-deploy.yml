@@ -404,7 +404,7 @@ jobs:
           chmod 700 $sshRoot
           chmod 600 $keyPath $knownHostsPath
 
-          $remoteBase = "/tmp/powerforge-${{ github.run_id }}-${{ github.run_attempt }}"
+          $remoteBase = "/tmp/powerforge-${{ github.run_id }}-${{ github.run_attempt }}-$($env:DEPLOYMENT_SITE)"
           $target = "$($env:DEPLOYMENT_USER)@$($env:DEPLOYMENT_HOST)"
           $sshOptions = @('-i', $keyPath, '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHostsPath")
           $scpArgs = @('-P', $env:DEPLOYMENT_PORT) + $sshOptions + @((Join-Path $env:RUNNER_TEMP 'powerforge-site/artifact.tar'), (Join-Path $env:RUNNER_TEMP 'powerforge-site/deployment.json'), "${target}:${remoteBase}/")
@@ -427,7 +427,7 @@ jobs:
           $sshRoot = Join-Path $env:RUNNER_TEMP 'powerforge-deployment-ssh'
           $keyPath = Join-Path $sshRoot 'id_ed25519'
           $knownHostsPath = Join-Path $sshRoot 'known_hosts'
-          $remoteBase = "/tmp/powerforge-${{ github.run_id }}-${{ github.run_attempt }}"
+          $remoteBase = "/tmp/powerforge-${{ github.run_id }}-${{ github.run_attempt }}-${{ inputs.deployment_site }}"
           $target = "$($env:DEPLOYMENT_USER)@$($env:DEPLOYMENT_HOST)"
           try {
             if ((Test-Path -LiteralPath $keyPath) -and (Test-Path -LiteralPath $knownHostsPath)) {
