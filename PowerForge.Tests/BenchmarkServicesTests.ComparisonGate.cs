@@ -94,6 +94,21 @@ benchmark 'gate' {
     }
 
     [Fact]
+    public void ComparisonGate_RejectsFailedBaselineWhenEveryCompetitorIsSkipped()
+    {
+        var suite = CreateGateSuite(tieTolerance: 0.05);
+        var failedBaseline = GateSummary("Managed", null);
+        var skippedCompetitor = GateSummary("Other", null);
+        skippedCompetitor.Status = "Skipped";
+        var summary = new[] { failedBaseline, skippedCompetitor };
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => PowerShellBenchmarkComparisonEvaluator.ValidateGates(suite, summary));
+
+        Assert.Contains("baseline Managed failed", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void HostExecutor_ChildRequestDefersComparisonGateValidation()
     {
         var request = new PowerShellBenchmarkHostRunRequest

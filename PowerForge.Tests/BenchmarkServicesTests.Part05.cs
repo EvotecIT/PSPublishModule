@@ -248,6 +248,29 @@ benchmark 'policy-suite' {
     }
 
     [Fact]
+    public void DslRuntime_PreservesLegacyPositionalBenchmarkPolicyArguments()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'legacy-policy-suite' {
+    policy 1 3 publish Rotated 10 ExcludeMinMax
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script));
+
+        Assert.Equal(1, suite.WarmupCount);
+        Assert.Equal(3, suite.IterationCount);
+        Assert.Equal("publish", suite.RunMode);
+        Assert.Equal(PowerShellBenchmarkRunOrder.Rotated, suite.RunOrder);
+        Assert.Equal(PowerShellBenchmarkMemoryCleanupMode.None, suite.MemoryCleanup);
+        Assert.Equal(10, suite.CooldownMilliseconds);
+        Assert.Equal(PowerShellBenchmarkOutlierMode.ExcludeMinMax, suite.OutlierMode);
+    }
+
+    [Fact]
     public void BenchmarkPolicy_PreservesExistingRunOrderValuesAndLegacyRuntimeSignature()
     {
         Assert.Equal(0, (int)PowerShellBenchmarkRunOrder.Sequential);

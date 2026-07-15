@@ -489,6 +489,32 @@ public static class PowerShellBenchmarkDslRuntime
         const string InputBody = "param([Parameter(Position=0, Mandatory=$true)] [string] $Name, [Parameter(Position=1)] [object] $Default, [switch] $Required, [switch] $Int, [switch] $Bool) if ($Int.IsPresent) { $value = $BenchmarkVariables[$Name]; if ([string]::IsNullOrWhiteSpace([string] $value)) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' is required.\" }; if ($null -eq $Default) { return @() }; if ($Default -is [array]) { return @($Default | ForEach-Object { [int] $_ }) }; return @([string] $Default -split ',' | Where-Object { $_.Trim() } | ForEach-Object { [int] $_.Trim() }) }; $items = @(); foreach ($entry in ([string] $value -split ',')) { $trimmed = $entry.Trim(); if ($trimmed) { $items += [int] $trimmed } }; if ($items.Count -eq 0) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' did not contain any integer values.\" }; return $Default }; return $items } if ($Bool.IsPresent) { $value = $BenchmarkVariables[$Name]; if ([string]::IsNullOrWhiteSpace([string] $value)) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' is required.\" }; if ($null -eq $Default) { return $false }; switch -Regex ([string] $Default) { '^(?i:true|1|yes|on)$' { return $true } '^(?i:false|0|no|off)$' { return $false } default { throw \"Benchmark variable '$Name' default '$Default' is not a boolean value.\" } } }; switch -Regex ([string] $value) { '^(?i:true|1|yes|on)$' { return $true } '^(?i:false|0|no|off)$' { return $false } default { throw \"Benchmark variable '$Name' value '$value' is not a boolean value.\" } } } $value = $BenchmarkVariables[$Name]; if ([string]::IsNullOrWhiteSpace([string] $value)) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' is required.\" }; return $Default }; [string] $value";
         const string InputIntBody = "param([Parameter(Position=0, Mandatory=$true)] [string] $Name, [Parameter(Position=1)] [int[]] $Default, [switch] $Required) $value = $BenchmarkVariables[$Name]; if ([string]::IsNullOrWhiteSpace([string] $value)) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' is required.\" }; return $Default }; $items = @(); foreach ($entry in ([string] $value -split ',')) { $trimmed = $entry.Trim(); if ($trimmed) { $items += [int] $trimmed } }; if ($items.Count -eq 0) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' did not contain any integer values.\" }; return $Default }; $items";
         const string InputBoolBody = "param([Parameter(Position=0, Mandatory=$true)] [string] $Name, [Parameter(Position=1)] [object] $Default = $false, [switch] $Required) $value = $BenchmarkVariables[$Name]; if ([string]::IsNullOrWhiteSpace([string] $value)) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' is required.\" }; switch -Regex ([string] $Default) { '^(?i:true|1|yes|on)$' { return $true } '^(?i:false|0|no|off)$' { return $false } default { throw \"Benchmark variable '$Name' default '$Default' is not a boolean value.\" } } }; switch -Regex ([string] $value) { '^(?i:true|1|yes|on)$' { return $true } '^(?i:false|0|no|off)$' { return $false } default { throw \"Benchmark variable '$Name' value '$value' is not a boolean value.\" } }";
+        const string PolicyBody = """
+param(
+    [Parameter(Position=0)] [int] $Warmup,
+    [Parameter(Position=1)] [Alias('Iterations')] [int] $Iteration,
+    [Parameter(Position=2)] [string] $RunMode,
+    [Parameter(Position=3)] [object] $Order,
+    [Parameter(Position=4)] [int] $CooldownMilliseconds,
+    [Parameter(Position=5)] [object] $OutlierMode,
+    [Parameter(Position=6)] [object] $MemoryCleanup
+)
+$w = $null
+$i = $null
+$c = $null
+if ($PSBoundParameters.ContainsKey('Warmup')) { $w = $Warmup }
+if ($PSBoundParameters.ContainsKey('Iteration')) { $i = $Iteration }
+if ($PSBoundParameters.ContainsKey('CooldownMilliseconds')) { $c = $CooldownMilliseconds }
+$arguments = [object[]]::new(7)
+$arguments[0] = $w
+$arguments[1] = $i
+$arguments[2] = $RunMode
+$arguments[3] = [string] $Order
+$arguments[4] = [string] $MemoryCleanup
+$arguments[5] = $c
+$arguments[6] = [string] $OutlierMode
+__PowerForgeBenchmarkDslInvoke -Name 'Policy' -Arguments $arguments
+""";
 
         return new()
         {
@@ -516,7 +542,7 @@ try {
             ["data"] = Call("Data", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
             ["skip"] = Call("Skip", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
             ["validate"] = Call("Validate", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
-            ["policy"] = "param([int] $Warmup, [Alias('Iterations')] [int] $Iteration, [string] $RunMode, [object] $Order, [object] $MemoryCleanup, [int] $CooldownMilliseconds, [object] $OutlierMode) $w=$null; $i=$null; $c=$null; if ($PSBoundParameters.ContainsKey('Warmup')) { $w=$Warmup }; if ($PSBoundParameters.ContainsKey('Iteration')) { $i=$Iteration }; if ($PSBoundParameters.ContainsKey('CooldownMilliseconds')) { $c=$CooldownMilliseconds }; $arguments = [object[]]::new(7); $arguments[0] = $w; $arguments[1] = $i; $arguments[2] = $RunMode; $arguments[3] = [string] $Order; $arguments[4] = [string] $MemoryCleanup; $arguments[5] = $c; $arguments[6] = [string] $OutlierMode; __PowerForgeBenchmarkDslInvoke -Name 'Policy' -Arguments $arguments",
+            ["policy"] = PolicyBody,
             ["profile"] = Call("Profile", "param([Parameter(Position=0)] [string] $Name, [string] $Cleanup)", "[object[]] @($Name, $Cleanup)"),
             ["cleanup"] = Call("Cleanup", "param([Parameter(Position=0)] [string] $Name)", "[object[]] @($Name)"),
             ["engine"] = Call("Engine", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
@@ -538,7 +564,7 @@ try {
             ["Add-BenchmarkAxis"] = "param([Parameter(Position=0)] [string] $Name, [Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) $arguments = [object[]]::new(2); $arguments[0] = $Name; $arguments[1] = $Values; __PowerForgeBenchmarkDslInvoke -Name 'Axis' -Arguments $arguments",
             ["Set-BenchmarkSetup"] = Call("Setup", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
             ["Set-BenchmarkDataFactory"] = Call("Data", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
-            ["Set-BenchmarkPolicy"] = "param([int] $Warmup, [Alias('Iterations')] [int] $Iteration, [string] $RunMode, [object] $Order, [object] $MemoryCleanup, [int] $CooldownMilliseconds, [object] $OutlierMode) $w=$null; $i=$null; $c=$null; if ($PSBoundParameters.ContainsKey('Warmup')) { $w=$Warmup }; if ($PSBoundParameters.ContainsKey('Iteration')) { $i=$Iteration }; if ($PSBoundParameters.ContainsKey('CooldownMilliseconds')) { $c=$CooldownMilliseconds }; $arguments = [object[]]::new(7); $arguments[0] = $w; $arguments[1] = $i; $arguments[2] = $RunMode; $arguments[3] = [string] $Order; $arguments[4] = [string] $MemoryCleanup; $arguments[5] = $c; $arguments[6] = [string] $OutlierMode; __PowerForgeBenchmarkDslInvoke -Name 'Policy' -Arguments $arguments",
+            ["Set-BenchmarkPolicy"] = PolicyBody,
             ["Set-BenchmarkProfile"] = Call("Profile", "param([Parameter(Position=0)] [string] $Name, [string] $Cleanup)", "[object[]] @($Name, $Cleanup)"),
             ["Set-BenchmarkCleanup"] = Call("Cleanup", "param([Parameter(Position=0)] [string] $Name)", "[object[]] @($Name)"),
             ["Add-BenchmarkEngine"] = Call("Engine", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),

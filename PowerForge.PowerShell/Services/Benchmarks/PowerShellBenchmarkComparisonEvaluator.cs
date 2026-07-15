@@ -42,6 +42,14 @@ internal static class PowerShellBenchmarkComparisonEvaluator
         var failures = new List<string>();
         foreach (var group in rows.GroupBy(GroupKey, StringComparer.Ordinal))
         {
+            var baseline = group.FirstOrDefault(row =>
+                string.Equals(row.Engine, comparison.Baseline, StringComparison.OrdinalIgnoreCase));
+            if (baseline?.Actual is null || IsFailed(baseline))
+            {
+                failures.Add($"{Describe(group.First())}: baseline {comparison.Baseline} failed");
+                continue;
+            }
+
             var competitors = group
                 .Where(row => !string.Equals(row.Engine, comparison.Baseline, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
@@ -65,14 +73,6 @@ internal static class PowerShellBenchmarkComparisonEvaluator
                 .ToArray();
             if (successfulCompetitors.Length == 0)
                 continue;
-
-            var baseline = group.FirstOrDefault(row =>
-                string.Equals(row.Engine, comparison.Baseline, StringComparison.OrdinalIgnoreCase));
-            if (baseline?.Actual is null || IsFailed(baseline))
-            {
-                failures.Add($"{Describe(group.First())}: baseline {comparison.Baseline} failed");
-                continue;
-            }
 
             var fastest = successfulCompetitors.OrderBy(static row => row.Actual!.Value).First();
             var tolerance = Math.Max(0, comparison.TieTolerance);
