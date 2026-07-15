@@ -27,7 +27,7 @@ internal static partial class WebPipelineRunner
     private static readonly string[] AllowedProjectContentModes = { "hybrid", "external" };
     private static readonly string[] AllowedProjectStatuses = { "active", "archived", "deprecated", "experimental" };
     private static readonly string[] AllowedProjectSurfaceKeys = { "docs", "apiDotNet", "apiPowerShell", "examples", "changelog", "releases", "downloads" };
-    private static readonly string[] AllowedProjectLinkKeys = { "docs", "apiDotNet", "apiPowerShell", "examples", "changelog", "releases", "downloads", "source", "website", "nuget", "powerShellGallery", "privateGallery", "privateFeed", "blog" };
+    private static readonly string[] AllowedProjectLinkKeys = { "docs", "apiDotNet", "apiPowerShell", "examples", "changelog", "releases", "downloads", "source", "website", "nuget", "powerShellGallery", "privateGallery", "privateFeed", "blog", "appStore", "support", "privacy" };
     private static readonly JsonSerializerOptions ProjectSitemapFingerprintJsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -324,6 +324,12 @@ internal static partial class WebPipelineRunner
             project.Mode = NormalizeProjectMode(manifest.Mode, project.Mode ?? "hub-full");
         if (!string.IsNullOrWhiteSpace(manifest.ContentMode))
             project.ContentMode = NormalizeProjectContentMode(manifest.ContentMode, project.Mode ?? "hub-full");
+        if (!string.IsNullOrWhiteSpace(manifest.Kind))
+            project.Kind = manifest.Kind!.Trim();
+        if (manifest.Brand is not null)
+            project.Brand = manifest.Brand;
+        if (manifest.Product is not null)
+            project.Product = manifest.Product;
         if (manifest.Aliases is { Count: > 0 })
         {
             project.Aliases = manifest.Aliases
@@ -1000,6 +1006,18 @@ internal static partial class WebPipelineRunner
             project.ManifestCommit = NormalizeOptionalString(project.ManifestCommit);
             project.ManifestPath = NormalizeOptionalString(project.ManifestPath);
             project.Version = NormalizeOptionalString(project.Version);
+            if (project.Product is not null)
+            {
+                project.Kind = NormalizeProjectKind(project.Kind, "product");
+            }
+            else if (NormalizeProjectKind(project.Kind, "project").Equals("project", StringComparison.OrdinalIgnoreCase))
+            {
+                project.Kind = null;
+            }
+            else
+            {
+                project.Kind = NormalizeProjectKind(project.Kind, "project");
+            }
 
             var mode = NormalizeProjectMode(project.Mode, "hub-full");
             project.Mode = mode;
@@ -1152,6 +1170,7 @@ internal static partial class WebPipelineRunner
             artifacts.Docs = NormalizeOptionalString(artifacts.Docs);
             artifacts.Api = NormalizeOptionalString(artifacts.Api);
             artifacts.Examples = NormalizeOptionalString(artifacts.Examples);
+            NormalizeProductCatalogContract(project, links, slug);
         }
     }
 
@@ -1221,6 +1240,10 @@ internal static partial class WebPipelineRunner
             if (string.IsNullOrWhiteSpace(project.Name))
                 findings.Add(ProjectCatalogFinding.Warning("missing-name", slug, "Project should define a display name."));
 
+            var kind = NormalizeProjectKind(project.Kind, project.Product is null ? "project" : "product");
+            if (!AllowedProjectKinds.Contains(kind, StringComparer.OrdinalIgnoreCase))
+                findings.Add(ProjectCatalogFinding.Error("invalid-kind", slug, $"Kind '{kind}' is not supported. Allowed: {string.Join(", ", AllowedProjectKinds)}."));
+
             var mode = NormalizeProjectMode(project.Mode, fallback: "hub-full");
             if (!AllowedProjectModes.Contains(mode, StringComparer.OrdinalIgnoreCase))
                 findings.Add(ProjectCatalogFinding.Error("invalid-mode", slug, $"Mode '{mode}' is not supported. Allowed: {string.Join(", ", AllowedProjectModes)}."));
@@ -1261,6 +1284,7 @@ internal static partial class WebPipelineRunner
             }
 
             ValidateProjectLinkAndSurfaceContracts(findings, project, slug, mode, contentMode);
+            ValidateProductCatalogContract(findings, project, slug, mode, contentMode);
         }
 
         return findings;
@@ -1551,7 +1575,7 @@ internal static partial class WebPipelineRunner
                 $"title: {YamlQuote(string.IsNullOrWhiteSpace(project.Name) ? slug : project.Name)}",
                 $"description: {YamlQuote(string.IsNullOrWhiteSpace(project.Description) ? $"{slug} project page." : project.Description)}",
                 $"slug: {YamlQuote(slug)}",
-                "layout: project"
+                $"layout: {(IsProductProject(project) ? "product" : "project")}"
             };
 
             if (project.Aliases is { Length: > 0 })
@@ -1575,6 +1599,8 @@ internal static partial class WebPipelineRunner
             var listed = project.Listed ?? !status.Equals("archived", StringComparison.OrdinalIgnoreCase);
             var hubPath = ResolveProjectHubPath(project, slug);
             lines.Add($"meta.project_mode: {YamlQuote(mode)}");
+            if (!string.IsNullOrWhiteSpace(project.Kind) || project.Product is not null)
+                lines.Add($"meta.project_kind: {YamlQuote(NormalizeProjectKind(project.Kind, project.Product is null ? "project" : "product"))}");
             lines.Add($"meta.project_content_mode: {YamlQuote(contentMode)}");
             lines.Add($"meta.project_status: {YamlQuote(status)}");
             lines.Add($"meta.project_listed: {listed.ToString().ToLowerInvariant()}");
@@ -2501,6 +2527,8 @@ internal static partial class WebPipelineRunner
         if (!string.IsNullOrWhiteSpace(project.ContentMode))
             WriteMetaString(lines, "meta.project_content_mode", project.ContentMode);
 
+        AppendProductFrontMatterExtensions(lines, project);
+
         if (project.Links is { Count: > 0 })
         {
             WriteMetaString(lines, "meta.project_link_docs", TryGetDictionaryValue(project.Links, "docs"));
@@ -2516,6 +2544,9 @@ internal static partial class WebPipelineRunner
             WriteMetaString(lines, "meta.project_link_psgallery", TryGetDictionaryValue(project.Links, "powerShellGallery"));
             WriteMetaString(lines, "meta.project_link_private_gallery", TryGetDictionaryValue(project.Links, "privateGallery"));
             WriteMetaString(lines, "meta.project_link_private_feed", TryGetDictionaryValue(project.Links, "privateFeed"));
+            WriteMetaString(lines, "meta.project_link_app_store", TryGetDictionaryValue(project.Links, "appStore"));
+            WriteMetaString(lines, "meta.project_link_support", TryGetDictionaryValue(project.Links, "support"));
+            WriteMetaString(lines, "meta.project_link_privacy", TryGetDictionaryValue(project.Links, "privacy"));
         }
 
         if (project.Surfaces is { Count: > 0 })
@@ -2680,6 +2711,7 @@ internal static partial class WebPipelineRunner
             Section = NormalizeOptionalString(section),
             Slug = NormalizeOptionalString(project.Slug),
             Name = NormalizeOptionalString(project.Name),
+            Kind = NormalizeOptionalString(project.Kind),
             Mode = NormalizeOptionalString(project.Mode),
             ContentMode = NormalizeOptionalString(project.ContentMode),
             HubPath = NormalizeOptionalString(project.HubPath),
@@ -2691,6 +2723,8 @@ internal static partial class WebPipelineRunner
             Version = NormalizeOptionalString(project.Version),
             ManifestCommit = NormalizeOptionalString(project.ManifestCommit),
             Aliases = NormalizeStringArray(project.Aliases),
+            Brand = project.Brand,
+            Product = project.Product,
             Links = NormalizeStringDictionary(project.Links),
             Surfaces = NormalizeBoolDictionary(project.Surfaces),
             Artifacts = project.Artifacts is null
@@ -3020,6 +3054,10 @@ internal static partial class WebPipelineRunner
         [JsonPropertyName("name")]
         public string? Name { get; set; }
 
+        [JsonPropertyName("kind")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Kind { get; set; }
+
         [JsonPropertyName("mode")]
         public string? Mode { get; set; }
 
@@ -3067,6 +3105,14 @@ internal static partial class WebPipelineRunner
 
         [JsonPropertyName("artifacts")]
         public ProjectCatalogArtifacts? Artifacts { get; set; }
+
+        [JsonPropertyName("brand")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public ProjectBrandData? Brand { get; set; }
+
+        [JsonPropertyName("product")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public ProductPresentationData? Product { get; set; }
 
         [JsonPropertyName("metrics")]
         public ProjectCatalogMetrics? Metrics { get; set; }
@@ -3224,6 +3270,9 @@ internal static partial class WebPipelineRunner
         [JsonPropertyName("contentMode")]
         public string? ContentMode { get; set; }
 
+        [JsonPropertyName("kind")]
+        public string? Kind { get; set; }
+
         [JsonPropertyName("status")]
         public string? Status { get; set; }
 
@@ -3250,6 +3299,12 @@ internal static partial class WebPipelineRunner
 
         [JsonPropertyName("artifacts")]
         public ProjectCatalogArtifacts? Artifacts { get; set; }
+
+        [JsonPropertyName("brand")]
+        public ProjectBrandData? Brand { get; set; }
+
+        [JsonPropertyName("product")]
+        public ProductPresentationData? Product { get; set; }
 
         [JsonExtensionData]
         public Dictionary<string, JsonElement>? ExtensionData { get; set; }

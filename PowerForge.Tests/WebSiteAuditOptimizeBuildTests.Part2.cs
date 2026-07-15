@@ -1103,6 +1103,8 @@ public partial class WebSiteAuditOptimizeBuildTests
             Assert.Contains("height=\"700\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("decoding=\"async\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(" />", html, StringComparison.Ordinal);
+            Assert.DoesNotContain(" / srcset=", html, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

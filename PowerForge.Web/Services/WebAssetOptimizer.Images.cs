@@ -221,6 +221,10 @@ public static partial class WebAssetOptimizer
             var rewritten = ImgTagRegex.Replace(html, match =>
             {
                 var attrs = match.Groups["attrs"].Value;
+                var trimmedAttrs = attrs.TrimEnd();
+                var selfClosing = trimmedAttrs.EndsWith("/", StringComparison.Ordinal);
+                if (selfClosing)
+                    attrs = trimmedAttrs[..^1].TrimEnd();
                 var srcMatch = ImgSrcAttrRegex.Match(attrs);
                 if (!srcMatch.Success)
                     return match.Value;
@@ -301,7 +305,7 @@ public static partial class WebAssetOptimizer
                     return match.Value;
 
                 fileChanged = true;
-                return $"<img{attrsUpdated}>";
+                return selfClosing ? $"<img{attrsUpdated} />" : $"<img{attrsUpdated}>";
             });
 
             if (!fileChanged || string.Equals(rewritten, html, StringComparison.Ordinal))
