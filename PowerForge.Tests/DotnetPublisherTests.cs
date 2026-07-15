@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Reflection;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -27,5 +28,64 @@ public sealed class DotnetPublisherTests
             $"-p:RestoreAdditionalProjectSources={sourceA};{sourceB}",
             StringComparison.Ordinal));
         Assert.Single(args, arg => arg.StartsWith("-p:RestoreAdditionalProjectSources=", StringComparison.Ordinal));
+        Assert.Contains("--no-restore", args);
+        Assert.Contains("-p:BuildProjectReferences=false", args);
+    }
+
+    [Fact]
+    public void BuildDependencyArguments_DoesNotStampReferencedProjects()
+    {
+        var args = DotnetPublisher.BuildDependencyArguments(
+            configuration: "Release",
+            tfm: "net8.0",
+            useIsolatedArtifacts: true,
+            artifacts: Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "artifacts"),
+            maxCpuCountArgument: "-m:1",
+            restoreSources: null);
+
+        Assert.Equal("build", args[0]);
+        Assert.DoesNotContain(args, arg => arg.StartsWith("-p:Version=", StringComparison.Ordinal));
+        Assert.DoesNotContain(args, arg => arg.StartsWith("-p:AssemblyVersion=", StringComparison.Ordinal));
+        Assert.DoesNotContain(args, arg => arg.StartsWith("-p:FileVersion=", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Publish_StampsOnlyTheModuleProject()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "DotnetPublisher", Guid.NewGuid().ToString("N"));
+        var dependencyDirectory = Path.Combine(root, "Dependency");
+        var moduleDirectory = Path.Combine(root, "Module");
+        var artifacts = Path.Combine(root, "artifacts");
+        Directory.CreateDirectory(dependencyDirectory);
+        Directory.CreateDirectory(moduleDirectory);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(dependencyDirectory, "Dependency.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><AssemblyVersion>2.3.4.0</AssemblyVersion><FileVersion>2.3.4.0</FileVersion></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(dependencyDirectory, "Dependency.cs"),
+                "namespace Dependency; public sealed class Value { public string Text => \"dependency\"; }");
+            var moduleProject = Path.Combine(moduleDirectory, "Module.csproj");
+            File.WriteAllText(moduleProject,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup><ItemGroup><ProjectReference Include=\"..\\Dependency\\Dependency.csproj\" /></ItemGroup></Project>");
+            File.WriteAllText(Path.Combine(moduleDirectory, "Module.cs"),
+                "namespace Module; public sealed class Value { public string Text => new Dependency.Value().Text; }");
+
+            var published = new DotnetPublisher(new NullLogger()).Publish(
+                moduleProject,
+                "Release",
+                new[] { "net8.0" },
+                "9.8.7",
+                artifacts);
+            var publishDirectory = published["net8.0"];
+
+            Assert.Equal(new Version(9, 8, 7, 0), AssemblyName.GetAssemblyName(Path.Combine(publishDirectory, "Module.dll")).Version);
+            Assert.Equal(new Version(2, 3, 4, 0), AssemblyName.GetAssemblyName(Path.Combine(publishDirectory, "Dependency.dll")).Version);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
     }
 }

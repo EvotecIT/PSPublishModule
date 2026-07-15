@@ -111,6 +111,15 @@ public sealed class DotnetPublisher
             var publishDir = useIsolatedArtifacts
                 ? Path.Combine(artifacts!, "publish", tfm)
                 : Path.Combine(projDir, "bin", configuration, tfm, "publish");
+            var dependencyArgs = BuildDependencyArguments(
+                configuration,
+                tfm,
+                useIsolatedArtifacts,
+                artifacts,
+                maxCpuCountArgument,
+                restoreSources);
+            RunDotnet(projDir, dependencyArgs, tfm, "dependency build");
+
             var args = BuildPublishArguments(
                 configuration,
                 version,
@@ -120,35 +129,7 @@ public sealed class DotnetPublisher
                 maxCpuCountArgument,
                 publishDir,
                 restoreSources);
-
-            var psi = new ProcessStartInfo
-            {
-                FileName = "dotnet",
-                WorkingDirectory = projDir,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            ProcessStartInfoEncoding.TryApplyUtf8(psi);
-
-#if NET472
-            psi.Arguments = BuildWindowsArgumentString(args);
-#else
-            foreach (var arg in args)
-                psi.ArgumentList.Add(arg);
-#endif
-
-            using var p = Process.Start(psi)!;
-            var stdout = p.StandardOutput.ReadToEnd();
-            var stderr = p.StandardError.ReadToEnd();
-            p.WaitForExit();
-
-            if (p.ExitCode != 0)
-            {
-                _logger.Error($"dotnet publish failed for {tfm}: {stderr}\n{stdout}");
-                throw new InvalidOperationException($"dotnet publish failed for {tfm} (exit {p.ExitCode})");
-            }
+            RunDotnet(projDir, args, tfm, "publish");
 
             if (!Directory.Exists(publishDir))
                 throw new DirectoryNotFoundException($"Publish directory not found: {publishDir}");
@@ -157,6 +138,27 @@ public sealed class DotnetPublisher
         }
 
         return result;
+    }
+
+    internal static IReadOnlyList<string> BuildDependencyArguments(
+        string configuration,
+        string tfm,
+        bool useIsolatedArtifacts,
+        string? artifacts,
+        string maxCpuCountArgument,
+        IEnumerable<string>? restoreSources)
+    {
+        var args = new List<string>
+        {
+            "build",
+            "--configuration", configuration,
+            "-nologo",
+            "--verbosity", "minimal",
+            "--framework", tfm
+        };
+
+        AppendSharedBuildArguments(args, useIsolatedArtifacts, artifacts, maxCpuCountArgument, restoreSources);
+        return args;
     }
 
     internal static IReadOnlyList<string> BuildPublishArguments(
@@ -175,12 +177,31 @@ public sealed class DotnetPublisher
             "--configuration", configuration,
             "-nologo",
             "--verbosity", "minimal",
+            "--no-restore",
+            "-p:BuildProjectReferences=false",
             $"-p:Version={version}",
             $"-p:AssemblyVersion={version}",
             $"-p:FileVersion={version}",
             "--framework", tfm
         };
 
+        AppendSharedBuildArguments(args, useIsolatedArtifacts, artifacts, maxCpuCountArgument, restoreSources);
+        if (useIsolatedArtifacts)
+        {
+            args.Add("--output");
+            args.Add(publishDir);
+        }
+
+        return args;
+    }
+
+    private static void AppendSharedBuildArguments(
+        List<string> args,
+        bool useIsolatedArtifacts,
+        string? artifacts,
+        string maxCpuCountArgument,
+        IEnumerable<string>? restoreSources)
+    {
         var normalizedSources = NormalizeRestoreSources(restoreSources);
         if (normalizedSources.Length > 0)
             args.Add($"-p:RestoreAdditionalProjectSources={string.Join(";", normalizedSources)}");
@@ -192,11 +213,39 @@ public sealed class DotnetPublisher
             // Centralized artifacts output can make parallel project-reference builds race on generated files.
             // Serializing MSBuild trades speed for deterministic module binary publishes.
             args.Add(maxCpuCountArgument);
-            args.Add("--output");
-            args.Add(publishDir);
         }
+    }
 
-        return args;
+    private void RunDotnet(string workingDirectory, IReadOnlyList<string> args, string tfm, string phase)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        ProcessStartInfoEncoding.TryApplyUtf8(psi);
+
+#if NET472
+        psi.Arguments = BuildWindowsArgumentString(args);
+#else
+        foreach (var arg in args)
+            psi.ArgumentList.Add(arg);
+#endif
+
+        using var process = Process.Start(psi)!;
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+
+        if (process.ExitCode == 0)
+            return;
+
+        _logger.Error($"dotnet {phase} failed for {tfm}: {stderr}\n{stdout}");
+        throw new InvalidOperationException($"dotnet {phase} failed for {tfm} (exit {process.ExitCode})");
     }
 
     private static string[] NormalizeRestoreSources(IEnumerable<string>? restoreSources)
