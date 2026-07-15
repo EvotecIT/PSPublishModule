@@ -77,7 +77,7 @@ internal static partial class WebCliCommandHandlers
         return Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "_server-state", name, "bootstrap-plan"));
     }
 
-    private static List<PowerForgeServerBootstrapPlanStep> BuildBootstrapPlanSteps(
+    internal static List<PowerForgeServerBootstrapPlanStep> BuildBootstrapPlanSteps(
         PowerForgeServerRecoveryManifest manifest,
         ICollection<string> warnings)
     {
@@ -93,6 +93,29 @@ internal static partial class WebCliCommandHandlers
         {
             AddStep(steps, ref order, "packages", "Install apt prerequisites",
                 "apt-get update && apt-get install -y " + string.Join(' ', manifest.Packages.Apt),
+                plannedCommands: plannedCommands);
+        }
+
+        foreach (var account in manifest.Accounts ?? Array.Empty<PowerForgeServerAccount>())
+        {
+            if (string.IsNullOrWhiteSpace(account.Name)) continue;
+            var useradd = new List<string> { "useradd" };
+            if (account.System) useradd.Add("--system");
+            useradd.Add("--user-group");
+            useradd.Add(account.CreateHome ? "--create-home" : "--no-create-home");
+            if (!string.IsNullOrWhiteSpace(account.Home))
+            {
+                useradd.Add("--home-dir");
+                useradd.Add(ShellQuote(account.Home));
+            }
+            if (!string.IsNullOrWhiteSpace(account.Shell))
+            {
+                useradd.Add("--shell");
+                useradd.Add(ShellQuote(account.Shell));
+            }
+            useradd.Add(ShellQuote(account.Name));
+            AddStep(steps, ref order, "accounts", $"Create account {account.Name}",
+                $"id -u {ShellQuote(account.Name)} >/dev/null 2>&1 || {string.Join(' ', useradd)}",
                 plannedCommands: plannedCommands);
         }
 
@@ -113,6 +136,18 @@ internal static partial class WebCliCommandHandlers
         foreach (var repository in manifest.Repositories ?? Array.Empty<PowerForgeServerRepository>())
         {
             if (string.IsNullOrWhiteSpace(repository.Path)) continue;
+            var prerequisites = repository.BootstrapRequiredFiles?
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray() ?? Array.Empty<string>();
+            if (prerequisites.Length > 0)
+            {
+                var checks = string.Join(" && ", prerequisites.Select(path => $"test -s {ShellQuote(path)}"));
+                var message = ShellQuote($"Restore bootstrap prerequisite files for repository {repository.Role} before continuing.");
+                AddStep(steps, ref order, "repositories", $"Verify {repository.Role} repository prerequisites",
+                    $"{checks} || {{ echo {message} >&2; exit 3; }}",
+                    plannedCommands: plannedCommands);
+            }
             if (string.IsNullOrWhiteSpace(repository.Url))
             {
                 warnings.Add($"Repository URL is missing for role '{repository.Role}'. Bootstrap script leaves a manual clone step.");
@@ -177,8 +212,23 @@ internal static partial class WebCliCommandHandlers
 
         foreach (var secret in manifest.Secrets ?? Array.Empty<PowerForgeServerSecret>())
         {
-            AddStep(steps, ref order, "secrets", $"Restore secret {secret.Id}",
-                $"# TODO: restore encrypted secret to {secret.Path ?? secret.Env ?? secret.Id}", manual: true, sensitive: true, plannedCommands: plannedCommands);
+            var message = ShellQuote($"Restore encrypted secret {secret.Id} before continuing.");
+            string guard;
+            if (!string.IsNullOrWhiteSpace(secret.Path))
+            {
+                guard = secret.RestoreMode?.Equals("directory", StringComparison.OrdinalIgnoreCase) == true
+                    ? $"test -d {ShellQuote(secret.Path)} && find {ShellQuote(secret.Path)} -mindepth 1 -maxdepth 1 -print -quit | grep -q . || {{ echo {message} >&2; exit 3; }}"
+                    : $"test -s {ShellQuote(secret.Path)} || {{ echo {message} >&2; exit 3; }}";
+            }
+            else if (!string.IsNullOrWhiteSpace(secret.Env))
+            {
+                guard = $"test -n \"$(printenv {ShellQuote(secret.Env)} 2>/dev/null)\" || {{ echo {message} >&2; exit 3; }}";
+            }
+            else
+            {
+                guard = $"echo {message} >&2; exit 3";
+            }
+            AddStep(steps, ref order, "secrets", $"Confirm restored secret {secret.Id}", guard, plannedCommands: plannedCommands);
         }
 
         foreach (var command in manifest.Deploy?.Commands ?? Array.Empty<PowerForgeServerNamedCommand>())

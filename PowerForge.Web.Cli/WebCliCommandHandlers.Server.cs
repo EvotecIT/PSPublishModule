@@ -78,6 +78,7 @@ internal static partial class WebCliCommandHandlers
             SshAlias = manifest.Target?.SshAlias,
             SshPort = manifest.Target?.SshPort,
             RepositoryCount = manifest.Repositories?.Length ?? 0,
+            AccountCount = manifest.Accounts?.Length ?? 0,
             PackageCount = manifest.Packages?.Apt?.Length ?? 0,
             ApacheModuleCount = manifest.Packages?.ApacheModules?.Length ?? manifest.Apache?.Modules?.Length ?? 0,
             SystemdServiceCount = manifest.Systemd?.Services?.Length ?? 0,
@@ -112,7 +113,7 @@ internal static partial class WebCliCommandHandlers
         logger.Success("Server recovery manifest loaded.");
         logger.Info($"Manifest: {fullManifestPath}");
         logger.Info($"Target: {manifest.Target?.SshAlias ?? manifest.Target?.Host ?? "(unknown)"} port {manifest.Target?.SshPort?.ToString() ?? "(default)"}");
-        logger.Info($"Repositories: {result.RepositoryCount}; packages: {result.PackageCount}; services: {result.SystemdServiceCount}; timers: {result.SystemdTimerCount}");
+        logger.Info($"Repositories: {result.RepositoryCount}; accounts: {result.AccountCount}; packages: {result.PackageCount}; services: {result.SystemdServiceCount}; timers: {result.SystemdTimerCount}");
         logger.Info($"Certificates: {result.CertificateCount}; plain captures: {result.PlainCaptureCount}; encrypted captures: {result.EncryptedCaptureCount}; secrets: {result.SecretCount}");
         if (!string.IsNullOrWhiteSpace(result.BackupTarget))
             logger.Info($"Backup target: {result.BackupTarget} ({result.BackupEncryption ?? "no encryption configured"})");

@@ -68,7 +68,7 @@ powerforge-web server restore-secrets-plan --manifest deploy/linux/example.serve
 
 `server verify` runs the manifest's operational health checks, such as Apache config validation, local service health checks, Certbot dry-runs, Cloudflare origin sync, and public URL checks. Pass `--fail-on-failure` when the command should exit non-zero if a required command or URL check fails.
 
-`server bootstrap-plan` generates a reviewable markdown plan, JSON plan, and LF-normalized shell script draft for rebuilding a fresh host. Manual and sensitive steps are left as blocking TODOs in the script so it cannot silently deploy without restored secrets.
+`server bootstrap-plan` generates a reviewable markdown plan, JSON plan, and LF-normalized shell script draft for rebuilding a fresh host. Managed accounts are created before owned directories. Repositories may declare `bootstrapRequiredFiles` so a private clone fails closed until its isolated SSH key, pinned known-hosts file, and client configuration have been restored. Secret steps are rerunnable presence guards: they stop with an operator-facing restore instruction while state is missing and continue without exposing values after restoration.
 
 `server restore-secrets-plan` generates a markdown plan, JSON plan, and LF-normalized `restore-secrets.sh` draft for an encrypted secret bundle. The script requires `age`, decrypts to a temporary directory, lists archive contents, rejects absolute or path-traversal archive entries, and refuses to extract into `/` unless `POWERFORGE_RESTORE_SECRETS_CONFIRM=YES` is set.
 
@@ -92,6 +92,8 @@ A recovery manifest should describe:
 - expected operating system family and version
 - package prerequisites
 - repository checkouts and branches
+- service accounts required by managed path ownership
+- private-repository bootstrap prerequisite files
 - filesystem layout
 - Apache modules, vhosts, and managed includes
 - systemd services and timers
