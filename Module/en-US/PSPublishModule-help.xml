@@ -17557,6 +17557,18 @@ System.Management.Automation.PSObject</maml:name>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MemoryCleanup</maml:name>
+          <maml:description>
+            <maml:para>Optional managed-memory cleanup override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Operations">
           <maml:name>Operation</maml:name>
           <maml:description>
@@ -17776,6 +17788,18 @@ System.Management.Automation.PSObject</maml:name>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MemoryCleanup</maml:name>
+          <maml:description>
+            <maml:para>Optional managed-memory cleanup override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="Operations">
           <maml:name>Operation</maml:name>
           <maml:description>
@@ -17987,6 +18011,18 @@ System.Management.Automation.PSObject</maml:name>
         <maml:name>IterationCount</maml:name>
         <maml:description>
           <maml:para>Optional measured iteration count override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <dev:type>
+          <maml:name>Nullable`1</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MemoryCleanup</maml:name>
+        <maml:description>
+          <maml:para>Optional managed-memory cleanup override.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
         <dev:type>
@@ -61689,6 +61725,18 @@ When false, the cmdlet fails on existing tags.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MemoryCleanup</maml:name>
+          <maml:description>
+            <maml:para>Managed-memory cleanup performed outside timed operations.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+          <dev:type>
+            <maml:name>Nullable`1</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Order</maml:name>
           <maml:description>
             <maml:para>Work-item ordering strategy.</maml:para>
@@ -61755,6 +61803,18 @@ When false, the cmdlet fails on existing tags.</maml:para>
         <maml:name>Iteration</maml:name>
         <maml:description>
           <maml:para>Measured iteration count.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
+        <dev:type>
+          <maml:name>Nullable`1</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MemoryCleanup</maml:name>
+        <maml:description>
+          <maml:para>Managed-memory cleanup performed outside timed operations.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
         <dev:type>

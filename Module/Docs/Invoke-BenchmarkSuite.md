@@ -11,12 +11,12 @@ Runs a reusable PowerShell benchmark suite.
 ## SYNTAX
 ### Path (Default)
 ```powershell
-Invoke-BenchmarkSuite [-Path] <string> [-OutputRoot <string>] [-WarmupCount <int>] [-IterationCount <int>] [-RunMode <string>] [-RunOrder <PowerShellBenchmarkRunOrder>] [-CooldownMilliseconds <int>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [-Suite <string>] [-Case <string[]>] [-Engine <string[]>] [-Operation <string[]>] [-HostName <string[]>] [-ExternalHostTimeoutSeconds <int>] [-Profile <PowerShellBenchmarkProfileKind>] [-Cleanup <PowerShellBenchmarkCleanupMode>] [-Variable <hashtable>] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-BenchmarkSuite [-Path] <string> [-OutputRoot <string>] [-WarmupCount <int>] [-IterationCount <int>] [-RunMode <string>] [-RunOrder <PowerShellBenchmarkRunOrder>] [-MemoryCleanup <PowerShellBenchmarkMemoryCleanupMode>] [-CooldownMilliseconds <int>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [-Suite <string>] [-Case <string[]>] [-Engine <string[]>] [-Operation <string[]>] [-HostName <string[]>] [-ExternalHostTimeoutSeconds <int>] [-Profile <PowerShellBenchmarkProfileKind>] [-Cleanup <PowerShellBenchmarkCleanupMode>] [-Variable <hashtable>] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Settings
 ```powershell
-Invoke-BenchmarkSuite [-Settings] <scriptblock> [-OutputRoot <string>] [-WarmupCount <int>] [-IterationCount <int>] [-RunMode <string>] [-RunOrder <PowerShellBenchmarkRunOrder>] [-CooldownMilliseconds <int>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [-Suite <string>] [-Case <string[]>] [-Engine <string[]>] [-Operation <string[]>] [-HostName <string[]>] [-ExternalHostTimeoutSeconds <int>] [-Profile <PowerShellBenchmarkProfileKind>] [-Cleanup <PowerShellBenchmarkCleanupMode>] [-Variable <hashtable>] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-BenchmarkSuite [-Settings] <scriptblock> [-OutputRoot <string>] [-WarmupCount <int>] [-IterationCount <int>] [-RunMode <string>] [-RunOrder <PowerShellBenchmarkRunOrder>] [-MemoryCleanup <PowerShellBenchmarkMemoryCleanupMode>] [-CooldownMilliseconds <int>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [-Suite <string>] [-Case <string[]>] [-Engine <string[]>] [-Operation <string[]>] [-HostName <string[]>] [-ExternalHostTimeoutSeconds <int>] [-Profile <PowerShellBenchmarkProfileKind>] [-Cleanup <PowerShellBenchmarkCleanupMode>] [-Variable <hashtable>] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -130,6 +130,22 @@ Accept wildcard characters: True
 
 ### -IterationCount
 Optional measured iteration count override.
+
+```yaml
+Type: Nullable`1
+Parameter Sets: Path, Settings
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -MemoryCleanup
+Optional managed-memory cleanup override.
 
 ```yaml
 Type: Nullable`1
