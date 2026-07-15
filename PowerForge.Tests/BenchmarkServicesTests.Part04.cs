@@ -409,6 +409,26 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void RunnerPathSegments_ShortenLongMatrixValuesDeterministicallyWithoutCollisions()
+    {
+        var common = new string('a', 160);
+        var first = PowerShellBenchmarkPathSegments.Matrix(
+            new Dictionary<string, object?> { ["Label"] = common + "-first", ["Rows"] = 100 },
+            _ => false);
+        var repeated = PowerShellBenchmarkPathSegments.Matrix(
+            new Dictionary<string, object?> { ["Label"] = common + "-first", ["Rows"] = 100 },
+            _ => false);
+        var second = PowerShellBenchmarkPathSegments.Matrix(
+            new Dictionary<string, object?> { ["Label"] = common + "-second", ["Rows"] = 100 },
+            _ => false);
+
+        Assert.Equal(first, repeated);
+        Assert.NotEqual(first, second);
+        Assert.True(first.Length <= 80);
+        Assert.Contains("~", first, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DslRuntime_ResolvesShortAndLongEngineForms()
     {
         var script = ScriptBlock.Create(@"

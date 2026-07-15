@@ -34,6 +34,9 @@ public sealed class PowerShellBenchmarkHostRunRequest
     /// <summary>Run order after caller-side overrides.</summary>
     public PowerShellBenchmarkRunOrder RunOrder { get; set; } = PowerShellBenchmarkRunOrder.Rotated;
 
+    /// <summary>Managed-memory cleanup after caller-side overrides.</summary>
+    public PowerShellBenchmarkMemoryCleanupMode MemoryCleanup { get; set; } = PowerShellBenchmarkMemoryCleanupMode.None;
+
     /// <summary>Delay between measured samples, in milliseconds.</summary>
     public int CooldownMilliseconds { get; set; }
 
@@ -97,6 +100,15 @@ public sealed class PowerShellBenchmarkHostExecutor
         }
 
         var merged = PowerShellBenchmarkResultMerger.Merge(suite, results, started);
+        try
+        {
+            PowerShellBenchmarkComparisonEvaluator.ValidateGates(suite, merged.Summary);
+        }
+        catch
+        {
+            PowerShellBenchmarkArtifactWriter.WriteArtifacts(suite, merged);
+            throw;
+        }
         PowerShellBenchmarkArtifactWriter.WriteArtifacts(suite, merged);
         PowerShellBenchmarkArtifactWriter.UpdateReadmeBlocks(suite, merged);
         return merged;
@@ -157,7 +169,7 @@ public sealed class PowerShellBenchmarkHostExecutor
         }
     }
 
-    private static PowerShellBenchmarkChildRunnerRequest CreateChildRequest(
+    internal static PowerShellBenchmarkChildRunnerRequest CreateChildRequest(
         PowerShellBenchmarkHostRunRequest request,
         string host,
         string executable,
@@ -186,6 +198,7 @@ public sealed class PowerShellBenchmarkHostExecutor
             IterationCount = request.IterationCount,
             RunMode = request.RunMode ?? string.Empty,
             RunOrder = request.RunOrder.ToString(),
+            MemoryCleanup = request.MemoryCleanup.ToString(),
             CooldownMilliseconds = request.CooldownMilliseconds,
             OutlierMode = request.OutlierMode.ToString(),
             SuiteName = request.SuiteName ?? string.Empty,
@@ -194,7 +207,8 @@ public sealed class PowerShellBenchmarkHostExecutor
             Selection = selection,
             ModulePaths = PowerShellBenchmarkTemporaryUserExecutor.GetImportableCallerModulePaths(),
             RunStartedUtc = started.ToString("O"),
-            UpdateReadmeBlocks = false
+            UpdateReadmeBlocks = false,
+            ValidateComparisonGates = false
         };
     }
 

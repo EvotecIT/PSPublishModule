@@ -229,7 +229,7 @@ benchmark 'temp-user' {
     {
         var script = ScriptBlock.Create(@"
 benchmark 'policy-suite' {
-    policy -Warmup 2 -Iterations 5 -RunMode publish -Order Sequential -CooldownMilliseconds 10 -OutlierMode ExcludeMinMax
+    policy -Warmup 2 -Iterations 5 -RunMode publish -Order Sequential -MemoryCleanup BeforeIteration -CooldownMilliseconds 10 -OutlierMode ExcludeMinMax
     axis Operation Run
     axis Engine Managed
     engine Managed { operation Run { param($case, $run) } }
@@ -242,8 +242,47 @@ benchmark 'policy-suite' {
         Assert.Equal(5, suite.IterationCount);
         Assert.Equal("publish", suite.RunMode);
         Assert.Equal(PowerShellBenchmarkRunOrder.Sequential, suite.RunOrder);
+        Assert.Equal(PowerShellBenchmarkMemoryCleanupMode.BeforeIteration, suite.MemoryCleanup);
         Assert.Equal(10, suite.CooldownMilliseconds);
         Assert.Equal(PowerShellBenchmarkOutlierMode.ExcludeMinMax, suite.OutlierMode);
+    }
+
+    [Fact]
+    public void DslRuntime_PreservesLegacyPositionalBenchmarkPolicyArguments()
+    {
+        var script = ScriptBlock.Create(@"
+benchmark 'legacy-policy-suite' {
+    policy 1 3 publish Rotated 10 ExcludeMinMax
+    axis Operation Run
+    axis Engine Managed
+    engine Managed { operation Run { param($case, $run) } }
+}
+");
+
+        var suite = Assert.Single(EvaluateBenchmarkDsl(script));
+
+        Assert.Equal(1, suite.WarmupCount);
+        Assert.Equal(3, suite.IterationCount);
+        Assert.Equal("publish", suite.RunMode);
+        Assert.Equal(PowerShellBenchmarkRunOrder.Rotated, suite.RunOrder);
+        Assert.Equal(PowerShellBenchmarkMemoryCleanupMode.None, suite.MemoryCleanup);
+        Assert.Equal(10, suite.CooldownMilliseconds);
+        Assert.Equal(PowerShellBenchmarkOutlierMode.ExcludeMinMax, suite.OutlierMode);
+    }
+
+    [Fact]
+    public void BenchmarkPolicy_PreservesExistingRunOrderValuesAndLegacyRuntimeSignature()
+    {
+        Assert.Equal(0, (int)PowerShellBenchmarkRunOrder.Sequential);
+        Assert.Equal(1, (int)PowerShellBenchmarkRunOrder.Rotated);
+        Assert.Equal(2, (int)PowerShellBenchmarkRunOrder.Randomized);
+        Assert.Equal(3, (int)PowerShellBenchmarkRunOrder.GroupedRotated);
+
+        var legacyPolicy = typeof(PowerShellBenchmarkDslRuntime).GetMethod(
+            nameof(PowerShellBenchmarkDslRuntime.Policy),
+            new[] { typeof(int?), typeof(int?), typeof(string), typeof(string), typeof(int?), typeof(string) });
+
+        Assert.NotNull(legacyPolicy);
     }
 
     [Fact]

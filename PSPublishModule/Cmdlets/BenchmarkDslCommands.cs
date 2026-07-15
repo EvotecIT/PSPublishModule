@@ -275,6 +275,10 @@ public sealed class SetBenchmarkPolicyCommand : BenchmarkDslCommand
     [Parameter]
     public PowerShellBenchmarkRunOrder? Order { get; set; }
 
+    /// <summary>Managed-memory cleanup performed outside timed operations.</summary>
+    [Parameter]
+    public PowerShellBenchmarkMemoryCleanupMode? MemoryCleanup { get; set; }
+
     /// <summary>Delay between measured samples, in milliseconds.</summary>
     [Parameter]
     [ValidateRange(0, int.MaxValue)]
@@ -291,6 +295,7 @@ public sealed class SetBenchmarkPolicyCommand : BenchmarkDslCommand
             Iteration,
             RunMode,
             Order?.ToString(),
+            MemoryCleanup?.ToString(),
             CooldownMilliseconds,
             OutlierMode?.ToString());
 }
@@ -452,9 +457,13 @@ public sealed class AddBenchmarkComparisonCommand : BenchmarkDslCommand
     [ValidateRange(0d, double.MaxValue)]
     public double TieTolerance { get; set; }
 
+    /// <summary>Fail the benchmark when the baseline is materially slower than a successful competitor.</summary>
+    [Parameter]
+    public SwitchParameter RequireBaselineFastest { get; set; }
+
     /// <inheritdoc />
     protected override void ProcessRecord()
-        => PowerShellBenchmarkDslRuntime.Compare(Dimension, Baseline, Metric, TieTolerance);
+        => PowerShellBenchmarkDslRuntime.Compare(Dimension, Baseline, Metric, TieTolerance, RequireBaselineFastest.IsPresent);
 }
 
 /// <summary>

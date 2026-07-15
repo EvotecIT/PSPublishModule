@@ -853,6 +853,18 @@
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequireBaselineFastest</maml:name>
+          <maml:description>
+            <maml:para>Fail the benchmark when the baseline is materially slower than a successful competitor.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>TieTolerance</maml:name>
           <maml:description>
             <maml:para>Fractional tolerance used to label practically equivalent results, such as 0.05 for five percent.</maml:para>
@@ -899,6 +911,18 @@
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
         <dev:type>
           <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequireBaselineFastest</maml:name>
+        <maml:description>
+          <maml:para>Fail the benchmark when the baseline is materially slower than a successful competitor.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
