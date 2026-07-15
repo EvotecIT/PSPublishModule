@@ -234,6 +234,7 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
     Assert-LastExitCode 'Committing the encrypted server backup'
 
     $published = $false
+    $publishedCommit = $null
     for ($attempt = 1; $attempt -le 3; $attempt++) {
         git -C $checkout fetch origin $backupBranch
         Assert-LastExitCode 'Fetching the backup branch'
@@ -255,6 +256,8 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
         git -C $checkout diff --cached --quiet "origin/$backupBranch"
         $diffFromOrigin = $LASTEXITCODE
         if ($diffFromOrigin -eq 0) {
+            $publishedCommit = (git -C $checkout rev-parse "origin/$backupBranch").Trim()
+            Assert-LastExitCode 'Resolving the superseding backup commit'
             $published = $true
             break
         }
@@ -273,6 +276,8 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
 
         git -C $checkout push origin "HEAD:$backupBranch"
         if ($LASTEXITCODE -eq 0) {
+            $publishedCommit = (git -C $checkout rev-parse HEAD).Trim()
+            Assert-LastExitCode 'Resolving the published backup commit'
             $published = $true
             break
         }
@@ -282,7 +287,6 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
         throw 'Backup publication failed after three push attempts.'
     }
 
-    $publishedCommit = (git -C $checkout rev-parse HEAD).Trim()
     if ($publishedCommit -notmatch '^[a-f0-9]{40}$') {
         throw 'Unable to resolve the published backup commit.'
     }

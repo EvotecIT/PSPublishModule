@@ -38,11 +38,16 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Reject pull request backups
+      if: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'merge_group' }}
+      shell: pwsh
+      run: throw 'PowerForge protected backups cannot run from pull request events.'
+
     - name: Checkout caller repository
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         token: ${{ github.token }}
-        ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        ref: ${{ github.sha }}
 
     - name: Setup .NET
       uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
@@ -61,5 +66,5 @@ runs:
         POWERFORGE_MANIFEST_PATH: ${{ inputs.manifest-path }}
         POWERFORGE_SERVER_SSH_KNOWN_HOSTS: ${{ inputs.server-ssh-known-hosts }}
         POWERFORGE_SERVER_SSH_PRIVATE_KEY: ${{ inputs.server-ssh-private-key }}
-        POWERFORGE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        POWERFORGE_SOURCE_SHA: ${{ github.sha }}
       run: '& "$env:GITHUB_ACTION_PATH/Invoke-PowerForgeServerBackup.ps1"'

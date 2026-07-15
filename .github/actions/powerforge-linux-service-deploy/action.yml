@@ -39,11 +39,23 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Reject pull request deployments
+      if: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'merge_group' }}
+      shell: pwsh
+      run: throw 'PowerForge protected deployments cannot run from pull request events.'
+
     - name: Checkout caller repository
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         token: ${{ github.token }}
-        ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        ref: ${{ github.sha }}
+
+    - name: Validate and prepare Linux service
+      shell: pwsh
+      env:
+        POWERFORGE_SERVICE_ROOT: ${{ inputs.service-root }}
+        POWERFORGE_SERVICE_VALIDATION_SCRIPT: ${{ inputs.service-validation-script }}
+      run: '& "$env:GITHUB_ACTION_PATH/Invoke-PowerForgeLinuxServiceValidation.ps1"'
 
     - name: Deploy Linux service release
       shell: pwsh
@@ -55,7 +67,6 @@ runs:
         POWERFORGE_DEPLOYMENT_SSH_PRIVATE_KEY: ${{ inputs.deployment-ssh-private-key }}
         POWERFORGE_DEPLOYMENT_USER: ${{ inputs.deployment-user }}
         POWERFORGE_SERVICE_ROOT: ${{ inputs.service-root }}
-        POWERFORGE_SERVICE_VALIDATION_SCRIPT: ${{ inputs.service-validation-script }}
         POWERFORGE_SOURCE_REPOSITORY: ${{ inputs.source-repository }}
         POWERFORGE_SOURCE_SHA: ${{ inputs.source-sha }}
       run: '& "$env:GITHUB_ACTION_PATH/Invoke-PowerForgeLinuxServiceDeploy.ps1"'

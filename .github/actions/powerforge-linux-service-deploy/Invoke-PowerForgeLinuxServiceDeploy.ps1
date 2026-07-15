@@ -44,7 +44,9 @@ if ($env:POWERFORGE_SOURCE_SHA -notmatch '^[a-fA-F0-9]{40,64}$') {
     throw 'source-sha must be an exact commit.'
 }
 
-$workspace = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([IO.Path]::DirectorySeparatorChar)
+$workspace = realpath --canonicalize-existing -- $env:GITHUB_WORKSPACE
+Assert-LastExitCode 'Resolving the caller repository'
+$workspace = [IO.Path]::GetFullPath(([string]$workspace).Trim()).TrimEnd([IO.Path]::DirectorySeparatorChar)
 $workspacePrefix = $workspace + [IO.Path]::DirectorySeparatorChar
 $serviceRoot = [IO.Path]::GetFullPath((Join-Path $workspace $env:POWERFORGE_SERVICE_ROOT))
 if (-not [string]::Equals($serviceRoot, $workspace, [StringComparison]::Ordinal) -and
@@ -52,20 +54,12 @@ if (-not [string]::Equals($serviceRoot, $workspace, [StringComparison]::Ordinal)
     throw 'service-root must remain inside the caller repository.'
 }
 
-if (-not [string]::IsNullOrWhiteSpace($env:POWERFORGE_SERVICE_VALIDATION_SCRIPT)) {
-    $validationScript = [IO.Path]::GetFullPath((Join-Path $workspace $env:POWERFORGE_SERVICE_VALIDATION_SCRIPT))
-    if (-not $validationScript.StartsWith($workspacePrefix, [StringComparison]::Ordinal) -or
-        -not (Test-Path -LiteralPath $validationScript -PathType Leaf)) {
-        throw 'service-validation-script must identify a file inside the caller repository.'
-    }
-    bash $validationScript
-    Assert-LastExitCode 'Validating and preparing the service'
-}
-
 if (-not (Test-Path -LiteralPath $serviceRoot -PathType Container)) {
     throw "Service root not found after validation: $serviceRoot"
 }
-$resolvedServiceRoot = (Resolve-Path -LiteralPath $serviceRoot).Path
+$resolvedServiceRoot = realpath --canonicalize-existing -- $serviceRoot
+Assert-LastExitCode 'Resolving the service root'
+$resolvedServiceRoot = [IO.Path]::GetFullPath(([string]$resolvedServiceRoot).Trim()).TrimEnd([IO.Path]::DirectorySeparatorChar)
 if (-not [string]::Equals($resolvedServiceRoot, $workspace, [StringComparison]::Ordinal) -and
     -not $resolvedServiceRoot.StartsWith($workspacePrefix, [StringComparison]::Ordinal)) {
     throw 'service-root resolved outside the caller repository.'

@@ -21,6 +21,9 @@ Keep the reusable build and the protected deployment as separate jobs. GitHub do
 not pass a caller repository's environment secrets into a cross-repository reusable
 workflow. The deployment job must therefore belong to the caller repository, name
 the protected environment itself, and invoke the pinned shared composite action.
+The protected deployment action rejects `pull_request`, `pull_request_target`, and
+`merge_group` events; invoke it only from a trusted `push` or `workflow_dispatch`
+job after the build artifact has passed its normal validation lane.
 The build still runs on `runner_labels_json`, so Windows-only and Linux-compatible
 sites use the same publication contract without moving their toolchains onto the web
 server.

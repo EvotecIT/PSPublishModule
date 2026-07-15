@@ -95,11 +95,11 @@ try {
         deployedAtUtc      = [DateTimeOffset]::UtcNow.ToString('O')
     }
     if (-not [string]::IsNullOrWhiteSpace($env:POWERFORGE_ENGINE_SHA)) {
-        $metadata.engineSha = $env:POWERFORGE_ENGINE_SHA.ToLowerInvariant()
+        $metadata['engineSha'] = $env:POWERFORGE_ENGINE_SHA.ToLowerInvariant()
     }
     if (-not [string]::IsNullOrWhiteSpace($env:POWERFORGE_ENGINE_ASSET)) {
-        $metadata.engineAsset = $env:POWERFORGE_ENGINE_ASSET
-        $metadata.engineAssetSha256 = $env:POWERFORGE_ENGINE_ASSET_SHA256.ToLowerInvariant()
+        $metadata['engineAsset'] = $env:POWERFORGE_ENGINE_ASSET
+        $metadata['engineAssetSha256'] = $env:POWERFORGE_ENGINE_ASSET_SHA256.ToLowerInvariant()
     }
     $metadata | ConvertTo-Json | Set-Content -LiteralPath $metadataPath -Encoding utf8NoBOM
 

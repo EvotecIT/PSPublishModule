@@ -109,7 +109,12 @@ move this job into a cross-repository reusable workflow; GitHub does not pass th
 caller repository's environment secrets across that boundary. The action validates
 both values before it packages or transfers the artifact.
 
-The optional validation script runs in the checked-out caller repository before packaging. It should run contract tests and prepare generated output when needed. `service_root` is resolved after that script completes, so it may point at either committed source or a generated release directory.
+The protected deployment action rejects `pull_request`, `pull_request_target`, and
+`merge_group` events. The optional validation script runs in the checked-out caller
+repository before deployment SSH inputs enter a process environment. It should run
+contract tests and prepare generated output when needed. `service_root` is resolved
+after that script completes, so it may point at either committed source or a
+generated release directory.
 
 ## Promotion And Rollback
 
