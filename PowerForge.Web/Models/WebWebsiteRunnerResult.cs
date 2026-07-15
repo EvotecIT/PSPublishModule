@@ -27,6 +27,9 @@ public sealed class WebWebsiteRunnerResult
     /// <summary>Resolved release asset when binary mode is used.</summary>
     public string? Asset { get; set; }
 
+    /// <summary>SHA-256 of the downloaded release asset when binary mode is used.</summary>
+    public string? AssetSha256 { get; set; }
+
     /// <summary>Resolved executable or project path used to launch the pipeline.</summary>
     public string LaunchedPath { get; set; } = string.Empty;
 }

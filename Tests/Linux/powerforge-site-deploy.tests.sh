@@ -7,6 +7,7 @@ test_root="$(mktemp -d)"
 trap 'rm -rf "$test_root" /tmp/powerforge-91001-1 /tmp/powerforge-91002-1 /tmp/powerforge-91003-1 /tmp/powerforge-91004-1' EXIT
 
 mkdir -p "$test_root/config" "$test_root/locks" "$test_root/site" "$test_root/bin"
+export POWERFORGE_SITE_TRUSTED_STAGE_ROOT="$test_root/trusted-stage"
 cat >"$test_root/config/example.env" <<EOF
 SITE_ROOT=$test_root/site
 PUBLIC_URL=https://example.test
@@ -129,5 +130,9 @@ if env \
   exit 1
 fi
 [[ ! -e "$test_root/cloudflare-site/current" ]]
+if [[ -d "$POWERFORGE_SITE_TRUSTED_STAGE_ROOT" ]] && find "$POWERFORGE_SITE_TRUSTED_STAGE_ROOT" -mindepth 1 -maxdepth 1 | grep -q .; then
+  echo 'Root-owned deployment staging was not cleaned.' >&2
+  exit 1
+fi
 
 echo 'powerforge-site-deploy integration tests passed.'

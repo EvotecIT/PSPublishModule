@@ -9,6 +9,18 @@ on:
       engine_sha:
         description: Exact PowerForge commit used to build the website.
         value: ${{ jobs.website-run.outputs.engine_sha }}
+      engine_mode:
+        description: Resolved source or binary engine mode.
+        value: ${{ jobs.website-run.outputs.engine_mode }}
+      engine_ref:
+        description: Exact source commit or binary release tag used to build.
+        value: ${{ jobs.website-run.outputs.engine_ref }}
+      engine_asset:
+        description: Binary release asset used to build, when applicable.
+        value: ${{ jobs.website-run.outputs.engine_asset }}
+      engine_asset_sha256:
+        description: Exact binary release asset digest, when applicable.
+        value: ${{ jobs.website-run.outputs.engine_asset_sha256 }}
     inputs:
       website_root:
         required: true
@@ -116,8 +128,12 @@ env:
 jobs:
   website-run:
     outputs:
-      engine_repository: ${{ steps.workflow_source.outputs.repository }}
-      engine_sha: ${{ steps.engine_commit.outputs.sha }}
+      engine_repository: ${{ steps.engine_provenance.outputs.repository }}
+      engine_sha: ${{ steps.engine_provenance.outputs.sha }}
+      engine_mode: ${{ steps.engine_provenance.outputs.mode }}
+      engine_ref: ${{ steps.engine_provenance.outputs.ref }}
+      engine_asset: ${{ steps.engine_provenance.outputs.asset }}
+      engine_asset_sha256: ${{ steps.engine_provenance.outputs.asset_sha256 }}
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     env:
@@ -173,16 +189,6 @@ jobs:
           token: ${{ github.token }}
           fetch-depth: 1
 
-      - name: Resolve exact PowerForge commit
-        id: engine_commit
-        shell: pwsh
-        run: |
-          $sha = (git -C ./.powerforge-runner rev-parse HEAD).Trim()
-          if ($sha -notmatch '^[0-9a-f]{40}$') {
-            throw "Unable to resolve exact PowerForge commit: $sha"
-          }
-          "sha=$sha" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
       - name: Setup .NET
         uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
         with:
@@ -226,6 +232,7 @@ jobs:
           POWERFORGE_REPOSITORY_TOKEN: ${{ secrets.repository_read_token }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare_api_token }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.cloudflare_zone_id }}
+          POWERFORGE_RUNNER_RESULT_PATH: ${{ runner.temp }}/powerforge-website-runner-result.json
         run: |
           $runnerArgs = @(
             'website-runner',
@@ -239,7 +246,8 @@ jobs:
             '--powerforge-repository-override', '${{ inputs.powerforge_repository_override }}',
             '--powerforge-ref-override', '${{ inputs.powerforge_ref_override }}',
             '--powerforge-tool-lock-path', '${{ inputs.powerforge_tool_lock_path }}',
-            '--powerforge-web-tag', '${{ inputs.powerforge_web_tag }}'
+            '--powerforge-web-tag', '${{ inputs.powerforge_web_tag }}',
+            '--result-path', $env:POWERFORGE_RUNNER_RESULT_PATH
           )
 
           if ('${{ inputs.maintenance_mode_note }}' -eq 'true') {
@@ -247,6 +255,56 @@ jobs:
           }
 
           dotnet run --framework net10.0 -p:RestoreLockedMode=false --project ./.powerforge-runner/PowerForge.Web.Cli/PowerForge.Web.Cli.csproj -- $runnerArgs
+
+      - name: Resolve actual PowerForge engine provenance
+        id: engine_provenance
+        shell: pwsh
+        env:
+          POWERFORGE_RUNNER_RESULT_PATH: ${{ runner.temp }}/powerforge-website-runner-result.json
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path -LiteralPath $env:POWERFORGE_RUNNER_RESULT_PATH -PathType Leaf)) {
+            throw "Website runner result not found: $($env:POWERFORGE_RUNNER_RESULT_PATH)"
+          }
+          $result = Get-Content -LiteralPath $env:POWERFORGE_RUNNER_RESULT_PATH -Raw | ConvertFrom-Json
+          $mode = [string]$result.engineMode
+          $repository = [string]$result.repository
+          if ($mode -notin @('source', 'binary')) {
+            throw "Website runner returned unsupported engine mode '$mode'."
+          }
+          if ($repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
+            throw "Website runner returned invalid engine repository '$repository'."
+          }
+
+          $ref = ''
+          $sha = ''
+          $asset = ''
+          $assetSha256 = ''
+          if ($mode -eq 'source') {
+            $ref = [string]$result.ref
+            if ($ref -notmatch '^[0-9a-fA-F]{40,64}$') {
+              throw "Website runner returned invalid source engine commit '$ref'."
+            }
+            $ref = $ref.ToLowerInvariant()
+            $sha = $ref
+          } else {
+            $ref = [string]$result.tag
+            $asset = [string]$result.asset
+            $assetSha256 = [string]$result.assetSha256
+            if ([string]::IsNullOrWhiteSpace($ref) -or [string]::IsNullOrWhiteSpace($asset)) {
+              throw 'Website runner did not report the binary release tag and asset.'
+            }
+            if ($assetSha256 -notmatch '^[0-9a-f]{64}$') {
+              throw "Website runner returned invalid binary asset SHA-256 '$assetSha256'."
+            }
+          }
+
+          "mode=$mode" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "repository=$repository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "ref=$ref" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "sha=$sha" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "asset=$asset" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "asset_sha256=$assetSha256" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload website reports
         if: always()

@@ -5,12 +5,22 @@ umask 022
 
 CONFIG_ROOT="${POWERFORGE_SITE_CONFIG_ROOT:-/etc/powerforge/sites}"
 LOCK_ROOT="${POWERFORGE_SITE_LOCK_ROOT:-/var/lock}"
+TRUSTED_STAGE_ROOT="${POWERFORGE_SITE_TRUSTED_STAGE_ROOT:-/var/lib/powerforge/deployment-staging}"
 site=""
 archive=""
 metadata=""
 promoted=0
 previous_target=""
 release_dir=""
+workflow_stage=""
+trusted_stage=""
+
+cleanup_staging() {
+  [[ -z "$workflow_stage" || ! -d "$workflow_stage" ]] || rm -rf -- "$workflow_stage"
+  [[ -z "$trusted_stage" || ! -d "$trusted_stage" ]] || rm -rf -- "$trusted_stage"
+}
+
+trap cleanup_staging EXIT
 
 log() {
   printf '[powerforge-site-deploy] %s\n' "$*"
@@ -75,6 +85,7 @@ source "$config_path"
 
 [[ "$SITE_ROOT" == /* && "$SITE_ROOT" != '/' ]] || fail 'SITE_ROOT must be an absolute non-root path.'
 [[ "$SITE_ROOT" != *[[:space:]]* ]] || fail 'SITE_ROOT must not contain whitespace.'
+[[ "$TRUSTED_STAGE_ROOT" == /* && "$TRUSTED_STAGE_ROOT" != '/' ]] || fail 'Trusted staging root must be an absolute non-root path.'
 [[ "$PUBLIC_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || fail 'PUBLIC_URL must be an HTTPS origin without a path.'
 [[ "$RELEASES_TO_KEEP" =~ ^[1-9][0-9]*$ ]] || fail 'RELEASES_TO_KEEP must be a positive integer.'
 if [[ -n "$ORIGIN_ADDRESS" || -n "$ORIGIN_HOST" ]]; then
@@ -102,6 +113,15 @@ if [[ -n "${SUDO_UID:-}" ]]; then
   [[ "$(stat -c '%u' "$archive")" -eq "$SUDO_UID" ]] || fail 'Artifact owner does not match the invoking deployment account.'
   [[ "$(stat -c '%u' "$metadata")" -eq "$SUDO_UID" ]] || fail 'Metadata owner does not match the invoking deployment account.'
 fi
+
+workflow_stage="$(dirname "$archive")"
+install -d -m 0700 "$TRUSTED_STAGE_ROOT"
+trusted_stage="$(mktemp -d "${TRUSTED_STAGE_ROOT}/${site}.XXXXXXXX")"
+chmod 0700 "$trusted_stage"
+install -m 0600 "$archive" "$trusted_stage/artifact.tar"
+install -m 0600 "$metadata" "$trusted_stage/deployment.json"
+archive="$trusted_stage/artifact.tar"
+metadata="$trusted_stage/deployment.json"
 
 json_string() {
   local key="$1"
@@ -194,7 +214,6 @@ rollback() {
     purge_cloudflare || true
   fi
   [[ -z "$release_dir" || ! -d "$release_dir" || "$release_dir" == "$previous_target" ]] || rm -rf "$release_dir"
-  rm -rf "$(dirname "$archive")"
   exit "$exit_code"
 }
 trap 'rollback $?' ERR INT TERM
@@ -222,5 +241,6 @@ for ((index=RELEASES_TO_KEEP; index<${#old_releases[@]}; index++)); do
 done
 
 trap - ERR INT TERM
-rm -rf "$(dirname "$archive")"
+cleanup_staging
+trap - EXIT
 log "Promoted $site release $release_id from $source_sha"

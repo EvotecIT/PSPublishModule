@@ -41,6 +41,18 @@ internal static partial class WebCliCommandHandlers
                 outputJson ? null : Console.WriteLine,
                 outputJson ? null : Console.Error.WriteLine);
 
+            var resultPath = TryGetOptionValue(subArgs, "--result-path") ?? TryGetOptionValue(subArgs, "--resultPath");
+            if (!string.IsNullOrWhiteSpace(resultPath))
+            {
+                var resolvedResultPath = Path.GetFullPath(resultPath);
+                var resultDirectory = Path.GetDirectoryName(resolvedResultPath);
+                if (!string.IsNullOrWhiteSpace(resultDirectory))
+                    Directory.CreateDirectory(resultDirectory);
+                File.WriteAllText(
+                    resolvedResultPath,
+                    WebCliJson.SerializeToElement(result, WebCliJson.Context.WebWebsiteRunnerResult).GetRawText());
+            }
+
             if (outputJson)
             {
                 WebCliJsonWriter.Write(new WebCliJsonEnvelope

@@ -24,7 +24,9 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         var deployWorkflow = ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml");
         var runWorkflow = ReadRepoFile(".github", "workflows", "powerforge-website-run.yml");
 
-        Assert.Contains("git -C ./.powerforge-runner rev-parse HEAD", runWorkflow, StringComparison.Ordinal);
+        Assert.Contains("--result-path", runWorkflow, StringComparison.Ordinal);
+        Assert.Contains("Resolve actual PowerForge engine provenance", runWorkflow, StringComparison.Ordinal);
+        Assert.Contains("assetSha256", runWorkflow, StringComparison.Ordinal);
         Assert.Contains("sourceSha", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("engineSha", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("artifactSha256", deployWorkflow, StringComparison.Ordinal);
@@ -46,6 +48,9 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("mv -Tf", script, StringComparison.Ordinal);
         Assert.Contains("umask 022", script, StringComparison.Ordinal);
         Assert.Contains("CLOUDFLARE_ZONE_ID is required", script, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_SITE_TRUSTED_STAGE_ROOT", script, StringComparison.Ordinal);
+        Assert.Contains("install -m 0600 \"$archive\"", script, StringComparison.Ordinal);
+        Assert.Contains("powerforge-site-{0}", ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml"), StringComparison.Ordinal);
     }
 
     private static string ReadRepoFile(params string[] relativePath)
