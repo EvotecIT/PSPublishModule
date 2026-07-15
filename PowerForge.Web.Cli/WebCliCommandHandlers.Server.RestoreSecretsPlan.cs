@@ -14,9 +14,7 @@ internal static partial class WebCliCommandHandlers
 
         var manifest = loaded.Manifest;
         var manifestPath = loaded.ManifestPath!;
-        var outPathArg = TryGetOptionValue(subArgs, "--out") ??
-                         TryGetOptionValue(subArgs, "--output") ??
-                         TryGetOptionValue(subArgs, "--output-dir");
+        var outPathArg = ResolveServerPlanOutputDirectory(subArgs);
         var archivePath = TryGetOptionValue(subArgs, "--archive") ?? "encrypted-secrets.tar.gz.age";
         var outputRoot = ResolveRestoreSecretsPlanOutputPath(outPathArg, manifest);
         Directory.CreateDirectory(outputRoot);

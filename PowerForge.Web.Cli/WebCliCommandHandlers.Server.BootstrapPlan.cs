@@ -14,9 +14,7 @@ internal static partial class WebCliCommandHandlers
 
         var manifest = loaded.Manifest;
         var manifestPath = loaded.ManifestPath!;
-        var outPathArg = TryGetOptionValue(subArgs, "--out") ??
-                         TryGetOptionValue(subArgs, "--output") ??
-                         TryGetOptionValue(subArgs, "--output-dir");
+        var outPathArg = ResolveServerPlanOutputDirectory(subArgs);
         var outputRoot = ResolveBootstrapPlanOutputPath(outPathArg, manifest);
         Directory.CreateDirectory(outputRoot);
 
