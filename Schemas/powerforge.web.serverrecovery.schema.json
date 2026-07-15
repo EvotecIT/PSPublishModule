@@ -14,6 +14,10 @@
       "type": "array",
       "items": { "$ref": "#/$defs/Repository" }
     },
+    "accounts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Account" }
+    },
     "packages": { "$ref": "#/$defs/Packages" },
     "paths": {
       "type": "array",
@@ -66,9 +70,25 @@
         "url": { "type": "string" },
         "path": { "type": "string" },
         "branch": { "type": "string" },
-        "required": { "type": "boolean" }
+        "required": { "type": "boolean" },
+        "bootstrapRequiredFiles": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
       },
       "required": ["role", "path"]
+    },
+    "Account": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z_][a-z0-9_-]{0,31}$" },
+        "system": { "type": "boolean" },
+        "createHome": { "type": "boolean" },
+        "home": { "type": "string" },
+        "shell": { "type": "string" }
+      },
+      "required": ["name"]
     },
     "Packages": {
       "type": "object",

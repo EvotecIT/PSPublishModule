@@ -7,6 +7,7 @@ internal sealed class PowerForgeServerRecoveryManifest
     public string? Description { get; set; }
     public PowerForgeServerTarget? Target { get; set; }
     public PowerForgeServerRepository[]? Repositories { get; set; }
+    public PowerForgeServerAccount[]? Accounts { get; set; }
     public PowerForgeServerPackages? Packages { get; set; }
     public PowerForgeServerPath[]? Paths { get; set; }
     public PowerForgeServerApache? Apache { get; set; }
@@ -39,6 +40,16 @@ internal sealed class PowerForgeServerRepository
     public string? Path { get; set; }
     public string? Branch { get; set; }
     public bool Required { get; set; }
+    public string[]? BootstrapRequiredFiles { get; set; }
+}
+
+internal sealed class PowerForgeServerAccount
+{
+    public string Name { get; set; } = string.Empty;
+    public bool System { get; set; }
+    public bool CreateHome { get; set; }
+    public string? Home { get; set; }
+    public string? Shell { get; set; }
 }
 
 internal sealed class PowerForgeServerPackages
@@ -184,6 +195,7 @@ internal sealed class PowerForgeServerRecoveryPlanResult
     public string? SshAlias { get; set; }
     public int? SshPort { get; set; }
     public int RepositoryCount { get; set; }
+    public int AccountCount { get; set; }
     public int PackageCount { get; set; }
     public int ApacheModuleCount { get; set; }
     public int SystemdServiceCount { get; set; }
