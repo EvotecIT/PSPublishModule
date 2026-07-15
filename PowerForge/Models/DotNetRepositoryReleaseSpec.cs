@@ -47,6 +47,11 @@ public sealed class DotNetRepositoryReleaseSpec
     /// </summary>
     public bool AlignPackageVersions { get; set; }
 
+    /// <summary>
+    /// Project-build version tracks that need package-version alignment after project discovery.
+    /// </summary>
+    internal IReadOnlyList<ProjectBuildVersionAlignmentGroup>? VersionAlignmentGroups { get; set; }
+
     /// <summary>Sources used to resolve the current package version (v3 index or local path).</summary>
     public string[]? VersionSources { get; set; }
 

@@ -248,7 +248,12 @@ public sealed partial class DotNetRepositoryReleaseService
             var alignedVersions = ResolveAlignedPackageVersions(packable, expectedGlobal, expectedMap, spec);
             foreach (var project in packable)
             {
-                var expectedVersion = ResolveExpectedVersion(project.ProjectName, expectedGlobal, expectedMap, out var expectedSource);
+                var expectedVersion = ResolveExpectedVersion(
+                    project.ProjectName,
+                    expectedGlobal,
+                    expectedMap,
+                    spec.ExpectedVersionMapUseWildcards,
+                    out var expectedSource);
 
                 if (!string.IsNullOrWhiteSpace(expectedVersion))
                     _logger.Info($"{project.ProjectName}: expected version {expectedVersion} ({expectedSource}).");
