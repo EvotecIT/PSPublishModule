@@ -119,6 +119,9 @@ public sealed class PackageBuildConfiguration
     /// <summary>When true, <see cref="ExpectedVersionMap"/> keys support wildcard matching.</summary>
     public bool ExpectedVersionMapUseWildcards { get; set; }
 
+    /// <summary>When true, projects sharing an X-pattern receive one next version based on the highest current package version in that group.</summary>
+    public bool AlignPackageVersions { get; set; }
+
     /// <summary>Project names to include.</summary>
     public string[]? IncludeProjects { get; set; }
 

@@ -8,6 +8,92 @@ namespace PowerForge.Tests;
 public sealed class DotNetRepositoryReleaseServiceVersioningTests
 {
     [Fact]
+    public void Execute_AlignsXPatternProjectsAfterHighestCurrentPackageVersion()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            WritePackableProject(root.FullName, "Suite.Core", "Suite.Core");
+            WritePackableProject(root.FullName, "Suite.Rendering", "Suite.Renderer");
+            WritePackableProject(root.FullName, "Suite.NewPackage", "Suite.NewPackage");
+
+            var source = Directory.CreateDirectory(Path.Combine(root.FullName, "source"));
+            File.WriteAllText(Path.Combine(source.FullName, "Suite.Core.2.0.2.nupkg"), string.Empty);
+            File.WriteAllText(Path.Combine(source.FullName, "Suite.Renderer.2.0.5.nupkg"), string.Empty);
+
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                ExpectedVersionsByProject = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Suite.Core"] = "2.0.X",
+                    ["Suite.Rendering"] = "2.0.X",
+                    ["Suite.NewPackage"] = "2.0.X"
+                },
+                ExpectedVersionMapAsInclude = true,
+                AlignPackageVersions = true,
+                VersionSources = new[] { source.FullName },
+                UpdateVersions = true,
+                Pack = false,
+                WhatIf = true
+            };
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(spec);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal("2.0.6", result.ResolvedVersion);
+            Assert.Equal("2.0.6", result.ResolvedVersionsByProject["Suite.Core"]);
+            Assert.Equal("2.0.6", result.ResolvedVersionsByProject["Suite.Rendering"]);
+            Assert.Equal("2.0.6", result.ResolvedVersionsByProject["Suite.NewPackage"]);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Execute_KeepsExactVersionsOutsideXPatternAlignment()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            WritePackableProject(root.FullName, "Suite.Core", "Suite.Core");
+            WritePackableProject(root.FullName, "Suite.Fixed", "Suite.Fixed");
+
+            var source = Directory.CreateDirectory(Path.Combine(root.FullName, "source"));
+            File.WriteAllText(Path.Combine(source.FullName, "Suite.Core.2.0.5.nupkg"), string.Empty);
+
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                ExpectedVersionsByProject = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Suite.Core"] = "2.0.X",
+                    ["Suite.Fixed"] = "2.0.3"
+                },
+                ExpectedVersionMapAsInclude = true,
+                AlignPackageVersions = true,
+                VersionSources = new[] { source.FullName },
+                UpdateVersions = true,
+                Pack = false,
+                WhatIf = true
+            };
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(spec);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Null(result.ResolvedVersion);
+            Assert.Equal("2.0.6", result.ResolvedVersionsByProject["Suite.Core"]);
+            Assert.Equal("2.0.3", result.ResolvedVersionsByProject["Suite.Fixed"]);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Execute_AcceptsExactPrereleasePackageVersion()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -200,5 +286,21 @@ public sealed class DotNetRepositoryReleaseServiceVersioningTests
         {
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
+    }
+
+    private static void WritePackableProject(string rootPath, string projectName, string packageId)
+    {
+        var projectDirectory = Directory.CreateDirectory(Path.Combine(rootPath, projectName));
+        File.WriteAllText(Path.Combine(projectDirectory.FullName, projectName + ".csproj"), string.Join(Environment.NewLine, new[]
+        {
+            "<Project Sdk=\"Microsoft.NET.Sdk\">",
+            "  <PropertyGroup>",
+            "    <TargetFramework>net8.0</TargetFramework>",
+            $"    <PackageId>{packageId}</PackageId>",
+            "    <Version>1.0.0</Version>",
+            "    <IsPackable>true</IsPackable>",
+            "  </PropertyGroup>",
+            "</Project>"
+        }));
     }
 }

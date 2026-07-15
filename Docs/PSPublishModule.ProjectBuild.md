@@ -319,10 +319,27 @@ Versioning
 - `VersionTracks.<Name>.AnchorPackageId`: optional explicit package identity when it differs from the project name.
 - `VersionTracks.<Name>.Projects`: sibling projects that should be stamped to the same resolved version. `AnchorProject` is included automatically.
 - When `AnchorPackageId` is used, also set `AnchorProject` so the anchor project itself is stamped automatically.
+- `AlignPackageVersions`: when true, projects using the same X-pattern are stepped from the highest current package version found for any project in that group. For example, if one `2.0.X` package is at `2.0.5` and another is new, both plan `2.0.6`. Exact-version overrides remain exact.
 - When no expected version is provided for a project, the existing csproj version is used.
 - When both `VersionTracks` and `ExpectedVersionMap` are present, the explicit map wins for matching projects.
 - `UpdateVersions`: when false, csproj files are not updated.
 - Version source resolution can use `NugetSource` (v3 index URL or local folder) with optional credentials.
+
+To keep an existing package family and newly added packages on one release version, enable alignment alongside the shared X-pattern:
+
+```json
+{
+  "ExpectedVersion": "2.0.X",
+  "ExpectedVersionMap": {
+    "ExampleSuite.Core": "2.0.X",
+    "ExampleSuite.Excel": "2.0.X",
+    "ExampleSuite.NewPackage": "2.0.X"
+  },
+  "ExpectedVersionMapAsInclude": true,
+  "AlignPackageVersions": true
+}
+```
+
 - `PackStrategy`: optional packing strategy. `PerProject` runs a non-incremental build followed by `dotnet pack --no-build` for each project. `MSBuild` (alias `Batch`) requires `OutputPath` or `StagingPath`, generates a temporary traversal project, and runs `Restore;Rebuild;Pack` for selected projects in parallel. If no package output path is available, it logs a warning and falls back to `PerProject`. Both strategies verify primary managed assemblies under `lib/<tfm>`, `runtimes/<rid>/lib/<tfm>`, and `tools/<tfm>/any` against exact fresh build target directories before package signing or publishing. Native runtime assets and metadata-only packages are not assembly-hash targets. Private feed credentials must already be available to `dotnet`/MSBuild restore. Batch mode stops on the first project failure and treats the whole failed batch as failed, so already-produced packages from that batch are not signed or published. Projects without a resolved version are reported as failed skipped projects.
 
 Staging and outputs

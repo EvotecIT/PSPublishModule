@@ -93,6 +93,7 @@ internal sealed class ProjectBuildPreparationService
             ExpectedVersionsByProject = expectedVersionMap,
             ExpectedVersionMapAsInclude = config.ExpectedVersionMapAsInclude,
             ExpectedVersionMapUseWildcards = config.ExpectedVersionMapUseWildcards,
+            AlignPackageVersions = config.AlignPackageVersions,
             IncludeProjects = config.IncludeProjects,
             ExcludeProjects = config.ExcludeProjects,
             ExcludeDirectories = config.ExcludeDirectories,

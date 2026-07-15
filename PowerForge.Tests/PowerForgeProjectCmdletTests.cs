@@ -151,6 +151,7 @@ public sealed class PowerForgeProjectCmdletTests
                     ["IncludePrerelease"] = true
                 }
             })
+            .AddParameter("AlignPackageVersions")
             .AddParameter("BuildBeforeModule")
             .AddParameter("IncludeSymbols")
             .AddParameter("PublishNuget", false)
@@ -164,6 +165,7 @@ public sealed class PowerForgeProjectCmdletTests
         var segment = Assert.IsType<ConfigurationPackageBuildSegment>(Assert.Single(results).BaseObject);
         Assert.Equal(".\\Sources", segment.Configuration.RootPath);
         Assert.Equal("2.0.X", segment.Configuration.ExpectedVersionMap?["HtmlTinkerX"]);
+        Assert.True(segment.Configuration.AlignPackageVersions);
         Assert.True(segment.Configuration.BuildBeforeModule);
         Assert.True(segment.Configuration.IncludeSymbols);
         Assert.False(segment.Configuration.PublishNuget);
