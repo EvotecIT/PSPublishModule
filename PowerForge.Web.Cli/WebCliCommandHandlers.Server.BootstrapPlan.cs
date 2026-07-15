@@ -157,8 +157,11 @@ internal static partial class WebCliCommandHandlers
             {
                 var branchArg = string.IsNullOrWhiteSpace(repository.Branch) ? string.Empty : $" --branch {ShellQuote(repository.Branch)}";
                 var gitDirectory = repository.Path.TrimEnd('/') + "/.git";
+                var pinRef = string.IsNullOrWhiteSpace(repository.Ref)
+                    ? string.Empty
+                    : $"; git -C {ShellQuote(repository.Path)} checkout --detach {ShellQuote(repository.Ref)}";
                 AddStep(steps, ref order, "repositories", $"Clone or update {repository.Role} repository",
-                    $"if [ -d {ShellQuote(gitDirectory)} ]; then git -C {ShellQuote(repository.Path)} fetch --all --prune; else git clone{branchArg} {ShellQuote(repository.Url)} {ShellQuote(repository.Path)}; fi",
+                    $"if [ -d {ShellQuote(gitDirectory)} ]; then git -C {ShellQuote(repository.Path)} fetch --all --tags --prune; else git clone{branchArg} {ShellQuote(repository.Url)} {ShellQuote(repository.Path)}; fi{pinRef}",
                     plannedCommands: plannedCommands);
             }
         }
