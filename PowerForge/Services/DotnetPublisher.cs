@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Xml.Linq;
 
 namespace PowerForge;
 
@@ -13,6 +12,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class DotnetPublisher
 {
+    // Microsoft.Common targets append this list to RemoveProperties for every project-reference traversal.
+    private const string ProjectReferenceVersionProperties = "Version%3BAssemblyVersion%3BFileVersion";
     private readonly ILogger _logger;
 
     /// <summary>
@@ -106,75 +107,35 @@ public sealed class DotnetPublisher
             throw new InvalidOperationException("No supported frameworks were provided for dotnet publish.");
 
         var maxCpuCountArgument = isWindows ? "/m:1" : "-m:1";
-        var versionIsolationProfile = CreateVersionIsolationProfile(version);
-        try
+        foreach (var tfm in requestedFrameworks)
         {
-            foreach (var tfm in requestedFrameworks)
-            {
-                var publishDir = useIsolatedArtifacts
-                    ? Path.Combine(artifacts!, "publish", tfm)
-                    : Path.Combine(projDir, "bin", configuration, tfm, "publish");
-                var dependencyArgs = BuildDependencyArguments(
-                    configuration,
-                    tfm,
-                    useIsolatedArtifacts,
-                    artifacts,
-                    maxCpuCountArgument,
-                    restoreSources);
-                RunDotnet(projDir, dependencyArgs, tfm, "dependency build");
+            var publishDir = useIsolatedArtifacts
+                ? Path.Combine(artifacts!, "publish", tfm)
+                : Path.Combine(projDir, "bin", configuration, tfm, "publish");
+            var args = BuildPublishArguments(
+                projectPath,
+                version,
+                configuration,
+                tfm,
+                useIsolatedArtifacts,
+                artifacts,
+                maxCpuCountArgument,
+                publishDir,
+                restoreSources);
+            RunDotnet(projDir, args, tfm, "publish");
 
-                var args = BuildPublishArguments(
-                    projectPath,
-                    versionIsolationProfile,
-                    configuration,
-                    tfm,
-                    useIsolatedArtifacts,
-                    artifacts,
-                    maxCpuCountArgument,
-                    publishDir,
-                    restoreSources);
-                RunDotnet(projDir, args, tfm, "publish");
+            if (!Directory.Exists(publishDir))
+                throw new DirectoryNotFoundException($"Publish directory not found: {publishDir}");
 
-                if (!Directory.Exists(publishDir))
-                    throw new DirectoryNotFoundException($"Publish directory not found: {publishDir}");
-
-                result[tfm] = publishDir;
-            }
-        }
-        finally
-        {
-            try { File.Delete(versionIsolationProfile); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            result[tfm] = publishDir;
         }
 
         return result;
     }
 
-    internal static IReadOnlyList<string> BuildDependencyArguments(
-        string configuration,
-        string tfm,
-        bool useIsolatedArtifacts,
-        string? artifacts,
-        string maxCpuCountArgument,
-        IEnumerable<string>? restoreSources)
-    {
-        var args = new List<string>
-        {
-            "build",
-            "--configuration", configuration,
-            "-nologo",
-            "--verbosity", "minimal",
-            "--framework", tfm
-        };
-
-        AppendSharedBuildArguments(args, useIsolatedArtifacts, artifacts, maxCpuCountArgument, restoreSources);
-        return args;
-    }
-
     internal static IReadOnlyList<string> BuildPublishArguments(
         string projectPath,
-        string versionIsolationProfile,
+        string version,
         string configuration,
         string tfm,
         bool useIsolatedArtifacts,
@@ -186,12 +147,14 @@ public sealed class DotnetPublisher
         var args = new List<string>
         {
             "publish",
+            projectPath,
             "--configuration", configuration,
             "-nologo",
             "--verbosity", "minimal",
-            "--no-restore",
-            $"-p:PublishProfileFullPath={Path.GetFullPath(versionIsolationProfile)}",
-            $"-p:ProjectToOverrideProjectExtensionsPath={Path.GetFullPath(projectPath)}",
+            $"-p:Version={version}",
+            $"-p:AssemblyVersion={version}",
+            $"-p:FileVersion={version}",
+            $"-p:_GlobalPropertiesToRemoveFromProjectReferences={ProjectReferenceVersionProperties}",
             "--framework", tfm
         };
 
@@ -203,19 +166,6 @@ public sealed class DotnetPublisher
         }
 
         return args;
-    }
-
-    private static string CreateVersionIsolationProfile(string version)
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"PowerForge.VersionIsolation.{Guid.NewGuid():N}.pubxml");
-        new XDocument(
-            new XElement("Project",
-                new XElement("PropertyGroup",
-                    new XElement("Version", version),
-                    new XElement("AssemblyVersion", version),
-                    new XElement("FileVersion", version))))
-            .Save(path);
-        return path;
     }
 
     private static void AppendSharedBuildArguments(
