@@ -11,6 +11,7 @@ public sealed class CloudflareOriginSyncDeploymentTests
         Assert.Contains("https://www.cloudflare.com/ips-v6", script, StringComparison.Ordinal);
         Assert.Contains("--proto '=https'", script, StringComparison.Ordinal);
         Assert.Contains("--proto-redir '=https'", script, StringComparison.Ordinal);
+        Assert.Contains("--max-filesize 65536", script, StringComparison.Ordinal);
         Assert.Contains("ipaddress.ip_network", script, StringComparison.Ordinal);
         Assert.Contains("not network.is_global", script, StringComparison.Ordinal);
         Assert.Contains("contained too few CIDRs", script, StringComparison.Ordinal);

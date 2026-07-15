@@ -54,6 +54,7 @@ download_ranges() {
     --location \
     --connect-timeout 10 \
     --max-time 30 \
+    --max-filesize 65536 \
     --retry 3 \
     --retry-all-errors \
     --output "$output" \
@@ -72,7 +73,7 @@ sources = ((pathlib.Path(sys.argv[1]), 4, 5), (pathlib.Path(sys.argv[2]), 6, 2))
 networks = set()
 
 for source, expected_version, minimum_count in sources:
-    parsed = []
+    parsed = set()
     for raw_line in source.read_text(encoding="ascii").splitlines():
         value = raw_line.strip()
         if not value:
@@ -80,7 +81,7 @@ for source, expected_version, minimum_count in sources:
         network = ipaddress.ip_network(value, strict=True)
         if network.version != expected_version or not network.is_global:
             raise SystemExit(f"Rejected non-public or wrong-family Cloudflare CIDR: {value}")
-        parsed.append(network)
+        parsed.add(network)
         networks.add(network)
     if len(parsed) < minimum_count:
         raise SystemExit(f"Cloudflare IPv{expected_version} response contained too few CIDRs")
