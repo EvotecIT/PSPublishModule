@@ -128,6 +128,8 @@ Encrypted capture:
 
 Encrypted capture requires an explicit recipient such as an age or GPG public key. If no recipient is configured, PowerForge should skip encrypted capture and report the missing secret recovery coverage.
 
+Mark capture entries with `required: true` when a successful recovery depends on them. If either archive contains a required entry, PowerForge runs that archive in strict mode and any missing listed path fails capture. An archive whose entries are all optional retains best-effort missing-file behavior.
+
 ## Bootstrap Stages
 
 The engine should plan and run these stages:
@@ -182,7 +184,26 @@ PowerForge may publish capture artifacts to a private GitHub repository, but onl
 
 For most sites, a separate private backup repository is cleaner than storing generated backup artifacts in the engine source repository.
 
-`backupTarget.retention.keepLatest` can define how many timestamped captures should remain in the backup repository working tree. This is a publication policy for wrappers or future publish commands; Git history still preserves older committed captures unless repository history is rewritten.
+Use `.github/workflows/powerforge-server-backup.yml` to run encrypted capture and publication on a schedule or manual dispatch. The caller pins the reusable workflow and `powerforge_ref` to the same exact commit, supplies the manifest path and a dedicated capture username, and names a protected deployment environment. The called job reads these environment secrets directly:
+
+- `SERVER_SSH_PRIVATE_KEY` and `SERVER_SSH_KNOWN_HOSTS` for the least-privilege server capture account
+- `BACKUP_REPOSITORY_SSH_PRIVATE_KEY` and `BACKUP_REPOSITORY_SSH_KNOWN_HOSTS` for a write-scoped deploy key on the private backup repository
+
+The two identities must remain separate. The server account should only be able to execute the exact read-only inspection and archive commands required by the manifest. The backup repository key should be a deploy key for that repository only.
+
+```yaml
+jobs:
+  backup:
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-server-backup.yml@POWERFORGE_COMMIT
+    with:
+      manifest_path: deploy/linux/example.serverrecovery.json
+      capture_user: powerforge-example-backup
+      deployment_environment: production
+      powerforge_repository: EvotecIT/PSPublishModule
+      powerforge_ref: POWERFORGE_COMMIT
+```
+
+The workflow requires remote age encryption, a non-empty plain archive, a non-empty encrypted archive, a warning-free capture summary, exact source/engine/run provenance, and SHA-256 checksums before it clones the backup repository. It commits a timestamped directory under `backupTarget.path`, applies `backupTarget.retention.keepLatest`, and retries fetch/rebase/push races without uploading recovery material as a GitHub Actions artifact. Git history still preserves older committed captures unless repository history is rewritten.
 
 ## Evotec Reference
 
