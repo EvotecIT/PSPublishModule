@@ -66,6 +66,11 @@ by another account. It atomically promotes a timestamped release, purges Cloudfl
 without disabling proxying, verifies the exact source SHA through both the origin and
 public URL, and rolls back the symlink if any check fails.
 
+On the first PowerForge deployment, an existing non-symlink `current` directory is
+moved into the release history and becomes the rollback target. This lets the shared
+promoter take over a legacy in-place site without a consumer-specific migration
+script or an unprotected delete-and-replace step.
+
 When `deployment_cloudflare_zone` is set, the workflow uses `cloudflare_zone_id`
 directly and transfers the deploy-only `deployment_cloudflare_api_token` and zone
 id only inside temporary deployment staging. A least-privilege cache-purge token
