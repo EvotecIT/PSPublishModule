@@ -13,7 +13,7 @@ namespace PowerForge;
 public sealed class DotnetPublisher
 {
     // Microsoft.Common targets append this list to RemoveProperties for every project-reference traversal.
-    private const string ProjectReferenceVersionProperties = "Version%3BAssemblyVersion%3BFileVersion";
+    private const string ProjectReferenceVersionProperties = "%3BVersion%3BAssemblyVersion%3BFileVersion";
     private readonly ILogger _logger;
 
     /// <summary>
@@ -69,7 +69,11 @@ public sealed class DotnetPublisher
         string? artifactsRoot,
         IEnumerable<string>? restoreSources)
     {
-        if (string.IsNullOrWhiteSpace(projectPath) || !File.Exists(projectPath))
+        if (string.IsNullOrWhiteSpace(projectPath))
+            throw new FileNotFoundException($"Project file not found: {projectPath}");
+
+        projectPath = Path.GetFullPath(projectPath);
+        if (!File.Exists(projectPath))
             throw new FileNotFoundException($"Project file not found: {projectPath}");
 
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

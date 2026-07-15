@@ -34,7 +34,7 @@ public sealed class DotnetPublisherTests
         Assert.Contains("-p:Version=9.8.7", args);
         Assert.Contains("-p:AssemblyVersion=9.8.7", args);
         Assert.Contains("-p:FileVersion=9.8.7", args);
-        Assert.Contains("-p:_GlobalPropertiesToRemoveFromProjectReferences=Version%3BAssemblyVersion%3BFileVersion", args);
+        Assert.Contains("-p:_GlobalPropertiesToRemoveFromProjectReferences=%3BVersion%3BAssemblyVersion%3BFileVersion", args);
         Assert.DoesNotContain(args, arg => arg.StartsWith("-p:PublishProfile", StringComparison.Ordinal));
         Assert.DoesNotContain(args, arg => arg.StartsWith("-p:CustomAfterMicrosoftCommonTargets=", StringComparison.Ordinal));
     }
@@ -64,7 +64,7 @@ public sealed class DotnetPublisherTests
                 "namespace Dependency; public sealed class Value { public string Text => new Transitive.Value().Text; }");
             var moduleProject = Path.Combine(moduleDirectory, "Module.csproj");
             File.WriteAllText(moduleProject,
-                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Version>1.0.0</Version><AssemblyVersion>1.0.0.0</AssemblyVersion><FileVersion>1.0.0.0</FileVersion><CustomAfterMicrosoftCommonTargets>$(MSBuildProjectDirectory)/Custom.After.targets</CustomAfterMicrosoftCommonTargets><PublishProfileFullPath>$(MSBuildProjectDirectory)/Module.pubxml</PublishProfileFullPath></PropertyGroup><ItemGroup><ProjectReference Include=\"..\\Dependency\\Dependency.csproj\" /></ItemGroup><Target Name=\"RecordModuleBuild\" AfterTargets=\"Build\"><WriteLinesToFile File=\"$(MSBuildProjectDirectory)/module-builds.txt\" Lines=\"build\" Overwrite=\"false\" /></Target></Project>");
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Version>1.0.0</Version><AssemblyVersion>1.0.0.0</AssemblyVersion><FileVersion>1.0.0.0</FileVersion><CustomAfterMicrosoftCommonTargets>$(MSBuildProjectDirectory)/Custom.After.targets</CustomAfterMicrosoftCommonTargets><PublishProfileFullPath>$(MSBuildProjectDirectory)/Module.pubxml</PublishProfileFullPath></PropertyGroup><ItemGroup><ProjectReference Include=\"..\\Dependency\\Dependency.csproj\" GlobalPropertiesToRemove=\"RuntimeIdentifier;SelfContained\" /></ItemGroup><Target Name=\"RecordModuleBuild\" AfterTargets=\"Build\"><WriteLinesToFile File=\"$(MSBuildProjectDirectory)/module-builds.txt\" Lines=\"build\" Overwrite=\"false\" /></Target></Project>");
             File.WriteAllText(Path.Combine(moduleDirectory, "Custom.After.targets"),
                 "<Project><Target Name=\"PreserveCustomAfterHook\" AfterTargets=\"Publish\"><WriteLinesToFile File=\"$(PublishDir)custom-after-hook.txt\" Lines=\"custom hook preserved\" Overwrite=\"true\" /></Target></Project>");
             File.WriteAllText(Path.Combine(moduleDirectory, "Module.pubxml"),
@@ -73,7 +73,7 @@ public sealed class DotnetPublisherTests
                 "namespace Module; public sealed class Value { public string Text => new Dependency.Value().Text; }");
 
             var published = new DotnetPublisher(new NullLogger()).Publish(
-                moduleProject,
+                Path.GetRelativePath(Environment.CurrentDirectory, moduleProject),
                 "Release",
                 new[] { "net8.0" },
                 "9.8.7",
