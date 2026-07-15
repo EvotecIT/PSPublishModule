@@ -56,6 +56,7 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Contains("test -s '/etc/example/id_ed25519'", repositorySteps[0].Command, StringComparison.Ordinal);
         Assert.Contains("test -s '/etc/example/known_hosts'", repositorySteps[0].Command, StringComparison.Ordinal);
         Assert.Contains("exit 3", repositorySteps[0].Command, StringComparison.Ordinal);
+        Assert.Contains("fetch --all --tags --prune", repositorySteps[1].Command, StringComparison.Ordinal);
         Assert.Contains("git clone --branch 'main'", repositorySteps[1].Command, StringComparison.Ordinal);
         Assert.Contains("git -C '/srv/example' checkout --detach '0123456789abcdef0123456789abcdef01234567'", repositorySteps[1].Command, StringComparison.Ordinal);
         Assert.Empty(warnings);
