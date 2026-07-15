@@ -36,6 +36,7 @@ public sealed class GitHubProtectedEnvironmentDeployActionTests
         Assert.Contains("actions/checkout@", action, StringComparison.Ordinal);
         Assert.DoesNotContain("github.event.pull_request.head.sha", action, StringComparison.Ordinal);
         Assert.Contains("actions/upload-artifact@", action, StringComparison.Ordinal);
+        Assert.Contains("overwrite: true", action, StringComparison.Ordinal);
         Assert.Contains("default: \"7\"", action, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgeLinuxServicePackage.ps1", action, StringComparison.Ordinal);
         Assert.DoesNotContain("secrets: inherit", action, StringComparison.Ordinal);
@@ -110,6 +111,10 @@ public sealed class GitHubProtectedEnvironmentDeployActionTests
         Assert.Contains("recipientEnv", script, StringComparison.Ordinal);
         Assert.Contains("GetEnvironmentVariable($recipientEnvName", script, StringComparison.Ordinal);
         Assert.Contains("HostKeyAlias github.com", script, StringComparison.Ordinal);
+        Assert.Contains("IdentityFile \"$serverKey\"", script, StringComparison.Ordinal);
+        Assert.Contains("UserKnownHostsFile \"$serverKnownHosts\"", script, StringComparison.Ordinal);
+        Assert.Contains("IdentityFile \"$backupKey\"", script, StringComparison.Ordinal);
+        Assert.Contains("UserKnownHostsFile \"$backupKnownHosts\"", script, StringComparison.Ordinal);
         Assert.Contains("capture-manifest.json", script, StringComparison.Ordinal);
         Assert.Contains("Add-Member -NotePropertyName sshAlias", script, StringComparison.Ordinal);
         Assert.Contains("$env:GIT_SSH = $serverSshCommand", script, StringComparison.Ordinal);

@@ -142,8 +142,8 @@ Host $captureAlias
   HostName $captureHost
   User $($env:POWERFORGE_CAPTURE_USER)
   Port $capturePort
-  IdentityFile $serverKey
-  UserKnownHostsFile $serverKnownHosts
+  IdentityFile "$serverKey"
+  UserKnownHostsFile "$serverKnownHosts"
   StrictHostKeyChecking yes
   IdentitiesOnly yes
   BatchMode yes
@@ -153,8 +153,8 @@ Host github.com-powerforge-backup
   HostKeyAlias github.com
   User git
   Port 22
-  IdentityFile $backupKey
-  UserKnownHostsFile $backupKnownHosts
+  IdentityFile "$backupKey"
+  UserKnownHostsFile "$backupKnownHosts"
   StrictHostKeyChecking yes
   IdentitiesOnly yes
   BatchMode yes

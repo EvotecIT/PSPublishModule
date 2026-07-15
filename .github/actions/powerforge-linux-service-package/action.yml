@@ -49,6 +49,7 @@ runs:
       uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
       with:
         name: ${{ inputs.artifact-name }}
+        overwrite: true
         path: |
           ${{ runner.temp }}/powerforge-service-package/artifact.tar
           ${{ runner.temp }}/powerforge-service-package/package.json
