@@ -470,10 +470,11 @@ internal static partial class WebCliCommandHandlers
         return script.ToString();
     }
 
-    private static string BuildRemoteEncryptedTarScript(PowerForgeServerManagedFile[] files, string recipient)
+    internal static string BuildRemoteEncryptedTarScript(PowerForgeServerManagedFile[] files, string recipient)
     {
         var tarScript = BuildRemoteTarScript(files);
-        return $"{tarScript} | age -r {ShellQuote(recipient)} -o -";
+        var pipeline = $"{tarScript} | age -r {ShellQuote(recipient)} -o -";
+        return $"bash -o pipefail -c {ShellQuote(pipeline)}";
     }
 
     private static string ShellQuote(string value)

@@ -199,6 +199,7 @@ jobs:
           $backupKey = Join-Path $sshRoot 'backup_repository_ed25519'
           $backupKnownHosts = Join-Path $sshRoot 'backup_repository_known_hosts'
           $configPath = Join-Path $sshRoot 'config'
+          $serverSshCommand = Join-Path $sshRoot 'server-ssh'
           Set-Content -LiteralPath $serverKey -Value $env:SERVER_PRIVATE_KEY -Encoding utf8NoBOM
           Set-Content -LiteralPath $serverKnownHosts -Value $env:SERVER_KNOWN_HOSTS -Encoding utf8NoBOM
           Set-Content -LiteralPath $backupKey -Value $env:BACKUP_PRIVATE_KEY -Encoding utf8NoBOM
@@ -224,14 +225,23 @@ jobs:
             IdentitiesOnly yes
             BatchMode yes
           "@ | Set-Content -LiteralPath $configPath -Encoding utf8NoBOM
+          @'
+          #!/usr/bin/env bash
+          set -Eeuo pipefail
+          exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
+          '@ | Set-Content -LiteralPath $serverSshCommand -Encoding utf8NoBOM
           chmod 700 $sshRoot
           chmod 600 $serverKey $serverKnownHosts $backupKey $backupKnownHosts $configPath
+          chmod 700 $serverSshCommand
           "GIT_SSH_COMMAND=ssh -F $configPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "POWERFORGE_SERVER_SSH_CONFIG=$configPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "SERVER_SSH_COMMAND=$serverSshCommand" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "SSH_CONFIG_PATH=$configPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Verify capture host identity
         shell: bash
-        run: ssh -F "$SSH_CONFIG_PATH" "$CAPTURE_SSH_ALIAS" 'printf capture-host-ok'
+        run: |
+          "$SERVER_SSH_COMMAND" "$CAPTURE_SSH_ALIAS" 'printf capture-host-ok'
 
       - name: Build pinned PowerForge capture CLI
         shell: pwsh
@@ -253,12 +263,15 @@ jobs:
           dotnet $env:POWERFORGE_CLI server capture `
             --manifest $env:MANIFEST_FULL_PATH `
             --out $env:CAPTURE_ROOT `
+            --ssh $env:SERVER_SSH_COMMAND `
             --encrypt-remote `
             --fail-on-failure
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Validate capture and write provenance
         shell: pwsh
+        env:
+          SOURCE_SHA_INPUT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           $ErrorActionPreference = 'Stop'
           $requiredFiles = @(
@@ -278,6 +291,10 @@ jobs:
           if (@($summary.Warnings).Count -ne 0) {
             throw "Capture summary contains warnings: $($summary.Warnings -join '; ')"
           }
+          if ($env:SOURCE_SHA_INPUT -notmatch '^[a-f0-9]{40,64}$') {
+            throw 'Unable to resolve exact caller source provenance.'
+          }
+          "SOURCE_SHA=$env:SOURCE_SHA_INPUT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           $engineSha = (git -C $env:ENGINE_ROOT rev-parse HEAD).Trim()
           if ($engineSha -notmatch '^[a-f0-9]{40}$') {
             throw 'Unable to resolve exact PowerForge engine provenance.'
@@ -285,7 +302,7 @@ jobs:
           [ordered]@{
             schemaVersion = 1
             sourceRepository = $env:GITHUB_REPOSITORY
-            sourceSha = $env:GITHUB_SHA
+            sourceSha = $env:SOURCE_SHA_INPUT
             engineRepository = '${{ inputs.powerforge_repository }}'
             engineSha = $engineSha
             workflowRunId = $env:GITHUB_RUN_ID
@@ -338,7 +355,7 @@ jobs:
           git -C $checkout config user.name 'PowerForge Server Backup'
           git -C $checkout config user.email 'powerforge-backup@users.noreply.github.com'
           git -C $checkout add -- $env:BACKUP_PATH
-          git -C $checkout commit -m "Backup $env:GITHUB_REPOSITORY at $env:GITHUB_SHA"
+          git -C $checkout commit -m "Backup $env:GITHUB_REPOSITORY at $env:SOURCE_SHA"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Publish backup with race-safe retry
@@ -351,6 +368,20 @@ jobs:
             if ! git rebase "origin/$BACKUP_BRANCH"; then
               git rebase --abort || true
               exit 1
+            fi
+            mapfile -t captures < <(find "$BACKUP_PATH" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -r)
+            retained=0
+            for capture in "${captures[@]}"; do
+              [[ "$capture" =~ ^[0-9]{8}T[0-9]{6}Z-[0-9]+-[0-9]+$ ]] || continue
+              if (( retained < BACKUP_KEEP_LATEST )); then
+                ((retained += 1))
+                continue
+              fi
+              rm -rf -- "$BACKUP_PATH/$capture"
+            done
+            git add -- "$BACKUP_PATH"
+            if ! git diff --cached --quiet; then
+              git commit --amend --no-edit
             fi
             if git push origin "HEAD:$BACKUP_BRANCH"; then
               exit 0

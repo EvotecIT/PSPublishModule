@@ -15,6 +15,8 @@ public sealed class GitHubServerBackupWorkflowTests
         Assert.Contains("backup_repository_ed25519", workflow, StringComparison.Ordinal);
         Assert.Contains("StrictHostKeyChecking yes", workflow, StringComparison.Ordinal);
         Assert.Contains("IdentitiesOnly yes", workflow, StringComparison.Ordinal);
+        Assert.Contains("SERVER_SSH_COMMAND", workflow, StringComparison.Ordinal);
+        Assert.Contains("--ssh $env:SERVER_SSH_COMMAND", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("ssh-keyscan", workflow, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -30,6 +32,8 @@ public sealed class GitHubServerBackupWorkflowTests
         Assert.Contains("capture-metadata.json", workflow, StringComparison.Ordinal);
         Assert.Contains("SHA256SUMS.txt", workflow, StringComparison.Ordinal);
         Assert.Contains("engineSha", workflow, StringComparison.Ordinal);
+        Assert.Contains("sourceSha = $env:SOURCE_SHA_INPUT", workflow, StringComparison.Ordinal);
+        Assert.Contains("SOURCE_SHA_INPUT: ${{ github.event.pull_request.head.sha || github.sha }}", workflow, StringComparison.Ordinal);
         Assert.Contains("workflowRunAttempt", workflow, StringComparison.Ordinal);
     }
 
@@ -41,6 +45,8 @@ public sealed class GitHubServerBackupWorkflowTests
         Assert.Contains("backupTarget.retention.keepLatest", workflow, StringComparison.Ordinal);
         Assert.Contains("Select-Object -Skip $keepLatest", workflow, StringComparison.Ordinal);
         Assert.Contains("git rebase \"origin/$BACKUP_BRANCH\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("mapfile -t captures", workflow, StringComparison.Ordinal);
+        Assert.Contains("git commit --amend --no-edit", workflow, StringComparison.Ordinal);
         Assert.Contains("for attempt in 1 2 3", workflow, StringComparison.Ordinal);
         Assert.Contains("git push origin \"HEAD:$BACKUP_BRANCH\"", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("upload-artifact", workflow, StringComparison.OrdinalIgnoreCase);

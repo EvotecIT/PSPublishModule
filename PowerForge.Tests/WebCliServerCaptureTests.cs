@@ -39,4 +39,17 @@ public sealed class WebCliServerCaptureTests
 
         Assert.Contains("unsupported characters", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void BuildRemoteEncryptedTarScript_PropagatesTarFailuresThroughEncryptionPipeline()
+    {
+        var script = WebCliCommandHandlers.BuildRemoteEncryptedTarScript(
+        [
+            new PowerForgeServerManagedFile { Target = "/etc/example/required.env", Required = true }
+        ], "age1example");
+
+        Assert.StartsWith("bash -o pipefail -c ", script, StringComparison.Ordinal);
+        Assert.Contains("sudo -n tar -czf - /etc/example/required.env", script, StringComparison.Ordinal);
+        Assert.Contains("| age -r", script, StringComparison.Ordinal);
+    }
 }
