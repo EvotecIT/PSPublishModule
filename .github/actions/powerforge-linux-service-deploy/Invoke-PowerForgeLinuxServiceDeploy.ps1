@@ -43,44 +43,57 @@ if ($env:POWERFORGE_SOURCE_REPOSITORY -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]
 if ($env:POWERFORGE_SOURCE_SHA -notmatch '^[a-fA-F0-9]{40,64}$') {
     throw 'source-sha must be an exact commit.'
 }
-
-$workspace = realpath --canonicalize-existing -- $env:GITHUB_WORKSPACE
-Assert-LastExitCode 'Resolving the caller repository'
-$workspace = [IO.Path]::GetFullPath(([string]$workspace).Trim()).TrimEnd([IO.Path]::DirectorySeparatorChar)
-$workspacePrefix = $workspace + [IO.Path]::DirectorySeparatorChar
-$serviceRoot = [IO.Path]::GetFullPath((Join-Path $workspace $env:POWERFORGE_SERVICE_ROOT))
-if (-not [string]::Equals($serviceRoot, $workspace, [StringComparison]::Ordinal) -and
-    -not $serviceRoot.StartsWith($workspacePrefix, [StringComparison]::Ordinal)) {
-    throw 'service-root must remain inside the caller repository.'
-}
-
-if (-not (Test-Path -LiteralPath $serviceRoot -PathType Container)) {
-    throw "Service root not found after validation: $serviceRoot"
-}
-$resolvedServiceRoot = realpath --canonicalize-existing -- $serviceRoot
-Assert-LastExitCode 'Resolving the service root'
-$resolvedServiceRoot = [IO.Path]::GetFullPath(([string]$resolvedServiceRoot).Trim()).TrimEnd([IO.Path]::DirectorySeparatorChar)
-if (-not [string]::Equals($resolvedServiceRoot, $workspace, [StringComparison]::Ordinal) -and
-    -not $resolvedServiceRoot.StartsWith($workspacePrefix, [StringComparison]::Ordinal)) {
-    throw 'service-root resolved outside the caller repository.'
+if ($env:GITHUB_RUN_ID -notmatch '^\d+$' -or $env:GITHUB_RUN_ATTEMPT -notmatch '^\d+$') {
+    throw 'GitHub workflow run identity is missing or invalid.'
 }
 
 $runnerTemp = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd([IO.Path]::DirectorySeparatorChar)
 $stageRoot = Join-Path $runnerTemp 'powerforge-service-deployment'
 $sshRoot = Join-Path $runnerTemp 'powerforge-service-deployment-ssh'
 $artifactPath = Join-Path $stageRoot 'artifact.tar'
+$packageMetadataPath = Join-Path $stageRoot 'package.json'
 $metadataPath = Join-Path $stageRoot 'deployment.json'
 $keyPath = Join-Path $sshRoot 'id_ed25519'
 $knownHostsPath = Join-Path $sshRoot 'known_hosts'
-$remoteBase = "/tmp/powerforge-service-$($env:POWERFORGE_DEPLOYMENT_SERVICE)"
+$remoteBase = "/tmp/powerforge-service-$($env:POWERFORGE_DEPLOYMENT_SERVICE)-$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)"
+$handoffBase = "/tmp/powerforge-service-$($env:POWERFORGE_DEPLOYMENT_SERVICE)"
+$remoteLock = ".powerforge/locks/powerforge-service-$($env:POWERFORGE_DEPLOYMENT_SERVICE).lock"
 $target = "$($env:POWERFORGE_DEPLOYMENT_USER)@$($env:POWERFORGE_DEPLOYMENT_HOST)"
 $sshOptions = @('-i', $keyPath, '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHostsPath")
 $remoteCreated = $false
 
+if (-not (Test-Path -LiteralPath $artifactPath -PathType Leaf)) {
+    throw "Downloaded service artifact not found: $artifactPath"
+}
+if (-not (Test-Path -LiteralPath $packageMetadataPath -PathType Leaf)) {
+    throw "Downloaded service package metadata not found: $packageMetadataPath"
+}
+$resolvedArtifactPath = realpath --canonicalize-existing -- $artifactPath
+Assert-LastExitCode 'Resolving the downloaded service artifact'
+$resolvedArtifactPath = [IO.Path]::GetFullPath(([string]$resolvedArtifactPath).Trim())
+if (-not [string]::Equals($resolvedArtifactPath, [IO.Path]::GetFullPath($artifactPath), [StringComparison]::Ordinal) -or
+    (Get-Item -LiteralPath $resolvedArtifactPath).Length -eq 0) {
+    throw 'The downloaded service artifact must be a non-empty regular file in the action staging directory.'
+}
+$resolvedPackageMetadataPath = realpath --canonicalize-existing -- $packageMetadataPath
+Assert-LastExitCode 'Resolving the downloaded service package metadata'
+$resolvedPackageMetadataPath = [IO.Path]::GetFullPath(([string]$resolvedPackageMetadataPath).Trim())
+if (-not [string]::Equals($resolvedPackageMetadataPath, [IO.Path]::GetFullPath($packageMetadataPath), [StringComparison]::Ordinal) -or
+    (Get-Item -LiteralPath $resolvedPackageMetadataPath).Length -eq 0) {
+    throw 'The downloaded service package metadata must be a non-empty regular file in the action staging directory.'
+}
+$packageMetadata = Get-Content -LiteralPath $resolvedPackageMetadataPath -Raw | ConvertFrom-Json
+$actualArtifactSha256 = (Get-FileHash -LiteralPath $resolvedArtifactPath -Algorithm SHA256).Hash.ToLowerInvariant()
+if (-not [string]::Equals([string]$packageMetadata.sourceRepository, $env:POWERFORGE_SOURCE_REPOSITORY, [StringComparison]::Ordinal) -or
+    -not [string]::Equals([string]$packageMetadata.sourceSha, $env:POWERFORGE_SOURCE_SHA.ToLowerInvariant(), [StringComparison]::Ordinal) -or
+    -not [string]::Equals([string]$packageMetadata.workflowRunId, $env:GITHUB_RUN_ID, [StringComparison]::Ordinal) -or
+    [string]$packageMetadata.workflowRunAttempt -notmatch '^\d+$' -or
+    -not [string]::Equals([string]$packageMetadata.artifactSha256, $actualArtifactSha256, [StringComparison]::Ordinal)) {
+    throw 'The service artifact does not match its expected source, workflow run, or SHA-256 provenance.'
+}
+
 try {
-    New-Item -ItemType Directory -Force -Path $stageRoot, $sshRoot | Out-Null
-    tar --directory $resolvedServiceRoot -cf $artifactPath --exclude=.git --exclude=.github --exclude=_powerforge .
-    Assert-LastExitCode 'Archiving the service artifact'
+    New-Item -ItemType Directory -Force -Path $sshRoot | Out-Null
 
     [ordered]@{
         schemaVersion      = 1
@@ -88,7 +101,8 @@ try {
         sourceSha          = $env:POWERFORGE_SOURCE_SHA.ToLowerInvariant()
         workflowRunId      = $env:GITHUB_RUN_ID
         workflowRunAttempt = $env:GITHUB_RUN_ATTEMPT
-        artifactSha256     = (Get-FileHash -LiteralPath $artifactPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        packageRunAttempt  = [string]$packageMetadata.workflowRunAttempt
+        artifactSha256     = $actualArtifactSha256
         deployedAtUtc      = [DateTimeOffset]::UtcNow.ToString('O')
     } | ConvertTo-Json | Set-Content -LiteralPath $metadataPath -Encoding utf8NoBOM
 
@@ -107,7 +121,13 @@ try {
     scp @scpArguments
     Assert-LastExitCode 'Uploading the service deployment payload'
 
-    ssh @sshOptions -p $deploymentPort $target "sudo /usr/local/sbin/powerforge-service-deploy --service '$($env:POWERFORGE_DEPLOYMENT_SERVICE)'"
+    $handoffCommand = 'install -d -m 0700 ''.powerforge/locks'' && flock -w 900 ''{0}'' sh -c "rm -rf -- ''{1}'' && mv -- ''{2}'' ''{1}'' && sudo /usr/local/sbin/powerforge-service-deploy --service ''{3}''; status=\$?; rm -rf -- ''{1}''; exit \$status"' -f @(
+        $remoteLock,
+        $handoffBase,
+        $remoteBase,
+        $env:POWERFORGE_DEPLOYMENT_SERVICE
+    )
+    ssh @sshOptions -p $deploymentPort $target $handoffCommand
     Assert-LastExitCode 'Promoting the service release'
 }
 finally {

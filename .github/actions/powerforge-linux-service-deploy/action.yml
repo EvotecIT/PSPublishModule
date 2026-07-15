@@ -1,14 +1,10 @@
 name: PowerForge Linux Service Deploy
-description: Validate, package, and promote a Linux service from a caller-owned protected environment.
+description: Promote a validated Linux service artifact from a caller-owned protected environment.
 
 inputs:
-  service-root:
-    description: Repository-relative service source or prepared output directory.
+  artifact-name:
+    description: Workflow artifact produced by the secret-free service package job.
     required: true
-  service-validation-script:
-    description: Optional repository-relative Bash script that tests and prepares the service.
-    required: false
-    default: ""
   deployment-service:
     description: Host-configured service identifier.
     required: true
@@ -44,18 +40,11 @@ runs:
       shell: pwsh
       run: throw 'PowerForge protected deployments cannot run from pull request events.'
 
-    - name: Checkout caller repository
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - name: Download validated service artifact
+      uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
       with:
-        token: ${{ github.token }}
-        ref: ${{ github.sha }}
-
-    - name: Validate and prepare Linux service
-      shell: pwsh
-      env:
-        POWERFORGE_SERVICE_ROOT: ${{ inputs.service-root }}
-        POWERFORGE_SERVICE_VALIDATION_SCRIPT: ${{ inputs.service-validation-script }}
-      run: '& "$env:GITHUB_ACTION_PATH/Invoke-PowerForgeLinuxServiceValidation.ps1"'
+        name: ${{ inputs.artifact-name }}
+        path: ${{ runner.temp }}/powerforge-service-deployment
 
     - name: Deploy Linux service release
       shell: pwsh
@@ -66,7 +55,6 @@ runs:
         POWERFORGE_DEPLOYMENT_SSH_KNOWN_HOSTS: ${{ inputs.deployment-ssh-known-hosts }}
         POWERFORGE_DEPLOYMENT_SSH_PRIVATE_KEY: ${{ inputs.deployment-ssh-private-key }}
         POWERFORGE_DEPLOYMENT_USER: ${{ inputs.deployment-user }}
-        POWERFORGE_SERVICE_ROOT: ${{ inputs.service-root }}
         POWERFORGE_SOURCE_REPOSITORY: ${{ inputs.source-repository }}
         POWERFORGE_SOURCE_SHA: ${{ inputs.source-sha }}
       run: '& "$env:GITHUB_ACTION_PATH/Invoke-PowerForgeLinuxServiceDeploy.ps1"'

@@ -1,0 +1,56 @@
+name: PowerForge Linux Service Package
+description: Validate, prepare, and publish a Linux service artifact without deployment credentials.
+
+inputs:
+  service-root:
+    description: Repository-relative service source or prepared output directory.
+    required: true
+  service-validation-script:
+    description: Optional repository-relative Bash script that tests and prepares the service.
+    required: false
+    default: ""
+  artifact-name:
+    description: Workflow artifact name consumed by the protected deployment job.
+    required: true
+  artifact-retention-days:
+    description: Number of days to retain the service artifact.
+    required: false
+    default: "1"
+
+outputs:
+  artifact-name:
+    description: Workflow artifact name published by this action.
+    value: ${{ inputs.artifact-name }}
+  artifact-sha256:
+    description: SHA-256 of the packaged service artifact.
+    value: ${{ steps.package.outputs.artifact-sha256 }}
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout caller repository
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        token: ${{ github.token }}
+        ref: ${{ github.sha }}
+        persist-credentials: false
+
+    - name: Validate and package Linux service
+      id: package
+      shell: pwsh
+      env:
+        POWERFORGE_SERVICE_ROOT: ${{ inputs.service-root }}
+        POWERFORGE_SERVICE_VALIDATION_SCRIPT: ${{ inputs.service-validation-script }}
+        POWERFORGE_SOURCE_REPOSITORY: ${{ github.repository }}
+        POWERFORGE_SOURCE_SHA: ${{ github.sha }}
+      run: '& "$env:GITHUB_ACTION_PATH/Invoke-PowerForgeLinuxServicePackage.ps1"'
+
+    - name: Upload validated service artifact
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: |
+          ${{ runner.temp }}/powerforge-service-package/artifact.tar
+          ${{ runner.temp }}/powerforge-service-package/package.json
+        if-no-files-found: error
+        retention-days: ${{ inputs.artifact-retention-days }}

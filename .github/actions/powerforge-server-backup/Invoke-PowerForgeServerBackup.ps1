@@ -66,7 +66,12 @@ if ($captureHost -notmatch '^[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$') {
     throw 'target.host is not a valid hostname or IP address.'
 }
 $capturePort = 0
-if (-not [int]::TryParse([string]$manifest.target.sshPort, [ref]$capturePort) -or
+$capturePortText = if ([string]::IsNullOrWhiteSpace([string]$manifest.target.sshPort)) {
+    '22'
+} else {
+    [string]$manifest.target.sshPort
+}
+if (-not [int]::TryParse($capturePortText, [ref]$capturePort) -or
     $capturePort -lt 1 -or $capturePort -gt 65535) {
     throw 'target.sshPort must be an integer from 1 through 65535.'
 }

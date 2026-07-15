@@ -1,8 +1,8 @@
 # PowerForge.Web Linux Service Deployment
 
-PowerForge provides a generic release action and a root-owned promoter for small Linux systemd services. It complements server recovery: the action deploys reproducible application code, while the recovery manifest captures host configuration, service units, certificates, encrypted secrets, and mutable state.
+PowerForge provides generic package and deployment actions plus a root-owned promoter for small Linux systemd services. It complements server recovery: the actions deploy reproducible application code, while the recovery manifest captures host configuration, service units, certificates, encrypted secrets, and mutable state.
 
-The service repository stays thin. It owns the service code, a validation script, and one protected-environment job that invokes the shared action. PowerForge owns checkout, packaging, provenance, SSH hygiene, archive validation, atomic promotion, health checks, retention, and rollback.
+The service repository stays thin. It owns the service code, a validation script, a secret-free package job, and a protected-environment deployment job. PowerForge owns checkout, packaging, artifact publication, provenance, SSH hygiene, archive validation, atomic promotion, health checks, retention, and rollback.
 
 ## Runtime Contract
 
@@ -60,9 +60,10 @@ their ownership and copies them into root-only staging before inspection.
 
 ## Caller Workflow
 
-Pin the shared action to an exact PowerForge commit. The job stays in the caller so
-GitHub resolves the `production` environment variables and secrets before the action
-runs:
+Pin both shared actions to the same exact PowerForge commit. Validation and packaging
+run in a job with no protected environment. The deployment job downloads that exact
+workflow artifact and owns the `production` environment so repository code never runs
+in a process or job that can access deployment credentials:
 
 ```yaml
 name: Deploy service
@@ -77,7 +78,19 @@ on:
   workflow_dispatch:
 
 jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: EvotecIT/PSPublishModule/.github/actions/powerforge-linux-service-package@POWERFORGE_COMMIT
+        with:
+          service-root: Services/Example
+          service-validation-script: deploy/linux/validate-service.sh
+          artifact-name: powerforge-service-example
+
   deploy:
+    needs: package
     runs-on: ubuntu-latest
     environment:
       name: production
@@ -87,8 +100,7 @@ jobs:
     steps:
       - uses: EvotecIT/PSPublishModule/.github/actions/powerforge-linux-service-deploy@POWERFORGE_COMMIT
         with:
-          service-root: Services/Example
-          service-validation-script: deploy/linux/validate-service.sh
+          artifact-name: powerforge-service-example
           deployment-service: example
           deployment-host: ${{ vars.POWERFORGE_SERVICE_DEPLOY_HOST }}
           deployment-port: ${{ vars.POWERFORGE_SERVICE_DEPLOY_PORT }}
@@ -106,19 +118,25 @@ concurrency:
 Store `DEPLOYMENT_SSH_PRIVATE_KEY` and `DEPLOYMENT_SSH_KNOWN_HOSTS` in the
 protected environment named by the caller job. Do not use `secrets: inherit` or
 move this job into a cross-repository reusable workflow; GitHub does not pass the
-caller repository's environment secrets across that boundary. The action validates
-both values before it packages or transfers the artifact.
+caller repository's environment secrets across that boundary. The deploy action
+validates both values before it transfers the already packaged artifact.
 
 The protected deployment action rejects `pull_request`, `pull_request_target`, and
-`merge_group` events. The optional validation script runs in the checked-out caller
-repository before deployment SSH inputs enter a process environment. It should run
-contract tests and prepare generated output when needed. `service_root` is resolved
-after that script completes, so it may point at either committed source or a
-generated release directory.
+`merge_group` events. The optional validation script runs only in the secret-free
+package job, without persisted checkout credentials or GitHub workflow-command file
+paths. It should run contract tests and prepare generated output when needed.
+`service-root` is resolved and canonicalized after that script completes, so it may
+point at either committed source or a generated release directory without escaping
+the caller repository.
 
 ## Promotion And Rollback
 
-The action writes metadata containing the source repository, exact source SHA, workflow run identity, and archive SHA-256, then publishes the artifact and metadata with temporary SSH credentials.
+The package action binds the archive SHA-256 to the source repository, exact source
+SHA, and workflow run in an immutable artifact sidecar. The deployment action verifies
+that binding before it writes SSH credentials, then emits the runtime deployment
+metadata and transfers both files. Each run uploads into a unique remote staging
+directory; a deployment-account lock serializes the atomic handoff into the fixed
+root-promoter path.
 
 The root promoter:
 
