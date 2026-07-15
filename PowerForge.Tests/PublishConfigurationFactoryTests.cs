@@ -5,31 +5,23 @@ namespace PowerForge.Tests;
 public sealed class PublishConfigurationFactoryTests
 {
     [Fact]
-    public void Create_reads_publish_api_key_from_file()
+    public void Create_defers_enabled_publish_api_key_file_until_publish_runtime()
     {
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".txt");
-        File.WriteAllText(path, " api-key " + Environment.NewLine);
-        try
-        {
-            var factory = new PublishConfigurationFactory();
+        var factory = new PublishConfigurationFactory();
 
-            var segment = factory.Create(new PublishConfigurationRequest
-            {
-                ParameterSetName = "ApiFromFile",
-                Type = PublishDestination.PowerShellGallery,
-                FilePath = path,
-                Enabled = true
-            });
-
-            Assert.Equal("api-key", segment.Configuration.ApiKey);
-            Assert.Equal(PublishDestination.PowerShellGallery, segment.Configuration.Destination);
-            Assert.True(segment.Configuration.Enabled);
-        }
-        finally
+        var segment = factory.Create(new PublishConfigurationRequest
         {
-            if (File.Exists(path))
-                File.Delete(path);
-        }
+            ParameterSetName = "ApiFromFile",
+            Type = PublishDestination.PowerShellGallery,
+            FilePath = path,
+            Enabled = true
+        });
+
+        Assert.Equal(string.Empty, segment.Configuration.ApiKey);
+        Assert.Equal(path, segment.Configuration.ApiKeyFilePath);
+        Assert.Equal(PublishDestination.PowerShellGallery, segment.Configuration.Destination);
+        Assert.True(segment.Configuration.Enabled);
     }
 
     [Fact]
@@ -176,7 +168,7 @@ public sealed class PublishConfigurationFactoryTests
     }
 
     [Fact]
-    public void Create_rejects_multiline_publish_api_key_file()
+    public void Create_defers_multiline_publish_api_key_validation_until_publish_runtime()
     {
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".ps1");
         File.WriteAllText(path, "Write-Host 'not a key'" + Environment.NewLine + "Write-Host 'still not a key'");
@@ -184,17 +176,16 @@ public sealed class PublishConfigurationFactoryTests
         {
             var factory = new PublishConfigurationFactory();
 
-            var ex = Assert.Throws<ArgumentException>(() => factory.Create(new PublishConfigurationRequest
+            var segment = factory.Create(new PublishConfigurationRequest
             {
                 ParameterSetName = "ApiFromFile",
                 Type = PublishDestination.PowerShellGallery,
                 FilePath = path,
                 Enabled = true
-            }));
+            });
 
-            Assert.Contains("multi-line secret", ex.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("single line", ex.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("not a script", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(string.Empty, segment.Configuration.ApiKey);
+            Assert.Equal(path, segment.Configuration.ApiKeyFilePath);
         }
         finally
         {
@@ -344,7 +335,8 @@ public sealed class PublishConfigurationFactoryTests
                 Enabled = true
             });
 
-            Assert.Equal("pat", segment.Configuration.ApiKey);
+            Assert.Equal(string.Empty, segment.Configuration.ApiKey);
+            Assert.Equal(secretPath, segment.Configuration.ApiKeyFilePath);
             Assert.Equal("JFrogPS", segment.Configuration.RepositoryName);
 
             var repository = Assert.IsType<PublishRepositoryConfiguration>(segment.Configuration.Repository);
