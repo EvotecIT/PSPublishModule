@@ -15,6 +15,12 @@ internal sealed class ProjectBuildVersionAlignmentGroup
     /// <summary>Project names participating in the track.</summary>
     public string[] Projects { get; set; } = System.Array.Empty<string>();
 
+    /// <summary>Project whose package identity anchors the track.</summary>
+    public string? AnchorProject { get; set; }
+
+    /// <summary>Optional feed package identifier used for the anchor project.</summary>
+    public string? AnchorPackageId { get; set; }
+
     /// <summary>NuGet sources used to resolve current versions for this track.</summary>
     public string[]? VersionSources { get; set; }
 

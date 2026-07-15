@@ -97,6 +97,8 @@ internal sealed class ProjectBuildVersionTrackService
                 Name = trackName,
                 ExpectedVersion = expectedVersion!,
                 Projects = ResolveProjects(trackName, track).ToArray(),
+                AnchorProject = NormalizeNullable(track.AnchorProject),
+                AnchorPackageId = NormalizeNullable(track.AnchorPackageId),
                 VersionSources = sources.Length == 0 ? null : sources,
                 IncludePrerelease = track.IncludePrerelease ?? config.IncludePrerelease
             });

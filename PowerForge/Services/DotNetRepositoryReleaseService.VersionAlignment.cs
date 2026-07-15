@@ -40,11 +40,8 @@ public sealed partial class DotNetRepositoryReleaseService
 
             foreach (var item in group)
             {
-                var packageId = string.IsNullOrWhiteSpace(item.Project.PackageId)
-                    ? item.Project.ProjectName
-                    : item.Project.PackageId;
                 var current = _resolver.ResolveLatest(
-                    packageId,
+                    item.PackageId,
                     settings.VersionSources,
                     spec.VersionSourceCredential,
                     spec.VersionSourceCredentials,
@@ -53,7 +50,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 if (current is not null && (highestCurrent is null || current.CompareTo(highestCurrent) > 0))
                 {
                     highestCurrent = current;
-                    highestPackageId = packageId;
+                    highestPackageId = item.PackageId;
                 }
             }
 
@@ -94,8 +91,14 @@ public sealed partial class DotNetRepositoryReleaseService
                     !configured.Projects.Contains(project.ProjectName, StringComparer.OrdinalIgnoreCase))
                     continue;
 
+                var packageId = string.Equals(configured.AnchorProject, project.ProjectName, StringComparison.OrdinalIgnoreCase) &&
+                                !string.IsNullOrWhiteSpace(configured.AnchorPackageId)
+                    ? configured.AnchorPackageId!
+                    : ResolveAlignmentPackageId(project);
+
                 return new PackageVersionAlignmentCandidate(
                     project,
+                    packageId,
                     expectedVersion,
                     "track:" + configured.Name,
                     configured.VersionSources,
@@ -105,11 +108,17 @@ public sealed partial class DotNetRepositoryReleaseService
 
         return new PackageVersionAlignmentCandidate(
             project,
+            ResolveAlignmentPackageId(project),
             expectedVersion,
             "pattern:" + expectedVersion,
             spec.VersionSources,
             spec.IncludePrerelease);
     }
+
+    private static string ResolveAlignmentPackageId(DotNetRepositoryProjectResult project)
+        => string.IsNullOrWhiteSpace(project.PackageId)
+            ? project.ProjectName
+            : project.PackageId;
 
     private static string? ResolveExpectedVersion(
         string projectName,
@@ -150,12 +159,14 @@ public sealed partial class DotNetRepositoryReleaseService
     {
         public PackageVersionAlignmentCandidate(
             DotNetRepositoryProjectResult project,
+            string packageId,
             string expectedVersion,
             string groupKey,
             IReadOnlyList<string>? versionSources,
             bool includePrerelease)
         {
             Project = project;
+            PackageId = packageId;
             ExpectedVersion = expectedVersion.Trim();
             GroupKey = groupKey;
             VersionSources = versionSources;
@@ -163,6 +174,7 @@ public sealed partial class DotNetRepositoryReleaseService
         }
 
         public DotNetRepositoryProjectResult Project { get; }
+        public string PackageId { get; }
         public string ExpectedVersion { get; }
         public string GroupKey { get; }
         public IReadOnlyList<string>? VersionSources { get; }

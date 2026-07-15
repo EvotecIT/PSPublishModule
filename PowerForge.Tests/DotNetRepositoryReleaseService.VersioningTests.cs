@@ -149,6 +149,57 @@ public sealed class DotNetRepositoryReleaseServiceVersioningTests
     }
 
     [Fact]
+    public void Execute_AlignsVersionTrackFromExplicitAnchorPackageId()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            WritePackableProject(root.FullName, "Suite.Core", "Suite.Core.Project");
+            WritePackableProject(root.FullName, "Suite.NewPackage", "Suite.NewPackage");
+
+            var source = Directory.CreateDirectory(Path.Combine(root.FullName, "source"));
+            File.WriteAllText(Path.Combine(source.FullName, "Suite.Anchor.2.0.5.nupkg"), string.Empty);
+
+            var context = new ProjectBuildPreparationService().Prepare(
+                new ProjectBuildConfiguration
+                {
+                    RootPath = root.FullName,
+                    ExpectedVersionMapAsInclude = true,
+                    AlignPackageVersions = true,
+                    UpdateVersions = true,
+                    Build = false,
+                    PublishNuget = false,
+                    PublishGitHub = false,
+                    VersionTracks = new Dictionary<string, ProjectBuildVersionTrack>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["Suite"] = new()
+                        {
+                            ExpectedVersion = "2.0.X",
+                            AnchorProject = "Suite.Core",
+                            AnchorPackageId = "Suite.Anchor",
+                            Projects = new[] { "Suite.NewPackage" },
+                            NugetSource = new[] { source.FullName }
+                        }
+                    }
+                },
+                root.FullName,
+                null,
+                new ProjectBuildRequestedActions());
+
+            context.Spec.WhatIf = true;
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(context.Spec);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal("2.0.6", result.ResolvedVersion);
+            Assert.All(result.ResolvedVersionsByProject.Values, version => Assert.Equal("2.0.6", version));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Execute_KeepsExactVersionsOutsideXPatternAlignment()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
