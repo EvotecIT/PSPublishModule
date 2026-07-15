@@ -53,9 +53,9 @@ on:
         default: 7
     secrets:
       deployment_ssh_private_key:
-        required: true
+        required: false
       deployment_ssh_known_hosts:
-        required: true
+        required: false
 
 permissions:
   contents: read

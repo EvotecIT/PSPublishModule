@@ -86,10 +86,15 @@ jobs:
       deployment_user: ${{ vars.POWERFORGE_SERVICE_DEPLOY_USER }}
       deployment_environment: production
       deployment_url: https://api.example.com/healthz
-    secrets:
-      deployment_ssh_private_key: ${{ secrets.SERVICE_DEPLOY_SSH_PRIVATE_KEY }}
-      deployment_ssh_known_hosts: ${{ secrets.SERVICE_DEPLOY_SSH_KNOWN_HOSTS }}
 ```
+
+Store `DEPLOYMENT_SSH_PRIVATE_KEY` and `DEPLOYMENT_SSH_KNOWN_HOSTS` in the
+protected environment named by `deployment_environment`. GitHub supplies those
+environment secrets directly to the reusable deploy job, so the caller does not
+need repository-level deployment credentials. Callers may still pass
+`deployment_ssh_private_key` and `deployment_ssh_known_hosts` explicitly when
+their security model requires it. The workflow validates both values before it
+downloads or transfers the artifact.
 
 The optional validation script runs in the checked-out caller repository before packaging. It should run contract tests and prepare generated output when needed. `service_root` is resolved after that script completes, so it may point at either committed source or a generated release directory.
 

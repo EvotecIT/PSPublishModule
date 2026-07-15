@@ -6,8 +6,13 @@ public sealed class GitHubServiceLinuxDeployWorkflowTests
     public void WorkflowPackagesUniqueArtifactAndUsesTemporarySshCredentials()
     {
         var workflow = ReadRepoFile(".github", "workflows", "powerforge-service-deploy.yml");
+        var normalizedWorkflow = workflow.Replace("\r\n", "\n", StringComparison.Ordinal);
 
         Assert.Contains("powerforge-service-{0}", workflow, StringComparison.Ordinal);
+        Assert.Contains("deployment_ssh_private_key:\n        required: false", normalizedWorkflow, StringComparison.Ordinal);
+        Assert.Contains("deployment_ssh_known_hosts:\n        required: false", normalizedWorkflow, StringComparison.Ordinal);
+        Assert.Contains("deployment_ssh_private_key is required", workflow, StringComparison.Ordinal);
+        Assert.Contains("deployment_ssh_known_hosts is required", workflow, StringComparison.Ordinal);
         Assert.Contains("service_validation_script", workflow, StringComparison.Ordinal);
         Assert.Contains("artifactSha256", workflow, StringComparison.Ordinal);
         Assert.Contains("realpath -e", workflow, StringComparison.Ordinal);
