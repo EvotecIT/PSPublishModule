@@ -39,6 +39,7 @@ internal sealed class PowerForgeServerRepository
     public string? Url { get; set; }
     public string? Path { get; set; }
     public string? Branch { get; set; }
+    public string? Ref { get; set; }
     public bool Required { get; set; }
     public string[]? BootstrapRequiredFiles { get; set; }
 }
