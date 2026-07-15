@@ -131,6 +131,8 @@ on:
         required: false
       cloudflare_zone_id:
         required: false
+      deployment_cloudflare_api_token:
+        required: false
       deployment_ssh_private_key:
         required: false
       deployment_ssh_known_hosts:
@@ -324,7 +326,7 @@ jobs:
           DEPLOYMENT_CLOUDFLARE_ZONE: ${{ inputs.deployment_cloudflare_zone }}
           DEPLOYMENT_PRIVATE_KEY: ${{ secrets.deployment_ssh_private_key }}
           DEPLOYMENT_KNOWN_HOSTS: ${{ secrets.deployment_ssh_known_hosts }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare_api_token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.deployment_cloudflare_api_token }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.cloudflare_zone_id }}
         run: |
           $ErrorActionPreference = 'Stop'
@@ -352,7 +354,7 @@ jobs:
               throw 'deployment_cloudflare_zone must be a DNS zone name.'
             }
             if ([string]::IsNullOrWhiteSpace($env:CLOUDFLARE_API_TOKEN)) {
-              throw 'cloudflare_api_token is required when deployment_cloudflare_zone is configured.'
+              throw 'deployment_cloudflare_api_token is required when deployment_cloudflare_zone is configured.'
             }
           }
 
@@ -410,7 +412,7 @@ jobs:
           DEPLOYMENT_CLOUDFLARE_ZONE: ${{ inputs.deployment_cloudflare_zone }}
           DEPLOYMENT_PRIVATE_KEY: ${{ secrets.deployment_ssh_private_key }}
           DEPLOYMENT_KNOWN_HOSTS: ${{ secrets.deployment_ssh_known_hosts }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare_api_token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.deployment_cloudflare_api_token }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.cloudflare_zone_id }}
         run: |
           $ErrorActionPreference = 'Stop'

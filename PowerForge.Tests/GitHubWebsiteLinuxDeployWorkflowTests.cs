@@ -47,7 +47,7 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("rolling back", script, StringComparison.Ordinal);
         Assert.Contains("mv -Tf", script, StringComparison.Ordinal);
         Assert.Contains("umask 022", script, StringComparison.Ordinal);
-        Assert.Contains("CLOUDFLARE_ZONE_ID is required", script, StringComparison.Ordinal);
+        Assert.Contains("Cloudflare zone id is required", script, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_SITE_TRUSTED_STAGE_ROOT", script, StringComparison.Ordinal);
         Assert.Contains("install -m 0600 \"$archive\"", script, StringComparison.Ordinal);
         Assert.Contains("powerforge-site-{0}", ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml"), StringComparison.Ordinal);
@@ -55,9 +55,13 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("artifactSha256", script, StringComparison.Ordinal);
         Assert.Contains("^/tmp/powerforge-([0-9]+)-([0-9]+)-", script, StringComparison.Ordinal);
         Assert.Contains("BASH_REMATCH[3]", script, StringComparison.Ordinal);
-        Assert.Contains("deployment_cloudflare_zone", ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml"), StringComparison.Ordinal);
-        Assert.Contains("CLOUDFLARE_ZONE_ID", ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml"), StringComparison.Ordinal);
-        Assert.Contains("per_page=5", ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml"), StringComparison.Ordinal);
+        string workflow = ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml");
+        Assert.Contains("deployment_cloudflare_zone", workflow, StringComparison.Ordinal);
+        Assert.Contains("deployment_cloudflare_api_token", workflow, StringComparison.Ordinal);
+        Assert.Contains("CLOUDFLARE_API_TOKEN: ${{ secrets.deployment_cloudflare_api_token }}", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare_api_token }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("CLOUDFLARE_ZONE_ID", workflow, StringComparison.Ordinal);
+        Assert.Contains("per_page=5", workflow, StringComparison.Ordinal);
         Assert.Contains("cloudflare-api.token", script, StringComparison.Ordinal);
         Assert.Contains("Ephemeral Cloudflare zone id does not match", script, StringComparison.Ordinal);
     }
