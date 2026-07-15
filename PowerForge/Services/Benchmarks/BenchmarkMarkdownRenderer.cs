@@ -145,7 +145,7 @@ public sealed class BenchmarkMarkdownRenderer
         }
 
         var ratio = row.Ratio.HasValue ? row.Ratio.Value.ToString("0.00", CultureInfo.InvariantCulture) + "x" : "n/a";
-        var value = IsDurationMetric(row.Metric)
+        var value = BenchmarkComparisonSemantics.IsDurationMetric(row.Metric)
             ? FormatDuration(row.Actual.Value)
             : Number(row.Actual.Value);
         return $"{ratio} ({value})";
@@ -153,7 +153,7 @@ public sealed class BenchmarkMarkdownRenderer
 
     private static string FormatComparisonResult(string baseline, string? metric, IEnumerable<BenchmarkComparisonRow> rows)
     {
-        if (!IsDurationMetric(metric))
+        if (!BenchmarkComparisonSemantics.IsDurationMetric(metric))
             return $"{baseline} baseline";
 
         var successful = rows
@@ -192,16 +192,6 @@ public sealed class BenchmarkMarkdownRenderer
 
     private static bool IsDefaultDurationMetric(string? metric)
         => string.IsNullOrWhiteSpace(metric) || string.Equals(metric, "MedianMs", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsDurationMetric(string? metric)
-    {
-        var name = string.IsNullOrWhiteSpace(metric) ? "MedianMs" : metric!.Trim();
-        return name.EndsWith("Ms", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(name, "P95", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(name, "P99", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(name, "StdDev", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(name, "StdErr", StringComparison.OrdinalIgnoreCase);
-    }
 
     private static string FormatDuration(double milliseconds)
         => milliseconds >= 1000

@@ -195,6 +195,11 @@ public sealed class PowerShellBenchmarkComparison
 
     /// <summary>Fractional tolerance used to label practically equivalent results, such as <c>0.05</c> for five percent.</summary>
     public double TieTolerance { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the benchmark run must fail when the baseline is materially slower than a successful competitor.
+    /// </summary>
+    public bool RequireBaselineFastest { get; set; }
 }
 
 /// <summary>

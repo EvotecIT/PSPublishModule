@@ -10,8 +10,7 @@ internal static class PowerShellBenchmarkResultMerger
             .SelectMany(result => result.Samples)
             .Select(sample => CopySample(sample, runId))
             .ToArray();
-        var summarizer = new BenchmarkSummaryService();
-        var summary = summarizer.Summarize(samples, suite.OutlierMode);
+        var summary = new BenchmarkSummaryService().Summarize(samples, suite.OutlierMode);
         var result = new BenchmarkRunResult
         {
             RunId = runId,
@@ -20,10 +19,7 @@ internal static class PowerShellBenchmarkResultMerger
             FinishedUtc = DateTimeOffset.UtcNow,
             Samples = samples,
             Summary = summary,
-            Comparison = suite.Comparisons
-                .Where(comparison => !string.IsNullOrWhiteSpace(comparison.Baseline))
-                .SelectMany(comparison => GetComparisonMetrics(comparison).SelectMany(metric => summarizer.Compare(summary, comparison.Baseline, metric, comparison.TieTolerance)))
-                .ToArray(),
+            Comparison = PowerShellBenchmarkComparisonEvaluator.Build(suite, summary),
             Metadata = PowerShellBenchmarkEnvironmentMetadata.Build(suite)
         };
 
@@ -51,9 +47,4 @@ internal static class PowerShellBenchmarkResultMerger
             Variables = new Dictionary<string, string?>(sample.Variables, StringComparer.OrdinalIgnoreCase),
             Metrics = new Dictionary<string, double>(sample.Metrics, StringComparer.OrdinalIgnoreCase)
         };
-
-    private static IEnumerable<string> GetComparisonMetrics(PowerShellBenchmarkComparison comparison)
-        => comparison.Metrics is null || comparison.Metrics.Length == 0
-            ? new[] { "MedianMs" }
-            : comparison.Metrics;
 }

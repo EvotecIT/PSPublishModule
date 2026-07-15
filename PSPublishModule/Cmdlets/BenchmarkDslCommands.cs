@@ -452,9 +452,13 @@ public sealed class AddBenchmarkComparisonCommand : BenchmarkDslCommand
     [ValidateRange(0d, double.MaxValue)]
     public double TieTolerance { get; set; }
 
+    /// <summary>Fail the benchmark when the baseline is materially slower than a successful competitor.</summary>
+    [Parameter]
+    public SwitchParameter RequireBaselineFastest { get; set; }
+
     /// <inheritdoc />
     protected override void ProcessRecord()
-        => PowerShellBenchmarkDslRuntime.Compare(Dimension, Baseline, Metric, TieTolerance);
+        => PowerShellBenchmarkDslRuntime.Compare(Dimension, Baseline, Metric, TieTolerance, RequireBaselineFastest.IsPresent);
 }
 
 /// <summary>

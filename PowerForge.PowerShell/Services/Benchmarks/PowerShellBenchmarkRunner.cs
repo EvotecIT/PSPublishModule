@@ -201,10 +201,8 @@ public sealed class PowerShellBenchmarkRunner
 
         try
         {
-            result.Comparison = suite.Comparisons
-                .Where(c => !string.IsNullOrWhiteSpace(c.Baseline))
-                .SelectMany(c => GetComparisonMetrics(c).SelectMany(m => summarizer.Compare(summary, c.Baseline, m, c.TieTolerance)))
-                .ToArray();
+            result.Comparison = PowerShellBenchmarkComparisonEvaluator.Build(suite, summary);
+            PowerShellBenchmarkComparisonEvaluator.ValidateGates(suite, summary);
         }
         catch
         {
@@ -510,6 +508,8 @@ public sealed class PowerShellBenchmarkRunner
             foreach (var metric in GetComparisonMetrics(comparison))
             {
                 var normalized = string.IsNullOrWhiteSpace(metric) ? "MedianMs" : metric.Trim();
+                if (comparison.RequireBaselineFastest && !BenchmarkComparisonSemantics.IsDurationMetric(normalized))
+                    throw new NotSupportedException($"Benchmark comparison metric '{metric}' cannot require the baseline to be fastest because only duration metrics have lower-is-better semantics.");
                 if (IsPrimaryComparisonMetric(normalized) || customMetrics.Contains(normalized))
                     continue;
                 throw new NotSupportedException($"Benchmark comparison metric '{metric}' is not supported by suite '{suite.Name}'. Use MedianMs, MeanMs, MinMs, MaxMs, P95Ms/P95, P99Ms/P99, StdDevMs/StdDev, StdErrMs/StdErr, or a declared custom metric.");

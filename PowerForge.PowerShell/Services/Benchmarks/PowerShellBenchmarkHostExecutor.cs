@@ -97,6 +97,15 @@ public sealed class PowerShellBenchmarkHostExecutor
         }
 
         var merged = PowerShellBenchmarkResultMerger.Merge(suite, results, started);
+        try
+        {
+            PowerShellBenchmarkComparisonEvaluator.ValidateGates(suite, merged.Summary);
+        }
+        catch
+        {
+            PowerShellBenchmarkArtifactWriter.WriteArtifacts(suite, merged);
+            throw;
+        }
         PowerShellBenchmarkArtifactWriter.WriteArtifacts(suite, merged);
         PowerShellBenchmarkArtifactWriter.UpdateReadmeBlocks(suite, merged);
         return merged;
