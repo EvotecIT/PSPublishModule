@@ -380,6 +380,10 @@ jobs:
               rm -rf -- "$BACKUP_PATH/$capture"
             done
             git add -- "$BACKUP_PATH"
+            if git diff --cached --quiet "origin/$BACKUP_BRANCH"; then
+              echo 'Backup was superseded by a newer retained capture; no publication is required.'
+              exit 0
+            fi
             if ! git diff --cached --quiet; then
               git commit --amend --no-edit
             fi

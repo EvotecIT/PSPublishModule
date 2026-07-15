@@ -46,6 +46,8 @@ public sealed class GitHubServerBackupWorkflowTests
         Assert.Contains("Select-Object -Skip $keepLatest", workflow, StringComparison.Ordinal);
         Assert.Contains("git rebase \"origin/$BACKUP_BRANCH\"", workflow, StringComparison.Ordinal);
         Assert.Contains("mapfile -t captures", workflow, StringComparison.Ordinal);
+        Assert.Contains("git diff --cached --quiet \"origin/$BACKUP_BRANCH\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("Backup was superseded by a newer retained capture", workflow, StringComparison.Ordinal);
         Assert.Contains("git commit --amend --no-edit", workflow, StringComparison.Ordinal);
         Assert.Contains("for attempt in 1 2 3", workflow, StringComparison.Ordinal);
         Assert.Contains("git push origin \"HEAD:$BACKUP_BRANCH\"", workflow, StringComparison.Ordinal);
