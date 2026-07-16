@@ -30,6 +30,7 @@ public sealed class GitHubProtectedEnvironmentDeployActionTests
         Assert.DoesNotContain("https://$($env:POWERFORGE_DEPLOYMENT_SITE)", script, StringComparison.Ordinal);
         Assert.Contains("--finalize", script, StringComparison.Ordinal);
         Assert.Contains("--rollback", script, StringComparison.Ordinal);
+        Assert.Contains("retrying once to confirm terminal state", script, StringComparison.Ordinal);
         Assert.Contains("Invoke-CloudflarePurge", script, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgePublicRequest", publicVerification, StringComparison.Ordinal);
         Assert.Contains("workflowRunAttempt", publicVerification, StringComparison.Ordinal);

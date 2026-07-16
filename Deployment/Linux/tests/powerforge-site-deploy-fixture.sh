@@ -108,6 +108,11 @@ $deploy_command --site example.com --expire-pending
 $deploy_command --site example.com --finalize --release-id "$release1"
 [[ ! -e "$fixture_root/pending/example.com" ]]
 [[ "$(basename "$(readlink -f "$fixture_root/site/current")")" == "$release1" ]]
+$deploy_command --site example.com --finalize --release-id "$release1"
+if $deploy_command --site example.com --rollback --release-id "$release1" 2>/dev/null; then
+  echo 'A live finalized release was incorrectly accepted as already rolled back.' >&2
+  exit 1
+fi
 
 run2="$((base_run + 1))"
 stage_release "$run2" '2222222222222222222222222222222222222222' ephemeral
@@ -117,6 +122,7 @@ release2="$release_id"
 $deploy_command --site example.com --rollback --release-id "$release2"
 [[ ! -e "$fixture_root/pending/example.com" && ! -e "$fixture_root/site/releases/$release2" ]]
 [[ "$(basename "$(readlink -f "$fixture_root/site/current")")" == "$release1" ]]
+$deploy_command --site example.com --rollback --release-id "$release2"
 
 run3="$((base_run + 2))"
 stage_release "$run3" '3333333333333333333333333333333333333333' ephemeral

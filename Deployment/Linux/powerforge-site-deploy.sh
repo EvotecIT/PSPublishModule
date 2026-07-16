@@ -218,6 +218,25 @@ assert_pending_identity() {
   [[ "$release_id_argument" == "$pending_release_id" ]] || fail 'Deferred release id does not match pending state.'
 }
 
+confirm_completed_operation() {
+  local completed_operation="$1"
+  local selected_release
+  local current_target=""
+  selected_release="$(release_path "$release_id_argument")"
+  if [[ -L "$SITE_ROOT/current" ]]; then
+    current_target="$(readlink -f "$SITE_ROOT/current" 2>/dev/null || true)"
+  fi
+  if [[ "$completed_operation" == 'finalize' && "$current_target" == "$selected_release" && -d "$selected_release" && -s "$selected_release/_powerforge/deployment.json" ]]; then
+    log "Deferred $site release $release_id_argument was already finalized"
+    return 0
+  fi
+  if [[ "$completed_operation" == 'rollback' && "$current_target" != "$selected_release" && ! -e "$selected_release" && ! -L "$selected_release" ]]; then
+    log "Deferred $site release $release_id_argument was already rolled back"
+    return 0
+  fi
+  return 1
+}
+
 configure_pending_cloudflare() {
   local pending_token="$pending_dir/cloudflare-api.token"
   local pending_zone="$pending_dir/cloudflare-zone-id"
@@ -342,6 +361,9 @@ fi
 
 if [[ "$operation" == 'finalize' ]]; then
   [[ -n "$release_id_argument" ]] || fail '--release-id is required during finalization.'
+  if [[ ! -e "$pending_dir" && ! -L "$pending_dir" ]] && confirm_completed_operation finalize; then
+    exit 0
+  fi
   load_pending_release
   assert_pending_identity
   finalize_deferred_release
@@ -349,6 +371,9 @@ if [[ "$operation" == 'finalize' ]]; then
 fi
 if [[ "$operation" == 'rollback' ]]; then
   [[ -n "$release_id_argument" ]] || fail '--release-id is required during rollback.'
+  if [[ ! -e "$pending_dir" && ! -L "$pending_dir" ]] && confirm_completed_operation rollback; then
+    exit 0
+  fi
   load_pending_release
   assert_pending_identity
   rollback_deferred_release

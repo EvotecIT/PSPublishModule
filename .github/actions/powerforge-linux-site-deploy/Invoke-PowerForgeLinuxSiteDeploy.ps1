@@ -116,6 +116,25 @@ $sshOptions = @('-i', $keyPath, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes
 $remoteCreated = $false
 $zoneId = ''
 
+function Invoke-DeferredReleaseOperation {
+    param(
+        [Parameter(Mandatory)][ValidateSet('finalize', 'rollback')][string] $Operation,
+        [Parameter(Mandatory)][string] $ReleaseArguments
+    )
+
+    $operationArgument = if ($Operation -eq 'finalize') { '--finalize' } else { '--rollback' }
+    foreach ($attempt in 1..2) {
+        ssh @sshOptions -p $deploymentPort $target "sudo /usr/local/sbin/powerforge-site-deploy --site '$($env:POWERFORGE_DEPLOYMENT_SITE)' $operationArgument $ReleaseArguments"
+        if ($LASTEXITCODE -eq 0) {
+            return
+        }
+        if ($attempt -eq 1) {
+            Write-Warning "$Operation acknowledgement failed; retrying once to confirm terminal state."
+        }
+    }
+    throw "$Operation failed after two attempts with exit code $LASTEXITCODE."
+}
+
 try {
     $metadata = [ordered]@{
         schemaVersion      = 1
@@ -193,14 +212,12 @@ try {
 
     try {
         Assert-PowerForgePublicSite -BaseUri $publicUri -SmokePaths $smokePaths -SourceSha $metadata.sourceSha -ArtifactSha256 $metadata.artifactSha256 -RunId $metadata.workflowRunId -RunAttempt $metadata.workflowRunAttempt
-        ssh @sshOptions -p $deploymentPort $target "sudo /usr/local/sbin/powerforge-site-deploy --site '$($env:POWERFORGE_DEPLOYMENT_SITE)' --finalize $releaseArguments"
-        Assert-LastExitCode 'Finalizing the externally verified site release'
+        Invoke-DeferredReleaseOperation -Operation finalize -ReleaseArguments $releaseArguments
     } catch {
         $deploymentError = $_
         $rollbackError = $null
         try {
-            ssh @sshOptions -p $deploymentPort $target "sudo /usr/local/sbin/powerforge-site-deploy --site '$($env:POWERFORGE_DEPLOYMENT_SITE)' --rollback $releaseArguments"
-            Assert-LastExitCode 'Rolling back the externally rejected site release'
+            Invoke-DeferredReleaseOperation -Operation rollback -ReleaseArguments $releaseArguments
             if (-not [string]::IsNullOrWhiteSpace($zoneId)) {
                 Invoke-CloudflarePurge -ZoneId $zoneId -ApiToken $env:POWERFORGE_CLOUDFLARE_API_TOKEN
             }

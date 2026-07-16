@@ -63,6 +63,8 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("verify_origin_release", script, StringComparison.Ordinal);
         Assert.Contains("--defer-public-verification", script, StringComparison.Ordinal);
         Assert.Contains("finalize_deferred_release", script, StringComparison.Ordinal);
+        Assert.Contains("was already finalized", script, StringComparison.Ordinal);
+        Assert.Contains("was already rolled back", script, StringComparison.Ordinal);
         Assert.Contains("rollback_deferred_release", script, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_RELEASE_ID", script, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_PENDING_EXPIRES_AT", script, StringComparison.Ordinal);

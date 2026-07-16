@@ -141,7 +141,9 @@ checks that state every minute and restores an abandoned release after runner
 cancellation, timeout, or loss. Deferred promotion refuses to start when that timer is
 not active. The trusted pending state stores the exact resolved previous target, so
 rollback also preserves an existing `current` symlink outside the managed release root;
-that path is never accepted from the runner.
+that path is never accepted from the runner. Finalize and rollback acknowledge the
+same completed release idempotently, and the runner retries once when an SSH response
+is lost after the host has already reached that terminal state.
 
 On the first PowerForge deployment, an existing non-symlink `current` directory is
 moved into the release history and becomes the rollback target. This lets the shared
