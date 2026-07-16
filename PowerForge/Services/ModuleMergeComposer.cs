@@ -200,21 +200,13 @@ internal static class ModuleMergeComposer
             }
 
             var block = new List<string>();
-            foreach (var line in lines)
+            var extractedDirectives = ExtractPreambleDirectives(lines, requires, usingLines);
+            for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++)
             {
-                var trimmed = line.TrimStart();
-                if (trimmed.StartsWith("#requires", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    requires.Add(trimmed);
+                if (extractedDirectives.Contains(lineIndex))
                     continue;
-                }
 
-                if (trimmed.StartsWith("using ", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    usingLines.Add(trimmed);
-                    continue;
-                }
-
+                var line = lines[lineIndex];
                 block.Add(fixRelativePaths ? NormalizeMergedRelativePathReferences(line) : line);
             }
 
@@ -251,6 +243,108 @@ internal static class ModuleMergeComposer
         }
 
         return merged;
+    }
+
+    private static HashSet<int> ExtractPreambleDirectives(
+        IReadOnlyList<string> lines,
+        ISet<string> requires,
+        ISet<string> usingLines)
+    {
+        // PowerShell using statements are valid only in the script preamble. Restricting extraction to that region
+        // prevents embedded languages in here-strings and block comments from being mistaken for module directives.
+        var extracted = new HashSet<int>();
+        var insideBlockComment = false;
+
+        for (var index = 0; index < lines.Count; index++)
+        {
+            var kind = ClassifyPreambleLine(lines[index], ref insideBlockComment);
+            if (kind == PreambleLineKind.Trivia)
+                continue;
+
+            if (kind == PreambleLineKind.Requires)
+            {
+                requires.Add(lines[index].TrimStart());
+                extracted.Add(index);
+                continue;
+            }
+
+            if (kind == PreambleLineKind.Using)
+            {
+                usingLines.Add(lines[index].TrimStart());
+                extracted.Add(index);
+                continue;
+            }
+
+            break;
+        }
+
+        return extracted;
+    }
+
+    private static PreambleLineKind ClassifyPreambleLine(string line, ref bool insideBlockComment)
+    {
+        var index = 0;
+        var hasLeadingBlockComment = false;
+
+        while (index < line.Length)
+        {
+            if (insideBlockComment)
+            {
+                var commentEnd = line.IndexOf("#>", index, System.StringComparison.Ordinal);
+                if (commentEnd < 0)
+                    return PreambleLineKind.Trivia;
+
+                insideBlockComment = false;
+                hasLeadingBlockComment = true;
+                index = commentEnd + 2;
+                continue;
+            }
+
+            while (index < line.Length && char.IsWhiteSpace(line[index]))
+                index++;
+
+            if (index >= line.Length)
+                return PreambleLineKind.Trivia;
+
+            if (line.IndexOf("<#", index, System.StringComparison.Ordinal) == index)
+            {
+                insideBlockComment = true;
+                hasLeadingBlockComment = true;
+                index += 2;
+                continue;
+            }
+
+            if (line[index] == '#')
+            {
+                return !hasLeadingBlockComment && StartsWithDirective(line, index, "#requires")
+                    ? PreambleLineKind.Requires
+                    : PreambleLineKind.Trivia;
+            }
+
+            if (!hasLeadingBlockComment && StartsWithDirective(line, index, "using"))
+                return PreambleLineKind.Using;
+
+            return PreambleLineKind.Code;
+        }
+
+        return PreambleLineKind.Trivia;
+    }
+
+    private static bool StartsWithDirective(string line, int index, string directive)
+    {
+        if (line.IndexOf(directive, index, System.StringComparison.OrdinalIgnoreCase) != index)
+            return false;
+
+        var boundary = index + directive.Length;
+        return boundary == line.Length || char.IsWhiteSpace(line[boundary]);
+    }
+
+    private enum PreambleLineKind
+    {
+        Trivia,
+        Requires,
+        Using,
+        Code
     }
 
     private static string NormalizeMergedRelativePathReferences(string line)

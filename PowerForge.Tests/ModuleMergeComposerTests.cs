@@ -1,10 +1,67 @@
 using System;
 using System.IO;
+using System.Management.Automation.Language;
 
 namespace PowerForge.Tests;
 
 public sealed class ModuleMergeComposerTests
 {
+    [Fact]
+    public void BuildSources_PreservesUsingLinesInsidePowerShellHereStrings()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMergeModule(root.FullName, moduleName);
+            File.WriteAllText(
+                Path.Combine(root.FullName, "Public", "Get-TestExample.ps1"),
+                """
+                # module preamble
+                <#
+                using Fake.Namespace
+                #>
+                #requires -Version 5.1
+                using namespace System.Text
+
+                function Get-TestExample {
+                    Add-Type -TypeDefinition @"
+                    using System.Net;
+                    using System.Security.Cryptography.X509Certificates;
+                    public class TrustAllCertsPolicy : ICertificatePolicy {
+                        public bool CheckValidationResult(
+                            ServicePoint srvPoint, X509Certificate certificate,
+                            WebRequest request, int certificateProblem) {
+                            return true;
+                        }
+                    }
+                "@
+                }
+                """);
+
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                moduleName,
+                information: null,
+                exports: new ExportSet(new[] { "Get-TestExample" }, Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: false);
+
+            Assert.StartsWith("#requires -Version 5.1" + Environment.NewLine + "using namespace System.Text", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains("using Fake.Namespace", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains("using System.Net;", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.True(
+                sources.MergedScriptContent.IndexOf("using System.Net;", StringComparison.Ordinal) >
+                sources.MergedScriptContent.IndexOf("Add-Type -TypeDefinition", StringComparison.Ordinal));
+
+            Parser.ParseInput(sources.MergedScriptContent, out _, out var errors);
+            Assert.Empty(errors);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void BuildSources_RewritesLegacyPSScriptRootParentPathsByDefault()
     {
