@@ -108,6 +108,46 @@ public sealed class ManagedModuleArchiveExtractorTests
         Assert.True(File.Exists(Path.Combine(destination, "Company.Tools.psm1")));
         Assert.False(File.Exists(Path.Combine(destination, "Company.Tools", "Company.Tools.psd1")));
     }
+
+    [Fact]
+    public async Task ExtractPackageAsync_honors_cancellation_before_writing_payload()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        var destination = Path.Combine(temp.Path, "out");
+        CreatePackageWithPackageFolder(packagePath);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await using var stream = File.OpenRead(packagePath);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new ManagedModuleArchiveExtractor().ExtractPackageAsync(stream, destination, cancellation.Token));
+
+        Assert.Empty(Directory.EnumerateFiles(destination, "*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public void ExtractBufferedPackage_preserves_multi_entry_payload_contents()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        var destination = Path.Combine(temp.Path, "out");
+        CreatePackageWithMultiEntryPayload(packagePath);
+        var packageBytes = File.ReadAllBytes(packagePath);
+        using var stream = new MemoryStream(packageBytes.Length);
+        stream.Write(packageBytes, 0, packageBytes.Length);
+        stream.Position = 0;
+
+        var result = new ManagedModuleArchiveExtractor().ExtractBufferedPackage(
+            stream,
+            destination,
+            "Company.Tools",
+            CancellationToken.None);
+
+        Assert.Equal(12, result.FileCount);
+        for (var index = 0; index < result.FileCount; index++)
+            Assert.Equal($"payload-{index}", File.ReadAllText(Path.Combine(destination, "payload", $"file-{index}.txt")));
+    }
 #endif
 
     private static void CreatePackageWithPackageFolder(string packagePath)
@@ -134,6 +174,14 @@ public sealed class ManagedModuleArchiveExtractorTests
         using var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create);
         AddEntry(archive, "Company.Tools/Company.Tools.psd1", "@{ ModuleVersion = '1.0.0' }");
         AddEntry(archive, "Company.Tools/Company.Tools.psm1", string.Empty);
+    }
+
+    private static void CreatePackageWithMultiEntryPayload(string packagePath)
+    {
+        using var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create);
+        AddEntry(archive, "Company.Tools.nuspec", TestPackageFactory.CreateNuspec("Company.Tools", "1.0.0"));
+        for (var index = 0; index < 12; index++)
+            AddEntry(archive, $"payload/file-{index}.txt", $"payload-{index}");
     }
 
     private static void AddEntry(ZipArchive archive, string name, string content)

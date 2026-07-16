@@ -32,9 +32,19 @@ public sealed partial class ManagedModuleInstallService
     private async Task<ManagedModuleArchiveExtractionResult> ExtractBufferedPackageForInstallAsync(
         ManagedModuleBufferedPackage bufferedPackage,
         string stageModulePath,
+        ManagedModuleInstallContext context,
         CancellationToken cancellationToken)
     {
         bufferedPackage.PackageStream.Position = 0;
+        if (!context.IsDependencyInstall)
+        {
+            return _extractor.ExtractBufferedPackage(
+                bufferedPackage.PackageStream,
+                stageModulePath,
+                bufferedPackage.Download.Metadata?.Id,
+                cancellationToken);
+        }
+
         return await _extractor.ExtractPackageAsync(
                 bufferedPackage.PackageStream,
                 stageModulePath,

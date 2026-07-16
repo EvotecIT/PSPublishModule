@@ -390,6 +390,11 @@ is not changed.
 | SingleModule | AcceptLicense=False, ModuleName=PSScriptAnalyzer, Version=1.25.0 | Desktop-5.1.26100.8655 | Save | 1.00x (1.15s) | Skipped | 2.60x (2.99s) | Skipped | Managed fastest |
 <!-- managed-module-benchmark-table:end -->
 
+For the controlled identical-feed results, the default-source race between the
+official PowerShell Gallery and pwsh.gallery, exact product versions/hashes, and
+the Windows PowerShell 5.1 support lane, see
+[Managed Module Benchmarks](Benchmarks/ManagedModules/README.md#modulefast-100-beta1-results).
+
 Run the managed module benchmark:
 
 ```powershell
@@ -400,7 +405,8 @@ Invoke-BenchmarkSuite `
     -Engine Managed, ModuleFast, PSResourceGet, PowerShellGet `
     -Host Core, Desktop `
     -WarmupCount 1 `
-    -IterationCount 3
+    -IterationCount 3 `
+    -Variable @{ UpdateReadme = $true }
 ```
 
 Import existing artifacts or BenchmarkDotNet output:
