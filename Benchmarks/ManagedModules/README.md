@@ -68,6 +68,40 @@ as skipped for that host instead of being treated as failures.
 Use `ModuleFastPath` to pin the released ModuleFast lane to a specific local
 module path instead of resolving `ModuleFast` from `PSModulePath`.
 
+## Fair Install Comparisons
+
+The default sources compare the normal product paths: managed modules use the
+official PowerShell Gallery while ModuleFast uses its configured ModuleFast
+source. Those results include repository and CDN behavior, so they should not be
+presented as a pure installer-engine comparison.
+
+To isolate installer behavior, point both engines at the same NuGet v3 feed:
+
+```powershell
+Invoke-BenchmarkSuite `
+    -Path .\Benchmarks\ManagedModules\managed-modules.benchmark.ps1 `
+    -Scenario SingleModule, Graph, Az `
+    -Operation Install `
+    -Engine Managed, ModuleFast `
+    -Variable @{
+        RepositoryUri     = 'https://feed.example.test/index.json'
+        ModuleFastSource  = 'https://feed.example.test/index.json'
+        ManagedModulePath = 'C:\Build\PSPublishModule.dll'
+        ModuleFastPath    = 'C:\Modules\ModuleFast\1.0.0\ModuleFast.psd1'
+    }
+```
+
+Every install sample starts with a fresh destination. ModuleFast import and its
+resolution-cache reset happen during setup, outside measured time. The managed
+binary can be pinned with `ManagedModulePath`; validation fails if the measured
+command does not come from that exact file. The managed install intentionally
+uses its operation-local package buffer rather than a
+persistent extracted-package cache because ModuleFast has no equivalent cache
+in this lane. ModuleFast runs with `DestinationOnly`, so neither engine mutates
+the process module path. Validation requires exactly one requested module
+manifest with the exact requested version, and the artifacts record installed
+file count and bytes alongside timing.
+
 ## Native Provider Installs
 
 `Install-PSResource` and `Install-Module` install into the current user profile.

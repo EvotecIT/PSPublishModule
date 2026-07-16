@@ -78,6 +78,29 @@ public sealed class ManagedModuleBenchmarkSuiteTests
     }
 
     [Fact]
+    public void ManagedModuleSuite_InstallComparisonKeepsProviderSetupOutOfMeasuredHandlers()
+    {
+        var path = Path.Combine(RepoRootLocator.Find(), "Benchmarks", "ManagedModules", "managed-modules.benchmark.ps1");
+        var text = File.ReadAllText(path);
+        var setupStart = text.IndexOf("    setup {", StringComparison.Ordinal);
+        var setupEnd = text.IndexOf("    skip {", StringComparison.Ordinal);
+        var setup = text.Substring(setupStart, setupEnd - setupStart);
+        var managedStart = text.IndexOf("    engine Managed {", StringComparison.Ordinal);
+        var managedEnd = text.IndexOf("        operation Save {", managedStart, StringComparison.Ordinal);
+        var managedInstall = text.Substring(managedStart, managedEnd - managedStart);
+        var moduleFastStart = text.IndexOf("    engine ModuleFast {", StringComparison.Ordinal);
+        var moduleFastEnd = text.IndexOf("    engine PSResourceGet {", moduleFastStart, StringComparison.Ordinal);
+        var moduleFastInstall = text.Substring(moduleFastStart, moduleFastEnd - moduleFastStart);
+
+        Assert.Contains("Import-Module", setup, StringComparison.Ordinal);
+        Assert.Contains("Clear-ModuleFastCache", setup, StringComparison.Ordinal);
+        Assert.Contains("ManagedCommandPath", setup, StringComparison.Ordinal);
+        Assert.DoesNotContain("PackageCacheDirectory", managedInstall, StringComparison.Ordinal);
+        Assert.DoesNotContain("Import-Module", moduleFastInstall, StringComparison.Ordinal);
+        Assert.Contains("DestinationOnly", moduleFastInstall, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ManagedModuleSuite_ExplicitHostSelectionKeepsHostMatrix()
     {
         var suite = LoadSuite(new PowerShellBenchmarkSelection

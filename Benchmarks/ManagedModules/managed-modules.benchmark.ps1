@@ -3,6 +3,7 @@ $repositoryName = input RepositoryName PSGallery
 $repositoryUri = input RepositoryUri 'https://www.powershellgallery.com/api/v3/index.json'
 $moduleFastSource = input ModuleFastSource 'https://pwsh.gallery/index.json'
 $moduleFastModulePath = input ModuleFastPath
+$managedModulePath = input ManagedModulePath
 
 benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\ManagedModules') {
     policy -Warmup 1 -Iterations 3 -Order Rotated -OutlierMode None
@@ -23,7 +24,9 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         $run.RepositoryUri = $repositoryUri
         $run.ModuleFastSource = $moduleFastSource
         $run.ModuleFastModulePath = $moduleFastModulePath
-        $hashBytes = [System.Security.Cryptography.SHA1]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($run.OutputDirectory))
+        $run.ManagedModulePath = $managedModulePath
+        $workKey = "$repositoryRoot|$PID|$($case.ModuleName)|$($case.Engine)|$($case.Operation)|$($case.Host)"
+        $hashBytes = [System.Security.Cryptography.SHA1]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($workKey))
         $hash = [System.BitConverter]::ToString($hashBytes).Replace('-', '').Substring(0, 12).ToLowerInvariant()
         $run.WorkRoot = Join-Path ([System.IO.Path]::GetTempPath()) "pf-mm-$hash"
         $run.InstallRoot = Join-Path $run.WorkRoot 'installed'
@@ -34,6 +37,19 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
             Remove-Item -LiteralPath $run.WorkRoot -Recurse -Force
         }
         New-Item -ItemType Directory -Path $run.InstallRoot, $run.SaveRoot, $run.PackageCacheRoot -Force | Out-Null
+
+        if ($case.Engine -eq 'Managed' -and $run.ManagedModulePath -and $run.ManagedModulePath.Trim()) {
+            Import-Module -Name $run.ManagedModulePath -Force -ErrorAction Stop
+            $run.ManagedCommandPath = [System.IO.Path]::GetFullPath([string] (Get-Command Install-ManagedModule -ErrorAction Stop).DLL)
+        } elseif ($case.Engine -eq 'ModuleFast') {
+            Remove-Module ModuleFast -Force -ErrorAction SilentlyContinue
+            if ($run.ModuleFastModulePath -and $run.ModuleFastModulePath.Trim()) {
+                Import-Module -Name $run.ModuleFastModulePath -Force -ErrorAction Stop
+            } else {
+                Import-Module ModuleFast -Force -ErrorAction Stop
+            }
+            Clear-ModuleFastCache
+        }
     }
 
     skip {
@@ -85,7 +101,6 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
                 -RepositoryName $run.RepositoryName `
                 -Scope Custom `
                 -ModuleRoot $run.InstallRoot `
-                -PackageCacheDirectory $run.PackageCacheRoot `
                 -AcceptLicense:$case.AcceptLicense `
                 -AllowClobber `
                 -Force
@@ -111,17 +126,12 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         operation Install {
             param($case, $run)
 
-            Remove-Module ModuleFast -Force -ErrorAction SilentlyContinue
-            if ($run.ModuleFastModulePath -and $run.ModuleFastModulePath.Trim()) {
-                Import-Module -Name $run.ModuleFastModulePath -Force
-            } else {
-                Import-Module ModuleFast -ErrorAction Stop
-            }
-
             Install-ModuleFast "$($case.ModuleName)=$($case.Version)" `
                 -Destination $run.InstallRoot `
                 -Source $run.ModuleFastSource `
-                -NoPSModulePathUpdate | Out-Null
+                -DestinationOnly `
+                -NoPSModulePathUpdate `
+                -Confirm:$false | Out-Null
         }
     }
 
@@ -183,7 +193,15 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
             default { return }
         }
 
-        assertPath (Join-Path $root $case.ModuleName)
+        $moduleRoot = Join-Path $root $case.ModuleName
+        assertPath $moduleRoot
+        $manifests = @(Get-ChildItem -LiteralPath $moduleRoot -Recurse -File -Filter "$($case.ModuleName).psd1")
+        assertValue -Actual $manifests.Count -Expected 1 -Message 'Expected exactly one requested module manifest.'
+        $manifest = Import-PowerShellDataFile -Path $manifests[0].FullName
+        assertValue -Actual ([string] $manifest.ModuleVersion) -Expected $case.Version -Message 'Installed manifest version must match the requested exact version.'
+        if ($case.Engine -eq 'Managed' -and $run.ManagedModulePath -and $run.ManagedModulePath.Trim()) {
+            assertValue -Actual $run.ManagedCommandPath -Expected ([System.IO.Path]::GetFullPath($run.ManagedModulePath)) -Message 'Managed benchmark must use the pinned PSPublishModule binary.'
+        }
     }
 
     metric DependencyCount {
@@ -194,6 +212,20 @@ benchmark 'managed-modules' -out (Join-Path $repositoryRoot 'Ignore\Benchmarks\M
         }
 
         return $run.ManagedResult.DependenciesInstalled.Count
+    }
+
+    metric InstalledFileCount {
+        param($case, $run)
+
+        $root = if ($case.Operation -eq 'Save') { $run.SaveRoot } else { $run.InstallRoot }
+        return @(Get-ChildItem -LiteralPath $root -Recurse -File).Count
+    }
+
+    metric InstalledBytes {
+        param($case, $run)
+
+        $root = if ($case.Operation -eq 'Save') { $run.SaveRoot } else { $run.InstallRoot }
+        return [long] ((Get-ChildItem -LiteralPath $root -Recurse -File | Measure-Object -Property Length -Sum).Sum)
     }
 
     comparison Engine -Baseline Managed -Metric MedianMs
