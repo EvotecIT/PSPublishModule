@@ -17,69 +17,36 @@ This pattern is the reusable baseline for static PowerForge.Web sites hosted on 
 
 ## CI Artifact Flow (Recommended)
 
-Keep the reusable build and the protected deployment as separate jobs. GitHub does
-not pass a caller repository's environment secrets into a cross-repository reusable
-workflow. The deployment job must therefore belong to the caller repository, name
-the protected environment itself, and invoke the pinned shared composite action.
-The protected deployment action rejects `pull_request`, `pull_request_target`, and
-`merge_group` events; invoke it only from a trusted `push` or `workflow_dispatch`
-job after the build artifact has passed its normal validation lane.
-The build still runs on `runner_labels_json`, so Windows-only and Linux-compatible
-sites use the same publication contract without moving their toolchains onto the web
-server.
+Use the pinned `powerforge-website-deploy.yml` reusable workflow for the normal static-site lane. Its Linux deployment and optional cache-policy jobs name the protected environment themselves. GitHub therefore resolves that environment's deployment variables and secrets inside the called jobs; the caller does not pass environment-only credentials through `workflow_call`.
+
+The protected deployment action rejects `pull_request`, `pull_request_target`, and `merge_group` events. Invoke this workflow only from trusted `push` or `workflow_dispatch` events. The build still runs on `runner_labels_json`, so Windows-only and Linux-compatible sites use the same publication contract without moving their toolchains onto the web server.
 
 ```yaml
 jobs:
-  build:
+  deploy:
     permissions:
       actions: write
       contents: read
       packages: read
-    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-run.yml@POWERFORGE_COMMIT
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-deploy.yml@POWERFORGE_COMMIT
     with:
       website_root: Website
       pipeline_config: Website/pipeline.json
-      site_artifact_name: powerforge-site-example.com
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: production
-      url: https://example.com
-    permissions:
-      actions: read
-      contents: read
-    steps:
-      - uses: EvotecIT/PSPublishModule/.github/actions/powerforge-linux-site-deploy@POWERFORGE_COMMIT
-        with:
-          artifact-name: powerforge-site-example.com
-          deployment-site: example.com
-          deployment-public-url: https://example.com
-          deployment-smoke-paths: "/ /sitemap.xml"
-          deployment-host: ${{ vars.POWERFORGE_WEBSITE_DEPLOY_HOST }}
-          deployment-port: ${{ vars.POWERFORGE_WEBSITE_DEPLOY_PORT }}
-          deployment-user: ${{ vars.POWERFORGE_WEBSITE_DEPLOY_USER }}
-          deployment-cloudflare-zone: example.com
-          deployment-ssh-private-key: ${{ secrets.WEBSITE_DEPLOY_SSH_PRIVATE_KEY }}
-          deployment-ssh-known-hosts: ${{ secrets.WEBSITE_DEPLOY_SSH_KNOWN_HOSTS }}
-          deployment-cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          cloudflare-zone-id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
-          source-repository: ${{ github.repository }}
-          source-sha: ${{ github.sha }}
-          engine-mode: ${{ needs.build.outputs.engine_mode }}
-          engine-repository: ${{ needs.build.outputs.engine_repository }}
-          engine-ref: ${{ needs.build.outputs.engine_ref }}
-          engine-sha: ${{ needs.build.outputs.engine_sha }}
-          engine-asset: ${{ needs.build.outputs.engine_asset }}
-          engine-asset-sha256: ${{ needs.build.outputs.engine_asset_sha256 }}
-
-concurrency:
-  group: powerforge-site-example.com
-  cancel-in-progress: false
+      engine_mode: source
+      powerforge_repository: EvotecIT/PSPublishModule
+      powerforge_ref: POWERFORGE_COMMIT
+      deployment_target: linux
+      deployment_site: example.com
+      deployment_environment: production
+      deployment_url: https://example.com
+      deployment_smoke_paths: "/ /sitemap.xml"
+    secrets:
+      indexnow_key: ${{ secrets.INDEXNOW_KEY }}
 ```
 
-This two-job lane:
+The `production` environment owns variables `POWERFORGE_WEBSITE_DEPLOY_HOST`, `POWERFORGE_WEBSITE_DEPLOY_PORT`, and `POWERFORGE_WEBSITE_DEPLOY_USER`, plus secrets `DEPLOYMENT_SSH_PRIVATE_KEY` and `DEPLOYMENT_SSH_KNOWN_HOSTS`. Add `deployment_cloudflare_zone` only after the per-site token is stored as the environment secret `DEPLOYMENT_CLOUDFLARE_API_TOKEN` and the non-secret exact zone id is stored as the environment variable `CLOUDFLARE_ZONE_ID`. The called workflow then applies the managed cache policy before deployment and cache purge. Omitting the zone performs no Cloudflare API operation.
+
+This lane:
 
 1. runs the normal PowerForge CI pipeline and quality guardrails
 2. archives the validated `_site` output on its native build runner
@@ -87,7 +54,9 @@ This two-job lane:
 4. transfers the artifact through a pinned SSH host key
 5. invokes the root-owned server promoter for an allowlisted site id
 6. verifies the promoted release directly at the origin and from the GitHub runner
-7. finalizes the release, or restores the previous symlink and purges the rejected release from cache
+7. finalizes the release, or restores the previous symlink and purges the rejected release from cache when Cloudflare is enabled
+
+Use the lower-level `powerforge-website-run.yml` plus `powerforge-linux-site-deploy` composite action only when a product needs additional caller-owned jobs between build and promotion. Keep those jobs declarative and do not copy the shared PowerShell implementation into the consumer workflow.
 
 Install `Deployment/Linux/powerforge-site-deploy.sh` as
 `/usr/local/sbin/powerforge-site-deploy` and

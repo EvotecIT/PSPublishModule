@@ -120,7 +120,7 @@ source_sha="$(json_string sourceSha)"
 artifact_sha="$(json_string artifactSha256)"
 run_id="$(json_string workflowRunId)"
 run_attempt="$(json_string workflowRunAttempt)"
-[[ "$source_sha" =~ ^[0-9a-fA-F]{40,64}$ ]] || fail 'Metadata sourceSha is missing or invalid.'
+[[ "$source_sha" =~ ^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$ ]] || fail 'Metadata sourceSha is missing or invalid.'
 [[ "$artifact_sha" =~ ^[0-9a-f]{64}$ ]] || fail 'Metadata artifactSha256 is missing or invalid.'
 [[ "$run_id" =~ ^[0-9]+$ && "$run_attempt" =~ ^[0-9]+$ ]] || fail 'Metadata workflow run identity is invalid.'
 actual_artifact_sha="$(sha256sum "$archive" | awk '{print $1}')"

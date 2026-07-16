@@ -7,7 +7,7 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebCliCommandHandlers
 {
-    private const string SupportedServerActions = "inspect, plan, validate, capture, deploy, verify, bootstrap-plan, restore-secrets-plan";
+    private const string SupportedServerActions = "inspect, plan, validate, capture, deploy, verify, scaffold, bootstrap-plan, restore-secrets-plan";
 
     internal static int HandleServer(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
@@ -27,6 +27,7 @@ internal static partial class WebCliCommandHandlers
                 "capture" => HandleServerCapture(actionArgs, outputJson, logger, outputSchemaVersion),
                 "verify" => HandleServerVerify(actionArgs, outputJson, logger, outputSchemaVersion),
                 "deploy" => HandleServerDeploy(actionArgs, outputJson, logger, outputSchemaVersion),
+                "scaffold" => HandleServerScaffold(actionArgs, outputJson, logger, outputSchemaVersion),
                 "bootstrap-plan" => HandleServerBootstrapPlan(actionArgs, outputJson, logger, outputSchemaVersion),
                 "restore-secrets-plan" => HandleServerRestoreSecretsPlan(actionArgs, outputJson, logger, outputSchemaVersion),
                 _ => Fail($"Unknown server action '{subArgs[0]}'. Supported actions: {SupportedServerActions}.", outputJson, logger, "web.server")
@@ -154,7 +155,6 @@ internal static partial class WebCliCommandHandlers
         var warnings = new List<string>();
         var commandResults = new List<PowerForgeServerCaptureCommandResult>();
         var copiedManifestPath = Path.Combine(outputRoot, "manifest.json");
-        File.Copy(manifestPath, copiedManifestPath, overwrite: true);
 
         var commandList = manifest.Capture?.Commands ?? Array.Empty<PowerForgeServerNamedCommand>();
         var plainFiles = manifest.Capture?.PlainFiles ?? Array.Empty<PowerForgeServerManagedFile>();
@@ -233,6 +233,13 @@ internal static partial class WebCliCommandHandlers
             }
         }
 
+        HydrateCapturedRepositoryRefs(manifest, commandResults, warnings);
+        var capturedManifestOptions = new JsonSerializerOptions(WebCliJson.Options) { WriteIndented = true };
+        var capturedManifestContext = new PowerForgeWebCliJsonContext(capturedManifestOptions);
+        File.WriteAllText(
+            copiedManifestPath,
+            JsonSerializer.Serialize(manifest, capturedManifestContext.PowerForgeServerRecoveryManifest));
+
         var success = dryRun || warnings.Count == 0;
         var exitCode = success || !failOnFailure ? 0 : 1;
         var checklistPath = Path.Combine(outputRoot, "restore-checklist.md");
@@ -285,6 +292,42 @@ internal static partial class WebCliCommandHandlers
         return exitCode;
     }
 
+    internal static void HydrateCapturedRepositoryRefs(
+        PowerForgeServerRecoveryManifest manifest,
+        IReadOnlyCollection<PowerForgeServerCaptureCommandResult> commandResults,
+        ICollection<string> warnings)
+    {
+        ArgumentNullException.ThrowIfNull(manifest);
+        ArgumentNullException.ThrowIfNull(commandResults);
+        ArgumentNullException.ThrowIfNull(warnings);
+
+        foreach (var repository in manifest.Repositories ?? Array.Empty<PowerForgeServerRepository>())
+        {
+            var commandId = repository.RefCaptureCommandId;
+            if (string.IsNullOrWhiteSpace(commandId))
+                continue;
+
+            // A dynamic ref must never fall back to a stale source-manifest value.
+            repository.Ref = null;
+            var result = commandResults.SingleOrDefault(candidate =>
+                string.Equals(candidate.Id, commandId, StringComparison.Ordinal));
+            if (result is null || !result.Success || string.IsNullOrWhiteSpace(result.StdoutPath) || !File.Exists(result.StdoutPath))
+            {
+                warnings.Add($"Repository '{repository.Role}' revision capture is missing or failed for command '{commandId}'.");
+                continue;
+            }
+
+            var revision = File.ReadAllText(result.StdoutPath).Trim().ToLowerInvariant();
+            if (!PowerForge.Web.WebEngineLockFile.IsCommitSha(revision))
+            {
+                warnings.Add($"Repository '{repository.Role}' revision capture is not an exact commit for command '{commandId}'.");
+                continue;
+            }
+
+            repository.Ref = revision;
+        }
+    }
+
     private static (PowerForgeServerRecoveryManifest? Manifest, string? ManifestPath, int ExitCode) LoadServerRecoveryManifest(
         string[] subArgs,
         bool outputJson,
@@ -303,6 +346,10 @@ internal static partial class WebCliCommandHandlers
                 File.ReadAllText(fullManifestPath), WebCliJson.Options);
             if (manifest is null)
                 return (null, null, Fail("Invalid server recovery manifest.", outputJson, logger, commandName));
+
+            var validationErrors = ValidateServerRecoveryManifest(manifest);
+            if (validationErrors.Length > 0)
+                throw new InvalidOperationException("Server recovery manifest validation failed: " + string.Join(" ", validationErrors));
 
             return (manifest, fullManifestPath, 0);
         }
@@ -453,19 +500,7 @@ internal static partial class WebCliCommandHandlers
 
     internal static string BuildRemoteTarScript(PowerForgeServerManagedFile[] files)
     {
-        var captureFiles = files
-            .Where(static file => !string.IsNullOrWhiteSpace(file.Target))
-            .Select(static file => new { Target = file.Target!, file.Required })
-            .ToArray();
-        if (captureFiles.Length == 0)
-            throw new InvalidOperationException("No target paths are defined for capture.");
-
-        foreach (var file in captureFiles)
-        {
-            var path = file.Target;
-            if (path.Any(static c => !(char.IsLetterOrDigit(c) || c is '/' or '.' or '_' or '-' or '*' or '?' or '[' or ']')))
-                throw new InvalidOperationException($"Capture path contains unsupported characters: {path}");
-        }
+        var captureFiles = GetRemoteCaptureFiles(files, allowWildcards: true);
 
         var script = new StringBuilder("set -e; sudo -n tar -czf - ");
         if (!captureFiles.Any(static file => file.Required))
@@ -477,9 +512,66 @@ internal static partial class WebCliCommandHandlers
 
     internal static string BuildRemoteEncryptedTarScript(PowerForgeServerManagedFile[] files, string recipient)
     {
-        var tarScript = BuildRemoteTarScript(files);
-        var pipeline = $"{tarScript} | age -r {ShellQuote(recipient)} -o -";
-        return $"bash -o pipefail -c {ShellQuote(pipeline)}";
+        var command = BuildRemoteEncryptedCaptureCommand(files, recipient, quoteArguments: true);
+        return $"sudo -n {command}";
+    }
+
+    internal static string BuildRemoteEncryptedCaptureSudoersCommand(PowerForgeServerManagedFile[] files, string recipient)
+        => BuildRemoteEncryptedCaptureCommand(files, recipient, quoteArguments: false);
+
+    private static string BuildRemoteEncryptedCaptureCommand(
+        PowerForgeServerManagedFile[] files,
+        string recipient,
+        bool quoteArguments)
+    {
+        var captureFiles = GetRemoteCaptureFiles(files, allowWildcards: false);
+        if (string.IsNullOrWhiteSpace(recipient) ||
+            !recipient.StartsWith("age1", StringComparison.Ordinal) ||
+            recipient.Any(static character => !(character is >= 'a' and <= 'z' || character is >= '0' and <= '9')))
+            throw new InvalidOperationException("Remote encrypted capture requires an age public recipient beginning with age1.");
+
+        static string Raw(string value) => value;
+        Func<string, string> format = quoteArguments ? ShellQuote : Raw;
+        var arguments = new List<string>
+        {
+            "/usr/local/sbin/powerforge-server-encrypted-capture",
+            "--recipient",
+            format(recipient)
+        };
+        if (!captureFiles.Any(static file => file.Required))
+            arguments.Add("--ignore-failed-read");
+        arguments.Add("--");
+        arguments.AddRange(captureFiles.Select(file => format(file.Target)));
+        return string.Join(' ', arguments);
+    }
+
+    private static (string Target, bool Required)[] GetRemoteCaptureFiles(
+        IEnumerable<PowerForgeServerManagedFile> files,
+        bool allowWildcards)
+    {
+        var captureFiles = files
+            .Where(static file => !string.IsNullOrWhiteSpace(file.Target))
+            .Select(static file => (Target: file.Target!, file.Required))
+            .ToArray();
+        if (captureFiles.Length == 0)
+            throw new InvalidOperationException("No target paths are defined for capture.");
+
+        foreach (var file in captureFiles)
+        {
+            var path = file.Target;
+            var valid = path.StartsWith("/", StringComparison.Ordinal) &&
+                path != "/" &&
+                !path.Contains("//", StringComparison.Ordinal) &&
+                !path.Split('/', StringSplitOptions.RemoveEmptyEntries)
+                    .Any(static segment => segment is "." or "..") &&
+                path.All(character => IsAsciiLetterOrDigit(character) ||
+                character is '/' or '.' or '_' or '-' ||
+                (allowWildcards && character is '*' or '?' or '[' or ']'));
+            if (!valid)
+                throw new InvalidOperationException($"Capture path contains unsupported characters: {path}");
+        }
+
+        return captureFiles;
     }
 
     private static string ShellQuote(string value)

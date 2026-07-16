@@ -146,6 +146,13 @@ internal static partial class WebCliCommandHandlers
                     $"{checks} || {{ echo {message} >&2; exit 3; }}",
                     plannedCommands: plannedCommands);
             }
+            if (!string.IsNullOrWhiteSpace(repository.RefCaptureCommandId) && string.IsNullOrWhiteSpace(repository.Ref))
+            {
+                var message = ShellQuote($"Use the captured recovery manifest containing repository ref from command {repository.RefCaptureCommandId}.");
+                AddStep(steps, ref order, "repositories", $"Verify {repository.Role} captured revision",
+                    $"echo {message} >&2; exit 3",
+                    plannedCommands: plannedCommands);
+            }
             if (string.IsNullOrWhiteSpace(repository.Url))
             {
                 warnings.Add($"Repository URL is missing for role '{repository.Role}'. Bootstrap script leaves a manual clone step.");
@@ -155,11 +162,12 @@ internal static partial class WebCliCommandHandlers
             {
                 var branchArg = string.IsNullOrWhiteSpace(repository.Branch) ? string.Empty : $" --branch {ShellQuote(repository.Branch)}";
                 var gitDirectory = repository.Path.TrimEnd('/') + "/.git";
+                var gitPrefix = BuildRepositoryGitPrefix(repository);
                 var pinRef = string.IsNullOrWhiteSpace(repository.Ref)
                     ? string.Empty
                     : $"; git -C {ShellQuote(repository.Path)} checkout --detach {ShellQuote(repository.Ref)}";
                 AddStep(steps, ref order, "repositories", $"Clone or update {repository.Role} repository",
-                    $"if [ -d {ShellQuote(gitDirectory)} ]; then git -C {ShellQuote(repository.Path)} fetch --all --tags --prune; else git clone{branchArg} {ShellQuote(repository.Url)} {ShellQuote(repository.Path)}; fi{pinRef}",
+                    $"if [ -d {ShellQuote(gitDirectory)} ]; then {gitPrefix}git -C {ShellQuote(repository.Path)} fetch --all --tags --prune; else {gitPrefix}git clone{branchArg} {ShellQuote(repository.Url)} {ShellQuote(repository.Path)}; fi{pinRef}",
                     plannedCommands: plannedCommands);
             }
         }
@@ -213,6 +221,9 @@ internal static partial class WebCliCommandHandlers
 
         foreach (var secret in manifest.Secrets ?? Array.Empty<PowerForgeServerSecret>())
         {
+            if (secret.RequiredDuringBootstrap == false)
+                continue;
+
             var message = ShellQuote($"Restore encrypted secret {secret.Id} before continuing.");
             string guard;
             if (!string.IsNullOrWhiteSpace(secret.Path))
@@ -243,6 +254,16 @@ internal static partial class WebCliCommandHandlers
 
         AddStep(steps, ref order, "verify", "Run PowerForge server verify", "# Run from an operator workstation: powerforge-web server verify --manifest <manifest> --fail-on-failure", manual: true, plannedCommands: plannedCommands);
         return steps;
+    }
+
+    private static string BuildRepositoryGitPrefix(PowerForgeServerRepository repository)
+    {
+        if (string.IsNullOrWhiteSpace(repository.SshIdentityFile) ||
+            string.IsNullOrWhiteSpace(repository.SshKnownHostsFile))
+            return string.Empty;
+
+        var sshCommand = $"ssh -i {ShellQuote(repository.SshIdentityFile)} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile={ShellQuote(repository.SshKnownHostsFile)}";
+        return $"GIT_SSH_COMMAND={ShellQuote(sshCommand)} ";
     }
 
     private static void AddStep(

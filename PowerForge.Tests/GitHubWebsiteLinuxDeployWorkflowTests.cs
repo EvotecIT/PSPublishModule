@@ -15,9 +15,14 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("deployment_ssh_known_hosts", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("ssh-keyscan", workflow, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("deployment_artifact_retention_days", workflow, StringComparison.Ordinal);
+        Assert.Contains("job.workflow_repository", workflow, StringComparison.Ordinal);
         Assert.Contains("job.workflow_sha", workflow, StringComparison.Ordinal);
+        Assert.Contains("needs.guardrails.outputs.workflow_repository", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("github.workflow_ref", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("github.workflow_sha", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("{40,64}", workflow, StringComparison.Ordinal);
         Assert.Contains("uses: ./.powerforge-deployment/.github/actions/powerforge-linux-site-deploy", workflow, StringComparison.Ordinal);
-        Assert.Contains("deployment_url is required when deployment_target is linux", workflow, StringComparison.Ordinal);
+        Assert.Contains("deployment_url is required when deployment_target is linux", ReadRepoFile("Build", "Assert-PowerForgeWebsiteDeployGuardrails.ps1"), StringComparison.Ordinal);
         Assert.DoesNotContain("Publish and promote Linux release", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("scp @scpArgs", workflow, StringComparison.Ordinal);
         Assert.Contains("      pages: write", workflow, StringComparison.Ordinal);
@@ -25,6 +30,9 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.DoesNotContain("vars.POWERFORGE_DEPLOY_HOST", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("steps.deployment_target.outputs.host", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment_host:\n        description:", normalizedWorkflow, StringComparison.Ordinal);
+        Assert.Contains("inputs.deployment_host || vars.POWERFORGE_WEBSITE_DEPLOY_HOST", workflow, StringComparison.Ordinal);
+        Assert.Contains("inputs.deployment_port || vars.POWERFORGE_WEBSITE_DEPLOY_PORT || 22", workflow, StringComparison.Ordinal);
+        Assert.Contains("inputs.deployment_user || vars.POWERFORGE_WEBSITE_DEPLOY_USER || 'powerforge-deploy'", workflow, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -86,6 +94,7 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("powerforge-site-{0}", ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml"), StringComparison.Ordinal);
         Assert.Contains("workflowRunAttempt", script, StringComparison.Ordinal);
         Assert.Contains("artifactSha256", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("{40,64}", script, StringComparison.Ordinal);
         Assert.Contains("^/tmp/powerforge-([0-9]+)-([0-9]+)-", script, StringComparison.Ordinal);
         Assert.Contains("BASH_REMATCH[3]", script, StringComparison.Ordinal);
         string workflow = ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml");
@@ -93,9 +102,18 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("deployment_cloudflare_api_token", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment-cloudflare-api-token: ${{ secrets.deployment_cloudflare_api_token }}", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("deployment-cloudflare-api-token: ${{ secrets.cloudflare_api_token }}", workflow, StringComparison.Ordinal);
-        Assert.Contains("cloudflare-zone-id: ${{ secrets.cloudflare_zone_id }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("cloudflare-zone-id: ${{ vars.CLOUDFLARE_ZONE_ID || secrets.cloudflare_zone_id }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("zone-id: ${{ vars.CLOUDFLARE_ZONE_ID || secrets.cloudflare_zone_id }}", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment-public-url: ${{ inputs.deployment_url }}", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment-smoke-paths: ${{ inputs.deployment_smoke_paths }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("uses: ./.powerforge-deployment/.github/actions/powerforge-cloudflare-cache-policy", workflow, StringComparison.Ordinal);
+        Assert.Contains("checkout-caller: \"false\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("if: ${{ inputs.deployment_cloudflare_zone != '' }}", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("\n  cache-policy:\n", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.True(
+            workflow.IndexOf("powerforge-cloudflare-cache-policy", StringComparison.Ordinal) < workflow.IndexOf("powerforge-linux-site-deploy", StringComparison.Ordinal),
+            "The optional cache policy and deployment must share one protected job and approval boundary.");
+        Assert.Contains("name: ${{ inputs.deployment_environment }}", workflow, StringComparison.Ordinal);
         string deployAction = ReadRepoFile(".github", "actions", "powerforge-linux-site-deploy", "Invoke-PowerForgeLinuxSiteDeploy.ps1");
         Assert.Contains("per_page=5", deployAction, StringComparison.Ordinal);
         string environmentExample = ReadRepoFile("Deployment", "Linux", "powerforge-site.env.example");

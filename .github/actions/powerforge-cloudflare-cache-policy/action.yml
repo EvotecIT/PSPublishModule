@@ -28,6 +28,10 @@ inputs:
     description: Report whether rules would change without writing the ruleset.
     required: false
     default: "false"
+  checkout-caller:
+    description: Checkout the caller commit before reading site-config. Set false only when the caller already checked out the exact source.
+    required: false
+    default: "true"
 
 runs:
   using: composite
@@ -38,6 +42,7 @@ runs:
       run: throw 'PowerForge protected Cloudflare changes cannot run from pull request events.'
 
     - name: Checkout caller repository
+      if: ${{ inputs.checkout-caller == 'true' }}
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         token: ${{ github.token }}

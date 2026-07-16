@@ -45,7 +45,28 @@
     }
   },
   "required": ["schemaVersion", "name", "target"],
+  "allOf": [
+    {
+      "if": { "required": ["backupTarget"] },
+      "then": {
+        "required": ["capture"],
+        "properties": {
+          "capture": {
+            "required": ["plainFiles", "encryptedFiles"],
+            "properties": {
+              "plainFiles": { "minItems": 1 },
+              "encryptedFiles": { "minItems": 1 }
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
+    "AbsoluteUnixPath": {
+      "type": "string",
+      "pattern": "^/(?!\\.{1,2}(?:/|$))(?!.*/\\.{1,2}(?:/|$))(?!.*//)[A-Za-z0-9_./-]+$"
+    },
     "Target": {
       "type": "object",
       "additionalProperties": false,
@@ -68,14 +89,23 @@
       "properties": {
         "role": { "type": "string", "minLength": 1 },
         "url": { "type": "string" },
-        "path": { "type": "string" },
+        "path": { "$ref": "#/$defs/AbsoluteUnixPath" },
         "branch": { "type": "string" },
         "ref": { "type": "string", "minLength": 1 },
+        "refCaptureCommandId": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$" },
         "required": { "type": "boolean" },
+        "sshIdentityFile": { "$ref": "#/$defs/AbsoluteUnixPath" },
+        "sshKnownHostsFile": { "$ref": "#/$defs/AbsoluteUnixPath" },
         "bootstrapRequiredFiles": {
           "type": "array",
-          "items": { "type": "string", "minLength": 1 }
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/AbsoluteUnixPath" }
         }
+      },
+      "dependentRequired": {
+        "sshIdentityFile": ["sshKnownHostsFile", "bootstrapRequiredFiles"],
+        "sshKnownHostsFile": ["sshIdentityFile", "bootstrapRequiredFiles"]
       },
       "required": ["role", "path"]
     },
@@ -116,9 +146,9 @@
       "properties": {
         "id": { "type": "string", "minLength": 1 },
         "path": { "type": "string" },
-        "owner": { "type": "string" },
-        "group": { "type": "string" },
-        "mode": { "type": "string" },
+        "owner": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$" },
+        "group": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$" },
+        "mode": { "type": "string", "pattern": "^[0-7]{3,4}$" },
         "kind": {
           "type": "string",
           "enum": ["directory", "file", "symlink"]
@@ -157,6 +187,27 @@
         "sensitive": { "type": "boolean" }
       },
       "required": ["target"]
+    },
+    "PlainCaptureFile": {
+      "allOf": [
+        { "$ref": "#/$defs/ManagedFile" },
+        {
+          "properties": {
+            "sensitive": { "enum": [false] }
+          }
+        }
+      ]
+    },
+    "EncryptedCaptureFile": {
+      "allOf": [
+        { "$ref": "#/$defs/ManagedFile" },
+        {
+          "properties": {
+            "sensitive": { "enum": [true] }
+          },
+          "required": ["sensitive"]
+        }
+      ]
     },
     "Firewall": {
       "type": "object",
@@ -230,11 +281,18 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "requiredDuringBootstrap": {
+          "type": "boolean",
+          "description": "Defaults to true. Set false only when a secret may be created after the initial bootstrap stage, such as first-issue certificate material."
+        },
         "capture": {
           "type": "string",
           "enum": ["exclude", "encrypted"]
         },
-        "restoreMode": { "type": "string" }
+        "restoreMode": { "type": "string", "enum": ["file", "directory"] },
+        "owner": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$" },
+        "group": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$" },
+        "mode": { "type": "string", "pattern": "^[0-7]{3,4}$" }
       },
       "required": ["id", "capture"]
     },
@@ -244,11 +302,11 @@
       "properties": {
         "plainFiles": {
           "type": "array",
-          "items": { "$ref": "#/$defs/ManagedFile" }
+          "items": { "$ref": "#/$defs/PlainCaptureFile" }
         },
         "encryptedFiles": {
           "type": "array",
-          "items": { "$ref": "#/$defs/ManagedFile" }
+          "items": { "$ref": "#/$defs/EncryptedCaptureFile" }
         },
         "commands": {
           "type": "array",
@@ -314,24 +372,52 @@
           "type": "string",
           "enum": ["github"]
         },
-        "repository": { "type": "string" },
-        "branch": { "type": "string" },
-        "path": { "type": "string" },
+        "repository": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "branch": {
+          "type": "string",
+          "pattern": "^(?!.*[\\r\\n])(?!/)(?!.*\\.\\.)[A-Za-z0-9_./-]+$"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^(?!.*[\\r\\n])(?!/)(?!.*\\.\\.)[A-Za-z0-9_./-]+$"
+        },
         "encryption": {
           "type": "string",
           "enum": ["age"]
         },
-        "recipient": { "type": "string" },
-        "recipientEnv": { "type": "string" },
+        "recipient": { "type": "string", "minLength": 1 },
+        "recipientEnv": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
         "retention": { "$ref": "#/$defs/BackupRetention" }
-      }
+      },
+      "required": ["type", "repository", "branch", "path", "encryption", "retention"],
+      "anyOf": [
+        { "required": ["recipient"] },
+        { "required": ["recipientEnv"] }
+      ]
     },
     "BackupRetention": {
       "type": "object",
       "additionalProperties": false,
+      "anyOf": [
+        { "required": ["keepLatestInTree"] },
+        { "required": ["keepLatest"] }
+      ],
+      "not": { "required": ["keepLatestInTree", "keepLatest"] },
       "properties": {
-        "keepLatest": { "type": "integer", "minimum": 1 },
-        "keepDays": { "type": "integer", "minimum": 1 }
+        "keepLatestInTree": { "type": "integer", "minimum": 1, "maximum": 365 },
+        "keepLatest": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 365,
+          "deprecated": true,
+          "description": "Compatibility alias for keepLatestInTree. Git history is preserved."
+        }
       }
     }
   }

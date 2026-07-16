@@ -33,7 +33,7 @@ if ($env:POWERFORGE_ENGINE_REPOSITORY -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]
 if ($env:POWERFORGE_ENGINE_REF -notmatch '^[a-fA-F0-9]{40}$') {
     throw 'The PowerForge backup action must be pinned to an exact 40-character commit.'
 }
-if ($env:POWERFORGE_SOURCE_SHA -notmatch '^[a-fA-F0-9]{40,64}$') {
+if ($env:POWERFORGE_SOURCE_SHA -notmatch '^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$') {
     throw 'Unable to resolve exact caller source provenance.'
 }
 foreach ($requiredSecret in @(
@@ -83,7 +83,7 @@ if (-not [int]::TryParse($capturePortText, [ref]$capturePort) -or
 $backupRepository = [string]$manifest.backupTarget.repository
 $backupBranch = [string]$manifest.backupTarget.branch
 $backupPath = ([string]$manifest.backupTarget.path).Replace('\', '/')
-$keepLatest = 0
+$keepLatestInTree = 0
 if ($backupRepository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
     throw 'backupTarget.repository must be an owner/repository name.'
 }
@@ -93,9 +93,21 @@ if ($backupBranch -notmatch '^[A-Za-z0-9._/-]+$' -or $backupBranch.Contains('..'
 if ($backupPath -notmatch '^[A-Za-z0-9._/-]+$' -or $backupPath.Contains('..') -or $backupPath.StartsWith('/')) {
     throw 'backupTarget.path must be a safe repository-relative path.'
 }
-if (-not [int]::TryParse([string]$manifest.backupTarget.retention.keepLatest, [ref]$keepLatest) -or
-    $keepLatest -lt 1 -or $keepLatest -gt 365) {
-    throw 'backupTarget.retention.keepLatest must be from 1 through 365.'
+if ($null -ne $manifest.backupTarget.retention.keepDays) {
+    throw 'backupTarget.retention.keepDays is not implemented; Git history is preserved.'
+}
+if ($null -ne $manifest.backupTarget.retention.keepLatestInTree -and
+    $null -ne $manifest.backupTarget.retention.keepLatest) {
+    throw 'backupTarget.retention must not set both keepLatestInTree and keepLatest.'
+}
+$retentionValue = if ($null -ne $manifest.backupTarget.retention.keepLatestInTree) {
+    $manifest.backupTarget.retention.keepLatestInTree
+} else {
+    $manifest.backupTarget.retention.keepLatest
+}
+if (-not [int]::TryParse([string]$retentionValue, [ref]$keepLatestInTree) -or
+    $keepLatestInTree -lt 1 -or $keepLatestInTree -gt 365) {
+    throw 'backupTarget.retention.keepLatestInTree must be from 1 through 365.'
 }
 if (-not [string]::Equals([string]$manifest.backupTarget.encryption, 'age', [StringComparison]::OrdinalIgnoreCase)) {
     throw 'Automated encrypted capture requires backupTarget.encryption=age.'
@@ -191,7 +203,6 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
 
     dotnet $cli server capture --manifest $captureManifestPath --out $captureRoot --ssh $serverSshCommand --encrypt-remote --fail-on-failure
     Assert-LastExitCode 'Capturing and encrypting server recovery state'
-    Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $captureRoot 'manifest.json') -Force
 
     foreach ($relativePath in @(
         'capture-summary.json',
@@ -218,6 +229,8 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
         workflowRunId      = $env:GITHUB_RUN_ID
         workflowRunAttempt = $env:GITHUB_RUN_ATTEMPT
         capturedAtUtc      = [DateTimeOffset]::UtcNow.ToString('O')
+        retainedCapturesInTree = $keepLatestInTree
+        gitHistoryRetention = 'preserve'
     } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $captureRoot 'capture-metadata.json') -Encoding utf8NoBOM
 
     $hashLines = Get-ChildItem -LiteralPath $captureRoot -File -Recurse |
@@ -246,7 +259,7 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
     $captures = @(Get-ChildItem -LiteralPath $targetRoot -Directory |
         Where-Object Name -Match '^\d{8}T\d{6}Z-\d+-\d+$' |
         Sort-Object Name -Descending)
-    foreach ($stale in @($captures | Select-Object -Skip $keepLatest)) {
+    foreach ($stale in @($captures | Select-Object -Skip $keepLatestInTree)) {
         Remove-Item -LiteralPath $stale.FullName -Recurse -Force
     }
 
@@ -273,7 +286,7 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
         $captures = @(Get-ChildItem -LiteralPath $targetRoot -Directory |
             Where-Object Name -Match '^\d{8}T\d{6}Z-\d+-\d+$' |
             Sort-Object Name -Descending)
-        foreach ($stale in @($captures | Select-Object -Skip $keepLatest)) {
+        foreach ($stale in @($captures | Select-Object -Skip $keepLatestInTree)) {
             Remove-Item -LiteralPath $stale.FullName -Recurse -Force
         }
         git -C $checkout add -- $backupPath
