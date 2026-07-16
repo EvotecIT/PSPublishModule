@@ -153,7 +153,10 @@ public sealed partial class DotNetRepositoryReleaseService
                 var includePatterns = ResolveAssemblySigningIncludePatterns(project, spec, csprojDir, configuration, logger);
                 var resolveOutputWatch = Stopwatch.StartNew();
                 var outputDirectories = ResolveBuildOutputDirectories(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns);
-                var signingPlan = BuildAssemblySigningPlan(outputDirectories, includePatterns);
+                var signingPlan = BuildAssemblySigningPlan(
+                    outputDirectories,
+                    includePatterns,
+                    ResolvePackToolIntermediateAssemblyPaths(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns));
                 if (signingPlan.Files.Length == 0 && !spec.SignDependencyAssemblies)
                 {
                     var evaluatedIncludePatterns = ResolveAssemblySigningIncludePatterns(project, spec, csprojDir, configuration, logger);
@@ -161,7 +164,10 @@ public sealed partial class DotNetRepositoryReleaseService
                     {
                         includePatterns = evaluatedIncludePatterns;
                         outputDirectories = ResolveBuildOutputDirectories(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns);
-                        signingPlan = BuildAssemblySigningPlan(outputDirectories, includePatterns);
+                        signingPlan = BuildAssemblySigningPlan(
+                            outputDirectories,
+                            includePatterns,
+                            ResolvePackToolIntermediateAssemblyPaths(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns));
                     }
                 }
                 resolveOutputWatch.Stop();
@@ -456,6 +462,67 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
         });
     }
 
+    private static string[] ResolvePackToolIntermediateAssemblyPaths(
+        string csproj,
+        string workingDirectory,
+        string configuration,
+        string projectName,
+        ILogger logger,
+        IReadOnlyList<string> includePatterns)
+    {
+        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var targetFramework in ResolveConfiguredTargetFrameworks(csproj, workingDirectory, configuration, projectName, logger))
+        {
+            var packAsToolExitCode = RunDotnetMsBuildGetProperty(
+                csproj,
+                workingDirectory,
+                configuration,
+                targetFramework,
+                "PackAsTool",
+                projectName,
+                logger,
+                out var packAsToolValue,
+                out _,
+                out _,
+                out _);
+            if (packAsToolExitCode != 0 || !bool.TryParse(packAsToolValue?.Trim(), out var packAsTool) || !packAsTool)
+                continue;
+
+            var intermediateExitCode = RunDotnetMsBuildGetProperty(
+                csproj,
+                workingDirectory,
+                configuration,
+                targetFramework,
+                "IntermediateOutputPath",
+                projectName,
+                logger,
+                out var intermediateOutputPath,
+                out var stdErr,
+                out var stdOut,
+                out var duration);
+            if (intermediateExitCode != 0 || string.IsNullOrWhiteSpace(intermediateOutputPath))
+            {
+                logger.Verbose($"{projectName}: unable to resolve the pack-tool intermediate output in {FormatDuration(duration)}. {SummarizeProcessFailureOutput(stdErr, stdOut)}");
+                continue;
+            }
+
+            var normalizedIntermediateOutputPath = intermediateOutputPath!.Trim().Trim('"');
+            var resolvedDirectory = Path.IsPathRooted(normalizedIntermediateOutputPath)
+                ? Path.GetFullPath(normalizedIntermediateOutputPath)
+                : Path.GetFullPath(Path.Combine(workingDirectory, normalizedIntermediateOutputPath));
+            if (!Directory.Exists(resolvedDirectory))
+                continue;
+
+            foreach (var includePattern in includePatterns.Where(static pattern => !string.IsNullOrWhiteSpace(pattern)))
+            {
+                foreach (var path in Directory.EnumerateFiles(resolvedDirectory, includePattern, SearchOption.TopDirectoryOnly))
+                    files.Add(Path.GetFullPath(path));
+            }
+        }
+
+        return files.ToArray();
+    }
+
     private static string[] ResolveConventionalBuildOutputDirectories(
         string csproj,
         string workingDirectory,
@@ -536,7 +603,8 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
 
     private static AssemblySigningPlan BuildAssemblySigningPlan(
         IReadOnlyList<string> outputDirectories,
-        IReadOnlyList<string> includePatterns)
+        IReadOnlyList<string> includePatterns,
+        IReadOnlyList<string>? additionalFiles = null)
     {
         var files = new List<string>();
         var outputDirectoryCount = 0;
@@ -556,6 +624,12 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
             }
         }
 
+        if (additionalFiles is not null)
+        {
+            foreach (var path in additionalFiles.Where(File.Exists))
+                files.Add(path);
+        }
+
         return new AssemblySigningPlan
         {
             IncludePatterns = includePatterns.ToArray(),
@@ -563,7 +637,12 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
                 .Select(Path.GetFullPath)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
-            OutputDirectoryCount = outputDirectoryCount
+            OutputDirectoryCount = outputDirectoryCount + (additionalFiles ?? Array.Empty<string>())
+                .Where(File.Exists)
+                .Select(Path.GetDirectoryName)
+                .Where(static directory => !string.IsNullOrWhiteSpace(directory))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count()
         };
     }
 

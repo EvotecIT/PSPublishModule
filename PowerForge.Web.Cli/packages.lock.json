@@ -101,6 +101,28 @@
           "System.ComponentModel.Annotations": "5.0.0"
         }
       },
+      "NuGet.Common": {
+        "type": "Transitive",
+        "resolved": "7.6.0",
+        "contentHash": "uyXLqkbbZmkMvdHOR23l1EHW2hRmULtzoG3Ocj84VpGptnNfkODVboHGJfDfcn9Gi9oUNDs8/VjL4FZcST6zVg==",
+        "dependencies": {
+          "NuGet.Frameworks": "7.6.0"
+        }
+      },
+      "NuGet.Configuration": {
+        "type": "Transitive",
+        "resolved": "7.6.0",
+        "contentHash": "+bNj+YneC5CNg1vR+WZjLAakscJlsi0KhADZUgIJPn4pwh8/jeCUMC5ik5cpET/i+QOplDy7aJVTGkpdfrlPww==",
+        "dependencies": {
+          "NuGet.Common": "7.6.0",
+          "System.Security.Cryptography.ProtectedData": "8.0.0"
+        }
+      },
+      "NuGet.Frameworks": {
+        "type": "Transitive",
+        "resolved": "7.6.0",
+        "contentHash": "rJ7QtKN45XzLXCrMATve6eFLiUyUGEkA1rFSb6U6Fw6laM4hEAcKOrcdbgWlcFUlCK2158qP1LF00hg/ivF3nw=="
+      },
       "NUglify": {
         "type": "Transitive",
         "resolved": "1.21.17",
@@ -161,10 +183,10 @@
       "powerforge": {
         "type": "Project",
         "dependencies": {
+          "NuGet.Configuration": "[7.6.0, )",
           "System.IO.Packaging": "[10.0.7, )",
           "System.Reflection.MetadataLoadContext": "[8.0.0, )",
-          "System.Security.Cryptography.ProtectedData": "[10.0.7, )",
-          "NuGet.Configuration": "[7.6.0, )"
+          "System.Security.Cryptography.ProtectedData": "[10.0.7, )"
         }
       },
       "powerforge.web": {
@@ -173,226 +195,10 @@
           "HtmlTinkerX": "[2.0.19, )",
           "Magick.NET-Q8-AnyCPU": "[14.14.0, )",
           "OfficeIMO.Markdown": "[0.6.13, )",
-          "PowerForge": "[1.0.0, )",
+          "PowerForge": "[1.0.1, )",
           "Scriban": "[7.2.5, )",
           "YamlDotNet": "[15.1.2, )"
         }
-      },
-      "NuGet.Configuration": {
-        "type": "Transitive",
-        "resolved": "7.6.0",
-        "contentHash": "+bNj+YneC5CNg1vR+WZjLAakscJlsi0KhADZUgIJPn4pwh8/jeCUMC5ik5cpET/i+QOplDy7aJVTGkpdfrlPww==",
-        "dependencies": {
-          "NuGet.Common": "7.6.0",
-          "System.Security.Cryptography.ProtectedData": "8.0.0"
-        }
-      },
-      "NuGet.Common": {
-        "type": "Transitive",
-        "resolved": "7.6.0",
-        "contentHash": "uyXLqkbbZmkMvdHOR23l1EHW2hRmULtzoG3Ocj84VpGptnNfkODVboHGJfDfcn9Gi9oUNDs8/VjL4FZcST6zVg==",
-        "dependencies": {
-          "NuGet.Frameworks": "7.6.0"
-        }
-      },
-      "NuGet.Frameworks": {
-        "type": "Transitive",
-        "resolved": "7.6.0",
-        "contentHash": "rJ7QtKN45XzLXCrMATve6eFLiUyUGEkA1rFSb6U6Fw6laM4hEAcKOrcdbgWlcFUlCK2158qP1LF00hg/ivF3nw=="
-      }
-    },
-    "net8.0": {
-      "Acornima": {
-        "type": "Transitive",
-        "resolved": "1.4.0",
-        "contentHash": "3M7NpnhKL//pf7HkSfLJaGQ37uksibdqfa9YuUov1VOX0QXapZeYCUpURZ9an4VMt9wJ70MU/PeAsjhw8DwtJw=="
-      },
-      "AngleSharp": {
-        "type": "Transitive",
-        "resolved": "1.4.1-beta.523",
-        "contentHash": "1HPqvhCAHu2X9umsuoy2RU7Ls6j+JIg5Enu1SgTinXqo/EVdXP5Ey/PA0vuwqVgo1x3xowXrDCgOWt2DM4vZSA=="
-      },
-      "AngleSharp.Css": {
-        "type": "Transitive",
-        "resolved": "1.0.0-beta.213",
-        "contentHash": "R6Fn8GnapJi0uqJODCDUM0aYftaomcWhrk1Ty+U8E4zsTd+So4ZyDHS6J9Nni9b8WMCCp+pnMAehmVwbsgYMeQ==",
-        "dependencies": {
-          "AngleSharp": "[1.0.0, 2.0.0)"
-        }
-      },
-      "AngleSharp.Diffing": {
-        "type": "Transitive",
-        "resolved": "1.1.1",
-        "contentHash": "Uzz5895TpRyMA4t8GExmq4TxXqi3+bZTgb3kJgH+tdwrSuo9CO6Dlmv+Oqyhb2pNRfbnReLUzhlHAuT7c+3jSg==",
-        "dependencies": {
-          "AngleSharp": "1.1.2",
-          "AngleSharp.Css": "1.0.0-beta.144"
-        }
-      },
-      "AngleSharp.Js": {
-        "type": "Transitive",
-        "resolved": "1.0.0-beta.47",
-        "contentHash": "zSBLEBwoSBwU0JKtHX6DF5X4CDML/Sn92LrAlpy+XbI8wOCkZ8DVqh5mLlHXq8s6cVaOX2PzhPV5m7wv/6MT3A==",
-        "dependencies": {
-          "AngleSharp": "[1.0.0, 2.0.0)",
-          "Jint": "[4.0.0, 5.0.0)"
-        }
-      },
-      "ChartForgeX": {
-        "type": "Transitive",
-        "resolved": "0.1.6",
-        "contentHash": "KkhZMruv/Fhe5LSXD22KEl/T/HimNqB450NI9rKklyPewrYmU8rWnCOG5kbhzN3zHwXnmTdq1qJn2J9kw/N51w=="
-      },
-      "HtmlAgilityPack": {
-        "type": "Transitive",
-        "resolved": "1.12.4",
-        "contentHash": "ljqvBabvFwKoLniuoQKO8b5bJfJweKLs4fUNS/V5dsvpo0A8MlJqxxn9XVmP2DaskbUXty6IYaWAi1SArGIMeQ=="
-      },
-      "HtmlTinkerX": {
-        "type": "Transitive",
-        "resolved": "2.0.19",
-        "contentHash": "aN1x0cqwonG/JNSYxCBtqTTCq1nyaEYiX6WdQvvkGpfYlLKuFjKD+4HfXSfBl1KZqC6SdIUZz3oXAib5AyB8vQ==",
-        "dependencies": {
-          "AngleSharp": "1.4.1-beta.523",
-          "AngleSharp.Css": "1.0.0-beta.213",
-          "AngleSharp.Diffing": "1.1.1",
-          "AngleSharp.Js": "1.0.0-beta.47",
-          "ChartForgeX": "0.1.6",
-          "HtmlAgilityPack": "1.12.4",
-          "Jint": "4.8.0",
-          "Microsoft.Playwright": "1.59.0",
-          "NUglify": "1.21.17",
-          "OfficeIMO.Markdown.Html": "0.1.13",
-          "PreMailer.Net": "2.7.2"
-        }
-      },
-      "Jint": {
-        "type": "Transitive",
-        "resolved": "4.8.0",
-        "contentHash": "JlXh13WDivP2izPgS9jeUlzyP//hsHUGhGb33EQHLuRiLhdwJ0ajaYjVETnqnkIQay/qP6NHglxx/40bL0/ihQ==",
-        "dependencies": {
-          "Acornima": "1.4.0"
-        }
-      },
-      "Magick.NET-Q8-AnyCPU": {
-        "type": "Transitive",
-        "resolved": "14.14.0",
-        "contentHash": "Af7QdAb1AfLN09gpr4lzrTjioDez1hW1IQN3Tb0qJWi8NY3ywTJyteoH/8P/mripXq4D5Khz0uWBEX5O59i5Zw==",
-        "dependencies": {
-          "Magick.NET.Core": "14.14.0"
-        }
-      },
-      "Magick.NET.Core": {
-        "type": "Transitive",
-        "resolved": "14.14.0",
-        "contentHash": "pACR3w4QmjBkebtYvZwNk0oow8YwEAF4CLfzSrGmPcWsObL8wvt/lOXsrzK9M0cVwYES7jp+bdnHQBTeQgfoIg=="
-      },
-      "Microsoft.Bcl.AsyncInterfaces": {
-        "type": "Transitive",
-        "resolved": "6.0.0",
-        "contentHash": "UcSjPsst+DfAdJGVDsu346FX0ci0ah+lw3WRtn18NUwEqRt70HaOQ7lI72vy3+1LxtqI3T5GWwV39rQSrCzAeg=="
-      },
-      "Microsoft.Playwright": {
-        "type": "Transitive",
-        "resolved": "1.59.0",
-        "contentHash": "igqHbZMmXI6cYNPg1X1o5/51U3CQp83lvvov/d/zmus2wlG1LjvpEL6i1Jx51pRahPtSyppvwq+ZoBfxeSjiew==",
-        "dependencies": {
-          "Microsoft.Bcl.AsyncInterfaces": "6.0.0"
-        }
-      },
-      "NUglify": {
-        "type": "Transitive",
-        "resolved": "1.21.17",
-        "contentHash": "K2ywYpoPEvU3+Ooq6wxz+FJOkmbDeoE41q/sJZWv9tI7qbTmH2A5R0E4hWzruvl/9pnUhqwbu1mxT06C45D0ZQ=="
-      },
-      "OfficeIMO.Markdown": {
-        "type": "Transitive",
-        "resolved": "0.6.13",
-        "contentHash": "G32iOoUiPRfsyWoNiq9sS3Q3oN60jQFKOn6VLpvoemtzq7oXc7oECKw0W+BS7oUds+uKpsNHsfPDAfUUhTY8hg=="
-      },
-      "OfficeIMO.Markdown.Html": {
-        "type": "Transitive",
-        "resolved": "0.1.13",
-        "contentHash": "9f4V0tM164RcwKGyf681aj2NKc4zk7xMWu1pW23idj9sllazRmZ/Vma++//QSMShbDGsGQPPWU+rX1gT7280xg==",
-        "dependencies": {
-          "AngleSharp": "1.3.0",
-          "OfficeIMO.Markdown": "0.6.13"
-        }
-      },
-      "PreMailer.Net": {
-        "type": "Transitive",
-        "resolved": "2.7.2",
-        "contentHash": "OeN00ZA9ycJSSD4ZcjbWn5aJpJ+OfrAM3ti+9VI9Mc+o90QnWayPCU7PszopLa91lxKrL9ZnIcG33AAd5dypLA==",
-        "dependencies": {
-          "AngleSharp": "1.1.0"
-        }
-      },
-      "Scriban": {
-        "type": "Transitive",
-        "resolved": "7.2.5",
-        "contentHash": "6HDyv0P6PVdx/prWM3Aw0QHAT/DCpkBxOovZ2iPIH4L4ZvJ13JNYJgyUI+xJ5K2agXreYTBe23AL5ZQNTqJQvA=="
-      },
-      "System.IO.Packaging": {
-        "type": "Transitive",
-        "resolved": "10.0.7",
-        "contentHash": "qvYn5etKp2m3p05CCvw48OXf0mbD57g0gq/dCjQvq2ZgXYtjB3CV6rwzO7QprxMHnkZFhJ0StrB0thrVzpF49Q=="
-      },
-      "System.Reflection.MetadataLoadContext": {
-        "type": "Transitive",
-        "resolved": "8.0.0",
-        "contentHash": "SZxrQ4sQYnIcdwiO3G/lHZopbPYQ2lW0ioT4JezgccWUrKaKbHLJbAGZaDfkYjWcta1pWssAo3MOXLsR0ie4tQ=="
-      },
-      "System.Security.Cryptography.ProtectedData": {
-        "type": "Transitive",
-        "resolved": "10.0.7",
-        "contentHash": "eqKW9wyPUhZi6pxy9Y0fQO/bdHROcwj0tYdmoGEPCPCtCJLFdVVAlzuuYYEnJI64HxhoXPYGhtx891g/jwN4rg=="
-      },
-      "YamlDotNet": {
-        "type": "Transitive",
-        "resolved": "15.1.2",
-        "contentHash": "qeX0XhzOIcQEvnI5JxnPaIwcINwyY4Qy/LXhSfsdHkFrl9F41AT52UFfy2nIE7kgrhMg+cP7xuS+GtPJhmHmTA=="
-      },
-      "powerforge": {
-        "type": "Project",
-        "dependencies": {
-          "System.IO.Packaging": "[10.0.7, )",
-          "System.Reflection.MetadataLoadContext": "[8.0.0, )",
-          "System.Security.Cryptography.ProtectedData": "[10.0.7, )",
-          "NuGet.Configuration": "[7.6.0, )"
-        }
-      },
-      "powerforge.web": {
-        "type": "Project",
-        "dependencies": {
-          "HtmlTinkerX": "[2.0.19, )",
-          "Magick.NET-Q8-AnyCPU": "[14.14.0, )",
-          "OfficeIMO.Markdown": "[0.6.13, )",
-          "PowerForge": "[1.0.0, )",
-          "Scriban": "[7.2.5, )",
-          "YamlDotNet": "[15.1.2, )"
-        }
-      },
-      "NuGet.Configuration": {
-        "type": "Transitive",
-        "resolved": "7.6.0",
-        "contentHash": "+bNj+YneC5CNg1vR+WZjLAakscJlsi0KhADZUgIJPn4pwh8/jeCUMC5ik5cpET/i+QOplDy7aJVTGkpdfrlPww==",
-        "dependencies": {
-          "NuGet.Common": "7.6.0",
-          "System.Security.Cryptography.ProtectedData": "8.0.0"
-        }
-      },
-      "NuGet.Common": {
-        "type": "Transitive",
-        "resolved": "7.6.0",
-        "contentHash": "uyXLqkbbZmkMvdHOR23l1EHW2hRmULtzoG3Ocj84VpGptnNfkODVboHGJfDfcn9Gi9oUNDs8/VjL4FZcST6zVg==",
-        "dependencies": {
-          "NuGet.Frameworks": "7.6.0"
-        }
-      },
-      "NuGet.Frameworks": {
-        "type": "Transitive",
-        "resolved": "7.6.0",
-        "contentHash": "rJ7QtKN45XzLXCrMATve6eFLiUyUGEkA1rFSb6U6Fw6laM4hEAcKOrcdbgWlcFUlCK2158qP1LF00hg/ivF3nw=="
       }
     }
   }

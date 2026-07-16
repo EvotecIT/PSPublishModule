@@ -117,7 +117,14 @@ public sealed partial class DotNetRepositoryReleaseService
             project.ProjectName,
             logger,
             payloadNames.ToArray());
-        var outputHashes = BuildOutputHashLookup(outputDirectories, payloadNames);
+        var packToolIntermediateAssemblies = ResolvePackToolIntermediateAssemblyPaths(
+            project.CsprojPath,
+            projectDirectory,
+            configuration,
+            project.ProjectName,
+            logger,
+            payloadNames.ToArray());
+        var outputHashes = BuildOutputHashLookup(outputDirectories, payloadNames, packToolIntermediateAssemblies);
 
         foreach (var packagePath in packagesWithPayloads)
         {
@@ -207,7 +214,8 @@ public sealed partial class DotNetRepositoryReleaseService
 
     private static Dictionary<string, HashSet<string>> BuildOutputHashLookup(
         IEnumerable<string> outputDirectories,
-        HashSet<string> payloadNames)
+        HashSet<string> payloadNames,
+        IEnumerable<string>? additionalFiles = null)
     {
         var hashes = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var directory in outputDirectories
@@ -217,22 +225,36 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             foreach (var path in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
             {
-                var fileName = Path.GetFileName(path);
-                if (!payloadNames.Contains(fileName))
-                    continue;
-
-                if (!hashes.TryGetValue(fileName, out var fileHashes))
-                {
-                    fileHashes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    hashes[fileName] = fileHashes;
-                }
-
-                using var stream = File.OpenRead(path);
-                fileHashes.Add(ComputePackagePayloadSha256(stream));
+                AddBuildOutputHash(hashes, payloadNames, path);
             }
         }
 
+        if (additionalFiles is not null)
+        {
+            foreach (var path in additionalFiles.Where(File.Exists).Distinct(StringComparer.OrdinalIgnoreCase))
+                AddBuildOutputHash(hashes, payloadNames, path);
+        }
+
         return hashes;
+    }
+
+    private static void AddBuildOutputHash(
+        IDictionary<string, HashSet<string>> hashes,
+        HashSet<string> payloadNames,
+        string path)
+    {
+        var fileName = Path.GetFileName(path);
+        if (!payloadNames.Contains(fileName))
+            return;
+
+        if (!hashes.TryGetValue(fileName, out var fileHashes))
+        {
+            fileHashes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            hashes[fileName] = fileHashes;
+        }
+
+        using var stream = File.OpenRead(path);
+        fileHashes.Add(ComputePackagePayloadSha256(stream));
     }
 
     private static string?[] ResolveConfiguredTargetFrameworks(

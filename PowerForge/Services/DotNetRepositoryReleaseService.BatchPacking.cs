@@ -252,7 +252,10 @@ public sealed partial class DotNetRepositoryReleaseService
                 var csprojDir = Path.GetDirectoryName(project.CsprojPath) ?? string.Empty;
                 var includePatterns = ResolveAssemblySigningIncludePatterns(project, spec, csprojDir, configuration, logger);
                 var outputDirectories = ResolveBuildOutputDirectories(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns);
-                var signingPlan = BuildAssemblySigningPlan(outputDirectories, includePatterns);
+                var signingPlan = BuildAssemblySigningPlan(
+                    outputDirectories,
+                    includePatterns,
+                    ResolvePackToolIntermediateAssemblyPaths(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns));
                 if (signingPlan.Files.Length == 0 && !spec.SignDependencyAssemblies)
                 {
                     var evaluatedIncludePatterns = ResolveAssemblySigningIncludePatterns(project, spec, csprojDir, configuration, logger);
@@ -260,7 +263,10 @@ public sealed partial class DotNetRepositoryReleaseService
                     {
                         includePatterns = evaluatedIncludePatterns;
                         outputDirectories = ResolveBuildOutputDirectories(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns);
-                        signingPlan = BuildAssemblySigningPlan(outputDirectories, includePatterns);
+                        signingPlan = BuildAssemblySigningPlan(
+                            outputDirectories,
+                            includePatterns,
+                            ResolvePackToolIntermediateAssemblyPaths(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns));
                     }
                 }
                 logger.Info($"{project.ProjectName}: assembly signing include pattern(s): {string.Join(", ", includePatterns)}.");
