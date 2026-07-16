@@ -171,4 +171,45 @@ public sealed class DotNetRepositoryReleaseCentralVersionTests
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
+
+    [Fact]
+    public void Execute_WhatIf_PreservesDeclaredReferenceWithoutEvaluatingMsBuild()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.WhatIf"));
+            var projectPath = Path.Combine(projectDirectory.FullName, "Sample.WhatIf.csproj");
+            const string projectSource = """
+                <Project Sdk="Intentionally.Missing.Sdk/999.0.0">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <PackageId>Sample.WhatIf</PackageId>
+                    <VersionPrefix>$(ProductVersion)</VersionPrefix>
+                    <IsPackable>true</IsPackable>
+                  </PropertyGroup>
+                </Project>
+                """;
+            File.WriteAllText(projectPath, projectSource);
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Pack = false,
+                Publish = false,
+                UpdateVersions = false,
+                WhatIf = true,
+                SignAssemblies = false,
+                SignPackages = false
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal("$(ProductVersion)", result.ResolvedVersionsByProject["Sample.WhatIf"]);
+            Assert.Equal(projectSource, File.ReadAllText(projectPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
 }
