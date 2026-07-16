@@ -49,11 +49,12 @@ public sealed partial class DotNetRepositoryReleaseService
     {
         warning = null;
         string? declaredVersion = null;
+        string? declaredExactVersion = null;
         if (CsprojVersionEditor.TryGetVersion(project.CsprojPath, out var candidate))
         {
             declaredVersion = candidate;
             if (PackageVersionUtility.TryNormalizeExact(candidate, out var exact))
-                return exact;
+                declaredExactVersion = exact;
         }
 
         var projectDirectory = Path.GetDirectoryName(project.CsprojPath) ?? spec.RootPath;
@@ -81,22 +82,28 @@ public sealed partial class DotNetRepositoryReleaseService
         if (exitCode != 0)
         {
             var detail = SummarizeProcessFailureOutput(stdErr, stdOut);
-            warning = string.IsNullOrWhiteSpace(declaredVersion)
-                ? $"No literal project version was found and MSBuild PackageVersion evaluation failed. {detail}".Trim()
-                : $"Project version '{declaredVersion}' requires MSBuild evaluation, but PackageVersion evaluation failed. {detail}".Trim();
+            warning = !string.IsNullOrWhiteSpace(declaredExactVersion)
+                ? $"MSBuild PackageVersion evaluation failed; using declared project version '{declaredExactVersion}'. {detail}".Trim()
+                : string.IsNullOrWhiteSpace(declaredVersion)
+                    ? $"No literal project version was found and MSBuild PackageVersion evaluation failed. {detail}".Trim()
+                    : $"Project version '{declaredVersion}' requires MSBuild evaluation, but PackageVersion evaluation failed. {detail}".Trim();
         }
         else if (!string.IsNullOrWhiteSpace(evaluatedVersion))
         {
-            warning = $"MSBuild evaluated PackageVersion to unsupported value '{evaluatedVersion}'.";
+            warning = !string.IsNullOrWhiteSpace(declaredExactVersion)
+                ? $"MSBuild evaluated PackageVersion to unsupported value '{evaluatedVersion}'; using declared project version '{declaredExactVersion}'."
+                : $"MSBuild evaluated PackageVersion to unsupported value '{evaluatedVersion}'.";
         }
         else
         {
-            warning = string.IsNullOrWhiteSpace(declaredVersion)
-                ? "No project version was found after evaluating MSBuild PackageVersion."
-                : $"Project version '{declaredVersion}' did not evaluate to a package version.";
+            warning = !string.IsNullOrWhiteSpace(declaredExactVersion)
+                ? $"MSBuild did not evaluate PackageVersion; using declared project version '{declaredExactVersion}'."
+                : string.IsNullOrWhiteSpace(declaredVersion)
+                    ? "No project version was found after evaluating MSBuild PackageVersion."
+                    : $"Project version '{declaredVersion}' did not evaluate to a package version.";
         }
 
-        return string.Empty;
+        return declaredExactVersion ?? string.Empty;
     }
 
     private static DotNetPackResult PackProject(
