@@ -9,6 +9,20 @@ plan_root="$test_root/plan"
 fake_bin="$test_root/bin"
 trap 'rm -rf "$test_root"' EXIT
 
+if [[ ! -f "$cli" ]]; then
+  build_command=(
+    dotnet build "$repo_root/PowerForge.Web.Cli/PowerForge.Web.Cli.csproj"
+    --configuration Release
+    --nologo
+  )
+  if [[ "$(id -u)" -eq 0 && -n "${SUDO_USER:-}" && "$SUDO_USER" != root ]]; then
+    sudo -u "$SUDO_USER" -H "${build_command[@]}" >/dev/null
+  else
+    "${build_command[@]}" >/dev/null
+  fi
+fi
+[[ -f "$cli" ]] || { echo "PowerForge.Web CLI build did not produce $cli" >&2; exit 1; }
+
 mkdir -p "$restore_root" "$plan_root" "$fake_bin"
 cat >"$test_root/manifest.json" <<EOF
 {
