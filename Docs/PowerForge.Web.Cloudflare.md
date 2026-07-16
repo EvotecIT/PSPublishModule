@@ -1,6 +1,6 @@
-# Cloudflare Cache Purge (Optional)
+# Cloudflare Cache Policy, Purge, and Verification
 
-Last updated: 2026-02-18
+Last updated: 2026-07-16
 
 If your site is behind Cloudflare and you cache HTML aggressively, deploys can appear "stale"
 until Cloudflare revalidates or you hard refresh. The best long-term pattern is:
@@ -8,7 +8,40 @@ until Cloudflare revalidates or you hard refresh. The best long-term pattern is:
 - hash/version static assets (CSS/JS/images) so they can be cached for a long time
 - keep HTML caching conservative, or purge HTML after deploy
 
-PowerForge.Web includes small Cloudflare purge + verify commands to make this repeatable in CI.
+PowerForge.Web owns the repeatable Cloudflare operations used by a static site:
+
+- apply the standard host-scoped cache policy without replacing unrelated rules
+- purge newly deployed routes
+- verify public cache behavior after warmup
+
+## Cache Policy
+
+Apply the standard policy from a PowerForge `site.json`:
+
+```bash
+powerforge-web cloudflare cache-policy apply \
+  --zone-id <ZONE_ID> \
+  --token-env CLOUDFLARE_API_TOKEN \
+  --site-config ./site.json
+```
+
+PowerForge derives the hostname and optional deployment base path from `BaseUrl`, the
+managed description prefix from `Name`, and additional HTML routes from features and
+navigation. The policy manages exactly three rules for that site:
+
+- static assets, with query strings excluded from the cache key
+- data and discovery files, preserving normal query behavior
+- HTML, docs, API, and site-specific navigation routes, preserving normal query behavior
+
+The command creates the phase entry-point ruleset when it is absent, preserves rules
+outside the site's `PowerForge <Name>:` prefix in their existing positions, and avoids
+a ruleset update when the effective policy is already current. Generated expressions
+are rejected locally when they exceed Cloudflare's 4,096-character limit. Use
+`--dry-run` to read the current ruleset and report whether a write would be required.
+
+If a site specification is not available, pass `--hostname`, `--policy-name`, and
+optional `--base-path` and `--html-path` values explicitly. HTML paths are relative to
+the site base path.
 
 ## CLI
 
@@ -90,7 +123,40 @@ Verify example step (no token/zone required):
 }
 ```
 
-## GitHub Actions (Recommended)
+## GitHub Actions
+
+Configure cache rules from a caller-owned protected environment with the composite
+action. The consumer workflow remains declarative; the API token is passed to the
+PowerForge CLI through an environment-variable name and never appears in command
+arguments.
+
+```yaml
+jobs:
+  cloudflare-cache-policy:
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - uses: EvotecIT/PSPublishModule/.github/actions/powerforge-cloudflare-cache-policy@POWERFORGE_COMMIT
+        with:
+          site-config: Website/site.json
+          zone-id: ${{ vars.CLOUDFLARE_ZONE_ID }}
+          api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+```
+
+Pin `POWERFORGE_COMMIT` to an exact commit. Cloudflare's current
+[Cache Rules API guide](https://developers.cloudflare.com/cache/how-to/cache-rules/create-api/)
+lists these token permissions:
+
+- `Zone > Cache Rules > Edit`, scoped to the target zones
+- `Account > Account Rulesets > Edit`, scoped to the owning account
+- `Account > Account Filter Lists > Edit`, scoped to the owning account
+
+If the same token is also used by deployment purge, grant `Zone > Cache Purge > Purge`.
+The action rejects pull-request events before protected inputs are used.
+
+### Post-Deploy Purge
 
 For GitHub Pages workflows that deploy via `actions/deploy-pages@v4`, the purge should run
 in the deploy job **after** the deployment step, using secrets:
@@ -109,9 +175,9 @@ Pseudo-snippet:
     powerforge-web cloudflare verify --site-config ./site.json --warmup 1
 ```
 
-## Cloudflare Rules (Free Plan Friendly)
+## Standard Rule Expressions
 
-Use 3 cache rules for all PowerForge websites.
+The standard policy uses three cache rules for each PowerForge website.
 These expressions only use `eq`/`wildcard` (no `matches`), so they work on Free plans.
 
 1) `Static assets`

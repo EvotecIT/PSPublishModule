@@ -1,0 +1,61 @@
+name: PowerForge Cloudflare Cache Policy
+description: Apply the generic PowerForge cache policy from a caller-owned protected environment.
+
+inputs:
+  site-config:
+    description: Repository-relative PowerForge site specification used for hostname, policy name, and HTML routes.
+    required: false
+    default: Website/site.json
+  zone-id:
+    description: Cloudflare zone identifier from the caller job's protected environment.
+    required: true
+  api-token:
+    description: Protected Cloudflare API token with Zone > Cache Rules > Edit and required account Rulesets/Filter Lists edit permissions.
+    required: true
+  hostname:
+    description: Optional hostname override; normally derived from the site specification BaseUrl.
+    required: false
+    default: ""
+  policy-name:
+    description: Optional managed description name; normally derived from the site specification Name.
+    required: false
+    default: ""
+  base-path:
+    description: Optional site base-path override; normally derived from the site specification BaseUrl.
+    required: false
+    default: ""
+  dry-run:
+    description: Report whether rules would change without writing the ruleset.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Reject pull request cache changes
+      if: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'merge_group' }}
+      shell: pwsh
+      run: throw 'PowerForge protected Cloudflare changes cannot run from pull request events.'
+
+    - name: Checkout caller repository
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        token: ${{ github.token }}
+        ref: ${{ github.sha }}
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+      with:
+        global-json-file: ${{ github.action_path }}/../../../global.json
+
+    - name: Apply Cloudflare cache policy
+      shell: pwsh
+      env:
+        POWERFORGE_CLOUDFLARE_API_TOKEN: ${{ inputs.api-token }}
+        POWERFORGE_CLOUDFLARE_BASE_PATH: ${{ inputs.base-path }}
+        POWERFORGE_CLOUDFLARE_DRY_RUN: ${{ inputs.dry-run }}
+        POWERFORGE_CLOUDFLARE_HOSTNAME: ${{ inputs.hostname }}
+        POWERFORGE_CLOUDFLARE_POLICY_NAME: ${{ inputs.policy-name }}
+        POWERFORGE_CLOUDFLARE_SITE_CONFIG: ${{ inputs.site-config }}
+        POWERFORGE_CLOUDFLARE_ZONE_ID: ${{ inputs.zone-id }}
+      run: '& "$env:GITHUB_ACTION_PATH/Invoke-PowerForgeCloudflareCachePolicy.ps1"'
