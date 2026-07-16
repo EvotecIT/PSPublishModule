@@ -432,6 +432,28 @@ public sealed class AddBenchmarkMetricCommand : BenchmarkDslCommand
 }
 
 /// <summary>
+/// Adds a suite-specific provenance value to benchmark metadata artifacts.
+/// </summary>
+[Cmdlet(VerbsCommon.Add, "BenchmarkMetadata")]
+[Alias("metadata")]
+public sealed class AddBenchmarkMetadataCommand : BenchmarkDslCommand
+{
+    /// <summary>Metadata name.</summary>
+    [Parameter(Mandatory = true, Position = 0)]
+    [ValidateNotNullOrEmpty]
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Metadata value.</summary>
+    [Parameter(Mandatory = true, Position = 1)]
+    [ValidateNotNullOrEmpty]
+    public string Value { get; set; } = string.Empty;
+
+    /// <inheritdoc />
+    protected override void ProcessRecord()
+        => PowerShellBenchmarkDslRuntime.Metadata(Name, Value);
+}
+
+/// <summary>
 /// Adds a benchmark comparison definition.
 /// </summary>
 [Cmdlet(VerbsCommon.Add, "BenchmarkComparison")]

@@ -28,11 +28,14 @@ public sealed class ManagedModuleBenchmarkSuiteTests
         var text = File.ReadAllText(path);
         var lines = File.ReadLines(path).Where(static line => !string.IsNullOrWhiteSpace(line)).Count();
 
-        Assert.True(lines <= 210, "Managed module benchmark spec should stay readable and data-driven.");
+        Assert.True(lines <= 245, "Managed module benchmark spec should stay readable and data-driven.");
         Assert.Contains("benchmark 'managed-modules'", text, StringComparison.Ordinal);
         Assert.Contains("caseSource", text, StringComparison.Ordinal);
         Assert.Contains("engine Managed", text, StringComparison.Ordinal);
         Assert.Contains("operation Install", text, StringComparison.Ordinal);
+        Assert.Contains("metadata ComparisonMode", text, StringComparison.Ordinal);
+        Assert.Contains("ManagedModuleSha256", text, StringComparison.Ordinal);
+        Assert.Contains("ModuleFastSha256", text, StringComparison.Ordinal);
         Assert.DoesNotContain("ModuleFastCSharp", text, StringComparison.Ordinal);
         Assert.DoesNotContain("New-ManagedModuleBenchmarkSuite", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Invoke-BenchmarkSuite", text, StringComparison.Ordinal);
@@ -94,10 +97,27 @@ public sealed class ManagedModuleBenchmarkSuiteTests
 
         Assert.Contains("Import-Module", setup, StringComparison.Ordinal);
         Assert.Contains("Clear-ModuleFastCache", setup, StringComparison.Ordinal);
-        Assert.Contains("ManagedCommandPath", setup, StringComparison.Ordinal);
+        Assert.Contains("$run.RunId", setup, StringComparison.Ordinal);
+        Assert.Contains("$run.Iteration", setup, StringComparison.Ordinal);
+        Assert.Contains("ManagedCommandSha256", setup, StringComparison.Ordinal);
+        Assert.Contains("ModuleFastCommandSha256", setup, StringComparison.Ordinal);
         Assert.DoesNotContain("PackageCacheDirectory", managedInstall, StringComparison.Ordinal);
         Assert.DoesNotContain("Import-Module", moduleFastInstall, StringComparison.Ordinal);
         Assert.Contains("DestinationOnly", moduleFastInstall, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ManagedModuleSuite_OnlyUpdatesRootReadmeWhenExplicitlyRequested()
+    {
+        var normal = LoadSuite();
+        var publishing = LoadSuite(variables: new Dictionary<string, string?>
+        {
+            ["UpdateReadme"] = "true"
+        });
+
+        Assert.Empty(normal.ReadmeBlocks);
+        var block = Assert.Single(publishing.ReadmeBlocks);
+        Assert.Equal("managed-module-benchmark-table", block.BlockId);
     }
 
     [Fact]

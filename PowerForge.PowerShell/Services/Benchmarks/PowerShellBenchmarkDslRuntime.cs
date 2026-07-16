@@ -10,7 +10,7 @@ namespace PowerForge;
 /// <summary>
 /// Runtime used by locally scoped benchmark DSL helper functions.
 /// </summary>
-public static class PowerShellBenchmarkDslRuntime
+public static partial class PowerShellBenchmarkDslRuntime
 {
     private static readonly AsyncLocal<PowerShellBenchmarkDslContext?> Current = new();
 
@@ -548,6 +548,7 @@ try {
             ["engine"] = Call("Engine", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
             ["operation"] = Call("Operation", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
             ["metric"] = Call("Metric", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
+            ["metadata"] = Call("Metadata", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [string] $Value)", "[object[]] @($Name, $Value)"),
             ["compare"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric, [ValidateRange(0, [double]::MaxValue)] [double] $TieTolerance, [switch] $RequireBaselineFastest) $arguments = [object[]]::new(5); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; $arguments[3] = $TieTolerance; $arguments[4] = $RequireBaselineFastest.IsPresent; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
             ["comparison"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric, [ValidateRange(0, [double]::MaxValue)] [double] $TieTolerance, [switch] $RequireBaselineFastest) $arguments = [object[]]::new(5); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; $arguments[3] = $TieTolerance; $arguments[4] = $RequireBaselineFastest.IsPresent; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
             ["readme"] = Call("Readme", "param([Parameter(Position=0)] [string] $Path, [string] $Block, [string] $Renderer)", "[object[]] @($Path, $Block, $Renderer)"),
@@ -572,6 +573,7 @@ try {
             ["Add-BenchmarkSkipRule"] = Call("Skip", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
             ["Add-BenchmarkValidation"] = Call("Validate", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
             ["Add-BenchmarkMetric"] = Call("Metric", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
+            ["Add-BenchmarkMetadata"] = Call("Metadata", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [string] $Value)", "[object[]] @($Name, $Value)"),
             ["Add-BenchmarkComparison"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric, [ValidateRange(0, [double]::MaxValue)] [double] $TieTolerance, [switch] $RequireBaselineFastest) $arguments = [object[]]::new(5); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; $arguments[3] = $TieTolerance; $arguments[4] = $RequireBaselineFastest.IsPresent; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
             ["Add-BenchmarkReadmeBlock"] = Call("Readme", "param([Parameter(Position=0)] [string] $Path, [string] $Block, [string] $Renderer)", "[object[]] @($Path, $Block, $Renderer)"),
             ["Set-BenchmarkArtifacts"] = "param([Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) $arguments = [object[]]::new(1); $arguments[0] = $Values; __PowerForgeBenchmarkDslInvoke -Name 'Artifacts' -Arguments $arguments",

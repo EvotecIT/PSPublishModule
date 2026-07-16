@@ -109,6 +109,9 @@ public sealed class PowerShellBenchmarkSuite
     /// <summary>Cleanup behavior for benchmark-owned temporary environment state.</summary>
     public PowerShellBenchmarkCleanupMode Cleanup { get; set; } = PowerShellBenchmarkCleanupMode.Always;
 
+    /// <summary>Suite-specific provenance written to benchmark metadata artifacts.</summary>
+    public Dictionary<string, string> Metadata { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Declared benchmark cases.</summary>
     public List<PowerShellBenchmarkCase> Cases { get; } = new();
 
