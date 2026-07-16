@@ -22,6 +22,8 @@ trap cleanup EXIT
 mkdir -p "$fixture_root/bin" "$fixture_root/config" "$fixture_root/locks" "$fixture_root/trusted" "$fixture_root/content"
 install -m 0755 "$repo_root/Deployment/Linux/powerforge-site-deploy.sh" "$fixture_root/bin/powerforge-site-deploy"
 install -m 0755 "$repo_root/Deployment/Linux/powerforge-site-reconcile.sh" "$fixture_root/bin/powerforge-site-reconcile"
+# The quoted literal is the body of the generated curl shim.
+# shellcheck disable=SC2016
 printf '%s\n' \
   '#!/usr/bin/env bash' \
   'printf "%s\\n" "$*" >>"$POWERFORGE_FIXTURE_CURL_LOG"' \
@@ -88,7 +90,6 @@ promote_release() {
     --metadata "/tmp/powerforge-${run_id}-1-example.com/deployment.json" \
     --defer-public-verification)"
   release_id="$(sed -n 's/^POWERFORGE_RELEASE_ID=//p' <<<"$output" | tail -n 1)"
-  previous_release_id="$(sed -n 's/^POWERFORGE_PREVIOUS_RELEASE_ID=//p' <<<"$output" | tail -n 1)"
   [[ -n "$release_id" ]]
 }
 
@@ -97,7 +98,8 @@ run1="$base_run"
 stage_release "$run1" '1111111111111111111111111111111111111111' ephemeral
 promote_release "$run1"
 release1="$release_id"
-[[ -z "$previous_release_id" && -s "$fixture_root/pending/example.com/cloudflare-api.token" ]]
+[[ -s "$fixture_root/pending/example.com/cloudflare-api.token" ]]
+[[ -z "$(sed -n '2p' "$fixture_root/pending/example.com/state")" ]]
 $deploy_command --site example.com --expire-pending
 [[ -d "$fixture_root/pending/example.com" ]]
 $deploy_command --site example.com --finalize --release-id "$release1"
@@ -108,8 +110,8 @@ run2="$((base_run + 1))"
 stage_release "$run2" '2222222222222222222222222222222222222222' ephemeral
 promote_release "$run2"
 release2="$release_id"
-[[ "$previous_release_id" == "$release1" ]]
-$deploy_command --site example.com --rollback --release-id "$release2" --previous-release-id "$release1"
+[[ "$(sed -n '2p' "$fixture_root/pending/example.com/state")" == "$fixture_root/site/releases/$release1" ]]
+$deploy_command --site example.com --rollback --release-id "$release2"
 [[ ! -e "$fixture_root/pending/example.com" && ! -e "$fixture_root/site/releases/$release2" ]]
 [[ "$(basename "$(readlink -f "$fixture_root/site/current")")" == "$release1" ]]
 
@@ -118,18 +120,18 @@ stage_release "$run3" '3333333333333333333333333333333333333333' ephemeral
 promote_release "$run3"
 release3="$release_id"
 sed -i '$s/.*/0/' "$fixture_root/pending/example.com/state"
-$fixture_root/bin/powerforge-site-reconcile
+"$fixture_root/bin/powerforge-site-reconcile"
 [[ ! -e "$fixture_root/pending/example.com" && ! -e "$fixture_root/site/releases/$release3" ]]
 [[ "$(basename "$(readlink -f "$fixture_root/site/current")")" == "$release1" ]]
 
 prepared_release="prepared-${base_run}"
 mkdir -p "$fixture_root/site/releases/$prepared_release" "$fixture_root/pending/example.com"
-printf '%s\n%s\n%s\n' "$prepared_release" "$release1" '0' >"$fixture_root/pending/example.com/state"
+printf '%s\n%s\n%s\n' "$prepared_release" "$fixture_root/site/releases/$release1" '0' >"$fixture_root/pending/example.com/state"
 printf '%s' 'fixture-token' >"$fixture_root/pending/example.com/cloudflare-api.token"
 printf '%s' '0123456789abcdef0123456789abcdef' >"$fixture_root/pending/example.com/cloudflare-zone-id"
 chmod 0700 "$fixture_root/pending/example.com"
 chmod 0600 "$fixture_root/pending/example.com/"*
-$fixture_root/bin/powerforge-site-reconcile
+"$fixture_root/bin/powerforge-site-reconcile"
 [[ ! -e "$fixture_root/pending/example.com" && ! -e "$fixture_root/site/releases/$prepared_release" ]]
 [[ "$(basename "$(readlink -f "$fixture_root/site/current")")" == "$release1" ]]
 
@@ -138,12 +140,26 @@ run4="$((base_run + 3))"
 stage_release "$run4" '4444444444444444444444444444444444444444' host
 promote_release "$run4"
 release4="$release_id"
-[[ "$previous_release_id" == "$release1" && ! -e "$fixture_root/pending/example.com/cloudflare-api.token" ]]
-$deploy_command --site example.com --rollback --release-id "$release4" --previous-release-id "$release1"
+[[ "$(sed -n '2p' "$fixture_root/pending/example.com/state")" == "$fixture_root/site/releases/$release1" ]]
+[[ ! -e "$fixture_root/pending/example.com/cloudflare-api.token" ]]
+$deploy_command --site example.com --rollback --release-id "$release4"
 [[ ! -e "$fixture_root/pending/example.com" && ! -e "$fixture_root/site/releases/$release4" ]]
-[[ "$(wc -l <"$fixture_root/curl.log")" -eq 8 ]]
+
+external_target="$fixture_root/external-release"
+mkdir -p "$external_target"
+rm -f "$fixture_root/site/current"
+ln -s "$external_target" "$fixture_root/site/current"
+run5="$((base_run + 4))"
+stage_release "$run5" '5555555555555555555555555555555555555555' host
+promote_release "$run5"
+release5="$release_id"
+[[ "$(sed -n '2p' "$fixture_root/pending/example.com/state")" == "$external_target" ]]
+$deploy_command --site example.com --rollback --release-id "$release5"
+[[ "$(readlink -f "$fixture_root/site/current")" == "$external_target" ]]
+[[ "$(wc -l <"$fixture_root/curl.log")" -eq 10 ]]
 
 printf '%s\n' \
   'deferred_finalize_and_rollback=passed' \
   'expired_and_prepared_release_reconciliation=passed' \
-  'ephemeral_and_host_cache_purge=passed'
+  'ephemeral_and_host_cache_purge=passed' \
+  'external_rollback_target=passed'

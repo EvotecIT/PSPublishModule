@@ -119,8 +119,8 @@ account. For example:
 
 ```sudoers
 powerforge-example ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-site-deploy ^--site example\.com --archive /tmp/powerforge-[0-9]+-[0-9]+-example\.com/artifact\.tar --metadata /tmp/powerforge-[0-9]+-[0-9]+-example\.com/deployment\.json --defer-public-verification$
-powerforge-example ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-site-deploy ^--site example\.com --finalize --release-id [A-Za-z0-9][A-Za-z0-9._-]*( --previous-release-id [A-Za-z0-9][A-Za-z0-9._-]*)?$
-powerforge-example ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-site-deploy ^--site example\.com --rollback --release-id [A-Za-z0-9][A-Za-z0-9._-]*( --previous-release-id [A-Za-z0-9][A-Za-z0-9._-]*)?$
+powerforge-example ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-site-deploy ^--site example\.com --finalize --release-id [A-Za-z0-9][A-Za-z0-9._-]*$
+powerforge-example ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-site-deploy ^--site example\.com --rollback --release-id [A-Za-z0-9][A-Za-z0-9._-]*$
 ```
 
 Validate the installed file with `visudo -cf`. Sites upgrading from the earlier
@@ -139,7 +139,9 @@ Release pruning happens only after the runner finalizes a verified release. Defe
 promotions create root-only pending state with a ten-minute deadline. The reconciler
 checks that state every minute and restores an abandoned release after runner
 cancellation, timeout, or loss. Deferred promotion refuses to start when that timer is
-not active.
+not active. The trusted pending state stores the exact resolved previous target, so
+rollback also preserves an existing `current` symlink outside the managed release root;
+that path is never accepted from the runner.
 
 On the first PowerForge deployment, an existing non-symlink `current` directory is
 moved into the release history and becomes the rollback target. This lets the shared

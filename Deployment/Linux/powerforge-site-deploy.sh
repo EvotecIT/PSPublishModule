@@ -13,7 +13,6 @@ metadata=""
 operation="promote"
 defer_public_verification=0
 release_id_argument=""
-previous_release_id_argument=""
 promoted=0
 legacy_migrated=0
 previous_target=""
@@ -24,7 +23,7 @@ pending_stage=""
 pending_dir=""
 pending_state_file=""
 pending_release_id=""
-pending_previous_release_id=""
+pending_previous_target=""
 pending_expires_at_epoch=""
 pending_created=0
 
@@ -49,8 +48,8 @@ usage() {
   cat <<'EOF'
 Usage:
   powerforge-site-deploy --site <id> --archive <artifact.tar> --metadata <deployment.json> [--defer-public-verification]
-  powerforge-site-deploy --site <id> --finalize --release-id <id> [--previous-release-id <id>]
-  powerforge-site-deploy --site <id> --rollback --release-id <id> [--previous-release-id <id>]
+  powerforge-site-deploy --site <id> --finalize --release-id <id>
+  powerforge-site-deploy --site <id> --rollback --release-id <id>
   powerforge-site-deploy --site <id> --expire-pending
 EOF
 }
@@ -92,10 +91,6 @@ while (($# > 0)); do
       release_id_argument="${2:-}"
       shift 2
       ;;
-    --previous-release-id)
-      previous_release_id_argument="${2:-}"
-      shift 2
-      ;;
     --help|-h)
       usage
       exit 0
@@ -110,12 +105,12 @@ done
 [[ "$site" =~ ^[a-z0-9][a-z0-9.-]{0,62}$ ]] || fail 'Invalid site identifier.'
 if [[ "$operation" == 'promote' ]]; then
   [[ -n "$archive" && -n "$metadata" ]] || fail 'Both --archive and --metadata are required.'
-  [[ -z "$release_id_argument" && -z "$previous_release_id_argument" ]] || fail 'Release identity arguments are not valid during promotion.'
+  [[ -z "$release_id_argument" ]] || fail 'Release identity arguments are not valid during promotion.'
 else
   [[ -z "$archive" && -z "$metadata" ]] || fail 'Archive and metadata are only valid during promotion.'
   [[ "$defer_public_verification" == '0' ]] || fail 'Deferred verification is only valid during promotion.'
   if [[ "$operation" == 'expire' ]]; then
-    [[ -z "$release_id_argument" && -z "$previous_release_id_argument" ]] || fail 'Release identity arguments are not valid during pending-release expiry.'
+    [[ -z "$release_id_argument" ]] || fail 'Release identity arguments are not valid during pending-release expiry.'
   fi
 fi
 
@@ -212,16 +207,15 @@ load_pending_release() {
   mapfile -t pending_values <"$pending_state_file"
   [[ "${#pending_values[@]}" -eq 3 ]] || fail 'Pending release state must contain exactly three lines.'
   pending_release_id="${pending_values[0]}"
-  pending_previous_release_id="${pending_values[1]}"
+  pending_previous_target="${pending_values[1]}"
   pending_expires_at_epoch="${pending_values[2]}"
   validate_release_id "$pending_release_id"
-  [[ -z "$pending_previous_release_id" ]] || validate_release_id "$pending_previous_release_id"
+  [[ -z "$pending_previous_target" || ( "$pending_previous_target" == /* && "$pending_previous_target" != '/' ) ]] || fail 'Pending previous release target is invalid.'
   [[ "$pending_expires_at_epoch" =~ ^[0-9]+$ ]] || fail 'Pending release expiry is invalid.'
 }
 
 assert_pending_identity() {
   [[ "$release_id_argument" == "$pending_release_id" ]] || fail 'Deferred release id does not match pending state.'
-  [[ "$previous_release_id_argument" == "$pending_previous_release_id" ]] || fail 'Deferred previous release id does not match pending state.'
 }
 
 configure_pending_cloudflare() {
@@ -258,9 +252,9 @@ finalize_deferred_release() {
   local current_target
   selected_release="$(release_path "$pending_release_id")"
   [[ -d "$selected_release" ]] || fail "Deferred release does not exist: $pending_release_id"
-  if [[ -n "$pending_previous_release_id" ]]; then
-    selected_previous="$(release_path "$pending_previous_release_id")"
-    [[ -d "$selected_previous" ]] || fail "Deferred rollback release does not exist: $pending_previous_release_id"
+  if [[ -n "$pending_previous_target" ]]; then
+    selected_previous="$pending_previous_target"
+    [[ -d "$selected_previous" ]] || fail "Deferred rollback release does not exist: $pending_previous_target"
   fi
   [[ -L "$SITE_ROOT/current" ]] || fail 'Current release is not a symlink during finalization.'
   current_target="$(readlink -f "$SITE_ROOT/current")"
@@ -276,15 +270,15 @@ rollback_deferred_release() {
   local selected_previous=""
   local current_target=""
   selected_release="$(release_path "$pending_release_id")"
-  if [[ -n "$pending_previous_release_id" ]]; then
-    selected_previous="$(release_path "$pending_previous_release_id")"
+  if [[ -n "$pending_previous_target" ]]; then
+    selected_previous="$pending_previous_target"
   fi
   if [[ -L "$SITE_ROOT/current" ]]; then
     current_target="$(readlink -f "$SITE_ROOT/current")"
   fi
   if [[ "$current_target" == "$selected_release" && -d "$selected_release" ]]; then
     if [[ -n "$selected_previous" ]]; then
-      [[ -d "$selected_previous" ]] || fail "Deferred rollback release does not exist: $pending_previous_release_id"
+      [[ -d "$selected_previous" ]] || fail "Deferred rollback release does not exist: $pending_previous_target"
       rollback_link="$SITE_ROOT/.current.rollback.$$"
       ln -s "$selected_previous" "$rollback_link"
       mv -Tf "$rollback_link" "$SITE_ROOT/current"
@@ -498,14 +492,10 @@ verify_release() {
 }
 
 create_pending_release() {
-  local previous_release_id=""
   pending_expires_at_epoch="$(( $(date -u +%s) + PENDING_TTL_SECONDS ))"
-  if [[ -n "$previous_target" ]]; then
-    previous_release_id="$(basename "$previous_target")"
-  fi
   pending_stage="$(mktemp -d "${PENDING_STATE_ROOT}/.${site}.XXXXXXXX")"
   chmod 0700 "$pending_stage"
-  printf '%s\n%s\n%s\n' "$release_id" "$previous_release_id" "$pending_expires_at_epoch" >"$pending_stage/state"
+  printf '%s\n%s\n%s\n' "$release_id" "$previous_target" "$pending_expires_at_epoch" >"$pending_stage/state"
   chmod 0600 "$pending_stage/state"
   if [[ -f "$trusted_stage/cloudflare-api.token" ]]; then
     install -m 0600 "$trusted_stage/cloudflare-api.token" "$pending_stage/cloudflare-api.token"
@@ -577,11 +567,6 @@ cleanup_staging
 trap - EXIT
 if [[ "$defer_public_verification" == '1' ]]; then
   printf 'POWERFORGE_RELEASE_ID=%s\n' "$release_id"
-  if [[ -n "$previous_target" ]]; then
-    printf 'POWERFORGE_PREVIOUS_RELEASE_ID=%s\n' "$(basename "$previous_target")"
-  else
-    printf 'POWERFORGE_PREVIOUS_RELEASE_ID=\n'
-  fi
   printf 'POWERFORGE_PENDING_EXPIRES_AT=%s\n' "$pending_expires_at_epoch"
   log "Promoted $site release $release_id pending external public verification"
 else

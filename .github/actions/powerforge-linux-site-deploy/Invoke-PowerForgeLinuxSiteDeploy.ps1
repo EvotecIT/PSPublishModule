@@ -185,16 +185,11 @@ try {
     Assert-LastExitCode 'Promoting the site release for external public verification'
 
     $releaseMatch = $promotionOutput | Select-String -Pattern '^POWERFORGE_RELEASE_ID=(?<value>[A-Za-z0-9][A-Za-z0-9._-]{0,127})$' | Select-Object -Last 1
-    $previousMatch = $promotionOutput | Select-String -Pattern '^POWERFORGE_PREVIOUS_RELEASE_ID=(?<value>[A-Za-z0-9._-]*)$' | Select-Object -Last 1
-    if ($null -eq $releaseMatch -or $null -eq $previousMatch) {
+    if ($null -eq $releaseMatch) {
         throw 'The remote promoter did not return a valid deferred release identity.'
     }
     $releaseId = $releaseMatch.Matches[0].Groups['value'].Value
-    $previousReleaseId = $previousMatch.Matches[0].Groups['value'].Value
     $releaseArguments = "--release-id '$releaseId'"
-    if (-not [string]::IsNullOrWhiteSpace($previousReleaseId)) {
-        $releaseArguments += " --previous-release-id '$previousReleaseId'"
-    }
 
     try {
         Assert-PowerForgePublicSite -BaseUri $publicUri -SmokePaths $smokePaths -SourceSha $metadata.sourceSha -ArtifactSha256 $metadata.artifactSha256 -RunId $metadata.workflowRunId -RunAttempt $metadata.workflowRunAttempt
