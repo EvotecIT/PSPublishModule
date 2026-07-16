@@ -103,7 +103,7 @@ internal static partial class WebCliCommandHandlers
         {
             Command("install-deployment-ssh-identity", $"install -d -o {deploymentUser} -g {deploymentUser} -m 0700 /home/{deploymentUser}/.ssh && install -o {deploymentUser} -g {deploymentUser} -m 0600 {repositoryPath}/deploy/linux/powerforge-{options.SiteId}-authorized_keys /home/{deploymentUser}/.ssh/authorized_keys"),
             Command("install-backup-ssh-identity", $"install -d -o {backupUser} -g {backupUser} -m 0700 /var/lib/{backupUser}/.ssh && install -o {backupUser} -g {backupUser} -m 0600 {repositoryPath}/deploy/linux/powerforge-{options.SiteId}-backup-authorized_keys /var/lib/{backupUser}/.ssh/authorized_keys"),
-            Command("install-static-deployment-runtime", $"install -o root -g root -m 0755 {enginePath}/Deployment/Linux/powerforge-site-deploy.sh /usr/local/sbin/powerforge-site-deploy && install -o root -g root -m 0755 {enginePath}/Deployment/Linux/powerforge-site-reconcile.sh /usr/local/sbin/powerforge-site-reconcile && install -o root -g root -m 0755 {enginePath}/Deployment/Linux/powerforge-server-encrypted-capture.sh /usr/local/sbin/powerforge-server-encrypted-capture"),
+            Command("install-static-deployment-runtime", $"install -o root -g root -m 0755 {enginePath}/Deployment/Linux/powerforge-site-deploy.sh /usr/local/sbin/powerforge-site-deploy && install -o root -g root -m 0755 {enginePath}/Deployment/Linux/powerforge-site-reconcile.sh /usr/local/sbin/powerforge-site-reconcile && install -o root -g root -m 0755 {enginePath}/Deployment/Linux/powerforge-server-encrypted-capture.sh /usr/local/sbin/powerforge-server-encrypted-capture && install -o root -g root -m 0755 {enginePath}/Deployment/Linux/powerforge-apache-site-enable.sh /usr/local/sbin/powerforge-apache-site-enable"),
             Command("install-powerforge-config", $"install -d -o root -g root -m 0750 /etc/powerforge/sites && install -o root -g root -m 0640 {repositoryPath}/deploy/linux/{options.Domain}.env {siteEnvironment}"),
             Command("install-deployment-sudoers", $"install -o root -g root -m 0440 {repositoryPath}/deploy/linux/powerforge-{options.SiteId}.sudoers /etc/sudoers.d/{deploymentUser} && visudo -cf /etc/sudoers.d/{deploymentUser}"),
             Command("install-backup-sudoers", $"install -o root -g root -m 0440 {repositoryPath}/deploy/linux/powerforge-{options.SiteId}-backup.sudoers /etc/sudoers.d/{backupUser} && visudo -cf /etc/sudoers.d/{backupUser}")
@@ -203,7 +203,7 @@ internal static partial class WebCliCommandHandlers
                 [
                     Command("reload-systemd", "sudo -n systemctl daemon-reload", required: true),
                     Command("enable-static-deployment-reconciler", "sudo -n systemctl enable --now powerforge-site-reconcile.timer", required: true),
-                    Command("enable-apache-site", $"sudo -n a2ensite {domainFile}.conf {domainFile}-le-ssl.conf && sudo -n apachectl configtest && sudo -n systemctl reload apache2", required: true)
+                    Command("enable-apache-sites", $"sudo -n /usr/local/sbin/powerforge-apache-site-enable --http-site {domainFile}.conf --https-site {domainFile}-le-ssl.conf --certificate-name {options.Domain}", required: true)
                 ]
             },
             Verify = new PowerForgeServerVerify
