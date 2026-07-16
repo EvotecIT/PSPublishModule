@@ -15,7 +15,7 @@ namespace PowerForge;
 /// <summary>
 /// Minimal GitHub Releases client for creating releases and uploading assets.
 /// </summary>
-public sealed class GitHubReleasePublisher
+public sealed partial class GitHubReleasePublisher
 {
     private readonly ILogger _logger;
     private static readonly HttpClient SharedClient = CreateSharedClient();
@@ -46,6 +46,8 @@ public sealed class GitHubReleasePublisher
         var reuseExistingReleaseOnConflict = request.ReuseExistingReleaseOnConflict;
         var requireExpectedExistingRelease = request.RequireExpectedExistingRelease;
         var expectedExistingReleaseId = request.ExpectedExistingReleaseId;
+        var expectedReleaseBodyMarker = request.ExpectedReleaseBodyMarker;
+        var expectedTagCommitSha = request.ExpectedTagCommitSha;
         var replaceExistingAssets = request.ReplaceExistingAssets;
 
         if (string.IsNullOrWhiteSpace(owner)) throw new ArgumentException("Owner is required.", nameof(request));
@@ -108,6 +110,9 @@ public sealed class GitHubReleasePublisher
                 repo,
                 apiBaseUrl,
                 release.Id,
+                tagName,
+                expectedReleaseBodyMarker,
+                expectedTagCommitSha,
                 replaceExistingAssets,
                 result.ReplacedExistingAssets));
             assetUploadWatch.Stop();
@@ -224,7 +229,7 @@ public sealed class GitHubReleasePublisher
         if (string.IsNullOrWhiteSpace(upload))
             throw new InvalidOperationException("GitHub release creation succeeded but upload_url was empty.");
 
-        return new GitHubReleaseApiResponse(parsed.Id, html, upload, reusedExistingRelease: false);
+        return new GitHubReleaseApiResponse(parsed.Id, html, upload, reusedExistingRelease: false, parsed.Body);
     }
 
     private GitHubReleaseApiResponse GetReleaseByTag(string owner, string repo, string token, string apiBaseUrl, string tagName, bool reusedExistingRelease)
@@ -244,7 +249,7 @@ public sealed class GitHubReleasePublisher
         if (string.IsNullOrWhiteSpace(upload))
             throw new InvalidOperationException($"GitHub get-release-by-tag succeeded for '{tagName}' but upload_url was empty.");
 
-        return new GitHubReleaseApiResponse(parsed.Id, html, upload, reusedExistingRelease);
+        return new GitHubReleaseApiResponse(parsed.Id, html, upload, reusedExistingRelease, parsed.Body);
     }
 
     private IReadOnlyList<string> UploadAssets(
@@ -255,9 +260,22 @@ public sealed class GitHubReleasePublisher
         string repo,
         string apiBaseUrl,
         long releaseId,
+        string tagName,
+        string? expectedReleaseBodyMarker,
+        string? expectedTagCommitSha,
         bool replaceExistingAssets,
         List<string> replacedExistingAssets)
     {
+        ValidateReleaseBeforeAssetMutation(
+            owner,
+            repo,
+            token,
+            apiBaseUrl,
+            releaseId,
+            tagName,
+            expectedReleaseBodyMarker,
+            expectedTagCommitSha);
+
         var skippedAssets = new List<string>();
         var replaceableAssetNames = replaceExistingAssets
             ? CreateReplaceableAssetNameSet(ListReleaseAssets(owner, repo, token, apiBaseUrl, releaseId))
@@ -535,6 +553,9 @@ public sealed class GitHubReleasePublisher
 
         [DataMember(Name = "upload_url")]
         public string? UploadUrl { get; set; }
+
+        [DataMember(Name = "body")]
+        public string? Body { get; set; }
     }
 
     [DataContract]
@@ -575,17 +596,19 @@ public sealed class GitHubReleasePublisher
 
     private sealed class GitHubReleaseApiResponse
     {
-        public GitHubReleaseApiResponse(long id, string htmlUrl, string uploadUrl, bool reusedExistingRelease)
+        public GitHubReleaseApiResponse(long id, string htmlUrl, string uploadUrl, bool reusedExistingRelease, string? body = null)
         {
             Id = id;
             HtmlUrl = htmlUrl;
             UploadUrl = uploadUrl;
             ReusedExistingRelease = reusedExistingRelease;
+            Body = body;
         }
 
         public long Id { get; }
         public string HtmlUrl { get; }
         public string UploadUrl { get; }
         public bool ReusedExistingRelease { get; }
+        public string? Body { get; }
     }
 }

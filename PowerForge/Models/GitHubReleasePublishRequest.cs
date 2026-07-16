@@ -52,6 +52,14 @@ public sealed class GitHubReleasePublishRequest
     /// <summary>Preflight-verified release identifier permitted for idempotent reuse.</summary>
     public long? ExpectedExistingReleaseId { get; set; }
 
+    /// <summary>
+    /// Optional marker that must still be present in the release body immediately before assets are mutated.
+    /// </summary>
+    public string? ExpectedReleaseBodyMarker { get; set; }
+
+    /// <summary>Optional commit SHA that the release tag must still resolve to immediately before assets are mutated.</summary>
+    public string? ExpectedTagCommitSha { get; set; }
+
     /// <summary>True to delete same-named assets from a reused release before uploading new files.</summary>
     public bool ReplaceExistingAssets { get; set; }
 

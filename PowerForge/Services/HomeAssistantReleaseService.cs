@@ -72,7 +72,11 @@ public sealed class HomeAssistantReleaseService {
 
         ValidateChecks(github, pullRequest);
         _git.EnsureContainsMerge(root, mergeCommitSha);
-        var preparedReleaseCommit = _git.FindCommitForSourcePullRequest(root, pullRequest.Number);
+        var preparedReleaseCommit = _git.FindPreparedReleaseCommit(
+            root,
+            pullRequest.Number,
+            mergeCommitSha,
+            _repository.GetVersionMetadataFiles(snapshot, root));
         var increment = HomeAssistantReleasePolicy.Resolve(pullRequest.Labels, pullRequest.ChangedFiles, spec.Increment);
         var currentVersion = HomeAssistantSemanticVersion.Parse(snapshot.Version);
         var latestRelease = github.GetLatestRelease();
@@ -270,6 +274,8 @@ public sealed class HomeAssistantReleaseService {
             ReplaceExistingAssets = true,
             RequireExpectedExistingRelease = true,
             ExpectedExistingReleaseId = existing?.Id,
+            ExpectedReleaseBodyMarker = marker,
+            ExpectedTagCommitSha = spec.ReleaseCommitSha,
             AssetFilePaths = assets
         });
         if (!publishResult.Succeeded)

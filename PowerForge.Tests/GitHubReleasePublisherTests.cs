@@ -66,6 +66,23 @@ public sealed class GitHubReleasePublisherTests
     }
 
     [Fact]
+    public void ValidateExpectedReleaseState_RejectsReleaseOrTagChangesBeforeAssetMutation()
+    {
+        const string marker = "<!-- powerforge-homeassistant source-pr:42 -->";
+        const string commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+        Assert.Throws<InvalidOperationException>(() => GitHubReleasePublisher.ValidateExpectedReleaseState(
+            "v1.2.3", 42, 99, marker, marker, commit, commit));
+        Assert.Throws<InvalidOperationException>(() => GitHubReleasePublisher.ValidateExpectedReleaseState(
+            "v1.2.3", 42, 42, "foreign body", marker, commit, commit));
+        Assert.Throws<InvalidOperationException>(() => GitHubReleasePublisher.ValidateExpectedReleaseState(
+            "v1.2.3", 42, 42, marker, marker, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", commit));
+
+        GitHubReleasePublisher.ValidateExpectedReleaseState(
+            "v1.2.3", 42, 42, marker, marker, commit, commit);
+    }
+
+    [Fact]
     public void BuildApiUri_PreservesGitHubEnterpriseApiPrefix()
     {
         var uri = GitHubReleasePublisher.BuildApiUri(

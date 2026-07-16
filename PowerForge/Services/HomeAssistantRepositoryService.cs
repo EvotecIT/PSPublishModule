@@ -106,6 +106,24 @@ internal sealed class HomeAssistantRepositoryService {
         return changed;
     }
 
+    internal IReadOnlyList<string> GetVersionMetadataFiles(HomeAssistantRepositorySnapshot snapshot, string repositoryRoot) {
+        if (snapshot.Kind == HomeAssistantRepositoryKind.Integration) {
+            var files = new List<string> { ToRelativePath(repositoryRoot, snapshot.ManifestPath!) };
+            if (!string.IsNullOrWhiteSpace(snapshot.PyProjectPath))
+                files.Add(ToRelativePath(repositoryRoot, snapshot.PyProjectPath!));
+            return files;
+        }
+
+        if (snapshot.Kind == HomeAssistantRepositoryKind.LovelacePlugin) {
+            return new[] {
+                ToRelativePath(repositoryRoot, snapshot.PackageJsonPath!),
+                ToRelativePath(repositoryRoot, snapshot.PackageLockPath!)
+            };
+        }
+
+        throw new InvalidOperationException("The repository layout must be resolved before listing version metadata files.");
+    }
+
     internal IReadOnlyList<string> BuildAssets(HomeAssistantRepositorySnapshot snapshot, string repositoryRoot, string version) {
         _ = HomeAssistantSemanticVersion.Parse(version);
         var root = ResolveRoot(repositoryRoot);

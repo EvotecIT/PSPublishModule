@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace PowerForge;
@@ -30,20 +31,55 @@ internal sealed class HomeAssistantReleaseGitService {
     internal string GetHeadSha(string repositoryRoot)
         => Run(repositoryRoot, "rev-parse", "HEAD").StdOut.Trim();
 
-    internal string? FindCommitForSourcePullRequest(string repositoryRoot, int pullRequestNumber) {
+    internal string? FindPreparedReleaseCommit(
+        string repositoryRoot,
+        int pullRequestNumber,
+        string mergeCommitSha,
+        IReadOnlyCollection<string> allowedVersionFiles) {
+        if (string.IsNullOrWhiteSpace(mergeCommitSha)) throw new ArgumentException("Merge commit SHA is required.", nameof(mergeCommitSha));
+        if (allowedVersionFiles is null || allowedVersionFiles.Count == 0)
+            throw new ArgumentException("At least one allowed version metadata file is required.", nameof(allowedVersionFiles));
+
         var result = RunAllowFailure(
             repositoryRoot,
             "log",
             "HEAD",
             "--fixed-strings",
             $"--grep=Source-PR: #{pullRequestNumber}",
-            "-n",
-            "1",
             "--format=%H");
         if (!result.Succeeded) return null;
-        var sha = result.StdOut.Trim();
-        return string.IsNullOrWhiteSpace(sha) ? null : sha;
+        var allowed = new HashSet<string>(
+            allowedVersionFiles.Select(NormalizeGitPath),
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var line in result.StdOut.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)) {
+            var candidate = line.Trim();
+            if (candidate.Length == 0 || string.Equals(candidate, mergeCommitSha, StringComparison.OrdinalIgnoreCase)) continue;
+
+            var message = Run(repositoryRoot, "show", "-s", "--format=%B", candidate).StdOut;
+            var messageLines = message.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(value => value.Trim())
+                .ToArray();
+            if (!messageLines.Contains($"Source-PR: #{pullRequestNumber}", StringComparer.Ordinal) ||
+                !messageLines.Contains($"Source-Merge: {mergeCommitSha}", StringComparer.OrdinalIgnoreCase)) {
+                continue;
+            }
+
+            var parentContainsMerge = RunAllowFailure(repositoryRoot, "merge-base", "--is-ancestor", mergeCommitSha, candidate + "^");
+            if (parentContainsMerge.ExitCode != 0) continue;
+
+            var changed = Run(repositoryRoot, "diff-tree", "--no-commit-id", "--name-only", "-r", candidate)
+                .StdOut
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(NormalizeGitPath)
+                .ToArray();
+            if (changed.Length > 0 && changed.All(allowed.Contains)) return candidate;
+        }
+
+        return null;
     }
+
+    private static string NormalizeGitPath(string path)
+        => path.Trim().Replace('\\', '/');
 
     internal void EnsureNoTrackedChanges(string repositoryRoot) {
         var result = Run(repositoryRoot, "status", "--porcelain", "--untracked-files=no");

@@ -107,6 +107,7 @@ jobs:
           name: powerforge-homeassistant-release-asset
           path: ${{ steps.build.outputs.asset-path }}
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 1
 
   publish:
