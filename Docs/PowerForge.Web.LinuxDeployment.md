@@ -100,6 +100,20 @@ Give each repository a separate deployment key and a protected GitHub environmen
 Restrict its server account/sudo rule to the expected site argument. Do not share one
 unrestricted deployment key across every repository.
 
+The protected action uses three promoter commands: deferred promotion, finalization,
+and rollback. Allow only those exact command shapes for the repository's deployment
+account. For example:
+
+```sudoers
+powerforge-example ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-site-deploy ^--site example\.com --archive /tmp/powerforge-[0-9]+-[0-9]+-example\.com/artifact\.tar --metadata /tmp/powerforge-[0-9]+-[0-9]+-example\.com/deployment\.json --defer-public-verification$
+powerforge-example ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-site-deploy ^--site example\.com --finalize --release-id [A-Za-z0-9][A-Za-z0-9._-]*( --previous-release-id [A-Za-z0-9][A-Za-z0-9._-]*)?$
+powerforge-example ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-site-deploy ^--site example\.com --rollback --release-id [A-Za-z0-9][A-Za-z0-9._-]*( --previous-release-id [A-Za-z0-9][A-Za-z0-9._-]*)?$
+```
+
+Validate the installed file with `visudo -cf`. Sites upgrading from the earlier
+one-shot action must install these rules before repinning the action; retaining only
+the old promotion rule will reject the deferred verification protocol.
+
 The promoter rejects path traversal, links, special files, checksum mismatches,
 unconfigured site ids, mutable site configuration, and workflow staging files owned
 by another account. It atomically promotes a timestamped release, purges Cloudflare
