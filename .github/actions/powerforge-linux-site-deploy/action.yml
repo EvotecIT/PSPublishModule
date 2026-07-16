@@ -25,8 +25,7 @@ inputs:
     default: ""
   deployment-public-url:
     description: Public HTTPS origin verified from the runner after host-origin promotion.
-    required: false
-    default: ""
+    required: true
   deployment-smoke-paths:
     description: Space-separated public paths verified after exact provenance.
     required: false

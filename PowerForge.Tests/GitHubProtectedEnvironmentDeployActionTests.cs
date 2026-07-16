@@ -26,6 +26,8 @@ public sealed class GitHubProtectedEnvironmentDeployActionTests
         Assert.Contains("cloudflare-api.token", script, StringComparison.Ordinal);
         Assert.Contains("--defer-public-verification", script, StringComparison.Ordinal);
         Assert.Contains("Assert-PowerForgePublicSite", script, StringComparison.Ordinal);
+        Assert.Contains("deployment-public-url is required", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("https://$($env:POWERFORGE_DEPLOYMENT_SITE)", script, StringComparison.Ordinal);
         Assert.Contains("--finalize", script, StringComparison.Ordinal);
         Assert.Contains("--rollback", script, StringComparison.Ordinal);
         Assert.Contains("Invoke-CloudflarePurge", script, StringComparison.Ordinal);

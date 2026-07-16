@@ -119,6 +119,7 @@ on:
         type: string
         default: ""
       deployment_url:
+        description: Public HTTPS origin. Required when deployment_target is linux.
         required: false
         type: string
         default: ""
@@ -177,6 +178,7 @@ jobs:
         shell: pwsh
         env:
           DEPLOYMENT_TARGET: ${{ inputs.deployment_target }}
+          DEPLOYMENT_URL: ${{ inputs.deployment_url }}
           PIPELINE_CONFIG: ${{ inputs.pipeline_config }}
           REQUIRE_SEO_DOCTOR_GUARDRAIL: ${{ inputs.require_seo_doctor_guardrail }}
         run: |
@@ -184,6 +186,9 @@ jobs:
 
           if ($env:DEPLOYMENT_TARGET -notin @('github-pages', 'linux')) {
             throw "Unsupported deployment_target '$($env:DEPLOYMENT_TARGET)'. Expected github-pages or linux."
+          }
+          if ($env:DEPLOYMENT_TARGET -eq 'linux' -and [string]::IsNullOrWhiteSpace($env:DEPLOYMENT_URL)) {
+            throw 'deployment_url is required when deployment_target is linux.'
           }
 
           if ($env:REQUIRE_SEO_DOCTOR_GUARDRAIL -ne 'true') {

@@ -272,6 +272,10 @@ jobs:
         timeout-minutes: 10
         run: .\Build\Build-Module.ps1
 
+      - name: Test Linux website deployment state machine
+        shell: bash
+        run: sudo bash Deployment/Linux/tests/powerforge-site-deploy-fixture.sh
+
       - name: Test with Pester
         shell: pwsh
         timeout-minutes: 10

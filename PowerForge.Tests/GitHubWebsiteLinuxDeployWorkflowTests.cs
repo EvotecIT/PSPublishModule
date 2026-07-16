@@ -17,6 +17,7 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("deployment_artifact_retention_days", workflow, StringComparison.Ordinal);
         Assert.Contains("job.workflow_sha", workflow, StringComparison.Ordinal);
         Assert.Contains("uses: ./.powerforge-deployment/.github/actions/powerforge-linux-site-deploy", workflow, StringComparison.Ordinal);
+        Assert.Contains("deployment_url is required when deployment_target is linux", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("Publish and promote Linux release", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("scp @scpArgs", workflow, StringComparison.Ordinal);
         Assert.Contains("      pages: write", workflow, StringComparison.Ordinal);
@@ -51,6 +52,8 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
     public void LinuxPromoter_ShouldProtectPromotionAndRollbackContracts()
     {
         var script = ReadRepoFile("Deployment", "Linux", "powerforge-site-deploy.sh");
+        var reconciler = ReadRepoFile("Deployment", "Linux", "powerforge-site-reconcile.sh");
+        var reconcileTimer = ReadRepoFile("Deployment", "Linux", "systemd", "powerforge-site-reconcile.timer");
 
         Assert.Contains("/etc/powerforge/sites", script, StringComparison.Ordinal);
         Assert.Contains("Artifact checksum does not match", script, StringComparison.Ordinal);
@@ -62,6 +65,13 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("finalize_deferred_release", script, StringComparison.Ordinal);
         Assert.Contains("rollback_deferred_release", script, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_RELEASE_ID", script, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_PENDING_EXPIRES_AT", script, StringComparison.Ordinal);
+        Assert.Contains("--expire-pending", script, StringComparison.Ordinal);
+        Assert.Contains("PENDING_TTL_SECONDS", script, StringComparison.Ordinal);
+        Assert.Contains("ensure_pending_reconciler", script, StringComparison.Ordinal);
+        Assert.Contains("create_pending_release", script, StringComparison.Ordinal);
+        Assert.Contains("configure_pending_cloudflare", script, StringComparison.Ordinal);
+        Assert.Contains("remove_pending_release", script, StringComparison.Ordinal);
         Assert.Contains("rolling back", script, StringComparison.Ordinal);
         Assert.Contains("Migrating legacy current directory", script, StringComparison.Ordinal);
         Assert.Contains("restoring the legacy current directory", script, StringComparison.Ordinal);
@@ -91,6 +101,13 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.DoesNotContain("workflow's cloudflare_api_token secret", environmentExample, StringComparison.Ordinal);
         Assert.Contains("cloudflare-api.token", script, StringComparison.Ordinal);
         Assert.Contains("Ephemeral Cloudflare zone id does not match", script, StringComparison.Ordinal);
+        Assert.Contains("--expire-pending", reconciler, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_SITE_PENDING_STATE_ROOT", reconciler, StringComparison.Ordinal);
+        Assert.Contains("OnUnitActiveSec=1min", reconcileTimer, StringComparison.Ordinal);
+        Assert.Contains("Persistent=true", reconcileTimer, StringComparison.Ordinal);
+        Assert.Contains("sudo bash Deployment/Linux/tests/powerforge-site-deploy-fixture.sh", ReadRepoFile(".github", "workflows", "BuildModule.yml"), StringComparison.Ordinal);
+        Assert.InRange(NormalizedLineCount(script), 1, 650);
+        Assert.InRange(NormalizedLineCount(reconciler), 1, 100);
     }
 
     private static string ReadRepoFile(params string[] relativePath)
@@ -105,4 +122,7 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
 
         throw new DirectoryNotFoundException("Unable to locate repository root.");
     }
+
+    private static int NormalizedLineCount(string text) =>
+        text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').Length;
 }

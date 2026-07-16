@@ -6,6 +6,7 @@ umask 022
 CONFIG_ROOT="${POWERFORGE_SITE_CONFIG_ROOT:-/etc/powerforge/sites}"
 LOCK_ROOT="${POWERFORGE_SITE_LOCK_ROOT:-/var/lock}"
 TRUSTED_STAGE_ROOT="${POWERFORGE_SITE_TRUSTED_STAGE_ROOT:-/var/lib/powerforge/deployment-staging}"
+PENDING_STATE_ROOT="${POWERFORGE_SITE_PENDING_STATE_ROOT:-/var/lib/powerforge/site-pending}"
 site=""
 archive=""
 metadata=""
@@ -19,10 +20,18 @@ previous_target=""
 release_dir=""
 workflow_stage=""
 trusted_stage=""
+pending_stage=""
+pending_dir=""
+pending_state_file=""
+pending_release_id=""
+pending_previous_release_id=""
+pending_expires_at_epoch=""
+pending_created=0
 
 cleanup_staging() {
   [[ -z "$workflow_stage" || ! -d "$workflow_stage" ]] || rm -rf -- "$workflow_stage"
   [[ -z "$trusted_stage" || ! -d "$trusted_stage" ]] || rm -rf -- "$trusted_stage"
+  [[ -z "$pending_stage" || ! -d "$pending_stage" ]] || rm -rf -- "$pending_stage"
 }
 
 trap cleanup_staging EXIT
@@ -42,6 +51,7 @@ Usage:
   powerforge-site-deploy --site <id> --archive <artifact.tar> --metadata <deployment.json> [--defer-public-verification]
   powerforge-site-deploy --site <id> --finalize --release-id <id> [--previous-release-id <id>]
   powerforge-site-deploy --site <id> --rollback --release-id <id> [--previous-release-id <id>]
+  powerforge-site-deploy --site <id> --expire-pending
 EOF
 }
 
@@ -73,6 +83,11 @@ while (($# > 0)); do
       operation="rollback"
       shift
       ;;
+    --expire-pending)
+      [[ "$operation" == 'promote' ]] || fail 'Only one deployment operation may be selected.'
+      operation="expire"
+      shift
+      ;;
     --release-id)
       release_id_argument="${2:-}"
       shift 2
@@ -99,6 +114,9 @@ if [[ "$operation" == 'promote' ]]; then
 else
   [[ -z "$archive" && -z "$metadata" ]] || fail 'Archive and metadata are only valid during promotion.'
   [[ "$defer_public_verification" == '0' ]] || fail 'Deferred verification is only valid during promotion.'
+  if [[ "$operation" == 'expire' ]]; then
+    [[ -z "$release_id_argument" && -z "$previous_release_id_argument" ]] || fail 'Release identity arguments are not valid during pending-release expiry.'
+  fi
 fi
 
 config_path="${CONFIG_ROOT}/${site}.env"
@@ -122,12 +140,17 @@ source "$config_path"
 : "${CLOUDFLARE_API_TOKEN_FILE:=}"
 : "${ORIGIN_ADDRESS:=}"
 : "${ORIGIN_HOST:=}"
+: "${PENDING_TTL_SECONDS:=600}"
+: "${PENDING_RECONCILE_REQUIRED:=1}"
 
 [[ "$SITE_ROOT" == /* && "$SITE_ROOT" != '/' ]] || fail 'SITE_ROOT must be an absolute non-root path.'
 [[ "$SITE_ROOT" != *[[:space:]]* ]] || fail 'SITE_ROOT must not contain whitespace.'
 [[ "$TRUSTED_STAGE_ROOT" == /* && "$TRUSTED_STAGE_ROOT" != '/' ]] || fail 'Trusted staging root must be an absolute non-root path.'
+[[ "$PENDING_STATE_ROOT" == /* && "$PENDING_STATE_ROOT" != '/' ]] || fail 'Pending state root must be an absolute non-root path.'
 [[ "$PUBLIC_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || fail 'PUBLIC_URL must be an HTTPS origin without a path.'
 [[ "$RELEASES_TO_KEEP" =~ ^[1-9][0-9]*$ ]] || fail 'RELEASES_TO_KEEP must be a positive integer.'
+[[ "$PENDING_TTL_SECONDS" =~ ^[0-9]+$ && "$PENDING_TTL_SECONDS" -ge 60 && "$PENDING_TTL_SECONDS" -le 3600 ]] || fail 'PENDING_TTL_SECONDS must be from 60 through 3600.'
+[[ "$PENDING_RECONCILE_REQUIRED" == '0' || "$PENDING_RECONCILE_REQUIRED" == '1' ]] || fail 'PENDING_RECONCILE_REQUIRED must be 0 or 1.'
 [[ "$CLOUDFLARE_PURGE_ENABLED" == '0' || "$CLOUDFLARE_PURGE_ENABLED" == '1' ]] || fail 'CLOUDFLARE_PURGE_ENABLED must be 0 or 1.'
 if [[ -n "$ORIGIN_ADDRESS" || -n "$ORIGIN_HOST" ]]; then
   [[ -n "$ORIGIN_ADDRESS" && "$ORIGIN_HOST" =~ ^[A-Za-z0-9.-]+$ ]] || fail 'ORIGIN_ADDRESS and ORIGIN_HOST must be configured together.'
@@ -149,6 +172,19 @@ release_path() {
   printf '%s/releases/%s' "$SITE_ROOT" "$1"
 }
 
+purge_cloudflare() {
+  [[ "$CLOUDFLARE_PURGE_ENABLED" == '1' ]] || return 0
+  [[ "$CLOUDFLARE_ZONE_ID" =~ ^[A-Fa-f0-9]{32}$ ]] || fail 'Cloudflare zone id is required when purge is enabled.'
+  [[ "$CLOUDFLARE_API_TOKEN_FILE" == /* && -s "$CLOUDFLARE_API_TOKEN_FILE" && -r "$CLOUDFLARE_API_TOKEN_FILE" ]] || fail 'A readable Cloudflare API token is required when purge is enabled.'
+  local response
+  response="$(curl -fsS --retry 3 --max-time 30 \
+    -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
+    -H "Authorization: Bearer $(<"$CLOUDFLARE_API_TOKEN_FILE")" \
+    -H 'Content-Type: application/json' \
+    --data '{"purge_everything":true}')"
+  grep -Eq '"success"[[:space:]]*:[[:space:]]*true' <<<"$response" || fail 'Cloudflare cache purge was rejected.'
+}
+
 prune_releases() {
   local current_release="$1"
   local rollback_release="$2"
@@ -159,63 +195,179 @@ prune_releases() {
   done
 }
 
+load_pending_release() {
+  local pending_mode
+  local pending_dir_mode
+  local -a pending_values
+  pending_state_file="$pending_dir/state"
+  [[ -d "$pending_dir" && ! -L "$pending_dir" ]] || fail "No pending release exists for $site."
+  [[ -f "$pending_state_file" && ! -L "$pending_state_file" ]] || fail 'Pending release state is missing or invalid.'
+  if [[ "$(id -u)" -eq 0 ]]; then
+    [[ "$(stat -c '%u' "$pending_dir")" -eq 0 && "$(stat -c '%u' "$pending_state_file")" -eq 0 ]] || fail 'Pending release state must be owned by root.'
+    pending_dir_mode="$(stat -c '%a' "$pending_dir")"
+    pending_mode="$(stat -c '%a' "$pending_state_file")"
+    (( (8#$pending_dir_mode & 0077) == 0 )) || fail 'Pending release directory must not be group/world accessible.'
+    (( (8#$pending_mode & 0077) == 0 )) || fail 'Pending release state must not be group/world accessible.'
+  fi
+  mapfile -t pending_values <"$pending_state_file"
+  [[ "${#pending_values[@]}" -eq 3 ]] || fail 'Pending release state must contain exactly three lines.'
+  pending_release_id="${pending_values[0]}"
+  pending_previous_release_id="${pending_values[1]}"
+  pending_expires_at_epoch="${pending_values[2]}"
+  validate_release_id "$pending_release_id"
+  [[ -z "$pending_previous_release_id" ]] || validate_release_id "$pending_previous_release_id"
+  [[ "$pending_expires_at_epoch" =~ ^[0-9]+$ ]] || fail 'Pending release expiry is invalid.'
+}
+
+assert_pending_identity() {
+  [[ "$release_id_argument" == "$pending_release_id" ]] || fail 'Deferred release id does not match pending state.'
+  [[ "$previous_release_id_argument" == "$pending_previous_release_id" ]] || fail 'Deferred previous release id does not match pending state.'
+}
+
+configure_pending_cloudflare() {
+  local pending_token="$pending_dir/cloudflare-api.token"
+  local pending_zone="$pending_dir/cloudflare-zone-id"
+  local pending_token_mode
+  local pending_zone_mode
+  if [[ -e "$pending_token" || -L "$pending_token" || -e "$pending_zone" || -L "$pending_zone" ]]; then
+    [[ -f "$pending_token" && ! -L "$pending_token" && -s "$pending_token" ]] || fail 'Pending Cloudflare token is missing or invalid.'
+    [[ -f "$pending_zone" && ! -L "$pending_zone" && -s "$pending_zone" ]] || fail 'Pending Cloudflare zone id is missing or invalid.'
+    if [[ "$(id -u)" -eq 0 ]]; then
+      [[ "$(stat -c '%u' "$pending_token")" -eq 0 && "$(stat -c '%u' "$pending_zone")" -eq 0 ]] || fail 'Pending Cloudflare credentials must be owned by root.'
+      pending_token_mode="$(stat -c '%a' "$pending_token")"
+      pending_zone_mode="$(stat -c '%a' "$pending_zone")"
+      (( (8#$pending_token_mode & 0077) == 0 && (8#$pending_zone_mode & 0077) == 0 )) || fail 'Pending Cloudflare credentials must not be group/world accessible.'
+    fi
+    CLOUDFLARE_ZONE_ID="$(tr -d '[:space:]' <"$pending_zone")"
+    CLOUDFLARE_API_TOKEN_FILE="$pending_token"
+  fi
+  if [[ "$CLOUDFLARE_PURGE_ENABLED" == '1' ]]; then
+    CLOUDFLARE_ZONE_ID="${CLOUDFLARE_ZONE_ID,,}"
+    [[ "$CLOUDFLARE_ZONE_ID" =~ ^[a-f0-9]{32}$ ]] || fail 'Pending rollback requires a Cloudflare zone id.'
+    [[ "$CLOUDFLARE_API_TOKEN_FILE" == /* && -s "$CLOUDFLARE_API_TOKEN_FILE" && -r "$CLOUDFLARE_API_TOKEN_FILE" ]] || fail 'Pending rollback requires a readable Cloudflare API token.'
+  fi
+}
+
+remove_pending_release() {
+  rm -rf -- "$pending_dir"
+}
+
 finalize_deferred_release() {
   local selected_release
   local selected_previous=""
   local current_target
-  selected_release="$(release_path "$release_id_argument")"
-  [[ -d "$selected_release" ]] || fail "Deferred release does not exist: $release_id_argument"
-  if [[ -n "$previous_release_id_argument" ]]; then
-    selected_previous="$(release_path "$previous_release_id_argument")"
-    [[ -d "$selected_previous" ]] || fail "Deferred rollback release does not exist: $previous_release_id_argument"
+  selected_release="$(release_path "$pending_release_id")"
+  [[ -d "$selected_release" ]] || fail "Deferred release does not exist: $pending_release_id"
+  if [[ -n "$pending_previous_release_id" ]]; then
+    selected_previous="$(release_path "$pending_previous_release_id")"
+    [[ -d "$selected_previous" ]] || fail "Deferred rollback release does not exist: $pending_previous_release_id"
   fi
   [[ -L "$SITE_ROOT/current" ]] || fail 'Current release is not a symlink during finalization.'
   current_target="$(readlink -f "$SITE_ROOT/current")"
   [[ "$current_target" == "$selected_release" ]] || fail 'Current release changed before deferred finalization.'
   [[ -s "$selected_release/_powerforge/deployment.json" ]] || fail 'Deferred release provenance is missing.'
   prune_releases "$selected_release" "$selected_previous"
-  log "Finalized $site release $release_id_argument after external public verification"
+  remove_pending_release
+  log "Finalized $site release $pending_release_id after external public verification"
 }
 
 rollback_deferred_release() {
   local selected_release
   local selected_previous=""
   local current_target=""
-  selected_release="$(release_path "$release_id_argument")"
-  [[ -d "$selected_release" ]] || fail "Deferred release does not exist: $release_id_argument"
-  if [[ -n "$previous_release_id_argument" ]]; then
-    selected_previous="$(release_path "$previous_release_id_argument")"
-    [[ -d "$selected_previous" ]] || fail "Deferred rollback release does not exist: $previous_release_id_argument"
+  selected_release="$(release_path "$pending_release_id")"
+  if [[ -n "$pending_previous_release_id" ]]; then
+    selected_previous="$(release_path "$pending_previous_release_id")"
   fi
   if [[ -L "$SITE_ROOT/current" ]]; then
     current_target="$(readlink -f "$SITE_ROOT/current")"
   fi
-  [[ "$current_target" == "$selected_release" ]] || fail 'Current release changed before deferred rollback.'
-  if [[ -n "$selected_previous" ]]; then
-    rollback_link="$SITE_ROOT/.current.rollback.$$"
-    ln -s "$selected_previous" "$rollback_link"
-    mv -Tf "$rollback_link" "$SITE_ROOT/current"
+  if [[ "$current_target" == "$selected_release" && -d "$selected_release" ]]; then
+    if [[ -n "$selected_previous" ]]; then
+      [[ -d "$selected_previous" ]] || fail "Deferred rollback release does not exist: $pending_previous_release_id"
+      rollback_link="$SITE_ROOT/.current.rollback.$$"
+      ln -s "$selected_previous" "$rollback_link"
+      mv -Tf "$rollback_link" "$SITE_ROOT/current"
+    else
+      rm -f "$SITE_ROOT/current"
+    fi
+    rm -rf "$selected_release"
+  elif [[ -n "$selected_previous" && "$current_target" == "$selected_previous" && ! -e "$selected_release" ]]; then
+    log "Deferred $site release $pending_release_id was already restored; retrying cache purge"
+  elif [[ -n "$selected_previous" && "$current_target" == "$selected_previous" && -d "$selected_release" ]]; then
+    log "Deferred $site release $pending_release_id was prepared but not promoted; removing it"
+    rm -rf "$selected_release"
+  elif [[ -z "$selected_previous" && -z "$current_target" && ! -e "$selected_release" ]]; then
+    log "Deferred first $site release $pending_release_id was already removed; retrying cache purge"
+  elif [[ -z "$selected_previous" && -z "$current_target" && -d "$selected_release" ]]; then
+    log "Deferred first $site release $pending_release_id was prepared but not promoted; removing it"
+    rm -rf "$selected_release"
   else
-    rm -f "$SITE_ROOT/current"
+    fail 'Current release changed before deferred rollback.'
   fi
-  rm -rf "$selected_release"
-  log "Rolled back deferred $site release $release_id_argument"
+  configure_pending_cloudflare
+  purge_cloudflare
+  remove_pending_release
+  log "Rolled back deferred $site release $pending_release_id"
+}
+
+expire_pending_release() {
+  local now_epoch
+  load_pending_release
+  now_epoch="$(date -u +%s)"
+  if [[ "$now_epoch" -lt "$pending_expires_at_epoch" ]]; then
+    log "Pending $site release $pending_release_id has not expired"
+    return 0
+  fi
+  log "Pending $site release $pending_release_id expired; restoring the previous release"
+  rollback_deferred_release
+}
+
+ensure_pending_reconciler() {
+  [[ "$PENDING_RECONCILE_REQUIRED" == '1' ]] || return 0
+  [[ -x /usr/local/sbin/powerforge-site-reconcile ]] || fail 'Deferred verification requires /usr/local/sbin/powerforge-site-reconcile.'
+  command -v systemctl >/dev/null || fail 'Deferred verification requires systemd.'
+  systemctl is-enabled --quiet powerforge-site-reconcile.timer || fail 'Deferred verification requires the pending-release reconciler timer to be enabled.'
+  systemctl is-active --quiet powerforge-site-reconcile.timer || fail 'Deferred verification requires the pending-release reconciler timer to be active.'
 }
 
 mkdir -p "$SITE_ROOT/releases"
 mkdir -p "$LOCK_ROOT"
+install -d -m 0700 "$PENDING_STATE_ROOT"
+[[ -d "$PENDING_STATE_ROOT" && ! -L "$PENDING_STATE_ROOT" ]] || fail 'Pending state root must be a directory, not a symlink.'
+if [[ "$(id -u)" -eq 0 ]]; then
+  [[ "$(stat -c '%u' "$PENDING_STATE_ROOT")" -eq 0 ]] || fail 'Pending state root must be owned by root.'
+fi
+pending_dir="$PENDING_STATE_ROOT/$site"
 exec 9>"${LOCK_ROOT}/powerforge-site-${site}.lock"
-flock -n 9 || fail "Another deployment is active for $site."
+if [[ "$operation" == 'expire' ]]; then
+  flock -w 30 9 || fail "Timed out waiting to reconcile $site."
+else
+  flock -n 9 || fail "Another deployment is active for $site."
+fi
 
 if [[ "$operation" == 'finalize' ]]; then
   [[ -n "$release_id_argument" ]] || fail '--release-id is required during finalization.'
+  load_pending_release
+  assert_pending_identity
   finalize_deferred_release
   exit 0
 fi
 if [[ "$operation" == 'rollback' ]]; then
   [[ -n "$release_id_argument" ]] || fail '--release-id is required during rollback.'
+  load_pending_release
+  assert_pending_identity
   rollback_deferred_release
   exit 0
+fi
+if [[ "$operation" == 'expire' ]]; then
+  expire_pending_release
+  exit 0
+fi
+
+[[ ! -e "$pending_dir" && ! -L "$pending_dir" ]] || fail "A deferred release is already pending for $site."
+if [[ "$defer_public_verification" == '1' ]]; then
+  ensure_pending_reconciler
 fi
 
 archive="$(realpath -e "$archive")"
@@ -298,17 +450,6 @@ release_id="$(date -u +%Y%m%d%H%M%S)-${run_id}-${run_attempt}-${source_sha:0:12}
 release_dir="$SITE_ROOT/releases/$release_id"
 [[ ! -e "$release_dir" ]] || fail "Release already exists: $release_id"
 
-purge_cloudflare() {
-  [[ "$CLOUDFLARE_PURGE_ENABLED" == '1' ]] || return 0
-  local response
-  response="$(curl -fsS --retry 3 --max-time 30 \
-    -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
-    -H "Authorization: Bearer $(<"$CLOUDFLARE_API_TOKEN_FILE")" \
-    -H 'Content-Type: application/json' \
-    --data '{"purge_everything":true}')"
-  grep -Eq '"success"[[:space:]]*:[[:space:]]*true' <<<"$response" || fail 'Cloudflare cache purge was rejected.'
-}
-
 smoke_url() {
   local base_url="$1"
   local path="$2"
@@ -356,6 +497,25 @@ verify_release() {
   verify_origin_release
 }
 
+create_pending_release() {
+  local previous_release_id=""
+  pending_expires_at_epoch="$(( $(date -u +%s) + PENDING_TTL_SECONDS ))"
+  if [[ -n "$previous_target" ]]; then
+    previous_release_id="$(basename "$previous_target")"
+  fi
+  pending_stage="$(mktemp -d "${PENDING_STATE_ROOT}/.${site}.XXXXXXXX")"
+  chmod 0700 "$pending_stage"
+  printf '%s\n%s\n%s\n' "$release_id" "$previous_release_id" "$pending_expires_at_epoch" >"$pending_stage/state"
+  chmod 0600 "$pending_stage/state"
+  if [[ -f "$trusted_stage/cloudflare-api.token" ]]; then
+    install -m 0600 "$trusted_stage/cloudflare-api.token" "$pending_stage/cloudflare-api.token"
+    install -m 0600 "$trusted_stage/cloudflare-zone-id" "$pending_stage/cloudflare-zone-id"
+  fi
+  mv -T "$pending_stage" "$pending_dir"
+  pending_stage=""
+  pending_created=1
+}
+
 rollback() {
   local exit_code="$1"
   set +e
@@ -375,6 +535,7 @@ rollback() {
     mv -T "$previous_target" "$SITE_ROOT/current"
   fi
   [[ -z "$release_dir" || ! -d "$release_dir" || "$release_dir" == "$previous_target" ]] || rm -rf "$release_dir"
+  [[ "$pending_created" != '1' || ! -d "$pending_dir" ]] || rm -rf -- "$pending_dir"
   exit "$exit_code"
 }
 trap 'rollback $?' ERR INT TERM
@@ -394,6 +555,9 @@ elif [[ -e "$SITE_ROOT/current" ]]; then
   log "Migrating legacy current directory to $previous_target"
   mv -T "$SITE_ROOT/current" "$previous_target"
   legacy_migrated=1
+fi
+if [[ "$defer_public_verification" == '1' ]]; then
+  create_pending_release
 fi
 candidate_link="$SITE_ROOT/.current.${run_id}.${run_attempt}"
 ln -s "$release_dir" "$candidate_link"
@@ -418,6 +582,7 @@ if [[ "$defer_public_verification" == '1' ]]; then
   else
     printf 'POWERFORGE_PREVIOUS_RELEASE_ID=\n'
   fi
+  printf 'POWERFORGE_PENDING_EXPIRES_AT=%s\n' "$pending_expires_at_epoch"
   log "Promoted $site release $release_id pending external public verification"
 else
   log "Promoted $site release $release_id from $source_sha"

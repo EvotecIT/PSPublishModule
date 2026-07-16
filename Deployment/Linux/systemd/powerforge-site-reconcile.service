@@ -1,0 +1,8 @@
+[Unit]
+Description=Reconcile abandoned PowerForge website releases
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/powerforge-site-reconcile

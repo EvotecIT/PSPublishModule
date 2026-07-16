@@ -84,7 +84,7 @@ if (-not [string]::IsNullOrWhiteSpace($env:POWERFORGE_CLOUDFLARE_ZONE)) {
 
 $publicUrl = [string]$env:POWERFORGE_DEPLOYMENT_PUBLIC_URL
 if ([string]::IsNullOrWhiteSpace($publicUrl)) {
-    $publicUrl = "https://$($env:POWERFORGE_DEPLOYMENT_SITE)"
+    throw 'deployment-public-url is required for external public verification.'
 }
 $publicUri = $null
 if (-not [Uri]::TryCreate($publicUrl, [UriKind]::Absolute, [ref] $publicUri) -or

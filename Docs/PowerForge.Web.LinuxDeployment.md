@@ -90,11 +90,24 @@ This two-job lane:
 7. finalizes the release, or restores the previous symlink and purges the rejected release from cache
 
 Install `Deployment/Linux/powerforge-site-deploy.sh` as
-`/usr/local/sbin/powerforge-site-deploy`. Install one root-owned configuration from
+`/usr/local/sbin/powerforge-site-deploy` and
+`Deployment/Linux/powerforge-site-reconcile.sh` as
+`/usr/local/sbin/powerforge-site-reconcile`. Install and enable the matching
+`powerforge-site-reconcile.service` and `powerforge-site-reconcile.timer` units from
+`Deployment/Linux/systemd`. Install one root-owned configuration from
 `Deployment/Linux/powerforge-site.env.example` under
 `/etc/powerforge/sites/<site>.env`. The workflow cannot provide release roots,
 Cloudflare credentials, origin addresses, or smoke policy; those remain trusted host
-configuration.
+configuration. The protected action also requires an explicit `deployment-public-url`;
+the site id is an allowlist key and is not assumed to be a public hostname.
+
+```bash
+sudo install -m 0755 Deployment/Linux/powerforge-site-reconcile.sh /usr/local/sbin/powerforge-site-reconcile
+sudo install -m 0644 Deployment/Linux/systemd/powerforge-site-reconcile.service /etc/systemd/system/powerforge-site-reconcile.service
+sudo install -m 0644 Deployment/Linux/systemd/powerforge-site-reconcile.timer /etc/systemd/system/powerforge-site-reconcile.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now powerforge-site-reconcile.timer
+```
 
 Give each repository a separate deployment key and a protected GitHub environment.
 Restrict its server account/sudo rule to the expected site argument. Do not share one
@@ -122,7 +135,11 @@ composite action then verifies the same provenance and configured smoke paths th
 the public URL from the GitHub runner. This separation avoids treating an origin-host
 Cloudflare challenge as a broken release. A public verification failure restores the
 previous symlink remotely, removes the rejected release, and purges Cloudflare again.
-Release pruning happens only after the runner finalizes a verified release.
+Release pruning happens only after the runner finalizes a verified release. Deferred
+promotions create root-only pending state with a ten-minute deadline. The reconciler
+checks that state every minute and restores an abandoned release after runner
+cancellation, timeout, or loss. Deferred promotion refuses to start when that timer is
+not active.
 
 On the first PowerForge deployment, an existing non-symlink `current` directory is
 moved into the release history and becomes the rollback target. This lets the shared
@@ -135,8 +152,10 @@ id only inside temporary deployment staging. A least-privilege cache-purge token
 therefore does not need Zone Read. If
 the zone-id secret is absent, the action may discover exactly one active zone by
 name; that fallback also requires Zone Read and uses Cloudflare's valid page size.
-The promoter copies the credentials into root-only staging,
-purges before exact-SHA verification, and erases them on every success or failure.
+The promoter copies the credentials into root-only staging and purges before exact-SHA
+verification. During deferred verification it retains the scoped token only in the
+root-only pending directory so an abandoned release can be rolled back and purged.
+Finalization, explicit rollback, or deadline reconciliation erases that pending state.
 The normal website-pipeline Cloudflare token remains isolated to the build and is
 never reused for Linux promotion.
 This keeps Cloudflare proxying and cache analytics enabled without storing a broad
