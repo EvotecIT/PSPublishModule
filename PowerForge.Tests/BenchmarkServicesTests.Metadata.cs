@@ -10,8 +10,7 @@ public sealed partial class BenchmarkServicesTests
         var metadata = PowerShellBenchmarkEnvironmentMetadata.Build(new PowerShellBenchmarkSuite { Name = "host" });
         var host = PowerShellBenchmarkHostRuntime.GetCurrentHostLabel();
 
-        Assert.EndsWith(metadata["pwsh"], host, StringComparison.OrdinalIgnoreCase);
-        Assert.StartsWith(metadata["psEdition"], host, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal($"{metadata["psEdition"]}-{metadata["pwsh"]}", host, ignoreCase: true);
     }
 
     [Fact]
