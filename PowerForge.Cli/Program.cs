@@ -82,6 +82,9 @@ internal static partial class Program
             return CommandWorkspace(filteredArgs, cli, logger);
         case "github":
             return CommandGitHub(filteredArgs, cli, logger);
+        case "homeassistant":
+        case "hacs":
+            return CommandHomeAssistant(filteredArgs, cli, logger);
         case "normalize":
         {
             var argv = filteredArgs.Skip(1).ToArray();
