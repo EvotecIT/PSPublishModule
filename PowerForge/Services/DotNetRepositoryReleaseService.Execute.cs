@@ -297,8 +297,19 @@ public sealed partial class DotNetRepositoryReleaseService
 
                 result.ResolvedVersionsByProject[project.ProjectName] = resolvedVersion;
 
-                if (CsprojVersionEditor.TryGetVersion(project.CsprojPath, out var oldV))
+                if (CsprojVersionEditor.TryGetVersion(project.CsprojPath, out var oldV) &&
+                    PackageVersionUtility.TryNormalizeExact(oldV, out var normalizedOldVersion))
+                {
+                    project.OldVersion = normalizedOldVersion;
+                }
+                else if (!spec.UpdateVersions)
+                {
+                    project.OldVersion = resolvedVersion;
+                }
+                else if (!string.IsNullOrWhiteSpace(oldV))
+                {
                     project.OldVersion = oldV;
+                }
 
                 project.NewVersion = resolvedVersion;
                 if (spec.WhatIf || !spec.UpdateVersions) continue;
