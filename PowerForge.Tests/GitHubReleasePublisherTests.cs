@@ -51,4 +51,14 @@ public sealed class GitHubReleasePublisherTests
         Assert.True(GitHubReleasePublisher.TryReserveExistingAssetNameForReplacement(replaceableAssetNames, "powerforge-win-x64.zip"));
         Assert.False(GitHubReleasePublisher.TryReserveExistingAssetNameForReplacement(replaceableAssetNames, "PowerForge-win-x64.zip"));
     }
+
+    [Fact]
+    public void BuildApiUri_PreservesGitHubEnterpriseApiPrefix()
+    {
+        var uri = GitHubReleasePublisher.BuildApiUri(
+            "https://github.enterprise.example/api/v3/",
+            "/repos/EvotecIT/example/releases");
+
+        Assert.Equal("https://github.enterprise.example/api/v3/repos/EvotecIT/example/releases", uri.AbsoluteUri);
+    }
 }

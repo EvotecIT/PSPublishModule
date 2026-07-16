@@ -25,7 +25,10 @@ internal sealed class HomeAssistantGitHubRelease {
     internal string Body { get; set; } = string.Empty;
     internal string HtmlUrl { get; set; } = string.Empty;
     internal string TargetCommitish { get; set; } = string.Empty;
+    internal bool IsDraft { get; set; }
+    internal bool IsPrerelease { get; set; }
     internal List<string> AssetNames { get; } = new();
+    internal Dictionary<string, long> AssetSizes { get; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 internal sealed class HomeAssistantReleaseAssetException : InvalidOperationException {

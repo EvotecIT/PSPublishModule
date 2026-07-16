@@ -1,13 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 
 namespace PowerForge;
 
 internal sealed class HomeAssistantReleaseGitService {
     private readonly GitClient _git;
+    private readonly IProcessRunner _processRunner;
 
-    internal HomeAssistantReleaseGitService(GitClient? git = null) {
+    internal HomeAssistantReleaseGitService(GitClient? git = null, IProcessRunner? processRunner = null) {
         _git = git ?? new GitClient(defaultTimeout: TimeSpan.FromMinutes(2));
+        _processRunner = processRunner ?? new ProcessRunner();
     }
 
     internal void EnsureClean(string repositoryRoot) {
@@ -30,7 +34,7 @@ internal sealed class HomeAssistantReleaseGitService {
         var result = RunAllowFailure(
             repositoryRoot,
             "log",
-            "--all",
+            "HEAD",
             "--fixed-strings",
             $"--grep=Source-PR: #{pullRequestNumber}",
             "-n",
@@ -41,13 +45,47 @@ internal sealed class HomeAssistantReleaseGitService {
         return string.IsNullOrWhiteSpace(sha) ? null : sha;
     }
 
-    internal string CommitAndPush(
+    internal void EnsureNoTrackedChanges(string repositoryRoot) {
+        var result = Run(repositoryRoot, "status", "--porcelain", "--untracked-files=no");
+        if (!string.IsNullOrWhiteSpace(result.StdOut))
+            throw new InvalidOperationException("The release build changed tracked files after the immutable release commit was created.\n" + result.StdOut.Trim());
+    }
+
+    internal string CreateDetachedWorktree(string repositoryRoot, string commitSha) {
+        if (string.IsNullOrWhiteSpace(commitSha)) throw new ArgumentException("Commit SHA is required.", nameof(commitSha));
+        var parent = Path.Combine(Path.GetTempPath(), "PowerForge.HomeAssistant.Worktrees");
+        Directory.CreateDirectory(parent);
+        var path = Path.Combine(parent, Guid.NewGuid().ToString("N"));
+        Run(repositoryRoot, "worktree", "add", "--detach", path, commitSha);
+        return path;
+    }
+
+    internal void RemoveDetachedWorktree(string repositoryRoot, string worktreePath) {
+        if (string.IsNullOrWhiteSpace(worktreePath)) return;
+        var result = RunAllowFailure(repositoryRoot, "worktree", "remove", "--force", worktreePath);
+        if (!result.Succeeded) {
+            var detail = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
+            throw new InvalidOperationException($"Unable to remove detached release worktree '{worktreePath}'. {detail.Trim()}");
+        }
+
+        Run(repositoryRoot, "worktree", "prune");
+        var parent = Path.GetDirectoryName(worktreePath);
+        try {
+            if (!string.IsNullOrWhiteSpace(parent) && Directory.Exists(parent) && Directory.GetFileSystemEntries(parent).Length == 0)
+                Directory.Delete(parent);
+        } catch (IOException) {
+            // Another release may have created a recovery worktree concurrently.
+        } catch (UnauthorizedAccessException) {
+            // Best-effort cleanup only; git metadata has already been pruned.
+        }
+    }
+
+    internal string CommitRelease(
         string repositoryRoot,
         IReadOnlyCollection<string> changedFiles,
         string version,
         int pullRequestNumber,
-        string mergeCommitSha,
-        string defaultBranch) {
+        string mergeCommitSha) {
         if (changedFiles.Count == 0)
             return GetHeadSha(repositoryRoot);
 
@@ -66,9 +104,37 @@ internal sealed class HomeAssistantReleaseGitService {
 
         var message = $"Release v{version}\n\nSource-PR: #{pullRequestNumber}\nSource-Merge: {mergeCommitSha}";
         Run(repositoryRoot, "commit", "-m", message);
-        var commitSha = GetHeadSha(repositoryRoot);
-        Run(repositoryRoot, "push", "origin", $"HEAD:refs/heads/{defaultBranch}");
-        return commitSha;
+        return GetHeadSha(repositoryRoot);
+    }
+
+    internal void Push(string repositoryRoot, string defaultBranch, string token) {
+        if (string.IsNullOrWhiteSpace(defaultBranch)) throw new ArgumentException("Default branch is required.", nameof(defaultBranch));
+        if (string.IsNullOrWhiteSpace(token)) throw new ArgumentException("GitHub token is required.", nameof(token));
+
+        var basicToken = Convert.ToBase64String(Encoding.UTF8.GetBytes("x-access-token:" + token));
+        var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase) {
+            ["GH_TOKEN"] = null,
+            ["GITHUB_TOKEN"] = null,
+            ["GIT_CONFIG_COUNT"] = "2",
+            ["GIT_CONFIG_KEY_0"] = "credential.helper",
+            ["GIT_CONFIG_VALUE_0"] = string.Empty,
+            ["GIT_CONFIG_KEY_1"] = "http.extraheader",
+            ["GIT_CONFIG_VALUE_1"] = "AUTHORIZATION: basic " + basicToken,
+            ["GIT_TERMINAL_PROMPT"] = "0"
+        };
+        var result = _processRunner.RunAsync(new ProcessRunRequest(
+                "git",
+                repositoryRoot,
+                new[] { "push", "origin", $"HEAD:refs/heads/{defaultBranch}" },
+                TimeSpan.FromMinutes(2),
+                environment))
+            .ConfigureAwait(false)
+            .GetAwaiter()
+            .GetResult();
+        if (!result.Succeeded) {
+            var detail = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
+            throw new InvalidOperationException($"git push failed with exit code {result.ExitCode}. {detail.Trim()}");
+        }
     }
 
     private ProcessRunResult Run(string repositoryRoot, params string[] arguments) {

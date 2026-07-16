@@ -63,12 +63,12 @@ public sealed class HomeAssistantReleaseService {
         HomeAssistantGitHubRelease? incompleteSourceRelease = null;
         if (existingSourceRelease is not null) {
             try {
-                VerifyExistingRelease(github, existingSourceRelease, snapshot, expectedCommitSha: null, marker);
+                VerifyExistingRelease(github, existingSourceRelease, expectedCommitSha: null, marker);
                 return CreateResult(
                     snapshot,
                     HomeAssistantReleaseAction.Reused,
                     HomeAssistantVersionIncrement.None,
-                    snapshot.Version,
+                    HomeAssistantSemanticVersion.Parse(existingSourceRelease.TagName).ToString(),
                     existingSourceRelease.TagName,
                     github.GetTagCommitSha(existingSourceRelease.TagName),
                     existingSourceRelease.HtmlUrl,
@@ -86,6 +86,8 @@ public sealed class HomeAssistantReleaseService {
             throw new InvalidOperationException("Pull request checks are not settled successfully: " + string.Join(", ", checks.BlockingChecks));
 
         _git.EnsureContainsMerge(root, mergeCommitSha);
+        var currentHeadSha = _git.GetHeadSha(root);
+        var preparedReleaseCommit = _git.FindCommitForSourcePullRequest(root, pullRequest.Number);
         var increment = HomeAssistantReleasePolicy.Resolve(pullRequest.Labels, pullRequest.ChangedFiles, spec.Increment);
         var currentVersion = HomeAssistantSemanticVersion.Parse(snapshot.Version);
         var latestRelease = github.GetLatestRelease();
@@ -94,8 +96,6 @@ public sealed class HomeAssistantReleaseService {
 
         if (incompleteSourceRelease is not null) {
             releaseVersion = HomeAssistantSemanticVersion.Parse(incompleteSourceRelease.TagName);
-            if (currentVersion.CompareTo(releaseVersion) != 0)
-                throw new InvalidOperationException($"Incomplete source release {incompleteSourceRelease.TagName} does not match repository metadata version {currentVersion}.");
             recoveringPreparedVersion = true;
         } else if (latestRelease is not null) {
             var latestVersion = HomeAssistantSemanticVersion.Parse(latestRelease.TagName);
@@ -103,8 +103,14 @@ public sealed class HomeAssistantReleaseService {
             if (comparison < 0)
                 throw new InvalidOperationException($"Repository metadata version {currentVersion} is behind latest GitHub release {latestRelease.TagName}.");
             if (comparison > 0) {
+                if (string.IsNullOrWhiteSpace(preparedReleaseCommit)) {
+                    throw new InvalidOperationException(
+                        $"Repository version {currentVersion} is ahead of {latestRelease.TagName}, but no PowerForge release commit belongs to pull request #{pullRequest.Number}. " +
+                        "Finish or rerun the pull request that prepared the ahead version before releasing this pull request.");
+                }
+
                 recoveringPreparedVersion = true;
-                _logger.Info($"Repository version {currentVersion} is ahead of {latestRelease.TagName}; resuming publication without another increment.");
+                _logger.Info($"Repository version {currentVersion} is ahead of {latestRelease.TagName}; resuming pull request #{pullRequest.Number} from release commit {preparedReleaseCommit}.");
             } else if (increment != HomeAssistantVersionIncrement.None) {
                 releaseVersion = currentVersion.Increment(increment);
             }
@@ -150,44 +156,74 @@ public sealed class HomeAssistantReleaseService {
             result.ChangedFiles.AddRange(_repository.UpdateVersion(snapshot, root, releaseVersion.ToString()));
         }
 
-        result.AssetFiles.AddRange(_repository.BuildAssets(snapshot, root, releaseVersion.ToString()));
         var releaseCommit = recoveringPreparedVersion
             ? incompleteSourceRelease is not null
                 ? github.GetTagCommitSha(incompleteSourceRelease.TagName)
                     ?? throw new InvalidOperationException($"Unable to resolve incomplete release tag {incompleteSourceRelease.TagName}.")
-                : _git.FindCommitForSourcePullRequest(root, pullRequest.Number) ?? _git.GetHeadSha(root)
-            : _git.CommitAndPush(root, result.ChangedFiles, releaseVersion.ToString(), pullRequest.Number, mergeCommitSha, spec.DefaultBranch);
+                : preparedReleaseCommit!
+            : _git.CommitRelease(root, result.ChangedFiles, releaseVersion.ToString(), pullRequest.Number, mergeCommitSha);
         result.ReleaseCommitSha = releaseCommit;
+        var buildHeadSha = _git.GetHeadSha(root);
+        var pushReleaseCommit = !recoveringPreparedVersion && result.ChangedFiles.Count > 0;
 
-        if (!spec.Publish) {
-            result.Message = "Release metadata and artifacts were prepared without publishing a GitHub release.";
+        string? detachedWorktree = null;
+        try {
+            var buildRoot = root;
+            var buildSnapshot = snapshot;
+            if (!string.Equals(buildHeadSha, releaseCommit, StringComparison.OrdinalIgnoreCase)) {
+                detachedWorktree = _git.CreateDetachedWorktree(root, releaseCommit);
+                buildRoot = detachedWorktree;
+                buildSnapshot = _repository.Inspect(buildRoot);
+            }
+
+            if (!string.Equals(buildSnapshot.Version, releaseVersion.ToString(), StringComparison.Ordinal)) {
+                throw new InvalidOperationException(
+                    $"Release commit {releaseCommit} contains repository version {buildSnapshot.Version}, not expected version {releaseVersion}.");
+            }
+
+            result.AssetFiles.AddRange(_repository.BuildAssets(buildSnapshot, buildRoot, releaseVersion.ToString()));
+            _git.EnsureNoTrackedChanges(buildRoot);
+
+            if (pushReleaseCommit)
+                _git.Push(root, spec.DefaultBranch, spec.Token);
+
+            if (!spec.Publish) {
+                result.Message = "Release metadata and artifacts were prepared without publishing a GitHub release.";
+                return result;
+            }
+
+            var requiredAsset = buildSnapshot.Kind == HomeAssistantRepositoryKind.LovelacePlugin || buildSnapshot.ZipRelease
+                ? buildSnapshot.HacsFileName
+                : null;
+            var notes = HomeAssistantReleasePolicy.BuildReleaseNotes(pullRequest, marker, releaseCommit, requiredAsset);
+            var publishResult = publisher.Publish(new GitHubReleasePublishRequest {
+                Owner = spec.Owner,
+                Repository = spec.Repository,
+                Token = spec.Token,
+                ApiBaseUrl = spec.ApiBaseUrl,
+                TagName = tagName,
+                ReleaseName = tagName,
+                ReleaseNotes = notes,
+                Commitish = releaseCommit,
+                GenerateReleaseNotes = false,
+                ReuseExistingReleaseOnConflict = true,
+                ReplaceExistingAssets = true,
+                AssetFilePaths = result.AssetFiles
+            });
+            if (!publishResult.Succeeded)
+                throw new InvalidOperationException($"GitHub release publication did not succeed for {tagName}.");
+
+            var published = WaitForRelease(github, tagName);
+            VerifyExistingRelease(github, published, releaseCommit, marker);
+            result.ReleaseUrl = published.HtmlUrl;
+            result.Message = publishResult.ReusedExistingRelease
+                ? "The existing GitHub release was resumed and verified."
+                : "The GitHub release was published and verified.";
             return result;
+        } finally {
+            if (!string.IsNullOrWhiteSpace(detachedWorktree))
+                _git.RemoveDetachedWorktree(root, detachedWorktree!);
         }
-
-        var notes = HomeAssistantReleasePolicy.BuildReleaseNotes(pullRequest, marker, releaseCommit);
-        var publishResult = publisher.Publish(new GitHubReleasePublishRequest {
-            Owner = spec.Owner,
-            Repository = spec.Repository,
-            Token = spec.Token,
-            TagName = tagName,
-            ReleaseName = tagName,
-            ReleaseNotes = notes,
-            Commitish = releaseCommit,
-            GenerateReleaseNotes = false,
-            ReuseExistingReleaseOnConflict = true,
-            ReplaceExistingAssets = true,
-            AssetFilePaths = result.AssetFiles
-        });
-        if (!publishResult.Succeeded)
-            throw new InvalidOperationException($"GitHub release publication did not succeed for {tagName}.");
-
-        var published = WaitForRelease(github, tagName);
-        VerifyExistingRelease(github, published, snapshot, releaseCommit, marker);
-        result.ReleaseUrl = published.HtmlUrl;
-        result.Message = publishResult.ReusedExistingRelease
-            ? "The existing GitHub release was resumed and verified."
-            : "The GitHub release was published and verified.";
-        return result;
     }
 
     private static void Validate(HomeAssistantReleaseSpec spec) {
@@ -214,11 +250,12 @@ public sealed class HomeAssistantReleaseService {
     private static void VerifyExistingRelease(
         IHomeAssistantGitHubClient github,
         HomeAssistantGitHubRelease release,
-        HomeAssistantRepositorySnapshot snapshot,
         string? expectedCommitSha,
         string marker) {
         if (release.Body.IndexOf(marker, StringComparison.Ordinal) < 0)
             throw new InvalidOperationException($"GitHub release {release.TagName} does not contain the expected PowerForge source marker.");
+        if (release.IsDraft || release.IsPrerelease)
+            throw new InvalidOperationException($"GitHub release {release.TagName} must be a published stable release, not a draft or prerelease.");
         _ = HomeAssistantSemanticVersion.Parse(release.TagName);
         var tagCommitSha = github.GetTagCommitSha(release.TagName);
         if (string.IsNullOrWhiteSpace(tagCommitSha))
@@ -233,12 +270,14 @@ public sealed class HomeAssistantReleaseService {
             throw new InvalidOperationException($"Git tag {release.TagName} points to {tagCommitSha}, not expected release commit {expectedCommitSha}.");
         }
 
-        var requiredAsset = snapshot.Kind == HomeAssistantRepositoryKind.LovelacePlugin || snapshot.ZipRelease
-            ? snapshot.HacsFileName
-            : null;
+        var requiredAsset = HomeAssistantReleasePolicy.ReadRequiredAsset(release.Body);
         if (!string.IsNullOrWhiteSpace(requiredAsset) &&
             !release.AssetNames.Contains(requiredAsset!, StringComparer.OrdinalIgnoreCase)) {
             throw new HomeAssistantReleaseAssetException($"GitHub release {release.TagName} is missing required HACS asset '{requiredAsset}'.");
+        }
+        if (!string.IsNullOrWhiteSpace(requiredAsset) &&
+            (!release.AssetSizes.TryGetValue(requiredAsset!, out var size) || size <= 0)) {
+            throw new HomeAssistantReleaseAssetException($"GitHub release {release.TagName} has an empty or unobservable HACS asset '{requiredAsset}'.");
         }
     }
 

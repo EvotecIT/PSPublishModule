@@ -33,7 +33,7 @@ permissions:
 
 concurrency:
   group: powerforge-homeassistant-release-${{ github.repository }}
-  cancel-in-progress: false
+  queue: max
 
 jobs:
   release:
@@ -46,6 +46,7 @@ jobs:
           ref: ${{ inputs.default_branch }}
           fetch-depth: 0
           path: source
+          persist-credentials: false
           token: ${{ secrets['github-token'] != '' && secrets['github-token'] || github.token }}
 
       - name: Setup Node.js for HACS plugin builds

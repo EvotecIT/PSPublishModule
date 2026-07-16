@@ -35,6 +35,7 @@ public sealed class GitHubReleasePublisher
         var owner = request.Owner;
         var repo = request.Repository;
         var token = request.Token;
+        var apiBaseUrl = NormalizeApiBaseUrl(request.ApiBaseUrl);
         var tagName = request.TagName;
         var releaseName = request.ReleaseName;
         var releaseNotes = request.ReleaseNotes;
@@ -69,6 +70,7 @@ public sealed class GitHubReleasePublisher
             owner,
             repo,
             token,
+            apiBaseUrl,
             tagName,
             releaseName!,
             releaseNotes,
@@ -100,6 +102,7 @@ public sealed class GitHubReleasePublisher
                 token,
                 owner,
                 repo,
+                apiBaseUrl,
                 release.Id,
                 replaceExistingAssets,
                 result.ReplacedExistingAssets));
@@ -132,6 +135,7 @@ public sealed class GitHubReleasePublisher
             Owner = owner,
             Repository = repo,
             Token = token,
+            ApiBaseUrl = "https://api.github.com",
             TagName = tagName,
             ReleaseName = releaseName,
             ReleaseNotes = releaseNotes,
@@ -150,6 +154,7 @@ public sealed class GitHubReleasePublisher
         string owner,
         string repo,
         string token,
+        string apiBaseUrl,
         string tagName,
         string releaseName,
         string? releaseNotes,
@@ -159,7 +164,7 @@ public sealed class GitHubReleasePublisher
         bool isPreRelease,
         bool reuseExistingReleaseOnConflict)
     {
-        var uri = new Uri($"https://api.github.com/repos/{owner}/{repo}/releases");
+        var uri = BuildApiUri(apiBaseUrl, $"/repos/{owner}/{repo}/releases");
 
         var normalizedCommitish = string.IsNullOrWhiteSpace(commitish) ? null : commitish!.Trim();
         var normalizedReleaseNotes = string.IsNullOrWhiteSpace(releaseNotes) ? null : releaseNotes;
@@ -192,7 +197,7 @@ public sealed class GitHubReleasePublisher
                 IsAlreadyExistsValidationError(responseText, fieldName: "tag_name"))
             {
                 _logger.Info($"GitHub release for tag '{tagName}' already exists; reusing existing release.");
-                return GetReleaseByTag(owner, repo, token, tagName, reusedExistingRelease: true);
+                return GetReleaseByTag(owner, repo, token, apiBaseUrl, tagName, reusedExistingRelease: true);
             }
 
             throw new InvalidOperationException($"GitHub release creation failed ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}");
@@ -207,9 +212,9 @@ public sealed class GitHubReleasePublisher
         return new GitHubReleaseApiResponse(parsed.Id, html, upload, reusedExistingRelease: false);
     }
 
-    private GitHubReleaseApiResponse GetReleaseByTag(string owner, string repo, string token, string tagName, bool reusedExistingRelease)
+    private GitHubReleaseApiResponse GetReleaseByTag(string owner, string repo, string token, string apiBaseUrl, string tagName, bool reusedExistingRelease)
     {
-        var uri = new Uri($"https://api.github.com/repos/{owner}/{repo}/releases/tags/{Uri.EscapeDataString(tagName)}");
+        var uri = BuildApiUri(apiBaseUrl, $"/repos/{owner}/{repo}/releases/tags/{Uri.EscapeDataString(tagName)}");
         using var request = new HttpRequestMessage(HttpMethod.Get, uri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -233,13 +238,14 @@ public sealed class GitHubReleasePublisher
         string token,
         string owner,
         string repo,
+        string apiBaseUrl,
         long releaseId,
         bool replaceExistingAssets,
         List<string> replacedExistingAssets)
     {
         var skippedAssets = new List<string>();
         var replaceableAssetNames = replaceExistingAssets
-            ? CreateReplaceableAssetNameSet(ListReleaseAssets(owner, repo, token, releaseId))
+            ? CreateReplaceableAssetNameSet(ListReleaseAssets(owner, repo, token, apiBaseUrl, releaseId))
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var assetPath in assets)
@@ -248,7 +254,7 @@ public sealed class GitHubReleasePublisher
 
             if (replaceExistingAssets &&
                 TryReserveExistingAssetNameForReplacement(replaceableAssetNames, fileName) &&
-                DeleteExistingAssetByName(owner, repo, token, releaseId, fileName))
+                DeleteExistingAssetByName(owner, repo, token, apiBaseUrl, releaseId, fileName))
             {
                 replacedExistingAssets.Add(fileName);
             }
@@ -263,7 +269,7 @@ public sealed class GitHubReleasePublisher
                 (int)resp.StatusCode == 422 &&
                 IsAlreadyExistsValidationError(respText, fieldName: "name") &&
                 TryReserveExistingAssetNameForReplacement(replaceableAssetNames, fileName) &&
-                DeleteExistingAssetByName(owner, repo, token, releaseId, fileName))
+                DeleteExistingAssetByName(owner, repo, token, apiBaseUrl, releaseId, fileName))
             {
                 replacedExistingAssets.Add(fileName);
                 resp.Dispose();
@@ -329,17 +335,17 @@ public sealed class GitHubReleasePublisher
         return SharedClient.SendAsync(req).ConfigureAwait(false).GetAwaiter().GetResult();
     }
 
-    private bool DeleteExistingAssetByName(string owner, string repo, string token, long releaseId, string fileName)
+    private bool DeleteExistingAssetByName(string owner, string repo, string token, string apiBaseUrl, long releaseId, string fileName)
     {
         if (releaseId <= 0)
             throw new InvalidOperationException("GitHub release asset replacement requires the release id returned by GitHub.");
 
-        var asset = ListReleaseAssets(owner, repo, token, releaseId)
+        var asset = ListReleaseAssets(owner, repo, token, apiBaseUrl, releaseId)
             .FirstOrDefault(existing => string.Equals(existing.Name, fileName, StringComparison.OrdinalIgnoreCase));
         if (asset is null)
             return false;
 
-        var uri = new Uri($"https://api.github.com/repos/{owner}/{repo}/releases/assets/{asset.Id}");
+        var uri = BuildApiUri(apiBaseUrl, $"/repos/{owner}/{repo}/releases/assets/{asset.Id}");
         using var request = new HttpRequestMessage(HttpMethod.Delete, uri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -355,12 +361,12 @@ public sealed class GitHubReleasePublisher
         return true;
     }
 
-    private static IReadOnlyList<GitHubReleaseAssetResponse> ListReleaseAssets(string owner, string repo, string token, long releaseId)
+    private static IReadOnlyList<GitHubReleaseAssetResponse> ListReleaseAssets(string owner, string repo, string token, string apiBaseUrl, long releaseId)
     {
         var assets = new List<GitHubReleaseAssetResponse>();
         for (var page = 1; ; page++)
         {
-            var uri = new Uri($"https://api.github.com/repos/{owner}/{repo}/releases/{releaseId}/assets?per_page=100&page={page}");
+            var uri = BuildApiUri(apiBaseUrl, $"/repos/{owner}/{repo}/releases/{releaseId}/assets?per_page=100&page={page}");
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -416,6 +422,14 @@ public sealed class GitHubReleasePublisher
         var idx = uploadUrl.IndexOf('{');
         return idx >= 0 ? uploadUrl.Substring(0, idx) : uploadUrl;
     }
+
+    private static string NormalizeApiBaseUrl(string? apiBaseUrl)
+        => string.IsNullOrWhiteSpace(apiBaseUrl)
+            ? "https://api.github.com"
+            : apiBaseUrl!.Trim().TrimEnd('/');
+
+    internal static Uri BuildApiUri(string apiBaseUrl, string path)
+        => new(NormalizeApiBaseUrl(apiBaseUrl) + path);
 
     private static string Serialize<T>(T value)
     {

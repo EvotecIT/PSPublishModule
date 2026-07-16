@@ -132,12 +132,17 @@ internal sealed class HomeAssistantGitHubClient : IHomeAssistantGitHubClient {
             TagName = GetString(value, "tag_name"),
             Body = GetString(value, "body"),
             HtmlUrl = GetString(value, "html_url"),
-            TargetCommitish = GetString(value, "target_commitish")
+            TargetCommitish = GetString(value, "target_commitish"),
+            IsDraft = value["draft"]?.GetValue<bool>() == true,
+            IsPrerelease = value["prerelease"]?.GetValue<bool>() == true
         };
         if (value["assets"] is JsonArray assets) {
             foreach (var asset in assets.OfType<JsonObject>()) {
                 var name = GetString(asset, "name");
-                if (!string.IsNullOrWhiteSpace(name)) result.AssetNames.Add(name);
+                if (!string.IsNullOrWhiteSpace(name)) {
+                    result.AssetNames.Add(name);
+                    result.AssetSizes[name] = asset["size"]?.GetValue<long>() ?? 0;
+                }
             }
         }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 
 namespace PowerForge;
 
@@ -41,8 +42,11 @@ internal static class HomeAssistantReleasePolicy {
     internal static string BuildMarker(int pullRequestNumber, string mergeCommitSha)
         => $"<!-- powerforge-homeassistant source-pr:{pullRequestNumber} merge:{mergeCommitSha} -->";
 
-    internal static string BuildReleaseNotes(HomeAssistantPullRequest pullRequest, string marker, string releaseCommitSha)
-        => $"{marker}{Environment.NewLine}<!-- powerforge-homeassistant release-commit:{releaseCommitSha} -->{Environment.NewLine}{Environment.NewLine}Released from #{pullRequest.Number}: [{pullRequest.Title}]({pullRequest.HtmlUrl}).";
+    internal static string BuildReleaseNotes(HomeAssistantPullRequest pullRequest, string marker, string releaseCommitSha, string? requiredAsset)
+        => $"{marker}{Environment.NewLine}" +
+           $"<!-- powerforge-homeassistant release-commit:{releaseCommitSha} -->{Environment.NewLine}" +
+           $"<!-- powerforge-homeassistant required-asset:{Convert.ToBase64String(Encoding.UTF8.GetBytes(requiredAsset ?? string.Empty))} -->{Environment.NewLine}{Environment.NewLine}" +
+           $"Release triggered by #{pullRequest.Number}: [{pullRequest.Title}]({pullRequest.HtmlUrl}).";
 
     internal static string? ReadReleaseCommit(string releaseBody) {
         if (string.IsNullOrWhiteSpace(releaseBody)) return null;
@@ -51,6 +55,19 @@ internal static class HomeAssistantReleasePolicy {
             @"<!--\s*powerforge-homeassistant\s+release-commit:(?<sha>[0-9a-f]{40,64})\s*-->",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         return match.Success ? match.Groups["sha"].Value : null;
+    }
+
+    internal static string? ReadRequiredAsset(string releaseBody) {
+        if (string.IsNullOrWhiteSpace(releaseBody))
+            throw new InvalidOperationException("The GitHub release body does not record its required HACS asset.");
+        var match = System.Text.RegularExpressions.Regex.Match(
+            releaseBody,
+            @"<!--\s*powerforge-homeassistant\s+required-asset:(?<value>[A-Za-z0-9+/=]*)\s*-->",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!match.Success)
+            throw new InvalidOperationException("The GitHub release body does not record its required HACS asset.");
+        var value = Encoding.UTF8.GetString(Convert.FromBase64String(match.Groups["value"].Value));
+        return string.IsNullOrEmpty(value) ? null : value;
     }
 
     private static bool IsProductChange(string path) {

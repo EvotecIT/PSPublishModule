@@ -22,7 +22,7 @@ Use PowerForge as the release owner. A receiver repository should contain only t
 
 - With no release label, product/config/dependency changes increment patch; docs, tests, workflows, and maintainer metadata do not release.
 - Exactly one release label overrides that default. Conflicting release labels fail closed.
-- PowerForge synchronizes version files, builds the required HACS asset, creates a version-only commit, pushes it, publishes the GitHub release, and verifies the marker, tag target, and required asset.
+- PowerForge queues every merge trigger, synchronizes version files, creates a local version-only commit, builds the required HACS asset from that immutable commit without write credentials, rejects tracked build mutations, pushes with ephemeral authentication, publishes the GitHub release, and verifies the marker, tag target, and required asset.
 - Treat three-part versions as the public contract. Do not introduce four-part consumer versions.
 
 ## Recover a failed run
@@ -30,8 +30,9 @@ Use PowerForge as the release owner. A receiver repository should contain only t
 Rerun the failed Actions job first. PowerForge resumes safely:
 
 - a release containing the source PR marker is verified and reused;
-- metadata ahead of the latest release is published without another increment;
+- metadata ahead of the latest release is resumed only when the requested PR owns the prepared release commit;
 - an existing tag/release is reused and same-named assets are replaced;
+- missing historical assets are rebuilt from the exact tag commit in a detached worktree;
 - a tag pointing at the wrong commit or a missing required asset fails verification.
 
 For a manual recovery, dispatch the receiver workflow with the original merged PR number, its merge SHA, and the same increment decision. Do not hand-edit a second version bump or manually create a competing release.

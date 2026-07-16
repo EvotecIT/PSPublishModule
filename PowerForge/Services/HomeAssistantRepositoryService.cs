@@ -26,10 +26,16 @@ internal sealed class HomeAssistantRepositoryService {
 
         var hacs = ReadJsonObject(hacsPath);
         var hacsFileName = ReadOptionalString(hacs, "filename");
+        ValidateAssetFileName(hacsFileName);
         var zipRelease = ReadOptionalBoolean(hacs, "zip_release");
         var packageJsonPath = Path.Combine(root, "package.json");
+        var customComponents = Path.Combine(root, "custom_components");
+        if (!Directory.Exists(customComponents)) {
+            if (zipRelease)
+                throw new InvalidOperationException("hacs.json zip_release is only valid for a Home Assistant custom integration under custom_components.");
+            if (string.IsNullOrWhiteSpace(hacsFileName) || !File.Exists(packageJsonPath))
+                throw new InvalidOperationException("The repository is neither a HACS Lovelace plugin nor a Home Assistant custom integration.");
 
-        if (!string.IsNullOrWhiteSpace(hacsFileName) && File.Exists(packageJsonPath)) {
             var package = ReadJsonObject(packageJsonPath);
             var version = ReadRequiredString(package, "version", packageJsonPath);
             return new HomeAssistantRepositorySnapshot {
@@ -42,10 +48,6 @@ internal sealed class HomeAssistantRepositoryService {
                 ZipRelease = false
             };
         }
-
-        var customComponents = Path.Combine(root, "custom_components");
-        if (!Directory.Exists(customComponents))
-            throw new InvalidOperationException("The repository is neither a HACS Lovelace plugin nor a Home Assistant custom integration.");
 
         var manifests = Directory.GetFiles(customComponents, "manifest.json", SearchOption.AllDirectories);
         if (manifests.Length != 1)
@@ -130,8 +132,30 @@ internal sealed class HomeAssistantRepositoryService {
     }
 
     private void Run(string workingDirectory, string executable, params string[] arguments) {
+        var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase) {
+            ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"] = null,
+            ["ACTIONS_ID_TOKEN_REQUEST_URL"] = null,
+            ["ACTIONS_RUNTIME_TOKEN"] = null,
+            ["GH_TOKEN"] = null,
+            ["GITHUB_ENV"] = null,
+            ["GITHUB_OUTPUT"] = null,
+            ["GITHUB_PATH"] = null,
+            ["GITHUB_STEP_SUMMARY"] = null,
+            ["GITHUB_TOKEN"] = null,
+            ["GIT_ASKPASS"] = null,
+            ["GIT_CONFIG_COUNT"] = "2",
+            ["GIT_CONFIG_GLOBAL"] = Path.DirectorySeparatorChar == '\\' ? "NUL" : "/dev/null",
+            ["GIT_CONFIG_KEY_0"] = "credential.helper",
+            ["GIT_CONFIG_KEY_1"] = "http.extraheader",
+            ["GIT_CONFIG_NOSYSTEM"] = "1",
+            ["GIT_CONFIG_VALUE_0"] = string.Empty,
+            ["GIT_CONFIG_VALUE_1"] = string.Empty,
+            ["GIT_TERMINAL_PROMPT"] = "0",
+            ["INPUT_GITHUB_TOKEN"] = null,
+            ["SSH_AUTH_SOCK"] = null
+        };
         var result = _processRunner.RunAsync(
-                new ProcessRunRequest(executable, workingDirectory, arguments, TimeSpan.FromMinutes(15)))
+                new ProcessRunRequest(executable, workingDirectory, arguments, TimeSpan.FromMinutes(15), environment))
             .ConfigureAwait(false)
             .GetAwaiter()
             .GetResult();
@@ -166,6 +190,16 @@ internal sealed class HomeAssistantRepositoryService {
 
     private static bool ReadOptionalBoolean(JsonObject value, string propertyName)
         => value[propertyName]?.GetValue<bool>() == true;
+
+    private static void ValidateAssetFileName(string? fileName) {
+        if (fileName is null) return;
+        if (Path.IsPathRooted(fileName) ||
+            fileName.IndexOf('/') >= 0 ||
+            fileName.IndexOf('\\') >= 0 ||
+            !string.Equals(fileName, Path.GetFileName(fileName), StringComparison.Ordinal)) {
+            throw new InvalidOperationException("hacs.json filename must be a file name without a directory or rooted path.");
+        }
+    }
 
     private static void UpdateJsonVersion(string path, string version) {
         var value = ReadJsonObject(path);

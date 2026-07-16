@@ -16,6 +16,9 @@ public sealed class GitHubReleasePublishRequest
     /// <summary>GitHub personal access token.</summary>
     public string Token { get; set; } = string.Empty;
 
+    /// <summary>GitHub REST API base URL, including the <c>/api/v3</c> prefix for GitHub Enterprise Server.</summary>
+    public string ApiBaseUrl { get; set; } = "https://api.github.com";
+
     /// <summary>Release tag name.</summary>
     public string TagName { get; set; } = string.Empty;
 
