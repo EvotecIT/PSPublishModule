@@ -286,8 +286,8 @@ public sealed class ServerRecoverySecurityTests
         Assert.DoesNotContain("lstrip", script, StringComparison.Ordinal);
         Assert.Contains("tar --no-same-owner --no-same-permissions --no-overwrite-dir --no-acls --no-selinux --no-xattrs", script, StringComparison.Ordinal);
         Assert.DoesNotContain("tar --same-owner", script, StringComparison.Ordinal);
-        Assert.Contains("chown -h 'example-service:example-service' '/etc/example/secret.env'", script, StringComparison.Ordinal);
-        Assert.Contains("chmod 600 '/etc/example/secret.env'", script, StringComparison.Ordinal);
+        Assert.Contains("chown -h 'example-service:example-service' -- '/etc/example/secret.env'", script, StringComparison.Ordinal);
+        Assert.Contains("chmod 600 -- '/etc/example/secret.env'", script, StringComparison.Ordinal);
         Assert.DoesNotContain("chmod 640", script, StringComparison.Ordinal);
         Assert.DoesNotContain("/etc/example/excluded.env", script, StringComparison.Ordinal);
         Assert.Contains("Secret restore must run as root", script, StringComparison.Ordinal);
@@ -305,10 +305,34 @@ public sealed class ServerRecoverySecurityTests
                 new PowerForgeServerRestoreSecretEntry { Path = "/etc/example/both.env", Owner = "owner", Group = "group" }
             ]);
 
-        Assert.Contains("chown -h 'owner-only' '/etc/example/owner.env'", script, StringComparison.Ordinal);
+        Assert.Contains("chown -h 'owner-only' -- '/etc/example/owner.env'", script, StringComparison.Ordinal);
         Assert.DoesNotContain("chown -h 'owner-only:'", script, StringComparison.Ordinal);
-        Assert.Contains("chown -h ':group-only' '/etc/example/group.env'", script, StringComparison.Ordinal);
-        Assert.Contains("chown -h 'owner:group' '/etc/example/both.env'", script, StringComparison.Ordinal);
+        Assert.Contains("chown -h ':group-only' -- '/etc/example/group.env'", script, StringComparison.Ordinal);
+        Assert.Contains("chown -h 'owner:group' -- '/etc/example/both.env'", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RestoreScript_AppliesDirectorySecretMetadataRecursivelyWithoutFollowingLinks()
+    {
+        var script = WebCliCommandHandlers.BuildRestoreSecretsScript(
+            "archive.age",
+            ["/etc/example/private"],
+            [
+                new PowerForgeServerRestoreSecretEntry
+                {
+                    Id = "service-configuration",
+                    Path = "/etc/example/private",
+                    Owner = "root",
+                    Group = "example-service",
+                    Mode = "750",
+                    RestoreMode = "directory"
+                }
+            ]);
+
+        Assert.Contains("find -P '/etc/example/private' -exec chown -h 'root:example-service' -- {} +", script, StringComparison.Ordinal);
+        Assert.Contains("find -P '/etc/example/private' -type d -exec chmod 750 -- {} +", script, StringComparison.Ordinal);
+        Assert.Contains("find -P '/etc/example/private' -type f -exec chmod 640 -- {} +", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("chown -hR", script, StringComparison.Ordinal);
     }
 
     private static PowerForgeServerRecoveryManifest CreateManifest()

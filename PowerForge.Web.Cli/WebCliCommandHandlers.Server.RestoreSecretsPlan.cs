@@ -264,6 +264,7 @@ internal static partial class WebCliCommandHandlers
                      allowedArchivePaths.Any(allowedPath => PathContains(allowedPath, secret.Path!))))
         {
             var pathValue = ShellQuote(secret.Path!);
+            var isDirectory = string.Equals(secret.RestoreMode, "directory", StringComparison.OrdinalIgnoreCase);
             if (!string.IsNullOrWhiteSpace(secret.Owner) || !string.IsNullOrWhiteSpace(secret.Group))
             {
                 var ownership = (secret.Owner, secret.Group) switch
@@ -273,10 +274,30 @@ internal static partial class WebCliCommandHandlers
                     (_, { Length: > 0 } group) => $":{group}",
                     _ => throw new InvalidOperationException("Restore ownership metadata is empty.")
                 };
-                builder.AppendLine($"if [ -e {pathValue} ] || [ -L {pathValue} ]; then chown -h {ShellQuote(ownership)} {pathValue}; fi");
+                if (isDirectory)
+                {
+                    builder.AppendLine($"if [ -d {pathValue} ]; then find -P {pathValue} -exec chown -h {ShellQuote(ownership)} -- {{}} +; fi");
+                }
+                else
+                {
+                    builder.AppendLine($"if [ -e {pathValue} ] || [ -L {pathValue} ]; then chown -h {ShellQuote(ownership)} -- {pathValue}; fi");
+                }
             }
             if (!string.IsNullOrWhiteSpace(secret.Mode))
-                builder.AppendLine($"if [ -e {pathValue} ]; then chmod {secret.Mode} {pathValue}; fi");
+            {
+                if (isDirectory)
+                {
+                    var fileMode = Convert.ToString(
+                        Convert.ToInt32(secret.Mode, 8) & Convert.ToInt32("666", 8),
+                        8).PadLeft(3, '0');
+                    builder.AppendLine($"if [ -d {pathValue} ]; then find -P {pathValue} -type d -exec chmod {secret.Mode} -- {{}} +; fi");
+                    builder.AppendLine($"if [ -d {pathValue} ]; then find -P {pathValue} -type f -exec chmod {fileMode} -- {{}} +; fi");
+                }
+                else
+                {
+                    builder.AppendLine($"if [ -e {pathValue} ]; then chmod {secret.Mode} -- {pathValue}; fi");
+                }
+            }
         }
         builder.AppendLine("echo 'Secrets restored. Run server verify next.'");
 
