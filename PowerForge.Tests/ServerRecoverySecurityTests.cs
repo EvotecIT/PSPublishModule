@@ -337,6 +337,50 @@ public sealed class ServerRecoverySecurityTests
         Assert.DoesNotContain("chown -hR", script, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void RestoreScript_AppliesOverlappingSecretMetadataFromParentToChild()
+    {
+        var script = WebCliCommandHandlers.BuildRestoreSecretsScript(
+            "archive.age",
+            ["/etc/example", "/etc/example/private", "/etc/example/private/key"],
+            [
+                new PowerForgeServerRestoreSecretEntry
+                {
+                    Id = "private-directory",
+                    Path = "/etc/example/private",
+                    Owner = "root",
+                    Group = "private-service",
+                    Mode = "700",
+                    RestoreMode = "directory"
+                },
+                new PowerForgeServerRestoreSecretEntry
+                {
+                    Id = "private-key",
+                    Path = "/etc/example/private/key",
+                    Owner = "root",
+                    Group = "root",
+                    Mode = "600",
+                    RestoreMode = "file"
+                },
+                new PowerForgeServerRestoreSecretEntry
+                {
+                    Id = "service-directory",
+                    Path = "/etc/example",
+                    Owner = "root",
+                    Group = "example-service",
+                    Mode = "750",
+                    RestoreMode = "directory"
+                }
+            ]);
+
+        var parentIndex = script.IndexOf("apply_directory_metadata \"$tmp_dir/secrets.tar.gz\" '/etc/example' ", StringComparison.Ordinal);
+        var childIndex = script.IndexOf("apply_directory_metadata \"$tmp_dir/secrets.tar.gz\" '/etc/example/private' ", StringComparison.Ordinal);
+        var fileIndex = script.IndexOf("chown -h 'root:root' -- '/etc/example/private/key'", StringComparison.Ordinal);
+
+        Assert.True(parentIndex >= 0 && parentIndex < childIndex, "Parent directory metadata must be applied before child metadata.");
+        Assert.True(childIndex < fileIndex, "Exact child file metadata must be applied after enclosing directory metadata.");
+    }
+
     private static PowerForgeServerRecoveryManifest CreateManifest()
         => new()
         {

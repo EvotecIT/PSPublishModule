@@ -294,9 +294,11 @@ internal static partial class WebCliCommandHandlers
             builder.AppendLine("POWERFORGE_APPLY_DIRECTORY_METADATA");
             builder.AppendLine("}");
         }
-        foreach (var secret in secrets.Where(secret =>
-                     !string.IsNullOrWhiteSpace(secret.Path) &&
-                     allowedArchivePaths.Any(allowedPath => PathContains(allowedPath, secret.Path!))))
+        foreach (var secret in secrets
+                     .Where(secret =>
+                         !string.IsNullOrWhiteSpace(secret.Path) &&
+                         allowedArchivePaths.Any(allowedPath => PathContains(allowedPath, secret.Path!)))
+                     .OrderBy(secret => secret.Path!.Count(static character => character == '/')))
         {
             var pathValue = ShellQuote(secret.Path!);
             var isDirectory = string.Equals(secret.RestoreMode, "directory", StringComparison.OrdinalIgnoreCase);
