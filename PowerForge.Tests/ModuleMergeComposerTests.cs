@@ -63,6 +63,49 @@ public sealed class ModuleMergeComposerTests
     }
 
     [Fact]
+    public void BuildSources_PreservesUsingLinesInsideNestedPreambleBlockComments()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMergeModule(root.FullName, moduleName);
+            File.WriteAllText(
+                Path.Combine(root.FullName, "Public", "Get-TestExample.ps1"),
+                """
+                <# outer comment
+                    <# nested comment #>
+                    using namespace Missing.Namespace
+                #>
+                #requires -Version 5.1
+                using namespace System.Text
+
+                function Get-TestExample { 'ok' }
+                """);
+
+            var sources = ModuleMergeComposer.BuildSources(
+                root.FullName,
+                moduleName,
+                information: null,
+                exports: new ExportSet(new[] { "Get-TestExample" }, Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: false);
+
+            Assert.StartsWith("#requires -Version 5.1" + Environment.NewLine + "using namespace System.Text", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains("using namespace Missing.Namespace", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.True(
+                sources.MergedScriptContent.IndexOf("using namespace Missing.Namespace", StringComparison.Ordinal) >
+                sources.MergedScriptContent.IndexOf("using namespace System.Text", StringComparison.Ordinal));
+
+            Parser.ParseInput(sources.MergedScriptContent, out _, out var errors);
+            Assert.Empty(errors);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void BuildSources_RewritesLegacyPSScriptRootParentPathsByDefault()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

@@ -253,11 +253,11 @@ internal static class ModuleMergeComposer
         // PowerShell using statements are valid only in the script preamble. Restricting extraction to that region
         // prevents embedded languages in here-strings and block comments from being mistaken for module directives.
         var extracted = new HashSet<int>();
-        var insideBlockComment = false;
+        var blockCommentDepth = 0;
 
         for (var index = 0; index < lines.Count; index++)
         {
-            var kind = ClassifyPreambleLine(lines[index], ref insideBlockComment);
+            var kind = ClassifyPreambleLine(lines[index], ref blockCommentDepth);
             if (kind == PreambleLineKind.Trivia)
                 continue;
 
@@ -281,20 +281,28 @@ internal static class ModuleMergeComposer
         return extracted;
     }
 
-    private static PreambleLineKind ClassifyPreambleLine(string line, ref bool insideBlockComment)
+    private static PreambleLineKind ClassifyPreambleLine(string line, ref int blockCommentDepth)
     {
         var index = 0;
         var hasLeadingBlockComment = false;
 
         while (index < line.Length)
         {
-            if (insideBlockComment)
+            if (blockCommentDepth > 0)
             {
+                var commentStart = line.IndexOf("<#", index, System.StringComparison.Ordinal);
                 var commentEnd = line.IndexOf("#>", index, System.StringComparison.Ordinal);
+                if (commentStart >= 0 && (commentEnd < 0 || commentStart < commentEnd))
+                {
+                    blockCommentDepth++;
+                    index = commentStart + 2;
+                    continue;
+                }
+
                 if (commentEnd < 0)
                     return PreambleLineKind.Trivia;
 
-                insideBlockComment = false;
+                blockCommentDepth--;
                 hasLeadingBlockComment = true;
                 index = commentEnd + 2;
                 continue;
@@ -308,7 +316,7 @@ internal static class ModuleMergeComposer
 
             if (line.IndexOf("<#", index, System.StringComparison.Ordinal) == index)
             {
-                insideBlockComment = true;
+                blockCommentDepth++;
                 hasLeadingBlockComment = true;
                 index += 2;
                 continue;
