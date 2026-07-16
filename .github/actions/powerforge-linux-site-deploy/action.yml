@@ -23,6 +23,14 @@ inputs:
     description: Optional Cloudflare zone whose cache is purged during promotion.
     required: false
     default: ""
+  deployment-public-url:
+    description: Public HTTPS origin verified from the runner after host-origin promotion.
+    required: false
+    default: ""
+  deployment-smoke-paths:
+    description: Space-separated public paths verified after exact provenance.
+    required: false
+    default: "/"
   deployment-ssh-private-key:
     description: Private key from the caller job's protected environment.
     required: true
@@ -88,7 +96,9 @@ runs:
         POWERFORGE_CLOUDFLARE_ZONE_ID: ${{ inputs.cloudflare-zone-id }}
         POWERFORGE_DEPLOYMENT_HOST: ${{ inputs.deployment-host }}
         POWERFORGE_DEPLOYMENT_PORT: ${{ inputs.deployment-port }}
+        POWERFORGE_DEPLOYMENT_PUBLIC_URL: ${{ inputs.deployment-public-url }}
         POWERFORGE_DEPLOYMENT_SITE: ${{ inputs.deployment-site }}
+        POWERFORGE_DEPLOYMENT_SMOKE_PATHS: ${{ inputs.deployment-smoke-paths }}
         POWERFORGE_DEPLOYMENT_SSH_KNOWN_HOSTS: ${{ inputs.deployment-ssh-known-hosts }}
         POWERFORGE_DEPLOYMENT_SSH_PRIVATE_KEY: ${{ inputs.deployment-ssh-private-key }}
         POWERFORGE_DEPLOYMENT_USER: ${{ inputs.deployment-user }}

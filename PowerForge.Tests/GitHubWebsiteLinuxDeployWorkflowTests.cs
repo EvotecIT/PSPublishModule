@@ -15,8 +15,10 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("deployment_ssh_known_hosts", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("ssh-keyscan", workflow, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("deployment_artifact_retention_days", workflow, StringComparison.Ordinal);
-        Assert.Contains("$env:RUNNER_TEMP 'powerforge-deployment-ssh'", workflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("Join-Path $HOME '.ssh'", workflow, StringComparison.Ordinal);
+        Assert.Contains("job.workflow_sha", workflow, StringComparison.Ordinal);
+        Assert.Contains("uses: ./.powerforge-deployment/.github/actions/powerforge-linux-site-deploy", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("Publish and promote Linux release", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("scp @scpArgs", workflow, StringComparison.Ordinal);
         Assert.Contains("      pages: write", workflow, StringComparison.Ordinal);
         Assert.Contains("      id-token: write", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("vars.POWERFORGE_DEPLOY_HOST", workflow, StringComparison.Ordinal);
@@ -29,19 +31,20 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
     {
         var deployWorkflow = ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml");
         var runWorkflow = ReadRepoFile(".github", "workflows", "powerforge-website-run.yml");
+        var deployAction = ReadRepoFile(".github", "actions", "powerforge-linux-site-deploy", "Invoke-PowerForgeLinuxSiteDeploy.ps1");
 
         Assert.Contains("source_ref:", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("ref: ${{ inputs.source_ref || github.event.pull_request.head.sha || github.sha }}", deployWorkflow, StringComparison.Ordinal);
         Assert.Equal(2, deployWorkflow.Split("source_ref: ${{ inputs.source_ref }}", StringSplitOptions.None).Length - 1);
-        Assert.Contains("SOURCE_SHA: ${{ needs.build.outputs.source_sha }}", deployWorkflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}", deployWorkflow, StringComparison.Ordinal);
+        Assert.Contains("source-sha: ${{ needs.build.outputs.source_sha }}", deployWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("source-sha: ${{ github.event.pull_request.head.sha || github.sha }}", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("--result-path", runWorkflow, StringComparison.Ordinal);
         Assert.Contains("Resolve actual PowerForge engine provenance", runWorkflow, StringComparison.Ordinal);
         Assert.Contains("assetSha256", runWorkflow, StringComparison.Ordinal);
-        Assert.Contains("sourceSha", deployWorkflow, StringComparison.Ordinal);
-        Assert.Contains("engineSha", deployWorkflow, StringComparison.Ordinal);
-        Assert.Contains("artifactSha256", deployWorkflow, StringComparison.Ordinal);
-        Assert.Contains("workflowRunAttempt", deployWorkflow, StringComparison.Ordinal);
+        Assert.Contains("sourceSha", deployAction, StringComparison.Ordinal);
+        Assert.Contains("engineSha", deployAction, StringComparison.Ordinal);
+        Assert.Contains("artifactSha256", deployAction, StringComparison.Ordinal);
+        Assert.Contains("workflowRunAttempt", deployAction, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -53,8 +56,12 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("Artifact checksum does not match", script, StringComparison.Ordinal);
         Assert.Contains("Archive contains path traversal", script, StringComparison.Ordinal);
         Assert.Contains("purge_cloudflare", script, StringComparison.Ordinal);
-        Assert.Contains("Public endpoint did not serve", script, StringComparison.Ordinal);
-        Assert.Contains("Origin endpoint did not serve", script, StringComparison.Ordinal);
+        Assert.Contains("verify_public_release", script, StringComparison.Ordinal);
+        Assert.Contains("verify_origin_release", script, StringComparison.Ordinal);
+        Assert.Contains("--defer-public-verification", script, StringComparison.Ordinal);
+        Assert.Contains("finalize_deferred_release", script, StringComparison.Ordinal);
+        Assert.Contains("rollback_deferred_release", script, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_RELEASE_ID", script, StringComparison.Ordinal);
         Assert.Contains("rolling back", script, StringComparison.Ordinal);
         Assert.Contains("Migrating legacy current directory", script, StringComparison.Ordinal);
         Assert.Contains("restoring the legacy current directory", script, StringComparison.Ordinal);
@@ -72,10 +79,13 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         string workflow = ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml");
         Assert.Contains("deployment_cloudflare_zone", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment_cloudflare_api_token", workflow, StringComparison.Ordinal);
-        Assert.Contains("CLOUDFLARE_API_TOKEN: ${{ secrets.deployment_cloudflare_api_token }}", workflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare_api_token }}", workflow, StringComparison.Ordinal);
-        Assert.Contains("CLOUDFLARE_ZONE_ID", workflow, StringComparison.Ordinal);
-        Assert.Contains("per_page=5", workflow, StringComparison.Ordinal);
+        Assert.Contains("deployment-cloudflare-api-token: ${{ secrets.deployment_cloudflare_api_token }}", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("deployment-cloudflare-api-token: ${{ secrets.cloudflare_api_token }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("cloudflare-zone-id: ${{ secrets.cloudflare_zone_id }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("deployment-public-url: ${{ inputs.deployment_url }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("deployment-smoke-paths: ${{ inputs.deployment_smoke_paths }}", workflow, StringComparison.Ordinal);
+        string deployAction = ReadRepoFile(".github", "actions", "powerforge-linux-site-deploy", "Invoke-PowerForgeLinuxSiteDeploy.ps1");
+        Assert.Contains("per_page=5", deployAction, StringComparison.Ordinal);
         string environmentExample = ReadRepoFile("Deployment", "Linux", "powerforge-site.env.example");
         Assert.Contains("deployment_cloudflare_api_token", environmentExample, StringComparison.Ordinal);
         Assert.DoesNotContain("workflow's cloudflare_api_token secret", environmentExample, StringComparison.Ordinal);

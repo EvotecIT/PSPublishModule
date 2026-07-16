@@ -1,6 +1,6 @@
 # PowerForge.Web Linux Deployment Pattern
 
-Last updated: 2026-07-15
+Last updated: 2026-07-16
 
 This pattern is the reusable baseline for static PowerForge.Web sites hosted on Linux with Apache or another file-based web server.
 
@@ -11,7 +11,7 @@ This pattern is the reusable baseline for static PowerForge.Web sites hosted on 
 - Publish each deploy into a timestamped release directory.
 - Promote the release by moving a `current` symlink.
 - Record the exact source commit, PowerForge commit, workflow run, and artifact checksum.
-- Roll back automatically when origin or public smoke checks fail.
+- Roll back automatically when origin or externally verified public smoke checks fail.
 - Keep generated web-server redirect artifacts in sync.
 - Keep provider-specific cache purges in environment variables, not in repo files.
 
@@ -55,6 +55,8 @@ jobs:
         with:
           artifact-name: powerforge-site-example.com
           deployment-site: example.com
+          deployment-public-url: https://example.com
+          deployment-smoke-paths: "/ /sitemap.xml"
           deployment-host: ${{ vars.POWERFORGE_WEBSITE_DEPLOY_HOST }}
           deployment-port: ${{ vars.POWERFORGE_WEBSITE_DEPLOY_PORT }}
           deployment-user: ${{ vars.POWERFORGE_WEBSITE_DEPLOY_USER }}
@@ -84,6 +86,8 @@ This two-job lane:
 3. records exact source and engine SHAs plus the artifact SHA-256
 4. transfers the artifact through a pinned SSH host key
 5. invokes the root-owned server promoter for an allowlisted site id
+6. verifies the promoted release directly at the origin and from the GitHub runner
+7. finalizes the release, or restores the previous symlink and purges the rejected release from cache
 
 Install `Deployment/Linux/powerforge-site-deploy.sh` as
 `/usr/local/sbin/powerforge-site-deploy`. Install one root-owned configuration from
@@ -99,8 +103,12 @@ unrestricted deployment key across every repository.
 The promoter rejects path traversal, links, special files, checksum mismatches,
 unconfigured site ids, mutable site configuration, and workflow staging files owned
 by another account. It atomically promotes a timestamped release, purges Cloudflare
-without disabling proxying, verifies the exact source SHA through both the origin and
-public URL, and rolls back the symlink if any check fails.
+without disabling proxying, and verifies exact provenance directly at the origin. The
+composite action then verifies the same provenance and configured smoke paths through
+the public URL from the GitHub runner. This separation avoids treating an origin-host
+Cloudflare challenge as a broken release. A public verification failure restores the
+previous symlink remotely, removes the rejected release, and purges Cloudflare again.
+Release pruning happens only after the runner finalizes a verified release.
 
 On the first PowerForge deployment, an existing non-symlink `current` directory is
 moved into the release history and becomes the rollback target. This lets the shared

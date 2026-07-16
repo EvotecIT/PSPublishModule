@@ -9,6 +9,10 @@ TRUSTED_STAGE_ROOT="${POWERFORGE_SITE_TRUSTED_STAGE_ROOT:-/var/lib/powerforge/de
 site=""
 archive=""
 metadata=""
+operation="promote"
+defer_public_verification=0
+release_id_argument=""
+previous_release_id_argument=""
 promoted=0
 legacy_migrated=0
 previous_target=""
@@ -33,7 +37,12 @@ fail() {
 }
 
 usage() {
-  echo 'Usage: powerforge-site-deploy --site <id> --archive <artifact.tar> --metadata <deployment.json>'
+  cat <<'EOF'
+Usage:
+  powerforge-site-deploy --site <id> --archive <artifact.tar> --metadata <deployment.json> [--defer-public-verification]
+  powerforge-site-deploy --site <id> --finalize --release-id <id> [--previous-release-id <id>]
+  powerforge-site-deploy --site <id> --rollback --release-id <id> [--previous-release-id <id>]
+EOF
 }
 
 while (($# > 0)); do
@@ -50,6 +59,28 @@ while (($# > 0)); do
       metadata="${2:-}"
       shift 2
       ;;
+    --defer-public-verification)
+      defer_public_verification=1
+      shift
+      ;;
+    --finalize)
+      [[ "$operation" == 'promote' ]] || fail 'Only one deployment operation may be selected.'
+      operation="finalize"
+      shift
+      ;;
+    --rollback)
+      [[ "$operation" == 'promote' ]] || fail 'Only one deployment operation may be selected.'
+      operation="rollback"
+      shift
+      ;;
+    --release-id)
+      release_id_argument="${2:-}"
+      shift 2
+      ;;
+    --previous-release-id)
+      previous_release_id_argument="${2:-}"
+      shift 2
+      ;;
     --help|-h)
       usage
       exit 0
@@ -62,7 +93,13 @@ while (($# > 0)); do
 done
 
 [[ "$site" =~ ^[a-z0-9][a-z0-9.-]{0,62}$ ]] || fail 'Invalid site identifier.'
-[[ -n "$archive" && -n "$metadata" ]] || fail 'Both --archive and --metadata are required.'
+if [[ "$operation" == 'promote' ]]; then
+  [[ -n "$archive" && -n "$metadata" ]] || fail 'Both --archive and --metadata are required.'
+  [[ -z "$release_id_argument" && -z "$previous_release_id_argument" ]] || fail 'Release identity arguments are not valid during promotion.'
+else
+  [[ -z "$archive" && -z "$metadata" ]] || fail 'Archive and metadata are only valid during promotion.'
+  [[ "$defer_public_verification" == '0' ]] || fail 'Deferred verification is only valid during promotion.'
+fi
 
 config_path="${CONFIG_ROOT}/${site}.env"
 [[ -f "$config_path" && ! -L "$config_path" ]] || fail "Site is not configured: $site"
@@ -101,6 +138,84 @@ if [[ "$CLOUDFLARE_PURGE_ENABLED" == '1' ]]; then
     [[ "$CLOUDFLARE_API_TOKEN_FILE" == /* && -s "$CLOUDFLARE_API_TOKEN_FILE" ]] || fail 'CLOUDFLARE_API_TOKEN_FILE must be an absolute, non-empty readable file.'
     [[ -r "$CLOUDFLARE_API_TOKEN_FILE" ]] || fail 'Cloudflare API token file is not readable.'
   fi
+fi
+
+validate_release_id() {
+  [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || fail "Invalid release id: $1"
+}
+
+release_path() {
+  validate_release_id "$1"
+  printf '%s/releases/%s' "$SITE_ROOT" "$1"
+}
+
+prune_releases() {
+  local current_release="$1"
+  local rollback_release="$2"
+  local index
+  mapfile -t old_releases < <(find "$SITE_ROOT/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -rn | awk '{print $2}')
+  for ((index=RELEASES_TO_KEEP; index<${#old_releases[@]}; index++)); do
+    [[ "${old_releases[$index]}" == "$current_release" || "${old_releases[$index]}" == "$rollback_release" ]] || rm -rf "${old_releases[$index]}"
+  done
+}
+
+finalize_deferred_release() {
+  local selected_release
+  local selected_previous=""
+  local current_target
+  selected_release="$(release_path "$release_id_argument")"
+  [[ -d "$selected_release" ]] || fail "Deferred release does not exist: $release_id_argument"
+  if [[ -n "$previous_release_id_argument" ]]; then
+    selected_previous="$(release_path "$previous_release_id_argument")"
+    [[ -d "$selected_previous" ]] || fail "Deferred rollback release does not exist: $previous_release_id_argument"
+  fi
+  [[ -L "$SITE_ROOT/current" ]] || fail 'Current release is not a symlink during finalization.'
+  current_target="$(readlink -f "$SITE_ROOT/current")"
+  [[ "$current_target" == "$selected_release" ]] || fail 'Current release changed before deferred finalization.'
+  [[ -s "$selected_release/_powerforge/deployment.json" ]] || fail 'Deferred release provenance is missing.'
+  prune_releases "$selected_release" "$selected_previous"
+  log "Finalized $site release $release_id_argument after external public verification"
+}
+
+rollback_deferred_release() {
+  local selected_release
+  local selected_previous=""
+  local current_target=""
+  selected_release="$(release_path "$release_id_argument")"
+  [[ -d "$selected_release" ]] || fail "Deferred release does not exist: $release_id_argument"
+  if [[ -n "$previous_release_id_argument" ]]; then
+    selected_previous="$(release_path "$previous_release_id_argument")"
+    [[ -d "$selected_previous" ]] || fail "Deferred rollback release does not exist: $previous_release_id_argument"
+  fi
+  if [[ -L "$SITE_ROOT/current" ]]; then
+    current_target="$(readlink -f "$SITE_ROOT/current")"
+  fi
+  [[ "$current_target" == "$selected_release" ]] || fail 'Current release changed before deferred rollback.'
+  if [[ -n "$selected_previous" ]]; then
+    rollback_link="$SITE_ROOT/.current.rollback.$$"
+    ln -s "$selected_previous" "$rollback_link"
+    mv -Tf "$rollback_link" "$SITE_ROOT/current"
+  else
+    rm -f "$SITE_ROOT/current"
+  fi
+  rm -rf "$selected_release"
+  log "Rolled back deferred $site release $release_id_argument"
+}
+
+mkdir -p "$SITE_ROOT/releases"
+mkdir -p "$LOCK_ROOT"
+exec 9>"${LOCK_ROOT}/powerforge-site-${site}.lock"
+flock -n 9 || fail "Another deployment is active for $site."
+
+if [[ "$operation" == 'finalize' ]]; then
+  [[ -n "$release_id_argument" ]] || fail '--release-id is required during finalization.'
+  finalize_deferred_release
+  exit 0
+fi
+if [[ "$operation" == 'rollback' ]]; then
+  [[ -n "$release_id_argument" ]] || fail '--release-id is required during rollback.'
+  rollback_deferred_release
+  exit 0
 fi
 
 archive="$(realpath -e "$archive")"
@@ -179,11 +294,6 @@ while IFS= read -r listing; do
   [[ "$entry_type" == '-' || "$entry_type" == 'd' ]] || fail 'Archive contains links or special files.'
 done < <(tar -tvf "$archive")
 
-mkdir -p "$SITE_ROOT/releases"
-mkdir -p "$LOCK_ROOT"
-exec 9>"${LOCK_ROOT}/powerforge-site-${site}.lock"
-flock -n 9 || fail "Another deployment is active for $site."
-
 release_id="$(date -u +%Y%m%d%H%M%S)-${run_id}-${run_attempt}-${source_sha:0:12}"
 release_dir="$SITE_ROOT/releases/$release_id"
 [[ ! -e "$release_dir" ]] || fail "Release already exists: $release_id"
@@ -206,32 +316,44 @@ smoke_url() {
   curl -fsS --retry 3 --retry-all-errors --max-time 30 "$@" "${base_url}${path}?powerforge-deploy=${run_id}-${run_attempt}"
 }
 
-verify_release() {
+verify_marker() {
+  local marker="$1"
+  local endpoint="$2"
+  grep -Eq "\"sourceSha\"[[:space:]]*:[[:space:]]*\"${source_sha}\"" <<<"$marker" || fail "$endpoint did not serve the promoted source SHA."
+  grep -Eq "\"artifactSha256\"[[:space:]]*:[[:space:]]*\"${artifact_sha}\"" <<<"$marker" || fail "$endpoint did not serve the promoted artifact."
+  grep -Eq "\"workflowRunId\"[[:space:]]*:[[:space:]]*\"${run_id}\"" <<<"$marker" || fail "$endpoint did not serve the promoted workflow run."
+  grep -Eq "\"workflowRunAttempt\"[[:space:]]*:[[:space:]]*\"${run_attempt}\"" <<<"$marker" || fail "$endpoint did not serve the promoted workflow attempt."
+}
+
+verify_public_release() {
   local marker_path='/_powerforge/deployment.json'
   local public_marker
-  public_marker="$(smoke_url "$PUBLIC_URL" "$marker_path")"
-  grep -Eq "\"sourceSha\"[[:space:]]*:[[:space:]]*\"${source_sha}\"" <<<"$public_marker" || fail 'Public endpoint did not serve the promoted source SHA.'
-  grep -Eq "\"artifactSha256\"[[:space:]]*:[[:space:]]*\"${artifact_sha}\"" <<<"$public_marker" || fail 'Public endpoint did not serve the promoted artifact.'
-  grep -Eq "\"workflowRunId\"[[:space:]]*:[[:space:]]*\"${run_id}\"" <<<"$public_marker" || fail 'Public endpoint did not serve the promoted workflow run.'
-  grep -Eq "\"workflowRunAttempt\"[[:space:]]*:[[:space:]]*\"${run_attempt}\"" <<<"$public_marker" || fail 'Public endpoint did not serve the promoted workflow attempt.'
-
-  if [[ -n "$ORIGIN_ADDRESS" ]]; then
-    local origin_marker
-    origin_marker="$(smoke_url "https://${ORIGIN_HOST}" "$marker_path" --resolve "${ORIGIN_HOST}:443:${ORIGIN_ADDRESS}")"
-    grep -Eq "\"sourceSha\"[[:space:]]*:[[:space:]]*\"${source_sha}\"" <<<"$origin_marker" || fail 'Origin endpoint did not serve the promoted source SHA.'
-    grep -Eq "\"artifactSha256\"[[:space:]]*:[[:space:]]*\"${artifact_sha}\"" <<<"$origin_marker" || fail 'Origin endpoint did not serve the promoted artifact.'
-    grep -Eq "\"workflowRunId\"[[:space:]]*:[[:space:]]*\"${run_id}\"" <<<"$origin_marker" || fail 'Origin endpoint did not serve the promoted workflow run.'
-    grep -Eq "\"workflowRunAttempt\"[[:space:]]*:[[:space:]]*\"${run_attempt}\"" <<<"$origin_marker" || fail 'Origin endpoint did not serve the promoted workflow attempt.'
-  fi
-
   local smoke_path
+  public_marker="$(smoke_url "$PUBLIC_URL" "$marker_path")"
+  verify_marker "$public_marker" 'Public endpoint'
   for smoke_path in $SMOKE_PATHS; do
     [[ "$smoke_path" == /* ]] || fail "Smoke path must begin with '/': $smoke_path"
     smoke_url "$PUBLIC_URL" "$smoke_path" >/dev/null
-    if [[ -n "$ORIGIN_ADDRESS" ]]; then
-      smoke_url "https://${ORIGIN_HOST}" "$smoke_path" --resolve "${ORIGIN_HOST}:443:${ORIGIN_ADDRESS}" >/dev/null
-    fi
   done
+}
+
+verify_origin_release() {
+  local marker_path='/_powerforge/deployment.json'
+  local smoke_path
+  if [[ -n "$ORIGIN_ADDRESS" ]]; then
+    local origin_marker
+    origin_marker="$(smoke_url "https://${ORIGIN_HOST}" "$marker_path" --resolve "${ORIGIN_HOST}:443:${ORIGIN_ADDRESS}")"
+    verify_marker "$origin_marker" 'Origin endpoint'
+    for smoke_path in $SMOKE_PATHS; do
+      [[ "$smoke_path" == /* ]] || fail "Smoke path must begin with '/': $smoke_path"
+      smoke_url "https://${ORIGIN_HOST}" "$smoke_path" --resolve "${ORIGIN_HOST}:443:${ORIGIN_ADDRESS}" >/dev/null
+    done
+  fi
+}
+
+verify_release() {
+  verify_public_release
+  verify_origin_release
 }
 
 rollback() {
@@ -279,14 +401,24 @@ mv -Tf "$candidate_link" "$SITE_ROOT/current"
 promoted=1
 
 purge_cloudflare
-verify_release
-
-mapfile -t old_releases < <(find "$SITE_ROOT/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -rn | awk '{print $2}')
-for ((index=RELEASES_TO_KEEP; index<${#old_releases[@]}; index++)); do
-  [[ "${old_releases[$index]}" == "$release_dir" || "${old_releases[$index]}" == "$previous_target" ]] || rm -rf "${old_releases[$index]}"
-done
+if [[ "$defer_public_verification" == '1' ]]; then
+  verify_origin_release
+else
+  verify_release
+  prune_releases "$release_dir" "$previous_target"
+fi
 
 trap - ERR INT TERM
 cleanup_staging
 trap - EXIT
-log "Promoted $site release $release_id from $source_sha"
+if [[ "$defer_public_verification" == '1' ]]; then
+  printf 'POWERFORGE_RELEASE_ID=%s\n' "$release_id"
+  if [[ -n "$previous_target" ]]; then
+    printf 'POWERFORGE_PREVIOUS_RELEASE_ID=%s\n' "$(basename "$previous_target")"
+  else
+    printf 'POWERFORGE_PREVIOUS_RELEASE_ID=\n'
+  fi
+  log "Promoted $site release $release_id pending external public verification"
+else
+  log "Promoted $site release $release_id from $source_sha"
+fi
