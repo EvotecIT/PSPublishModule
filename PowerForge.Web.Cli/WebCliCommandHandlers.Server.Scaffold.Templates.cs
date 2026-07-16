@@ -252,7 +252,8 @@ internal static partial class WebCliCommandHandlers
             ("__ENGINE_REF__", options.EngineRef),
             ("__DOMAIN__", options.Domain),
             ("__SMOKE_PATHS__", options.SmokePaths),
-            ("__CLOUDFLARE_INPUT__", options.CloudflareEnabled ? $"      deployment_cloudflare_zone: {options.Domain}" : string.Empty));
+            ("__CLOUDFLARE_INPUT__", options.CloudflareEnabled ? $"      deployment_cloudflare_zone: {options.Domain}" : string.Empty),
+            ("__CLOUDFLARE_SECRET__", options.CloudflareEnabled ? "      deployment_cloudflare_api_token: ${{ secrets.DEPLOYMENT_CLOUDFLARE_API_TOKEN }}" : string.Empty));
 
     private static string BuildScaffoldBackupWorkflow(PowerForgeServerScaffoldOptions options)
         => ServerScaffoldTemplateStore.Render(

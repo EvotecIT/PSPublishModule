@@ -19,6 +19,8 @@ public sealed class ServerScaffoldTests
 
         Assert.DoesNotContain("run: |", workflow, StringComparison.Ordinal);
         Assert.Contains("powerforge-website-deploy.yml@" + EngineRef, workflow, StringComparison.Ordinal);
+        Assert.Contains("deployment_ssh_private_key: ${{ secrets.DEPLOYMENT_SSH_PRIVATE_KEY }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("deployment_ssh_known_hosts: ${{ secrets.DEPLOYMENT_SSH_KNOWN_HOSTS }}", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("CLOUDFLARE_API_TOKEN", workflow, StringComparison.Ordinal);
         Assert.Contains("CLOUDFLARE_PURGE_ENABLED=0", files["deploy/linux/example.test.env"], StringComparison.Ordinal);
         Assert.All(files.Where(file => !file.Key.EndsWith(".example", StringComparison.Ordinal)), file =>
@@ -63,7 +65,8 @@ public sealed class ServerScaffoldTests
         var workflow = files[".github/workflows/website-deploy.yml"];
 
         Assert.Contains("deployment_cloudflare_zone: example.test", workflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("CLOUDFLARE_API_TOKEN", workflow, StringComparison.Ordinal);
+        Assert.Contains("deployment_cloudflare_api_token: ${{ secrets.DEPLOYMENT_CLOUDFLARE_API_TOKEN }}", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("secrets.CLOUDFLARE_API_TOKEN", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("CLOUDFLARE_ZONE_ID", workflow, StringComparison.Ordinal);
         Assert.Contains("CLOUDFLARE_PURGE_ENABLED=1", files["deploy/linux/example.test.env"], StringComparison.Ordinal);
         Assert.Contains("token restricted to this one zone", files["deploy/linux/ONBOARDING.md"], StringComparison.Ordinal);
