@@ -296,13 +296,15 @@ public sealed partial class DotNetRepositoryReleaseService
                     _logger.Warn($"{project.ProjectName}: {resolutionWarning}");
 
                 result.ResolvedVersionsByProject[project.ProjectName] = resolvedVersion;
+                var shouldUpdateProjectVersion = spec.UpdateVersions &&
+                    (alignedVersions.ContainsKey(project.ProjectName) || !string.IsNullOrWhiteSpace(expectedVersion));
 
                 if (CsprojVersionEditor.TryGetVersion(project.CsprojPath, out var oldV) &&
                     PackageVersionUtility.TryNormalizeExact(oldV, out var normalizedOldVersion))
                 {
                     project.OldVersion = normalizedOldVersion;
                 }
-                else if (!spec.UpdateVersions)
+                else if (!shouldUpdateProjectVersion)
                 {
                     project.OldVersion = resolvedVersion;
                 }
@@ -312,7 +314,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 }
 
                 project.NewVersion = resolvedVersion;
-                if (spec.WhatIf || !spec.UpdateVersions) continue;
+                if (spec.WhatIf || !shouldUpdateProjectVersion) continue;
 
                 var content = File.ReadAllText(project.CsprojPath);
                 var updated = CsprojVersionEditor.UpdateVersionText(content, resolvedVersion, out _);

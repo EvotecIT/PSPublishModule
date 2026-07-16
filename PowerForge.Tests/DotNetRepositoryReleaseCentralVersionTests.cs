@@ -8,6 +8,55 @@ namespace PowerForge.Tests;
 public sealed class DotNetRepositoryReleaseCentralVersionTests
 {
     [Fact]
+    public void Execute_NoExpectedVersion_PreservesCentralVersionReference()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            File.WriteAllText(Path.Combine(root.FullName, "Directory.Build.props"), """
+                <Project>
+                  <PropertyGroup>
+                    <ProductVersion>1.2.3</ProductVersion>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.CentralVersion"));
+            var projectPath = Path.Combine(projectDirectory.FullName, "Sample.CentralVersion.csproj");
+            const string projectSource = """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <PackageId>Sample.CentralVersion</PackageId>
+                    <VersionPrefix>$(ProductVersion)</VersionPrefix>
+                    <IsPackable>true</IsPackable>
+                  </PropertyGroup>
+                </Project>
+                """;
+            File.WriteAllText(projectPath, projectSource);
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Configuration = "Release",
+                Pack = false,
+                Publish = false,
+                UpdateVersions = true,
+                SignAssemblies = false,
+                SignPackages = false
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal("1.2.3", result.ResolvedVersionsByProject["Sample.CentralVersion"]);
+            Assert.Equal(projectSource, File.ReadAllText(projectPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Execute_UpdateVersionsDisabled_UsesEvaluatedPackageVersionForMsBuildBatchCollection()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
