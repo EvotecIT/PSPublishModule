@@ -114,7 +114,16 @@ official PowerShell Gallery and ModuleFast uses `https://pwsh.gallery/index.json
 The latter includes endpoint and CDN behavior, so it is useful real-world
 evidence but not a pure installer-engine comparison.
 
-### Controlled Identical-Feed Comparison
+> **How to read the comparisons**
+>
+> - **Identical local feed**: PowerForge and ModuleFast both read from the same
+>   temporary local NuGet v3 feed. Neither PSGallery nor pwsh.gallery is timed.
+> - **Default endpoints**: PowerForge reads from the official PowerShell Gallery;
+>   ModuleFast reads from `https://pwsh.gallery/index.json`.
+> - When a compact result uses `PowerForge / ModuleFast` or `PF / MF`, the
+>   PowerForge time is always first and the ModuleFast time is second.
+
+### Identical Local Feed: PowerForge and ModuleFast on the Same Feed
 
 Both engines used the same local feed, exact packages, fresh destinations,
 rotated order, and exact manifest/payload validation. PowerForge was built from
@@ -127,7 +136,7 @@ commit `ab1a417a3ba35dd266fe786b87ccefe05882d510` and ModuleFast was
 | Microsoft.Graph 2.29.1 | 6 | 3.04 s | 4.04 s | 4/6 pairs |
 | Az 14.0.0 | 6 | 4.47 s | 7.98 s | 5/6 pairs |
 
-### Default Sources: PSGallery Versus pwsh.gallery
+### Default Endpoints: PowerForge on PSGallery, ModuleFast on pwsh.gallery
 
 Run `20260716-092623-ef4ac8ed` used PowerShell 7.6.3 on Windows
 10.0.26200, six samples per engine, rotated order, no warmup, and no outlier
