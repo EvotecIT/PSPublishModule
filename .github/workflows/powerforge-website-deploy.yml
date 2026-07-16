@@ -181,14 +181,11 @@ jobs:
         id: guardrail_source
         shell: pwsh
         env:
-          POWERFORGE_WORKFLOW_REF: ${{ github.workflow_ref }}
-          POWERFORGE_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          POWERFORGE_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          POWERFORGE_WORKFLOW_SHA: ${{ job.workflow_sha }}
         run: |
-          $workflowRef = [string]$env:POWERFORGE_WORKFLOW_REF
+          $repository = [string]$env:POWERFORGE_WORKFLOW_REPOSITORY
           $sha = [string]$env:POWERFORGE_WORKFLOW_SHA
-          $marker = '/.github/workflows/'
-          $markerIndex = $workflowRef.IndexOf($marker, [StringComparison]::Ordinal)
-          $repository = if ($markerIndex -gt 0) { $workflowRef.Substring(0, $markerIndex) } else { '' }
           if ($repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' -or
               $sha -notmatch '^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$') {
             throw 'Unable to resolve the exact shared guardrail source.'

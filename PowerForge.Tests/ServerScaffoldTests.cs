@@ -195,6 +195,20 @@ public sealed class ServerScaffoldTests
         Assert.Contains("already starts with www", wwwException.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ScaffoldOptions_ShouldFitGeneratedApacheSiteFilename()
+    {
+        var prefix = string.Join('.', new string('a', 63), new string('b', 63), new string('c', 63));
+        var longestSupportedDomain = $"{prefix}.{new string('d', 51)}";
+        var oversizedDomain = $"{prefix}.{new string('d', 52)}";
+
+        Assert.Equal(243, longestSupportedDomain.Length);
+        Assert.Equal(longestSupportedDomain, WebCliCommandHandlers.ParseServerScaffoldOptions(RequiredArguments(longestSupportedDomain)).Domain);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => WebCliCommandHandlers.ParseServerScaffoldOptions(RequiredArguments(oversizedDomain)));
+        Assert.Contains("Apache site filename", exception.Message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("/$(touch-pwned)")]
     [InlineData("/`touch-pwned`")]

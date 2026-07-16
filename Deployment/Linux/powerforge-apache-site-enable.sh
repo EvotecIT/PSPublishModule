@@ -44,8 +44,8 @@ while (($# > 0)); do
 done
 
 [[ "${EUID}" -eq 0 ]] || fail 'must run as root'
-[[ "$http_site" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.conf$ ]] || fail 'invalid HTTP site name'
-[[ "$https_site" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.conf$ ]] || fail 'invalid HTTPS site name'
+[[ "$http_site" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.conf$ && ${#http_site} -le 255 ]] || fail 'invalid HTTP site name'
+[[ "$https_site" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.conf$ && ${#https_site} -le 255 ]] || fail 'invalid HTTPS site name'
 [[ "$certificate_name" =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$ ]] || fail 'invalid certificate name'
 [[ "$apache_service" =~ ^[A-Za-z0-9_.@-]+$ ]] || fail 'invalid Apache service name'
 [[ "$http_site" != "$https_site" ]] || fail 'HTTP and HTTPS site names must differ'

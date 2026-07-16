@@ -127,8 +127,8 @@ internal static partial class WebCliCommandHandlers
         var portText = TryGetOptionValue(subArgs, "--ssh-port") ?? "22";
         var includeWwwAlias = HasOption(subArgs, "--www");
 
-        if (!Regex.IsMatch(domain, "^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$", RegexOptions.CultureInvariant))
-            throw new InvalidOperationException("--domain must be a lowercase DNS domain name.");
+        if (!Regex.IsMatch(domain, "^(?=.{1,243}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$", RegexOptions.CultureInvariant))
+            throw new InvalidOperationException("--domain must be a lowercase DNS domain name whose generated Apache site filename fits the 255-byte limit.");
         if (!Regex.IsMatch(repository, "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", RegexOptions.CultureInvariant))
             throw new InvalidOperationException("--repository must be an owner/repository name.");
         if (!Regex.IsMatch(repositoryRef, "^[a-f0-9]{40}$", RegexOptions.CultureInvariant))

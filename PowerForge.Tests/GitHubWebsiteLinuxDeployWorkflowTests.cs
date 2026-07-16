@@ -15,10 +15,11 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("deployment_ssh_known_hosts", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("ssh-keyscan", workflow, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("deployment_artifact_retention_days", workflow, StringComparison.Ordinal);
-        Assert.Contains("github.workflow_ref", workflow, StringComparison.Ordinal);
-        Assert.Contains("github.workflow_sha", workflow, StringComparison.Ordinal);
+        Assert.Contains("job.workflow_repository", workflow, StringComparison.Ordinal);
+        Assert.Contains("job.workflow_sha", workflow, StringComparison.Ordinal);
         Assert.Contains("needs.guardrails.outputs.workflow_repository", workflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("job.workflow_", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("github.workflow_ref", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("github.workflow_sha", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("{40,64}", workflow, StringComparison.Ordinal);
         Assert.Contains("uses: ./.powerforge-deployment/.github/actions/powerforge-linux-site-deploy", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment_url is required when deployment_target is linux", ReadRepoFile("Build", "Assert-PowerForgeWebsiteDeployGuardrails.ps1"), StringComparison.Ordinal);

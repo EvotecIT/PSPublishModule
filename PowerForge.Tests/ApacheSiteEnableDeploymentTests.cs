@@ -25,6 +25,8 @@ public sealed class ApacheSiteEnableDeploymentTests
         Assert.Contains("must run as root", script, StringComparison.Ordinal);
         Assert.Contains("invalid HTTP site name", script, StringComparison.Ordinal);
         Assert.Contains("invalid HTTPS site name", script, StringComparison.Ordinal);
+        Assert.Contains("${#http_site} -le 255", script, StringComparison.Ordinal);
+        Assert.Contains("${#https_site} -le 255", script, StringComparison.Ordinal);
         Assert.Contains("invalid certificate name", script, StringComparison.Ordinal);
         Assert.Contains("failed to disable stale HTTPS site", script, StringComparison.Ordinal);
         Assert.Contains("-L \"$https_enabled_path\"", script, StringComparison.Ordinal);
