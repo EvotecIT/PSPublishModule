@@ -53,6 +53,19 @@ public sealed class GitHubReleasePublisherTests
     }
 
     [Fact]
+    public void ValidateExpectedExistingRelease_RejectsUnverifiedConflictBeforeAssetReplacement()
+    {
+        var missing = Assert.Throws<InvalidOperationException>(() =>
+            GitHubReleasePublisher.ValidateExpectedExistingRelease("v1.2.3", true, null, 99));
+        var mismatch = Assert.Throws<InvalidOperationException>(() =>
+            GitHubReleasePublisher.ValidateExpectedExistingRelease("v1.2.3", true, 42, 99));
+
+        Assert.Contains("not preflight-verified", missing.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not preflight-verified", mismatch.Message, StringComparison.OrdinalIgnoreCase);
+        GitHubReleasePublisher.ValidateExpectedExistingRelease("v1.2.3", true, 99, 99);
+    }
+
+    [Fact]
     public void BuildApiUri_PreservesGitHubEnterpriseApiPrefix()
     {
         var uri = GitHubReleasePublisher.BuildApiUri(

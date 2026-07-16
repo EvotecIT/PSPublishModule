@@ -11,7 +11,7 @@ Use PowerForge as the release owner. A receiver repository should contain only t
 
 1. Confirm the repository has `hacs.json` and exactly one supported layout:
    - integration: one `custom_components/<domain>/manifest.json`, with an optional matching `[project] version` in `pyproject.toml`;
-   - Lovelace plugin: `package.json`, optional `package-lock.json`, and `hacs.json` `filename`.
+   - Lovelace plugin: `package.json`, required `package-lock.json`, and `hacs.json` `filename`.
 2. Inspect the existing validation workflow and latest GitHub release. The PR head must have at least one completed successful, neutral, or skipped check run.
 3. Add only the receiver workflow documented in `Docs/PowerForge.HomeAssistantRelease.md`. Pin the reusable workflow to a reviewed PSPublishModule commit or release ref.
 4. Give the job `checks: read`, `contents: write`, and `pull-requests: read`. Pass the merged PR number, merge SHA, default branch, and `github.token`.
@@ -22,7 +22,7 @@ Use PowerForge as the release owner. A receiver repository should contain only t
 
 - With no release label, product/config/dependency changes increment patch; docs, tests, workflows, and maintainer metadata do not release.
 - Exactly one release label overrides that default. Conflicting release labels fail closed.
-- PowerForge queues every merge trigger, synchronizes version files, creates a local version-only commit, builds the required HACS asset from that immutable commit without write credentials, rejects tracked build mutations, pushes with ephemeral authentication, publishes the GitHub release, and verifies the marker, tag target, and required asset.
+- PowerForge queues every merge trigger and runs three isolated jobs: privileged metadata prepare/push without receiver commands, read-only exact-commit build without write credentials, then privileged publish without receiver checkout or execution. It verifies the marker, tag target, conflict provenance, and required asset.
 - Treat three-part versions as the public contract. Do not introduce four-part consumer versions.
 
 ## Recover a failed run
@@ -31,8 +31,8 @@ Rerun the failed Actions job first. PowerForge resumes safely:
 
 - a release containing the source PR marker is verified and reused;
 - metadata ahead of the latest release is resumed only when the requested PR owns the prepared release commit;
-- an existing tag/release is reused and same-named assets are replaced;
-- missing historical assets are rebuilt from the exact tag commit in a detached worktree;
+- an existing tag/release is reused and same-named assets are replaced only after marker and commit preflight;
+- missing historical assets are rebuilt from a fresh read-only checkout of the exact tag commit;
 - a tag pointing at the wrong commit or a missing required asset fails verification.
 
 For a manual recovery, dispatch the receiver workflow with the original merged PR number, its merge SHA, and the same increment decision. Do not hand-edit a second version bump or manually create a competing release.

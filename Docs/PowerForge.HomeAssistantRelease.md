@@ -17,7 +17,7 @@ A Lovelace plugin needs:
 
 - `hacs.json` with `filename`;
 - `package.json` with a three-part `version`;
-- an optional `package-lock.json` whose root versions match;
+- `package-lock.json` whose root versions match; PowerForge requires the lockfile and uses `npm ci` for reproducible releases;
 - npm scripts named `test`, `check`, and `pack`; `pack` must create `release/<hacs filename>`.
 
 ## Release policy
@@ -86,19 +86,27 @@ jobs:
 
 The reusable workflow serializes and queues releases per repository and invokes the matching tagged action. The action installs an exact `PowerForge.Build` package version, so the workflow, action, and engine do not drift between retries.
 
+The shared workflow deliberately uses three jobs with different permissions:
+
+1. `prepare` has `contents: write`, validates the merged PR, updates only recognized version files, creates the release commit, and pushes it. It never runs receiver build commands.
+2. `build` checks out that exact commit with `contents: read`, runs plugin scripts or creates the integration zip, and uploads only the declared asset as a short-lived Actions artifact. It receives no write token or release secret.
+3. `publish` has `contents: write`, downloads the artifact, and publishes/verifies the release without checking out or executing receiver source code.
+
+This is a job-level trust boundary. Scrubbing a token only from an npm child process is not treated as isolation because same-user repository code could inspect or alter its parent job.
+
 ## What a successful run changes
 
 When a release is required, PowerForge:
 
-1. synchronizes `manifest.json` and `pyproject.toml`, or `package.json` and `package-lock.json`;
-2. creates a local commit containing only the version metadata and source PR/merge trailers;
-3. runs the plugin npm validation/build or produces the configured integration zip from that immutable commit without persisted checkout credentials or inherited GitHub tokens;
-4. rejects any tracked source mutation made by build scripts;
-5. pushes the validated version commit to the default branch with ephemeral Git authentication;
-6. creates or resumes `v<version>` at that exact commit and uploads the HACS asset;
-7. reads the release and tag back from GitHub and verifies the source marker, tag target, and required asset.
+1. synchronizes `manifest.json` and the bounded `[project]` table in `pyproject.toml`, or `package.json` and `package-lock.json`;
+2. creates and pushes a commit containing only the version metadata and source PR/merge trailers, using an explicit repository URL, disabled Git hooks, disabled redirects, and ephemeral authentication;
+3. starts a separate read-only job at that exact commit and runs the plugin npm validation/build or produces the configured integration zip;
+4. rejects any tracked source mutation made by build scripts and transfers only the declared asset;
+5. starts a separate privileged publish job that never executes receiver code;
+6. preflights any existing `v<version>` release and tag for the expected PowerForge marker and commit before same-named assets may be replaced;
+7. creates or safely resumes the release and reads it back from GitHub to verify the source marker, tag target, and required asset.
 
-The version commit is pushed with `GITHUB_TOKEN`, so GitHub does not recursively start ordinary push workflows. Safety comes from the merged PR checks plus PowerForge's constrained version edit, artifact build, and post-publication verification.
+The version commit is pushed with `GITHUB_TOKEN`, so GitHub does not recursively start ordinary push workflows. Safety comes from the merged PR checks, constrained version edit, job-level credential boundary, conflict preflight, and post-publication verification.
 
 ## Recovery
 
@@ -106,8 +114,8 @@ Rerun the failed release job before making manual changes. The workflow is desig
 
 - a release with the same source PR/merge marker is verified and returned;
 - repository metadata ahead of the latest release is resumed only when its reachable commit trailer proves that it belongs to the requested pull request;
-- existing releases and same-named assets are reused or replaced;
-- a missing historical asset is rebuilt in a detached worktree at the recorded tag commit, never from newer default-branch source;
+- an existing release is reused or modified only after its source marker and exact tag commit are verified;
+- a missing historical asset is rebuilt by the read-only job from a fresh checkout of the recorded tag commit, never from newer default-branch source;
 - mismatched tag targets, foreign prepared versions, and build-time tracked mutations fail closed.
 
 If the original run is no longer available, dispatch the receiver workflow with the original PR number and merge SHA. Do not create a second version commit just to retry publication.

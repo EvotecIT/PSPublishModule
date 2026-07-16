@@ -44,6 +44,8 @@ public sealed class GitHubReleasePublisher
         var isDraft = request.IsDraft;
         var isPreRelease = request.IsPreRelease;
         var reuseExistingReleaseOnConflict = request.ReuseExistingReleaseOnConflict;
+        var requireExpectedExistingRelease = request.RequireExpectedExistingRelease;
+        var expectedExistingReleaseId = request.ExpectedExistingReleaseId;
         var replaceExistingAssets = request.ReplaceExistingAssets;
 
         if (string.IsNullOrWhiteSpace(owner)) throw new ArgumentException("Owner is required.", nameof(request));
@@ -78,7 +80,9 @@ public sealed class GitHubReleasePublisher
             generateReleaseNotes,
             isDraft,
             isPreRelease,
-            reuseExistingReleaseOnConflict);
+            reuseExistingReleaseOnConflict,
+            requireExpectedExistingRelease,
+            expectedExistingReleaseId);
         releaseWatch.Stop();
         _logger.Success($"GitHub release ready in {DotNetRepositoryReleaseService.FormatDuration(releaseWatch.Elapsed)}: {release.HtmlUrl}");
 
@@ -162,7 +166,9 @@ public sealed class GitHubReleasePublisher
         bool generateReleaseNotes,
         bool isDraft,
         bool isPreRelease,
-        bool reuseExistingReleaseOnConflict)
+        bool reuseExistingReleaseOnConflict,
+        bool requireExpectedExistingRelease,
+        long? expectedExistingReleaseId)
     {
         var uri = BuildApiUri(apiBaseUrl, $"/repos/{owner}/{repo}/releases");
 
@@ -196,8 +202,17 @@ public sealed class GitHubReleasePublisher
                 (int)response.StatusCode == 422 &&
                 IsAlreadyExistsValidationError(responseText, fieldName: "tag_name"))
             {
-                _logger.Info($"GitHub release for tag '{tagName}' already exists; reusing existing release.");
-                return GetReleaseByTag(owner, repo, token, apiBaseUrl, tagName, reusedExistingRelease: true);
+                var existing = GetReleaseByTag(owner, repo, token, apiBaseUrl, tagName, reusedExistingRelease: true);
+                ValidateExpectedExistingRelease(
+                    tagName,
+                    requireExpectedExistingRelease,
+                    expectedExistingReleaseId,
+                    existing.Id);
+
+                _logger.Info(requireExpectedExistingRelease
+                    ? $"GitHub release for tag '{tagName}' already exists; reusing preflight-verified release {existing.Id}."
+                    : $"GitHub release for tag '{tagName}' already exists; reusing existing release {existing.Id}.");
+                return existing;
             }
 
             throw new InvalidOperationException($"GitHub release creation failed ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}");
@@ -307,6 +322,19 @@ public sealed class GitHubReleasePublisher
         if (string.IsNullOrWhiteSpace(fileName)) return false;
 
         return replaceableAssetNames.Remove(fileName);
+    }
+
+    internal static void ValidateExpectedExistingRelease(
+        string tagName,
+        bool requireExpectedExistingRelease,
+        long? expectedExistingReleaseId,
+        long actualExistingReleaseId)
+    {
+        if (!requireExpectedExistingRelease) return;
+        if (expectedExistingReleaseId.HasValue && expectedExistingReleaseId.Value == actualExistingReleaseId) return;
+
+        throw new InvalidOperationException(
+            $"GitHub release for tag '{tagName}' already exists, but release id {actualExistingReleaseId} was not preflight-verified for reuse.");
     }
 
     private static HashSet<string> CreateReplaceableAssetNameSet(IEnumerable<GitHubReleaseAssetResponse> existingAssets)

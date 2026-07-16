@@ -63,8 +63,9 @@ internal static partial class Program
                                       [--min-free-gb <N>] [--aggressive-threshold-gb <N>] [--dry-run|--apply] [--aggressive] [--allow-sudo]
                                       [--skip-diagnostics] [--skip-runner-temp] [--skip-actions-cache] [--skip-tool-cache] [--skip-dotnet-cache]
                                       [--skip-docker] [--no-docker-volumes] [--output json]
-      powerforge homeassistant release --repo <owner/name> --pr-number <N> [--repository-root <path>] [--merge-sha <sha>] [--default-branch <name>]
-                                      [--increment <auto|none|patch|minor|major>] [--token-env <ENV>] [--apply] [--publish] [--output json]
+      powerforge homeassistant release prepare --repo <owner/name> --pr-number <N> [--repository-root <path>] [--merge-sha <sha>] [--apply]
+      powerforge homeassistant release build --repository-root <path> --release-version <X.Y.Z> --release-commit <sha>
+      powerforge homeassistant release publish --repo <owner/name> --pr-number <N> --release-version <X.Y.Z> --release-commit <sha>
       --verbose, -Verbose              Enable verbose diagnostics
       --diagnostics                    Include logs in JSON output
       --quiet, -q                      Suppress non-essential output

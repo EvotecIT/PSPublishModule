@@ -36,13 +36,18 @@ internal sealed class HomeAssistantRepositoryService {
             if (string.IsNullOrWhiteSpace(hacsFileName) || !File.Exists(packageJsonPath))
                 throw new InvalidOperationException("The repository is neither a HACS Lovelace plugin nor a Home Assistant custom integration.");
 
+            var packageLockPath = Path.Combine(root, "package-lock.json");
+            if (!File.Exists(packageLockPath))
+                throw new InvalidOperationException("HACS Lovelace plugin releases require package-lock.json so npm ci is reproducible.");
+
             var package = ReadJsonObject(packageJsonPath);
             var version = ReadRequiredString(package, "version", packageJsonPath);
+            ValidatePackageLockVersion(packageLockPath, version);
             return new HomeAssistantRepositorySnapshot {
                 Kind = HomeAssistantRepositoryKind.LovelacePlugin,
                 Version = version,
                 PackageJsonPath = packageJsonPath,
-                PackageLockPath = File.Exists(Path.Combine(root, "package-lock.json")) ? Path.Combine(root, "package-lock.json") : null,
+                PackageLockPath = packageLockPath,
                 HacsPath = hacsPath,
                 HacsFileName = hacsFileName,
                 ZipRelease = false
@@ -92,10 +97,8 @@ internal sealed class HomeAssistantRepositoryService {
         } else if (snapshot.Kind == HomeAssistantRepositoryKind.LovelacePlugin) {
             UpdateJsonVersion(snapshot.PackageJsonPath!, version);
             changed.Add(ToRelativePath(repositoryRoot, snapshot.PackageJsonPath!));
-            if (!string.IsNullOrWhiteSpace(snapshot.PackageLockPath)) {
-                UpdatePackageLockVersion(snapshot.PackageLockPath!, version);
-                changed.Add(ToRelativePath(repositoryRoot, snapshot.PackageLockPath!));
-            }
+            UpdatePackageLockVersion(snapshot.PackageLockPath!, version);
+            changed.Add(ToRelativePath(repositoryRoot, snapshot.PackageLockPath!));
         } else {
             throw new InvalidOperationException("The repository layout must be resolved before updating its version.");
         }
@@ -217,28 +220,54 @@ internal sealed class HomeAssistantRepositoryService {
         WriteJson(path, value);
     }
 
+    private static void ValidatePackageLockVersion(string path, string expectedVersion) {
+        var value = ReadJsonObject(path);
+        var lockVersion = ReadRequiredString(value, "version", path);
+        if (value["packages"] is not JsonObject packages || packages[""] is not JsonObject rootPackage)
+            throw new InvalidOperationException($"'{path}' does not contain packages[''] metadata.");
+        var rootVersion = ReadRequiredString(rootPackage, "version", $"{path} packages['']");
+        if (!string.Equals(lockVersion, expectedVersion, StringComparison.Ordinal) ||
+            !string.Equals(rootVersion, expectedVersion, StringComparison.Ordinal)) {
+            throw new InvalidOperationException(
+                $"Version drift detected: package.json has {expectedVersion}, while package-lock.json has {lockVersion} and packages[''] has {rootVersion}.");
+        }
+    }
+
     private static void WriteJson(string path, JsonObject value)
         => File.WriteAllText(path, value.ToJsonString(JsonOptions) + Environment.NewLine, Utf8NoBom);
 
     private static string ReadPyProjectVersion(string path) {
-        var match = Regex.Match(
-            File.ReadAllText(path),
-            @"(?ms)^\[project\]\s*$.*?^version\s*=\s*""(?<version>[^""]+)""");
-        if (!match.Success)
-            throw new InvalidOperationException($"'{path}' does not define [project] version.");
-        return match.Groups["version"].Value.Trim();
+        var text = File.ReadAllText(path);
+        var span = FindPyProjectVersion(text, path);
+        return text.Substring(span.Start, span.Length).Trim();
     }
 
     private static void UpdatePyProjectVersion(string path, string version) {
         var text = File.ReadAllText(path);
-        var pattern = @"(?ms)(?<prefix>^\[project\]\s*$.*?^version\s*=\s*"")(?<version>[^""]+)(?<suffix>"")";
-        var updated = new Regex(pattern).Replace(
-            text,
-            match => match.Groups["prefix"].Value + version + match.Groups["suffix"].Value,
-            1);
-        if (string.Equals(text, updated, StringComparison.Ordinal))
-            throw new InvalidOperationException($"Unable to update [project] version in '{path}'.");
+        var span = FindPyProjectVersion(text, path);
+        var updated = text.Substring(0, span.Start) + version + text.Substring(span.Start + span.Length);
         File.WriteAllText(path, updated, Utf8NoBom);
+    }
+
+    private static (int Start, int Length) FindPyProjectVersion(string text, string path) {
+        var projectHeader = Regex.Match(text, @"(?m)^[ \t]*\[project\][ \t]*(?:#.*)?\r?$");
+        if (!projectHeader.Success)
+            throw new InvalidOperationException($"'{path}' does not define a [project] table.");
+
+        var sectionStart = projectHeader.Index + projectHeader.Length;
+        var nextTable = Regex.Match(
+            text.Substring(sectionStart),
+            @"(?m)^[ \t]*\[\[?[^\r\n\]]+\]\]?[ \t]*(?:#.*)?\r?$");
+        var sectionEnd = nextTable.Success ? sectionStart + nextTable.Index : text.Length;
+        var section = text.Substring(sectionStart, sectionEnd - sectionStart);
+        var versions = Regex.Matches(
+            section,
+            @"(?m)^[ \t]*version[ \t]*=[ \t]*""(?<version>[^""\r\n]+)""[ \t]*(?:#.*)?\r?$");
+        if (versions.Count != 1)
+            throw new InvalidOperationException($"'{path}' must define exactly one version in the [project] table, but found {versions.Count}.");
+
+        var group = versions[0].Groups["version"];
+        return (sectionStart + group.Index, group.Length);
     }
 
     private static string ToRelativePath(string root, string path) {

@@ -43,6 +43,15 @@ public sealed class GitHubReleasePublishRequest
     /// <summary>True to reuse an existing release when GitHub reports a tag conflict.</summary>
     public bool ReuseExistingReleaseOnConflict { get; set; } = true;
 
+    /// <summary>
+    /// When true, a tag-conflict release may be reused only when its identifier matches
+    /// <see cref="ExpectedExistingReleaseId"/>. This prevents mutating an unverified release.
+    /// </summary>
+    public bool RequireExpectedExistingRelease { get; set; }
+
+    /// <summary>Preflight-verified release identifier permitted for idempotent reuse.</summary>
+    public long? ExpectedExistingReleaseId { get; set; }
+
     /// <summary>True to delete same-named assets from a reused release before uploading new files.</summary>
     public bool ReplaceExistingAssets { get; set; }
 

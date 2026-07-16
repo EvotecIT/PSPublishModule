@@ -91,6 +91,41 @@ public sealed class HomeAssistantReleaseTests {
     }
 
     [Fact]
+    public void RepositoryService_RequiresPluginLockfileForReproducibleBuilds() {
+        using var fixture = HomeAssistantFixture.CreatePlugin("0.1.10");
+        File.Delete(Path.Combine(fixture.Root, "package-lock.json"));
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new HomeAssistantRepositoryService().Inspect(fixture.Root));
+
+        Assert.Contains("require package-lock.json", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RepositoryService_RejectsPluginLockfileVersionDrift() {
+        using var fixture = HomeAssistantFixture.CreatePlugin("0.1.10");
+        var path = Path.Combine(fixture.Root, "package-lock.json");
+        var packageLock = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+        packageLock["packages"]![""]!["version"] = "0.1.9";
+        File.WriteAllText(path, packageLock.ToJsonString());
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new HomeAssistantRepositoryService().Inspect(fixture.Root));
+
+        Assert.Contains("Version drift", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RepositoryService_DoesNotReadVersionFromALaterTomlTable() {
+        using var fixture = HomeAssistantFixture.CreateIntegration("0.2.6");
+        var pyProject = Path.Combine(fixture.Root, "pyproject.toml");
+        File.WriteAllText(pyProject, "[project]\nname = \"example\"\n\n[tool.example]\nversion = \"9.9.9\"\n");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new HomeAssistantRepositoryService().Inspect(fixture.Root));
+
+        Assert.Contains("[project] table", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("version = \"9.9.9\"", File.ReadAllText(pyProject), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RepositoryService_PrioritizesZipIntegrationLayoutWhenNpmToolingAlsoExists() {
         using var fixture = HomeAssistantFixture.CreateZipIntegration("0.2.6", includePackageJson: true);
 
@@ -129,15 +164,14 @@ public sealed class HomeAssistantReleaseTests {
             github,
             publisher);
 
-        var result = service.Run(new HomeAssistantReleaseSpec {
+        var result = service.Prepare(new HomeAssistantReleasePrepareSpec {
             RepositoryRoot = fixture.Root,
             Owner = "EvotecIT",
             Repository = "example",
             Token = "token",
             PullRequestNumber = 42,
             MergeCommitSha = mergeSha,
-            Apply = true,
-            Publish = true
+            Apply = true
         });
 
         Assert.Equal(HomeAssistantReleaseAction.Reused, result.Action);
@@ -176,7 +210,7 @@ public sealed class HomeAssistantReleaseTests {
             github,
             new RecordingPublisher());
 
-        var result = service.Run(new HomeAssistantReleaseSpec {
+        var result = service.Prepare(new HomeAssistantReleasePrepareSpec {
             RepositoryRoot = fixture.Root,
             Owner = "EvotecIT",
             Repository = "example",
@@ -188,6 +222,93 @@ public sealed class HomeAssistantReleaseTests {
         Assert.Equal(HomeAssistantReleaseAction.Planned, result.Action);
         Assert.Equal(HomeAssistantVersionIncrement.Patch, result.Increment);
         Assert.Equal("0.2.7", result.ReleaseVersion);
+    }
+
+    [Fact]
+    public void PrepareStage_DoesNotExecuteRepositoryBuildCommands() {
+        using var fixture = HomeAssistantFixture.CreatePlugin("0.1.10");
+        RunGit(fixture.Root, "init", "-b", "main");
+        RunGit(fixture.Root, "config", "user.name", "PowerForge Tests");
+        RunGit(fixture.Root, "config", "user.email", "powerforge-tests@example.invalid");
+        RunGit(fixture.Root, "add", ".");
+        RunGit(fixture.Root, "commit", "-m", "Merge plugin change");
+        var mergeSha = RunGit(fixture.Root, "rev-parse", "HEAD").StdOut.Trim();
+        var github = new FakeGitHubClient {
+            PullRequest = new HomeAssistantPullRequest {
+                Number = 42,
+                Merged = true,
+                HeadSha = mergeSha,
+                MergeCommitSha = mergeSha
+            },
+            LatestRelease = new HomeAssistantGitHubRelease { TagName = "v0.1.10" }
+        };
+        github.PullRequest.ChangedFiles.Add("src/example.ts");
+        var runner = new RecordingProcessRunner(mutateTrackedFile: false);
+        var service = new HomeAssistantReleaseService(
+            new NullLogger(),
+            new HomeAssistantRepositoryService(runner),
+            new HomeAssistantReleaseGitService(),
+            github,
+            new RecordingPublisher());
+
+        var result = service.Prepare(new HomeAssistantReleasePrepareSpec {
+            RepositoryRoot = fixture.Root,
+            Owner = "EvotecIT",
+            Repository = "example",
+            Token = "write-token",
+            PullRequestNumber = 42,
+            MergeCommitSha = mergeSha
+        });
+
+        Assert.Equal(HomeAssistantReleaseAction.Planned, result.Action);
+        Assert.Empty(runner.Requests);
+    }
+
+    [Fact]
+    public void PrepareStage_PreflightsForeignTargetTagBeforeVersionMutation() {
+        using var fixture = HomeAssistantFixture.CreateIntegration("0.2.6");
+        RunGit(fixture.Root, "init", "-b", "main");
+        RunGit(fixture.Root, "config", "user.name", "PowerForge Tests");
+        RunGit(fixture.Root, "config", "user.email", "powerforge-tests@example.invalid");
+        RunGit(fixture.Root, "add", ".");
+        RunGit(fixture.Root, "commit", "-m", "Merge integration change");
+        var mergeSha = RunGit(fixture.Root, "rev-parse", "HEAD").StdOut.Trim();
+        var github = new FakeGitHubClient {
+            PullRequest = new HomeAssistantPullRequest {
+                Number = 42,
+                Merged = true,
+                HeadSha = mergeSha,
+                MergeCommitSha = mergeSha
+            },
+            LatestRelease = new HomeAssistantGitHubRelease { TagName = "v0.2.6" },
+            TagRelease = new HomeAssistantGitHubRelease {
+                Id = 99,
+                TagName = "v0.2.7",
+                Body = "unrelated release"
+            },
+            TagCommitSha = "dddddddddddddddddddddddddddddddddddddddd"
+        };
+        github.PullRequest.ChangedFiles.Add("custom_components/example/sensor.py");
+        var service = new HomeAssistantReleaseService(
+            new NullLogger(),
+            new HomeAssistantRepositoryService(),
+            new HomeAssistantReleaseGitService(),
+            github,
+            new RecordingPublisher());
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Prepare(new HomeAssistantReleasePrepareSpec {
+            RepositoryRoot = fixture.Root,
+            Owner = "EvotecIT",
+            Repository = "example",
+            Token = "write-token",
+            PullRequestNumber = 42,
+            MergeCommitSha = mergeSha,
+            Apply = true
+        }));
+
+        Assert.Contains("source marker", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("0.2.6", ReadJsonVersion(Path.Combine(fixture.Root, "custom_components", "example", "manifest.json")));
+        Assert.Empty(RunGit(fixture.Root, "status", "--porcelain").StdOut);
     }
 
     [Fact]
@@ -216,7 +337,7 @@ public sealed class HomeAssistantReleaseTests {
             github,
             new RecordingPublisher());
 
-        var exception = Assert.Throws<InvalidOperationException>(() => service.Run(new HomeAssistantReleaseSpec {
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Prepare(new HomeAssistantReleasePrepareSpec {
             RepositoryRoot = fixture.Root,
             Owner = "EvotecIT",
             Repository = "example",
@@ -267,20 +388,140 @@ public sealed class HomeAssistantReleaseTests {
             github,
             publisher);
 
-        var result = service.Run(new HomeAssistantReleaseSpec {
+        var prepared = service.Prepare(new HomeAssistantReleasePrepareSpec {
             RepositoryRoot = fixture.Root,
             Owner = "EvotecIT",
             Repository = "example",
             Token = "token",
             PullRequestNumber = 42,
             MergeCommitSha = releaseCommit,
-            Apply = true,
-            Publish = true
+            Apply = true
+        });
+
+        Assert.Equal(HomeAssistantReleaseAction.Prepared, prepared.Action);
+        Assert.Equal(releaseCommit, prepared.ReleaseCommitSha);
+        var buildRoot = Path.Combine(Path.GetTempPath(), "PowerForge.HomeAssistant.BuildTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.GetDirectoryName(buildRoot)!);
+        RunGit(fixture.Root, "worktree", "add", "--detach", buildRoot, releaseCommit);
+        try {
+            var built = service.Build(new HomeAssistantReleaseBuildSpec {
+                RepositoryRoot = buildRoot,
+                ReleaseVersion = prepared.ReleaseVersion,
+                ReleaseCommitSha = releaseCommit
+            });
+            var result = service.Publish(new HomeAssistantReleasePublishSpec {
+                Owner = "EvotecIT",
+                Repository = "example",
+                Token = "token",
+                PullRequestNumber = 42,
+                MergeCommitSha = releaseCommit,
+                ReleaseVersion = prepared.ReleaseVersion,
+                ReleaseCommitSha = releaseCommit,
+                RequiredAssetName = built.RequiredAssetName,
+                AssetFilePath = Assert.Single(built.AssetFiles)
+            });
+
+            Assert.Equal(HomeAssistantReleaseAction.Published, result.Action);
+        } finally {
+            RunGit(fixture.Root, "worktree", "remove", "--force", buildRoot);
+        }
+        Assert.Equal("0.2.7", publisher.CapturedManifestVersion);
+        Assert.DoesNotContain("PowerForge.HomeAssistant.Worktrees", RunGit(fixture.Root, "worktree", "list", "--porcelain").StdOut, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PublishStage_RejectsUnrelatedTargetReleaseBeforePublisherMutation() {
+        const string mergeSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        const string releaseCommit = "cccccccccccccccccccccccccccccccccccccccc";
+        var github = new FakeGitHubClient {
+            PullRequest = new HomeAssistantPullRequest {
+                Number = 42,
+                Merged = true,
+                HeadSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                MergeCommitSha = mergeSha
+            },
+            TagRelease = new HomeAssistantGitHubRelease {
+                Id = 99,
+                TagName = "v0.2.7",
+                Body = "unrelated release",
+                HtmlUrl = "https://github.example/releases/v0.2.7"
+            },
+            TagCommitSha = releaseCommit
+        };
+        var publisher = new RecordingPublisher();
+        var service = new HomeAssistantReleaseService(
+            new NullLogger(),
+            new HomeAssistantRepositoryService(),
+            new HomeAssistantReleaseGitService(),
+            github,
+            publisher);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Publish(new HomeAssistantReleasePublishSpec {
+            Owner = "EvotecIT",
+            Repository = "example",
+            Token = "write-token",
+            PullRequestNumber = 42,
+            MergeCommitSha = mergeSha,
+            ReleaseVersion = "0.2.7",
+            ReleaseCommitSha = releaseCommit
+        }));
+
+        Assert.Contains("source marker", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, publisher.PublishCalls);
+    }
+
+    [Fact]
+    public void PublishStage_OnlyPermitsReplacementOnThePreflightVerifiedRelease() {
+        using var fixture = HomeAssistantFixture.CreateZipIntegration("0.2.7");
+        var snapshot = new HomeAssistantRepositoryService().Inspect(fixture.Root);
+        var asset = Assert.Single(new HomeAssistantRepositoryService().BuildAssets(snapshot, fixture.Root, "0.2.7"));
+        const string mergeSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        const string releaseCommit = "cccccccccccccccccccccccccccccccccccccccc";
+        var marker = HomeAssistantReleasePolicy.BuildMarker(42, mergeSha);
+        var release = new HomeAssistantGitHubRelease {
+            Id = 123,
+            TagName = "v0.2.7",
+            Body = HomeAssistantReleasePolicy.BuildReleaseNotes(
+                new HomeAssistantPullRequest { Number = 42, Title = "Fix", HtmlUrl = "https://github.example/pull/42" },
+                marker,
+                releaseCommit,
+                "example.zip"),
+            HtmlUrl = "https://github.example/releases/v0.2.7"
+        };
+        var github = new FakeGitHubClient {
+            PullRequest = new HomeAssistantPullRequest {
+                Number = 42,
+                Merged = true,
+                HeadSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                MergeCommitSha = mergeSha
+            },
+            MarkerRelease = release,
+            TagRelease = release,
+            TagCommitSha = releaseCommit
+        };
+        var publisher = new RecordingPublisher(github);
+        var service = new HomeAssistantReleaseService(
+            new NullLogger(),
+            new HomeAssistantRepositoryService(),
+            new HomeAssistantReleaseGitService(),
+            github,
+            publisher);
+
+        var result = service.Publish(new HomeAssistantReleasePublishSpec {
+            Owner = "EvotecIT",
+            Repository = "example",
+            Token = "write-token",
+            PullRequestNumber = 42,
+            MergeCommitSha = mergeSha,
+            ReleaseVersion = "0.2.7",
+            ReleaseCommitSha = releaseCommit,
+            RequiredAssetName = "example.zip",
+            AssetFilePath = asset
         });
 
         Assert.Equal(HomeAssistantReleaseAction.Published, result.Action);
-        Assert.Equal("0.2.7", publisher.CapturedManifestVersion);
-        Assert.DoesNotContain("PowerForge.HomeAssistant.Worktrees", RunGit(fixture.Root, "worktree", "list", "--porcelain").StdOut, StringComparison.OrdinalIgnoreCase);
+        Assert.True(publisher.CapturedRequest!.RequireExpectedExistingRelease);
+        Assert.Equal(123, publisher.CapturedRequest.ExpectedExistingReleaseId);
     }
 
     [Fact]
@@ -314,13 +555,16 @@ public sealed class HomeAssistantReleaseTests {
         var runner = new RecordingProcessRunner(mutateTrackedFile: false);
         var service = new HomeAssistantReleaseGitService(processRunner: runner);
 
-        service.Push(Path.GetTempPath(), "main", token);
+        service.Push(Path.GetTempPath(), "main", token, "EvotecIT", "example", "https://github.com");
 
         var request = Assert.Single(runner.Requests);
         Assert.DoesNotContain(request.Arguments, argument => argument.Contains(token, StringComparison.Ordinal));
         Assert.Null(request.EnvironmentVariables!["GITHUB_TOKEN"]);
-        Assert.DoesNotContain(token, request.EnvironmentVariables["GIT_CONFIG_VALUE_1"]!, StringComparison.Ordinal);
-        Assert.StartsWith("AUTHORIZATION: basic ", request.EnvironmentVariables["GIT_CONFIG_VALUE_1"], StringComparison.Ordinal);
+        Assert.Equal("https://github.com/EvotecIT/example.git", request.Arguments[1]);
+        Assert.DoesNotContain(token, request.EnvironmentVariables["GIT_CONFIG_VALUE_3"]!, StringComparison.Ordinal);
+        Assert.StartsWith("AUTHORIZATION: basic ", request.EnvironmentVariables["GIT_CONFIG_VALUE_3"], StringComparison.Ordinal);
+        Assert.Equal("false", request.EnvironmentVariables["GIT_CONFIG_VALUE_2"]);
+        Assert.True(Directory.Exists(request.EnvironmentVariables["GIT_CONFIG_VALUE_1"]!) is false);
     }
 
     private static string ReadJsonVersion(string path)
@@ -341,13 +585,14 @@ public sealed class HomeAssistantReleaseTests {
         internal HomeAssistantPullRequest PullRequest { get; set; } = new();
         internal HomeAssistantGitHubRelease? MarkerRelease { get; set; }
         internal HomeAssistantGitHubRelease? LatestRelease { get; set; }
+        internal HomeAssistantGitHubRelease? TagRelease { get; set; }
         internal string? TagCommitSha { get; set; }
 
         public HomeAssistantPullRequest GetPullRequest(int number) => PullRequest;
         public HomeAssistantCheckSummary GetCheckSummary(string commitSha) => new() { Total = 1 };
         public HomeAssistantGitHubRelease? GetLatestRelease() => LatestRelease;
         public HomeAssistantGitHubRelease? FindReleaseByMarker(string marker) => MarkerRelease;
-        public HomeAssistantGitHubRelease? GetReleaseByTag(string tagName) => MarkerRelease;
+        public HomeAssistantGitHubRelease? GetReleaseByTag(string tagName) => TagRelease ?? MarkerRelease;
         public string? GetTagCommitSha(string tagName) => TagCommitSha;
     }
 
@@ -360,9 +605,11 @@ public sealed class HomeAssistantReleaseTests {
 
         internal int PublishCalls { get; private set; }
         internal string? CapturedManifestVersion { get; private set; }
+        internal GitHubReleasePublishRequest? CapturedRequest { get; private set; }
 
         public GitHubReleasePublishResult Publish(GitHubReleasePublishRequest request) {
             PublishCalls++;
+            CapturedRequest = request;
             foreach (var asset in request.AssetFilePaths) {
                 if (!asset.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) continue;
                 using var archive = ZipFile.OpenRead(asset);

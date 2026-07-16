@@ -51,35 +51,6 @@ internal sealed class HomeAssistantReleaseGitService {
             throw new InvalidOperationException("The release build changed tracked files after the immutable release commit was created.\n" + result.StdOut.Trim());
     }
 
-    internal string CreateDetachedWorktree(string repositoryRoot, string commitSha) {
-        if (string.IsNullOrWhiteSpace(commitSha)) throw new ArgumentException("Commit SHA is required.", nameof(commitSha));
-        var parent = Path.Combine(Path.GetTempPath(), "PowerForge.HomeAssistant.Worktrees");
-        Directory.CreateDirectory(parent);
-        var path = Path.Combine(parent, Guid.NewGuid().ToString("N"));
-        Run(repositoryRoot, "worktree", "add", "--detach", path, commitSha);
-        return path;
-    }
-
-    internal void RemoveDetachedWorktree(string repositoryRoot, string worktreePath) {
-        if (string.IsNullOrWhiteSpace(worktreePath)) return;
-        var result = RunAllowFailure(repositoryRoot, "worktree", "remove", "--force", worktreePath);
-        if (!result.Succeeded) {
-            var detail = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
-            throw new InvalidOperationException($"Unable to remove detached release worktree '{worktreePath}'. {detail.Trim()}");
-        }
-
-        Run(repositoryRoot, "worktree", "prune");
-        var parent = Path.GetDirectoryName(worktreePath);
-        try {
-            if (!string.IsNullOrWhiteSpace(parent) && Directory.Exists(parent) && Directory.GetFileSystemEntries(parent).Length == 0)
-                Directory.Delete(parent);
-        } catch (IOException) {
-            // Another release may have created a recovery worktree concurrently.
-        } catch (UnauthorizedAccessException) {
-            // Best-effort cleanup only; git metadata has already been pruned.
-        }
-    }
-
     internal string CommitRelease(
         string repositoryRoot,
         IReadOnlyCollection<string> changedFiles,
@@ -107,33 +78,55 @@ internal sealed class HomeAssistantReleaseGitService {
         return GetHeadSha(repositoryRoot);
     }
 
-    internal void Push(string repositoryRoot, string defaultBranch, string token) {
+    internal void Push(
+        string repositoryRoot,
+        string defaultBranch,
+        string token,
+        string owner,
+        string repository,
+        string serverUrl) {
         if (string.IsNullOrWhiteSpace(defaultBranch)) throw new ArgumentException("Default branch is required.", nameof(defaultBranch));
         if (string.IsNullOrWhiteSpace(token)) throw new ArgumentException("GitHub token is required.", nameof(token));
+        if (string.IsNullOrWhiteSpace(owner)) throw new ArgumentException("Repository owner is required.", nameof(owner));
+        if (string.IsNullOrWhiteSpace(repository)) throw new ArgumentException("Repository name is required.", nameof(repository));
+        if (!Uri.TryCreate(serverUrl?.TrimEnd('/'), UriKind.Absolute, out var server) || server.Scheme != Uri.UriSchemeHttps)
+            throw new ArgumentException("GitHub server URL must be an absolute HTTPS address.", nameof(serverUrl));
 
         var basicToken = Convert.ToBase64String(Encoding.UTF8.GetBytes("x-access-token:" + token));
+        var pushUrl = new Uri(server, $"{owner}/{repository}.git").AbsoluteUri;
+        var emptyHooksDirectory = Path.Combine(Path.GetTempPath(), "PowerForge.HomeAssistant.EmptyHooks", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(emptyHooksDirectory);
         var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase) {
             ["GH_TOKEN"] = null,
             ["GITHUB_TOKEN"] = null,
-            ["GIT_CONFIG_COUNT"] = "2",
+            ["GIT_CONFIG_COUNT"] = "4",
             ["GIT_CONFIG_KEY_0"] = "credential.helper",
             ["GIT_CONFIG_VALUE_0"] = string.Empty,
-            ["GIT_CONFIG_KEY_1"] = "http.extraheader",
-            ["GIT_CONFIG_VALUE_1"] = "AUTHORIZATION: basic " + basicToken,
+            ["GIT_CONFIG_KEY_1"] = "core.hooksPath",
+            ["GIT_CONFIG_VALUE_1"] = emptyHooksDirectory,
+            ["GIT_CONFIG_KEY_2"] = "http.followRedirects",
+            ["GIT_CONFIG_VALUE_2"] = "false",
+            ["GIT_CONFIG_KEY_3"] = $"http.{pushUrl}.extraheader",
+            ["GIT_CONFIG_VALUE_3"] = "AUTHORIZATION: basic " + basicToken,
+            ["GIT_CONFIG_NOSYSTEM"] = "1",
             ["GIT_TERMINAL_PROMPT"] = "0"
         };
-        var result = _processRunner.RunAsync(new ProcessRunRequest(
-                "git",
-                repositoryRoot,
-                new[] { "push", "origin", $"HEAD:refs/heads/{defaultBranch}" },
-                TimeSpan.FromMinutes(2),
-                environment))
-            .ConfigureAwait(false)
-            .GetAwaiter()
-            .GetResult();
-        if (!result.Succeeded) {
-            var detail = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
-            throw new InvalidOperationException($"git push failed with exit code {result.ExitCode}. {detail.Trim()}");
+        try {
+            var result = _processRunner.RunAsync(new ProcessRunRequest(
+                    "git",
+                    repositoryRoot,
+                    new[] { "push", pushUrl, $"HEAD:refs/heads/{defaultBranch}" },
+                    TimeSpan.FromMinutes(2),
+                    environment))
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
+            if (!result.Succeeded) {
+                var detail = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
+                throw new InvalidOperationException($"git push failed with exit code {result.ExitCode}. {detail.Trim()}");
+            }
+        } finally {
+            if (Directory.Exists(emptyHooksDirectory)) Directory.Delete(emptyHooksDirectory, recursive: true);
         }
     }
 
