@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.64
+Help Version: 3.0.65
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -33,6 +33,9 @@ Adds a benchmark comparison definition.
 
 ### [Add-BenchmarkEngine](Add-BenchmarkEngine.md)
 Adds a benchmark engine.
+
+### [Add-BenchmarkMetadata](Add-BenchmarkMetadata.md)
+Adds a suite-specific provenance value to benchmark metadata artifacts.
 
 ### [Add-BenchmarkMetric](Add-BenchmarkMetric.md)
 Adds a custom benchmark metric.

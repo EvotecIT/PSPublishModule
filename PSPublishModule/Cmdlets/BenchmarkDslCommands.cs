@@ -434,6 +434,10 @@ public sealed class AddBenchmarkMetricCommand : BenchmarkDslCommand
 /// <summary>
 /// Adds a suite-specific provenance value to benchmark metadata artifacts.
 /// </summary>
+/// <example>
+/// <summary>Add benchmark provenance metadata</summary>
+/// <code>Add-BenchmarkMetadata -Name 'runtime' -Value 'net10.0'</code>
+/// </example>
 [Cmdlet(VerbsCommon.Add, "BenchmarkMetadata")]
 [Alias("metadata")]
 public sealed class AddBenchmarkMetadataCommand : BenchmarkDslCommand
