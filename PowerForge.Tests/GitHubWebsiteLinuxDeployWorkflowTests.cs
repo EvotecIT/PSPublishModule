@@ -30,6 +30,11 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         var deployWorkflow = ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml");
         var runWorkflow = ReadRepoFile(".github", "workflows", "powerforge-website-run.yml");
 
+        Assert.Contains("source_ref:", deployWorkflow, StringComparison.Ordinal);
+        Assert.Contains("ref: ${{ inputs.source_ref || github.event.pull_request.head.sha || github.sha }}", deployWorkflow, StringComparison.Ordinal);
+        Assert.Equal(2, deployWorkflow.Split("source_ref: ${{ inputs.source_ref }}", StringSplitOptions.None).Length - 1);
+        Assert.Contains("SOURCE_SHA: ${{ needs.build.outputs.source_sha }}", deployWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("--result-path", runWorkflow, StringComparison.Ordinal);
         Assert.Contains("Resolve actual PowerForge engine provenance", runWorkflow, StringComparison.Ordinal);
         Assert.Contains("assetSha256", runWorkflow, StringComparison.Ordinal);

@@ -3,6 +3,9 @@ name: PowerForge Website Run
 on:
   workflow_call:
     outputs:
+      source_sha:
+        description: Exact caller repository commit used to build the website.
+        value: ${{ jobs.website-run.outputs.source_sha }}
       engine_repository:
         description: Repository used to build the website.
         value: ${{ jobs.website-run.outputs.engine_repository }}
@@ -28,6 +31,11 @@ on:
       pipeline_config:
         required: true
         type: string
+      source_ref:
+        description: Optional caller repository ref to build instead of the event commit.
+        required: false
+        type: string
+        default: ""
       engine_mode:
         required: false
         type: string
@@ -128,6 +136,7 @@ env:
 jobs:
   website-run:
     outputs:
+      source_sha: ${{ steps.source_provenance.outputs.sha }}
       engine_repository: ${{ steps.engine_provenance.outputs.repository }}
       engine_sha: ${{ steps.engine_provenance.outputs.sha }}
       engine_mode: ${{ steps.engine_provenance.outputs.mode }}
@@ -148,7 +157,18 @@ jobs:
         with:
           token: ${{ github.token }}
           # workflow_call can otherwise default to refs/pull/<n>/merge, which is not available in some repos.
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.source_ref || github.event.pull_request.head.sha || github.sha }}
+
+      - name: Resolve website source provenance
+        id: source_provenance
+        shell: pwsh
+        run: |
+          $sourceSha = (git rev-parse HEAD).Trim().ToLowerInvariant()
+          if ($sourceSha -notmatch '^[a-f0-9]{40,64}$') {
+            throw "Unable to resolve the exact website source commit."
+          }
+
+          "sha=$sourceSha" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Resolve shared workflow source
         id: workflow_source

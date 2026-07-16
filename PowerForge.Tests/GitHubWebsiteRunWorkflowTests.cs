@@ -60,6 +60,23 @@ public sealed class GitHubWebsiteRunWorkflowTests
     }
 
     [Fact]
+    public void WebsiteRunWorkflow_ShouldResolveOptionalCallerSourceRefToExactProvenance()
+    {
+        var repoRoot = FindRepoRoot();
+        var workflowPath = Path.Combine(repoRoot, ".github", "workflows", "powerforge-website-run.yml");
+
+        Assert.True(File.Exists(workflowPath), $"Website workflow not found: {workflowPath}");
+
+        var workflowYaml = File.ReadAllText(workflowPath);
+
+        Assert.Contains("source_ref:", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("ref: ${{ inputs.source_ref || github.event.pull_request.head.sha || github.sha }}", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("source_sha: ${{ steps.source_provenance.outputs.sha }}", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("value: ${{ jobs.website-run.outputs.source_sha }}", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("$sourceSha = (git rev-parse HEAD).Trim().ToLowerInvariant()", workflowYaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WebsiteRunWorkflow_ShouldKeepTransientToolCachesInsideWorkspace()
     {
         var repoRoot = FindRepoRoot();
