@@ -10,7 +10,7 @@ inputs:
     description: Cloudflare zone identifier from the caller job's protected environment.
     required: true
   api-token:
-    description: Cloudflare API token with Zone > Cache Rules > Edit permission from the caller job's protected environment.
+    description: Protected Cloudflare API token with Zone > Cache Rules > Edit and required account Rulesets/Filter Lists edit permissions.
     required: true
   hostname:
     description: Optional hostname override; normally derived from the site specification BaseUrl.

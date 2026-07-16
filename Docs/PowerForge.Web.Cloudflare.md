@@ -145,9 +145,14 @@ jobs:
           api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 ```
 
-Pin `POWERFORGE_COMMIT` to an exact commit. The token needs
-`Zone > Cache Rules > Edit` for the target zone, as documented by Cloudflare's
-[Cache Rules API guide](https://developers.cloudflare.com/cache/how-to/cache-rules/create-api/).
+Pin `POWERFORGE_COMMIT` to an exact commit. Cloudflare's current
+[Cache Rules API guide](https://developers.cloudflare.com/cache/how-to/cache-rules/create-api/)
+lists these token permissions:
+
+- `Zone > Cache Rules > Edit`, scoped to the target zones
+- `Account > Account Rulesets > Edit`, scoped to the owning account
+- `Account > Account Filter Lists > Edit`, scoped to the owning account
+
 If the same token is also used by deployment purge, grant `Zone > Cache Purge > Purge`.
 The action rejects pull-request events before protected inputs are used.
 
