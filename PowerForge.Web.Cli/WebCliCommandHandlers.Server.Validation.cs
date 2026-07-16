@@ -22,6 +22,7 @@ internal static partial class WebCliCommandHandlers
         if (retention?.KeepLatestInTree is not null && retention.KeepLatest is not null)
             errors.Add("backupTarget.retention must not set both keepLatestInTree and its deprecated keepLatest alias.");
         ValidateBackupTarget(manifest.BackupTarget, plainFiles, encryptedFiles, errors);
+        ValidateRepositories(manifest.Repositories, manifest.Capture?.Commands, errors);
 
         var managedPathIds = new HashSet<string>(StringComparer.Ordinal);
         var managedPaths = new HashSet<string>(StringComparer.Ordinal);
@@ -70,18 +71,27 @@ internal static partial class WebCliCommandHandlers
             if (!IsValidMode(secret.Mode))
                 errors.Add($"Secret '{secret.Id}' has an invalid restore mode.");
 
+            string? secretPath = null;
+            if (!string.IsNullOrWhiteSpace(secret.Path))
+                secretPath = NormalizeCapturePath(secret.Path, $"secrets[{secret.Id}].path", errors);
+
+            if (string.Equals(secret.Capture, "exclude", StringComparison.OrdinalIgnoreCase))
+            {
+                if (secretPath is not null && plainPaths.Any(path => CapturePathsMayOverlap(secretPath, path)))
+                    errors.Add($"Excluded secret '{secret.Id}' at '{secretPath}' overlaps capture.plainFiles and could be published without encryption.");
+                if (secretPath is not null && encryptedPaths.Any(path => CapturePathsMayOverlap(secretPath, path)))
+                    errors.Add($"Excluded secret '{secret.Id}' at '{secretPath}' overlaps capture.encryptedFiles and would not be excluded.");
+                continue;
+            }
+
             if (!string.Equals(secret.Capture, "encrypted", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            if (string.IsNullOrWhiteSpace(secret.Path))
+            if (secretPath is null)
             {
                 errors.Add($"Encrypted secret '{secret.Id}' must declare a path covered by capture.encryptedFiles.");
                 continue;
             }
-
-            var secretPath = NormalizeCapturePath(secret.Path, $"secrets[{secret.Id}].path", errors);
-            if (secretPath is null)
-                continue;
 
             if (!encryptedPaths.Any(path => PathContains(path, secretPath)))
                 errors.Add($"Encrypted secret '{secret.Id}' at '{secretPath}' is not covered by capture.encryptedFiles.");
@@ -100,6 +110,76 @@ internal static partial class WebCliCommandHandlers
 
         return errors.Distinct(StringComparer.Ordinal).ToArray();
     }
+
+    private static void ValidateRepositories(
+        IEnumerable<PowerForgeServerRepository>? repositories,
+        IEnumerable<PowerForgeServerNamedCommand>? captureCommands,
+        ICollection<string> errors)
+    {
+        var captureCommandsById = (captureCommands ?? Array.Empty<PowerForgeServerNamedCommand>())
+            .Where(static command => !string.IsNullOrWhiteSpace(command.Id))
+            .GroupBy(static command => command.Id!, StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.ToArray(), StringComparer.Ordinal);
+        var index = 0;
+        foreach (var repository in repositories ?? Array.Empty<PowerForgeServerRepository>())
+        {
+            var field = $"repositories[{index}]";
+            NormalizeCapturePath(repository.Path, $"{field}.path", errors);
+
+            var prerequisites = new HashSet<string>(StringComparer.Ordinal);
+            var prerequisiteIndex = 0;
+            foreach (var path in repository.BootstrapRequiredFiles ?? Array.Empty<string>())
+            {
+                var normalized = NormalizeCapturePath(path, $"{field}.bootstrapRequiredFiles[{prerequisiteIndex}]", errors);
+                if (normalized is not null && !prerequisites.Add(normalized))
+                    errors.Add($"{field}.bootstrapRequiredFiles[{prerequisiteIndex}] duplicates prerequisite path '{normalized}'.");
+                prerequisiteIndex++;
+            }
+
+            var hasIdentity = !string.IsNullOrWhiteSpace(repository.SshIdentityFile);
+            var hasKnownHosts = !string.IsNullOrWhiteSpace(repository.SshKnownHostsFile);
+            if (hasIdentity != hasKnownHosts)
+            {
+                errors.Add($"{field} must declare both sshIdentityFile and sshKnownHostsFile.");
+                index++;
+                continue;
+            }
+
+            if (hasIdentity)
+            {
+                var identity = NormalizeCapturePath(repository.SshIdentityFile, $"{field}.sshIdentityFile", errors);
+                var knownHosts = NormalizeCapturePath(repository.SshKnownHostsFile, $"{field}.sshKnownHostsFile", errors);
+                if (identity is not null && !prerequisites.Contains(identity))
+                    errors.Add($"{field}.bootstrapRequiredFiles must include sshIdentityFile '{identity}'.");
+                if (knownHosts is not null && !prerequisites.Contains(knownHosts))
+                    errors.Add($"{field}.bootstrapRequiredFiles must include sshKnownHostsFile '{knownHosts}'.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(repository.RefCaptureCommandId))
+            {
+                var commandId = repository.RefCaptureCommandId;
+                if (!IsSafeIdentifier(commandId))
+                {
+                    errors.Add($"{field}.refCaptureCommandId contains unsupported characters.");
+                }
+                else if (!captureCommandsById.TryGetValue(commandId, out var commands) || commands.Length != 1)
+                {
+                    errors.Add($"{field}.refCaptureCommandId must identify exactly one capture command.");
+                }
+                else if (!commands[0].Required || commands[0].Sensitive)
+                {
+                    errors.Add($"{field}.refCaptureCommandId must identify a required, non-sensitive capture command.");
+                }
+            }
+
+            index++;
+        }
+    }
+
+    private static bool IsSafeIdentifier(string value)
+        => value.Length <= 64 &&
+           (IsAsciiLetterOrDigit(value[0]) || value[0] == '_') &&
+           value.All(static character => IsAsciiLetterOrDigit(character) || character is '_' or '-');
 
     private static void ValidateBackupTarget(
         PowerForgeServerBackupTarget? backupTarget,

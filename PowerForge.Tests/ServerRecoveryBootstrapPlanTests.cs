@@ -58,7 +58,9 @@ public sealed class ServerRecoveryBootstrapPlanTests
                     Path = "/srv/example",
                     Branch = "main",
                     Ref = "0123456789abcdef0123456789abcdef01234567",
-                    BootstrapRequiredFiles = ["/etc/example/id_ed25519", "/etc/example/known_hosts"]
+                    BootstrapRequiredFiles = ["/etc/example/id_ed25519", "/etc/example/known_hosts"],
+                    SshIdentityFile = "/etc/example/id_ed25519",
+                    SshKnownHostsFile = "/etc/example/known_hosts"
                 }
             ]
         };
@@ -78,6 +80,10 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Contains("exit 3", repositorySteps[0].Command, StringComparison.Ordinal);
         Assert.Contains("fetch --all --tags --prune", repositorySteps[1].Command, StringComparison.Ordinal);
         Assert.Contains("git clone --branch 'main'", repositorySteps[1].Command, StringComparison.Ordinal);
+        Assert.Equal(2, repositorySteps[1].Command!.Split("GIT_SSH_COMMAND=", StringSplitOptions.None).Length - 1);
+        Assert.Contains("IdentitiesOnly=yes", repositorySteps[1].Command, StringComparison.Ordinal);
+        Assert.Contains("StrictHostKeyChecking=yes", repositorySteps[1].Command, StringComparison.Ordinal);
+        Assert.Contains("UserKnownHostsFile=", repositorySteps[1].Command, StringComparison.Ordinal);
         Assert.Contains("git -C '/srv/example' checkout --detach '0123456789abcdef0123456789abcdef01234567'", repositorySteps[1].Command, StringComparison.Ordinal);
         Assert.Empty(warnings);
     }
@@ -110,5 +116,29 @@ public sealed class ServerRecoveryBootstrapPlanTests
             Assert.DoesNotContain("TODO", step.Command, StringComparison.Ordinal);
             Assert.Contains("exit 3", step.Command, StringComparison.Ordinal);
         });
+    }
+
+    [Fact]
+    public void BuildPlan_FailsClosedUntilCapturedRepositoryRevisionIsHydrated()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Repositories =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerRepository
+                {
+                    Role = "application",
+                    Url = "https://github.com/ExampleOrg/ExampleSite.git",
+                    Path = "/srv/example",
+                    RefCaptureCommandId = "static-source-ref"
+                }
+            ]
+        };
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        var guard = Assert.Single(steps, step => step.Title.Contains("captured revision", StringComparison.Ordinal));
+
+        Assert.Contains("Use the captured recovery manifest", guard.Command, StringComparison.Ordinal);
+        Assert.Contains("exit 3", guard.Command, StringComparison.Ordinal);
     }
 }

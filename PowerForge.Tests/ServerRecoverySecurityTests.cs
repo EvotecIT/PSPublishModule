@@ -57,6 +57,38 @@ public sealed class ServerRecoverySecurityTests
     }
 
     [Fact]
+    public void ManifestValidation_RejectsExcludedSecretInsideAnyCaptureArchive()
+    {
+        var manifest = CreateManifest();
+        manifest.Secrets =
+        [
+            new PowerForgeServerSecret
+            {
+                Id = "excluded-plaintext-secret",
+                Path = "/etc/example/private/token.txt",
+                Capture = "exclude",
+                RestoreMode = "file"
+            },
+            new PowerForgeServerSecret
+            {
+                Id = "excluded-encrypted-secret",
+                Path = "/etc/example/secret.env",
+                Capture = "exclude",
+                RestoreMode = "file"
+            }
+        ];
+        manifest.Capture!.PlainFiles =
+        [
+            new PowerForgeServerManagedFile { Target = "/etc/example/private", Required = true, Sensitive = false }
+        ];
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("could be published without encryption", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("would not be excluded", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void ManifestValidation_RejectsInvalidInheritedRestoreMetadata()
     {
         var manifest = CreateManifest();
@@ -163,6 +195,54 @@ public sealed class ServerRecoverySecurityTests
         Assert.Contains(errors, error => error.Contains("encryption must be age", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("recipientEnv", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("from 1 through 365", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ManifestValidation_RequiresCompleteStrictSshRepositoryPrerequisites()
+    {
+        var manifest = CreateManifest();
+        manifest.Repositories =
+        [
+            new PowerForgeServerRepository
+            {
+                Role = "private-application",
+                Url = "git@github.com:ExampleOrg/ExampleSite.git",
+                Path = "/srv/example",
+                BootstrapRequiredFiles = ["/etc/example/id_ed25519"],
+                SshIdentityFile = "/etc/example/id_ed25519"
+            }
+        ];
+
+        var incompletePair = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+        Assert.Contains(incompletePair, error => error.Contains("both sshIdentityFile and sshKnownHostsFile", StringComparison.Ordinal));
+
+        manifest.Repositories[0].SshKnownHostsFile = "/etc/example/known_hosts";
+        var missingPrerequisite = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+        Assert.Contains(missingPrerequisite, error => error.Contains("must include sshKnownHostsFile", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ManifestValidation_RequiresExactRequiredRevisionCaptureCommand()
+    {
+        var manifest = CreateManifest();
+        manifest.Repositories =
+        [
+            new PowerForgeServerRepository
+            {
+                Role = "application",
+                Url = "https://github.com/ExampleOrg/ExampleSite.git",
+                Path = "/srv/example",
+                RefCaptureCommandId = "static-source-ref"
+            }
+        ];
+        manifest.Capture!.Commands =
+        [
+            new PowerForgeServerNamedCommand { Id = "static-source-ref", Command = "printf invalid", Required = false }
+        ];
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("required, non-sensitive capture command", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -104,7 +104,6 @@ internal static partial class WebCliCommandHandlers
 
         if (options.PrivateRepository)
         {
-            files[$"{deployRoot}/{options.SiteId}-repository-ssh.conf"] = BuildScaffoldRepositorySshConfig(options);
             files[$"{deployRoot}/github_known_hosts.example"] = "# Replace with reviewed GitHub SSH host-key entries; never populate this with deploy-time ssh-keyscan output.\n";
         }
 
@@ -115,6 +114,7 @@ internal static partial class WebCliCommandHandlers
     {
         var domain = RequireScaffoldOption(subArgs, "--domain").Trim().ToLowerInvariant();
         var repository = RequireScaffoldOption(subArgs, "--repository").Trim();
+        var repositoryRef = RequireScaffoldOption(subArgs, "--repository-ref").Trim().ToLowerInvariant();
         var engineRef = RequireScaffoldOption(subArgs, "--engine-ref").Trim().ToLowerInvariant();
         var host = RequireScaffoldOption(subArgs, "--host").Trim();
         var backupRepository = RequireScaffoldOption(subArgs, "--backup-repository").Trim();
@@ -125,11 +125,14 @@ internal static partial class WebCliCommandHandlers
         var smokePaths = (TryGetOptionValue(subArgs, "--smoke-paths") ?? "/ /sitemap.xml").Trim();
         var outputRoot = TryGetOptionValue(subArgs, "--out") ?? TryGetOptionValue(subArgs, "--output-dir") ?? Directory.GetCurrentDirectory();
         var portText = TryGetOptionValue(subArgs, "--ssh-port") ?? "22";
+        var includeWwwAlias = HasOption(subArgs, "--www");
 
         if (!Regex.IsMatch(domain, "^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$", RegexOptions.CultureInvariant))
             throw new InvalidOperationException("--domain must be a lowercase DNS domain name.");
         if (!Regex.IsMatch(repository, "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", RegexOptions.CultureInvariant))
             throw new InvalidOperationException("--repository must be an owner/repository name.");
+        if (!Regex.IsMatch(repositoryRef, "^[a-f0-9]{40}$", RegexOptions.CultureInvariant))
+            throw new InvalidOperationException("--repository-ref must be an exact 40-character commit.");
         if (!Regex.IsMatch(backupRepository, "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", RegexOptions.CultureInvariant))
             throw new InvalidOperationException("--backup-repository must be an owner/repository name.");
         if (!Regex.IsMatch(engineRef, "^[a-f0-9]{40}$", RegexOptions.CultureInvariant))
@@ -138,14 +141,16 @@ internal static partial class WebCliCommandHandlers
             throw new InvalidOperationException("--host must be a DNS name or IPv4 address.");
         if (!Regex.IsMatch(branch, "^[A-Za-z0-9._/-]+$", RegexOptions.CultureInvariant) || branch.Contains("..", StringComparison.Ordinal))
             throw new InvalidOperationException("--branch contains unsupported characters.");
-        if (!Regex.IsMatch(siteId, "^[a-z0-9][a-z0-9-]{0,13}$", RegexOptions.CultureInvariant))
-            throw new InvalidOperationException("--site-id must be 1-14 lowercase letters, digits, or hyphens.");
+        if (!Regex.IsMatch(siteId, "^[a-z][a-z0-9-]{0,13}$", RegexOptions.CultureInvariant))
+            throw new InvalidOperationException("--site-id must be 1-14 lowercase letters, digits, or hyphens and start with a letter.");
         if (!Regex.IsMatch(websiteRoot, "^[A-Za-z0-9._/-]+$", RegexOptions.CultureInvariant) || websiteRoot.Contains("..", StringComparison.Ordinal))
             throw new InvalidOperationException("--website-root must be a safe repository-relative path.");
         if (!int.TryParse(portText, out var port) || port is < 1 or > 65535)
             throw new InvalidOperationException("--ssh-port must be from 1 through 65535.");
         if (!backupRecipient.StartsWith("age1", StringComparison.Ordinal) || backupRecipient.Any(char.IsWhiteSpace))
             throw new InvalidOperationException("--backup-recipient must be an age public recipient beginning with age1.");
+        if (includeWwwAlias && domain.StartsWith("www.", StringComparison.Ordinal))
+            throw new InvalidOperationException("--www cannot be combined with a domain that already starts with www.");
         var smokePathValues = smokePaths.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (smokePathValues.Length == 0 || smokePathValues.Any(static path =>
                 !Regex.IsMatch(path, "^/[A-Za-z0-9._~!&'()*+,;=:@%/?-]*$", RegexOptions.CultureInvariant)))
@@ -158,6 +163,7 @@ internal static partial class WebCliCommandHandlers
         {
             Domain = domain,
             Repository = repository,
+            RepositoryRef = repositoryRef,
             EngineRef = engineRef,
             Host = host,
             BackupRepository = backupRepository,
@@ -170,6 +176,7 @@ internal static partial class WebCliCommandHandlers
             OutputRoot = outputRoot,
             PrivateRepository = HasOption(subArgs, "--private-repository"),
             CloudflareEnabled = HasOption(subArgs, "--cloudflare"),
+            IncludeWwwAlias = includeWwwAlias,
             Force = HasOption(subArgs, "--force")
         };
     }
@@ -182,11 +189,16 @@ internal static partial class WebCliCommandHandlers
     private static string BuildScaffoldSiteId(string domain)
     {
         var firstLabel = domain.Split('.', 2)[0];
-        var sanitized = Regex.Replace(firstLabel, "[^a-z0-9-]", string.Empty, RegexOptions.CultureInvariant).Trim('-');
-        if (sanitized.Length <= 14)
-            return sanitized;
+        var readable = Regex.Replace(firstLabel, "[^a-z0-9-]", string.Empty, RegexOptions.CultureInvariant).Trim('-');
+        if (string.IsNullOrEmpty(readable))
+            readable = "site";
+        if (readable[0] is < 'a' or > 'z')
+            readable = "s-" + readable;
+        if (readable.Length > 9)
+            readable = readable[..9].TrimEnd('-');
+
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(domain))).ToLowerInvariant();
-        return sanitized[..9] + "-" + hash[..4];
+        return readable + "-" + hash[..4];
     }
 
     private static string ResolveScaffoldPath(string outputRoot, string relativePath)
@@ -209,6 +221,7 @@ internal sealed class PowerForgeServerScaffoldOptions
     public string Domain { get; set; } = string.Empty;
     public string SiteId { get; set; } = string.Empty;
     public string Repository { get; set; } = string.Empty;
+    public string RepositoryRef { get; set; } = string.Empty;
     public string Branch { get; set; } = "main";
     public string WebsiteRoot { get; set; } = "Website";
     public string EngineRef { get; set; } = string.Empty;
@@ -220,5 +233,6 @@ internal sealed class PowerForgeServerScaffoldOptions
     public string OutputRoot { get; set; } = string.Empty;
     public bool PrivateRepository { get; set; }
     public bool CloudflareEnabled { get; set; }
+    public bool IncludeWwwAlias { get; set; }
     public bool Force { get; set; }
 }

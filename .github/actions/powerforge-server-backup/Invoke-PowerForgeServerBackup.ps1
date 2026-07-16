@@ -203,7 +203,6 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
 
     dotnet $cli server capture --manifest $captureManifestPath --out $captureRoot --ssh $serverSshCommand --encrypt-remote --fail-on-failure
     Assert-LastExitCode 'Capturing and encrypting server recovery state'
-    Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $captureRoot 'manifest.json') -Force
 
     foreach ($relativePath in @(
         'capture-summary.json',

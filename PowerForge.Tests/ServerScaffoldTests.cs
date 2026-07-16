@@ -23,6 +23,9 @@ public sealed class ServerScaffoldTests
         Assert.Contains("deployment_ssh_known_hosts: ${{ secrets.DEPLOYMENT_SSH_KNOWN_HOSTS }}", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("CLOUDFLARE_API_TOKEN", workflow, StringComparison.Ordinal);
         Assert.Contains("CLOUDFLARE_PURGE_ENABLED=0", files["deploy/linux/example.test.env"], StringComparison.Ordinal);
+        Assert.DoesNotContain("www.example.test", files["Website/deploy/apache.conf"], StringComparison.Ordinal);
+        Assert.DoesNotContain("www.example.test", files["Website/deploy/apache-ssl.conf"], StringComparison.Ordinal);
+        Assert.DoesNotContain("www.example.test", manifest, StringComparison.Ordinal);
         Assert.All(files.Where(file => !file.Key.EndsWith(".example", StringComparison.Ordinal)), file =>
         {
             Assert.DoesNotContain("BEGIN OPENSSH PRIVATE KEY", file.Value, StringComparison.Ordinal);
@@ -50,8 +53,20 @@ public sealed class ServerScaffoldTests
         Assert.StartsWith("restrict ssh-ed25519", deploymentKey, StringComparison.Ordinal);
         Assert.StartsWith("restrict ssh-ed25519", backupKey, StringComparison.Ordinal);
         Assert.Contains("/etc/powerforge/repository-ssh/example_ed25519", sudoers, StringComparison.Ordinal);
-        Assert.Contains("example-repository-private-key", files["deploy/linux/example.serverrecovery.json"], StringComparison.Ordinal);
-        Assert.Contains("StrictHostKeyChecking yes", files["deploy/linux/example-repository-ssh.conf"], StringComparison.Ordinal);
+        Assert.Contains("Cmnd_Alias PF_EXAMPLE_BACKUP_ENCRYPTED = /usr/local/sbin/powerforge-server-encrypted-capture", sudoers, StringComparison.Ordinal);
+        Assert.Contains("--recipient age1examplepublicrecipient", sudoers, StringComparison.Ordinal);
+        Assert.DoesNotContain("BACKUP_ENCRYPTED = /usr/bin/tar", sudoers, StringComparison.Ordinal);
+        var manifest = files["deploy/linux/example.serverrecovery.json"];
+        Assert.Contains("example-repository-private-key", manifest, StringComparison.Ordinal);
+        Assert.Contains("git@github.com:ExampleOrg/ExampleSite.git", manifest, StringComparison.Ordinal);
+        Assert.Contains("\"sshIdentityFile\": \"/etc/powerforge/repository-ssh/example_ed25519\"", manifest, StringComparison.Ordinal);
+        Assert.Contains("\"sshKnownHostsFile\": \"/etc/powerforge/repository-ssh/github_known_hosts\"", manifest, StringComparison.Ordinal);
+        Assert.Contains("\"refCaptureCommandId\": \"static-source-ref\"", manifest, StringComparison.Ordinal);
+        var manifestNode = JsonNode.Parse(manifest)!;
+        Assert.Equal(EngineRef, manifestNode["repositories"]![0]!["ref"]!.GetValue<string>());
+        Assert.Contains("deployment.json", manifest, StringComparison.Ordinal);
+        Assert.DoesNotContain("github.com-example", manifest, StringComparison.Ordinal);
+        Assert.DoesNotContain(files.Keys, key => key.EndsWith("repository-ssh.conf", StringComparison.Ordinal));
         Assert.DoesNotContain("$(ssh-keyscan", string.Join('\n', files.Values), StringComparison.OrdinalIgnoreCase);
     }
 
@@ -73,15 +88,35 @@ public sealed class ServerScaffoldTests
     }
 
     [Fact]
+    public void Scaffold_ShouldOnlyAddWwwAliasWhenExplicitlyRequested()
+    {
+        var options = CreateOptions();
+        options.IncludeWwwAlias = true;
+
+        var files = WebCliCommandHandlers.BuildServerScaffoldFiles(options);
+        var manifest = files["deploy/linux/example.serverrecovery.json"];
+
+        Assert.Contains("ServerAlias www.example.test", files["Website/deploy/apache.conf"], StringComparison.Ordinal);
+        Assert.Contains("ServerAlias www.example.test", files["Website/deploy/apache-ssl.conf"], StringComparison.Ordinal);
+        Assert.Contains("www.example.test", manifest, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Scaffold_ManifestShouldSatisfyPublishedSchema()
     {
         var files = WebCliCommandHandlers.BuildServerScaffoldFiles(CreateOptions());
+        var privateOptions = CreateOptions();
+        privateOptions.PrivateRepository = true;
+        var privateFiles = WebCliCommandHandlers.BuildServerScaffoldFiles(privateOptions);
         var schema = JsonSchema.FromText(File.ReadAllText(GetRepoPath("Schemas", "powerforge.web.serverrecovery.schema.json")));
         var manifest = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!;
+        var privateManifest = JsonNode.Parse(privateFiles["deploy/linux/example.serverrecovery.json"])!;
 
         var result = schema.Evaluate(manifest, new EvaluationOptions { OutputFormat = OutputFormat.List });
+        var privateResult = schema.Evaluate(privateManifest, new EvaluationOptions { OutputFormat = OutputFormat.List });
 
         Assert.True(result.IsValid);
+        Assert.True(privateResult.IsValid);
     }
 
     [Fact]
@@ -114,6 +149,13 @@ public sealed class ServerScaffoldTests
         var unsupportedRetention = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
         unsupportedRetention["backupTarget"]!["retention"]!["keepDays"] = 30;
         Assert.False(EvaluateSchema(schema, unsupportedRetention));
+
+        var privateOptions = CreateOptions();
+        privateOptions.PrivateRepository = true;
+        var privateFiles = WebCliCommandHandlers.BuildServerScaffoldFiles(privateOptions);
+        var incompleteRepositorySsh = JsonNode.Parse(privateFiles["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        incompleteRepositorySsh["repositories"]![0]!.AsObject().Remove("sshKnownHostsFile");
+        Assert.False(EvaluateSchema(schema, incompleteRepositorySsh));
     }
 
     [Fact]
@@ -123,12 +165,30 @@ public sealed class ServerScaffoldTests
 
         var options = WebCliCommandHandlers.ParseServerScaffoldOptions(args);
 
-        Assert.Matches("^[a-z0-9][a-z0-9-]{0,13}$", options.SiteId);
+        Assert.Matches("^[a-z][a-z0-9-]{0,13}$", options.SiteId);
         Assert.Equal(options.SiteId, WebCliCommandHandlers.ParseServerScaffoldOptions(args).SiteId);
+
+        var sameLabelOtherDomain = WebCliCommandHandlers.ParseServerScaffoldOptions(RequiredArguments("domain-detective-website.test"));
+        Assert.NotEqual(options.SiteId, sameLabelOtherDomain.SiteId);
+
+        var numericLabel = WebCliCommandHandlers.ParseServerScaffoldOptions(RequiredArguments("123.example"));
+        Assert.Matches("^[a-z][a-z0-9-]{0,13}$", numericLabel.SiteId);
 
         args[5] = "main";
         var exception = Assert.Throws<InvalidOperationException>(() => WebCliCommandHandlers.ParseServerScaffoldOptions(args));
         Assert.Contains("exact 40-character commit", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ScaffoldOptions_ShouldRejectNumericSiteIdAndDuplicateWwwPrefix()
+    {
+        var numericSiteId = RequiredArguments("example.test").Concat(["--site-id", "123example"]).ToArray();
+        var siteIdException = Assert.Throws<InvalidOperationException>(() => WebCliCommandHandlers.ParseServerScaffoldOptions(numericSiteId));
+        Assert.Contains("start with a letter", siteIdException.Message, StringComparison.Ordinal);
+
+        var duplicateWww = RequiredArguments("www.example.test").Concat(["--www"]).ToArray();
+        var wwwException = Assert.Throws<InvalidOperationException>(() => WebCliCommandHandlers.ParseServerScaffoldOptions(duplicateWww));
+        Assert.Contains("already starts with www", wwwException.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -162,6 +222,7 @@ public sealed class ServerScaffoldTests
             Domain = "example.test",
             SiteId = "example",
             Repository = "ExampleOrg/ExampleSite",
+            RepositoryRef = EngineRef,
             Branch = "main",
             WebsiteRoot = "Website",
             EngineRef = EngineRef,
@@ -181,7 +242,8 @@ public sealed class ServerScaffoldTests
             "--engine-ref", EngineRef,
             "--host", "192.0.2.10",
             "--backup-repository", "ExampleOrg/ServerBackups",
-            "--backup-recipient", "age1examplepublicrecipient"
+            "--backup-recipient", "age1examplepublicrecipient",
+            "--repository-ref", EngineRef
         ];
 
     private static string GetRepoPath(params string[] relativePath)

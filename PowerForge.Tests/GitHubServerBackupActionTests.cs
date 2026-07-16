@@ -27,6 +27,8 @@ public sealed class GitHubServerBackupActionTests
         Assert.Contains("plain-files.tar.gz", script, StringComparison.Ordinal);
         Assert.Contains("encrypted-secrets.tar.gz.age", script, StringComparison.Ordinal);
         Assert.Contains("capture-metadata.json", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("refCaptureCommandId", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Captured repository revision", script, StringComparison.Ordinal);
         Assert.Contains("SHA256SUMS.txt", script, StringComparison.Ordinal);
         Assert.Contains("engineSha", script, StringComparison.Ordinal);
         Assert.Contains("sourceSha", script, StringComparison.Ordinal);

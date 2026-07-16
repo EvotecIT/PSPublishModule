@@ -63,6 +63,10 @@
     }
   ],
   "$defs": {
+    "AbsoluteUnixPath": {
+      "type": "string",
+      "pattern": "^/(?!\\.{1,2}(?:/|$))(?!.*/\\.{1,2}(?:/|$))(?!.*//)[A-Za-z0-9_./-]+$"
+    },
     "Target": {
       "type": "object",
       "additionalProperties": false,
@@ -85,14 +89,23 @@
       "properties": {
         "role": { "type": "string", "minLength": 1 },
         "url": { "type": "string" },
-        "path": { "type": "string" },
+        "path": { "$ref": "#/$defs/AbsoluteUnixPath" },
         "branch": { "type": "string" },
         "ref": { "type": "string", "minLength": 1 },
+        "refCaptureCommandId": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$" },
         "required": { "type": "boolean" },
+        "sshIdentityFile": { "$ref": "#/$defs/AbsoluteUnixPath" },
+        "sshKnownHostsFile": { "$ref": "#/$defs/AbsoluteUnixPath" },
         "bootstrapRequiredFiles": {
           "type": "array",
-          "items": { "type": "string", "minLength": 1 }
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/AbsoluteUnixPath" }
         }
+      },
+      "dependentRequired": {
+        "sshIdentityFile": ["sshKnownHostsFile", "bootstrapRequiredFiles"],
+        "sshKnownHostsFile": ["sshIdentityFile", "bootstrapRequiredFiles"]
       },
       "required": ["role", "path"]
     },

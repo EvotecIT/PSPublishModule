@@ -14,9 +14,8 @@ internal static partial class WebCliCommandHandlers
         var domainFile = options.Domain.Replace('.', '-');
         var siteEnvironment = $"/etc/powerforge/sites/{options.Domain}.env";
         var repositoryKey = $"/etc/powerforge/repository-ssh/{options.SiteId}_ed25519";
-        var repositoryAlias = $"github.com-{options.SiteId}";
         var repositoryUrl = options.PrivateRepository
-            ? $"git@{repositoryAlias}:{options.Repository}.git"
+            ? $"git@github.com:{options.Repository}.git"
             : $"https://github.com/{options.Repository}.git";
 
         var paths = new List<PowerForgeServerPath>
@@ -30,13 +29,13 @@ internal static partial class WebCliCommandHandlers
             new() { Id = "backup-user-home", Path = $"/var/lib/{backupUser}", Kind = "directory", Owner = backupUser, Group = backupUser, Mode = "700" },
             new() { Id = "backup-user-ssh", Path = $"/var/lib/{backupUser}/.ssh", Kind = "directory", Owner = backupUser, Group = backupUser, Mode = "700" },
             new() { Id = "backup-user-authorized-keys", Path = $"/var/lib/{backupUser}/.ssh/authorized_keys", Kind = "file", Owner = backupUser, Group = backupUser, Mode = "600" },
+            new() { Id = "encrypted-capture-runtime", Path = "/usr/local/sbin/powerforge-server-encrypted-capture", Kind = "file", Owner = "root", Group = "root", Mode = "755" },
             new() { Id = "static-deploy-config", Path = siteEnvironment, Kind = "file", Owner = "root", Group = "root", Mode = "640" }
         };
         if (options.PrivateRepository)
         {
             paths.AddRange([
                 new PowerForgeServerPath { Id = "repository-ssh-directory", Path = "/etc/powerforge/repository-ssh", Kind = "directory", Owner = "root", Group = "root", Mode = "700" },
-                new PowerForgeServerPath { Id = "repository-ssh-client-config", Path = $"/etc/ssh/ssh_config.d/80-powerforge-{options.SiteId}.conf", Kind = "file", Owner = "root", Group = "root", Mode = "644" },
                 new PowerForgeServerPath { Id = "repository-known-hosts", Path = "/etc/powerforge/repository-ssh/github_known_hosts", Kind = "file", Owner = "root", Group = "root", Mode = "600" },
                 new PowerForgeServerPath { Id = "repository-private-key", Path = repositoryKey, Kind = "file", Owner = "root", Group = "root", Mode = "600" }
             ]);
@@ -56,10 +55,7 @@ internal static partial class WebCliCommandHandlers
         };
         if (options.PrivateRepository)
         {
-            plainFiles.AddRange([
-                RequiredFile($"/etc/ssh/ssh_config.d/80-powerforge-{options.SiteId}.conf"),
-                RequiredFile("/etc/powerforge/repository-ssh/github_known_hosts")
-            ]);
+            plainFiles.Add(RequiredFile("/etc/powerforge/repository-ssh/github_known_hosts"));
         }
 
         var encryptedFiles = new List<PowerForgeServerManagedFile>
@@ -107,21 +103,29 @@ internal static partial class WebCliCommandHandlers
         {
             Command("install-deployment-ssh-identity", $"install -d -o {deploymentUser} -g {deploymentUser} -m 0700 /home/{deploymentUser}/.ssh && install -o {deploymentUser} -g {deploymentUser} -m 0600 {repositoryPath}/deploy/linux/powerforge-{options.SiteId}-authorized_keys /home/{deploymentUser}/.ssh/authorized_keys"),
             Command("install-backup-ssh-identity", $"install -d -o {backupUser} -g {backupUser} -m 0700 /var/lib/{backupUser}/.ssh && install -o {backupUser} -g {backupUser} -m 0600 {repositoryPath}/deploy/linux/powerforge-{options.SiteId}-backup-authorized_keys /var/lib/{backupUser}/.ssh/authorized_keys"),
-            Command("install-static-deployment-runtime", $"install -o root -g root -m 0755 {enginePath}/Deployment/Linux/powerforge-site-deploy.sh /usr/local/sbin/powerforge-site-deploy && install -o root -g root -m 0755 {enginePath}/Deployment/Linux/powerforge-site-reconcile.sh /usr/local/sbin/powerforge-site-reconcile"),
+            Command("install-static-deployment-runtime", $"install -o root -g root -m 0755 {enginePath}/Deployment/Linux/powerforge-site-deploy.sh /usr/local/sbin/powerforge-site-deploy && install -o root -g root -m 0755 {enginePath}/Deployment/Linux/powerforge-site-reconcile.sh /usr/local/sbin/powerforge-site-reconcile && install -o root -g root -m 0755 {enginePath}/Deployment/Linux/powerforge-server-encrypted-capture.sh /usr/local/sbin/powerforge-server-encrypted-capture"),
             Command("install-powerforge-config", $"install -d -o root -g root -m 0750 /etc/powerforge/sites && install -o root -g root -m 0640 {repositoryPath}/deploy/linux/{options.Domain}.env {siteEnvironment}"),
             Command("install-deployment-sudoers", $"install -o root -g root -m 0440 {repositoryPath}/deploy/linux/powerforge-{options.SiteId}.sudoers /etc/sudoers.d/{deploymentUser} && visudo -cf /etc/sudoers.d/{deploymentUser}"),
             Command("install-backup-sudoers", $"install -o root -g root -m 0440 {repositoryPath}/deploy/linux/powerforge-{options.SiteId}-backup.sudoers /etc/sudoers.d/{backupUser} && visudo -cf /etc/sudoers.d/{backupUser}")
         };
-        if (options.PrivateRepository)
-        {
-            bootstrapCommands.Insert(0, Command("install-repository-ssh-identity", $"install -d -o root -g root -m 0700 /etc/powerforge/repository-ssh && install -o root -g root -m 0644 {repositoryPath}/deploy/linux/{options.SiteId}-repository-ssh.conf /etc/ssh/ssh_config.d/80-powerforge-{options.SiteId}.conf && install -o root -g root -m 0600 {repositoryPath}/deploy/linux/github_known_hosts /etc/powerforge/repository-ssh/github_known_hosts"));
-        }
-
         var repositoryPrerequisites = options.PrivateRepository
-            ? new[] { $"/etc/ssh/ssh_config.d/80-powerforge-{options.SiteId}.conf", "/etc/powerforge/repository-ssh/github_known_hosts", repositoryKey }
+            ? new[] { "/etc/powerforge/repository-ssh/github_known_hosts", repositoryKey }
             : null;
+        var applicationRepository = new PowerForgeServerRepository
+        {
+            Role = "application-and-website",
+            Url = repositoryUrl,
+            Path = repositoryPath,
+            Branch = options.Branch,
+            Ref = options.RepositoryRef,
+            RefCaptureCommandId = "static-source-ref",
+            Required = true,
+            BootstrapRequiredFiles = repositoryPrerequisites,
+            SshIdentityFile = options.PrivateRepository ? repositoryKey : null,
+            SshKnownHostsFile = options.PrivateRepository ? "/etc/powerforge/repository-ssh/github_known_hosts" : null
+        };
         var repositoryVerification = options.PrivateRepository
-            ? $"sudo -n git ls-remote git@{repositoryAlias}:{options.Repository}.git HEAD >/dev/null"
+            ? $"sudo -n env {BuildRepositoryGitPrefix(applicationRepository).TrimEnd()} git ls-remote {ShellQuote(repositoryUrl)} HEAD >/dev/null"
             : $"git ls-remote https://github.com/{options.Repository}.git HEAD >/dev/null";
 
         return new PowerForgeServerRecoveryManifest
@@ -133,7 +137,7 @@ internal static partial class WebCliCommandHandlers
             Target = new PowerForgeServerTarget { SshAlias = "powerforge-site-host", Host = options.Host, User = "ubuntu", SshPort = options.SshPort, Os = "ubuntu-24.04", Architecture = "x64" },
             Repositories =
             [
-                new PowerForgeServerRepository { Role = "application-and-website", Url = repositoryUrl, Path = repositoryPath, Branch = options.Branch, Required = true, BootstrapRequiredFiles = repositoryPrerequisites },
+                applicationRepository,
                 new PowerForgeServerRepository { Role = "deployment-engine", Url = "https://github.com/EvotecIT/PSPublishModule.git", Path = enginePath, Branch = "main", Ref = options.EngineRef, Required = true }
             ],
             Accounts =
@@ -165,7 +169,7 @@ internal static partial class WebCliCommandHandlers
                 new PowerForgeServerCertificate
                 {
                     Name = options.Domain,
-                    Domains = [options.Domain, $"www.{options.Domain}"],
+                    Domains = options.IncludeWwwAlias ? [options.Domain, $"www.{options.Domain}"] : [options.Domain],
                     Authenticator = "apache",
                     RenewalConfigPath = $"/etc/letsencrypt/renewal/{options.Domain}.conf",
                     DryRunCommand = $"certbot renew --dry-run --cert-name {options.Domain} --non-interactive --agree-tos --no-random-sleep-on-renew",
@@ -187,7 +191,8 @@ internal static partial class WebCliCommandHandlers
                     Command("os-release", "cat /etc/os-release", required: true),
                     Command("packages", "dpkg-query -W -f='${binary:Package}\\t${Version}\\n'", required: true),
                     Command("apache-vhosts", "sudo -n apachectl -S", required: true),
-                    Command("release-link", $"readlink -f {siteRoot}/current", required: true)
+                    Command("release-link", $"readlink -f {siteRoot}/current", required: true),
+                    Command("static-source-ref", $"jq -er '.sourceSha | select(type == \"string\" and test(\"^[0-9a-fA-F]{{40,64}}$\"))' {siteRoot}/current/_powerforge/deployment.json", required: true)
                 ],
                 Exclude = [$"{siteRoot}/releases", $"{repositoryPath}/{options.WebsiteRoot}/_site", $"{repositoryPath}/{options.WebsiteRoot}/_reports", $"{repositoryPath}/{options.WebsiteRoot}/_temp"]
             },
@@ -283,32 +288,36 @@ internal static partial class WebCliCommandHandlers
 
     private static string BuildScaffoldBackupSudoers(PowerForgeServerScaffoldOptions options, PowerForgeServerRecoveryManifest manifest)
     {
-        var alias = Regex.Replace(options.SiteId.ToUpperInvariant(), "[^A-Z0-9]", "_", RegexOptions.CultureInvariant);
+        var alias = "PF_" + Regex.Replace(options.SiteId.ToUpperInvariant(), "[^A-Z0-9]", "_", RegexOptions.CultureInvariant);
         var plain = string.Join(' ', manifest.Capture!.PlainFiles!.Select(static file => file.Target));
-        var encrypted = string.Join(' ', manifest.Capture.EncryptedFiles!.Select(static file => file.Target));
+        var encryptedCommand = BuildRemoteEncryptedCaptureSudoersCommand(
+            manifest.Capture.EncryptedFiles!,
+            manifest.BackupTarget!.Recipient!);
         var user = $"powerforge-{options.SiteId}-backup";
         return ServerScaffoldTemplateStore.Render(
             "backup.sudoers",
             ("__ALIAS__", alias),
             ("__PLAIN_PATHS__", plain),
-            ("__ENCRYPTED_PATHS__", encrypted),
+            ("__ENCRYPTED_CAPTURE_COMMAND__", encryptedCommand),
             ("__BACKUP_USER__", user));
     }
-
-    private static string BuildScaffoldRepositorySshConfig(PowerForgeServerScaffoldOptions options)
-        => ServerScaffoldTemplateStore.Render("repository-ssh.conf", ("__SITE_ID__", options.SiteId));
 
     private static string BuildScaffoldApacheHttp(PowerForgeServerScaffoldOptions options)
         => ServerScaffoldTemplateStore.Render(
             "apache-http.conf",
             ("__DOMAIN__", options.Domain),
+            ("__SERVER_ALIAS__", BuildScaffoldServerAlias(options)),
             ("__SITE_ID__", options.SiteId));
 
     private static string BuildScaffoldApacheHttps(PowerForgeServerScaffoldOptions options)
         => ServerScaffoldTemplateStore.Render(
             "apache-https.conf",
             ("__DOMAIN__", options.Domain),
+            ("__SERVER_ALIAS__", BuildScaffoldServerAlias(options)),
             ("__SITE_ID__", options.SiteId));
+
+    private static string BuildScaffoldServerAlias(PowerForgeServerScaffoldOptions options)
+        => options.IncludeWwwAlias ? $"    ServerAlias www.{options.Domain}" : string.Empty;
 
     private static string BuildScaffoldOnboarding(PowerForgeServerScaffoldOptions options)
     {
@@ -316,7 +325,7 @@ internal static partial class WebCliCommandHandlers
             ? "[ ] Create a token restricted to this one zone, store it as the production environment secret `DEPLOYMENT_CLOUDFLARE_API_TOKEN`, and store the exact zone id as the environment variable `CLOUDFLARE_ZONE_ID`."
             : "[ ] Cloudflare is intentionally deferred. When ready, rerun the scaffold in a clean directory with `--cloudflare`, review the diff, and provision a per-site token. Do not reuse an account-wide token.";
         var repository = options.PrivateRepository
-            ? "[ ] Install a read-only repository deploy key at `/etc/powerforge/repository-ssh/` and replace `github_known_hosts.example` with reviewed, pinned GitHub host keys."
+            ? $"[ ] Before the first private clone, install the read-only repository key as `/etc/powerforge/repository-ssh/{options.SiteId}_ed25519` and reviewed, pinned GitHub host keys as `/etc/powerforge/repository-ssh/github_known_hosts`; recovery restores these two prerequisites before bootstrap."
             : "[x] The source repository uses public HTTPS recovery; no repository private key is required.";
         return ServerScaffoldTemplateStore.Render(
             "ONBOARDING.md",
