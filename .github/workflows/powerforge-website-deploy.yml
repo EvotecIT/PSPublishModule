@@ -9,6 +9,11 @@ on:
       pipeline_config:
         required: true
         type: string
+      source_ref:
+        description: Optional caller repository ref to build instead of the event commit.
+        required: false
+        type: string
+        default: ""
       site_output_path:
         required: false
         type: string
@@ -162,7 +167,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ github.token }}
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.source_ref || github.event.pull_request.head.sha || github.sha }}
 
       - name: Validate deploy guardrails
         shell: pwsh
@@ -270,6 +275,7 @@ jobs:
     with:
       website_root: ${{ inputs.website_root }}
       pipeline_config: ${{ inputs.pipeline_config }}
+      source_ref: ${{ inputs.source_ref }}
       engine_mode: ${{ inputs.engine_mode }}
       runner_labels_json: ${{ inputs.runner_labels_json }}
       timeout_minutes: ${{ inputs.build_timeout_minutes }}
@@ -371,7 +377,7 @@ jobs:
         shell: pwsh
         env:
           SOURCE_REPOSITORY: ${{ github.repository }}
-          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           ENGINE_REPOSITORY: ${{ needs.build.outputs.engine_repository }}
           ENGINE_SHA: ${{ needs.build.outputs.engine_sha }}
           ENGINE_MODE: ${{ needs.build.outputs.engine_mode }}
@@ -496,6 +502,7 @@ jobs:
     with:
       website_root: ${{ inputs.website_root }}
       pipeline_config: ${{ inputs.post_deploy_pipeline_config }}
+      source_ref: ${{ inputs.source_ref }}
       engine_mode: ${{ inputs.engine_mode }}
       runner_labels_json: ${{ inputs.runner_labels_json }}
       timeout_minutes: ${{ inputs.timeout_minutes }}
