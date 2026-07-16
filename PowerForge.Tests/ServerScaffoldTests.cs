@@ -65,6 +65,7 @@ public sealed class ServerScaffoldTests
         var manifestNode = JsonNode.Parse(manifest)!;
         Assert.Equal(EngineRef, manifestNode["repositories"]![0]!["ref"]!.GetValue<string>());
         Assert.Contains("deployment.json", manifest, StringComparison.Ordinal);
+        Assert.DoesNotContain("{40,64}", manifest, StringComparison.Ordinal);
         Assert.DoesNotContain("github.com-example", manifest, StringComparison.Ordinal);
         Assert.DoesNotContain(files.Keys, key => key.EndsWith("repository-ssh.conf", StringComparison.Ordinal));
         Assert.DoesNotContain("$(ssh-keyscan", string.Join('\n', files.Values), StringComparison.OrdinalIgnoreCase);

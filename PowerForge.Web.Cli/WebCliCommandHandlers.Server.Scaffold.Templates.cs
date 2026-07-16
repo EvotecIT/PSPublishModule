@@ -192,7 +192,7 @@ internal static partial class WebCliCommandHandlers
                     Command("packages", "dpkg-query -W -f='${binary:Package}\\t${Version}\\n'", required: true),
                     Command("apache-vhosts", "sudo -n apachectl -S", required: true),
                     Command("release-link", $"readlink -f {siteRoot}/current", required: true),
-                    Command("static-source-ref", $"jq -er '.sourceSha | select(type == \"string\" and test(\"^[0-9a-fA-F]{{40,64}}$\"))' {siteRoot}/current/_powerforge/deployment.json", required: true)
+                    Command("static-source-ref", $"jq -er '.sourceSha | select(type == \"string\" and test(\"^([0-9a-fA-F]{{40}}|[0-9a-fA-F]{{64}})$\"))' {siteRoot}/current/_powerforge/deployment.json", required: true)
                 ],
                 Exclude = [$"{siteRoot}/releases", $"{repositoryPath}/{options.WebsiteRoot}/_site", $"{repositoryPath}/{options.WebsiteRoot}/_reports", $"{repositoryPath}/{options.WebsiteRoot}/_temp"]
             },

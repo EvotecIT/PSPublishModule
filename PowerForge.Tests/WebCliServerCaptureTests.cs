@@ -49,7 +49,6 @@ public sealed class WebCliServerCaptureTests
         try
         {
             var outputPath = Path.Combine(root, "static-source-ref.out.txt");
-            File.WriteAllText(outputPath, "main\n");
             var manifest = new PowerForgeServerRecoveryManifest
             {
                 Repositories =
@@ -64,13 +63,20 @@ public sealed class WebCliServerCaptureTests
             };
             var warnings = new List<string>();
 
-            WebCliCommandHandlers.HydrateCapturedRepositoryRefs(
-                manifest,
-                [new PowerForgeServerCaptureCommandResult { Id = "static-source-ref", Success = true, StdoutPath = outputPath }],
-                warnings);
+            foreach (var invalidRevision in new[] { "main", new string('a', 41), new string('b', 63) })
+            {
+                File.WriteAllText(outputPath, invalidRevision + "\n");
+                manifest.Repositories[0].Ref = "1111111111111111111111111111111111111111";
+                warnings.Clear();
 
-            Assert.Null(manifest.Repositories[0].Ref);
-            Assert.Contains(warnings, warning => warning.Contains("not an exact commit", StringComparison.Ordinal));
+                WebCliCommandHandlers.HydrateCapturedRepositoryRefs(
+                    manifest,
+                    [new PowerForgeServerCaptureCommandResult { Id = "static-source-ref", Success = true, StdoutPath = outputPath }],
+                    warnings);
+
+                Assert.Null(manifest.Repositories[0].Ref);
+                Assert.Contains(warnings, warning => warning.Contains("not an exact commit", StringComparison.Ordinal));
+            }
         }
         finally
         {

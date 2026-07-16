@@ -33,7 +33,7 @@ if ($env:POWERFORGE_ENGINE_REPOSITORY -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]
 if ($env:POWERFORGE_ENGINE_REF -notmatch '^[a-fA-F0-9]{40}$') {
     throw 'The PowerForge backup action must be pinned to an exact 40-character commit.'
 }
-if ($env:POWERFORGE_SOURCE_SHA -notmatch '^[a-fA-F0-9]{40,64}$') {
+if ($env:POWERFORGE_SOURCE_SHA -notmatch '^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$') {
     throw 'Unable to resolve exact caller source provenance.'
 }
 foreach ($requiredSecret in @(

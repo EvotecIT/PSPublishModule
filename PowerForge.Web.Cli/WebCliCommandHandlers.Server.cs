@@ -318,8 +318,7 @@ internal static partial class WebCliCommandHandlers
             }
 
             var revision = File.ReadAllText(result.StdoutPath).Trim().ToLowerInvariant();
-            if (revision.Length is < 40 or > 64 ||
-                revision.Any(static character => !(character is >= 'a' and <= 'f' || character is >= '0' and <= '9')))
+            if (!PowerForge.Web.WebEngineLockFile.IsCommitSha(revision))
             {
                 warnings.Add($"Repository '{repository.Role}' revision capture is not an exact commit for command '{commandId}'.");
                 continue;

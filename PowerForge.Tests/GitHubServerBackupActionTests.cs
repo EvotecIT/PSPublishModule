@@ -29,6 +29,8 @@ public sealed class GitHubServerBackupActionTests
         Assert.Contains("capture-metadata.json", script, StringComparison.Ordinal);
         Assert.DoesNotContain("refCaptureCommandId", script, StringComparison.Ordinal);
         Assert.DoesNotContain("Captured repository revision", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("{40,64}", script, StringComparison.Ordinal);
+        Assert.Contains("{40}|[a-fA-F0-9]{64}", script, StringComparison.Ordinal);
         Assert.Contains("SHA256SUMS.txt", script, StringComparison.Ordinal);
         Assert.Contains("engineSha", script, StringComparison.Ordinal);
         Assert.Contains("sourceSha", script, StringComparison.Ordinal);
