@@ -7,7 +7,7 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebCliCommandHandlers
 {
-    private const string SupportedServerActions = "inspect, plan, validate, capture, deploy, verify, bootstrap-plan, restore-secrets-plan";
+    private const string SupportedServerActions = "inspect, plan, validate, capture, deploy, verify, scaffold, bootstrap-plan, restore-secrets-plan";
 
     internal static int HandleServer(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
@@ -27,6 +27,7 @@ internal static partial class WebCliCommandHandlers
                 "capture" => HandleServerCapture(actionArgs, outputJson, logger, outputSchemaVersion),
                 "verify" => HandleServerVerify(actionArgs, outputJson, logger, outputSchemaVersion),
                 "deploy" => HandleServerDeploy(actionArgs, outputJson, logger, outputSchemaVersion),
+                "scaffold" => HandleServerScaffold(actionArgs, outputJson, logger, outputSchemaVersion),
                 "bootstrap-plan" => HandleServerBootstrapPlan(actionArgs, outputJson, logger, outputSchemaVersion),
                 "restore-secrets-plan" => HandleServerRestoreSecretsPlan(actionArgs, outputJson, logger, outputSchemaVersion),
                 _ => Fail($"Unknown server action '{subArgs[0]}'. Supported actions: {SupportedServerActions}.", outputJson, logger, "web.server")
@@ -303,6 +304,10 @@ internal static partial class WebCliCommandHandlers
                 File.ReadAllText(fullManifestPath), WebCliJson.Options);
             if (manifest is null)
                 return (null, null, Fail("Invalid server recovery manifest.", outputJson, logger, commandName));
+
+            var validationErrors = ValidateServerRecoveryManifest(manifest);
+            if (validationErrors.Length > 0)
+                throw new InvalidOperationException("Server recovery manifest validation failed: " + string.Join(" ", validationErrors));
 
             return (manifest, fullManifestPath, 0);
         }

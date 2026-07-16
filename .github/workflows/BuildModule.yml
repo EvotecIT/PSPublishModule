@@ -276,6 +276,10 @@ jobs:
         shell: bash
         run: sudo bash Deployment/Linux/tests/powerforge-site-deploy-fixture.sh
 
+      - name: Test Linux secret restore safety
+        shell: bash
+        run: sudo bash Deployment/Linux/tests/powerforge-secret-restore-fixture.sh
+
       - name: Test with Pester
         shell: pwsh
         timeout-minutes: 10

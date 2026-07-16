@@ -1,7 +1,11 @@
+using System.Text.Json.Serialization;
+
 namespace PowerForge.Web.Cli;
 
 internal sealed class PowerForgeServerRecoveryManifest
 {
+    [JsonPropertyName("$schema")]
+    public string? Schema { get; set; }
     public int SchemaVersion { get; set; }
     public string? Name { get; set; }
     public string? Description { get; set; }
@@ -125,6 +129,9 @@ internal sealed class PowerForgeServerSecret
     public string[]? RequiredFor { get; set; }
     public string Capture { get; set; } = "exclude";
     public string? RestoreMode { get; set; }
+    public string? Owner { get; set; }
+    public string? Group { get; set; }
+    public string? Mode { get; set; }
 }
 
 internal sealed class PowerForgeServerCapture
@@ -140,7 +147,7 @@ internal sealed class PowerForgeServerManagedFile
     public string? Source { get; set; }
     public string? Target { get; set; }
     public bool Required { get; set; }
-    public bool Sensitive { get; set; }
+    public bool? Sensitive { get; set; }
 }
 
 internal sealed class PowerForgeServerCommandGroup
@@ -184,6 +191,7 @@ internal sealed class PowerForgeServerBackupTarget
 
 internal sealed class PowerForgeServerBackupRetention
 {
+    public int? KeepLatestInTree { get; set; }
     public int? KeepLatest { get; set; }
     public int? KeepDays { get; set; }
 }
@@ -337,6 +345,7 @@ internal sealed class PowerForgeServerRestoreSecretsPlanResult
     public string? ArchivePath { get; set; }
     public string? Encryption { get; set; }
     public string? RecipientEnv { get; set; }
+    public string[]? AllowedArchivePaths { get; set; }
     public PowerForgeServerRestoreSecretEntry[]? Secrets { get; set; }
     public string[]? Warnings { get; set; }
 }
@@ -348,6 +357,20 @@ internal sealed class PowerForgeServerRestoreSecretEntry
     public string? Env { get; set; }
     public string? RestoreMode { get; set; }
     public string? RequiredFor { get; set; }
+    public string? Owner { get; set; }
+    public string? Group { get; set; }
+    public string? Mode { get; set; }
+}
+
+internal sealed class PowerForgeServerScaffoldResult
+{
+    public string? OutputRoot { get; set; }
+    public string? Domain { get; set; }
+    public string? SiteId { get; set; }
+    public bool CloudflareEnabled { get; set; }
+    public bool PrivateRepository { get; set; }
+    public string[]? Files { get; set; }
+    public string[]? NextSteps { get; set; }
 }
 
 internal sealed class ProcessResult

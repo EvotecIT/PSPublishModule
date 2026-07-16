@@ -81,6 +81,7 @@ namespace PowerForge.Web.Cli;
 [JsonSerializable(typeof(PowerForgeServerBootstrapPlanStep))]
 [JsonSerializable(typeof(PowerForgeServerRestoreSecretsPlanResult))]
 [JsonSerializable(typeof(PowerForgeServerRestoreSecretEntry))]
+[JsonSerializable(typeof(PowerForgeServerScaffoldResult))]
 internal partial class PowerForgeWebCliJsonContext : JsonSerializerContext
 {
 }

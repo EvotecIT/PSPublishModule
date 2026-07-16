@@ -54,6 +54,7 @@ powerforge-web server capture --manifest deploy/linux/example.serverrecovery.jso
 powerforge-web server capture --manifest deploy/linux/example.serverrecovery.json --out ./_server-state/example --encrypt-remote
 powerforge-web server deploy --manifest deploy/linux/example.serverrecovery.json --dry-run
 powerforge-web server verify --manifest deploy/linux/example.serverrecovery.json --fail-on-failure
+powerforge-web server scaffold --domain example.com --repository Owner/Site --engine-ref <commit> --host web.example.net --backup-repository Owner/ServerBackups --backup-recipient <age-public-recipient> --out .
 powerforge-web server bootstrap-plan --manifest deploy/linux/example.serverrecovery.json --out ./_server-state/bootstrap-plan
 powerforge-web server restore-secrets-plan --manifest deploy/linux/example.serverrecovery.json --out ./_server-state/restore-secrets-plan --archive encrypted-secrets.tar.gz.age
 ```
@@ -70,7 +71,9 @@ powerforge-web server restore-secrets-plan --manifest deploy/linux/example.serve
 
 `server bootstrap-plan` generates a reviewable markdown plan, JSON plan, and LF-normalized shell script draft for rebuilding a fresh host. Managed accounts are created before owned directories. Repositories may declare `bootstrapRequiredFiles` so a private clone fails closed until its isolated SSH key, pinned known-hosts file, and client configuration have been restored. Set repository `ref` to an immutable commit or tag when recovery must restore an exact engine or application revision after cloning the configured branch. Secret steps are rerunnable presence guards: they stop with an operator-facing restore instruction while state is missing and continue without exposing values after restoration.
 
-`server restore-secrets-plan` generates a markdown plan, JSON plan, and LF-normalized `restore-secrets.sh` draft for an encrypted secret bundle. The script requires `age`, decrypts to a temporary directory, lists archive contents, rejects absolute or path-traversal archive entries, and refuses to extract into `/` unless `POWERFORGE_RESTORE_SECRETS_CONFIRM=YES` is set.
+`server scaffold` generates the thin caller workflows, recovery manifest, site environment, strict sudoers, restricted-key examples, Apache baseline, and onboarding checklist for a static Linux site. It writes no private key or API-token value, refuses to overwrite by default, keeps Cloudflare disabled unless `--cloudflare` is explicit, and derives backup sudoers from the generated manifest capture sets.
+
+`server restore-secrets-plan` generates a markdown plan, JSON plan, and LF-normalized `restore-secrets.sh` draft for an encrypted secret bundle. The script requires `age` and `python3`, decrypts into a mode-700 temporary directory, validates every archive member against exact encrypted capture roots, rejects traversal, duplicate paths, hard links, unsafe symlinks, special files, and extraction through existing symlink parents, then refuses to restore unless it runs as root with `POWERFORGE_RESTORE_SECRETS_CONFIRM=YES`. Declared owner, group, and mode values replace filename-based permission guesses.
 
 Proposed PowerShell shape:
 
@@ -220,7 +223,9 @@ concurrency:
   cancel-in-progress: false
 ```
 
-The action requires remote age encryption, a non-empty plain archive, a non-empty encrypted archive, a warning-free capture summary, exact source/engine/run provenance, and SHA-256 checksums before it clones the backup repository. It commits a timestamped directory under `backupTarget.path`, applies `backupTarget.retention.keepLatest`, and retries fetch/rebase/push races without uploading recovery material as a GitHub Actions artifact. Git history still preserves older committed captures unless repository history is rewritten.
+The action requires remote age encryption, a non-empty plain archive, a non-empty encrypted archive, a warning-free capture summary, exact source/engine/run provenance, and SHA-256 checksums before it clones the backup repository. It commits a timestamped directory under `backupTarget.path`, applies `backupTarget.retention.keepLatestInTree`, and retries fetch/rebase/push races without uploading recovery material as a GitHub Actions artifact. The older `keepLatest` property remains a compatibility alias.
+
+This setting deliberately controls only the captures visible in the current Git tree. Git history is preserved, so it is not a data-destruction or repository-size retention policy. Use a separately reviewed history rewrite or a non-Git backup backend if historical deletion is required.
 
 ## Evotec Reference
 
