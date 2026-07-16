@@ -4,11 +4,27 @@ param()
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 
+. "$PSScriptRoot/Test-PowerForgePublicSite.ps1"
+
 function Assert-LastExitCode {
     param([Parameter(Mandatory)][string] $Operation)
 
     if ($LASTEXITCODE -ne 0) {
         throw "$Operation failed with exit code $LASTEXITCODE."
+    }
+}
+
+function Invoke-CloudflarePurge {
+    param(
+        [Parameter(Mandatory)][string] $ZoneId,
+        [Parameter(Mandatory)][string] $ApiToken
+    )
+
+    $headers = @{ Authorization = "Bearer $ApiToken" }
+    $body = @{ purge_everything = $true } | ConvertTo-Json -Compress
+    $response = Invoke-RestMethod -Method Post -Uri "https://api.cloudflare.com/client/v4/zones/$ZoneId/purge_cache" -Headers $headers -ContentType 'application/json' -Body $body
+    if (-not $response.success) {
+        throw 'Cloudflare cache purge was rejected after deferred rollback.'
     }
 }
 
@@ -66,6 +82,24 @@ if (-not [string]::IsNullOrWhiteSpace($env:POWERFORGE_CLOUDFLARE_ZONE)) {
     }
 }
 
+$publicUrl = [string]$env:POWERFORGE_DEPLOYMENT_PUBLIC_URL
+if ([string]::IsNullOrWhiteSpace($publicUrl)) {
+    throw 'deployment-public-url is required for external public verification.'
+}
+$publicUri = $null
+if (-not [Uri]::TryCreate($publicUrl, [UriKind]::Absolute, [ref] $publicUri) -or
+    $publicUri.Scheme -ne 'https' -or $publicUri.AbsolutePath -ne '/' -or
+    -not [string]::IsNullOrEmpty($publicUri.Query) -or -not [string]::IsNullOrEmpty($publicUri.Fragment)) {
+    throw 'deployment-public-url must be an HTTPS origin without a path, query, or fragment.'
+}
+$smokePaths = @(
+    ([string]$env:POWERFORGE_DEPLOYMENT_SMOKE_PATHS -split '\s+') |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+)
+if ($smokePaths.Count -eq 0) {
+    throw 'deployment-smoke-paths must contain at least one absolute path.'
+}
+
 $artifactPath = [IO.Path]::GetFullPath($env:POWERFORGE_ARTIFACT_PATH)
 if (-not (Test-Path -LiteralPath $artifactPath -PathType Leaf)) {
     throw "Downloaded site artifact not found: $artifactPath"
@@ -80,6 +114,26 @@ $keyPath = Join-Path $sshRoot 'id_ed25519'
 $knownHostsPath = Join-Path $sshRoot 'known_hosts'
 $sshOptions = @('-i', $keyPath, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHostsPath")
 $remoteCreated = $false
+$zoneId = ''
+
+function Invoke-DeferredReleaseOperation {
+    param(
+        [Parameter(Mandatory)][ValidateSet('finalize', 'rollback')][string] $Operation,
+        [Parameter(Mandatory)][string] $ReleaseArguments
+    )
+
+    $operationArgument = if ($Operation -eq 'finalize') { '--finalize' } else { '--rollback' }
+    foreach ($attempt in 1..2) {
+        ssh @sshOptions -p $deploymentPort $target "sudo /usr/local/sbin/powerforge-site-deploy --site '$($env:POWERFORGE_DEPLOYMENT_SITE)' $operationArgument $ReleaseArguments"
+        if ($LASTEXITCODE -eq 0) {
+            return
+        }
+        if ($attempt -eq 1) {
+            Write-Warning "$Operation acknowledgement failed; retrying once to confirm terminal state."
+        }
+    }
+    throw "$Operation failed after two attempts with exit code $LASTEXITCODE."
+}
 
 try {
     $metadata = [ordered]@{
@@ -143,8 +197,38 @@ try {
     scp @scpArguments
     Assert-LastExitCode 'Uploading the site deployment payload'
 
-    ssh @sshOptions -p $deploymentPort $target "sudo /usr/local/sbin/powerforge-site-deploy --site '$($env:POWERFORGE_DEPLOYMENT_SITE)' --archive '$remoteBase/artifact.tar' --metadata '$remoteBase/deployment.json'"
-    Assert-LastExitCode 'Promoting the site release'
+    $promotionOutput = @(ssh @sshOptions -p $deploymentPort $target "sudo /usr/local/sbin/powerforge-site-deploy --site '$($env:POWERFORGE_DEPLOYMENT_SITE)' --archive '$remoteBase/artifact.tar' --metadata '$remoteBase/deployment.json' --defer-public-verification")
+    $promotionExitCode = $LASTEXITCODE
+    $promotionOutput | ForEach-Object { Write-Host $_ }
+    $global:LASTEXITCODE = $promotionExitCode
+    Assert-LastExitCode 'Promoting the site release for external public verification'
+
+    $releaseMatch = $promotionOutput | Select-String -Pattern '^POWERFORGE_RELEASE_ID=(?<value>[A-Za-z0-9][A-Za-z0-9._-]{0,127})$' | Select-Object -Last 1
+    if ($null -eq $releaseMatch) {
+        throw 'The remote promoter did not return a valid deferred release identity.'
+    }
+    $releaseId = $releaseMatch.Matches[0].Groups['value'].Value
+    $releaseArguments = "--release-id '$releaseId'"
+
+    try {
+        Assert-PowerForgePublicSite -BaseUri $publicUri -SmokePaths $smokePaths -SourceSha $metadata.sourceSha -ArtifactSha256 $metadata.artifactSha256 -RunId $metadata.workflowRunId -RunAttempt $metadata.workflowRunAttempt
+        Invoke-DeferredReleaseOperation -Operation finalize -ReleaseArguments $releaseArguments
+    } catch {
+        $deploymentError = $_
+        $rollbackError = $null
+        try {
+            Invoke-DeferredReleaseOperation -Operation rollback -ReleaseArguments $releaseArguments
+            if (-not [string]::IsNullOrWhiteSpace($zoneId)) {
+                Invoke-CloudflarePurge -ZoneId $zoneId -ApiToken $env:POWERFORGE_CLOUDFLARE_API_TOKEN
+            }
+        } catch {
+            $rollbackError = $_
+        }
+        if ($null -ne $rollbackError) {
+            throw "External public verification failed: $($deploymentError.Exception.Message) Rollback also failed: $($rollbackError.Exception.Message)"
+        }
+        throw "External public verification failed and the release was rolled back: $($deploymentError.Exception.Message)"
+    }
 }
 finally {
     if ($remoteCreated -and (Test-Path -LiteralPath $keyPath) -and (Test-Path -LiteralPath $knownHostsPath)) {

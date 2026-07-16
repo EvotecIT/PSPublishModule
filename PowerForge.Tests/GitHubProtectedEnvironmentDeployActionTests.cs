@@ -7,9 +7,12 @@ public sealed class GitHubProtectedEnvironmentDeployActionTests
     {
         var action = ReadRepoFile(".github", "actions", "powerforge-linux-site-deploy", "action.yml");
         var script = ReadRepoFile(".github", "actions", "powerforge-linux-site-deploy", "Invoke-PowerForgeLinuxSiteDeploy.ps1");
+        var publicVerification = ReadRepoFile(".github", "actions", "powerforge-linux-site-deploy", "Test-PowerForgePublicSite.ps1");
 
         Assert.Contains("using: composite", action, StringComparison.Ordinal);
         Assert.Contains("deployment-ssh-private-key", action, StringComparison.Ordinal);
+        Assert.Contains("deployment-public-url", action, StringComparison.Ordinal);
+        Assert.Contains("deployment-smoke-paths", action, StringComparison.Ordinal);
         Assert.Contains("Reject pull request deployments", action, StringComparison.Ordinal);
         Assert.DoesNotContain("github.event.pull_request.head.sha", action, StringComparison.Ordinal);
         Assert.Contains("actions/download-artifact@", action, StringComparison.Ordinal);
@@ -21,8 +24,19 @@ public sealed class GitHubProtectedEnvironmentDeployActionTests
         Assert.Contains("IdentitiesOnly=yes", script, StringComparison.Ordinal);
         Assert.Contains("StrictHostKeyChecking=yes", script, StringComparison.Ordinal);
         Assert.Contains("cloudflare-api.token", script, StringComparison.Ordinal);
+        Assert.Contains("--defer-public-verification", script, StringComparison.Ordinal);
+        Assert.Contains("Assert-PowerForgePublicSite", script, StringComparison.Ordinal);
+        Assert.Contains("deployment-public-url is required", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("https://$($env:POWERFORGE_DEPLOYMENT_SITE)", script, StringComparison.Ordinal);
+        Assert.Contains("--finalize", script, StringComparison.Ordinal);
+        Assert.Contains("--rollback", script, StringComparison.Ordinal);
+        Assert.Contains("retrying once to confirm terminal state", script, StringComparison.Ordinal);
+        Assert.Contains("Invoke-CloudflarePurge", script, StringComparison.Ordinal);
+        Assert.Contains("Invoke-PowerForgePublicRequest", publicVerification, StringComparison.Ordinal);
+        Assert.Contains("workflowRunAttempt", publicVerification, StringComparison.Ordinal);
         Assert.Contains("finally", script, StringComparison.Ordinal);
         Assert.InRange(NormalizedLineCount(script), 1, 250);
+        Assert.InRange(NormalizedLineCount(publicVerification), 1, 120);
     }
 
     [Fact]
