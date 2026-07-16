@@ -167,6 +167,9 @@ jobs:
   guardrails:
     runs-on: ${{ fromJson(inputs.runner_labels_json) }}
     timeout-minutes: 10
+    outputs:
+      workflow_repository: ${{ steps.guardrail_source.outputs.repository }}
+      workflow_sha: ${{ steps.guardrail_source.outputs.sha }}
     steps:
       - name: Checkout caller repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -177,10 +180,17 @@ jobs:
       - name: Resolve shared guardrail source
         id: guardrail_source
         shell: pwsh
+        env:
+          POWERFORGE_WORKFLOW_REF: ${{ github.workflow_ref }}
+          POWERFORGE_WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: |
-          $repository = [string]'${{ job.workflow_repository }}'
-          $sha = [string]'${{ job.workflow_sha }}'
-          if ([string]::IsNullOrWhiteSpace($repository) -or $sha -notmatch '^[a-fA-F0-9]{40,64}$') {
+          $workflowRef = [string]$env:POWERFORGE_WORKFLOW_REF
+          $sha = [string]$env:POWERFORGE_WORKFLOW_SHA
+          $marker = '/.github/workflows/'
+          $markerIndex = $workflowRef.IndexOf($marker, [StringComparison]::Ordinal)
+          $repository = if ($markerIndex -gt 0) { $workflowRef.Substring(0, $markerIndex) } else { '' }
+          if ($repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' -or
+              $sha -notmatch '^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$') {
             throw 'Unable to resolve the exact shared guardrail source.'
           }
           "repository=$repository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
@@ -253,7 +263,7 @@ jobs:
 
   deploy-linux:
     if: ${{ inputs.deployment_target == 'linux' }}
-    needs: build
+    needs: [build, guardrails]
     runs-on: ${{ fromJson(inputs.publisher_runner_labels_json) }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     environment:
@@ -268,24 +278,11 @@ jobs:
         with:
           ref: ${{ needs.build.outputs.source_sha }}
 
-      - name: Resolve shared deployment action source
-        id: deployment_action_source
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $repository = [string]'${{ job.workflow_repository }}'
-          $sha = [string]'${{ job.workflow_sha }}'
-          if ([string]::IsNullOrWhiteSpace($repository) -or $sha -notmatch '^[a-fA-F0-9]{40,64}$') {
-            throw 'Unable to resolve the exact shared deployment action source.'
-          }
-          "repository=$repository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "sha=$($sha.ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
       - name: Checkout shared deployment action
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          repository: ${{ steps.deployment_action_source.outputs.repository }}
-          ref: ${{ steps.deployment_action_source.outputs.sha }}
+          repository: ${{ needs.guardrails.outputs.workflow_repository }}
+          ref: ${{ needs.guardrails.outputs.workflow_sha }}
           path: ./.powerforge-deployment
           token: ${{ github.token }}
           fetch-depth: 1

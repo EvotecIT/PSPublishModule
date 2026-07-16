@@ -15,7 +15,11 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("deployment_ssh_known_hosts", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("ssh-keyscan", workflow, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("deployment_artifact_retention_days", workflow, StringComparison.Ordinal);
-        Assert.Contains("job.workflow_sha", workflow, StringComparison.Ordinal);
+        Assert.Contains("github.workflow_ref", workflow, StringComparison.Ordinal);
+        Assert.Contains("github.workflow_sha", workflow, StringComparison.Ordinal);
+        Assert.Contains("needs.guardrails.outputs.workflow_repository", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("job.workflow_", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("{40,64}", workflow, StringComparison.Ordinal);
         Assert.Contains("uses: ./.powerforge-deployment/.github/actions/powerforge-linux-site-deploy", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment_url is required when deployment_target is linux", ReadRepoFile("Build", "Assert-PowerForgeWebsiteDeployGuardrails.ps1"), StringComparison.Ordinal);
         Assert.DoesNotContain("Publish and promote Linux release", workflow, StringComparison.Ordinal);
@@ -89,6 +93,7 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
         Assert.Contains("powerforge-site-{0}", ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml"), StringComparison.Ordinal);
         Assert.Contains("workflowRunAttempt", script, StringComparison.Ordinal);
         Assert.Contains("artifactSha256", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("{40,64}", script, StringComparison.Ordinal);
         Assert.Contains("^/tmp/powerforge-([0-9]+)-([0-9]+)-", script, StringComparison.Ordinal);
         Assert.Contains("BASH_REMATCH[3]", script, StringComparison.Ordinal);
         string workflow = ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml");

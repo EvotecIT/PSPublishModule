@@ -35,6 +35,7 @@ public sealed class GitHubServiceLinuxDeployWorkflowTests
 
         Assert.Contains("POWERFORGE_SERVICE_TRUSTED_STAGE_ROOT", script, StringComparison.Ordinal);
         Assert.Contains("install -m 0600 \"$archive\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("{40,64}", script, StringComparison.Ordinal);
         Assert.Contains("artifactSha256", script, StringComparison.Ordinal);
         Assert.Contains("tar -tvf", script, StringComparison.Ordinal);
         Assert.Contains("mv -Tf", script, StringComparison.Ordinal);
