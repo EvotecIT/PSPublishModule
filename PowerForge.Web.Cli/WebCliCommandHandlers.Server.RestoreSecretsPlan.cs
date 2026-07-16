@@ -259,12 +259,63 @@ internal static partial class WebCliCommandHandlers
         builder.AppendLine("[ \"$(id -u)\" -eq 0 ] || { echo 'Secret restore must run as root.' >&2; exit 3; }");
         builder.AppendLine();
         builder.AppendLine("tar --no-same-owner --no-same-permissions --no-overwrite-dir --no-acls --no-selinux --no-xattrs -xzf \"$tmp_dir/secrets.tar.gz\" -C /");
+        if (secrets.Any(secret =>
+                string.Equals(secret.RestoreMode, "directory", StringComparison.OrdinalIgnoreCase) &&
+                (!string.IsNullOrWhiteSpace(secret.Owner) ||
+                 !string.IsNullOrWhiteSpace(secret.Group) ||
+                 !string.IsNullOrWhiteSpace(secret.Mode))))
+        {
+            builder.AppendLine("apply_directory_metadata() {");
+            builder.AppendLine("  python3 - \"$@\" <<'POWERFORGE_APPLY_DIRECTORY_METADATA'");
+            builder.AppendLine("import grp");
+            builder.AppendLine("import os");
+            builder.AppendLine("import posixpath");
+            builder.AppendLine("import pwd");
+            builder.AppendLine("import sys");
+            builder.AppendLine("import tarfile");
+            builder.AppendLine();
+            builder.AppendLine("archive_path, root, owner_name, group_name, directory_mode, file_mode = sys.argv[1:]");
+            builder.AppendLine("root_normalized = root.strip('/')");
+            builder.AppendLine("uid = pwd.getpwnam(owner_name).pw_uid if owner_name else -1");
+            builder.AppendLine("gid = grp.getgrnam(group_name).gr_gid if group_name else -1");
+            builder.AppendLine("with tarfile.open(archive_path, mode='r:gz') as archive:");
+            builder.AppendLine("    for member in archive.getmembers():");
+            builder.AppendLine("        normalized = posixpath.normpath(member.name)");
+            builder.AppendLine("        if normalized != root_normalized and not normalized.startswith(root_normalized + '/'):");
+            builder.AppendLine("            continue");
+            builder.AppendLine("        target = '/' + normalized");
+            builder.AppendLine("        os.lstat(target)");
+            builder.AppendLine("        if uid != -1 or gid != -1:");
+            builder.AppendLine("            os.chown(target, uid, gid, follow_symlinks=False)");
+            builder.AppendLine("        if member.isdir() and directory_mode:");
+            builder.AppendLine("            os.chmod(target, int(directory_mode, 8), follow_symlinks=False)");
+            builder.AppendLine("        elif member.isfile() and file_mode:");
+            builder.AppendLine("            os.chmod(target, int(file_mode, 8), follow_symlinks=False)");
+            builder.AppendLine("POWERFORGE_APPLY_DIRECTORY_METADATA");
+            builder.AppendLine("}");
+        }
         foreach (var secret in secrets.Where(secret =>
                      !string.IsNullOrWhiteSpace(secret.Path) &&
                      allowedArchivePaths.Any(allowedPath => PathContains(allowedPath, secret.Path!))))
         {
             var pathValue = ShellQuote(secret.Path!);
             var isDirectory = string.Equals(secret.RestoreMode, "directory", StringComparison.OrdinalIgnoreCase);
+            if (isDirectory)
+            {
+                if (!string.IsNullOrWhiteSpace(secret.Owner) ||
+                    !string.IsNullOrWhiteSpace(secret.Group) ||
+                    !string.IsNullOrWhiteSpace(secret.Mode))
+                {
+                    var fileMode = string.IsNullOrWhiteSpace(secret.Mode)
+                        ? string.Empty
+                        : Convert.ToString(
+                            Convert.ToInt32(secret.Mode, 8) & Convert.ToInt32("666", 8),
+                            8).PadLeft(3, '0');
+                    builder.AppendLine($"if [ -d {pathValue} ]; then apply_directory_metadata \"$tmp_dir/secrets.tar.gz\" {pathValue} {ShellQuote(secret.Owner ?? string.Empty)} {ShellQuote(secret.Group ?? string.Empty)} {ShellQuote(secret.Mode ?? string.Empty)} {ShellQuote(fileMode)}; fi");
+                }
+                continue;
+            }
+
             if (!string.IsNullOrWhiteSpace(secret.Owner) || !string.IsNullOrWhiteSpace(secret.Group))
             {
                 var ownership = (secret.Owner, secret.Group) switch
@@ -274,30 +325,10 @@ internal static partial class WebCliCommandHandlers
                     (_, { Length: > 0 } group) => $":{group}",
                     _ => throw new InvalidOperationException("Restore ownership metadata is empty.")
                 };
-                if (isDirectory)
-                {
-                    builder.AppendLine($"if [ -d {pathValue} ]; then find -P {pathValue} -exec chown -h {ShellQuote(ownership)} -- {{}} +; fi");
-                }
-                else
-                {
-                    builder.AppendLine($"if [ -e {pathValue} ] || [ -L {pathValue} ]; then chown -h {ShellQuote(ownership)} -- {pathValue}; fi");
-                }
+                builder.AppendLine($"if [ -e {pathValue} ] || [ -L {pathValue} ]; then chown -h {ShellQuote(ownership)} -- {pathValue}; fi");
             }
             if (!string.IsNullOrWhiteSpace(secret.Mode))
-            {
-                if (isDirectory)
-                {
-                    var fileMode = Convert.ToString(
-                        Convert.ToInt32(secret.Mode, 8) & Convert.ToInt32("666", 8),
-                        8).PadLeft(3, '0');
-                    builder.AppendLine($"if [ -d {pathValue} ]; then find -P {pathValue} -type d -exec chmod {secret.Mode} -- {{}} +; fi");
-                    builder.AppendLine($"if [ -d {pathValue} ]; then find -P {pathValue} -type f -exec chmod {fileMode} -- {{}} +; fi");
-                }
-                else
-                {
-                    builder.AppendLine($"if [ -e {pathValue} ]; then chmod {secret.Mode} -- {pathValue}; fi");
-                }
-            }
+                builder.AppendLine($"if [ -e {pathValue} ]; then chmod {secret.Mode} -- {pathValue}; fi");
         }
         builder.AppendLine("echo 'Secrets restored. Run server verify next.'");
 

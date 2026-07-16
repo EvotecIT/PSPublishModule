@@ -329,9 +329,11 @@ public sealed class ServerRecoverySecurityTests
                 }
             ]);
 
-        Assert.Contains("find -P '/etc/example/private' -exec chown -h 'root:example-service' -- {} +", script, StringComparison.Ordinal);
-        Assert.Contains("find -P '/etc/example/private' -type d -exec chmod 750 -- {} +", script, StringComparison.Ordinal);
-        Assert.Contains("find -P '/etc/example/private' -type f -exec chmod 640 -- {} +", script, StringComparison.Ordinal);
+        Assert.Contains("os.chown(target, uid, gid, follow_symlinks=False)", script, StringComparison.Ordinal);
+        Assert.Contains("os.chmod(target, int(directory_mode, 8), follow_symlinks=False)", script, StringComparison.Ordinal);
+        Assert.Contains("normalized != root_normalized and not normalized.startswith(root_normalized + '/')", script, StringComparison.Ordinal);
+        Assert.Contains("apply_directory_metadata \"$tmp_dir/secrets.tar.gz\" '/etc/example/private' 'root' 'example-service' '750' '640'", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("find -P", script, StringComparison.Ordinal);
         Assert.DoesNotContain("chown -hR", script, StringComparison.Ordinal);
     }
 
