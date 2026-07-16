@@ -46,6 +46,17 @@ public sealed class HomeAssistantReleaseTests {
     }
 
     [Fact]
+    public void ReleaseNotes_RecordTheExactTagCommit() {
+        const string releaseCommit = "cccccccccccccccccccccccccccccccccccccccc";
+        var notes = HomeAssistantReleasePolicy.BuildReleaseNotes(
+            new HomeAssistantPullRequest { Number = 42, Title = "Fix telemetry", HtmlUrl = "https://github.example/pull/42" },
+            HomeAssistantReleasePolicy.BuildMarker(42, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            releaseCommit);
+
+        Assert.Equal(releaseCommit, HomeAssistantReleasePolicy.ReadReleaseCommit(notes));
+    }
+
+    [Fact]
     public void RepositoryService_SynchronizesIntegrationMetadata() {
         using var fixture = HomeAssistantFixture.CreateIntegration("0.2.6");
         var service = new HomeAssistantRepositoryService();
@@ -90,7 +101,7 @@ public sealed class HomeAssistantReleaseTests {
             },
             MarkerRelease = new HomeAssistantGitHubRelease {
                 TagName = "v0.2.7",
-                Body = marker,
+                Body = marker + "\n<!-- powerforge-homeassistant release-commit:cccccccccccccccccccccccccccccccccccccccc -->",
                 HtmlUrl = "https://github.example/releases/v0.2.7"
             },
             TagCommitSha = "cccccccccccccccccccccccccccccccccccccccc"

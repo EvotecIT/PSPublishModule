@@ -41,8 +41,17 @@ internal static class HomeAssistantReleasePolicy {
     internal static string BuildMarker(int pullRequestNumber, string mergeCommitSha)
         => $"<!-- powerforge-homeassistant source-pr:{pullRequestNumber} merge:{mergeCommitSha} -->";
 
-    internal static string BuildReleaseNotes(HomeAssistantPullRequest pullRequest, string marker)
-        => $"{marker}{Environment.NewLine}{Environment.NewLine}Released from #{pullRequest.Number}: [{pullRequest.Title}]({pullRequest.HtmlUrl}).";
+    internal static string BuildReleaseNotes(HomeAssistantPullRequest pullRequest, string marker, string releaseCommitSha)
+        => $"{marker}{Environment.NewLine}<!-- powerforge-homeassistant release-commit:{releaseCommitSha} -->{Environment.NewLine}{Environment.NewLine}Released from #{pullRequest.Number}: [{pullRequest.Title}]({pullRequest.HtmlUrl}).";
+
+    internal static string? ReadReleaseCommit(string releaseBody) {
+        if (string.IsNullOrWhiteSpace(releaseBody)) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(
+            releaseBody,
+            @"<!--\s*powerforge-homeassistant\s+release-commit:(?<sha>[0-9a-f]{40,64})\s*-->",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return match.Success ? match.Groups["sha"].Value : null;
+    }
 
     private static bool IsProductChange(string path) {
         if (string.IsNullOrWhiteSpace(path)) return false;

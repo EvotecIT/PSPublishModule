@@ -164,7 +164,7 @@ public sealed class HomeAssistantReleaseService {
             return result;
         }
 
-        var notes = HomeAssistantReleasePolicy.BuildReleaseNotes(pullRequest, marker);
+        var notes = HomeAssistantReleasePolicy.BuildReleaseNotes(pullRequest, marker, releaseCommit);
         var publishResult = publisher.Publish(new GitHubReleasePublishRequest {
             Owner = spec.Owner,
             Repository = spec.Repository,
@@ -223,8 +223,13 @@ public sealed class HomeAssistantReleaseService {
         var tagCommitSha = github.GetTagCommitSha(release.TagName);
         if (string.IsNullOrWhiteSpace(tagCommitSha))
             throw new InvalidOperationException($"Git tag {release.TagName} could not be resolved to a commit.");
+        var recordedCommitSha = HomeAssistantReleasePolicy.ReadReleaseCommit(release.Body);
+        if (string.IsNullOrWhiteSpace(recordedCommitSha))
+            throw new InvalidOperationException($"GitHub release {release.TagName} does not record its PowerForge release commit.");
+        if (!string.Equals(recordedCommitSha, tagCommitSha, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Git tag {release.TagName} points to {tagCommitSha}, not recorded release commit {recordedCommitSha}.");
         if (!string.IsNullOrWhiteSpace(expectedCommitSha) &&
-            !string.Equals(expectedCommitSha, tagCommitSha, StringComparison.OrdinalIgnoreCase)) {
+            !string.Equals(expectedCommitSha, recordedCommitSha, StringComparison.OrdinalIgnoreCase)) {
             throw new InvalidOperationException($"Git tag {release.TagName} points to {tagCommitSha}, not expected release commit {expectedCommitSha}.");
         }
 
