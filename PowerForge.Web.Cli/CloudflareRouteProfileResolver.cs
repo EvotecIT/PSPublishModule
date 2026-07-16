@@ -9,6 +9,7 @@ namespace PowerForge.Web.Cli;
 internal sealed class CloudflareSiteRouteProfile
 {
     public string SiteConfigPath { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
     public string BaseUrl { get; init; } = string.Empty;
     public string[] VerifyPaths { get; init; } = Array.Empty<string>();
     public string[] PurgePaths { get; init; } = Array.Empty<string>();
@@ -46,6 +47,7 @@ internal static class CloudflareRouteProfileResolver
         return new CloudflareSiteRouteProfile
         {
             SiteConfigPath = specPath,
+            Name = (spec.Name ?? string.Empty).Trim(),
             BaseUrl = baseUrl,
             VerifyPaths = verifyPaths,
             PurgePaths = purgePaths
