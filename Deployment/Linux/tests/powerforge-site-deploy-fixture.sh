@@ -80,6 +80,9 @@ stage_release() {
     printf '%s' '0123456789abcdef0123456789abcdef' >"$stage_path/cloudflare-zone-id"
     chmod 0600 "$stage_path/cloudflare-api.token" "$stage_path/cloudflare-zone-id"
   fi
+  if [[ -n "${SUDO_UID:-}" ]]; then
+    chown "${SUDO_UID}:${SUDO_GID:-$SUDO_UID}" "$stage_path" "$stage_path/"*
+  fi
 }
 
 promote_release() {
