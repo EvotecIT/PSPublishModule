@@ -68,16 +68,25 @@ internal static partial class WebCliCommandHandlers
         if (string.IsNullOrWhiteSpace(token))
             return Fail($"Missing Cloudflare API token. Provide --token or set env var '{tokenEnv}'.", outputJson, logger, command);
 
+        Uri? siteBaseUri = null;
+        if (!string.IsNullOrWhiteSpace(siteProfile?.BaseUrl))
+        {
+            if (!Uri.TryCreate(siteProfile.BaseUrl, UriKind.Absolute, out siteBaseUri) ||
+                (siteBaseUri.Scheme != Uri.UriSchemeHttps && siteBaseUri.Scheme != Uri.UriSchemeHttp))
+                return Fail("site config BaseUrl must be an absolute HTTP or HTTPS URL.", outputJson, logger, command);
+        }
+
         var hostname = TryGetOptionValue(subArgs, "--hostname") ??
                        TryGetOptionValue(subArgs, "--host");
-        if (string.IsNullOrWhiteSpace(hostname) && !string.IsNullOrWhiteSpace(siteProfile?.BaseUrl) &&
-            Uri.TryCreate(siteProfile.BaseUrl, UriKind.Absolute, out var baseUri))
-        {
-            hostname = baseUri.Host;
-        }
+        if (string.IsNullOrWhiteSpace(hostname) && siteBaseUri is not null)
+            hostname = siteBaseUri.Host;
         if (string.IsNullOrWhiteSpace(hostname))
             return Fail("Missing --hostname (or a --site-config with BaseUrl).", outputJson, logger, command);
 
+        var basePath = TryGetOptionValue(subArgs, "--base-path") ??
+                       TryGetOptionValue(subArgs, "--basePath") ??
+                       siteBaseUri?.AbsolutePath ??
+                       "/";
         var policyName = TryGetOptionValue(subArgs, "--policy-name") ??
                          TryGetOptionValue(subArgs, "--policyName") ??
                          siteProfile?.Name ??
@@ -94,7 +103,8 @@ internal static partial class WebCliCommandHandlers
             policyName,
             htmlPaths,
             dryRun,
-            logger);
+            logger,
+            basePath: basePath);
 
         if (outputJson)
         {
@@ -103,6 +113,7 @@ internal static partial class WebCliCommandHandlers
                 ["siteConfig"] = siteProfile?.SiteConfigPath,
                 ["zoneId"] = zoneId,
                 ["hostname"] = result.Hostname,
+                ["basePath"] = basePath,
                 ["policyName"] = result.PolicyName,
                 ["managedRuleCount"] = result.ManagedRuleCount,
                 ["preservedRuleCount"] = result.PreservedRuleCount,

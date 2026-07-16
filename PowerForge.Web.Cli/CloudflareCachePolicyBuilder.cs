@@ -8,6 +8,7 @@ namespace PowerForge.Web.Cli;
 internal static class CloudflareCachePolicyBuilder
 {
     private const int MaxHtmlPaths = 64;
+    private const int MaxRuleExpressionLength = 4096;
 
     private static readonly string[] DefaultHtmlPaths =
     {
@@ -27,45 +28,51 @@ internal static class CloudflareCachePolicyBuilder
     internal static JsonArray BuildManagedRules(
         string hostname,
         string policyName,
-        IReadOnlyCollection<string>? htmlPaths)
+        IReadOnlyCollection<string>? htmlPaths,
+        string? basePath = null)
     {
         hostname = NormalizeHostname(hostname);
         policyName = NormalizePolicyName(policyName, hostname);
+        basePath = NormalizeBasePath(basePath);
         var hostFilter = $"http.host eq \"{hostname}\" and http.request.method eq \"GET\" and ";
 
         var staticExpression = $"({hostFilter}(" + string.Join(" or ", new[]
         {
-            "http.request.uri.path wildcard \"/css/*\"",
-            "http.request.uri.path wildcard \"/js/*\"",
-            "http.request.uri.path wildcard \"/assets/*\"",
-            "http.request.uri.path wildcard \"/fonts/*\"",
-            "http.request.uri.path wildcard \"/images/*\"",
-            "http.request.uri.path wildcard \"/img/*\"",
-            "http.request.uri.path wildcard \"/*.css\"",
-            "http.request.uri.path wildcard \"/*.js\"",
-            "http.request.uri.path wildcard \"/*.mjs\"",
-            "http.request.uri.path wildcard \"/*.png\"",
-            "http.request.uri.path wildcard \"/*.jpg\"",
-            "http.request.uri.path wildcard \"/*.jpeg\"",
-            "http.request.uri.path wildcard \"/*.webp\"",
-            "http.request.uri.path wildcard \"/*.svg\"",
-            "http.request.uri.path wildcard \"/*.ico\"",
-            "http.request.uri.path wildcard \"/*.woff\"",
-            "http.request.uri.path wildcard \"/*.woff2\""
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/css/*")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/js/*")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/assets/*")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/fonts/*")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/images/*")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/img/*")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.css")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.js")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.mjs")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.png")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.jpg")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.jpeg")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.webp")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.svg")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.ico")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.woff")),
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/*.woff2"))
         }) + "))";
 
         var dataExpression = $"({hostFilter}(" + string.Join(" or ", new[]
         {
-            "http.request.uri.path wildcard \"/data/*\"",
-            "http.request.uri.path eq \"/sitemap.xml\"",
-            "http.request.uri.path eq \"/llms.txt\"",
-            "http.request.uri.path eq \"/llms-full.txt\"",
-            "http.request.uri.path eq \"/llms.json\""
+            BuildPathClause("wildcard", CombineBasePath(basePath, "/data/*")),
+            BuildPathClause("eq", CombineBasePath(basePath, "/sitemap.xml")),
+            BuildPathClause("eq", CombineBasePath(basePath, "/llms.txt")),
+            BuildPathClause("eq", CombineBasePath(basePath, "/llms-full.txt")),
+            BuildPathClause("eq", CombineBasePath(basePath, "/llms.json"))
         }) + "))";
 
-        var routeClauses = BuildHtmlRouteClauses(htmlPaths);
-        routeClauses.Add("http.request.uri.path wildcard \"*.html\"");
+        var routeClauses = BuildHtmlRouteClauses(basePath, htmlPaths);
+        routeClauses.Add(BuildPathClause("wildcard", CombineBasePath(basePath, "/*.html")));
         var htmlExpression = $"({hostFilter}(" + string.Join(" or ", routeClauses) + "))";
+
+        ValidateExpressionLength("static assets", staticExpression);
+        ValidateExpressionLength("data files", dataExpression);
+        ValidateExpressionLength("HTML docs and API", htmlExpression);
 
         return new JsonArray
         {
@@ -91,13 +98,37 @@ internal static class CloudflareCachePolicyBuilder
         return normalized;
     }
 
-    private static List<string> BuildHtmlRouteClauses(IReadOnlyCollection<string>? htmlPaths)
+    internal static string NormalizeBasePath(string? rawBasePath)
+    {
+        var normalized = string.IsNullOrWhiteSpace(rawBasePath)
+            ? "/"
+            : rawBasePath.Trim().Replace('\\', '/');
+        var delimiter = normalized.IndexOfAny(new[] { '?', '#' });
+        if (delimiter >= 0)
+            normalized = normalized[..delimiter];
+        if (!normalized.StartsWith("/", StringComparison.Ordinal))
+            normalized = "/" + normalized;
+        while (normalized.Contains("//", StringComparison.Ordinal))
+            normalized = normalized.Replace("//", "/", StringComparison.Ordinal);
+
+        if (normalized.Contains("..", StringComparison.Ordinal) ||
+            normalized.Contains('*') ||
+            normalized.Any(char.IsControl))
+            throw new ArgumentException($"Invalid Cloudflare base path '{rawBasePath}'.", nameof(rawBasePath));
+
+        if (!normalized.EndsWith("/", StringComparison.Ordinal))
+            normalized += "/";
+        return normalized;
+    }
+
+    private static List<string> BuildHtmlRouteClauses(string basePath, IReadOnlyCollection<string>? htmlPaths)
     {
         var paths = DefaultHtmlPaths
             .Concat(htmlPaths ?? Array.Empty<string>())
             .Select(NormalizeHtmlPath)
             .Where(path => path is not null)
             .Cast<string>()
+            .Select(path => CombineBasePath(basePath, path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(MaxHtmlPaths + 1)
             .ToArray();
@@ -108,10 +139,9 @@ internal static class CloudflareCachePolicyBuilder
         var clauses = new List<string>();
         foreach (var path in paths)
         {
-            var escaped = EscapeExpressionString(path);
-            clauses.Add($"http.request.uri.path eq \"{escaped}\"");
+            clauses.Add(BuildPathClause("eq", path));
             if (path.Length > 1 && path.EndsWith("/", StringComparison.Ordinal))
-                clauses.Add($"http.request.uri.path wildcard \"{escaped}*\"");
+                clauses.Add(BuildPathClause("wildcard", path + "*"));
         }
 
         return clauses;
@@ -143,6 +173,29 @@ internal static class CloudflareCachePolicyBuilder
             return null;
 
         return path;
+    }
+
+    private static string CombineBasePath(string basePath, string path)
+    {
+        if (basePath == "/")
+            return path;
+        if (path == "/")
+            return basePath;
+        if (path.StartsWith(basePath, StringComparison.OrdinalIgnoreCase))
+            return path;
+        return basePath.TrimEnd('/') + path;
+    }
+
+    private static string BuildPathClause(string operation, string path) =>
+        $"http.request.uri.path {operation} \"{EscapeExpressionString(path)}\"";
+
+    private static void ValidateExpressionLength(string ruleName, string expression)
+    {
+        if (expression.Length > MaxRuleExpressionLength)
+        {
+            throw new ArgumentException(
+                $"Cloudflare {ruleName} expression is {expression.Length} characters; the maximum is {MaxRuleExpressionLength}.");
+        }
     }
 
     private static JsonObject BuildRule(string description, string expression, bool ignoreQueryString)

@@ -30,6 +30,25 @@ public sealed class CloudflareCachePolicyTests
     }
 
     [Fact]
+    public void BuildManagedRules_ShouldScopeEveryRouteToSiteBasePath()
+    {
+        var rules = CloudflareCachePolicyBuilder.BuildManagedRules(
+            "example.com",
+            "Project",
+            ["/docs/"],
+            basePath: "/project/");
+
+        var staticExpression = rules[0]!["expression"]!.GetValue<string>();
+        var dataExpression = rules[1]!["expression"]!.GetValue<string>();
+        var htmlExpression = rules[2]!["expression"]!.GetValue<string>();
+        Assert.Contains("/project/css/*", staticExpression, StringComparison.Ordinal);
+        Assert.Contains("/project/*.css", staticExpression, StringComparison.Ordinal);
+        Assert.Contains("/project/sitemap.xml", dataExpression, StringComparison.Ordinal);
+        Assert.Contains("/project/docs/*", htmlExpression, StringComparison.Ordinal);
+        Assert.DoesNotContain("uri.path eq \"/docs/\"", htmlExpression, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Apply_ShouldReplaceManagedRulesAndPreserveUnrelatedRules()
     {
         var existingRules = new JsonArray
@@ -72,6 +91,40 @@ public sealed class CloudflareCachePolicyTests
         Assert.Equal("custom-id", rules[3]!["id"]!.GetValue<string>());
         Assert.Null(rules[3]!["version"]);
         Assert.Null(rules[3]!["last_updated"]);
+    }
+
+    [Fact]
+    public void Apply_ShouldPreserveUnmanagedRulePositions()
+    {
+        var existingRules = new JsonArray
+        {
+            ExistingRule("custom-before", "Operator before", "before"),
+            ExistingRule("managed-static-id", "PowerForge Example: static assets", "old-static"),
+            ExistingRule("custom-between", "Operator between", "between"),
+            ExistingRule("managed-data-id", "PowerForge Example: data files", "old-data"),
+            ExistingRule("managed-html-id", "PowerForge Example: HTML docs and API", "old-html"),
+            ExistingRule("custom-after", "Operator after", "after")
+        };
+        var handler = new SequenceHandler(
+            JsonResponse(HttpStatusCode.OK, ExistingEnvelope(existingRules)),
+            JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
+        using var client = NewClient(handler);
+
+        var result = CloudflareCachePolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "example.com",
+            "Example",
+            htmlPaths: null,
+            dryRun: false,
+            logger: null,
+            client);
+
+        Assert.True(result.Success, result.Message);
+        var rules = JsonNode.Parse(handler.Requests[1].Body)!["rules"]!.AsArray();
+        Assert.Equal(
+            ["Operator before", "PowerForge Example: static assets", "Operator between", "PowerForge Example: data files", "PowerForge Example: HTML docs and API", "Operator after"],
+            rules.Select(rule => rule!["description"]!.GetValue<string>()).ToArray());
     }
 
     [Fact]
@@ -218,6 +271,30 @@ public sealed class CloudflareCachePolicyTests
     }
 
     [Fact]
+    public void Apply_ShouldRejectOversizedExpressionBeforeCallingCloudflare()
+    {
+        var longPaths = Enumerable.Range(0, 40)
+            .Select(index => $"/{new string('x', 120)}-{index}/")
+            .ToArray();
+        var handler = new SequenceHandler();
+        using var client = NewClient(handler);
+
+        var result = CloudflareCachePolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef",
+            "secret-token",
+            "example.com",
+            "Example",
+            longPaths,
+            dryRun: false,
+            logger: null,
+            client);
+
+        Assert.False(result.Success);
+        Assert.Contains("maximum is 4096", result.Message, StringComparison.Ordinal);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
     public void Apply_ShouldAvoidRulesetVersionChurnWhenPolicyIsCurrent()
     {
         var currentRules = CloudflareCachePolicyBuilder.BuildManagedRules(
@@ -261,9 +338,11 @@ public sealed class CloudflareCachePolicyTests
         Assert.Contains("Reject pull request cache changes", action, StringComparison.Ordinal);
         Assert.Contains("actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd", action, StringComparison.Ordinal);
         Assert.Contains("actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7", action, StringComparison.Ordinal);
+        Assert.Contains("Zone > Cache Rules > Edit", action, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgeCloudflareCachePolicy.ps1", action, StringComparison.Ordinal);
         Assert.Contains("--token-env', 'POWERFORGE_CLOUDFLARE_API_TOKEN'", script, StringComparison.Ordinal);
         Assert.DoesNotContain("--token', $env:POWERFORGE_CLOUDFLARE_API_TOKEN", script, StringComparison.Ordinal);
+        Assert.Contains("--base-path", script, StringComparison.Ordinal);
         Assert.Contains("site-config must identify a file inside the caller repository", script, StringComparison.Ordinal);
         Assert.True(script.Split('\n').Length < 100, "The action entrypoint should remain a bounded adapter over the CLI.");
     }

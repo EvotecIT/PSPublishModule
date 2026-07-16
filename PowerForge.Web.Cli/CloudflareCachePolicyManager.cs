@@ -33,7 +33,8 @@ internal static class CloudflareCachePolicyManager
         IReadOnlyCollection<string>? htmlPaths,
         bool dryRun,
         WebConsoleLogger? logger,
-        HttpClient? httpClient = null)
+        HttpClient? httpClient = null,
+        string? basePath = null)
     {
         if (string.IsNullOrWhiteSpace(zoneId))
             return Failure("Missing zoneId.", hostname, policyName, dryRun);
@@ -49,7 +50,7 @@ internal static class CloudflareCachePolicyManager
         {
             hostname = CloudflareCachePolicyBuilder.NormalizeHostname(hostname);
             policyName = CloudflareCachePolicyBuilder.NormalizePolicyName(policyName, hostname);
-            managedRules = CloudflareCachePolicyBuilder.BuildManagedRules(hostname, policyName, htmlPaths);
+            managedRules = CloudflareCachePolicyBuilder.BuildManagedRules(hostname, policyName, htmlPaths, basePath);
         }
         catch (ArgumentException ex)
         {
@@ -88,7 +89,6 @@ internal static class CloudflareCachePolicyManager
                     policyName,
                     dryRun);
             }
-            var preservedRules = new JsonArray();
             var existingManaged = new List<JsonObject>();
 
             foreach (var ruleNode in existingRules)
@@ -99,26 +99,15 @@ internal static class CloudflareCachePolicyManager
                 var description = rule["description"]?.GetValue<string>() ?? string.Empty;
                 if (description.StartsWith(managedPrefix, StringComparison.Ordinal))
                     existingManaged.Add(rule);
-                else
-                    preservedRules.Add(PrepareRuleForUpdate(rule));
             }
 
             CopyManagedRuleIdentity(existingManaged, managedRules);
-
-            var desiredRules = new JsonArray();
-            foreach (var rule in managedRules)
-            {
-                if (rule is not null)
-                    desiredRules.Add(rule.DeepClone());
-            }
-            foreach (var rule in preservedRules)
-                desiredRules.Add(rule?.DeepClone());
+            var desiredRules = BuildDesiredRuleSequence(existingRules, managedRules, managedPrefix, out var preservedCount);
 
             var normalizedCurrent = NormalizeRulesForComparison(existingRules);
             var normalizedDesired = NormalizeRulesForComparison(desiredRules);
             var changesRequired = !JsonNode.DeepEquals(normalizedCurrent, normalizedDesired);
             var managedCount = managedRules.Count;
-            var preservedCount = preservedRules.Count;
 
             if (!changesRequired)
             {
@@ -193,6 +182,66 @@ internal static class CloudflareCachePolicyManager
                 if (existing[identityName] is not null)
                     desired[identityName] = existing[identityName]!.DeepClone();
             }
+        }
+    }
+
+    private static JsonArray BuildDesiredRuleSequence(
+        JsonArray existingRules,
+        JsonArray managedRules,
+        string managedPrefix,
+        out int preservedCount)
+    {
+        var desiredByDescription = managedRules
+            .OfType<JsonObject>()
+            .ToDictionary(
+                rule => rule["description"]?.GetValue<string>() ?? string.Empty,
+                rule => rule,
+                StringComparer.Ordinal);
+        var emittedDescriptions = new HashSet<string>(StringComparer.Ordinal);
+        var lastManagedIndex = -1;
+        for (var index = 0; index < existingRules.Count; index++)
+        {
+            var description = existingRules[index]!["description"]?.GetValue<string>() ?? string.Empty;
+            if (description.StartsWith(managedPrefix, StringComparison.Ordinal))
+                lastManagedIndex = index;
+        }
+
+        var desiredRules = new JsonArray();
+        if (lastManagedIndex < 0)
+            AddMissingManagedRules(desiredRules, managedRules, emittedDescriptions);
+
+        preservedCount = 0;
+        for (var index = 0; index < existingRules.Count; index++)
+        {
+            var existing = existingRules[index]!.AsObject();
+            var description = existing["description"]?.GetValue<string>() ?? string.Empty;
+            if (!description.StartsWith(managedPrefix, StringComparison.Ordinal))
+            {
+                desiredRules.Add(PrepareRuleForUpdate(existing));
+                preservedCount++;
+                continue;
+            }
+
+            if (desiredByDescription.TryGetValue(description, out var desired) && emittedDescriptions.Add(description))
+                desiredRules.Add(desired.DeepClone());
+
+            if (index == lastManagedIndex)
+                AddMissingManagedRules(desiredRules, managedRules, emittedDescriptions);
+        }
+
+        return desiredRules;
+    }
+
+    private static void AddMissingManagedRules(
+        JsonArray destination,
+        JsonArray managedRules,
+        HashSet<string> emittedDescriptions)
+    {
+        foreach (var managed in managedRules.OfType<JsonObject>())
+        {
+            var description = managed["description"]?.GetValue<string>() ?? string.Empty;
+            if (emittedDescriptions.Add(description))
+                destination.Add(managed.DeepClone());
         }
     }
 

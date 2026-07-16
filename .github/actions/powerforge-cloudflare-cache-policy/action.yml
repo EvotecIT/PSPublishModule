@@ -10,7 +10,7 @@ inputs:
     description: Cloudflare zone identifier from the caller job's protected environment.
     required: true
   api-token:
-    description: Cloudflare API token with Cache Settings Write permission from the caller job's protected environment.
+    description: Cloudflare API token with Zone > Cache Rules > Edit permission from the caller job's protected environment.
     required: true
   hostname:
     description: Optional hostname override; normally derived from the site specification BaseUrl.
@@ -18,6 +18,10 @@ inputs:
     default: ""
   policy-name:
     description: Optional managed description name; normally derived from the site specification Name.
+    required: false
+    default: ""
+  base-path:
+    description: Optional site base-path override; normally derived from the site specification BaseUrl.
     required: false
     default: ""
   dry-run:
@@ -48,6 +52,7 @@ runs:
       shell: pwsh
       env:
         POWERFORGE_CLOUDFLARE_API_TOKEN: ${{ inputs.api-token }}
+        POWERFORGE_CLOUDFLARE_BASE_PATH: ${{ inputs.base-path }}
         POWERFORGE_CLOUDFLARE_DRY_RUN: ${{ inputs.dry-run }}
         POWERFORGE_CLOUDFLARE_HOSTNAME: ${{ inputs.hostname }}
         POWERFORGE_CLOUDFLARE_POLICY_NAME: ${{ inputs.policy-name }}

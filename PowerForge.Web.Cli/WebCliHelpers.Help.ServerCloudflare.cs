@@ -19,6 +19,7 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web cloudflare verify [--site-config <site.json>] [--base-url <url>] [--path <p[,p...]>] [--url <u[,u...]>]");
         Console.WriteLine("                     [--warmup <n>] [--allow-status <HIT,REVALIDATED,EXPIRED,STALE>] [--timeout-ms <n>]");
         Console.WriteLine("  powerforge-web cloudflare cache-policy apply --zone-id <id> [--token <token> | --token-env <env>]");
-        Console.WriteLine("                     [--site-config <site.json> | --hostname <host>] [--policy-name <name>] [--html-path <p[,p...]>] [--dry-run]");
+        Console.WriteLine("                     [--site-config <site.json> | --hostname <host>] [--base-path <path>] [--policy-name <name>]");
+        Console.WriteLine("                     [--html-path <p[,p...]>] [--dry-run]");
     }
 }

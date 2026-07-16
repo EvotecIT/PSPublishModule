@@ -25,21 +25,23 @@ powerforge-web cloudflare cache-policy apply \
   --site-config ./site.json
 ```
 
-PowerForge derives the hostname from `BaseUrl`, the managed description prefix from
-`Name`, and additional HTML routes from features and navigation. The policy manages
-exactly three rules for that site:
+PowerForge derives the hostname and optional deployment base path from `BaseUrl`, the
+managed description prefix from `Name`, and additional HTML routes from features and
+navigation. The policy manages exactly three rules for that site:
 
 - static assets, with query strings excluded from the cache key
 - data and discovery files, preserving normal query behavior
 - HTML, docs, API, and site-specific navigation routes, preserving normal query behavior
 
 The command creates the phase entry-point ruleset when it is absent, preserves rules
-outside the site's `PowerForge <Name>:` prefix, and avoids a ruleset update when the
-effective policy is already current. Use `--dry-run` to read the current ruleset and
-report whether a write would be required.
+outside the site's `PowerForge <Name>:` prefix in their existing positions, and avoids
+a ruleset update when the effective policy is already current. Generated expressions
+are rejected locally when they exceed Cloudflare's 4,096-character limit. Use
+`--dry-run` to read the current ruleset and report whether a write would be required.
 
 If a site specification is not available, pass `--hostname`, `--policy-name`, and
-optional `--html-path` values explicitly.
+optional `--base-path` and `--html-path` values explicitly. HTML paths are relative to
+the site base path.
 
 ## CLI
 
@@ -143,9 +145,11 @@ jobs:
           api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 ```
 
-Pin `POWERFORGE_COMMIT` to an exact commit. The token needs `Cache Settings Write`
-for the target zone. The action rejects pull-request events before protected inputs
-are used.
+Pin `POWERFORGE_COMMIT` to an exact commit. The token needs
+`Zone > Cache Rules > Edit` for the target zone, as documented by Cloudflare's
+[Cache Rules API guide](https://developers.cloudflare.com/cache/how-to/cache-rules/create-api/).
+If the same token is also used by deployment purge, grant `Zone > Cache Purge > Purge`.
+The action rejects pull-request events before protected inputs are used.
 
 ### Post-Deploy Purge
 

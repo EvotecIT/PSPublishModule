@@ -55,6 +55,9 @@ if (-not [string]::IsNullOrWhiteSpace($env:POWERFORGE_CLOUDFLARE_HOSTNAME)) {
 if (-not [string]::IsNullOrWhiteSpace($env:POWERFORGE_CLOUDFLARE_POLICY_NAME)) {
     $arguments += @('--policy-name', $env:POWERFORGE_CLOUDFLARE_POLICY_NAME)
 }
+if (-not [string]::IsNullOrWhiteSpace($env:POWERFORGE_CLOUDFLARE_BASE_PATH)) {
+    $arguments += @('--base-path', $env:POWERFORGE_CLOUDFLARE_BASE_PATH)
+}
 if ($env:POWERFORGE_CLOUDFLARE_DRY_RUN -eq 'true') {
     $arguments += '--dry-run'
 }
