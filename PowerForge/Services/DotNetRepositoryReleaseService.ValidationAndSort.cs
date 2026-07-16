@@ -50,6 +50,8 @@ public sealed partial class DotNetRepositoryReleaseService
         DotNetRepositoryReleaseSpec spec)
     {
         var versionSources = GetPublishPreflightVersionSources(spec);
+        var enforceNuGetOrgPackageSize = !spec.WhatIf &&
+                                            IsNuGetOrgPublishSource(spec.PublishSource, spec.RootPath);
 
         foreach (var project in projects)
         {
@@ -67,9 +69,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 if (!spec.WhatIf && !File.Exists(pkg))
                     return (false, $"Publish preflight failed: package not found: {pkg}");
 
-                var packageLength = spec.WhatIf || !IsNuGetOrgPublishSource(spec.PublishSource)
-                    ? 0
-                    : new FileInfo(pkg).Length;
+                var packageLength = enforceNuGetOrgPackageSize ? new FileInfo(pkg).Length : 0;
                 if (packageLength > NuGetOrgPackageSizeLimitBytes)
                 {
                     return (false,
@@ -98,15 +98,29 @@ public sealed partial class DotNetRepositoryReleaseService
         return (true, null);
     }
 
-    private static bool IsNuGetOrgPublishSource(string? source)
+    private static bool IsNuGetOrgPublishSource(string? source, string? searchRoot)
     {
         if (string.IsNullOrWhiteSpace(source))
             return true;
 
-        return Uri.TryCreate(source!.Trim(), UriKind.Absolute, out var uri) &&
+        var trimmed = source!.Trim();
+        if (IsNuGetOrgEndpoint(trimmed))
+            return true;
+
+        if (!string.IsNullOrWhiteSpace(searchRoot) &&
+            TryResolveNamedPublishSource(trimmed, searchRoot!, out var configuredSource))
+        {
+            return IsNuGetOrgEndpoint(configuredSource);
+        }
+
+        // Keep the conventional key safe even when no NuGet.config is available locally.
+        return string.Equals(trimmed, "nuget.org", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsNuGetOrgEndpoint(string source)
+        => Uri.TryCreate(source, UriKind.Absolute, out var uri) &&
                (string.Equals(uri.Host, "nuget.org", StringComparison.OrdinalIgnoreCase) ||
                 uri.Host.EndsWith(".nuget.org", StringComparison.OrdinalIgnoreCase));
-    }
 
     private static IReadOnlyList<string>? GetPublishPreflightVersionSources(DotNetRepositoryReleaseSpec spec)
     {

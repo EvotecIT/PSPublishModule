@@ -161,6 +161,46 @@ public sealed class DotNetRepositoryReleaseServiceTests
         }
     }
 
+    [Theory]
+    [InlineData("nuget.org")]
+    [InlineData("PublicPackages")]
+    public void PublishPreflight_RejectsPackageAboveNuGetOrgLimitForNamedSource(string sourceName)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root.FullName, "NuGet.config"),
+                $"<configuration><packageSources><clear /><add key=\"{sourceName}\" value=\"https://api.nuget.org/v3/index.json\" /></packageSources></configuration>");
+            var packagePath = Path.Combine(root.FullName, "Sample.Package.1.2.3.nupkg");
+            using (var stream = new FileStream(packagePath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                stream.SetLength(DotNetRepositoryReleaseService.NuGetOrgPackageSizeLimitBytes + 1);
+
+            var project = new DotNetRepositoryProjectResult
+            {
+                ProjectName = "Sample.Package",
+                PackageId = "Sample.Package",
+                NewVersion = "1.2.3"
+            };
+            project.Packages.Add(packagePath);
+
+            var preflight = new DotNetRepositoryReleaseService(new NullLogger()).ValidatePublishPreflight(
+                new[] { project },
+                new DotNetRepositoryReleaseSpec
+                {
+                    RootPath = root.FullName,
+                    PublishSource = sourceName
+                });
+
+            Assert.False(preflight.Success);
+            Assert.Contains("exceeds the nuget.org package limit", preflight.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void Execute_IgnoresNestedGitWorktreeRoots_DuringProjectDiscovery()
     {

@@ -14,6 +14,42 @@ public sealed partial class DotNetRepositoryReleaseService
         out string resolvedSource)
     {
         resolvedSource = string.Empty;
+        if (!TryResolveNamedPublishSource(sourceName, searchRoot, out var configuredSource))
+            return false;
+
+        try
+        {
+            if (Uri.TryCreate(configuredSource, UriKind.Absolute, out var configuredUri))
+            {
+                if (!configuredUri.IsFile)
+                    return false;
+
+                resolvedSource = Path.GetFullPath(configuredUri.LocalPath);
+                return true;
+            }
+
+            var normalized = PathValueResolver.NormalizeSeparators(configuredSource);
+            var settingsRoot = Path.GetFullPath(searchRoot);
+            if (!Directory.Exists(settingsRoot))
+                settingsRoot = Path.GetDirectoryName(settingsRoot) ?? settingsRoot;
+            resolvedSource = Path.IsPathRooted(normalized)
+                ? Path.GetFullPath(normalized)
+                : PathValueResolver.Resolve(settingsRoot, normalized);
+            return true;
+        }
+        catch
+        {
+            // dotnet nuget push reports malformed or inaccessible configuration itself.
+            return false;
+        }
+    }
+
+    private static bool TryResolveNamedPublishSource(
+        string sourceName,
+        string searchRoot,
+        out string configuredSource)
+    {
+        configuredSource = string.Empty;
         if (string.IsNullOrWhiteSpace(sourceName) || string.IsNullOrWhiteSpace(searchRoot))
             return false;
 
@@ -24,31 +60,14 @@ public sealed partial class DotNetRepositoryReleaseService
                 settingsRoot = Path.GetDirectoryName(settingsRoot) ?? settingsRoot;
 
             var settings = Settings.LoadDefaultSettings(settingsRoot);
-            var configuredSource = new PackageSourceProvider(settings)
+            configuredSource = new PackageSourceProvider(settings)
                 .LoadPackageSources()
                 .FirstOrDefault(source => string.Equals(
                     source.Name,
                     sourceName,
                     StringComparison.OrdinalIgnoreCase))
-                ?.Source;
-            if (string.IsNullOrWhiteSpace(configuredSource))
-                return false;
-            var configuredSourceValue = configuredSource!;
-
-            if (Uri.TryCreate(configuredSourceValue, UriKind.Absolute, out var configuredUri))
-            {
-                if (!configuredUri.IsFile)
-                    return false;
-
-                resolvedSource = Path.GetFullPath(configuredUri.LocalPath);
-                return true;
-            }
-
-            var normalized = PathValueResolver.NormalizeSeparators(configuredSourceValue);
-            resolvedSource = Path.IsPathRooted(normalized)
-                ? Path.GetFullPath(normalized)
-                : PathValueResolver.Resolve(settingsRoot, normalized);
-            return true;
+                ?.Source ?? string.Empty;
+            return !string.IsNullOrWhiteSpace(configuredSource);
         }
         catch
         {
