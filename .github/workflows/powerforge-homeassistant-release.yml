@@ -1,0 +1,65 @@
+name: PowerForge Home Assistant Release
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: Merged pull request number that initiated the release.
+        required: true
+        type: number
+      merge_commit_sha:
+        description: Expected pull request merge commit SHA.
+        required: false
+        default: ""
+        type: string
+      default_branch:
+        description: Branch that receives the version-only release commit.
+        required: false
+        default: main
+        type: string
+      increment:
+        description: Optional auto, none, patch, minor, or major override.
+        required: false
+        default: auto
+        type: string
+    secrets:
+      github-token:
+        required: false
+
+permissions:
+  checks: read
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: powerforge-homeassistant-release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.default_branch }}
+          fetch-depth: 0
+          path: source
+          token: ${{ secrets['github-token'] != '' && secrets['github-token'] || github.token }}
+
+      - name: Setup Node.js for HACS plugin builds
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - name: Run PowerForge release
+        uses: EvotecIT/PSPublishModule/.github/actions/homeassistant-release@PowerForge-v1.0.2
+        with:
+          repository-root: ${{ github.workspace }}/source
+          repository: ${{ github.repository }}
+          pr-number: ${{ inputs.pr_number }}
+          merge-sha: ${{ inputs.merge_commit_sha }}
+          default-branch: ${{ inputs.default_branch }}
+          increment: ${{ inputs.increment }}
+          github-token: ${{ secrets['github-token'] != '' && secrets['github-token'] || github.token }}

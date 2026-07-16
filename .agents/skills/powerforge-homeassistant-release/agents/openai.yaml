@@ -1,0 +1,4 @@
+interface:
+  display_name: "PowerForge Home Assistant Releases"
+  short_description: "Automate thin HACS and Home Assistant releases"
+  default_prompt: "Use $powerforge-homeassistant-release to onboard or recover a Home Assistant integration release."
