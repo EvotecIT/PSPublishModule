@@ -7,7 +7,7 @@ public sealed class ApacheSiteEnableDeploymentTests
     {
         var script = ReadRepoFile("Deployment", "Linux", "powerforge-apache-site-enable.sh");
         var httpEnable = script.IndexOf("a2ensite \"$http_site\"", StringComparison.Ordinal);
-        var certificateGuard = script.IndexOf("! -s \"$certificate_dir/fullchain.pem\"", StringComparison.Ordinal);
+        var certificateGuard = script.IndexOf("if [[ \"$certificate_available\" == 0 ]]", StringComparison.Ordinal);
         var httpsEnable = script.IndexOf("a2ensite \"$https_site\"", StringComparison.Ordinal);
 
         Assert.True(httpEnable >= 0, "Expected the HTTP site to be enabled.");
@@ -26,6 +26,8 @@ public sealed class ApacheSiteEnableDeploymentTests
         Assert.Contains("invalid HTTP site name", script, StringComparison.Ordinal);
         Assert.Contains("invalid HTTPS site name", script, StringComparison.Ordinal);
         Assert.Contains("invalid certificate name", script, StringComparison.Ordinal);
+        Assert.Contains("failed to disable stale HTTPS site", script, StringComparison.Ordinal);
+        Assert.Contains("-L \"$https_enabled_path\"", script, StringComparison.Ordinal);
         Assert.Contains("apachectl configtest", script, StringComparison.Ordinal);
         Assert.Contains("restore_site_state", script, StringComparison.Ordinal);
         Assert.Contains("a2dissite \"$site\"", script, StringComparison.Ordinal);

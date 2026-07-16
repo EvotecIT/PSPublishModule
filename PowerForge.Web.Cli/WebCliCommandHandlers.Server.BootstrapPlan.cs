@@ -221,6 +221,9 @@ internal static partial class WebCliCommandHandlers
 
         foreach (var secret in manifest.Secrets ?? Array.Empty<PowerForgeServerSecret>())
         {
+            if (secret.RequiredDuringBootstrap == false)
+                continue;
+
             var message = ShellQuote($"Restore encrypted secret {secret.Id} before continuing.");
             string guard;
             if (!string.IsNullOrWhiteSpace(secret.Path))

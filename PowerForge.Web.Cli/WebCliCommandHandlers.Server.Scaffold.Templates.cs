@@ -71,6 +71,7 @@ internal static partial class WebCliCommandHandlers
                 Id = $"letsencrypt-{options.SiteId}-private-keys",
                 Path = $"/etc/letsencrypt/archive/{options.Domain}",
                 RequiredFor = ["certificate-continuity"],
+                RequiredDuringBootstrap = false,
                 Capture = "encrypted",
                 RestoreMode = "directory"
             },
@@ -79,6 +80,7 @@ internal static partial class WebCliCommandHandlers
                 Id = "letsencrypt-acme-account",
                 Path = "/etc/letsencrypt/accounts",
                 RequiredFor = ["certificate-renewal"],
+                RequiredDuringBootstrap = false,
                 Capture = "encrypted",
                 RestoreMode = "directory"
             }

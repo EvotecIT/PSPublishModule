@@ -59,8 +59,18 @@ http_enabled_path="/etc/apache2/sites-enabled/$http_site"
 https_enabled_path="/etc/apache2/sites-enabled/$https_site"
 http_was_enabled=0
 https_was_enabled=0
-[[ -e "$http_enabled_path" ]] && http_was_enabled=1
-[[ -e "$https_enabled_path" ]] && https_was_enabled=1
+[[ -e "$http_enabled_path" || -L "$http_enabled_path" ]] && http_was_enabled=1
+[[ -e "$https_enabled_path" || -L "$https_enabled_path" ]] && https_was_enabled=1
+
+certificate_dir="/etc/letsencrypt/live/$certificate_name"
+certificate_available=0
+if [[ -s "$certificate_dir/fullchain.pem" && -s "$certificate_dir/privkey.pem" ]]; then
+  certificate_available=1
+elif [[ "$https_was_enabled" == 1 ]]; then
+  if ! a2dissite "$https_site" >/dev/null; then
+    fail "certificate is missing and failed to disable stale HTTPS site $https_site"
+  fi
+fi
 
 restore_site_state() {
   local site="$1"
@@ -86,8 +96,7 @@ if ! systemctl reload "$apache_service"; then
   fail 'HTTP Apache reload failed; previous site state restored'
 fi
 
-certificate_dir="/etc/letsencrypt/live/$certificate_name"
-if [[ ! -s "$certificate_dir/fullchain.pem" || ! -s "$certificate_dir/privkey.pem" ]]; then
+if [[ "$certificate_available" == 0 ]]; then
   echo "powerforge-apache-site-enable: HTTP site enabled; obtain or restore certificate $certificate_name before enabling HTTPS" >&2
   exit 3
 fi

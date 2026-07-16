@@ -37,6 +37,7 @@ public sealed class ServerScaffoldTests
         Assert.Contains($"EvotecIT/PSPublishModule/{EngineRef}/Schemas/powerforge.web.serverrecovery.schema.json", manifest, StringComparison.Ordinal);
         Assert.DoesNotContain("EvotecIT/PSPublishModule/main/Schemas/powerforge.web.serverrecovery.schema.json", manifest, StringComparison.Ordinal);
         Assert.Contains("restricted SSH accounts", manifest, StringComparison.Ordinal);
+        Assert.Equal(2, manifest.Split("\"requiredDuringBootstrap\": false", StringSplitOptions.None).Length - 1);
         Assert.Contains("/usr/local/sbin/powerforge-apache-site-enable --http-site example-test.conf --https-site example-test-le-ssl.conf --certificate-name example.test", manifest, StringComparison.Ordinal);
         Assert.DoesNotContain("sudo -n a2ensite", manifest, StringComparison.Ordinal);
     }

@@ -130,6 +130,7 @@ internal sealed class PowerForgeServerSecret
     public string? Path { get; set; }
     public string? Env { get; set; }
     public string[]? RequiredFor { get; set; }
+    public bool? RequiredDuringBootstrap { get; set; }
     public string Capture { get; set; } = "exclude";
     public string? RestoreMode { get; set; }
     public string? Owner { get; set; }

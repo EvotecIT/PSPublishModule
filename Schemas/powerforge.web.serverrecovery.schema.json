@@ -281,6 +281,10 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "requiredDuringBootstrap": {
+          "type": "boolean",
+          "description": "Defaults to true. Set false only when a secret may be created after the initial bootstrap stage, such as first-issue certificate material."
+        },
         "capture": {
           "type": "string",
           "enum": ["exclude", "encrypted"]

@@ -97,7 +97,8 @@ public sealed class ServerRecoveryBootstrapPlanTests
             [
                 new PowerForge.Web.Cli.PowerForgeServerSecret { Id = "directory", Path = "/etc/example", RestoreMode = "directory" },
                 new PowerForge.Web.Cli.PowerForgeServerSecret { Id = "file", Path = "/etc/example/token", RestoreMode = "file" },
-                new PowerForge.Web.Cli.PowerForgeServerSecret { Id = "environment", Env = "EXAMPLE_TOKEN" }
+                new PowerForge.Web.Cli.PowerForgeServerSecret { Id = "environment", Env = "EXAMPLE_TOKEN" },
+                new PowerForge.Web.Cli.PowerForgeServerSecret { Id = "first-issue-certificate", Path = "/etc/example/certificate", RequiredDuringBootstrap = false }
             ]
         };
 
@@ -105,6 +106,7 @@ public sealed class ServerRecoveryBootstrapPlanTests
         var secrets = steps.Where(step => step.Category == "secrets").ToArray();
 
         Assert.Equal(3, secrets.Length);
+        Assert.DoesNotContain(secrets, step => step.Title.Contains("first-issue-certificate", StringComparison.Ordinal));
         Assert.Contains("test -d '/etc/example'", secrets[0].Command, StringComparison.Ordinal);
         Assert.Contains("-mindepth 1 -maxdepth 1", secrets[0].Command, StringComparison.Ordinal);
         Assert.Contains("test -s '/etc/example/token'", secrets[1].Command, StringComparison.Ordinal);
