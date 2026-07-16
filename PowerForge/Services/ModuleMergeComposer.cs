@@ -200,13 +200,18 @@ internal static class ModuleMergeComposer
             }
 
             var block = new List<string>();
-            var extractedDirectives = ExtractPreambleDirectives(lines, requires, usingLines);
+            var directiveLineReplacements = ExtractPreambleDirectives(lines, requires, usingLines);
             for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++)
             {
-                if (extractedDirectives.Contains(lineIndex))
-                    continue;
-
                 var line = lines[lineIndex];
+                if (directiveLineReplacements.TryGetValue(lineIndex, out var replacement))
+                {
+                    if (replacement.Length == 0)
+                        continue;
+
+                    line = replacement;
+                }
+
                 block.Add(fixRelativePaths ? NormalizeMergedRelativePathReferences(line) : line);
             }
 
@@ -245,46 +250,49 @@ internal static class ModuleMergeComposer
         return merged;
     }
 
-    private static HashSet<int> ExtractPreambleDirectives(
+    private static Dictionary<int, string> ExtractPreambleDirectives(
         IReadOnlyList<string> lines,
         ISet<string> requires,
         ISet<string> usingLines)
     {
         // PowerShell using statements are valid only in the script preamble. Restricting extraction to that region
         // prevents embedded languages in here-strings and block comments from being mistaken for module directives.
-        var extracted = new HashSet<int>();
+        var lineReplacements = new Dictionary<int, string>();
         var blockCommentDepth = 0;
 
         for (var index = 0; index < lines.Count; index++)
         {
-            var kind = ClassifyPreambleLine(lines[index], ref blockCommentDepth);
+            var kind = ClassifyPreambleLine(lines[index], ref blockCommentDepth, out var directiveStart);
             if (kind == PreambleLineKind.Trivia)
                 continue;
 
             if (kind == PreambleLineKind.Requires)
             {
-                requires.Add(lines[index].TrimStart());
-                extracted.Add(index);
+                requires.Add(lines[index].Substring(directiveStart));
+                lineReplacements[index] = lines[index].Substring(0, directiveStart).TrimEnd();
                 continue;
             }
 
             if (kind == PreambleLineKind.Using)
             {
-                usingLines.Add(lines[index].TrimStart());
-                extracted.Add(index);
+                usingLines.Add(lines[index].Substring(directiveStart));
+                lineReplacements[index] = lines[index].Substring(0, directiveStart).TrimEnd();
                 continue;
             }
 
             break;
         }
 
-        return extracted;
+        return lineReplacements;
     }
 
-    private static PreambleLineKind ClassifyPreambleLine(string line, ref int blockCommentDepth)
+    private static PreambleLineKind ClassifyPreambleLine(
+        string line,
+        ref int blockCommentDepth,
+        out int directiveStart)
     {
         var index = 0;
-        var hasLeadingBlockComment = false;
+        directiveStart = -1;
 
         while (index < line.Length)
         {
@@ -303,7 +311,6 @@ internal static class ModuleMergeComposer
                     return PreambleLineKind.Trivia;
 
                 blockCommentDepth--;
-                hasLeadingBlockComment = true;
                 index = commentEnd + 2;
                 continue;
             }
@@ -317,20 +324,24 @@ internal static class ModuleMergeComposer
             if (line.IndexOf("<#", index, System.StringComparison.Ordinal) == index)
             {
                 blockCommentDepth++;
-                hasLeadingBlockComment = true;
                 index += 2;
                 continue;
             }
 
             if (line[index] == '#')
             {
-                return !hasLeadingBlockComment && StartsWithDirective(line, index, "#requires")
-                    ? PreambleLineKind.Requires
-                    : PreambleLineKind.Trivia;
+                if (!StartsWithDirective(line, index, "#requires"))
+                    return PreambleLineKind.Trivia;
+
+                directiveStart = index;
+                return PreambleLineKind.Requires;
             }
 
-            if (!hasLeadingBlockComment && StartsWithDirective(line, index, "using"))
+            if (StartsWithDirective(line, index, "using"))
+            {
+                directiveStart = index;
                 return PreambleLineKind.Using;
+            }
 
             return PreambleLineKind.Code;
         }
