@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using System.Xml.Linq;
@@ -117,6 +118,42 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.False(result.Success);
             Assert.Contains("already exists", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Sample.Package version 1.2.3", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PublishPreflight_RejectsPackageAboveNuGetOrgLimitBeforeUpload()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var packagePath = Path.Combine(root.FullName, "Sample.Package.1.2.3.nupkg");
+            using (var stream = new FileStream(packagePath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                stream.SetLength(DotNetRepositoryReleaseService.NuGetOrgPackageSizeLimitBytes + 1);
+
+            var project = new DotNetRepositoryProjectResult
+            {
+                ProjectName = "Sample.Package",
+                PackageId = "Sample.Package",
+                NewVersion = "1.2.3"
+            };
+            project.Packages.Add(packagePath);
+
+            var preflight = new DotNetRepositoryReleaseService(new NullLogger()).ValidatePublishPreflight(
+                new[] { project },
+                new DotNetRepositoryReleaseSpec
+                {
+                    RootPath = root.FullName,
+                    PublishSource = "https://api.nuget.org/v3/index.json"
+                });
+
+            Assert.False(preflight.Success);
+            Assert.Contains("exceeds the nuget.org package limit", preflight.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(Path.GetFileName(packagePath), preflight.ErrorMessage, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -658,6 +695,75 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.True(File.Exists(project.Packages[0]));
             Assert.True(File.Exists(project.SymbolPackages[0]));
             Assert.True(File.Exists(project.ReleaseZipPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData(DotNetRepositoryPackStrategy.PerProject)]
+    [InlineData(DotNetRepositoryPackStrategy.MSBuild)]
+    public void Execute_WithAssemblySigning_PreservesSignedPackToolAssembly(DotNetRepositoryPackStrategy packStrategy)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Tool"));
+            var projectPath = Path.Combine(projectDirectory.FullName, "Sample.Tool.csproj");
+            File.WriteAllText(projectPath, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <OutputType>Exe</OutputType>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <PackageId>Sample.Tool</PackageId>
+                    <VersionPrefix>1.0.0</VersionPrefix>
+                    <PackAsTool>true</PackAsTool>
+                    <ToolCommandName>sample-tool</ToolCommandName>
+                  </PropertyGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(projectDirectory.FullName, "Program.cs"), "System.Console.WriteLine(\"sample\");");
+
+            var marker = new byte[] { 0x49, 0x58, 0x53, 0x49, 0x47 };
+            string[] signedPaths = Array.Empty<string>();
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(
+                new DotNetRepositoryReleaseSpec
+                {
+                    RootPath = root.FullName,
+                    Configuration = "Release",
+                    OutputPath = Path.Combine(root.FullName, "packages"),
+                    Pack = true,
+                    PackStrategy = packStrategy,
+                    Publish = false,
+                    UpdateVersions = false,
+                    CreateReleaseZip = false,
+                    CertificateThumbprint = "ABC123",
+                    SignAssemblies = true,
+                    SignPackages = false
+                },
+                request =>
+                {
+                    signedPaths = Assert.IsType<string[]>(request.FilePaths);
+                    foreach (var path in signedPaths.Where(path => path.EndsWith("Sample.Tool.dll", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.None);
+                        stream.Write(marker, 0, marker.Length);
+                    }
+                },
+                _ => { });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Contains(signedPaths, path => path.EndsWith(Path.Combine("obj", "Release", "net8.0", "Sample.Tool.dll"), StringComparison.OrdinalIgnoreCase));
+
+            var package = Assert.Single(Assert.Single(result.Projects, project => project.IsPackable).Packages);
+            using var archive = ZipFile.OpenRead(package);
+            var entry = Assert.Single(archive.Entries, item => string.Equals(item.FullName, "tools/net8.0/any/Sample.Tool.dll", StringComparison.OrdinalIgnoreCase));
+            using var entryStream = entry.Open();
+            using var packagedAssembly = new MemoryStream();
+            entryStream.CopyTo(packagedAssembly);
+            Assert.Equal(marker, packagedAssembly.ToArray().TakeLast(marker.Length).ToArray());
         }
         finally
         {
