@@ -223,22 +223,28 @@ internal static partial class WebCliCommandHandlers
             }
         }
 
-        AddStep(steps, ref order, "systemd", "Reload systemd units", "systemctl daemon-reload", plannedCommands: plannedCommands);
-
-        foreach (var unit in (manifest.Systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>())
-                 .Concat(manifest.Systemd?.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
-                 .Where(static unit => unit.Enabled && !string.IsNullOrWhiteSpace(unit.Name)))
+        if (manifest.Systemd is not null)
         {
-            AddStep(steps, ref order, "systemd", $"Enable {unit.Name}", $"systemctl enable {ShellQuote(unit.Name!)}", plannedCommands: plannedCommands);
+            AddStep(steps, ref order, "systemd", "Reload systemd units", "systemctl daemon-reload", plannedCommands: plannedCommands);
+
+            foreach (var unit in (manifest.Systemd.Services ?? Array.Empty<PowerForgeServerSystemdUnit>())
+                     .Concat(manifest.Systemd.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
+                     .Where(static unit => unit.Enabled && !string.IsNullOrWhiteSpace(unit.Name)))
+            {
+                AddStep(steps, ref order, "systemd", $"Enable {unit.Name}", $"systemctl enable {ShellQuote(unit.Name!)}", plannedCommands: plannedCommands);
+            }
         }
 
-        foreach (var port in manifest.Firewall?.SshPorts ?? Array.Empty<int>())
-            AddStep(steps, ref order, "firewall", $"Allow SSH port {port}", $"ufw allow {port}/tcp", plannedCommands: plannedCommands);
+        if (manifest.Firewall is not null)
+        {
+            foreach (var port in manifest.Firewall.SshPorts ?? Array.Empty<int>())
+                AddStep(steps, ref order, "firewall", $"Allow SSH port {port}", $"ufw allow {port}/tcp", plannedCommands: plannedCommands);
 
-        if (!string.IsNullOrWhiteSpace(manifest.Firewall?.SyncCommand))
-            AddStep(steps, ref order, "firewall", "Apply origin firewall sync", manifest.Firewall.SyncCommand, plannedCommands: plannedCommands);
+            if (!string.IsNullOrWhiteSpace(manifest.Firewall.SyncCommand))
+                AddStep(steps, ref order, "firewall", "Apply origin firewall sync", manifest.Firewall.SyncCommand, plannedCommands: plannedCommands);
 
-        AddStep(steps, ref order, "firewall", "Enable UFW", "ufw --force enable", plannedCommands: plannedCommands);
+            AddStep(steps, ref order, "firewall", "Enable UFW", "ufw --force enable", plannedCommands: plannedCommands);
+        }
 
         foreach (var secret in manifest.Secrets ?? Array.Empty<PowerForgeServerSecret>())
         {

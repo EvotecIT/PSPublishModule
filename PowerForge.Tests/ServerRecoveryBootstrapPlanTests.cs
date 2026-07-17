@@ -121,6 +121,18 @@ public sealed class ServerRecoveryBootstrapPlanTests
     }
 
     [Fact]
+    public void BuildPlan_DoesNotInventUndeclaredSystemdOrFirewallWork()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest();
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+
+        Assert.DoesNotContain(steps, step => step.Category == "systemd");
+        Assert.DoesNotContain(steps, step => step.Category == "firewall");
+        Assert.DoesNotContain(steps, step => step.Command?.Contains("ufw --force enable", StringComparison.Ordinal) == true);
+    }
+
+    [Fact]
     public void BuildPlan_FailsClosedUntilCapturedRepositoryRevisionIsHydrated()
     {
         var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
