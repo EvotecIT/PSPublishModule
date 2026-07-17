@@ -16,6 +16,7 @@ public sealed class ServerScaffoldTests
         var files = WebCliCommandHandlers.BuildServerScaffoldFiles(options);
         var workflow = files[".github/workflows/website-deploy.yml"];
         var backupWorkflow = files[".github/workflows/server-backup.yml"];
+        var recoveryValidationWorkflow = files[".github/workflows/server-recovery-ci.yml"];
         var manifest = files["deploy/linux/example.serverrecovery.json"];
         var onboarding = files["deploy/linux/ONBOARDING.md"];
 
@@ -27,6 +28,14 @@ public sealed class ServerScaffoldTests
         Assert.Contains("deployment_ssh_known_hosts: ${{ secrets.DEPLOYMENT_SSH_KNOWN_HOSTS }}", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment_host: ${{ secrets.DEPLOYMENT_HOST }}", workflow, StringComparison.Ordinal);
         Assert.Contains("server-host: ${{ secrets.DEPLOYMENT_HOST }}", backupWorkflow, StringComparison.Ordinal);
+        Assert.Contains("powerforge-server-recovery-validate@" + EngineRef, recoveryValidationWorkflow, StringComparison.Ordinal);
+        Assert.Contains("manifest-path: deploy/linux/example.serverrecovery.json", recoveryValidationWorkflow, StringComparison.Ordinal);
+        Assert.Contains("capture-user: powerforge-example-backup", recoveryValidationWorkflow, StringComparison.Ordinal);
+        Assert.Contains("fail-on-warnings: true", recoveryValidationWorkflow, StringComparison.Ordinal);
+        Assert.Contains("- \"Website/deploy/**\"", recoveryValidationWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("actions/checkout", recoveryValidationWorkflow, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("run:", recoveryValidationWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("${{ secrets.", recoveryValidationWorkflow, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("CLOUDFLARE_API_TOKEN", workflow, StringComparison.Ordinal);
         Assert.Contains("CLOUDFLARE_PURGE_ENABLED=0", files["deploy/linux/example.test.env"], StringComparison.Ordinal);
         Assert.DoesNotContain("www.example.test", files["Website/deploy/apache.conf"], StringComparison.Ordinal);

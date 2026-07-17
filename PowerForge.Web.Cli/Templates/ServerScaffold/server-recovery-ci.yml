@@ -1,0 +1,29 @@
+name: Server Recovery Validation
+
+on:
+  pull_request:
+    paths:
+      - "deploy/linux/**"
+      - "__WEBSITE_ROOT__/deploy/**"
+      - ".github/workflows/server-backup.yml"
+      - ".github/workflows/server-recovery-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: __SITE_ID__-server-recovery-validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Validate recovery manifest and generated plans
+        uses: EvotecIT/PSPublishModule/.github/actions/powerforge-server-recovery-validate@__ENGINE_REF__
+        with:
+          manifest-path: deploy/linux/__SITE_ID__.serverrecovery.json
+          capture-user: powerforge-__SITE_ID__-backup
+          fail-on-warnings: true

@@ -271,6 +271,13 @@ internal static partial class WebCliCommandHandlers
             ("__SITE_ID__", options.SiteId),
             ("__ENGINE_REF__", options.EngineRef));
 
+    private static string BuildScaffoldRecoveryValidationWorkflow(PowerForgeServerScaffoldOptions options)
+        => ServerScaffoldTemplateStore.Render(
+            "server-recovery-ci.yml",
+            ("__SITE_ID__", options.SiteId),
+            ("__WEBSITE_ROOT__", options.WebsiteRoot),
+            ("__ENGINE_REF__", options.EngineRef));
+
     private static string BuildScaffoldSiteEnvironment(PowerForgeServerScaffoldOptions options)
         => ServerScaffoldTemplateStore.Render(
             "site.env",

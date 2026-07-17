@@ -96,6 +96,7 @@ internal static partial class WebCliCommandHandlers
         {
             [".github/workflows/website-deploy.yml"] = BuildScaffoldWebsiteWorkflow(options),
             [".github/workflows/server-backup.yml"] = BuildScaffoldBackupWorkflow(options),
+            [".github/workflows/server-recovery-ci.yml"] = BuildScaffoldRecoveryValidationWorkflow(options),
             [$"{deployRoot}/{options.Domain}.env"] = BuildScaffoldSiteEnvironment(options),
             [$"{deployRoot}/{options.SiteId}.serverrecovery.json"] = manifestJson,
             [$"{deployRoot}/powerforge-{options.SiteId}.sudoers"] = BuildScaffoldDeploymentSudoers(options),
