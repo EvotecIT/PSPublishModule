@@ -373,10 +373,20 @@ public sealed class ServerRecoverySecurityTests
         var manifest = CreateManifest();
         manifest.Repositories =
         [
-            new PowerForgeServerRepository { Role = "application", Path = "/srv/example" }
+            new PowerForgeServerRepository { Role = "application", Path = "/srv/example" },
+            new PowerForgeServerRepository { Role = "trailing", Path = "/srv/trailing/" }
         ];
         manifest.Paths =
         [
+            new PowerForgeServerPath
+            {
+                Id = "managed-directory",
+                Path = "/var/lib/example/",
+                Kind = "directory",
+                Owner = "root",
+                Group = "root",
+                Mode = "0755"
+            },
             new PowerForgeServerPath
             {
                 Id = "managed-file",
@@ -402,6 +412,8 @@ public sealed class ServerRecoverySecurityTests
 
         var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
 
+        Assert.Contains(errors, error => error.Contains("repositories[1].path must not end with '/'", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("Managed path 'managed-directory' target must not end with '/'", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Managed path 'managed-file' source must not end with '/'", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Managed path 'managed-file' target must not end with '/'", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("apache.files[0].source must not end with '/'", StringComparison.Ordinal));

@@ -215,6 +215,17 @@ public sealed class ServerScaffoldTests
         sourceManagedPath["source"] = sourceManagedPath["source"]!.GetValue<string>() + "/";
         Assert.False(EvaluateSchema(schema, trailingManagedSource));
 
+        var trailingManagedDirectory = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        var managedDirectory = trailingManagedDirectory["paths"]!.AsArray()
+            .First(path => path?["kind"]?.GetValue<string>() == "directory")!;
+        managedDirectory["path"] = managedDirectory["path"]!.GetValue<string>() + "/";
+        Assert.False(EvaluateSchema(schema, trailingManagedDirectory));
+
+        var trailingRepository = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        var repositoryPath = trailingRepository["repositories"]!.AsArray()[0]!["path"]!;
+        trailingRepository["repositories"]!.AsArray()[0]!["path"] = repositoryPath.GetValue<string>() + "/";
+        Assert.False(EvaluateSchema(schema, trailingRepository));
+
         var trailingApacheTarget = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
         var apacheSite = trailingApacheTarget["apache"]!["sites"]!.AsArray()[0]!;
         apacheSite["target"] = apacheSite["target"]!.GetValue<string>() + "/";

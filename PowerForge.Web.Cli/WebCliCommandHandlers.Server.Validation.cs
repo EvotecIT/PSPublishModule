@@ -43,6 +43,8 @@ internal static partial class WebCliCommandHandlers
             var normalizedPath = NormalizeCapturePath(path.Path, $"paths[{path.Id}].path", errors);
             if (normalizedPath is not null)
             {
+                if (!string.Equals(normalizedPath, "/", StringComparison.Ordinal) && HasTrailingPathSeparator(path.Path))
+                    errors.Add($"Managed path '{path.Id}' target must not end with '/'.");
                 if (normalizedPath.IndexOfAny(['*', '?', '[']) >= 0)
                     errors.Add($"Managed path '{path.Id}' must use an exact path.");
                 if (!managedPaths.Add(normalizedPath))
@@ -67,8 +69,6 @@ internal static partial class WebCliCommandHandlers
                 {
                     if (HasTrailingPathSeparator(path.Source))
                         errors.Add($"Managed path '{path.Id}' source must not end with '/'.");
-                    if (normalizedPath is not null && HasTrailingPathSeparator(path.Path))
-                        errors.Add($"Managed path '{path.Id}' target must not end with '/'.");
                     if (normalizedSource.IndexOfAny(['*', '?', '[']) >= 0)
                         errors.Add($"Managed path '{path.Id}' source must use an exact path.");
                     if (!string.Equals(path.Kind, "file", StringComparison.OrdinalIgnoreCase))
@@ -331,7 +331,9 @@ internal static partial class WebCliCommandHandlers
         foreach (var repository in repositories ?? Array.Empty<PowerForgeServerRepository>())
         {
             var field = $"repositories[{index}]";
-            NormalizeCapturePath(repository.Path, $"{field}.path", errors);
+            var repositoryPath = NormalizeCapturePath(repository.Path, $"{field}.path", errors);
+            if (repositoryPath is not null && HasTrailingPathSeparator(repository.Path))
+                errors.Add($"{field}.path must not end with '/'.");
 
             var prerequisites = new HashSet<string>(StringComparer.Ordinal);
             var prerequisiteIndex = 0;

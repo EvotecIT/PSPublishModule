@@ -293,8 +293,11 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Contains("test \"$(stat -c '%u' -- \"$powerforge_path\")\" = 0 ||", guard.Command, StringComparison.Ordinal);
         Assert.Contains("return 1", guard.Command, StringComparison.Ordinal);
         Assert.Contains("-perm /022", guard.Command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_repository_ancestor='/srv/powerforge/sources'", repository.Command, StringComparison.Ordinal);
+        Assert.Contains("while [ ! -e \"$powerforge_repository_ancestor\" ] && [ ! -L \"$powerforge_repository_ancestor\" ]", repository.Command, StringComparison.Ordinal);
         Assert.Contains("mkdir -p -- '/srv/powerforge/sources'", repository.Command, StringComparison.Ordinal);
-        Assert.Contains("powerforge_assert_root_controlled_path '/srv/powerforge/sources';", repository.Command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path '/srv/powerforge/sources'", repository.Command, StringComparison.Ordinal);
+        Assert.Contains("test ! -e '/srv/powerforge/sources/example' && test ! -L '/srv/powerforge/sources/example'", repository.Command, StringComparison.Ordinal);
         Assert.Contains("powerforge_assert_root_controlled_path '/srv/powerforge/sources/example'", repository.Command, StringComparison.Ordinal);
         Assert.Contains("git --no-optional-locks -C '/srv/powerforge/sources/example' status --porcelain --untracked-files=normal", repository.Command, StringComparison.Ordinal);
         Assert.Contains("Repository must be clean before installing managed files", repository.Command, StringComparison.Ordinal);
@@ -343,9 +346,10 @@ public sealed class ServerRecoveryBootstrapPlanTests
             "example",
             "0700");
 
-        Assert.Contains("powerforge_directory_ancestor=$(dirname -- '/var/www/example/site/releases')", rootCommand, StringComparison.Ordinal);
+        Assert.Contains("powerforge_directory_ancestor='/var/www/example/site'", rootCommand, StringComparison.Ordinal);
         Assert.Contains("while [ ! -e \"$powerforge_directory_ancestor\" ] && [ ! -L \"$powerforge_directory_ancestor\" ]", rootCommand, StringComparison.Ordinal);
         Assert.Contains("powerforge_assert_root_controlled_path \"$powerforge_directory_ancestor\"", rootCommand, StringComparison.Ordinal);
+        Assert.Contains("mkdir -p -- '/var/www/example/site'", rootCommand, StringComparison.Ordinal);
         Assert.Contains("test -d '/var/www/example/site/releases' && test ! -L '/var/www/example/site/releases'", rootCommand, StringComparison.Ordinal);
         Assert.EndsWith("test -d '/var/www/example/site/releases' && test ! -L '/var/www/example/site/releases' && test \"$(stat -c '%u' -- '/var/www/example/site/releases')\" = 0", rootCommand, StringComparison.Ordinal);
         Assert.Contains("test -d '/home/example/.ssh' && test ! -L '/home/example/.ssh'", userCommand, StringComparison.Ordinal);
@@ -521,6 +525,8 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Contains("powerforge_sudoers_replaced=1", command, StringComparison.Ordinal);
         Assert.Contains("powerforge_sudoers_had_previous", command, StringComparison.Ordinal);
         Assert.Contains("test -f '/etc/sudoers.d/powerforge-example' && test ! -L '/etc/sudoers.d/powerforge-example'", command, StringComparison.Ordinal);
+        Assert.Contains("|| { echo 'Managed root target must be a regular non-symlink file when it already exists: /etc/sudoers.d/powerforge-example' >&2; exit 3; }", command, StringComparison.Ordinal);
+        Assert.Contains("if [ -e '/etc/sudoers.d/powerforge-example' ]; then cp -a -- '/etc/sudoers.d/powerforge-example'", command, StringComparison.Ordinal);
         Assert.Contains("mv -fT -- \"$powerforge_sudoers_backup\" '/etc/sudoers.d/powerforge-example'", command, StringComparison.Ordinal);
         Assert.Contains("visudo -c || powerforge_sudoers_status=1", command, StringComparison.Ordinal);
         Assert.Contains("trap - EXIT HUP INT TERM", command, StringComparison.Ordinal);

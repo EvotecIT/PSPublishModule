@@ -187,10 +187,7 @@ internal static partial class WebCliCommandHandlers
                 var branchArg = string.IsNullOrWhiteSpace(repository.Branch) ? string.Empty : $" --branch {ShellQuote(repository.Branch)}";
                 var gitDirectory = repository.Path.TrimEnd('/') + "/.git";
                 var gitPrefix = BuildRepositoryGitPrefix(repository);
-                var repositoryParent = GetUnixParentDirectory(repository.Path);
-                var ensureParent = repositoryParent == "/"
-                    ? "powerforge_assert_root_controlled_path /; "
-                    : $"mkdir -p -- {ShellQuote(repositoryParent)}; powerforge_assert_root_controlled_path {ShellQuote(repositoryParent)}; ";
+                var prepareCloneTarget = BuildRepositoryCloneTargetSafetyCommand(repository.Path);
                 var pinRef = string.IsNullOrWhiteSpace(repository.Ref)
                     ? string.Empty
                     : $"; git -C {ShellQuote(repository.Path)} checkout --detach {ShellQuote(repository.Ref)}";
@@ -198,7 +195,7 @@ internal static partial class WebCliCommandHandlers
                     $"; powerforge_repository_status=$(git --no-optional-locks -C {ShellQuote(repository.Path)} status --porcelain --untracked-files=normal); " +
                     $"test -z \"$powerforge_repository_status\" || {{ echo {ShellQuote($"Repository must be clean before installing managed files: {repository.Path}")} >&2; exit 3; }}";
                 AddStep(steps, ref order, "repositories", $"Clone or update {repository.Role} repository",
-                    $"if [ -d {ShellQuote(gitDirectory)} ]; then powerforge_assert_root_controlled_path {ShellQuote(repository.Path)}; {gitPrefix}git -C {ShellQuote(repository.Path)} fetch --all --tags --prune; else {ensureParent}{gitPrefix}git clone{branchArg} {ShellQuote(repository.Url)} {ShellQuote(repository.Path)}; fi; powerforge_assert_root_controlled_path {ShellQuote(repository.Path)}{pinRef}{cleanCheck}",
+                    $"if [ -d {ShellQuote(gitDirectory)} ]; then powerforge_assert_root_controlled_path {ShellQuote(repository.Path)}; {gitPrefix}git -C {ShellQuote(repository.Path)} fetch --all --tags --prune; else {prepareCloneTarget}; {gitPrefix}git clone{branchArg} {ShellQuote(repository.Url)} {ShellQuote(repository.Path)}; fi; powerforge_assert_root_controlled_path {ShellQuote(repository.Path)}{pinRef}{cleanCheck}",
                     plannedCommands: plannedCommands);
             }
         }
@@ -350,7 +347,8 @@ internal static partial class WebCliCommandHandlers
             "trap 'exit 143' TERM",
             $"{install} \"$powerforge_sudoers_temp\"",
             "visudo -cf \"$powerforge_sudoers_temp\"",
-            $"if [ -e {target} ] || [ -L {target} ]; then test -f {target} && test ! -L {target}; cp -a -- {target} \"$powerforge_sudoers_backup\"; powerforge_sudoers_had_previous=1; fi",
+            BuildExistingRegularFileTargetGuard(path.Path ?? string.Empty),
+            $"if [ -e {target} ]; then cp -a -- {target} \"$powerforge_sudoers_backup\"; powerforge_sudoers_had_previous=1; fi",
             "powerforge_sudoers_replaced=1",
             $"mv -fT -- \"$powerforge_sudoers_temp\" {target}",
             "visudo -c",
@@ -398,9 +396,7 @@ internal static partial class WebCliCommandHandlers
         }
 
         return string.Join('\n',
-            $"powerforge_directory_ancestor=$(dirname -- {quotedTarget})",
-            "while [ ! -e \"$powerforge_directory_ancestor\" ] && [ ! -L \"$powerforge_directory_ancestor\" ]; do powerforge_directory_ancestor=$(dirname -- \"$powerforge_directory_ancestor\"); done",
-            "powerforge_assert_root_controlled_path \"$powerforge_directory_ancestor\"",
+            BuildRootControlledParentPreparationCommand(target, "directory"),
             existingTargetGuard,
             $"install -d -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {quotedTarget}",
             $"test -d {quotedTarget} && test ! -L {quotedTarget} && test \"$(stat -c '%u' -- {quotedTarget})\" = 0");
@@ -449,12 +445,42 @@ internal static partial class WebCliCommandHandlers
         => $"powerforge_assert_root_controlled_path \"$(dirname -- {ShellQuote(target)})\"";
 
     private static string BuildRootControlledTargetSafetyCommand(string target)
+        => string.Join('\n',
+            BuildRootControlledTargetParentSafetyCommand(target),
+            BuildExistingRegularFileTargetGuard(target));
+
+    private static string BuildExistingRegularFileTargetGuard(string target)
     {
         var quotedTarget = ShellQuote(target);
         var message = ShellQuote($"Managed root target must be a regular non-symlink file when it already exists: {target}");
+        return $"if [ -e {quotedTarget} ] || [ -L {quotedTarget} ]; then test -f {quotedTarget} && test ! -L {quotedTarget} || {{ echo {message} >&2; exit 3; }}; fi";
+    }
+
+    private static string BuildRepositoryCloneTargetSafetyCommand(string repositoryPath)
+    {
+        var quotedRepository = ShellQuote(repositoryPath);
+        var message = ShellQuote($"Fresh clone target must not already exist or be a symlink: {repositoryPath}");
         return string.Join('\n',
-            BuildRootControlledTargetParentSafetyCommand(target),
-            $"if [ -e {quotedTarget} ] || [ -L {quotedTarget} ]; then test -f {quotedTarget} && test ! -L {quotedTarget} || {{ echo {message} >&2; exit 3; }}; fi");
+            BuildRootControlledParentPreparationCommand(repositoryPath, "repository"),
+            $"test ! -e {quotedRepository} && test ! -L {quotedRepository} || {{ echo {message} >&2; exit 3; }}");
+    }
+
+    private static string BuildRootControlledParentPreparationCommand(
+        string target,
+        string variablePrefix)
+    {
+        var parent = GetUnixParentDirectory(target);
+        var quotedParent = ShellQuote(parent);
+        var variable = $"powerforge_{variablePrefix}_ancestor";
+        var commands = new List<string>
+        {
+            $"{variable}={quotedParent}",
+            $"while [ ! -e \"${variable}\" ] && [ ! -L \"${variable}\" ]; do {variable}=$(dirname -- \"${variable}\"); done",
+            $"powerforge_assert_root_controlled_path \"${variable}\""
+        };
+        commands.Add($"mkdir -p -- {quotedParent}");
+        commands.Add($"powerforge_assert_root_controlled_path {quotedParent}");
+        return string.Join('\n', commands);
     }
 
     private static bool RequiresRootControlledPathGuard(PowerForgeServerRecoveryManifest manifest)

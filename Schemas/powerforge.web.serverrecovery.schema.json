@@ -67,7 +67,7 @@
       "type": "string",
       "pattern": "^/(?!\\.{1,2}(?:/|$))(?!.*/\\.{1,2}(?:/|$))(?!.*//)[A-Za-z0-9_./-]+$"
     },
-    "AbsoluteUnixFilePath": {
+    "AbsoluteUnixExactPath": {
       "type": "string",
       "pattern": "^/(?!\\.{1,2}(?:/|$))(?!.*/\\.{1,2}(?:/|$))(?!.*//)[A-Za-z0-9_./-]*[A-Za-z0-9_.-]$"
     },
@@ -93,7 +93,7 @@
       "properties": {
         "role": { "type": "string", "minLength": 1 },
         "url": { "type": "string" },
-        "path": { "$ref": "#/$defs/AbsoluteUnixPath" },
+        "path": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
         "branch": { "type": "string" },
         "ref": { "type": "string", "minLength": 1 },
         "refCaptureCommandId": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$" },
@@ -149,8 +149,8 @@
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string", "minLength": 1 },
-        "path": { "$ref": "#/$defs/AbsoluteUnixPath" },
-        "source": { "$ref": "#/$defs/AbsoluteUnixFilePath" },
+        "path": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+        "source": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
         "owner": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$" },
         "group": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$" },
         "mode": { "type": "string", "pattern": "^[0-7]{3,4}$" },
@@ -171,7 +171,7 @@
             "required": ["kind", "owner", "group", "mode"],
             "properties": {
               "kind": { "enum": ["file"] },
-              "path": { "$ref": "#/$defs/AbsoluteUnixFilePath" }
+              "path": { "$ref": "#/$defs/AbsoluteUnixExactPath" }
             }
           }
         },
@@ -226,8 +226,8 @@
         { "$ref": "#/$defs/ManagedFile" },
         {
           "properties": {
-            "source": { "$ref": "#/$defs/AbsoluteUnixFilePath" },
-            "target": { "$ref": "#/$defs/AbsoluteUnixFilePath" }
+            "source": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+            "target": { "$ref": "#/$defs/AbsoluteUnixExactPath" }
           }
         }
       ]
@@ -307,8 +307,8 @@
       "additionalProperties": false,
       "properties": {
         "name": { "type": "string", "minLength": 1 },
-        "source": { "$ref": "#/$defs/AbsoluteUnixFilePath" },
-        "target": { "$ref": "#/$defs/AbsoluteUnixFilePath" },
+        "source": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+        "target": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
         "enabled": { "type": "boolean" },
         "required": { "type": "boolean" }
       },
