@@ -85,6 +85,13 @@ public sealed class ServerScaffoldTests
         Assert.DoesNotContain(files.Keys, key => key.EndsWith("repository-ssh.conf", StringComparison.Ordinal));
         Assert.DoesNotContain("$(ssh-keyscan", string.Join('\n', files.Values), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("\"source\": \"/srv/powerforge/sources/example/deploy/linux/github_known_hosts\"", manifest, StringComparison.Ordinal);
+        Assert.Contains("deploy/linux/github_known_hosts.example", files.Keys);
+        Assert.DoesNotContain("deploy/linux/github_known_hosts", files.Keys);
+        var onboarding = files["deploy/linux/ONBOARDING.md"];
+        Assert.Contains("remove the `.example` suffix", onboarding, StringComparison.Ordinal);
+        Assert.Contains("commit the resulting public host-key file", onboarding, StringComparison.Ordinal);
+        Assert.Contains("the committed `deploy/linux/github_known_hosts`", onboarding, StringComparison.Ordinal);
+        Assert.Contains("authorized-key and reviewed host-key example files", WebCliCommandHandlers.BuildServerScaffoldNextSteps(options)[0], StringComparison.Ordinal);
     }
 
     [Fact]

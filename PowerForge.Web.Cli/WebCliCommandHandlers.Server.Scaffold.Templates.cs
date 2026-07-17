@@ -323,7 +323,7 @@ internal static partial class WebCliCommandHandlers
             ? "[ ] Create a token restricted to this one zone, store it as the production environment secret `DEPLOYMENT_CLOUDFLARE_API_TOKEN`, and store the exact zone id as the environment variable `CLOUDFLARE_ZONE_ID`."
             : "[ ] Cloudflare is intentionally deferred. When ready, rerun the scaffold in a clean directory with `--cloudflare`, review the diff, and provision a per-site token. Do not reuse an account-wide token.";
         var repository = options.PrivateRepository
-            ? $"[ ] Before the first private clone, install the read-only repository key as `/etc/powerforge/repository-ssh/{options.SiteId}_ed25519` and reviewed, pinned GitHub host keys as `/etc/powerforge/repository-ssh/github_known_hosts`; recovery restores these two prerequisites before bootstrap."
+            ? $"[ ] Replace `deploy/linux/github_known_hosts.example` with reviewed, pinned GitHub SSH host-key entries, remove the `.example` suffix, and commit the resulting public host-key file.\n[ ] Before the first private clone, install the read-only repository key as `/etc/powerforge/repository-ssh/{options.SiteId}_ed25519` and the committed `deploy/linux/github_known_hosts` as `/etc/powerforge/repository-ssh/github_known_hosts`; recovery restores these two prerequisites before bootstrap."
             : "[x] The source repository uses public HTTPS recovery; no repository private key is required.";
         return ServerScaffoldTemplateStore.Render(
             "ONBOARDING.md",
