@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "powerforge.web.serverrecovery.schema.json",
-  "title": "PowerForge Web Server Recovery Manifest (schema v1)",
+  "title": "PowerForge Web Server Recovery Manifest (schema v2)",
   "type": "object",
   "additionalProperties": false,
   "properties": {
     "$schema": { "type": "string" },
-    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "schemaVersion": { "type": "integer", "minimum": 2, "maximum": 2 },
     "name": { "type": "string", "minLength": 1 },
     "description": { "type": "string" },
     "target": { "$ref": "#/$defs/Target" },
@@ -66,6 +66,10 @@
     "AbsoluteUnixPath": {
       "type": "string",
       "pattern": "^/(?!\\.{1,2}(?:/|$))(?!.*/\\.{1,2}(?:/|$))(?!.*//)[A-Za-z0-9_./-]+$"
+    },
+    "AbsoluteUnixFilePath": {
+      "type": "string",
+      "pattern": "^/(?!\\.{1,2}(?:/|$))(?!.*/\\.{1,2}(?:/|$))(?!.*//)[A-Za-z0-9_./-]*[A-Za-z0-9_.-]$"
     },
     "Target": {
       "type": "object",
@@ -146,7 +150,7 @@
       "properties": {
         "id": { "type": "string", "minLength": 1 },
         "path": { "$ref": "#/$defs/AbsoluteUnixPath" },
-        "source": { "$ref": "#/$defs/AbsoluteUnixPath" },
+        "source": { "$ref": "#/$defs/AbsoluteUnixFilePath" },
         "owner": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$" },
         "group": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$" },
         "mode": { "type": "string", "pattern": "^[0-7]{3,4}$" },
@@ -165,7 +169,10 @@
           "if": { "required": ["source"] },
           "then": {
             "required": ["kind", "owner", "group", "mode"],
-            "properties": { "kind": { "enum": ["file"] } }
+            "properties": {
+              "kind": { "enum": ["file"] },
+              "path": { "$ref": "#/$defs/AbsoluteUnixFilePath" }
+            }
           }
         },
         {
@@ -194,14 +201,13 @@
         },
         "sites": {
           "type": "array",
-          "items": { "$ref": "#/$defs/ManagedFile" }
+          "items": { "$ref": "#/$defs/RepositoryManagedFile" }
         },
         "conf": {
           "type": "array",
-          "items": { "$ref": "#/$defs/ManagedFile" }
+          "items": { "$ref": "#/$defs/RepositoryManagedFile" }
         },
-        "validateCommand": { "type": "string" },
-        "reloadCommand": { "type": "string" }
+        "validateCommand": { "type": "string" }
       }
     },
     "ManagedFile": {
@@ -214,6 +220,17 @@
         "sensitive": { "type": "boolean" }
       },
       "required": ["target"]
+    },
+    "RepositoryManagedFile": {
+      "allOf": [
+        { "$ref": "#/$defs/ManagedFile" },
+        {
+          "properties": {
+            "source": { "$ref": "#/$defs/AbsoluteUnixFilePath" },
+            "target": { "$ref": "#/$defs/AbsoluteUnixFilePath" }
+          }
+        }
+      ]
     },
     "PlainCaptureFile": {
       "allOf": [
@@ -290,8 +307,8 @@
       "additionalProperties": false,
       "properties": {
         "name": { "type": "string", "minLength": 1 },
-        "source": { "type": "string" },
-        "target": { "type": "string" },
+        "source": { "$ref": "#/$defs/AbsoluteUnixFilePath" },
+        "target": { "$ref": "#/$defs/AbsoluteUnixFilePath" },
         "enabled": { "type": "boolean" },
         "required": { "type": "boolean" }
       },

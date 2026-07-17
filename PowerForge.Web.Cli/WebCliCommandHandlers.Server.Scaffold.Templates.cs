@@ -130,7 +130,7 @@ internal static partial class WebCliCommandHandlers
         return new PowerForgeServerRecoveryManifest
         {
             Schema = $"https://raw.githubusercontent.com/EvotecIT/PSPublishModule/{options.EngineRef}/Schemas/powerforge.web.serverrecovery.schema.json",
-            SchemaVersion = 1,
+            SchemaVersion = 2,
             Name = $"{options.SiteId}-production-linux",
             Description = $"Generated recovery manifest for the {options.Domain} static website.",
             Target = new PowerForgeServerTarget { SshAlias = "powerforge-site-host", Host = options.Host, User = "ubuntu", SshPort = options.SshPort, Os = "ubuntu-24.04", Architecture = "x64" },
@@ -159,8 +159,7 @@ internal static partial class WebCliCommandHandlers
                     new PowerForgeServerManagedFile { Source = $"{repositoryPath}/{options.WebsiteRoot}/deploy/apache.conf", Target = $"/etc/apache2/sites-available/{domainFile}.conf", Required = true },
                     new PowerForgeServerManagedFile { Source = $"{repositoryPath}/{options.WebsiteRoot}/deploy/apache-ssl.conf", Target = $"/etc/apache2/sites-available/{domainFile}-le-ssl.conf", Required = true }
                 ],
-                ValidateCommand = "sudo -n apachectl configtest",
-                ReloadCommand = "sudo -n systemctl reload apache2"
+                ValidateCommand = "sudo -n apachectl configtest"
             },
             Firewall = new PowerForgeServerFirewall { Provider = "ufw", DefaultIncoming = "deny", DefaultOutgoing = "allow", SshPorts = [options.SshPort], WebOriginPolicy = options.CloudflareEnabled ? "cloudflare-ready" : "operator-managed" },
             Certificates =

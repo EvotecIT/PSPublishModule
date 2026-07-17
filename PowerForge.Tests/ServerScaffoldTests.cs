@@ -49,6 +49,8 @@ public sealed class ServerScaffoldTests
         Assert.DoesNotContain("host-key", nextSteps[0], StringComparison.Ordinal);
 
         var manifestNode = JsonNode.Parse(manifest)!;
+        Assert.Equal(2, manifestNode["schemaVersion"]!.GetValue<int>());
+        Assert.Null(manifestNode["apache"]!["reloadCommand"]);
         var managedPaths = manifestNode["paths"]!.AsArray();
         Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/usr/local/sbin/powerforge-site-deploy" &&
                                               path["source"]!.GetValue<string>().EndsWith("/powerforge-site-deploy.sh", StringComparison.Ordinal));
@@ -202,6 +204,21 @@ public sealed class ServerScaffoldTests
         var supportedRuntime = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
         supportedRuntime["packages"]!["dotnetSdks"] = new JsonArray("8", "8.0", "10", "10.0");
         Assert.True(EvaluateSchema(schema, supportedRuntime));
+
+        var legacySchema = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        legacySchema["schemaVersion"] = 1;
+        Assert.False(EvaluateSchema(schema, legacySchema));
+
+        var trailingManagedSource = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        var sourceManagedPath = trailingManagedSource["paths"]!.AsArray()
+            .First(path => path?["source"] is not null)!;
+        sourceManagedPath["source"] = sourceManagedPath["source"]!.GetValue<string>() + "/";
+        Assert.False(EvaluateSchema(schema, trailingManagedSource));
+
+        var trailingApacheTarget = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        var apacheSite = trailingApacheTarget["apache"]!["sites"]!.AsArray()[0]!;
+        apacheSite["target"] = apacheSite["target"]!.GetValue<string>() + "/";
+        Assert.False(EvaluateSchema(schema, trailingApacheTarget));
     }
 
     [Fact]

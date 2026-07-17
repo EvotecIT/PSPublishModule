@@ -87,6 +87,13 @@ internal static partial class WebCliCommandHandlers
             BuildServerHostPreflightCommand(manifest.Target),
             plannedCommands: plannedCommands);
 
+        if (RequiresRootControlledPathGuard(manifest))
+        {
+            AddStep(steps, ref order, "security", "Define root-controlled path guard",
+                BuildRootControlledPathGuardFunction(),
+                plannedCommands: plannedCommands);
+        }
+
         if (manifest.Packages?.Apt?.Length > 0)
         {
             AddStep(steps, ref order, "packages", "Install apt prerequisites",
@@ -180,11 +187,18 @@ internal static partial class WebCliCommandHandlers
                 var branchArg = string.IsNullOrWhiteSpace(repository.Branch) ? string.Empty : $" --branch {ShellQuote(repository.Branch)}";
                 var gitDirectory = repository.Path.TrimEnd('/') + "/.git";
                 var gitPrefix = BuildRepositoryGitPrefix(repository);
+                var repositoryParent = GetUnixParentDirectory(repository.Path);
+                var ensureParent = repositoryParent == "/"
+                    ? "powerforge_assert_root_controlled_path /; "
+                    : $"mkdir -p -- {ShellQuote(repositoryParent)}; powerforge_assert_root_controlled_path {ShellQuote(repositoryParent)}; ";
                 var pinRef = string.IsNullOrWhiteSpace(repository.Ref)
                     ? string.Empty
                     : $"; git -C {ShellQuote(repository.Path)} checkout --detach {ShellQuote(repository.Ref)}";
+                var cleanCheck =
+                    $"; powerforge_repository_status=$(git --no-optional-locks -C {ShellQuote(repository.Path)} status --porcelain --untracked-files=normal); " +
+                    $"test -z \"$powerforge_repository_status\" || {{ echo {ShellQuote($"Repository must be clean before installing managed files: {repository.Path}")} >&2; exit 3; }}";
                 AddStep(steps, ref order, "repositories", $"Clone or update {repository.Role} repository",
-                    $"if [ -d {ShellQuote(gitDirectory)} ]; then {gitPrefix}git -C {ShellQuote(repository.Path)} fetch --all --tags --prune; else {gitPrefix}git clone{branchArg} {ShellQuote(repository.Url)} {ShellQuote(repository.Path)}; fi{pinRef}",
+                    $"if [ -d {ShellQuote(gitDirectory)} ]; then powerforge_assert_root_controlled_path {ShellQuote(repository.Path)}; {gitPrefix}git -C {ShellQuote(repository.Path)} fetch --all --tags --prune; else {ensureParent}{gitPrefix}git clone{branchArg} {ShellQuote(repository.Url)} {ShellQuote(repository.Path)}; fi; powerforge_assert_root_controlled_path {ShellQuote(repository.Path)}{pinRef}{cleanCheck}",
                     plannedCommands: plannedCommands);
             }
         }
@@ -308,12 +322,14 @@ internal static partial class WebCliCommandHandlers
 
         var source = ShellQuote(path.Source ?? string.Empty);
         var target = ShellQuote(path.Path ?? string.Empty);
-        var sourceSafety = BuildManagedSourceSafetyCommand(path.Source ?? string.Empty, repositoryRoot, useSudo: false);
+        var sourceSafety = BuildManagedSourceSafetyCommand(path.Source ?? string.Empty, repositoryRoot, useSudo: false, requireRootControl: true);
+        var targetSafety = BuildRootControlledTargetParentSafetyCommand(path.Path ?? string.Empty);
         var install = $"install -T -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {source}";
 
         var temporaryTemplate = ShellQuote((path.Path ?? string.Empty) + ".powerforge.XXXXXX");
         return string.Join('\n',
             sourceSafety,
+            targetSafety,
             $"powerforge_sudoers_temp=$(mktemp {temporaryTemplate})",
             "powerforge_sudoers_backup=\"${powerforge_sudoers_temp}.previous\"",
             "powerforge_sudoers_had_previous=0",
@@ -350,20 +366,86 @@ internal static partial class WebCliCommandHandlers
         string mode,
         string owner = "root",
         string group = "root")
-        => $"{BuildManagedSourceSafetyCommand(source, repositoryRoot, useSudo: false)}\n" +
-           $"install -T -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {ShellQuote(source)} {ShellQuote(target)}";
+    {
+        var install = string.Equals(owner, "root", StringComparison.Ordinal)
+            ? $"install -T -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {ShellQuote(source)} {ShellQuote(target)}"
+            : $"runuser -u {ShellQuote(owner)} -g {ShellQuote(group)} -- install -T -m {ShellQuote(mode)} {ShellQuote(source)} {ShellQuote(target)}";
+        var commands = new List<string>
+        {
+            BuildManagedSourceSafetyCommand(source, repositoryRoot, useSudo: false, requireRootControl: true)
+        };
+        if (string.Equals(owner, "root", StringComparison.Ordinal))
+            commands.Add(BuildRootControlledTargetSafetyCommand(target));
+        commands.Add(install);
+        return string.Join('\n', commands);
+    }
 
-    internal static string BuildManagedSourceSafetyCommand(string source, string repositoryRoot, bool useSudo)
+    internal static string BuildManagedSourceSafetyCommand(
+        string source,
+        string repositoryRoot,
+        bool useSudo,
+        bool requireRootControl = false)
     {
         var prefix = useSudo ? "sudo -n " : string.Empty;
         var quotedSource = ShellQuote(source);
         var quotedRepository = ShellQuote(repositoryRoot);
-        return string.Join(" && ",
+        var checks = new List<string>
+        {
             $"{prefix}test -f {quotedSource}",
             $"{prefix}test ! -L {quotedSource}",
             $"powerforge_managed_source_real=$({prefix}realpath -e -- {quotedSource})",
             $"powerforge_managed_repository_real=$({prefix}realpath -e -- {quotedRepository})",
-            "case \"$powerforge_managed_source_real\" in \"$powerforge_managed_repository_real\"/*) ;; *) echo 'Managed source resolves outside its declared repository.' >&2; exit 3 ;; esac");
+            "case \"$powerforge_managed_source_real\" in \"$powerforge_managed_repository_real\"/*) ;; *) echo 'Managed source resolves outside its declared repository.' >&2; exit 3 ;; esac"
+        };
+        if (requireRootControl)
+        {
+            checks.Add($"test \"$powerforge_managed_repository_real\" = {quotedRepository}");
+            checks.Add("powerforge_assert_root_controlled_path \"$powerforge_managed_source_real\"");
+        }
+        return string.Join(" && ", checks);
+    }
+
+    internal static string BuildRootControlledPathGuardFunction()
+        => string.Join('\n',
+            "powerforge_assert_root_controlled_path() {",
+            "  local powerforge_path=\"$1\"",
+            "  while :; do",
+            "    test -e \"$powerforge_path\" || { echo \"Required path does not exist: $powerforge_path\" >&2; return 1; }",
+            "    test ! -L \"$powerforge_path\" || { echo \"Root-controlled path must not be a symlink: $powerforge_path\" >&2; return 1; }",
+            "    test \"$(stat -c '%u' -- \"$powerforge_path\")\" = 0 || { echo \"Root-controlled path is not owned by root: $powerforge_path\" >&2; return 1; }",
+            "    test -z \"$(find \"$powerforge_path\" -maxdepth 0 -perm /022 -print -quit)\" || { echo \"Root-controlled path is group- or world-writable: $powerforge_path\" >&2; return 1; }",
+            "    test \"$powerforge_path\" = / && break",
+            "    powerforge_path=$(dirname -- \"$powerforge_path\")",
+            "  done",
+            "}");
+
+    private static string BuildRootControlledTargetParentSafetyCommand(string target)
+        => $"powerforge_assert_root_controlled_path \"$(dirname -- {ShellQuote(target)})\"";
+
+    private static string BuildRootControlledTargetSafetyCommand(string target)
+    {
+        var quotedTarget = ShellQuote(target);
+        var message = ShellQuote($"Managed root target must be a regular non-symlink file when it already exists: {target}");
+        return string.Join('\n',
+            BuildRootControlledTargetParentSafetyCommand(target),
+            $"if [ -e {quotedTarget} ] || [ -L {quotedTarget} ]; then test -f {quotedTarget} && test ! -L {quotedTarget} || {{ echo {message} >&2; exit 3; }}; fi");
+    }
+
+    private static bool RequiresRootControlledPathGuard(PowerForgeServerRecoveryManifest manifest)
+        => manifest.Repositories?.Any(static repository => !string.IsNullOrWhiteSpace(repository.Path)) == true ||
+           manifest.Paths?.Any(static path => !string.IsNullOrWhiteSpace(path.Source)) == true ||
+           (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerManagedFile>())
+               .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>())
+               .Any(static file => !string.IsNullOrWhiteSpace(file.Source)) ||
+           (manifest.Systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>())
+               .Concat(manifest.Systemd?.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
+               .Any(static unit => !string.IsNullOrWhiteSpace(unit.Source));
+
+    private static string GetUnixParentDirectory(string path)
+    {
+        var normalized = path.TrimEnd('/');
+        var separator = normalized.LastIndexOf('/');
+        return separator <= 0 ? "/" : normalized[..separator];
     }
 
     internal static string? FindManagedSourceRepositoryRoot(
@@ -469,6 +551,7 @@ internal static partial class WebCliCommandHandlers
         var builder = new StringBuilder();
         builder.AppendLine("#!/usr/bin/env bash");
         builder.AppendLine("set -Eeuo pipefail");
+        builder.AppendLine("umask 022");
         builder.AppendLine();
         builder.AppendLine("# Generated by powerforge-web server bootstrap-plan.");
         builder.AppendLine("# Review before running. Manual/TODO steps intentionally remain comments.");

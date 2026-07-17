@@ -49,8 +49,8 @@ internal static partial class WebCliCommandHandlers
         var manifest = loaded.Manifest;
 
         var warnings = new List<string>();
-        if (manifest.SchemaVersion <= 0)
-            warnings.Add("schemaVersion should be greater than zero.");
+        if (manifest.SchemaVersion != 2)
+            warnings.Add("schemaVersion should be 2 for this recovery engine revision.");
         if (string.IsNullOrWhiteSpace(manifest.Name))
             warnings.Add("name is missing.");
         if (manifest.Target is null)

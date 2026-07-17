@@ -87,7 +87,6 @@ internal sealed class PowerForgeServerApache
     public PowerForgeServerManagedFile[]? Sites { get; set; }
     public PowerForgeServerManagedFile[]? Conf { get; set; }
     public string? ValidateCommand { get; set; }
-    public string? ReloadCommand { get; set; }
 }
 
 internal sealed class PowerForgeServerFirewall

@@ -7,8 +7,8 @@ internal static partial class WebCliCommandHandlers
         ArgumentNullException.ThrowIfNull(manifest);
 
         var errors = new List<string>();
-        if (manifest.SchemaVersion <= 0)
-            errors.Add("schemaVersion must be a positive integer.");
+        if (manifest.SchemaVersion != 2)
+            errors.Add("schemaVersion must be 2; regenerate or migrate the recovery manifest before using this engine revision.");
         if (string.IsNullOrWhiteSpace(manifest.Target?.SshAlias) && string.IsNullOrWhiteSpace(manifest.Target?.Host))
             errors.Add("target must declare sshAlias or host.");
 
@@ -65,6 +65,10 @@ internal static partial class WebCliCommandHandlers
                 var normalizedSource = NormalizeCapturePath(path.Source, $"paths[{path.Id}].source", errors);
                 if (normalizedSource is not null)
                 {
+                    if (HasTrailingPathSeparator(path.Source))
+                        errors.Add($"Managed path '{path.Id}' source must not end with '/'.");
+                    if (normalizedPath is not null && HasTrailingPathSeparator(path.Path))
+                        errors.Add($"Managed path '{path.Id}' target must not end with '/'.");
                     if (normalizedSource.IndexOfAny(['*', '?', '[']) >= 0)
                         errors.Add($"Managed path '{path.Id}' source must use an exact path.");
                     if (!string.Equals(path.Kind, "file", StringComparison.OrdinalIgnoreCase))
@@ -214,6 +218,8 @@ internal static partial class WebCliCommandHandlers
                 if (!string.IsNullOrWhiteSpace(file.Target))
                 {
                     var observedTarget = NormalizeCapturePath(file.Target, $"{id}.target", errors);
+                    if (observedTarget is not null && HasTrailingPathSeparator(file.Target))
+                        errors.Add($"{id}.target must not end with '/'.");
                     if (observedTarget is not null && observedTarget.IndexOfAny(['*', '?', '[']) >= 0)
                         errors.Add($"{id}.target must use an exact path.");
                     if (observedTarget is not null && !managedPaths.Add(observedTarget))
@@ -224,6 +230,10 @@ internal static partial class WebCliCommandHandlers
             }
             var source = NormalizeCapturePath(file.Source, $"{id}.source", errors);
             var target = NormalizeCapturePath(file.Target, $"{id}.target", errors);
+            if (source is not null && HasTrailingPathSeparator(file.Source))
+                errors.Add($"{id}.source must not end with '/'.");
+            if (target is not null && HasTrailingPathSeparator(file.Target))
+                errors.Add($"{id}.target must not end with '/'.");
             if (source is not null && source.IndexOfAny(['*', '?', '[']) >= 0)
                 errors.Add($"{id}.source must use an exact path.");
             if (target is not null && target.IndexOfAny(['*', '?', '[']) >= 0)
@@ -504,6 +514,9 @@ internal static partial class WebCliCommandHandlers
 
         return normalized;
     }
+
+    private static bool HasTrailingPathSeparator(string? value)
+        => !string.IsNullOrEmpty(value) && value.EndsWith("/", StringComparison.Ordinal);
 
     private static bool CapturePathsMayOverlap(string left, string right)
     {

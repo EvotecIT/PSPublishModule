@@ -256,6 +256,80 @@ public sealed class ServerRecoveryBootstrapPlanTests
     }
 
     [Fact]
+    public void BuildPlan_CreatesFreshRepositoryParentsAndRequiresRootControlledSources()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Repositories =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerRepository
+                {
+                    Role = "application",
+                    Url = "https://github.com/ExampleOrg/ExampleSite.git",
+                    Path = "/srv/powerforge/sources/example",
+                    Branch = "main"
+                }
+            ],
+            Paths =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerPath
+                {
+                    Id = "authorized-keys",
+                    Path = "/home/example/.ssh/authorized_keys",
+                    Source = "/srv/powerforge/sources/example/deploy/authorized_keys",
+                    Kind = "file",
+                    Owner = "example",
+                    Group = "example",
+                    Mode = "0600"
+                }
+            ]
+        };
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        var guard = Assert.Single(steps, step => step.Title == "Define root-controlled path guard");
+        var repository = Assert.Single(steps, step => step.Title == "Clone or update application repository");
+        var managedFile = Assert.Single(steps, step => step.Title == "Install managed file /home/example/.ssh/authorized_keys");
+
+        Assert.Contains("test \"$(stat -c '%u' -- \"$powerforge_path\")\" = 0 ||", guard.Command, StringComparison.Ordinal);
+        Assert.Contains("return 1", guard.Command, StringComparison.Ordinal);
+        Assert.Contains("-perm /022", guard.Command, StringComparison.Ordinal);
+        Assert.Contains("mkdir -p -- '/srv/powerforge/sources'", repository.Command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path '/srv/powerforge/sources';", repository.Command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path '/srv/powerforge/sources/example'", repository.Command, StringComparison.Ordinal);
+        Assert.Contains("git --no-optional-locks -C '/srv/powerforge/sources/example' status --porcelain --untracked-files=normal", repository.Command, StringComparison.Ordinal);
+        Assert.Contains("Repository must be clean before installing managed files", repository.Command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path \"$powerforge_managed_source_real\"", managedFile.Command, StringComparison.Ordinal);
+        Assert.EndsWith(
+            "runuser -u 'example' -g 'example' -- install -T -m '0600' '/srv/powerforge/sources/example/deploy/authorized_keys' '/home/example/.ssh/authorized_keys'",
+            managedFile.Command,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("dirname -- '/home/example/.ssh/authorized_keys'", managedFile.Command, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildRepositoryManagedFileInstall_RejectsUnsafeExistingRootTarget()
+    {
+        var command = PowerForge.Web.Cli.WebCliCommandHandlers.BuildRepositoryManagedFileInstallCommand(
+            "/srv/example/deploy/apache.conf",
+            "/etc/apache2/sites-available/example.conf",
+            "/srv/example",
+            "0644");
+
+        Assert.Contains(
+            "powerforge_assert_root_controlled_path \"$(dirname -- '/etc/apache2/sites-available/example.conf')\"",
+            command,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "if [ -e '/etc/apache2/sites-available/example.conf' ] || [ -L '/etc/apache2/sites-available/example.conf' ]; then test -f '/etc/apache2/sites-available/example.conf' && test ! -L '/etc/apache2/sites-available/example.conf'",
+            command,
+            StringComparison.Ordinal);
+        Assert.EndsWith(
+            "install -T -o 'root' -g 'root' -m '0644' '/srv/example/deploy/apache.conf' '/etc/apache2/sites-available/example.conf'",
+            command,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RecoveryStages_IncludeDeclarativeBootstrapWorkWithoutLegacyCommands()
     {
         var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
@@ -333,6 +407,7 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Contains("packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb", runtimes[1].Command, StringComparison.Ordinal);
         Assert.Contains("apt-get install -y ca-certificates curl", runtimes[1].Command, StringComparison.Ordinal);
         Assert.Contains("dpkg -i \"$powerforge_ms_repo\"", runtimes[1].Command, StringComparison.Ordinal);
+        Assert.DoesNotContain("dpkg-query", runtimes[1].Command, StringComparison.Ordinal);
         Assert.Contains("trap 'exit 130' INT", runtimes[1].Command, StringComparison.Ordinal);
         Assert.DoesNotContain("| dpkg", runtimes[1].Command, StringComparison.Ordinal);
         Assert.Equal("apt-get install -y powershell", runtimes[2].Command);

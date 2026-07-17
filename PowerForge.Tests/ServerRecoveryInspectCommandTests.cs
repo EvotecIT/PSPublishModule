@@ -92,6 +92,19 @@ public sealed class ServerRecoveryInspectCommandTests
             "sudo -n cmp -s -- '/srv/example/deploy/example.env' '/etc/example.env'",
             securedContentCheck,
             StringComparison.Ordinal);
+        var repositoryManagedCheck = WebCliCommandHandlers.BuildRepositoryManagedFileCheckCommand(
+            "/srv/example/deploy/apache.conf",
+            "/etc/apache2/sites-available/example.conf",
+            "/srv/example");
+        Assert.Contains("sudo -n test -f '/etc/apache2/sites-available/example.conf'", repositoryManagedCheck, StringComparison.Ordinal);
+        Assert.Contains("sudo -n test ! -L '/etc/apache2/sites-available/example.conf'", repositoryManagedCheck, StringComparison.Ordinal);
+        Assert.Contains("stat -c '%U' -- '/etc/apache2/sites-available/example.conf')\" = 'root'", repositoryManagedCheck, StringComparison.Ordinal);
+        Assert.Contains("stat -c '%G' -- '/etc/apache2/sites-available/example.conf')\" = 'root'", repositoryManagedCheck, StringComparison.Ordinal);
+        Assert.Contains("stat -c '%a' -- '/etc/apache2/sites-available/example.conf')\" = '644'", repositoryManagedCheck, StringComparison.Ordinal);
+        Assert.EndsWith(
+            "sudo -n cmp -s -- '/srv/example/deploy/apache.conf' '/etc/apache2/sites-available/example.conf'",
+            repositoryManagedCheck,
+            StringComparison.Ordinal);
         Assert.Equal(
             "sudo -n visudo -cf '/etc/sudoers.d/powerforge-example'",
             WebCliCommandHandlers.BuildSudoersValidationCommand("/etc/sudoers.d/powerforge-example"));
@@ -105,16 +118,18 @@ public sealed class ServerRecoveryInspectCommandTests
 
         Assert.Equal(
             "powerforge_repository_path=$(sudo -n realpath -e -- '/srv/example') && " +
-            "powerforge_git_root=$(sudo -n git -C '/srv/example' rev-parse --show-toplevel) && " +
+            "powerforge_git_root=$(sudo -n git -c \"safe.directory=$powerforge_repository_path\" -C \"$powerforge_repository_path\" rev-parse --show-toplevel) && " +
             "test \"$powerforge_git_root\" = \"$powerforge_repository_path\"",
             WebCliCommandHandlers.BuildRepositoryExistsCheckCommand(path));
         Assert.Equal(
-            "powerforge_git_head=$(sudo -n git -C '/srv/example' rev-parse HEAD) && " +
-            "powerforge_git_expected=$(sudo -n git -C '/srv/example' rev-parse '0123456789abcdef0123456789abcdef01234567^{commit}') && " +
+            "powerforge_repository_path=$(sudo -n realpath -e -- '/srv/example') && " +
+            "powerforge_git_head=$(sudo -n git -c \"safe.directory=$powerforge_repository_path\" -C \"$powerforge_repository_path\" rev-parse HEAD) && " +
+            "powerforge_git_expected=$(sudo -n git -c \"safe.directory=$powerforge_repository_path\" -C \"$powerforge_repository_path\" rev-parse '0123456789abcdef0123456789abcdef01234567^{commit}') && " +
             "test \"$powerforge_git_head\" = \"$powerforge_git_expected\"",
             WebCliCommandHandlers.BuildRepositoryRefCheckCommand(path, reference));
         Assert.Equal(
-            "powerforge_git_status=$(sudo -n git --no-optional-locks -C '/srv/example' status --porcelain --untracked-files=normal) && " +
+            "powerforge_repository_path=$(sudo -n realpath -e -- '/srv/example') && " +
+            "powerforge_git_status=$(sudo -n git --no-optional-locks -c \"safe.directory=$powerforge_repository_path\" -C \"$powerforge_repository_path\" status --porcelain --untracked-files=normal) && " +
             "test -z \"$powerforge_git_status\"",
             WebCliCommandHandlers.BuildRepositoryCleanCheckCommand(path));
     }

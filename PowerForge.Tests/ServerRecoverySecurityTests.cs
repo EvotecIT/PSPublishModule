@@ -5,6 +5,17 @@ namespace PowerForge.Tests;
 public sealed class ServerRecoverySecurityTests
 {
     [Fact]
+    public void ManifestValidation_RequiresCurrentRecoverySchemaVersion()
+    {
+        var manifest = CreateManifest();
+        manifest.SchemaVersion = 1;
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("schemaVersion must be 2", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void ManifestValidation_AcceptsSeparatedPlainAndEncryptedCaptureSets()
     {
         var manifest = CreateManifest();
@@ -354,6 +365,47 @@ public sealed class ServerRecoverySecurityTests
         var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
 
         Assert.Contains(errors, error => error.Contains("source must be inside a declared repository path", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ManifestValidation_RejectsTrailingSeparatorsOnManagedFilePaths()
+    {
+        var manifest = CreateManifest();
+        manifest.Repositories =
+        [
+            new PowerForgeServerRepository { Role = "application", Path = "/srv/example" }
+        ];
+        manifest.Paths =
+        [
+            new PowerForgeServerPath
+            {
+                Id = "managed-file",
+                Path = "/etc/example/public.conf/",
+                Source = "/srv/example/deploy/public.conf/",
+                Kind = "file",
+                Owner = "root",
+                Group = "root",
+                Mode = "0644"
+            }
+        ];
+        manifest.Apache = new PowerForgeServerApache
+        {
+            Sites =
+            [
+                new PowerForgeServerManagedFile
+                {
+                    Source = "/srv/example/deploy/apache.conf/",
+                    Target = "/etc/apache2/sites-available/example.conf/"
+                }
+            ]
+        };
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("Managed path 'managed-file' source must not end with '/'", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("Managed path 'managed-file' target must not end with '/'", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("apache.files[0].source must not end with '/'", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("apache.files[0].target must not end with '/'", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -709,7 +761,7 @@ public sealed class ServerRecoverySecurityTests
     private static PowerForgeServerRecoveryManifest CreateManifest()
         => new()
         {
-            SchemaVersion = 1,
+            SchemaVersion = 2,
             Name = "example",
             Target = new PowerForgeServerTarget { Host = "example.test" },
             Secrets =
