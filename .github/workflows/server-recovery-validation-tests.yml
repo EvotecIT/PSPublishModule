@@ -7,7 +7,7 @@ on:
       - ".github/actions/powerforge-server-recovery-validate/**"
       - ".github/workflows/server-recovery-validation-tests.yml"
       - "PowerForge.Tests/GitHubServerRecoveryValidation*.cs"
-      - "PowerForge.Tests/ServerRecoverySecurityTests.cs"
+      - "PowerForge.Tests/ServerRecovery*.cs"
       - "PowerForge.Tests/ServerScaffoldTests.cs"
       - "PowerForge.Web.Cli/ServerScaffoldTemplateStore.cs"
       - "PowerForge.Web.Cli/ServerRecoveryModels.cs"
@@ -19,7 +19,7 @@ on:
       - ".github/actions/powerforge-server-recovery-validate/**"
       - ".github/workflows/server-recovery-validation-tests.yml"
       - "PowerForge.Tests/GitHubServerRecoveryValidation*.cs"
-      - "PowerForge.Tests/ServerRecoverySecurityTests.cs"
+      - "PowerForge.Tests/ServerRecovery*.cs"
       - "PowerForge.Tests/ServerScaffoldTests.cs"
       - "PowerForge.Web.Cli/ServerScaffoldTemplateStore.cs"
       - "PowerForge.Web.Cli/ServerRecoveryModels.cs"
@@ -54,4 +54,4 @@ jobs:
           dotnet test ./PowerForge.Tests/PowerForge.Tests.csproj
           -c Release
           --no-restore
-          --filter 'FullyQualifiedName~GitHubServerRecoveryValidation|FullyQualifiedName~ServerRecoverySecurityTests|FullyQualifiedName~ServerScaffoldTests'
+          --filter 'FullyQualifiedName~GitHubServerRecoveryValidation|FullyQualifiedName~ServerRecovery|FullyQualifiedName~ServerScaffoldTests'

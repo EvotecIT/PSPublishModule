@@ -113,10 +113,11 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.Contains("runs-on: ubuntu-latest", workflow, StringComparison.Ordinal);
         Assert.Contains(".github/actions/powerforge-server-recovery-validate/**", workflow, StringComparison.Ordinal);
         Assert.Contains("PowerForge.Tests/GitHubServerRecoveryValidation*.cs", workflow, StringComparison.Ordinal);
+        Assert.Equal(2, CountOccurrences(workflow, "PowerForge.Tests/ServerRecovery*.cs"));
         Assert.Contains("PowerForge.Tests/ServerScaffoldTests.cs", workflow, StringComparison.Ordinal);
         Assert.Equal(2, CountOccurrences(workflow, "PowerForge.Web.Cli/ServerRecoveryModels.cs"));
         Assert.Contains("FullyQualifiedName~GitHubServerRecoveryValidation", workflow, StringComparison.Ordinal);
-        Assert.Contains("FullyQualifiedName~ServerRecoverySecurityTests", workflow, StringComparison.Ordinal);
+        Assert.Contains("FullyQualifiedName~ServerRecovery", workflow, StringComparison.Ordinal);
         Assert.Contains("FullyQualifiedName~ServerScaffoldTests", workflow, StringComparison.Ordinal);
         Assert.Contains("actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd", workflow, StringComparison.Ordinal);
         Assert.Contains("actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7", workflow, StringComparison.Ordinal);

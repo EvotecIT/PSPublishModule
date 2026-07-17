@@ -599,13 +599,18 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
                 $ErrorActionPreference = 'Stop'
                 $env:POWERFORGE_ENGINE_REF = $EngineRef
                 $manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json -Depth 100
-                & $ValidatorPath `
-                    -Manifest $manifest `
-                    -Workspace $Workspace `
-                    -EngineRoot $EngineRoot `
-                    -CallerRepository $CallerRepository `
-                    -EngineRepository $EngineRepository `
-                    -CaptureUser $CaptureUser
+                try {
+                    & $ValidatorPath `
+                        -Manifest $manifest `
+                        -Workspace $Workspace `
+                        -EngineRoot $EngineRoot `
+                        -CallerRepository $CallerRepository `
+                        -EngineRepository $EngineRepository `
+                        -CaptureUser $CaptureUser
+                } catch {
+                    [Console]::Error.WriteLine($_.Exception.Message)
+                    exit 1
+                }
                 """);
 
             var validatorPath = GetRepoPath(
