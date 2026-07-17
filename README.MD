@@ -624,7 +624,7 @@ Start here:
 - [Docs/PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md)
 - [Docs/PSPublishModule.ManagedModules.Compatibility.md](Docs/PSPublishModule.ManagedModules.Compatibility.md)
 - [Docs/PSPublishModule.PSResourceGetParity.md](Docs/PSPublishModule.PSResourceGetParity.md)
-- [Docs/PSPublishModule.ManagedModules.Roadmap.md](Docs/PSPublishModule.ManagedModules.Roadmap.md)
+- [Docs/PSPublishModule.ManagedModules.ReleaseReadiness.md](Docs/PSPublishModule.ManagedModules.ReleaseReadiness.md)
 - [Benchmarks/ManagedModules/README.md](Benchmarks/ManagedModules/README.md)
 - [Docs/PSPublishModule.ModuleIsolation.md](Docs/PSPublishModule.ModuleIsolation.md)
 - [Docs/PSPublishModule.DevelopmentBootstrapper.md](Docs/PSPublishModule.DevelopmentBootstrapper.md)

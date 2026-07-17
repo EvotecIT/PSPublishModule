@@ -12,8 +12,9 @@ namespace PSPublishModule;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This command inspects the selected module root and updates only when the repository contains a newer selected
-/// version, or installs the target when the selected scope has no copy.
+/// This command provides the module-update functionality of <c>Update-PSResource</c>. It inspects the selected module
+/// root and updates only when the repository contains a newer selected version, or installs a named target when the
+/// selected scope has no copy. When Name is omitted, all installed modules in the selected roots are considered.
 /// </para>
 /// </remarks>
 /// <example>
@@ -24,12 +25,16 @@ namespace PSPublishModule;
 /// <summary>Update a module in an explicit module root from a local feed</summary>
 /// <code>Update-ManagedModule -Name Company.Tools -Repository C:\Packages -Path C:\Modules</code>
 /// </example>
+/// <example>
+/// <summary>Preview updates for every module in the current-user root</summary>
+/// <code>Update-ManagedModule -Scope CurrentUser -Plan</code>
+/// </example>
 [Cmdlet(VerbsData.Update, "ManagedModule", SupportsShouldProcess = true)]
 [OutputType(typeof(ManagedModuleUpdateResult), typeof(ManagedModuleUpdatePlan))]
 public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
 {
     /// <summary>Module names to update.</summary>
-    [Parameter(Position = 0, ValueFromPipelineByPropertyName = true)]
+    [Parameter(Position = 0, ValueFromPipeline = true, ValueFromPipelineByPropertyName = true)]
     [Alias("ModuleName")]
     [ValidateNotNullOrEmpty]
     public string[] Name { get; set; } = Array.Empty<string>();

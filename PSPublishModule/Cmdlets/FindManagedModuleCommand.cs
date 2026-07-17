@@ -11,7 +11,13 @@ namespace PSPublishModule;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This command queries NuGet v3 or local-folder repositories through the managed C# repository client.
+/// This command is the module-package equivalent of <c>Find-PSResource</c>. It queries NuGet-compatible or
+/// local-folder repositories through the managed C# repository client and returns typed module version objects
+/// that can be piped to <c>Install-ManagedModule</c> or <c>Save-ManagedModule</c>.
+/// </para>
+/// <para>
+/// Name, exact/range version, prerelease, tag, and dependency searches are supported for module packages.
+/// Command-name and DSC-resource-name searches inspect package contents and remain outside this fast metadata path.
 /// </para>
 /// </remarks>
 /// <example>
@@ -26,15 +32,19 @@ namespace PSPublishModule;
 /// <summary>Find all versions from a local folder feed</summary>
 /// <code>Find-ManagedModule -Name Company.Tools -Repository C:\Packages -AllVersions -AllowPrerelease</code>
 /// </example>
+/// <example>
+/// <summary>Find versions in a NuGet range and pipe the typed results to save</summary>
+/// <code>Find-ManagedModule -Name Company.Tools -Version '[1.2.0,2.0.0)' -ProfileName CompanyModules | Save-ManagedModule -Path C:\OfflineModules</code>
+/// </example>
 [Cmdlet(VerbsCommon.Find, "ManagedModule")]
 [OutputType(typeof(ManagedModuleVersionInfo))]
 public sealed class FindManagedModuleCommand : PSCmdlet
 {
-    /// <summary>Module names to find.</summary>
-    [Parameter(Mandatory = true, Position = 0, ValueFromPipelineByPropertyName = true)]
+    /// <summary>Module names or wildcard patterns to find. When omitted, all module package names are considered.</summary>
+    [Parameter(Position = 0, ValueFromPipeline = true, ValueFromPipelineByPropertyName = true)]
     [Alias("ModuleName")]
     [ValidateNotNullOrEmpty]
-    public string[] Name { get; set; } = Array.Empty<string>();
+    public string[] Name { get; set; } = new[] { "*" };
 
     /// <summary>Repository URL, NuGet v3 service index, flat-container URL, or local folder feed.</summary>
     [Parameter(Position = 1)]
@@ -51,6 +61,11 @@ public sealed class FindManagedModuleCommand : PSCmdlet
     [Parameter]
     [ValidateNotNullOrEmpty]
     public string? ProfileName { get; set; }
+
+    /// <summary>Exact version, wildcard version, or NuGet-style version range to return.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? Version { get; set; }
 
     /// <summary>Return all matching versions instead of only the latest selected version.</summary>
     [Parameter]
@@ -161,14 +176,14 @@ public sealed class FindManagedModuleCommand : PSCmdlet
         string moduleName,
         RepositoryCredential? credential)
     {
-        if (AllVersions.IsPresent)
+        if (AllVersions.IsPresent || HasVersionFilter())
         {
-            return client.GetVersionsAsync(repository, moduleName, Prerelease.IsPresent, credential)
+            return client.GetVersionsAsync(repository, moduleName, ShouldIncludePrerelease(), credential)
                 .GetAwaiter()
                 .GetResult();
         }
 
-        var latest = client.GetLatestVersionAsync(repository, moduleName, Prerelease.IsPresent, credential)
+        var latest = client.GetLatestVersionAsync(repository, moduleName, ShouldIncludePrerelease(), credential)
             .GetAwaiter()
             .GetResult();
         return latest is null ? Array.Empty<ManagedModuleVersionInfo>() : new[] { latest };
@@ -184,16 +199,16 @@ public sealed class FindManagedModuleCommand : PSCmdlet
             return FindWildcardPackageVersionsWithTagPaging(client, repository, moduleName, credential);
 
         var searchQuery = ResolveSearchQuery(moduleName);
-        var matches = client.SearchPackagesAsync(repository, searchQuery, Prerelease.IsPresent, credential, First)
+        var matches = client.SearchPackagesAsync(repository, searchQuery, ShouldIncludePrerelease(), credential, First)
             .GetAwaiter()
             .GetResult();
-        if (!AllVersions.IsPresent || matches.Count == 0)
+        if ((!AllVersions.IsPresent && !HasVersionFilter()) || matches.Count == 0)
             return matches;
 
         var versions = new List<ManagedModuleVersionInfo>();
         foreach (var match in matches)
         {
-            versions.AddRange(client.GetVersionsAsync(repository, match.Name, Prerelease.IsPresent, credential)
+            versions.AddRange(client.GetVersionsAsync(repository, match.Name, ShouldIncludePrerelease(), credential)
                 .GetAwaiter()
                 .GetResult());
         }
@@ -218,7 +233,7 @@ public sealed class FindManagedModuleCommand : PSCmdlet
 
         for (var skip = 0; !HasEnoughTagPagedMatches(results, seenPackages);)
         {
-            var page = client.SearchPackagesAsync(repository, searchQuery, Prerelease.IsPresent, credential, pageSize, skip)
+            var page = client.SearchPackagesAsync(repository, searchQuery, ShouldIncludePrerelease(), credential, pageSize, skip)
                 .GetAwaiter()
                 .GetResult();
             if (page.Count == 0)
@@ -226,7 +241,7 @@ public sealed class FindManagedModuleCommand : PSCmdlet
 
             skip += page.Count;
 
-            var candidates = AllVersions.IsPresent
+            var candidates = AllVersions.IsPresent || HasVersionFilter()
                 ? ExpandAllVersions(client, repository, page, credential)
                 : page;
             candidates = HydrateVersionsForFindAsync(client, repository, candidates, credential)
@@ -272,7 +287,7 @@ public sealed class FindManagedModuleCommand : PSCmdlet
         var versions = new List<ManagedModuleVersionInfo>();
         foreach (var match in matches)
         {
-            versions.AddRange(client.GetVersionsAsync(repository, match.Name, Prerelease.IsPresent, credential)
+            versions.AddRange(client.GetVersionsAsync(repository, match.Name, ShouldIncludePrerelease(), credential)
                 .GetAwaiter()
                 .GetResult());
         }
@@ -298,6 +313,9 @@ public sealed class FindManagedModuleCommand : PSCmdlet
                 version.Tags.Count > 0 &&
                 tagFilters.All(tag => version.Tags.Any(packageTag => TagsMatch(tag, packageTag))));
         }
+
+        if (HasVersionFilter())
+            filtered = filtered.Where(version => ManagedModuleVersionSelector.IsMatch(version.Version, Version));
 
         if (applyFirst && hasWildcard && !AllVersions.IsPresent)
             filtered = filtered.Take(First);
@@ -338,7 +356,7 @@ public sealed class FindManagedModuleCommand : PSCmdlet
                 var dependencyVersion = client.GetLatestDependencyVersionAsync(
                         repository,
                         dependency,
-                        Prerelease.IsPresent,
+                        ShouldIncludePrerelease(),
                         credential)
                     .GetAwaiter()
                     .GetResult();
@@ -364,6 +382,12 @@ public sealed class FindManagedModuleCommand : PSCmdlet
 
     private bool HasTagFilters()
         => Tag?.Any(static tag => !string.IsNullOrWhiteSpace(tag)) == true;
+
+    private bool HasVersionFilter()
+        => !string.IsNullOrWhiteSpace(Version);
+
+    private bool ShouldIncludePrerelease()
+        => Prerelease.IsPresent || ManagedModuleVersionSelector.IncludesPrerelease(Version);
 
     private string[] GetTagFilters()
         => Tag?

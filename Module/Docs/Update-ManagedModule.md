@@ -15,8 +15,9 @@ Update-ManagedModule [[-Name] <string[]>] [[-Repository] <string>] [-RepositoryN
 ```
 
 ## DESCRIPTION
-This command inspects the selected module root and updates only when the repository contains a newer selected
-version, or installs the target when the selected scope has no copy.
+This command provides the module-update functionality of Update-PSResource. It inspects the selected module
+root and updates only when the repository contains a newer selected version, or installs a named target when the
+selected scope has no copy. When Name is omitted, all installed modules in the selected roots are considered.
 
 ## EXAMPLES
 
@@ -29,6 +30,12 @@ Update-ManagedModule -Name Company.Tools
 ### EXAMPLE 2
 ```powershell
 Update-ManagedModule -Name Company.Tools -Repository C:\Packages -Path C:\Modules
+```
+
+
+### EXAMPLE 3
+```powershell
+Update-ManagedModule -Scope CurrentUser -Plan
 ```
 
 
@@ -366,7 +373,7 @@ Possible values:
 Required: False
 Position: 0
 Default value: None
-Accept pipeline input: True (ByPropertyName)
+Accept pipeline input: True (ByValue, ByPropertyName)
 Accept wildcard characters: True
 ```
 

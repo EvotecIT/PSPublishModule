@@ -34,21 +34,9 @@ public sealed class ManagedModulePublishService
         Validate(request);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        var outputDirectory = ResolveOutputDirectory(request);
-        var package = _packService.Pack(new ManagedModulePackRequest
-        {
-            ModulePath = request.ModulePath,
-            ManifestPath = request.ManifestPath,
-            Name = request.Name,
-            Version = request.Version,
-            OutputDirectory = outputDirectory,
-            Authors = request.Authors,
-            Description = request.Description,
-            ProjectUrl = request.ProjectUrl,
-            Tags = request.Tags,
-            SkipModuleManifestValidate = request.SkipModuleManifestValidate,
-            Force = request.Force
-        });
+        var package = string.IsNullOrWhiteSpace(request.PackagePath)
+            ? PackModule(request)
+            : PrepareExistingPackage(request);
         var metadata = _packageReader.ReadMetadata(package.PackagePath);
         await VerifyDependenciesAsync(request, metadata, cancellationToken).ConfigureAwait(false);
         var publishRepository = request.PublishRepository ?? request.Repository;
@@ -75,6 +63,63 @@ public sealed class ManagedModulePublishService
             Published = publish.Published,
             Duplicate = publish.Duplicate,
             Message = publish.Message
+        };
+    }
+
+    private ManagedModulePackResult PackModule(ManagedModulePublishRequest request)
+    {
+        var outputDirectory = ResolveOutputDirectory(request);
+        return _packService.Pack(new ManagedModulePackRequest
+        {
+            ModulePath = request.ModulePath,
+            ManifestPath = request.ManifestPath,
+            Name = request.Name,
+            Version = request.Version,
+            OutputDirectory = outputDirectory,
+            Authors = request.Authors,
+            Description = request.Description,
+            ProjectUrl = request.ProjectUrl,
+            Tags = request.Tags,
+            SkipModuleManifestValidate = request.SkipModuleManifestValidate,
+            Force = request.Force
+        });
+    }
+
+    private ManagedModulePackResult PrepareExistingPackage(ManagedModulePublishRequest request)
+    {
+        var packagePath = Path.GetFullPath(request.PackagePath!.Trim().Trim('"'));
+        if (!File.Exists(packagePath))
+            throw new FileNotFoundException($"Package file was not found: {packagePath}", packagePath);
+        if (!string.Equals(Path.GetExtension(packagePath), ".nupkg", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Package path must reference a .nupkg file: {packagePath}");
+
+        if (!string.IsNullOrWhiteSpace(request.OutputDirectory))
+        {
+            var outputDirectory = Path.GetFullPath(request.OutputDirectory!.Trim().Trim('"'));
+            var publishRepository = request.PublishRepository ?? request.Repository;
+            if (!IsSameLocalDirectory(outputDirectory, publishRepository.Source))
+            {
+                Directory.CreateDirectory(outputDirectory);
+                var destinationPath = Path.Combine(outputDirectory, Path.GetFileName(packagePath));
+                if (!string.Equals(packagePath, destinationPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (File.Exists(destinationPath) && !request.Force)
+                        throw new IOException($"Package already exists at destination path: {destinationPath}");
+
+                    File.Copy(packagePath, destinationPath, overwrite: true);
+                    packagePath = destinationPath;
+                }
+            }
+        }
+
+        var metadata = _packageReader.ReadMetadata(packagePath);
+        return new ManagedModulePackResult
+        {
+            Name = metadata.Id,
+            Version = metadata.Version,
+            PackagePath = packagePath,
+            FileCount = metadata.FileCount,
+            PackageBytes = metadata.PackageBytes
         };
     }
 
@@ -221,7 +266,9 @@ public sealed class ManagedModulePublishService
             throw new ArgumentNullException(nameof(request));
         if (request.Repository is null)
             throw new ArgumentException("Repository is required.", nameof(request));
-        if (string.IsNullOrWhiteSpace(request.ModulePath))
-            throw new ArgumentException("ModulePath is required.", nameof(request));
+        var hasModulePath = !string.IsNullOrWhiteSpace(request.ModulePath);
+        var hasPackagePath = !string.IsNullOrWhiteSpace(request.PackagePath);
+        if (hasModulePath == hasPackagePath)
+            throw new ArgumentException("Specify exactly one of ModulePath or PackagePath.", nameof(request));
     }
 }

@@ -11,9 +11,9 @@ namespace PSPublishModule;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This command is the PowerShell-native inventory surface for managed module
-/// maintenance. It returns installed module rows by default while reusing the
-/// same inventory engine that powers the advanced ModuleState workflow.
+/// This command provides the installed-module functionality of <c>Get-InstalledPSResource</c> while reusing the
+/// same inventory engine that powers managed estate maintenance. It returns typed installed module rows by default;
+/// those rows can be piped directly to <c>Uninstall-ManagedModule</c>.
 /// </para>
 /// </remarks>
 /// <example>
@@ -23,6 +23,10 @@ namespace PSPublishModule;
 /// <example>
 /// <summary>Inventory loaded and installed Graph modules</summary>
 /// <code>Get-ManagedModule -Name Microsoft.Graph.* -IncludeLoaded -ShowSummary</code>
+/// </example>
+/// <example>
+/// <summary>Preview uninstalling an exact installed module</summary>
+/// <code>Get-ManagedModule -Name Company.Tools -Version 1.2.0 | Uninstall-ManagedModule -WhatIf</code>
 /// </example>
 [Cmdlet(VerbsCommon.Get, "ManagedModule", DefaultParameterSetName = ParameterSetLocal)]
 [OutputType(typeof(ModuleStateInstalledModuleResult))]
@@ -39,8 +43,8 @@ public sealed class GetManagedModuleCommand : PSCmdlet
     };
 
     /// <summary>Optional module name filters. Wildcards are supported.</summary>
-    [Parameter(Position = 0, ParameterSetName = ParameterSetLocal)]
-    [Parameter(Position = 0, ParameterSetName = ParameterSetPath)]
+    [Parameter(Position = 0, ValueFromPipeline = true, ParameterSetName = ParameterSetLocal)]
+    [Parameter(Position = 0, ValueFromPipeline = true, ParameterSetName = ParameterSetPath)]
     [Alias("ModuleName")]
     [ValidateNotNullOrEmpty]
     public string[] Name { get; set; } = Array.Empty<string>();

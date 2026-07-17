@@ -3102,7 +3102,11 @@ This cmdlet exports the selected certificate from the local certificate store.</
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This command queries NuGet v3 or local-folder repositories through the managed C# repository client.</maml:para>
+      <maml:para>This command is the module-package equivalent of Find-PSResource. It queries NuGet-compatible or&#xD;
+local-folder repositories through the managed C# repository client and returns typed module version objects&#xD;
+that can be piped to Install-ManagedModule or Save-ManagedModule.</maml:para>
+      <maml:para>Name, exact/range version, prerelease, tag, and dependency searches are supported for module packages.&#xD;
+Command-name and DSC-resource-name searches inspect package contents and remain outside this fast metadata path.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
@@ -3191,12 +3195,12 @@ This cmdlet exports the selected certificate from the local certificate store.</
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
-            <maml:para>Module names to find.</maml:para>
+            <maml:para>Module names or wildcard patterns to find. When omitted, all module package names are considered.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
             <maml:uri />
@@ -3302,6 +3306,18 @@ This cmdlet exports the selected certificate from the local certificate store.</
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Version</maml:name>
+          <maml:description>
+            <maml:para>Exact version, wildcard version, or NuGet-style version range to return.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
@@ -3389,12 +3405,12 @@ This cmdlet exports the selected certificate from the local certificate store.</
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ModuleName">
         <maml:name>Name</maml:name>
         <maml:description>
-          <maml:para>Module names to find.</maml:para>
+          <maml:para>Module names or wildcard patterns to find. When omitted, all module package names are considered.</maml:para>
         </maml:description>
-        <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
         <dev:type>
           <maml:name>String[]</maml:name>
           <maml:uri />
@@ -3500,6 +3516,18 @@ This cmdlet exports the selected certificate from the local certificate store.</
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Version</maml:name>
+        <maml:description>
+          <maml:para>Exact version, wildcard version, or NuGet-style version range to return.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
     </command:parameters>
     <command:inputTypes>
       <command:inputType>
@@ -3538,6 +3566,13 @@ This cmdlet exports the selected certificate from the local certificate store.</
       <command:example>
         <maml:title>Find all versions from a local folder feed</maml:title>
         <dev:code>Find-ManagedModule -Name Company.Tools -Repository C:\Packages -AllVersions -AllowPrerelease</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Find versions in a NuGet range and pipe the typed results to save</maml:title>
+        <dev:code>Find-ManagedModule -Name Company.Tools -Version '[1.2.0,2.0.0)' -ProfileName CompanyModules | Save-ManagedModule -Path C:\OfflineModules</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -7617,9 +7652,9 @@ System.Boolean</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This command is the PowerShell-native inventory surface for managed module&#xD;
-maintenance. It returns installed module rows by default while reusing the&#xD;
-same inventory engine that powers the advanced ModuleState workflow.</maml:para>
+      <maml:para>This command provides the installed-module functionality of Get-InstalledPSResource while reusing the&#xD;
+same inventory engine that powers managed estate maintenance. It returns typed installed module rows by default;&#xD;
+those rows can be piped directly to Uninstall-ManagedModule.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="Local">
@@ -7672,7 +7707,7 @@ same inventory engine that powers the advanced ModuleState workflow.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="True (ByValue)" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Optional module name filters. Wildcards are supported.</maml:para>
@@ -7763,7 +7798,7 @@ same inventory engine that powers the advanced ModuleState workflow.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="True (ByValue)" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Optional module name filters. Wildcards are supported.</maml:para>
@@ -7878,7 +7913,7 @@ same inventory engine that powers the advanced ModuleState workflow.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="0" aliases="ModuleName">
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="True (ByValue)" position="0" aliases="ModuleName">
         <maml:name>Name</maml:name>
         <maml:description>
           <maml:para>Optional module name filters. Wildcards are supported.</maml:para>
@@ -7946,7 +7981,7 @@ same inventory engine that powers the advanced ModuleState workflow.</maml:para>
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>None</maml:name>
+          <maml:name>System.String[]</maml:name>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
@@ -7975,6 +8010,13 @@ System.String</maml:name>
       <command:example>
         <maml:title>Inventory loaded and installed Graph modules</maml:title>
         <dev:code>Get-ManagedModule -Name Microsoft.Graph.* -IncludeLoaded -ShowSummary</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Preview uninstalling an exact installed module</maml:title>
+        <dev:code>Get-ManagedModule -Name Company.Tools -Version 1.2.0 | Uninstall-ManagedModule -WhatIf</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -13887,8 +13929,11 @@ PSPublishModule.ModuleRepositoryRegistrationResult</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This command is the first managed install surface. It uses PowerForge repository lookup, package download, and&#xD;
-safe archive extraction directly instead of invoking PowerShellGet or PSResourceGet.</maml:para>
+      <maml:para>This command provides the module-install functionality of Install-PSResource through the PowerForge&#xD;
+repository, dependency, integrity, and promotion services. It accepts names, required-resource maps, required&#xD;
+resource files, and typed output from Find-ManagedModule without invoking PowerShellGet or PSResourceGet.</maml:para>
+      <maml:para>Managed installs always return a typed result or plan. Repository trust is explicit through managed profiles and&#xD;
+trust policies instead of a one-invocation prompt-suppression switch.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="NameParameterSet">
@@ -14061,7 +14106,7 @@ safe archive extraction directly instead of invoking PowerShellGet or PSResource
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names to install.</maml:para>
@@ -14307,6 +14352,367 @@ safe archive extraction directly instead of invoking PowerShellGet or PSResource
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="InputObjectParameterSet">
+        <maml:name>Install-ManagedModule</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AcceptLicense</maml:name>
+          <maml:description>
+            <maml:para>Accept package licenses when packages declare license acceptance is required.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AllowClobber</maml:name>
+          <maml:description>
+            <maml:para>Allow command exports to overlap with other modules in the target root.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="RequiredAuthor,TrustedAuthor">
+          <maml:name>AllowedAuthor</maml:name>
+          <maml:description>
+            <maml:para>Allowed package author values from package metadata.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AuthenticodeCheck</maml:name>
+          <maml:description>
+            <maml:para>Validate Authenticode signatures for signable package files before promotion.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Credential</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PSCredential</command:parameterValue>
+          <dev:type>
+            <maml:name>PSCredential</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Password,Token">
+          <maml:name>CredentialSecret</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential secret.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="CredentialPath,TokenPath">
+          <maml:name>CredentialSecretFilePath</maml:name>
+          <maml:description>
+            <maml:para>Optional path to a file containing the repository credential secret.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="UserName">
+          <maml:name>CredentialUserName</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential username.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DependencyConcurrency</maml:name>
+          <maml:description>
+            <maml:para>Maximum number of dependency branches to install concurrently. Omit to use the managed engine default.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="PackageSha256,Sha256">
+          <maml:name>ExpectedPackageSha256</maml:name>
+          <maml:description>
+            <maml:para>Expected SHA256 hash of the root package before it is extracted and promoted.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Reinstall the module version when it already exists.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ParentResource">
+          <maml:name>InputObject</maml:name>
+          <maml:description>
+            <maml:para>Module versions returned by Find-ManagedModule to install.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">ManagedModuleVersionInfo[]</command:parameterValue>
+          <dev:type>
+            <maml:name>ManagedModuleVersionInfo[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Path">
+          <maml:name>ModuleRoot</maml:name>
+          <maml:description>
+            <maml:para>Explicit module root. Use with Scope Custom.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NoClobber</maml:name>
+          <maml:description>
+            <maml:para>PSResourceGet-compatible spelling for the managed default that rejects command export conflicts.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PackageCacheDirectory</maml:name>
+          <maml:description>
+            <maml:para>Optional package cache directory.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Plan</maml:name>
+          <maml:description>
+            <maml:para>Return an inspectable install plan without writing files.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProfileName</maml:name>
+          <maml:description>
+            <maml:para>Saved repository profile name.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Proxy</maml:name>
+          <maml:description>
+            <maml:para>Optional HTTP proxy used for repository requests.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Uri</command:parameterValue>
+          <dev:type>
+            <maml:name>Uri</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProxyCredential</maml:name>
+          <maml:description>
+            <maml:para>Optional proxy credential used with Proxy.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PSCredential</command:parameterValue>
+          <dev:type>
+            <maml:name>PSCredential</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Quiet</maml:name>
+          <maml:description>
+            <maml:para>Suppress optional host summaries and progress-style output without changing pipeline result objects.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Reinstall</maml:name>
+          <maml:description>
+            <maml:para>PSResourceGet-compatible spelling for reinstalling the selected module version when it already exists.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="Source,RepositoryUri">
+          <maml:name>Repository</maml:name>
+          <maml:description>
+            <maml:para>Repository URL, NuGet v3 service index, flat-container URL, or local folder feed.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryName</maml:name>
+          <maml:description>
+            <maml:para>Friendly repository name used in output.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequireTrustedRepository</maml:name>
+          <maml:description>
+            <maml:para>Require the selected repository profile to be marked trusted.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Scope</maml:name>
+          <maml:description>
+            <maml:para>Install scope used when ModuleRoot is not supplied.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ManagedModuleInstallScope</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">CurrentUser</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AllUsers</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Custom</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ManagedModuleInstallScope</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ShellEdition</maml:name>
+          <maml:description>
+            <maml:para>PowerShell path family used when resolving default CurrentUser or AllUsers module roots.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ManagedModuleShellEdition</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Desktop</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Core</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ManagedModuleShellEdition</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ShowSummary</maml:name>
+          <maml:description>
+            <maml:para>Write a compact Spectre.Console summary for each plan or result.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="SkipDependenciesCheck">
+          <maml:name>SkipDependencyCheck</maml:name>
+          <maml:description>
+            <maml:para>Skip installing dependencies declared by the package.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TrustPolicy</maml:name>
+          <maml:description>
+            <maml:para>Optional typed repository/package trust policy.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ManagedModuleTrustPolicy</command:parameterValue>
+          <dev:type>
+            <maml:name>ManagedModuleTrustPolicy</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -15144,6 +15550,18 @@ safe archive extraction directly instead of invoking PowerShellGet or PSResource
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ParentResource">
+        <maml:name>InputObject</maml:name>
+        <maml:description>
+          <maml:para>Module versions returned by Find-ManagedModule to install.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">ManagedModuleVersionInfo[]</command:parameterValue>
+        <dev:type>
+          <maml:name>ManagedModuleVersionInfo[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>MaximumVersion</maml:name>
         <maml:description>
@@ -15180,7 +15598,7 @@ safe archive extraction directly instead of invoking PowerShellGet or PSResource
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
+      <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ModuleName">
         <maml:name>Name</maml:name>
         <maml:description>
           <maml:para>Module names to install.</maml:para>
@@ -15458,7 +15876,8 @@ safe archive extraction directly instead of invoking PowerShellGet or PSResource
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String[]</maml:name>
+          <maml:name>System.String[]&#xD;
+PowerForge.ManagedModuleVersionInfo[]</maml:name>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
@@ -15486,6 +15905,13 @@ PowerForge.ManagedModuleInstallPlan</maml:name>
       <command:example>
         <maml:title>Install an exact module version from a local feed into an explicit root</maml:title>
         <dev:code>Install-ManagedModule -Name Company.Tools -Version 1.2.0 -Repository C:\Packages -Scope Custom -ModuleRoot C:\Modules</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Install the exact typed result returned by Find-ManagedModule</maml:title>
+        <dev:code>Find-ManagedModule -Name Company.Tools -Version 1.2.0 -ProfileName CompanyModules | Install-ManagedModule -Scope CurrentUser</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -55056,11 +55482,14 @@ creates a GitHub release, and uploads the specified ZIP asset.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This managed publish surface creates a NuGet package from a module folder and publishes it to a local folder feed&#xD;
-or NuGet-compatible package publish endpoint.</maml:para>
+      <maml:para>This command provides the module-publish functionality of Publish-PSResource. It can create a NuGet&#xD;
+package from a module folder or publish an existing .nupkg file to a local folder feed or NuGet-compatible&#xD;
+package publish endpoint.</maml:para>
+      <maml:para>Microsoft Artifact Registry module prefixes are not applied because the managed repository client does not yet&#xD;
+expose a container-registry transport.</maml:para>
     </maml:description>
     <command:syntax>
-      <command:syntaxItem parameterSetName="__AllParameterSets">
+      <command:syntaxItem parameterSetName="PathParameterSet">
         <maml:name>Publish-ManagedModule</maml:name>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="NuGetApiKey">
           <maml:name>ApiKey</maml:name>
@@ -55161,7 +55590,7 @@ or NuGet-compatible package publish endpoint.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="DestinationPath,OutputPath">
           <maml:name>OutputDirectory</maml:name>
           <maml:description>
-            <maml:para>Output directory used when Repository is omitted.</maml:para>
+            <maml:para>Directory that receives the created or supplied package; it is also the local target when Repository is omitted.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -55315,6 +55744,165 @@ or NuGet-compatible package publish endpoint.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
       </command:syntaxItem>
+      <command:syntaxItem parameterSetName="NupkgPathParameterSet">
+        <maml:name>Publish-ManagedModule</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="NuGetApiKey">
+          <maml:name>ApiKey</maml:name>
+          <maml:description>
+            <maml:para>API key used by NuGet-compatible package publish endpoints.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="ApiKeyPath,NuGetApiKeyPath">
+          <maml:name>ApiKeyFilePath</maml:name>
+          <maml:description>
+            <maml:para>Optional path to a file containing the API key.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Credential</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PSCredential</command:parameterValue>
+          <dev:type>
+            <maml:name>PSCredential</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Overwrite an existing package.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NupkgPath</maml:name>
+          <maml:description>
+            <maml:para>Existing .nupkg file to publish without repacking a module folder.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="DestinationPath,OutputPath">
+          <maml:name>OutputDirectory</maml:name>
+          <maml:description>
+            <maml:para>Directory that receives the created or supplied package; it is also the local target when Repository is omitted.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProfileName</maml:name>
+          <maml:description>
+            <maml:para>Saved module repository profile to use instead of Repository or OutputDirectory.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Proxy</maml:name>
+          <maml:description>
+            <maml:para>Optional HTTP proxy used for repository requests.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Uri</command:parameterValue>
+          <dev:type>
+            <maml:name>Uri</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProxyCredential</maml:name>
+          <maml:description>
+            <maml:para>Optional proxy credential used with Proxy.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PSCredential</command:parameterValue>
+          <dev:type>
+            <maml:name>PSCredential</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="RepositoryPath,RepositoryUri,Source">
+          <maml:name>Repository</maml:name>
+          <maml:description>
+            <maml:para>Repository URL, NuGet v3 service index, publish endpoint, or local folder feed.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryName</maml:name>
+          <maml:description>
+            <maml:para>Friendly repository name used in output.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ShowSummary</maml:name>
+          <maml:description>
+            <maml:para>Write a compact Spectre.Console summary for the publish result.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipDependenciesCheck</maml:name>
+          <maml:description>
+            <maml:para>Skip checking RequiredModules against the target repository.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
     </command:syntax>
     <command:parameters>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="NuGetApiKey">
@@ -55413,10 +56001,22 @@ or NuGet-compatible package publish endpoint.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NupkgPath</maml:name>
+        <maml:description>
+          <maml:para>Existing .nupkg file to publish without repacking a module folder.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="DestinationPath,OutputPath">
         <maml:name>OutputDirectory</maml:name>
         <maml:description>
-          <maml:para>Output directory used when Repository is omitted.</maml:para>
+          <maml:para>Directory that receives the created or supplied package; it is also the local target when Repository is omitted.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -55593,6 +56193,13 @@ or NuGet-compatible package publish endpoint.</maml:para>
       <command:example>
         <maml:title>Publish a module to a local folder feed</maml:title>
         <dev:code>Publish-ManagedModule -Path C:\Source\Company.Tools -Repository C:\Packages</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Publish an existing package without repacking it</maml:title>
+        <dev:code>Publish-ManagedModule -NupkgPath C:\Packages\Company.Tools.1.2.0.nupkg -Repository CompanyFeed</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -57756,6 +58363,8 @@ should be predictable and safe. Supports -WhatIf, retries and optional backups.<
 inventories installed modules, plans stale-version, receipt-drift, source,&#xD;
 scope, family, and cleanup actions, and can apply the plan through the&#xD;
 managed delivery engine.</maml:para>
+      <maml:para>PSResourceGet has no equivalent estate-repair command. Use the lifecycle cmdlets for one requested operation and&#xD;
+this command when the desired outcome spans installed-state discovery, drift analysis, repair, and cleanup.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
@@ -58754,11 +59363,13 @@ PSPublishModule.ModuleStateInventoryResult</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This command uses the same managed C# repository and archive engine as Install-ManagedModule, but requires&#xD;
-an explicit destination root instead of installing into the default PowerShell module paths.</maml:para>
+      <maml:para>This command provides the module-save functionality of Save-PSResource through the same managed C#&#xD;
+repository and archive engine as Install-ManagedModule. It accepts names or typed&#xD;
+Find-ManagedModule output, saves unpacked modules or .nupkg files, and defaults to the current filesystem&#xD;
+location when Path is omitted.</maml:para>
     </maml:description>
     <command:syntax>
-      <command:syntaxItem parameterSetName="__AllParameterSets">
+      <command:syntaxItem parameterSetName="NameParameterSet">
         <maml:name>Save-ManagedModule</maml:name>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>AcceptLicense</maml:name>
@@ -58917,6 +59528,18 @@ an explicit destination root instead of installing into the default PowerShell m
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IncludeXml</maml:name>
+          <maml:description>
+            <maml:para>Write PowerShellGet-compatible PSGetModuleInfo.xml metadata beside each saved unpacked module.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>MaximumVersion</maml:name>
           <maml:description>
             <maml:para>Maximum package version to save when Version is omitted.</maml:para>
@@ -58964,12 +59587,12 @@ an explicit destination root instead of installing into the default PowerShell m
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="DestinationPath,ModuleRoot">
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="DestinationPath,ModuleRoot">
           <maml:name>Path</maml:name>
           <maml:description>
-            <maml:para>Destination module root.</maml:para>
+            <maml:para>Destination module root. Defaults to the current filesystem location.</maml:para>
           </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -59145,6 +59768,345 @@ an explicit destination root instead of installing into the default PowerShell m
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
       </command:syntaxItem>
+      <command:syntaxItem parameterSetName="InputObjectParameterSet">
+        <maml:name>Save-ManagedModule</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AcceptLicense</maml:name>
+          <maml:description>
+            <maml:para>Accept package licenses when packages declare license acceptance is required.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AllowClobber</maml:name>
+          <maml:description>
+            <maml:para>Allow command exports to overlap with other modules in the destination root.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="RequiredAuthor,TrustedAuthor">
+          <maml:name>AllowedAuthor</maml:name>
+          <maml:description>
+            <maml:para>Allowed package author values from package metadata.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AsNupkg</maml:name>
+          <maml:description>
+            <maml:para>Save the selected packages as .nupkg files instead of unpacked module folders.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AuthenticodeCheck</maml:name>
+          <maml:description>
+            <maml:para>Validate Authenticode signatures for signable package files before saving.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="MetadataPath,OfflineBundleMetadataPath">
+          <maml:name>BundleMetadataPath</maml:name>
+          <maml:description>
+            <maml:para>Optional path for offline bundle metadata written after successful saves.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Credential</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PSCredential</command:parameterValue>
+          <dev:type>
+            <maml:name>PSCredential</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Password,Token">
+          <maml:name>CredentialSecret</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential secret.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="CredentialPath,TokenPath">
+          <maml:name>CredentialSecretFilePath</maml:name>
+          <maml:description>
+            <maml:para>Optional path to a file containing the repository credential secret.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="UserName">
+          <maml:name>CredentialUserName</maml:name>
+          <maml:description>
+            <maml:para>Optional repository credential username.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DependencyConcurrency</maml:name>
+          <maml:description>
+            <maml:para>Maximum number of dependency branches to save concurrently. Omit to use the managed engine default.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="PackageSha256,Sha256">
+          <maml:name>ExpectedPackageSha256</maml:name>
+          <maml:description>
+            <maml:para>Expected SHA256 hash of the root package before it is extracted and saved.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Overwrite an existing saved version.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IncludeXml</maml:name>
+          <maml:description>
+            <maml:para>Write PowerShellGet-compatible PSGetModuleInfo.xml metadata beside each saved unpacked module.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ParentResource">
+          <maml:name>InputObject</maml:name>
+          <maml:description>
+            <maml:para>Module versions returned by Find-ManagedModule to save.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">ManagedModuleVersionInfo[]</command:parameterValue>
+          <dev:type>
+            <maml:name>ManagedModuleVersionInfo[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PackageCacheDirectory</maml:name>
+          <maml:description>
+            <maml:para>Optional package cache directory.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="DestinationPath,ModuleRoot">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Destination module root. Defaults to the current filesystem location.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Plan</maml:name>
+          <maml:description>
+            <maml:para>Return an inspectable save plan without writing files.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProfileName</maml:name>
+          <maml:description>
+            <maml:para>Saved repository profile name.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Proxy</maml:name>
+          <maml:description>
+            <maml:para>Optional HTTP proxy used for repository requests.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Uri</command:parameterValue>
+          <dev:type>
+            <maml:name>Uri</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProxyCredential</maml:name>
+          <maml:description>
+            <maml:para>Optional proxy credential used with Proxy.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PSCredential</command:parameterValue>
+          <dev:type>
+            <maml:name>PSCredential</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Quiet</maml:name>
+          <maml:description>
+            <maml:para>Suppress optional host summaries and progress-style output without changing pipeline result objects.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Source,RepositoryUri">
+          <maml:name>Repository</maml:name>
+          <maml:description>
+            <maml:para>Repository URL, NuGet v3 service index, flat-container URL, or local folder feed.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryName</maml:name>
+          <maml:description>
+            <maml:para>Friendly repository name used in output.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequireTrustedRepository</maml:name>
+          <maml:description>
+            <maml:para>Require the selected repository profile to be marked trusted.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ShowSummary</maml:name>
+          <maml:description>
+            <maml:para>Write a compact Spectre.Console summary for each plan or result.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="SkipDependenciesCheck">
+          <maml:name>SkipDependencyCheck</maml:name>
+          <maml:description>
+            <maml:para>Skip installing dependencies declared by the package.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TrustPolicy</maml:name>
+          <maml:description>
+            <maml:para>Optional typed repository/package trust policy.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ManagedModuleTrustPolicy</command:parameterValue>
+          <dev:type>
+            <maml:name>ManagedModuleTrustPolicy</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
     </command:syntax>
     <command:parameters>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
@@ -59304,6 +60266,30 @@ an explicit destination root instead of installing into the default PowerShell m
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>IncludeXml</maml:name>
+        <maml:description>
+          <maml:para>Write PowerShellGet-compatible PSGetModuleInfo.xml metadata beside each saved unpacked module.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ParentResource">
+        <maml:name>InputObject</maml:name>
+        <maml:description>
+          <maml:para>Module versions returned by Find-ManagedModule to save.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">ManagedModuleVersionInfo[]</command:parameterValue>
+        <dev:type>
+          <maml:name>ManagedModuleVersionInfo[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>MaximumVersion</maml:name>
         <maml:description>
           <maml:para>Maximum package version to save when Version is omitted.</maml:para>
@@ -59351,12 +60337,12 @@ an explicit destination root instead of installing into the default PowerShell m
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="DestinationPath,ModuleRoot">
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="1" aliases="DestinationPath,ModuleRoot">
         <maml:name>Path</maml:name>
         <maml:description>
-          <maml:para>Destination module root.</maml:para>
+          <maml:para>Destination module root. Defaults to the current filesystem location.</maml:para>
         </maml:description>
-        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
           <maml:uri />
@@ -59535,7 +60521,8 @@ an explicit destination root instead of installing into the default PowerShell m
     <command:inputTypes>
       <command:inputType>
         <dev:type>
-          <maml:name>System.String[]</maml:name>
+          <maml:name>System.String[]&#xD;
+PowerForge.ManagedModuleVersionInfo[]</maml:name>
         </dev:type>
       </command:inputType>
     </command:inputTypes>
@@ -59563,6 +60550,20 @@ PowerForge.ManagedModuleInstallPlan</maml:name>
       <command:example>
         <maml:title>Save an exact version from a local feed</maml:title>
         <dev:code>Save-ManagedModule -Name Company.Tools -RequiredVersion 1.2.0 -Repository C:\Packages -Path C:\Modules</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Save typed find output with PowerShellGet-compatible XML metadata</maml:title>
+        <dev:code>Find-ManagedModule -Name Company.Tools -Version 1.2.0 -ProfileName CompanyModules | Save-ManagedModule -Path C:\OfflineModules -IncludeXml</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Save a package file in the current directory</maml:title>
+        <dev:code>Save-ManagedModule -Name Company.Tools -Version 1.2.0 -AsNupkg</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -68330,7 +69331,7 @@ PSResourceGet. It follows PSResourceGet-shaped uninstall selection semantics whi
 dependency and loaded-module safety checks.</maml:para>
     </maml:description>
     <command:syntax>
-      <command:syntaxItem parameterSetName="__AllParameterSets">
+      <command:syntaxItem parameterSetName="NameParameterSet">
         <maml:name>Uninstall-ManagedModule</maml:name>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>AllowLoadedModuleUninstall</maml:name>
@@ -68368,7 +69369,7 @@ dependency and loaded-module safety checks.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names or wildcard patterns to uninstall.</maml:para>
@@ -68463,6 +69464,69 @@ dependency and loaded-module safety checks.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
       </command:syntaxItem>
+      <command:syntaxItem parameterSetName="InputObjectParameterSet">
+        <maml:name>Uninstall-ManagedModule</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AllowLoadedModuleUninstall</maml:name>
+          <maml:description>
+            <maml:para>Allow removal of module versions that appear loaded in the current PowerShell session.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByValue)" position="0" aliases="None">
+          <maml:name>InputObject</maml:name>
+          <maml:description>
+            <maml:para>Installed module rows returned by Get-ManagedModule to uninstall.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">ModuleStateInstalledModuleResult[]</command:parameterValue>
+          <dev:type>
+            <maml:name>ModuleStateInstalledModuleResult[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>LoadedModule</maml:name>
+          <maml:description>
+            <maml:para>Loaded module evidence used to block risky in-session uninstalls.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ManagedModuleLoadedModule[]</command:parameterValue>
+          <dev:type>
+            <maml:name>ManagedModuleLoadedModule[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Plan</maml:name>
+          <maml:description>
+            <maml:para>Return an inspectable uninstall plan without removing files.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="SkipDependenciesCheck">
+          <maml:name>SkipDependencyCheck</maml:name>
+          <maml:description>
+            <maml:para>Skip checking whether removed modules are still required by other installed modules.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
     </command:syntax>
     <command:parameters>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
@@ -68473,6 +69537,18 @@ dependency and loaded-module safety checks.</maml:para>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByValue)" position="0" aliases="None">
+        <maml:name>InputObject</maml:name>
+        <maml:description>
+          <maml:para>Installed module rows returned by Get-ManagedModule to uninstall.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">ModuleStateInstalledModuleResult[]</command:parameterValue>
+        <dev:type>
+          <maml:name>ModuleStateInstalledModuleResult[]</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -68501,7 +69577,7 @@ dependency and loaded-module safety checks.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
+      <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ModuleName">
         <maml:name>Name</maml:name>
         <maml:description>
           <maml:para>Module names or wildcard patterns to uninstall.</maml:para>
@@ -68600,6 +69676,7 @@ dependency and loaded-module safety checks.</maml:para>
       <command:inputType>
         <dev:type>
           <maml:name>System.String[]&#xD;
+PSPublishModule.ModuleStateInstalledModuleResult[]&#xD;
 System.String</maml:name>
         </dev:type>
       </command:inputType>
@@ -68628,6 +69705,13 @@ PowerForge.ManagedModuleUninstallPlan</maml:name>
       <command:example>
         <maml:title>Preview every installed module version that matches a version range</maml:title>
         <dev:code>Uninstall-ManagedModule -Name Company.Tools -Version '[1.0.0,2.0.0)' -Plan</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Uninstall the exact installed module returned by Get-ManagedModule</maml:title>
+        <dev:code>Get-ManagedModule -Name Company.Tools -Version 1.2.0 | Uninstall-ManagedModule</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -68945,8 +70029,9 @@ PowerForge.ManagedModuleUninstallPlan</maml:name>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This command inspects the selected module root and updates only when the repository contains a newer selected&#xD;
-version, or installs the target when the selected scope has no copy.</maml:para>
+      <maml:para>This command provides the module-update functionality of Update-PSResource. It inspects the selected module&#xD;
+root and updates only when the repository contains a newer selected version, or installs a named target when the&#xD;
+selected scope has no copy. When Name is omitted, all installed modules in the selected roots are considered.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
@@ -69191,7 +70276,7 @@ version, or installs the target when the selected scope has no copy.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ModuleName">
           <maml:name>Name</maml:name>
           <maml:description>
             <maml:para>Module names to update.</maml:para>
@@ -69684,7 +70769,7 @@ version, or installs the target when the selected scope has no copy.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="True (ByPropertyName)" position="0" aliases="ModuleName">
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="True (ByValue, ByPropertyName)" position="0" aliases="ModuleName">
         <maml:name>Name</maml:name>
         <maml:description>
           <maml:para>Module names to update.</maml:para>
@@ -69966,6 +71051,13 @@ PowerForge.ManagedModuleUpdatePlan</maml:name>
       <command:example>
         <maml:title>Update a module in an explicit module root from a local feed</maml:title>
         <dev:code>Update-ManagedModule -Name Company.Tools -Repository C:\Packages -Path C:\Modules</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Preview updates for every module in the current-user root</maml:title>
+        <dev:code>Update-ManagedModule -Scope CurrentUser -Plan</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>

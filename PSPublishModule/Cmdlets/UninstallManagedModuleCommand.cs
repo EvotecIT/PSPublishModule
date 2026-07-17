@@ -25,39 +25,50 @@ namespace PSPublishModule;
 /// <summary>Preview every installed module version that matches a version range</summary>
 /// <code>Uninstall-ManagedModule -Name Company.Tools -Version '[1.0.0,2.0.0)' -Plan</code>
 /// </example>
-[Cmdlet(VerbsLifecycle.Uninstall, "ManagedModule", SupportsShouldProcess = true)]
+/// <example>
+/// <summary>Uninstall the exact installed module returned by Get-ManagedModule</summary>
+/// <code>Get-ManagedModule -Name Company.Tools -Version 1.2.0 | Uninstall-ManagedModule</code>
+/// </example>
+[Cmdlet(VerbsLifecycle.Uninstall, "ManagedModule", SupportsShouldProcess = true, DefaultParameterSetName = NameParameterSet)]
 [OutputType(typeof(ManagedModuleUninstallResult), typeof(ManagedModuleUninstallPlan))]
 public sealed class UninstallManagedModuleCommand : PSCmdlet
 {
+    private const string NameParameterSet = "NameParameterSet";
+    private const string InputObjectParameterSet = "InputObjectParameterSet";
     private readonly List<ManagedModuleUninstallPlan> _plans = [];
 
     /// <summary>Module names or wildcard patterns to uninstall.</summary>
-    [Parameter(Mandatory = true, Position = 0, ValueFromPipelineByPropertyName = true)]
+    [Parameter(Mandatory = true, Position = 0, ValueFromPipeline = true, ValueFromPipelineByPropertyName = true, ParameterSetName = NameParameterSet)]
     [Alias("ModuleName")]
     [ValidateNotNullOrEmpty]
     public string[] Name { get; set; } = Array.Empty<string>();
 
+    /// <summary>Installed module rows returned by Get-ManagedModule to uninstall.</summary>
+    [Parameter(Mandatory = true, Position = 0, ValueFromPipeline = true, ParameterSetName = InputObjectParameterSet)]
+    [ValidateNotNullOrEmpty]
+    public ModuleStateInstalledModuleResult[] InputObject { get; set; } = Array.Empty<ModuleStateInstalledModuleResult>();
+
     /// <summary>Exact version or NuGet-style version range to uninstall. When omitted, the latest matching version is selected.</summary>
-    [Parameter(ValueFromPipelineByPropertyName = true)]
+    [Parameter(ValueFromPipelineByPropertyName = true, ParameterSetName = NameParameterSet)]
     [Alias("RequiredVersion")]
     [ValidateNotNullOrEmpty]
     public string? Version { get; set; }
 
     /// <summary>Restrict matching to prerelease module versions.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = NameParameterSet)]
     [Alias("AllowPrerelease")]
     public SwitchParameter Prerelease { get; set; }
 
     /// <summary>Install scope used when ModuleRoot is not supplied.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = NameParameterSet)]
     public ManagedModuleInstallScope Scope { get; set; } = ManagedModuleInstallScope.CurrentUser;
 
     /// <summary>PowerShell path family used when resolving default CurrentUser or AllUsers module roots.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = NameParameterSet)]
     public ManagedModuleShellEdition ShellEdition { get; set; } = ManagedModuleShellEdition.Auto;
 
     /// <summary>Explicit module root. Use with Scope Custom.</summary>
-    [Parameter(ValueFromPipelineByPropertyName = true)]
+    [Parameter(ValueFromPipelineByPropertyName = true, ParameterSetName = NameParameterSet)]
     [Alias("Path")]
     [ValidateNotNullOrEmpty]
     public string? ModuleRoot { get; set; }
@@ -82,13 +93,35 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
     /// <summary>Uninstalls requested modules.</summary>
     protected override void ProcessRecord()
     {
-        var moduleRoot = ResolveModuleRoot();
+        if (ParameterSetName == InputObjectParameterSet)
+        {
+            foreach (var resource in InputObject)
+            {
+                if (string.IsNullOrWhiteSpace(resource.Name))
+                    continue;
+
+                AddPlan(
+                    new[] { resource.Name },
+                    resource.Version,
+                    resource.InstalledLocation,
+                    ManagedModuleVersionComparer.IsPrerelease(resource.Version));
+            }
+
+            return;
+        }
+
+        AddPlan(Name, Version, ModuleRoot, Prerelease.IsPresent);
+    }
+
+    private void AddPlan(string[] names, string? version, string? modulePath, bool prerelease)
+    {
+        var moduleRoot = ResolveModuleRoot(modulePath, names);
         var service = new ManagedModuleUninstallService();
         var request = new ManagedModuleUninstallRequest
         {
-            Name = Name,
-            Version = Version,
-            Prerelease = Prerelease.IsPresent,
+            Name = names,
+            Version = version,
+            Prerelease = prerelease,
             Scope = string.IsNullOrWhiteSpace(moduleRoot) ? Scope : ManagedModuleInstallScope.Custom,
             ShellEdition = ShellEdition,
             ModuleRoot = moduleRoot,
@@ -159,17 +192,17 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             .ToArray();
     }
 
-    private string? ResolveModuleRoot()
+    private string? ResolveModuleRoot(string? modulePath, string[] names)
     {
-        var resolved = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot);
+        var resolved = ManagedModuleCommandSupport.ResolveProviderPath(this, modulePath);
         if (string.IsNullOrWhiteSpace(resolved) ||
-            Name.Length != 1 ||
-            string.IsNullOrWhiteSpace(Name[0]))
+            names.Length != 1 ||
+            string.IsNullOrWhiteSpace(names[0]))
         {
             return resolved;
         }
 
-        return TryResolveModuleRootFromInstalledPath(resolved!, Name[0]) ?? resolved;
+        return TryResolveModuleRootFromInstalledPath(resolved!, names[0]) ?? resolved;
     }
 
     private static string? TryResolveModuleRootFromInstalledPath(string path, string moduleName)

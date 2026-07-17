@@ -20,9 +20,9 @@ Get-ManagedModule [[-Name] <string[]>] -Path <string> [-Version <string>] [-Scop
 ```
 
 ## DESCRIPTION
-This command is the PowerShell-native inventory surface for managed module
-maintenance. It returns installed module rows by default while reusing the
-same inventory engine that powers the advanced ModuleState workflow.
+This command provides the installed-module functionality of Get-InstalledPSResource while reusing the
+same inventory engine that powers managed estate maintenance. It returns typed installed module rows by default;
+those rows can be piped directly to Uninstall-ManagedModule.
 
 ## EXAMPLES
 
@@ -35,6 +35,12 @@ Get-ManagedModule
 ### EXAMPLE 2
 ```powershell
 Get-ManagedModule -Name Microsoft.Graph.* -IncludeLoaded -ShowSummary
+```
+
+
+### EXAMPLE 3
+```powershell
+Get-ManagedModule -Name Company.Tools -Version 1.2.0 | Uninstall-ManagedModule -WhatIf
 ```
 
 
@@ -116,7 +122,7 @@ Possible values:
 Required: False
 Position: 0
 Default value: None
-Accept pipeline input: False
+Accept pipeline input: True (ByValue)
 Accept wildcard characters: True
 ```
 
@@ -189,7 +195,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-- `None`
+- `System.String[]`
 
 ## OUTPUTS
 

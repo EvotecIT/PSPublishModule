@@ -19,6 +19,10 @@ namespace PSPublishModule;
 /// scope, family, and cleanup actions, and can apply the plan through the
 /// managed delivery engine.
 /// </para>
+/// <para>
+/// PSResourceGet has no equivalent estate-repair command. Use the lifecycle cmdlets for one requested operation and
+/// this command when the desired outcome spans installed-state discovery, drift analysis, repair, and cleanup.
+/// </para>
 /// </remarks>
 /// <example>
 /// <summary>Preview latest-version repair for installed modules</summary>
