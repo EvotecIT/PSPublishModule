@@ -57,7 +57,7 @@ jobs:
 
       - name: Prepare immutable release commit
         id: prepare
-        uses: EvotecIT/PSPublishModule/.github/actions/homeassistant-release@8976b47713d00778aa798f4d4e292eaeb89b5b81
+        uses: EvotecIT/PSPublishModule/.github/actions/homeassistant-release@068a5d464b82b5d50ef3a1f44e8dc8f3bdfc4b8f
         with:
           stage: prepare
           repository-root: ${{ github.workspace }}/source
@@ -95,7 +95,7 @@ jobs:
 
       - name: Build without GitHub write credentials
         id: build
-        uses: EvotecIT/PSPublishModule/.github/actions/homeassistant-release@8976b47713d00778aa798f4d4e292eaeb89b5b81
+        uses: EvotecIT/PSPublishModule/.github/actions/homeassistant-release@068a5d464b82b5d50ef3a1f44e8dc8f3bdfc4b8f
         with:
           stage: build
           repository-root: ${{ github.workspace }}/source
@@ -133,7 +133,7 @@ jobs:
 
       - name: Publish and verify without receiver source code
         id: publish
-        uses: EvotecIT/PSPublishModule/.github/actions/homeassistant-release@8976b47713d00778aa798f4d4e292eaeb89b5b81
+        uses: EvotecIT/PSPublishModule/.github/actions/homeassistant-release@068a5d464b82b5d50ef3a1f44e8dc8f3bdfc4b8f
         with:
           stage: publish
           repository: ${{ github.repository }}
