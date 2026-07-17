@@ -286,8 +286,8 @@ public sealed class ServerRecoverySecurityTests
         Assert.DoesNotContain("lstrip", script, StringComparison.Ordinal);
         Assert.Contains("tar --no-same-owner --no-same-permissions --no-overwrite-dir --no-acls --no-selinux --no-xattrs", script, StringComparison.Ordinal);
         Assert.DoesNotContain("tar --same-owner", script, StringComparison.Ordinal);
-        Assert.Contains("chown -h 'example-service:example-service' '/etc/example/secret.env'", script, StringComparison.Ordinal);
-        Assert.Contains("chmod 600 '/etc/example/secret.env'", script, StringComparison.Ordinal);
+        Assert.Contains("chown -h 'example-service:example-service' -- '/etc/example/secret.env'", script, StringComparison.Ordinal);
+        Assert.Contains("chmod 600 -- '/etc/example/secret.env'", script, StringComparison.Ordinal);
         Assert.DoesNotContain("chmod 640", script, StringComparison.Ordinal);
         Assert.DoesNotContain("/etc/example/excluded.env", script, StringComparison.Ordinal);
         Assert.Contains("Secret restore must run as root", script, StringComparison.Ordinal);
@@ -305,10 +305,84 @@ public sealed class ServerRecoverySecurityTests
                 new PowerForgeServerRestoreSecretEntry { Path = "/etc/example/both.env", Owner = "owner", Group = "group" }
             ]);
 
-        Assert.Contains("chown -h 'owner-only' '/etc/example/owner.env'", script, StringComparison.Ordinal);
+        Assert.Contains("chown -h 'owner-only' -- '/etc/example/owner.env'", script, StringComparison.Ordinal);
         Assert.DoesNotContain("chown -h 'owner-only:'", script, StringComparison.Ordinal);
-        Assert.Contains("chown -h ':group-only' '/etc/example/group.env'", script, StringComparison.Ordinal);
-        Assert.Contains("chown -h 'owner:group' '/etc/example/both.env'", script, StringComparison.Ordinal);
+        Assert.Contains("chown -h ':group-only' -- '/etc/example/group.env'", script, StringComparison.Ordinal);
+        Assert.Contains("chown -h 'owner:group' -- '/etc/example/both.env'", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RestoreScript_AppliesDirectorySecretMetadataRecursivelyWithoutFollowingLinks()
+    {
+        var script = WebCliCommandHandlers.BuildRestoreSecretsScript(
+            "archive.age",
+            ["/etc/example/private"],
+            [
+                new PowerForgeServerRestoreSecretEntry
+                {
+                    Id = "service-configuration",
+                    Path = "/etc/example/private",
+                    Owner = "root",
+                    Group = "example-service",
+                    Mode = "750",
+                    RestoreMode = "directory"
+                }
+            ]);
+
+        Assert.Contains("os.O_NOFOLLOW", script, StringComparison.Ordinal);
+        Assert.Contains("os.open(component, flags, dir_fd=current_fd)", script, StringComparison.Ordinal);
+        Assert.Contains("os.fchown(member_fd, uid, gid)", script, StringComparison.Ordinal);
+        Assert.Contains("os.fchmod(member_fd, int(directory_mode, 8))", script, StringComparison.Ordinal);
+        Assert.Contains("normalized != root_normalized and not normalized.startswith(root_normalized + '/')", script, StringComparison.Ordinal);
+        Assert.Contains("apply_directory_metadata \"$tmp_dir/secrets.tar.gz\" '/etc/example/private' 'root' 'example-service' '750' '640'", script, StringComparison.Ordinal);
+        Assert.Contains("int(value, 10) if value.isdecimal()", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("follow_symlinks=False", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("find -P", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("chown -hR", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RestoreScript_AppliesOverlappingSecretMetadataFromParentToChild()
+    {
+        var script = WebCliCommandHandlers.BuildRestoreSecretsScript(
+            "archive.age",
+            ["/etc/example", "/etc/example/private", "/etc/example/private/key"],
+            [
+                new PowerForgeServerRestoreSecretEntry
+                {
+                    Id = "private-directory",
+                    Path = "/etc/example/private",
+                    Owner = "root",
+                    Group = "private-service",
+                    Mode = "700",
+                    RestoreMode = "directory"
+                },
+                new PowerForgeServerRestoreSecretEntry
+                {
+                    Id = "private-key",
+                    Path = "/etc/example/private/key",
+                    Owner = "root",
+                    Group = "root",
+                    Mode = "600",
+                    RestoreMode = "file"
+                },
+                new PowerForgeServerRestoreSecretEntry
+                {
+                    Id = "service-directory",
+                    Path = "/etc/example///",
+                    Owner = "root",
+                    Group = "example-service",
+                    Mode = "750",
+                    RestoreMode = "directory"
+                }
+            ]);
+
+        var parentIndex = script.IndexOf("apply_directory_metadata \"$tmp_dir/secrets.tar.gz\" '/etc/example' ", StringComparison.Ordinal);
+        var childIndex = script.IndexOf("apply_directory_metadata \"$tmp_dir/secrets.tar.gz\" '/etc/example/private' ", StringComparison.Ordinal);
+        var fileIndex = script.IndexOf("chown -h 'root:root' -- '/etc/example/private/key'", StringComparison.Ordinal);
+
+        Assert.True(parentIndex >= 0 && parentIndex < childIndex, "Parent directory metadata must be applied before child metadata.");
+        Assert.True(childIndex < fileIndex, "Exact child file metadata must be applied after enclosing directory metadata.");
     }
 
     private static PowerForgeServerRecoveryManifest CreateManifest()

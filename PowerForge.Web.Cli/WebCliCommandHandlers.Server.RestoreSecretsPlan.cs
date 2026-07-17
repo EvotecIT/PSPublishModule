@@ -30,16 +30,17 @@ internal static partial class WebCliCommandHandlers
 
         var managedPaths = (manifest.Paths ?? Array.Empty<PowerForgeServerPath>())
             .Where(static path => !string.IsNullOrWhiteSpace(path.Path))
-            .GroupBy(static path => path.Path!, StringComparer.Ordinal)
+            .GroupBy(static path => path.Path!.TrimEnd('/'), StringComparer.Ordinal)
             .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.Ordinal);
         var secrets = (manifest.Secrets ?? Array.Empty<PowerForgeServerSecret>())
             .Select(secret =>
             {
-                managedPaths.TryGetValue(secret.Path ?? string.Empty, out var managedPath);
+                var normalizedPath = secret.Path?.TrimEnd('/');
+                managedPaths.TryGetValue(normalizedPath ?? string.Empty, out var managedPath);
                 return new PowerForgeServerRestoreSecretEntry
                 {
                     Id = secret.Id,
-                    Path = secret.Path,
+                    Path = normalizedPath,
                     Env = secret.Env,
                     RestoreMode = secret.RestoreMode,
                     RequiredFor = secret.RequiredFor is { Length: > 0 } ? string.Join(", ", secret.RequiredFor) : null,
@@ -259,11 +260,101 @@ internal static partial class WebCliCommandHandlers
         builder.AppendLine("[ \"$(id -u)\" -eq 0 ] || { echo 'Secret restore must run as root.' >&2; exit 3; }");
         builder.AppendLine();
         builder.AppendLine("tar --no-same-owner --no-same-permissions --no-overwrite-dir --no-acls --no-selinux --no-xattrs -xzf \"$tmp_dir/secrets.tar.gz\" -C /");
-        foreach (var secret in secrets.Where(secret =>
-                     !string.IsNullOrWhiteSpace(secret.Path) &&
-                     allowedArchivePaths.Any(allowedPath => PathContains(allowedPath, secret.Path!))))
+        if (secrets.Any(secret =>
+                string.Equals(secret.RestoreMode, "directory", StringComparison.OrdinalIgnoreCase) &&
+                (!string.IsNullOrWhiteSpace(secret.Owner) ||
+                 !string.IsNullOrWhiteSpace(secret.Group) ||
+                 !string.IsNullOrWhiteSpace(secret.Mode))))
         {
-            var pathValue = ShellQuote(secret.Path!);
+            builder.AppendLine("apply_directory_metadata() {");
+            builder.AppendLine("  python3 - \"$@\" <<'POWERFORGE_APPLY_DIRECTORY_METADATA'");
+            builder.AppendLine("import grp");
+            builder.AppendLine("import os");
+            builder.AppendLine("import posixpath");
+            builder.AppendLine("import pwd");
+            builder.AppendLine("import stat");
+            builder.AppendLine("import sys");
+            builder.AppendLine("import tarfile");
+            builder.AppendLine();
+            builder.AppendLine("archive_path, root, owner_name, group_name, directory_mode, file_mode = sys.argv[1:]");
+            builder.AppendLine("root_normalized = root.strip('/')");
+            builder.AppendLine("directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, 'O_CLOEXEC', 0)");
+            builder.AppendLine("file_flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, 'O_CLOEXEC', 0) | getattr(os, 'O_NONBLOCK', 0)");
+            builder.AppendLine();
+            builder.AppendLine("def resolve_uid(value):");
+            builder.AppendLine("    return -1 if not value else int(value, 10) if value.isdecimal() else pwd.getpwnam(value).pw_uid");
+            builder.AppendLine();
+            builder.AppendLine("def resolve_gid(value):");
+            builder.AppendLine("    return -1 if not value else int(value, 10) if value.isdecimal() else grp.getgrnam(value).gr_gid");
+            builder.AppendLine();
+            builder.AppendLine("def open_member(normalized, is_directory):");
+            builder.AppendLine("    components = normalized.split('/')");
+            builder.AppendLine("    if not components or any(not component for component in components):");
+            builder.AppendLine("        raise SystemExit(f'Invalid restored member path: {normalized}')");
+            builder.AppendLine("    current_fd = os.open('/', directory_flags)");
+            builder.AppendLine("    try:");
+            builder.AppendLine("        for index, component in enumerate(components):");
+            builder.AppendLine("            final = index == len(components) - 1");
+            builder.AppendLine("            flags = directory_flags if not final or is_directory else file_flags");
+            builder.AppendLine("            next_fd = os.open(component, flags, dir_fd=current_fd)");
+            builder.AppendLine("            os.close(current_fd)");
+            builder.AppendLine("            current_fd = next_fd");
+            builder.AppendLine("        actual_mode = os.fstat(current_fd).st_mode");
+            builder.AppendLine("        if is_directory and not stat.S_ISDIR(actual_mode):");
+            builder.AppendLine("            raise SystemExit(f'Restored directory changed type: {normalized}')");
+            builder.AppendLine("        if not is_directory and not stat.S_ISREG(actual_mode):");
+            builder.AppendLine("            raise SystemExit(f'Restored file changed type: {normalized}')");
+            builder.AppendLine("        return current_fd");
+            builder.AppendLine("    except BaseException:");
+            builder.AppendLine("        os.close(current_fd)");
+            builder.AppendLine("        raise");
+            builder.AppendLine();
+            builder.AppendLine("uid = resolve_uid(owner_name)");
+            builder.AppendLine("gid = resolve_gid(group_name)");
+            builder.AppendLine("with tarfile.open(archive_path, mode='r:gz') as archive:");
+            builder.AppendLine("    for member in archive.getmembers():");
+            builder.AppendLine("        normalized = posixpath.normpath(member.name)");
+            builder.AppendLine("        if normalized != root_normalized and not normalized.startswith(root_normalized + '/'):");
+            builder.AppendLine("            continue");
+            builder.AppendLine("        if member.issym():");
+            builder.AppendLine("            continue");
+            builder.AppendLine("        member_fd = open_member(normalized, member.isdir())");
+            builder.AppendLine("        try:");
+            builder.AppendLine("            if uid != -1 or gid != -1:");
+            builder.AppendLine("                os.fchown(member_fd, uid, gid)");
+            builder.AppendLine("            if member.isdir() and directory_mode:");
+            builder.AppendLine("                os.fchmod(member_fd, int(directory_mode, 8))");
+            builder.AppendLine("            elif member.isfile() and file_mode:");
+            builder.AppendLine("                os.fchmod(member_fd, int(file_mode, 8))");
+            builder.AppendLine("        finally:");
+            builder.AppendLine("            os.close(member_fd)");
+            builder.AppendLine("POWERFORGE_APPLY_DIRECTORY_METADATA");
+            builder.AppendLine("}");
+        }
+        foreach (var secret in secrets
+                     .Where(secret =>
+                         !string.IsNullOrWhiteSpace(secret.Path) &&
+                         allowedArchivePaths.Any(allowedPath => PathContains(allowedPath, secret.Path!.TrimEnd('/'))))
+                     .OrderBy(secret => secret.Path!.TrimEnd('/').Count(static character => character == '/')))
+        {
+            var pathValue = ShellQuote(secret.Path!.TrimEnd('/'));
+            var isDirectory = string.Equals(secret.RestoreMode, "directory", StringComparison.OrdinalIgnoreCase);
+            if (isDirectory)
+            {
+                if (!string.IsNullOrWhiteSpace(secret.Owner) ||
+                    !string.IsNullOrWhiteSpace(secret.Group) ||
+                    !string.IsNullOrWhiteSpace(secret.Mode))
+                {
+                    var fileMode = string.IsNullOrWhiteSpace(secret.Mode)
+                        ? string.Empty
+                        : Convert.ToString(
+                            Convert.ToInt32(secret.Mode, 8) & Convert.ToInt32("666", 8),
+                            8).PadLeft(3, '0');
+                    builder.AppendLine($"if [ -d {pathValue} ]; then apply_directory_metadata \"$tmp_dir/secrets.tar.gz\" {pathValue} {ShellQuote(secret.Owner ?? string.Empty)} {ShellQuote(secret.Group ?? string.Empty)} {ShellQuote(secret.Mode ?? string.Empty)} {ShellQuote(fileMode)}; fi");
+                }
+                continue;
+            }
+
             if (!string.IsNullOrWhiteSpace(secret.Owner) || !string.IsNullOrWhiteSpace(secret.Group))
             {
                 var ownership = (secret.Owner, secret.Group) switch
@@ -273,10 +364,10 @@ internal static partial class WebCliCommandHandlers
                     (_, { Length: > 0 } group) => $":{group}",
                     _ => throw new InvalidOperationException("Restore ownership metadata is empty.")
                 };
-                builder.AppendLine($"if [ -e {pathValue} ] || [ -L {pathValue} ]; then chown -h {ShellQuote(ownership)} {pathValue}; fi");
+                builder.AppendLine($"if [ -e {pathValue} ] || [ -L {pathValue} ]; then chown -h {ShellQuote(ownership)} -- {pathValue}; fi");
             }
             if (!string.IsNullOrWhiteSpace(secret.Mode))
-                builder.AppendLine($"if [ -e {pathValue} ]; then chmod {secret.Mode} {pathValue}; fi");
+                builder.AppendLine($"if [ -e {pathValue} ]; then chmod {secret.Mode} -- {pathValue}; fi");
         }
         builder.AppendLine("echo 'Secrets restored. Run server verify next.'");
 
