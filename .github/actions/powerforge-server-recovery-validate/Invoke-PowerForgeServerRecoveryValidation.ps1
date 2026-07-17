@@ -16,6 +16,24 @@ function Assert-ProcessSucceeded {
     }
 }
 
+function Assert-PathHasNoSymbolicLink {
+    param(
+        [Parameter(Mandatory)][string] $Root,
+        [Parameter(Mandatory)][string] $Path
+    )
+
+    $relativePath = [IO.Path]::GetRelativePath($Root, $Path)
+    $currentPath = $Root
+    foreach ($segment in $relativePath.Split([IO.Path]::DirectorySeparatorChar, [StringSplitOptions]::RemoveEmptyEntries)) {
+        $currentPath = Join-Path $currentPath $segment
+        $item = Get-Item -LiteralPath $currentPath -Force
+        if ($item.LinkType -eq 'SymbolicLink' -or
+            ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'manifest-path and its parent directories must not be symbolic links.'
+        }
+    }
+}
+
 function Invoke-ProcessCapture {
     param(
         [Parameter(Mandatory)][string] $FileName,
@@ -107,10 +125,7 @@ if (-not $manifestPath.StartsWith($workspacePrefix, [StringComparison]::Ordinal)
     -not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
     throw 'manifest-path must identify a file inside the caller repository.'
 }
-$manifestItem = Get-Item -LiteralPath $manifestPath -Force
-if ($manifestItem.LinkType -eq 'SymbolicLink') {
-    throw 'manifest-path must not be a symbolic link.'
-}
+Assert-PathHasNoSymbolicLink -Root $workspace -Path $manifestPath
 
 $engineRoot = [IO.Path]::GetFullPath((Join-Path $env:GITHUB_ACTION_PATH '../../..'))
 $runnerTemp = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd([IO.Path]::DirectorySeparatorChar)

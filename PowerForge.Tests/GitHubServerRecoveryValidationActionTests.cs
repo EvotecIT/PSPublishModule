@@ -49,7 +49,10 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.Contains("POWERFORGE_ENGINE_REPOSITORY)/$($env:POWERFORGE_ENGINE_REF)", script, StringComparison.Ordinal);
         Assert.Contains("IsPathRooted($env:POWERFORGE_MANIFEST_PATH)", script, StringComparison.Ordinal);
         Assert.Contains("manifestPath.StartsWith($workspacePrefix", script, StringComparison.Ordinal);
-        Assert.Contains("$manifestItem.LinkType -eq 'SymbolicLink'", script, StringComparison.Ordinal);
+        Assert.Contains("[IO.Path]::GetRelativePath($Root, $Path)", script, StringComparison.Ordinal);
+        Assert.Contains("$item.LinkType -eq 'SymbolicLink'", script, StringComparison.Ordinal);
+        Assert.Contains("[IO.FileAttributes]::ReparsePoint", script, StringComparison.Ordinal);
+        Assert.Contains("Assert-PathHasNoSymbolicLink -Root $workspace -Path $manifestPath", script, StringComparison.Ordinal);
         Assert.Contains("validationRoot.StartsWith($runnerTempPrefix", script, StringComparison.Ordinal);
         Assert.Contains("[Guid]::NewGuid().ToString('N')", script, StringComparison.Ordinal);
         Assert.Contains("'--artifacts-path', $artifactsRoot", script, StringComparison.Ordinal);
