@@ -179,7 +179,7 @@ function Get-ExpectedEncryptedCaptureCommand {
     }
 
     $recipient = [string]$RecoveryManifest.backupTarget.recipient
-    if ($recipient -notmatch '^age1[a-z0-9]+$') {
+    if ($recipient -cnotmatch '^age1[a-z0-9]+$') {
         throw 'Credential-free validation requires a stable age public recipient in backupTarget.recipient.'
     }
 
@@ -212,7 +212,7 @@ function Get-ExpectedCaptureSudoersCommand {
 
     $captureCommands = @(@($RecoveryManifest.capture.commands) | Where-Object { $null -ne $_ })
     foreach ($captureCommand in $captureCommands.Where({ $_.sensitive -ne $true })) {
-        $command = [string]$captureCommand.command
+        $command = ([string]$captureCommand.command).Trim()
         if ($command -notmatch '^sudo -n (?<command>.+)$') {
             continue
         }
@@ -289,7 +289,11 @@ $expectedEncryptedCommand = Get-ExpectedEncryptedCaptureCommand -RecoveryManifes
 if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
     $engineRepositories = @(
         foreach ($repository in @($Manifest.repositories)) {
-            $repositorySlug = Get-GitHubRepositorySlug -Url ([string]$repository.url) -AllowUnsupported
+            $repositoryUrl = [string]$repository.url
+            if ([string]::IsNullOrWhiteSpace($repositoryUrl)) {
+                continue
+            }
+            $repositorySlug = Get-GitHubRepositorySlug -Url $repositoryUrl -AllowUnsupported
             if (-not [string]::IsNullOrWhiteSpace($repositorySlug) -and
                 [string]::Equals($repositorySlug, $EngineRepository, [StringComparison]::OrdinalIgnoreCase) -and
                 [string]::Equals([string]$repository.ref, $env:POWERFORGE_ENGINE_REF, [StringComparison]::OrdinalIgnoreCase)) {
@@ -316,7 +320,7 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
         [string]::Equals([string]$_.Entry.kind, 'file', [StringComparison]::OrdinalIgnoreCase) -and
         [string]::Equals([string]$_.Entry.owner, 'root', [StringComparison]::Ordinal) -and
         [string]::Equals([string]$_.Entry.group, 'root', [StringComparison]::Ordinal) -and
-        [string]::Equals([string]$_.Entry.mode, '755', [StringComparison]::Ordinal)
+        ([string]$_.Entry.mode) -in @('755', '0755')
     })
     if ($helper.Count -ne 1) {
         throw 'Encrypted recovery capture requires the exact managed helper from the pinned PowerForge engine.'
@@ -356,15 +360,19 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
             if ($trimmedLine -match '^User_Alias\b') {
                 throw 'Managed sudoers sources must not use User_Alias entries.'
             }
-            if ($line -notmatch '^\s*Cmnd_Alias\b') {
+            if ($trimmedLine -cmatch '^Defaults(?:[:@>!]\S+)?\s+' -and
+                $trimmedLine -cmatch '(?:^|[,\s])!authenticate(?:$|[,\s])') {
+                throw 'Managed sudoers sources must not disable authentication with Defaults !authenticate.'
+            }
+            if ($line -cnotmatch '^\s*Cmnd_Alias\b') {
                 continue
             }
-            if ($line -notmatch '^\s*Cmnd_Alias\s+(?<alias>\S+)\s*=\s*(?<commands>.+?)\s*$') {
+            if ($line -cnotmatch '^\s*Cmnd_Alias\s+(?<alias>\S+)\s*=\s*(?<commands>.+?)\s*$') {
                 throw 'Managed sudoers source contains a malformed command alias.'
             }
             $commandAlias = [string]$Matches['alias']
             $commandText = [string]$Matches['commands']
-            if ($commandAlias -notmatch '^[A-Z][A-Z0-9_]*$') {
+            if ($commandAlias -cnotmatch '^[A-Z][A-Z0-9_]*$') {
                 throw "Managed sudoers source contains an invalid command alias: $commandAlias"
             }
             if ($commandAliases.ContainsKey($commandAlias)) {
@@ -401,7 +409,7 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
                 throw 'The recovery capture account must run its approved commands only as root.'
             }
             foreach ($commandAlias in @($grantText -split '\s*,\s*')) {
-                if ($commandAlias -notmatch '^[A-Z][A-Z0-9_]*$' -or -not $commandAliases.ContainsKey($commandAlias)) {
+                if ($commandAlias -cnotmatch '^[A-Z][A-Z0-9_]*$' -or -not $commandAliases.ContainsKey($commandAlias)) {
                     throw "The recovery capture account grant references an invalid or undefined command alias: $commandAlias"
                 }
                 if (-not $grantedAliases.Add($commandAlias)) {

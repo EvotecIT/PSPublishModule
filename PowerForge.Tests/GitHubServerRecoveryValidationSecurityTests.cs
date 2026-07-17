@@ -148,6 +148,15 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
     }
 
     [Fact]
+    public void Validator_ShouldIgnoreCloneOnlyRepositoriesWithoutUrls()
+    {
+        var result = RunValidator(includeCloneOnlyRepositoryWithoutUrl: true);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("2", result.StandardOutput.Trim());
+    }
+
+    [Fact]
     public void Validator_ShouldRejectSymlinkModeInPinnedSources()
     {
         var result = RunValidator(pinSudoersAsSymlink: true);
@@ -172,6 +181,17 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
 
         Assert.NotEqual(0, result.ExitCode);
         Assert.Contains("exact managed helper from the pinned PowerForge engine", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("755")]
+    [InlineData("0755")]
+    public void Validator_ShouldAcceptSchemaEquivalentHelperModes(string mode)
+    {
+        var result = RunValidator(helperMode: mode);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("2", result.StandardOutput.Trim());
     }
 
     [Fact]
@@ -309,21 +329,70 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         Assert.Contains("do not authorize the exact hardened encrypted-capture command", result.AllOutput, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Validator_ShouldRejectLowercaseCommandAliases()
+    {
+        var sudoers = BuildExpectedSudoers(CaptureUser, "root")
+            .Replace("BACKUP_INSPECT", "backup_inspect", StringComparison.Ordinal);
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("invalid command alias", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectUppercaseAgeRecipients()
+    {
+        var result = RunValidator(recipient: "AGE1EXAMPLE");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("stable age public recipient", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldNormalizePrivilegedCaptureCommandWhitespace()
+    {
+        var result = RunValidator(captureCommand: "  sudo -n apachectl -S  ");
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("2", result.StandardOutput.Trim());
+    }
+
+    [Theory]
+    [InlineData("Defaults !authenticate")]
+    [InlineData($"Defaults:{CaptureUser} !authenticate")]
+    public void Validator_ShouldRejectAuthenticationDisablingDefaults(string defaults)
+    {
+        var sudoers = BuildExpectedSudoers(CaptureUser, "root") +
+                      defaults + "\n" +
+                      $"{CaptureUser} ALL=(root) /bin/sh\n";
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("must not disable authentication", result.AllOutput, StringComparison.Ordinal);
+    }
+
     private static ValidationResult RunValidator(
         string repositoryUrl = "https://github.com/EvotecIT/ExampleSite.git",
         string? sudoers = null,
         bool helperFromCaller = false,
         bool shadowEngineHelper = false,
         bool includeCloneOnlyRepository = false,
+        bool includeCloneOnlyRepositoryWithoutUrl = false,
         bool pinSudoersAsSymlink = false,
         string plainCaptureTarget = "/etc/example/config",
         string helperOwner = "root",
+        string helperMode = "755",
         string sudoersOwner = "root",
         string sudoersMode = "440",
         bool tagSudoers = true,
         string? alternateManagedSudoersTarget = null,
         string? additionalSudoers = null,
-        bool includeCapture = true)
+        bool includeCapture = true,
+        string recipient = Recipient,
+        string captureCommand = "sudo -n apachectl -S")
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-recovery-source-security-" + Guid.NewGuid().ToString("N"));
         var workspace = Path.Combine(root, "caller");
@@ -382,6 +451,8 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
                 repositories.Add(new { url = repositoryUrl, path = "/srv/engine/Deployment", @ref = callerRef });
             if (includeCloneOnlyRepository)
                 repositories.Add(new { url = "git@example.test:private/application.git", path = "/srv/clone-only", @ref = callerRef });
+            if (includeCloneOnlyRepositoryWithoutUrl)
+                repositories.Add(new { role = "application", path = "/srv/manual-clone", @ref = callerRef });
 
             var managedPaths = new List<object>
             {
@@ -392,7 +463,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
                     kind = "file",
                     owner = helperOwner,
                     group = "root",
-                    mode = "755"
+                    mode = helperMode
                 },
                 new
                 {
@@ -424,10 +495,10 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
                 {
                     plainFiles = new[] { new { target = plainCaptureTarget, required = true } },
                     encryptedFiles = new[] { new { target = "/etc/example/secret", required = true } },
-                    commands = new[] { new { id = "apache-vhosts", command = "sudo -n apachectl -S", required = true } }
+                    commands = new[] { new { id = "apache-vhosts", command = captureCommand, required = true } }
                 }
                 : null;
-            object? backupTarget = includeCapture ? new { recipient = Recipient } : null;
+            object? backupTarget = includeCapture ? new { recipient } : null;
             object? apache = alternateManagedSudoersTarget is not null
                 ? new
                 {
