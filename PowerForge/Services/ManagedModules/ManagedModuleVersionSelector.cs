@@ -111,6 +111,8 @@ public static class ManagedModuleVersionSelector
             if (tokens.Length == 0)
                 throw InvalidExpression(expression);
 
+            string? comparatorMinimum = null;
+            string? comparatorMaximum = null;
             foreach (var token in tokens)
             {
                 var prefixLength = token.StartsWith(">=", StringComparison.Ordinal) ||
@@ -123,9 +125,15 @@ public static class ManagedModuleVersionSelector
                 if (prefixLength == 0)
                     throw InvalidExpression(expression);
 
-                ValidateVersion(token.Substring(prefixLength), nameof(expression), expression);
+                var boundary = token.Substring(prefixLength);
+                ValidateVersion(boundary, nameof(expression), expression);
+                if (token.StartsWith(">", StringComparison.Ordinal))
+                    comparatorMinimum = boundary;
+                else
+                    comparatorMaximum = boundary;
             }
 
+            ValidateBounds(comparatorMinimum, comparatorMaximum, expression);
             return;
         }
 
@@ -161,8 +169,13 @@ public static class ManagedModuleVersionSelector
             ValidateVersion(minimum, nameof(expression), expression);
         if (maximum.Length > 0)
             ValidateVersion(maximum, nameof(expression), expression);
-        if (minimum.Length > 0 &&
-            maximum.Length > 0 &&
+        ValidateBounds(minimum, maximum, expression);
+    }
+
+    private static void ValidateBounds(string? minimum, string? maximum, string expression)
+    {
+        if (!string.IsNullOrWhiteSpace(minimum) &&
+            !string.IsNullOrWhiteSpace(maximum) &&
             ManagedModuleVersionComparer.Instance.Compare(minimum, maximum) > 0)
         {
             throw InvalidExpression(expression);
