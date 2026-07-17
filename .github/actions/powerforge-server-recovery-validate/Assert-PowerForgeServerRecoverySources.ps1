@@ -344,7 +344,7 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
             if ($trimmedLine -match '^(?:#|@)include(?:dir)?\b') {
                 throw 'Managed sudoers sources must not include additional policy files.'
             }
-            if ($trimmedLine -match '^#\d+\s+.*\bNOPASSWD\s*:') {
+            if ($trimmedLine -match '^#\d+(?:\s|,).*\bNOPASSWD\s*:') {
                 throw 'Managed sudoers sources must not use numeric user principals for NOPASSWD grants.'
             }
             if ([string]::IsNullOrWhiteSpace($trimmedLine) -or $trimmedLine.StartsWith('#', [StringComparison]::Ordinal)) {

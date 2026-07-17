@@ -224,11 +224,13 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         Assert.Contains(expectedError, result.AllOutput, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void Validator_ShouldRejectNumericUidPrincipals()
+    [Theory]
+    [InlineData("#1001 ALL=(root) NOPASSWD: /bin/sh")]
+    [InlineData("#1001,other-user ALL=(root) NOPASSWD: /bin/sh")]
+    public void Validator_ShouldRejectNumericUidPrincipals(string numericGrant)
     {
         var sudoers = BuildExpectedSudoers(CaptureUser, "root") +
-                      "#1001 ALL=(root) NOPASSWD: /bin/sh\n";
+                      numericGrant + "\n";
 
         var result = RunValidator(sudoers: sudoers);
 
