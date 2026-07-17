@@ -14,6 +14,8 @@ public sealed class ManagedModulePSResourceGetParityTests
     [InlineData("1.5.0", "[1.2.0,2.0.0)", true)]
     [InlineData("2.0.0", "[1.2.0,2.0.0)", false)]
     [InlineData("1.2.0-preview.1", "1.2.0-preview.1", true)]
+    [InlineData("1.5.0", ">=1.0.0 <2.0.0", true)]
+    [InlineData("1.5.0", "<2.0.0 >=1.0.0", true)]
     public void VersionSelector_matches_PSResourceGet_version_expressions(
         string version,
         string expression,
