@@ -1,5 +1,6 @@
 using PowerForge;
 using System.IO.Compression;
+using System.Text;
 using System.Text.Json.Nodes;
 
 namespace PowerForge.Tests;
@@ -75,6 +76,23 @@ public sealed class HomeAssistantReleaseTests {
     }
 
     [Fact]
+    public void RepositoryService_PreservesIntegrationManifestFormatting() {
+        using var fixture = HomeAssistantFixture.CreateIntegration("0.2.6");
+        var path = Path.Combine(fixture.Root, "custom_components", "example", "manifest.json");
+        const string before = "{\r\n  \"domain\": \"example\",\r\n  \"codeowners\": [\"@EvotecIT\", \"@Example\"],\r\n  \"version\": \"0.2.6\"\r\n}\r\n";
+        File.WriteAllText(path, before, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        var service = new HomeAssistantRepositoryService();
+
+        service.UpdateVersion(service.Inspect(fixture.Root), fixture.Root, "0.2.10");
+
+        var bytes = File.ReadAllBytes(path);
+        Assert.Equal(0xEF, bytes[0]);
+        Assert.Equal(0xBB, bytes[1]);
+        Assert.Equal(0xBF, bytes[2]);
+        Assert.Equal(before.Replace("\"0.2.6\"", "\"0.2.10\"", StringComparison.Ordinal), Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3));
+    }
+
+    [Fact]
     public void RepositoryService_SynchronizesPluginPackageAndLockMetadata() {
         using var fixture = HomeAssistantFixture.CreatePlugin("0.1.10");
         var service = new HomeAssistantRepositoryService();
@@ -88,6 +106,23 @@ public sealed class HomeAssistantReleaseTests {
         var packageLock = JsonNode.Parse(File.ReadAllText(Path.Combine(fixture.Root, "package-lock.json")))!.AsObject();
         Assert.Equal("0.1.11", packageLock["version"]!.GetValue<string>());
         Assert.Equal("0.1.11", packageLock["packages"]![""]!["version"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void RepositoryService_PreservesUnrelatedPluginJsonText() {
+        using var fixture = HomeAssistantFixture.CreatePlugin("0.9.9");
+        var packagePath = Path.Combine(fixture.Root, "package.json");
+        var lockPath = Path.Combine(fixture.Root, "package-lock.json");
+        const string packageBefore = "{\n  \"name\": \"example\",\n  \"version\": \"0.9.9\",\n  \"scripts\": { \"pack\": \"npm run build && node pack.mjs\" },\n  \"repository\": \"git+https://example.test/repo.git\"\n}\n";
+        const string lockBefore = "{\n  \"name\": \"example\",\n  \"version\": \"0.9.9\",\n  \"lockfileVersion\": 3,\n  \"packages\": {\n    \"\": { \"name\": \"example\", \"version\": \"0.9.9\" },\n    \"node_modules/tool\": { \"version\": \"1.0.0\", \"integrity\": \"sha512-a+b/c==\", \"engines\": { \"node\": \">=18\" } }\n  }\n}\n";
+        File.WriteAllText(packagePath, packageBefore);
+        File.WriteAllText(lockPath, lockBefore);
+        var service = new HomeAssistantRepositoryService();
+
+        service.UpdateVersion(service.Inspect(fixture.Root), fixture.Root, "0.10.0");
+
+        Assert.Equal(packageBefore.Replace("\"0.9.9\"", "\"0.10.0\"", StringComparison.Ordinal), File.ReadAllText(packagePath));
+        Assert.Equal(lockBefore.Replace("\"0.9.9\"", "\"0.10.0\"", StringComparison.Ordinal), File.ReadAllText(lockPath));
     }
 
     [Fact]
