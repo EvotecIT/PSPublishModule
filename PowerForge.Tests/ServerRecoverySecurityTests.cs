@@ -329,10 +329,14 @@ public sealed class ServerRecoverySecurityTests
                 }
             ]);
 
-        Assert.Contains("os.chown(target, uid, gid, follow_symlinks=False)", script, StringComparison.Ordinal);
-        Assert.Contains("os.chmod(target, int(directory_mode, 8), follow_symlinks=False)", script, StringComparison.Ordinal);
+        Assert.Contains("os.O_NOFOLLOW", script, StringComparison.Ordinal);
+        Assert.Contains("os.open(component, flags, dir_fd=current_fd)", script, StringComparison.Ordinal);
+        Assert.Contains("os.fchown(member_fd, uid, gid)", script, StringComparison.Ordinal);
+        Assert.Contains("os.fchmod(member_fd, int(directory_mode, 8))", script, StringComparison.Ordinal);
         Assert.Contains("normalized != root_normalized and not normalized.startswith(root_normalized + '/')", script, StringComparison.Ordinal);
         Assert.Contains("apply_directory_metadata \"$tmp_dir/secrets.tar.gz\" '/etc/example/private' 'root' 'example-service' '750' '640'", script, StringComparison.Ordinal);
+        Assert.Contains("int(value, 10) if value.isdecimal()", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("follow_symlinks=False", script, StringComparison.Ordinal);
         Assert.DoesNotContain("find -P", script, StringComparison.Ordinal);
         Assert.DoesNotContain("chown -hR", script, StringComparison.Ordinal);
     }
