@@ -13,7 +13,7 @@ Use PowerForge as the release owner. A receiver repository should contain only t
    - integration: one `custom_components/<domain>/manifest.json`, with an optional matching `[project] version` in `pyproject.toml`;
    - Lovelace plugin: `package.json`, required `package-lock.json`, and `hacs.json` `filename`.
 2. Inspect the existing validation workflow and latest GitHub release. The PR head must have at least one completed successful, neutral, or skipped check run.
-3. Add only the `pull_request_target` receiver workflow documented in `Docs/PowerForge.HomeAssistantRelease.md`. Pin the reusable workflow to a reviewed PSPublishModule commit or release ref. Keep the trigger on `closed`: the trusted default-branch workflow must handle fork and Dependabot merges without checking out or executing pull-request code with its write token.
+3. Add only the `pull_request_target` receiver workflow documented in `Docs/PowerForge.HomeAssistantRelease.md`. Pin the reusable workflow to the full immutable SHA of a reviewed PSPublishModule release; a release tag may appear only as a maintenance comment. Keep the trigger on `closed`: the trusted default-branch workflow must handle fork and Dependabot merges without checking out or executing pull-request code with its write token.
 4. Give the job `checks: read`, `contents: write`, and `pull-requests: read`. Pass the merged PR number, merge SHA, default branch, and `github.token`.
 5. Add the `release:none`, `release:patch`, `release:minor`, and `release:major` labels if the repository does not have them.
 6. Validate the receiver YAML and open a release-ready PR. Use a release label only when that onboarding PR should intentionally prove a live release.
