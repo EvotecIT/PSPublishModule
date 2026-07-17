@@ -232,9 +232,9 @@ public sealed class SaveManagedModuleCommand : AsyncPSCmdlet
 
         foreach (var target in targets)
         {
-            var repository = string.IsNullOrWhiteSpace(target.Repository)
+            var repository = target.ResolvedRepository ?? (string.IsNullOrWhiteSpace(target.Repository)
                 ? defaultRepository
-                : ManagedModuleCommandSupport.CreateRepository(this, target.Repository!, target.Repository!);
+                : ManagedModuleCommandSupport.CreateRepository(this, target.Repository!, target.Repository!));
             var request = new ManagedModuleInstallRequest
             {
                 Repository = repository,
@@ -297,13 +297,14 @@ public sealed class SaveManagedModuleCommand : AsyncPSCmdlet
                 resource.IsPrerelease,
                 ManagedModuleInstallScope.Custom,
                 scopeSpecified: true,
-                repositoryWasBound || profileWasBound
-                    ? null
-                    : FirstNonEmpty(resource.RepositorySource, resource.RepositoryName),
+                repository: null,
                 Force.IsPresent,
                 AllowClobber.IsPresent,
                 AcceptLicense.IsPresent,
-                SkipDependencyCheck.IsPresent));
+                SkipDependencyCheck.IsPresent,
+                resolvedRepository: repositoryWasBound || profileWasBound
+                    ? null
+                    : ManagedModuleCommandSupport.CreateRepository(this, resource)));
         }
 
         return Name.Select(moduleName => new ManagedModuleRequiredResourceTarget(
@@ -321,9 +322,6 @@ public sealed class SaveManagedModuleCommand : AsyncPSCmdlet
             AcceptLicense.IsPresent,
             SkipDependencyCheck.IsPresent));
     }
-
-    private static string? FirstNonEmpty(params string?[] values)
-        => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))?.Trim();
 
     /// <summary>Writes optional offline bundle metadata after all save results are available.</summary>
     protected override Task EndProcessingAsync()

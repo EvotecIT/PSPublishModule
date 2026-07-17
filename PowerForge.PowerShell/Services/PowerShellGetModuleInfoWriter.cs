@@ -146,7 +146,7 @@ public sealed class PowerShellGetModuleInfoWriter
             {
                 var item = new PSObject();
                 Add(item, "Name", dependency.Id);
-                Add(item, "Version", dependency.VersionRange);
+                Add(item, "VersionRange", dependency.VersionRange);
                 return (object)item;
             })
             .ToArray() ?? Array.Empty<object>();

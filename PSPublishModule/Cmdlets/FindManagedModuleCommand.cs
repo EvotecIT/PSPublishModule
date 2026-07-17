@@ -157,7 +157,7 @@ public sealed class FindManagedModuleCommand : PSCmdlet
             }
 
             foreach (var version in output)
-                WriteObject(version);
+                WriteVersion(version);
         }
 
         if (roots is null)
@@ -167,7 +167,13 @@ public sealed class FindManagedModuleCommand : PSCmdlet
             ? IncludeDependencyVersions(client, repository, roots, credential)
             : roots;
         foreach (var version in results)
-            WriteObject(version);
+            WriteVersion(version);
+    }
+
+    private void WriteVersion(ManagedModuleVersionInfo version)
+    {
+        version.RepositoryProfileName = string.IsNullOrWhiteSpace(ProfileName) ? null : ProfileName!.Trim();
+        WriteObject(version);
     }
 
     private IReadOnlyList<ManagedModuleVersionInfo> FindExactPackageVersions(
@@ -447,6 +453,7 @@ public sealed class FindManagedModuleCommand : PSCmdlet
             Version = version.Version,
             RepositoryName = version.RepositoryName,
             RepositorySource = version.RepositorySource,
+            RepositoryProfileName = version.RepositoryProfileName,
             PackageSource = version.PackageSource,
             IsPrerelease = version.IsPrerelease,
             Listed = version.Listed,

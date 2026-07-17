@@ -20,6 +20,15 @@ public sealed class ManagedModulePSResourceGetParityTests
         bool expected)
         => Assert.Equal(expected, ManagedModuleVersionSelector.IsMatch(version, expression));
 
+    [Theory]
+    [InlineData("foo")]
+    [InlineData("1.*.0")]
+    [InlineData("[1.0.0,foo)")]
+    [InlineData("[1.0.0,2.0.0")]
+    [InlineData("1.0.0,2.0.0")]
+    public void VersionSelector_rejects_invalid_version_expressions(string expression)
+        => Assert.Throws<ArgumentException>(() => ManagedModuleVersionSelector.IsMatch("1.0.0", expression));
+
     [Fact]
     public void FindManagedModule_version_range_returns_every_matching_module_version()
     {
@@ -91,7 +100,20 @@ public sealed class ManagedModulePSResourceGetParityTests
     {
         using var feed = new TemporaryDirectory();
         using var destination = new TemporaryDirectory();
-        CreatePackage(feed.Path, "Company.Tools", "1.0.0");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Dependency.2.0.0.nupkg"),
+            "Company.Dependency",
+            "2.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Dependency.psd1"] = "@{ RootModule = 'Company.Dependency.psm1'; ModuleVersion = '2.0.0'; FunctionsToExport = @('Get-CompanyDependency') }",
+                ["Company.Dependency.psm1"] = "function Get-CompanyDependency { 'ok' }"
+            });
+        CreatePackage(
+            feed.Path,
+            "Company.Tools",
+            "1.0.0",
+            new[] { new TestDependency("Company.Dependency", "[2.0.0,3.0.0)", targetFramework: null) });
 
         using var ps = CreatePowerShellWithModuleImported();
         SetLocation(ps, destination.Path);
@@ -116,6 +138,16 @@ public sealed class ManagedModulePSResourceGetParityTests
         Assert.Contains("Get-CompanyTool", File.ReadAllText(metadataPath), StringComparison.Ordinal);
         Assert.Equal(result.RepositoryName, metadata.Properties["Repository"].Value);
         Assert.Equal(result.RepositorySource, metadata.Properties["RepositorySourceLocation"].Value);
+        var serializedDependencies = metadata.Properties["Dependencies"].Value;
+        if (serializedDependencies is PSObject dependencyCollection)
+            serializedDependencies = dependencyCollection.BaseObject;
+        var dependencies = Assert.IsAssignableFrom<System.Collections.IEnumerable>(serializedDependencies)
+            .Cast<object>()
+            .ToArray();
+        var dependency = PSObject.AsPSObject(Assert.Single(dependencies));
+        Assert.Equal("Company.Dependency", dependency.Properties["Name"].Value);
+        Assert.Equal("[2.0.0,3.0.0)", dependency.Properties["VersionRange"].Value);
+        Assert.Null(dependency.Properties["Version"]);
     }
 
     [Fact]
@@ -142,6 +174,69 @@ public sealed class ManagedModulePSResourceGetParityTests
         Assert.Equal("Company.Tools", result.Name);
         Assert.Equal("1.0.0", result.Version);
         Assert.False(Directory.Exists(modulePath));
+    }
+
+    [Fact]
+    public void UninstallManagedModule_rejects_incomplete_installed_input()
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedModule")
+            .AddParameter("InputObject", new[]
+            {
+                new ModuleStateInstalledModuleResult
+                {
+                    Name = "Company.Tools",
+                    Version = "1.0.0"
+                }
+            })
+            .AddParameter("Plan");
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+
+        Assert.Contains("InstalledLocation", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("Install-ManagedModule")]
+    [InlineData("Save-ManagedModule")]
+    public void FindManagedModule_pipeline_preserves_managed_profile_identity_and_trust(string targetCommand)
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        using var profileRoot = new TemporaryDirectory();
+        using var profileScope = UseProfileStore(profileRoot.Path);
+        CreatePackage(feed.Path, "Company.Tools", "1.0.0");
+        new ModuleRepositoryProfileStore().SaveProfile(new ModuleRepositoryProfile
+        {
+            Name = "CompanyProfile",
+            Provider = PrivateGalleryProvider.NuGet,
+            RepositoryName = "CompanyModules",
+            RepositoryUri = feed.Path,
+            Trusted = true
+        });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Find-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Version", "1.0.0")
+            .AddParameter("ProfileName", "CompanyProfile")
+            .AddCommand(targetCommand)
+            .AddParameter("RequireTrustedRepository");
+        if (string.Equals(targetCommand, "Install-ManagedModule", StringComparison.Ordinal))
+        {
+            ps.AddParameter("Scope", ManagedModuleInstallScope.Custom)
+                .AddParameter("ModuleRoot", destination.Path);
+        }
+        else
+        {
+            ps.AddParameter("Path", destination.Path);
+        }
+
+        var result = Assert.IsType<ManagedModuleInstallResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal("CompanyModules", result.RepositoryName);
+        Assert.Equal(feed.Path, result.RepositorySource);
     }
 
     [Fact]
@@ -241,16 +336,26 @@ public sealed class ManagedModulePSResourceGetParityTests
         Assert.DoesNotContain("ModuleRoot", parameterNames);
     }
 
-    private static void CreatePackage(string repositoryPath, string name, string version)
+    private static void CreatePackage(
+        string repositoryPath,
+        string name,
+        string version,
+        IReadOnlyList<TestDependency>? dependencies = null)
         => TestPackageFactory.Create(
             Path.Combine(repositoryPath, name + "." + version + ".nupkg"),
             name,
             version,
+            dependencies: dependencies,
             files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 [name + ".psd1"] = "@{ RootModule = '" + name + ".psm1'; ModuleVersion = '" + version + "'; Author = 'Company'; CompanyName = 'Company'; Description = 'Company tools'; FunctionsToExport = @('Get-CompanyTool') }",
                 [name + ".psm1"] = "function Get-CompanyTool { 'ok' }"
             });
+
+    private static IDisposable UseProfileStore(string root)
+        => new TestEnvironmentVariable(
+            "POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH",
+            Path.Combine(root, "profiles.json"));
 
     private static PowerShell CreatePowerShellWithModuleImported()
     {
@@ -276,5 +381,21 @@ public sealed class ManagedModulePSResourceGetParityTests
     {
         if (ps.HadErrors)
             throw new InvalidOperationException(string.Join(Environment.NewLine, ps.Streams.Error.Select(static error => error.ToString())));
+    }
+
+    private sealed class TestEnvironmentVariable : IDisposable
+    {
+        private readonly string _name;
+        private readonly string? _previousValue;
+
+        internal TestEnvironmentVariable(string name, string value)
+        {
+            _name = name;
+            _previousValue = Environment.GetEnvironmentVariable(name);
+            Environment.SetEnvironmentVariable(name, value);
+        }
+
+        public void Dispose()
+            => Environment.SetEnvironmentVariable(_name, _previousValue);
     }
 }

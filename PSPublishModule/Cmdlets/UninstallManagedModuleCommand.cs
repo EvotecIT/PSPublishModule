@@ -97,8 +97,14 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
         {
             foreach (var resource in InputObject)
             {
-                if (string.IsNullOrWhiteSpace(resource.Name))
-                    continue;
+                if (resource is null ||
+                    string.IsNullOrWhiteSpace(resource.Name) ||
+                    string.IsNullOrWhiteSpace(resource.Version) ||
+                    string.IsNullOrWhiteSpace(resource.InstalledLocation))
+                {
+                    throw new InvalidOperationException(
+                        "Each InputObject entry must include Name, Version, and InstalledLocation from Get-ManagedModule.");
+                }
 
                 AddPlan(
                     new[] { resource.Name },

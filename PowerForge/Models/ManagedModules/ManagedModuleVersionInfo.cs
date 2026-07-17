@@ -26,6 +26,11 @@ public sealed class ManagedModuleVersionInfo
     public string RepositorySource { get; set; } = string.Empty;
 
     /// <summary>
+    /// Managed repository profile name used to resolve this version, when applicable.
+    /// </summary>
+    public string? RepositoryProfileName { get; set; }
+
+    /// <summary>
     /// Direct package download URI or local package path when known.
     /// </summary>
     public string? PackageSource { get; set; }

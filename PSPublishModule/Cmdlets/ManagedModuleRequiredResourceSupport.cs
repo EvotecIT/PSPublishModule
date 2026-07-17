@@ -337,7 +337,8 @@ internal sealed class ManagedModuleRequiredResourceTarget
         bool reinstall,
         bool allowClobber,
         bool acceptLicense,
-        bool skipDependencyCheck)
+        bool skipDependencyCheck,
+        ManagedModuleRepository? resolvedRepository = null)
     {
         Name = name;
         Version = version;
@@ -352,6 +353,7 @@ internal sealed class ManagedModuleRequiredResourceTarget
         AllowClobber = allowClobber;
         AcceptLicense = acceptLicense;
         SkipDependencyCheck = skipDependencyCheck;
+        ResolvedRepository = resolvedRepository;
     }
 
     internal string Name { get; }
@@ -379,4 +381,6 @@ internal sealed class ManagedModuleRequiredResourceTarget
     internal bool AcceptLicense { get; }
 
     internal bool SkipDependencyCheck { get; }
+
+    internal ManagedModuleRepository? ResolvedRepository { get; }
 }

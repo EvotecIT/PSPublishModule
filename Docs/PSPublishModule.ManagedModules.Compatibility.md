@@ -294,7 +294,7 @@ Cmdlets should map parameters into these models and write result objects. They s
 
 Managed install, save, and update are no-clobber by default. Before a staged package is promoted, the managed engine reads manifest-declared `FunctionsToExport`, `CmdletsToExport`, and `AliasesToExport` values and checks them against other installed modules in the selected target root. If another module exports the same function, cmdlet, or alias, the operation fails before writing the final module version.
 
-`-AllowClobber` is the explicit opt-in that permits those exported command conflicts. This maps to the PSResourceGet `-NoClobber` safety idea by making no-clobber the default in the managed engine, rather than adding a separate `-NoClobber` switch whose absence could imply less safe behavior.
+`-AllowClobber` is the explicit opt-in that permits those exported command conflicts. `-NoClobber` is also accepted for PSResourceGet migration and makes the default policy explicit; specifying both switches is rejected.
 
 Same-name modules are skipped during conflict checks so side-by-side versions and exact-version reinstalls do not self-conflict. Wildcard exports such as `FunctionsToExport = '*'` are not treated as concrete conflicts because they cannot be reliably enumerated from the manifest alone. The check is target-root based; cross-scope conflicts remain a repair/maintenance policy concern rather than an install-time block across every module path on the machine.
 

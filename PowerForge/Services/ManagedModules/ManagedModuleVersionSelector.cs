@@ -16,7 +16,9 @@ public static class ManagedModuleVersionSelector
         if (string.IsNullOrWhiteSpace(version))
             throw new ArgumentException("Version is required.", nameof(version));
 
-        return ParseSearchExpression(expression).IsSatisfiedBy(version.Trim());
+        var normalizedVersion = version.Trim();
+        ValidateVersion(normalizedVersion, nameof(version), version);
+        return ParseSearchExpression(expression).IsSatisfiedBy(normalizedVersion);
     }
 
     /// <summary>
@@ -39,12 +41,19 @@ public static class ManagedModuleVersionSelector
         if (TryConvertWildcardExpression(trimmed, out var wildcardRange))
             return ManagedModuleVersionRange.Parse(wildcardRange);
 
+        if (trimmed.IndexOf('*') >= 0 || trimmed.IndexOf('?') >= 0)
+            throw InvalidExpression(trimmed);
+
         if (HasRangeSyntax(trimmed))
+        {
+            ValidateRangeExpression(trimmed);
             return ManagedModuleVersionRange.Parse(trimmed);
+        }
 
         // PSResourceGet treats a plain -Version value as exact. The shared range
         // parser intentionally keeps NuGet dependency semantics for plain values,
         // so search wraps exact values explicitly instead of changing that contract.
+        ValidateVersion(trimmed, nameof(expression), trimmed);
         return ManagedModuleVersionRange.Parse("[" + trimmed + "]");
     }
 
@@ -86,4 +95,126 @@ public static class ManagedModuleVersionSelector
         range = "[" + string.Join(".", lower) + "," + string.Join(".", upper) + ")";
         return true;
     }
+
+    private static void ValidateRangeExpression(string expression)
+    {
+        if (expression.StartsWith("=", StringComparison.Ordinal))
+        {
+            ValidateVersion(expression.Substring(1), nameof(expression), expression);
+            return;
+        }
+
+        if (expression.StartsWith(">", StringComparison.Ordinal) ||
+            expression.StartsWith("<", StringComparison.Ordinal))
+        {
+            var tokens = expression.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length == 0)
+                throw InvalidExpression(expression);
+
+            foreach (var token in tokens)
+            {
+                var prefixLength = token.StartsWith(">=", StringComparison.Ordinal) ||
+                                   token.StartsWith("<=", StringComparison.Ordinal)
+                    ? 2
+                    : token.StartsWith(">", StringComparison.Ordinal) ||
+                      token.StartsWith("<", StringComparison.Ordinal)
+                        ? 1
+                        : 0;
+                if (prefixLength == 0)
+                    throw InvalidExpression(expression);
+
+                ValidateVersion(token.Substring(prefixLength), nameof(expression), expression);
+            }
+
+            return;
+        }
+
+        var hasOpeningDelimiter = expression.StartsWith("[", StringComparison.Ordinal) ||
+                                  expression.StartsWith("(", StringComparison.Ordinal);
+        var hasClosingDelimiter = expression.EndsWith("]", StringComparison.Ordinal) ||
+                                  expression.EndsWith(")", StringComparison.Ordinal);
+        if (!hasOpeningDelimiter || !hasClosingDelimiter)
+            throw InvalidExpression(expression);
+
+        var body = expression.Substring(1, expression.Length - 2).Trim();
+        var commaIndex = body.IndexOf(',');
+        if (commaIndex < 0)
+        {
+            if (!expression.StartsWith("[", StringComparison.Ordinal) ||
+                !expression.EndsWith("]", StringComparison.Ordinal))
+            {
+                throw InvalidExpression(expression);
+            }
+
+            ValidateVersion(body, nameof(expression), expression);
+            return;
+        }
+
+        if (body.IndexOf(',', commaIndex + 1) >= 0)
+            throw InvalidExpression(expression);
+
+        var minimum = body.Substring(0, commaIndex).Trim();
+        var maximum = body.Substring(commaIndex + 1).Trim();
+        if (minimum.Length == 0 && maximum.Length == 0)
+            throw InvalidExpression(expression);
+        if (minimum.Length > 0)
+            ValidateVersion(minimum, nameof(expression), expression);
+        if (maximum.Length > 0)
+            ValidateVersion(maximum, nameof(expression), expression);
+    }
+
+    private static void ValidateVersion(string value, string parameterName, string originalExpression)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw InvalidExpression(originalExpression, parameterName);
+
+        var trimmed = value.Trim();
+        var plusIndex = trimmed.IndexOf('+');
+        if (plusIndex >= 0)
+        {
+            if (plusIndex == 0 || plusIndex == trimmed.Length - 1 || trimmed.IndexOf('+', plusIndex + 1) >= 0)
+                throw InvalidExpression(originalExpression, parameterName);
+            ValidateIdentifiers(trimmed.Substring(plusIndex + 1), originalExpression, parameterName);
+            trimmed = trimmed.Substring(0, plusIndex);
+        }
+
+        var dashIndex = trimmed.IndexOf('-');
+        if (dashIndex >= 0)
+        {
+            if (dashIndex == 0 || dashIndex == trimmed.Length - 1)
+                throw InvalidExpression(originalExpression, parameterName);
+            ValidateIdentifiers(trimmed.Substring(dashIndex + 1), originalExpression, parameterName);
+            trimmed = trimmed.Substring(0, dashIndex);
+        }
+
+        var parts = trimmed.Split('.');
+        if (parts.Length is < 1 or > 4)
+            throw InvalidExpression(originalExpression, parameterName);
+        foreach (var part in parts)
+        {
+            if (part.Length == 0 || !part.All(static character => character >= '0' && character <= '9') ||
+                !int.TryParse(part, out _))
+            {
+                throw InvalidExpression(originalExpression, parameterName);
+            }
+        }
+    }
+
+    private static void ValidateIdentifiers(string value, string originalExpression, string parameterName)
+    {
+        foreach (var identifier in value.Split('.'))
+        {
+            if (identifier.Length == 0 || identifier.Any(static character =>
+                    !(character >= '0' && character <= '9') &&
+                    !(character >= 'A' && character <= 'Z') &&
+                    !(character >= 'a' && character <= 'z') &&
+                    character != '-'))
+            {
+                throw InvalidExpression(originalExpression, parameterName);
+            }
+        }
+    }
+
+    private static ArgumentException InvalidExpression(string expression, string parameterName = "expression")
+        => new($"Version expression '{expression}' is invalid.", parameterName);
 }

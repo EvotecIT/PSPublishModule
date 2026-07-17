@@ -49,6 +49,48 @@ internal static class ManagedModuleCommandSupport
             profile.Trusted);
     }
 
+    internal static ManagedModuleRepository CreateRepository(PSCmdlet cmdlet, ManagedModuleVersionInfo resource)
+    {
+        if (resource is null)
+            throw new ArgumentNullException(nameof(resource));
+        if (string.IsNullOrWhiteSpace(resource.RepositorySource))
+            throw new InvalidOperationException("InputObject repository source is required.");
+
+        if (!string.IsNullOrWhiteSpace(resource.RepositoryProfileName))
+        {
+            return CreateRepository(
+                cmdlet,
+                resource.RepositoryName,
+                resource.RepositorySource,
+                resource.RepositoryProfileName,
+                repositoryWasBound: false);
+        }
+
+        if (!string.IsNullOrWhiteSpace(resource.RepositoryName))
+        {
+            try
+            {
+                var registered = CreateRepository(cmdlet, DefaultRepositoryName, resource.RepositoryName);
+                if (SourcesEqual(registered.Source, resource.RepositorySource))
+                    return registered;
+            }
+            catch (InvalidOperationException)
+            {
+                // Direct repository results do not require a registered repository.
+            }
+        }
+
+        var source = ResolveRepositorySource(cmdlet, resource.RepositorySource);
+        var name = string.IsNullOrWhiteSpace(resource.RepositoryName)
+            ? ResolveRepositoryName(DefaultRepositoryName, source)
+            : resource.RepositoryName.Trim();
+        return new ManagedModuleRepository(
+            name,
+            source,
+            ManagedModuleRepositoryKind.Auto,
+            IsBuiltInDefaultRepository(name, source));
+    }
+
     internal static ManagedModuleRepository CreateScriptRepository(
         PSCmdlet cmdlet,
         string repositoryName,

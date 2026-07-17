@@ -243,9 +243,9 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
 
         foreach (var target in targets)
         {
-            var repository = string.IsNullOrWhiteSpace(target.Repository)
+            var repository = target.ResolvedRepository ?? (string.IsNullOrWhiteSpace(target.Repository)
                 ? defaultRepository
-                : ManagedModuleCommandSupport.CreateRepository(this, target.Repository!, target.Repository!);
+                : ManagedModuleCommandSupport.CreateRepository(this, target.Repository!, target.Repository!));
             var request = new ManagedModuleInstallRequest
             {
                 Repository = repository,
@@ -321,13 +321,14 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
                 resource.IsPrerelease,
                 Scope,
                 MyInvocation.BoundParameters.ContainsKey(nameof(Scope)),
-                repositoryWasBound || profileWasBound
-                    ? null
-                    : FirstNonEmpty(resource.RepositorySource, resource.RepositoryName),
+                repository: null,
                 defaults.Reinstall,
                 defaults.AllowClobber,
                 AcceptLicense.IsPresent,
-                SkipDependencyCheck.IsPresent));
+                SkipDependencyCheck.IsPresent,
+                resolvedRepository: repositoryWasBound || profileWasBound
+                    ? null
+                    : ManagedModuleCommandSupport.CreateRepository(this, resource)));
         }
 
         return Name.Select(moduleName => new ManagedModuleRequiredResourceTarget(
@@ -345,8 +346,5 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
             AcceptLicense.IsPresent,
             SkipDependencyCheck.IsPresent));
     }
-
-    private static string? FirstNonEmpty(params string?[] values)
-        => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))?.Trim();
 
 }
