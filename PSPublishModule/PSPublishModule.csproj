@@ -11,9 +11,6 @@
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>CS1591</WarningsAsErrors>
-    <UseLocalHtmlForgeX Condition="'$(UseLocalHtmlForgeX)' == ''">false</UseLocalHtmlForgeX>
-    <HtmlForgeXProjectPath Condition="'$(HtmlForgeXProjectPath)' == ''">..\..\HtmlForgeX\HtmlForgeX\HtmlForgeX.csproj</HtmlForgeXProjectPath>
-    <HtmlForgeXMarkdownProjectPath Condition="'$(HtmlForgeXMarkdownProjectPath)' == ''">..\..\HtmlForgeX\HtmlForgeX.Markdown\HtmlForgeX.Markdown.csproj</HtmlForgeXMarkdownProjectPath>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -30,8 +27,8 @@
     <PackageReference Include="System.Reflection.MetadataLoadContext" Version="8.0.0" />
     <PackageReference Include="Spectre.Console" Version="0.55.2" />
     <PackageReference Include="Spectre.Console.Json" Version="0.55.2" />
-    <PackageReference Include="HtmlForgeX" Version="0.50.0" Condition="'$(UseLocalHtmlForgeX)' != 'true' Or !Exists('$(HtmlForgeXProjectPath)') Or !Exists('$(HtmlForgeXMarkdownProjectPath)')" />
-    <PackageReference Include="HtmlForgeX.Markdown" Version="0.21.0" Condition="'$(UseLocalHtmlForgeX)' != 'true' Or !Exists('$(HtmlForgeXProjectPath)') Or !Exists('$(HtmlForgeXMarkdownProjectPath)')" />
+    <PackageReference Include="HtmlForgeX" Version="0.50.0" />
+    <PackageReference Include="HtmlForgeX.Markdown" Version="0.21.0" />
     <PackageReference Include="OfficeIMO.Markdown" Version="0.6.42" />
   </ItemGroup>
 
@@ -57,8 +54,6 @@
   <ItemGroup>
     <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
     <ProjectReference Include="..\PowerForge.PowerShell\PowerForge.PowerShell.csproj" />
-    <ProjectReference Include="$(HtmlForgeXProjectPath)" Condition="'$(UseLocalHtmlForgeX)' == 'true' And Exists('$(HtmlForgeXProjectPath)') And Exists('$(HtmlForgeXMarkdownProjectPath)')" />
-    <ProjectReference Include="$(HtmlForgeXMarkdownProjectPath)" Condition="'$(UseLocalHtmlForgeX)' == 'true' And Exists('$(HtmlForgeXProjectPath)') And Exists('$(HtmlForgeXMarkdownProjectPath)')" />
   </ItemGroup>
 
   <ItemGroup>
