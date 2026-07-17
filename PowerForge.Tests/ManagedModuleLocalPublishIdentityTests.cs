@@ -10,7 +10,7 @@ public sealed class ManagedModuleLocalPublishIdentityTests
         using var source = new TemporaryDirectory();
         using var destination = new TemporaryDirectory();
         var packagePath = Path.Combine(source.Path, "renamed-package.nupkg");
-        TestPackageFactory.Create(packagePath, "Company.Tools", "1.0.0");
+        TestPackageFactory.Create(packagePath, "Company.Tools", "1.0");
         var client = new ManagedModuleRepositoryClient(new NullLogger());
 
         var result = await client.PublishPackageAsync(
@@ -35,7 +35,7 @@ public sealed class ManagedModuleLocalPublishIdentityTests
         {
             ["payload.txt"] = "incoming"
         });
-        TestPackageFactory.Create(existingPath, "Company.Tools", "1.0.0", files: new Dictionary<string, string>
+        TestPackageFactory.Create(existingPath, "Company.Tools", "1.0", files: new Dictionary<string, string>
         {
             ["payload.txt"] = "existing"
         });

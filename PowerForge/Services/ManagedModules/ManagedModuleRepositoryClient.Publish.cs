@@ -183,12 +183,14 @@ public sealed partial class ManagedModuleRepositoryClient
         Directory.CreateDirectory(destinationDirectory);
         var packageMetadata = _packageReader.ReadMetadata(package);
         var safePackageId = ManagedModulePackageIdentity.RequireSafeId(packageMetadata.Id, nameof(packageMetadata.Id));
-        var safeVersion = ManagedModulePackageIdentity.RequireSafeVersion(packageMetadata.Version, nameof(packageMetadata.Version));
+        if (!PackageVersionUtility.TryNormalizeExact(packageMetadata.Version, out var normalizedVersion))
+            throw new InvalidOperationException($"Package '{package}' has an invalid version '{packageMetadata.Version}'.");
+        var safeVersion = ManagedModulePackageIdentity.RequireSafeVersion(normalizedVersion, nameof(packageMetadata.Version));
         var canonicalDestinationPath = Path.Combine(destinationDirectory, $"{safePackageId}.{safeVersion}.nupkg");
         var identityMatches = FindLocalPackageIdentityMatches(
             destinationDirectory,
             packageMetadata.Id,
-            packageMetadata.Version);
+            normalizedVersion);
         if (identityMatches.Length > 1)
         {
             throw new InvalidOperationException(
@@ -240,7 +242,7 @@ public sealed partial class ManagedModuleRepositoryClient
             {
                 var metadata = _packageReader.ReadMetadata(candidate);
                 if (metadata.Id.Equals(packageId, StringComparison.OrdinalIgnoreCase) &&
-                    metadata.Version.Equals(version, StringComparison.OrdinalIgnoreCase))
+                    ManagedModuleVersionComparer.Instance.Compare(metadata.Version, version) == 0)
                 {
                     matches.Add(candidate);
                 }
