@@ -251,7 +251,7 @@ public sealed class ManagedModulePublishService
 
         try
         {
-            var repositoryDirectory = Path.GetFullPath(repositorySource.Trim().Trim('"'));
+            var repositoryDirectory = ManagedModuleRepositoryPathResolver.ResolveLocalFolder(repositorySource);
             return string.Equals(
                 outputDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
                 repositoryDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),

@@ -179,7 +179,7 @@ public sealed partial class ManagedModuleRepositoryClient
         if (!File.Exists(package))
             throw new FileNotFoundException($"Package file was not found: {package}", package);
 
-        var destinationDirectory = ResolveLocalFolder(repository.Source);
+        var destinationDirectory = ManagedModuleRepositoryPathResolver.ResolveLocalFolder(repository.Source);
         Directory.CreateDirectory(destinationDirectory);
         var destinationPath = Path.Combine(destinationDirectory, Path.GetFileName(package));
         if (File.Exists(destinationPath) && !force)

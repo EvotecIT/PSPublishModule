@@ -613,6 +613,27 @@ public sealed class ManagedModulePackServiceTests
     }
 
     [Fact]
+    public async Task Publish_stages_outside_file_uri_feed_when_output_directory_is_repository()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var feed = new TemporaryDirectory();
+        CreateModule(moduleRoot.Path, "Company.Tools", "1.0.0", prerelease: null);
+        var service = new ManagedModulePublishService(new NullLogger());
+
+        var result = await service.PublishAsync(new ManagedModulePublishRequest
+        {
+            ModulePath = moduleRoot.Path,
+            Repository = new ManagedModuleRepository("Local", new Uri(feed.Path).AbsoluteUri),
+            OutputDirectory = feed.Path
+        });
+
+        Assert.True(result.Published);
+        Assert.False(result.Duplicate);
+        Assert.True(File.Exists(Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg")));
+        Assert.NotEqual(feed.Path, Path.GetDirectoryName(result.PackagePath));
+    }
+
+    [Fact]
     public async Task Publish_checks_required_modules_in_target_repository_by_default()
     {
         using var moduleRoot = new TemporaryDirectory();
