@@ -201,8 +201,8 @@ public sealed class FindManagedModuleCommand : PSCmdlet
         string moduleName,
         RepositoryCredential? credential)
     {
-        if (HasTagFilters())
-            return FindWildcardPackageVersionsWithTagPaging(client, repository, moduleName, credential);
+        if (HasTagFilters() || HasVersionFilter())
+            return FindWildcardPackageVersionsWithFilterPaging(client, repository, moduleName, credential);
 
         var searchQuery = ResolveSearchQuery(moduleName);
         var matches = client.SearchPackagesAsync(repository, searchQuery, ShouldIncludePrerelease(), credential, First)
@@ -225,7 +225,7 @@ public sealed class FindManagedModuleCommand : PSCmdlet
             .ToArray();
     }
 
-    private IReadOnlyList<ManagedModuleVersionInfo> FindWildcardPackageVersionsWithTagPaging(
+    private IReadOnlyList<ManagedModuleVersionInfo> FindWildcardPackageVersionsWithFilterPaging(
         ManagedModuleRepositoryClient client,
         ManagedModuleRepository repository,
         string moduleName,
@@ -237,7 +237,7 @@ public sealed class FindManagedModuleCommand : PSCmdlet
         var seenVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var seenPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        for (var skip = 0; !HasEnoughTagPagedMatches(results, seenPackages);)
+        for (var skip = 0; !HasEnoughPagedMatches(results, seenPackages);)
         {
             var page = client.SearchPackagesAsync(repository, searchQuery, ShouldIncludePrerelease(), credential, pageSize, skip)
                 .GetAwaiter()
@@ -267,7 +267,7 @@ public sealed class FindManagedModuleCommand : PSCmdlet
 
                 seenPackages.Add(candidate.Name);
                 results.Add(candidate);
-                if (!AllVersions.IsPresent && HasEnoughTagPagedMatches(results, seenPackages))
+                if (!AllVersions.IsPresent && HasEnoughPagedMatches(results, seenPackages))
                     break;
             }
         }
@@ -279,7 +279,7 @@ public sealed class FindManagedModuleCommand : PSCmdlet
         return AllVersions.IsPresent ? ordered : ordered.Take(First).ToArray();
     }
 
-    private bool HasEnoughTagPagedMatches(
+    private bool HasEnoughPagedMatches(
         IReadOnlyCollection<ManagedModuleVersionInfo> results,
         IReadOnlyCollection<string> packageNames)
         => AllVersions.IsPresent ? packageNames.Count >= First : results.Count >= First;

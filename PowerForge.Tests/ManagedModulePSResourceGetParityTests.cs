@@ -26,6 +26,7 @@ public sealed class ManagedModulePSResourceGetParityTests
     [InlineData("[1.0.0,foo)")]
     [InlineData("[1.0.0,2.0.0")]
     [InlineData("1.0.0,2.0.0")]
+    [InlineData("[2.0.0,1.0.0]")]
     public void VersionSelector_rejects_invalid_version_expressions(string expression)
         => Assert.Throws<ArgumentException>(() => ManagedModuleVersionSelector.IsMatch("1.0.0", expression));
 
@@ -68,6 +69,27 @@ public sealed class ManagedModulePSResourceGetParityTests
 
         AssertNoPowerShellErrors(ps);
         Assert.Equal("1.0.0-preview.1", result.Version);
+    }
+
+    [Fact]
+    public void FindManagedModule_applies_first_after_wildcard_version_filtering()
+    {
+        using var feed = new TemporaryDirectory();
+        CreatePackage(feed.Path, "Company.Alpha", "2.0.0");
+        CreatePackage(feed.Path, "Company.Beta", "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Find-ManagedModule")
+            .AddParameter("Name", "Company.*")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Version", "1.0.0")
+            .AddParameter("First", 1);
+
+        var result = Assert.IsType<ManagedModuleVersionInfo>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal("Company.Beta", result.Name);
+        Assert.Equal("1.0.0", result.Version);
     }
 
     [Fact]
@@ -138,6 +160,7 @@ public sealed class ManagedModulePSResourceGetParityTests
         Assert.Contains("Get-CompanyTool", File.ReadAllText(metadataPath), StringComparison.Ordinal);
         Assert.Equal(result.RepositoryName, metadata.Properties["Repository"].Value);
         Assert.Equal(result.RepositorySource, metadata.Properties["RepositorySourceLocation"].Value);
+        Assert.Equal(result.ModulePath, metadata.Properties["InstalledLocation"].Value);
         var serializedDependencies = metadata.Properties["Dependencies"].Value;
         if (serializedDependencies is PSObject dependencyCollection)
             serializedDependencies = dependencyCollection.BaseObject;
@@ -148,6 +171,11 @@ public sealed class ManagedModulePSResourceGetParityTests
         Assert.Equal("Company.Dependency", dependency.Properties["Name"].Value);
         Assert.Equal("[2.0.0,3.0.0)", dependency.Properties["VersionRange"].Value);
         Assert.Null(dependency.Properties["Version"]);
+
+        var dependencyResult = Assert.Single(result.DependencyResults);
+        var dependencyMetadataPath = Path.Combine(dependencyResult.ModulePath, "PSGetModuleInfo.xml");
+        var dependencyMetadata = Assert.IsType<PSObject>(PSSerializer.Deserialize(File.ReadAllText(dependencyMetadataPath)));
+        Assert.Equal(dependencyResult.ModulePath, dependencyMetadata.Properties["InstalledLocation"].Value);
     }
 
     [Fact]

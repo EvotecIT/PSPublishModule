@@ -82,7 +82,7 @@ public sealed class PowerShellGetModuleInfoWriter
         Add(info, "RepositorySourceLocation", result.RepositorySource);
         Add(info, "Repository", result.RepositoryName);
         Add(info, "AdditionalMetadata", CreateAdditionalMetadata(result.Version));
-        Add(info, "InstalledLocation", result.ModuleRoot);
+        Add(info, "InstalledLocation", result.ModulePath);
         return info;
     }
 

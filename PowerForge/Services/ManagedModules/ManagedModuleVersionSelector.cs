@@ -161,6 +161,12 @@ public static class ManagedModuleVersionSelector
             ValidateVersion(minimum, nameof(expression), expression);
         if (maximum.Length > 0)
             ValidateVersion(maximum, nameof(expression), expression);
+        if (minimum.Length > 0 &&
+            maximum.Length > 0 &&
+            ManagedModuleVersionComparer.Instance.Compare(minimum, maximum) > 0)
+        {
+            throw InvalidExpression(expression);
+        }
     }
 
     private static void ValidateVersion(string value, string parameterName, string originalExpression)
