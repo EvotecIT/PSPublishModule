@@ -64,6 +64,27 @@ function Get-ResolvedPipelineSteps {
     return $steps
 }
 
+function Get-StepBooleanOption {
+    param(
+        [Parameter(Mandatory)][Collections.IDictionary] $Step,
+        [Parameter(Mandatory)][string[]] $Names
+    )
+
+    foreach ($name in $Names) {
+        if ($Step.Contains($name) -and ($Step[$name] -is [bool])) {
+            return [pscustomobject]@{
+                IsBoolean = $true
+                Value = $Step[$name]
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        IsBoolean = $false
+        Value = $null
+    }
+}
+
 $pipelinePath = Resolve-WorkspacePath -Path $PipelineConfig
 $visited = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 $steps = @(Get-ResolvedPipelineSteps -PipelinePath $pipelinePath -Visited $visited)
@@ -86,24 +107,29 @@ if ($gatingSteps.Count -eq 0) {
 }
 
 $completeSteps = @($gatingSteps | Where-Object {
-    $_.Contains('checkContentLeaks') -and ($_['checkContentLeaks'] -eq $true) -and
-    $_.Contains('requireCanonical') -and ($_['requireCanonical'] -eq $true)
+    $contentLeaks = Get-StepBooleanOption -Step $_ -Names @('checkContentLeaks', 'check-content-leaks')
+    $canonical = Get-StepBooleanOption -Step $_ -Names @('requireCanonical', 'require-canonical')
+    $contentLeaks.IsBoolean -and ($contentLeaks.Value -eq $true) -and
+    $canonical.IsBoolean -and ($canonical.Value -eq $true)
 })
 if ($completeSteps.Count -eq 0) {
     throw 'Deploy guardrail requires a gating seo-doctor step with content-leak and canonical checks enabled.'
 }
 
-$explicitModeSteps = @($completeSteps | Where-Object {
-    $_.Contains('requireHreflang') -and
-    $_.Contains('requireHreflangXDefault') -and
-    ($_['requireHreflang'] -is [bool]) -and
-    ($_['requireHreflangXDefault'] -is [bool]) -and
-    ($_['requireHreflang'] -eq $_['requireHreflangXDefault'])
+$explicitModeSteps = @($completeSteps | ForEach-Object {
+    $hreflang = Get-StepBooleanOption -Step $_ -Names @('requireHreflang', 'require-hreflang')
+    $xDefault = Get-StepBooleanOption -Step $_ -Names @('requireHreflangXDefault', 'require-hreflang-x-default')
+    if ($hreflang.IsBoolean -and $xDefault.IsBoolean -and ($hreflang.Value -eq $xDefault.Value)) {
+        [pscustomobject]@{
+            Localized = [bool]$hreflang.Value
+            Step = $_
+        }
+    }
 })
 if ($explicitModeSteps.Count -eq 0) {
     throw 'Deploy guardrail requires an explicit SEO localization mode: set requireHreflang and requireHreflangXDefault to true for localized sites or false for single-language sites.'
 }
 
-$localizedSteps = @($explicitModeSteps | Where-Object { $_['requireHreflang'] -eq $true })
-$singleLanguageSteps = @($explicitModeSteps | Where-Object { $_['requireHreflang'] -eq $false })
+$localizedSteps = @($explicitModeSteps | Where-Object { $_.Localized })
+$singleLanguageSteps = @($explicitModeSteps | Where-Object { -not $_.Localized })
 Write-Host "Validated $($seoDoctorSteps.Count) seo-doctor step(s); $($gatingSteps.Count) gate deployment; $($completeSteps.Count) enforce content-leak/canonical checks; localization modes: $($localizedSteps.Count) localized, $($singleLanguageSteps.Count) single-language."

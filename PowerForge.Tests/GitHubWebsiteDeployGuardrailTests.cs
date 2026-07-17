@@ -62,6 +62,29 @@ public sealed class GitHubWebsiteDeployGuardrailTests
             Assert.Equal(0, singleLanguage.ExitCode);
             Assert.Contains("1 single-language", singleLanguage.Output, StringComparison.Ordinal);
 
+            File.WriteAllText(validPath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "seo-doctor",
+                      "failOnWarnings": true,
+                      "checkContentLeaks": "invalid",
+                      "check-content-leaks": true,
+                      "requireCanonical": "invalid",
+                      "require-canonical": true,
+                      "requireHreflang": "invalid",
+                      "require-hreflang": false,
+                      "requireHreflangXDefault": "invalid",
+                      "require-hreflang-x-default": false
+                    }
+                  ]
+                }
+                """);
+            var kebabCaseAliases = RunGuardrail(root, "pipeline.json");
+            Assert.Equal(0, kebabCaseAliases.ExitCode);
+            Assert.Contains("1 single-language", kebabCaseAliases.Output, StringComparison.Ordinal);
+
             File.WriteAllText(validPath, JsonSerializer.Serialize(new
             {
                 steps = new object[]
