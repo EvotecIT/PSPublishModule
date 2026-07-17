@@ -190,6 +190,10 @@ public sealed class ServerScaffoldTests
             .AsObject();
         sudoersPath.Remove("kind");
         Assert.False(EvaluateSchema(schema, incompleteSudoers));
+
+        var impossibleRuntime = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        impossibleRuntime["packages"]!["dotnetSdks"] = new JsonArray("8.1");
+        Assert.False(EvaluateSchema(schema, impossibleRuntime));
     }
 
     [Fact]

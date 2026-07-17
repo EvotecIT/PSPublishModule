@@ -78,10 +78,13 @@ public sealed class ServerRecoveryInspectCommandTests
             "test \"$(sudo -n git -C '/srv/example' rev-parse --is-inside-work-tree)\" = 'true'",
             WebCliCommandHandlers.BuildRepositoryExistsCheckCommand(path));
         Assert.Equal(
-            "test \"$(sudo -n git -C '/srv/example' rev-parse HEAD)\" = \"$(sudo -n git -C '/srv/example' rev-parse '0123456789abcdef0123456789abcdef01234567^{commit}')\"",
+            "powerforge_git_head=$(sudo -n git -C '/srv/example' rev-parse HEAD) && " +
+            "powerforge_git_expected=$(sudo -n git -C '/srv/example' rev-parse '0123456789abcdef0123456789abcdef01234567^{commit}') && " +
+            "test \"$powerforge_git_head\" = \"$powerforge_git_expected\"",
             WebCliCommandHandlers.BuildRepositoryRefCheckCommand(path, reference));
         Assert.Equal(
-            "test -z \"$(sudo -n git --no-optional-locks -C '/srv/example' status --porcelain --untracked-files=normal)\"",
+            "powerforge_git_status=$(sudo -n git --no-optional-locks -C '/srv/example' status --porcelain --untracked-files=normal) && " +
+            "test -z \"$powerforge_git_status\"",
             WebCliCommandHandlers.BuildRepositoryCleanCheckCommand(path));
     }
 }

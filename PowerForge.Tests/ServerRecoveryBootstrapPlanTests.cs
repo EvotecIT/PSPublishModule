@@ -288,6 +288,16 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Equal(expected, normalized);
     }
 
+    [Theory]
+    [InlineData("0")]
+    [InlineData("8.1")]
+    [InlineData("10.99")]
+    [InlineData("100")]
+    public void DotnetSdkVersionsRejectImpossibleAptPackageVersions(string value)
+    {
+        Assert.False(PowerForge.Web.Cli.WebCliCommandHandlers.TryNormalizeDotnetSdkVersion(value, out _));
+    }
+
     [Fact]
     public void SudoersManagedFileUsesValidatedAtomicReplacementWithRollback()
     {

@@ -255,10 +255,13 @@ internal static partial class WebCliCommandHandlers
         => $"test \"$(sudo -n git -C {ShellQuote(path)} rev-parse --is-inside-work-tree)\" = 'true'";
 
     internal static string BuildRepositoryRefCheckCommand(string path, string reference)
-        => $"test \"$(sudo -n git -C {ShellQuote(path)} rev-parse HEAD)\" = \"$(sudo -n git -C {ShellQuote(path)} rev-parse {ShellQuote(reference + "^{commit}")})\"";
+        => $"powerforge_git_head=$(sudo -n git -C {ShellQuote(path)} rev-parse HEAD) && " +
+           $"powerforge_git_expected=$(sudo -n git -C {ShellQuote(path)} rev-parse {ShellQuote(reference + "^{commit}")}) && " +
+           "test \"$powerforge_git_head\" = \"$powerforge_git_expected\"";
 
     internal static string BuildRepositoryCleanCheckCommand(string path)
-        => $"test -z \"$(sudo -n git --no-optional-locks -C {ShellQuote(path)} status --porcelain --untracked-files=normal)\"";
+        => $"powerforge_git_status=$(sudo -n git --no-optional-locks -C {ShellQuote(path)} status --porcelain --untracked-files=normal) && " +
+           "test -z \"$powerforge_git_status\"";
 
     private static string BuildManagedPathExpectation(PowerForgeServerPath path)
     {

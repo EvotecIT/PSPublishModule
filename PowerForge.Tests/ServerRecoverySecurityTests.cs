@@ -452,6 +452,19 @@ public sealed class ServerRecoverySecurityTests
         Assert.Empty(errors);
     }
 
+    [Theory]
+    [InlineData("8.1")]
+    [InlineData("10.99")]
+    public void ManifestValidation_RejectsImpossibleDotnetSdkPackageVersions(string version)
+    {
+        var manifest = CreateManifest();
+        manifest.Packages = new PowerForgeServerPackages { DotnetSdks = [version] };
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("major or major.0", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void RestoreScript_UsesAllowlistAndDeclaredMetadataWithoutHeuristics()
     {

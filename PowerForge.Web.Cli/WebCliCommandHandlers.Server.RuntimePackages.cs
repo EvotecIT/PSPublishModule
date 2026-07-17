@@ -76,7 +76,7 @@ internal static partial class WebCliCommandHandlers
 
         var minor = 0;
         if (parts.Length == 2 &&
-            (!int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out minor) || minor is < 0 or > 99))
+            (!int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out minor) || minor != 0))
         {
             return false;
         }
