@@ -43,13 +43,15 @@ The reusable workflow uses GitHub's durable `queue: max` concurrency mode. Every
 
 ## Thin receiver workflow
 
-Pin `POWERFORGE_REF` below to a reviewed PSPublishModule commit or release ref. The receiver contains no release implementation:
+Replace `POWERFORGE_COMMIT_SHA` below with the full commit SHA of a reviewed PSPublishModule release. Keep a release-name comment beside the pin when it helps maintenance. Do not grant a movable tag a cross-repository write token. The receiver contains no release implementation:
+
+The receiver intentionally uses `pull_request_target` for the `closed` event. GitHub otherwise downgrades `GITHUB_TOKEN` to read-only when a merged pull request came from a fork or Dependabot. The trusted default-branch receiver only passes merge metadata into PowerForge: privileged prepare and publish jobs never execute receiver code, and the credential-free build job checks out the already-merged release commit.
 
 ```yaml
 name: Release
 
 on:
-  pull_request:
+  pull_request_target:
     types: [closed]
   workflow_dispatch:
     inputs:
@@ -74,7 +76,7 @@ jobs:
       checks: read
       contents: write
       pull-requests: read
-    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-homeassistant-release.yml@POWERFORGE_REF
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-homeassistant-release.yml@POWERFORGE_COMMIT_SHA # PowerForge-vX.Y.Z
     with:
       pr_number: ${{ github.event.pull_request.number || inputs.pr_number }}
       merge_commit_sha: ${{ github.event.pull_request.merge_commit_sha || inputs.merge_commit_sha }}
@@ -84,7 +86,7 @@ jobs:
       github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-The reusable workflow serializes and queues releases per repository and invokes the matching tagged action. The action installs an exact `PowerForge.Build` package version, so the workflow, action, and engine do not drift between retries.
+The reusable workflow serializes and queues releases per repository and invokes the matching action at the immutable release commit. The action installs an exact `PowerForge.Build` package version, so the workflow, action, and engine do not drift between retries.
 
 The shared workflow deliberately uses three jobs with different permissions:
 
