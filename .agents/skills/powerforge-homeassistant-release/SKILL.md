@@ -14,7 +14,7 @@ Use PowerForge as the release owner. A receiver repository should contain only t
    - Lovelace plugin: `package.json`, required `package-lock.json`, and `hacs.json` `filename`.
 2. Inspect the existing validation workflow and latest GitHub release. The PR head must have at least one completed successful, neutral, or skipped check run.
 3. Add only the `pull_request_target` receiver workflow documented in `Docs/PowerForge.HomeAssistantRelease.md`. Pin the reusable workflow to the full immutable SHA of a reviewed PSPublishModule release; a release tag may appear only as a maintenance comment. Keep the trigger on `closed`: the trusted default-branch workflow must handle fork and Dependabot merges without checking out or executing pull-request code with its write token.
-4. Give the job `actions: read`, `checks: read`, `contents: write`, and `pull-requests: read`. Pass the merged PR number, merge SHA, default branch, and `github.token`.
+4. Give the job `actions: read`, `checks: read`, `contents: write`, and `pull-requests: read`. Keep the workflow-dispatch PR number input textual and use the canonical `format` expression when passing either event source into the reusable workflow. Pass the merge SHA, default branch, and `github.token` unchanged.
 5. Add the `release:none`, `release:patch`, `release:minor`, and `release:major` labels if the repository does not have them.
 6. Validate the receiver YAML and open a release-ready PR. Use a release label only when that onboarding PR should intentionally prove a live release.
 
@@ -35,7 +35,7 @@ Rerun the failed Actions job first. PowerForge resumes safely:
 - missing historical assets are rebuilt from a fresh read-only checkout of the exact tag commit;
 - a tag pointing at the wrong commit or a missing required asset fails verification.
 
-For a manual recovery, dispatch the receiver workflow with the original merged PR number, its merge SHA, and the same increment decision. Do not hand-edit a second version bump or manually create a competing release.
+For a manual recovery, dispatch the receiver workflow with the original merged PR number, its merge SHA, and the same increment decision. The receiver's textual PR-number contract must match the canonical example; a numeric workflow-dispatch input is not compatible with the reusable-call graph. Do not hand-edit a second version bump or manually create a competing release.
 
 ## Keep the boundary thin
 

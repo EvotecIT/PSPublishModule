@@ -58,7 +58,7 @@ on:
       pr_number:
         description: Merged pull request number to release or recover
         required: true
-        type: number
+        type: string
       merge_commit_sha:
         description: Expected merge commit SHA
         required: false
@@ -79,13 +79,15 @@ jobs:
       pull-requests: read
     uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-homeassistant-release.yml@POWERFORGE_COMMIT_SHA # PowerForge-vX.Y.Z
     with:
-      pr_number: ${{ github.event.pull_request.number || inputs.pr_number }}
+      pr_number: ${{ format('{0}', github.event.pull_request.number || inputs.pr_number) }}
       merge_commit_sha: ${{ github.event.pull_request.merge_commit_sha || inputs.merge_commit_sha }}
       default_branch: ${{ github.event.repository.default_branch }}
       increment: ${{ inputs.increment || 'auto' }}
     secrets:
       github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+Keep the pull request number textual at the workflow boundary. Manual-dispatch inputs are strings, and `format` also converts the numeric pull-request event value to the reusable workflow's single stable input type.
 
 The reusable workflow serializes and queues releases per repository and invokes the matching action at the immutable release commit. The action installs an exact `PowerForge.Build` package version, so the workflow, action, and engine do not drift between retries.
 

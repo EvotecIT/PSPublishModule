@@ -6,7 +6,7 @@ on:
       pr_number:
         description: Merged pull request number that initiated the release.
         required: true
-        type: number
+        type: string
       merge_commit_sha:
         description: Expected pull request merge commit SHA.
         required: false
