@@ -205,6 +205,10 @@ public sealed class ServerScaffoldTests
         supportedRuntime["packages"]!["dotnetSdks"] = new JsonArray("8", "8.0", "10", "10.0");
         Assert.True(EvaluateSchema(schema, supportedRuntime));
 
+        var uppercaseAptPackage = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        uppercaseAptPackage["packages"]!["apt"] = new JsonArray("Curl");
+        Assert.False(EvaluateSchema(schema, uppercaseAptPackage));
+
         var legacySchema = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
         legacySchema["schemaVersion"] = 1;
         Assert.False(EvaluateSchema(schema, legacySchema));

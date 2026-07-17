@@ -131,7 +131,7 @@
       "properties": {
         "apt": {
           "type": "array",
-          "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9+.:-]{0,127}$" }
+          "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9+.:-]{0,127}$" }
         },
         "apacheModules": {
           "type": "array",

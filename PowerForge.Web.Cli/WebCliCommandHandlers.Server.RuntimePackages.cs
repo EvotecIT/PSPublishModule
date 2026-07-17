@@ -106,8 +106,11 @@ internal static partial class WebCliCommandHandlers
         => !string.IsNullOrWhiteSpace(value) &&
            string.Equals(value, value.Trim(), StringComparison.Ordinal) &&
            value.Length <= 128 &&
-           (char.IsAsciiLetterOrDigit(value[0])) &&
-           value.All(static character => char.IsAsciiLetterOrDigit(character) || character is '+' or '-' or '.' or ':');
+           IsLowerAsciiLetterOrDigit(value[0]) &&
+           value.All(static character => IsLowerAsciiLetterOrDigit(character) || character is '+' or '-' or '.' or ':');
+
+    private static bool IsLowerAsciiLetterOrDigit(char character)
+        => character is >= 'a' and <= 'z' or >= '0' and <= '9';
 
     internal static bool IsSafeApacheModuleName(string? value)
         => !string.IsNullOrWhiteSpace(value) &&

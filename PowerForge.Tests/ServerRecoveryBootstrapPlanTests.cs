@@ -497,6 +497,15 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.False(PowerForge.Web.Cli.WebCliCommandHandlers.TryNormalizeDotnetSdkVersion(value, out _));
     }
 
+    [Theory]
+    [InlineData("Curl")]
+    [InlineData("libSSL3")]
+    [InlineData("ca-Certificates")]
+    public void AptPackageNamesRejectUppercaseCharacters(string value)
+    {
+        Assert.False(PowerForge.Web.Cli.WebCliCommandHandlers.IsSafeAptPackageName(value));
+    }
+
     [Fact]
     public void SudoersManagedFileUsesValidatedAtomicReplacementWithRollback()
     {
