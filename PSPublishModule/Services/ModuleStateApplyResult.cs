@@ -133,6 +133,11 @@ public sealed class ModuleStateDeliveryExecutionResult
     public bool Succeeded { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether the operation was deliberately skipped, for example because ShouldProcess declined it.
+    /// </summary>
+    public bool Skipped { get; set; }
+
+    /// <summary>
     /// Gets or sets the operational failure message when the operation did not succeed.
     /// </summary>
     public string? ErrorMessage { get; set; }

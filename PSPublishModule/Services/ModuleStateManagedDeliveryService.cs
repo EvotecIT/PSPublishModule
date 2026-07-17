@@ -329,6 +329,7 @@ internal sealed class ModuleStateManagedDeliveryService
         ModuleStatePlanAction action)
         => new()
         {
+            Skipped = true,
             Operation = operation,
             OperationPerformed = false,
             TargetPath = action.TargetPath,

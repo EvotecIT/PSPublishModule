@@ -54,7 +54,7 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
                 credentialSecretFilePath,
                 managedDeliveryOptions,
                 requiredResourceInputSupplied).ConfigureAwait(false);
-            if (executionResults.All(static execution => execution.Succeeded))
+            if (executionResults.All(static execution => execution.Succeeded && !execution.Skipped))
             {
                 var cleanupInventory = CollectPostApplyInventory(inventory);
                 if (cleanupInventory is not null)
@@ -87,7 +87,7 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
             }
         }
 
-        var executionSucceeded = executionRequested && executionResults.All(static execution => execution.Succeeded);
+        var executionSucceeded = executionRequested && executionResults.All(static execution => execution.Succeeded && !execution.Skipped);
         var converged = executionSucceeded && postApplyTest?.IsCompliant == true;
         if (!Plan.IsPresent && result.Receipt.CanApply && !hasActions)
         {

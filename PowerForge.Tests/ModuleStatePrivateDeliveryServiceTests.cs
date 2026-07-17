@@ -357,6 +357,47 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
         Assert.Equal("https://selected.example.test/v3/index.json", repository.Source);
     }
 
+    [Fact]
+    public void MapExecutionResult_PreservesDeliberateSkipState()
+    {
+        var result = ModuleStatePrivateDeliveryService.MapExecutionResult(
+            ModuleStatePlanActionKind.Update,
+            new PrivateModuleWorkflowResult
+            {
+                OperationPerformed = false,
+                OperationSkipped = true,
+                RepositoryName = "Company"
+            });
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.Skipped);
+        Assert.False(result.OperationPerformed);
+        Assert.Equal("Update", result.Operation);
+    }
+
+    [Fact]
+    public void ManagedSkippedResult_PreservesDeliberateSkipState()
+    {
+        var method = typeof(ModuleStateManagedDeliveryService).GetMethod(
+            "CreateSkippedResult",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        var action = new ModuleStatePlanAction(
+            ModuleStatePlanActionKind.Update,
+            "Company.Tools",
+            "1.0.0",
+            "*",
+            "latest");
+
+        var result = Assert.IsType<ModuleStateDeliveryExecutionResult>(method!.Invoke(
+            null,
+            new object[] { "Update", "Company", action }));
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.Skipped);
+        Assert.False(result.OperationPerformed);
+    }
+
     private static PrivateModuleWorkflowRequest InvokeCreateRequest(
         IReadOnlyList<ModuleStatePlanAction> actions,
         ModuleStatePrivateDeliveryOptions? options = null,

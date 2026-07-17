@@ -1,4 +1,5 @@
 using PowerForge;
+using PSPublishModule;
 
 namespace PowerForge.Tests;
 
@@ -31,5 +32,48 @@ public sealed class ModuleStateEstateSafetyTests
 
         Assert.Equal(ModuleStateConflictSeverity.Warning, optional.Severity);
         Assert.Equal(ModuleStateConflictSeverity.Error, required.Severity);
+    }
+
+    [Fact]
+    public void Cleanup_DoesNotMutateWhenRefreshedPlanHasErrors()
+    {
+        using var workspace = new TemporaryDirectory();
+        var moduleRoot = Path.Combine(workspace.Path, "Modules");
+        var targetPath = Path.Combine(moduleRoot, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(targetPath);
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(
+                    ModuleStatePlanActionKind.Remove,
+                    "Company.Tools",
+                    "1.0.0",
+                    "1.0.0",
+                    "cleanup",
+                    targetPath: targetPath,
+                    targetModuleRoot: moduleRoot)
+            },
+            new[]
+            {
+                new ModuleStateConflictFinding(
+                    ModuleStateConflictSeverity.Error,
+                    "ModuleState.InventoryPathEnumerationFailed",
+                    "A required estate root became inaccessible.",
+                    string.Empty,
+                    new[] { "Company.Tools" },
+                    new[] { "1.0.0" },
+                    path: moduleRoot)
+            });
+
+        var result = new ModuleStateManagedCleanupService(new RepairManagedModuleCommand()).Execute(
+            plan,
+            new ModuleStateInventoryResult(),
+            new ModuleStateManagedDeliveryOptions());
+
+        var failure = Assert.Single(result);
+        Assert.False(failure.Succeeded);
+        Assert.Equal("Cleanup", failure.Operation);
+        Assert.Contains("contains errors", failure.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(targetPath));
     }
 }

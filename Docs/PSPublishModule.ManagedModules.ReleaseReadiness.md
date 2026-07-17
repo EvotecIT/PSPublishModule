@@ -18,9 +18,11 @@ feature roadmap.
   cmdlets.
 - [x] Estate repair keeps physical roots, PowerShell editions, scopes, and local
   profiles independent; supplied inventories retain explicit destinations;
-  cleanup replans after delivery, uses exact-path uninstall safety, protects
-  current-runspace loaded modules, validates visible cross-root dependencies,
-  and returns post-apply convergence evidence.
+  cleanup replans after delivery, requires an error-free refreshed plan,
+  batch-preflights exact-path uninstall safety, protects current-runspace
+  loaded modules, validates global/profile cross-root dependencies, orders
+  selected dependents before dependencies, and returns post-apply convergence
+  evidence without treating declined actions as success.
 - [x] Common PowerShellGet and stable PSResourceGet module workflows have
   documented managed equivalents, including typed pipelines and version-range
   selection.

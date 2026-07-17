@@ -40,6 +40,8 @@ public sealed class ManagedModuleUninstallPlan
     /// </summary>
     public IReadOnlyList<ManagedModuleUninstallTarget> Targets { get; set; } = Array.Empty<ManagedModuleUninstallTarget>();
 
+    internal IReadOnlyList<ManagedModuleUninstallTarget> DependencyRemovalTargets { get; set; } = Array.Empty<ManagedModuleUninstallTarget>();
+
     /// <summary>
     /// Explicit module names from the request that did not match any installed module.
     /// </summary>

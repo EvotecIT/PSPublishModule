@@ -311,6 +311,39 @@ public sealed class RepairManagedModuleEstateTests
     }
 
     [Fact]
+    public void Plan_DoesNotRedirectAllUsersRequiredResourceIntoExplicitProfile()
+    {
+        using var workspace = new TemporaryDirectory();
+        var profilePath = Path.Combine(workspace.Path, "EmptyProfile");
+        Directory.CreateDirectory(profilePath);
+        var requiredResource = new System.Collections.Hashtable(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Company.Missing"] = new System.Collections.Hashtable(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Version"] = "1.0.0",
+                ["Scope"] = "AllUsers"
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("Inventory", new ModuleStateInventoryResult { Source = "Empty" })
+            .AddParameter("UserProfilePath", new[] { profilePath })
+            .AddParameter("RequiredResource", requiredResource)
+            .AddParameter("Plan");
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var action = Assert.Single(result.Plan.Actions, static action => action.ModuleName == "Company.Missing");
+        Assert.Equal("AllUsers", action.TargetScope);
+        Assert.Null(action.TargetModuleRoot);
+        Assert.Null(action.TargetProfileName);
+        Assert.Contains(result.Plan.Findings, static finding => finding.Code == "ModuleState.RepairTargetMissing");
+        Assert.False(result.Apply.CanApply);
+    }
+
+    [Fact]
     public void ProfileDiscovery_EnumeratesStandardRootsAcrossLocalProfiles()
     {
         using var workspace = new TemporaryDirectory();
@@ -511,6 +544,84 @@ public sealed class RepairManagedModuleEstateTests
         Assert.True(Directory.Exists(dependentPath));
         Assert.False(result.Apply.ExecutionSucceeded);
         Assert.False(result.Apply.Converged);
+    }
+
+    [Fact]
+    public void Cleanup_PreservesGlobalVersionRequiredByExplicitProfileModule()
+    {
+        using var workspace = new TemporaryDirectory();
+        var globalRoot = Path.Combine(workspace.Path, "PowerShell", "Modules");
+        var profilePath = Path.Combine(workspace.Path, "Alice");
+        var profileRoot = StandardCoreProfileModuleRoot(profilePath);
+        var oldPath = CreateInstalledModule(globalRoot, "Company.Core", "1.0.0");
+        var currentPath = CreateInstalledModule(globalRoot, "Company.Core", "2.0.0");
+        var dependentPath = CreateInstalledModule(
+            profileRoot,
+            "Company.ProfileTools",
+            "1.0.0",
+            requiredModuleName: "Company.Core",
+            requiredModuleVersion: "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { globalRoot })
+            .AddParameter("UserProfilePath", new[] { profilePath })
+            .AddParameter("ModuleRoot", globalRoot)
+            .AddParameter("Name", new[] { "Company.Core" })
+            .AddParameter("Cleanup", "OldVersions")
+            .AddParameter("Confirm", false);
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        Assert.True(ps.HadErrors);
+        var execution = Assert.Single(result.Apply.ExecutionResults);
+        Assert.False(execution.Succeeded);
+        Assert.Contains("required by Company.ProfileTools", execution.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(oldPath));
+        Assert.True(Directory.Exists(currentPath));
+        Assert.True(Directory.Exists(dependentPath));
+    }
+
+    [Fact]
+    public void Cleanup_RemovesSelectedDependentsBeforeTheirSelectedDependencies()
+    {
+        using var workspace = new TemporaryDirectory();
+        var moduleRoot = Path.Combine(workspace.Path, "PowerShell", "Modules");
+        var coreOld = CreateInstalledModule(moduleRoot, "A.Core", "1.0.0");
+        var coreCurrent = CreateInstalledModule(moduleRoot, "A.Core", "2.0.0");
+        var dependentOld = CreateInstalledModule(
+            moduleRoot,
+            "B.Dependent",
+            "1.0.0",
+            requiredModuleName: "A.Core",
+            requiredModuleVersion: "1.0.0");
+        var dependentCurrent = CreateInstalledModule(
+            moduleRoot,
+            "B.Dependent",
+            "2.0.0",
+            requiredModuleName: "A.Core",
+            requiredModuleVersion: "2.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { moduleRoot })
+            .AddParameter("Name", new[] { "A.Core", "B.Dependent" })
+            .AddParameter("Cleanup", "OldVersions")
+            .AddParameter("Confirm", false);
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        var removals = result.Apply.ExecutionResults.Where(static execution => execution.Operation == "Remove").ToArray();
+        Assert.Equal(2, removals.Length);
+        Assert.Equal("B.Dependent", Assert.Single(removals[0].DependencyResults).Name);
+        Assert.Equal("A.Core", Assert.Single(removals[1].DependencyResults).Name);
+        Assert.False(Directory.Exists(dependentOld));
+        Assert.False(Directory.Exists(coreOld));
+        Assert.True(Directory.Exists(dependentCurrent));
+        Assert.True(Directory.Exists(coreCurrent));
+        Assert.True(result.Apply.ExecutionSucceeded);
+        Assert.True(result.Apply.Converged);
     }
 
     [Fact]

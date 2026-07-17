@@ -40,7 +40,7 @@ public sealed partial class ManagedModuleUninstallService
             ThrowIfLoaded(targets);
 
         if (!request.SkipDependencyCheck && !request.DeferDependencyCheck)
-            ThrowIfDependencyBlocked(dependencyCandidates, targets);
+            ThrowIfDependencyBlocked(dependencyCandidates, targets, targets);
 
         return new ManagedModuleUninstallPlan
         {
@@ -107,7 +107,8 @@ public sealed partial class ManagedModuleUninstallService
         if (!plan.SkipDependencyCheck)
             ThrowIfDependencyBlocked(
                 EnumerateInstalledModules(NormalizeDependencyModuleRoots(plan.ModuleRoot, plan.DependencyModuleRoots)),
-                plan.Targets);
+                plan.Targets,
+                plan.DependencyRemovalTargets.Count > 0 ? plan.DependencyRemovalTargets : plan.Targets);
     }
 
     private static ManagedModuleUninstallResult UninstallTarget(
@@ -141,7 +142,7 @@ public sealed partial class ManagedModuleUninstallService
         };
     }
 
-    private static IReadOnlyList<ManagedModuleUninstallTarget> OrderTargetsForRemoval(
+    internal static IReadOnlyList<ManagedModuleUninstallTarget> OrderTargetsForRemoval(
         IReadOnlyList<ManagedModuleUninstallTarget> targets)
     {
         if (targets.Count < 2)
@@ -251,12 +252,13 @@ public sealed partial class ManagedModuleUninstallService
 
     private static void ThrowIfDependencyBlocked(
         IReadOnlyList<InstalledModuleCandidate> candidates,
-        IReadOnlyList<ManagedModuleUninstallTarget> targets)
+        IReadOnlyList<ManagedModuleUninstallTarget> targets,
+        IReadOnlyList<ManagedModuleUninstallTarget> removalTargets)
     {
         if (targets.Count == 0)
             return;
 
-        var targetKeys = targets
+        var targetKeys = removalTargets
             .Select(static target => ModuleKey.Create(target.Name, target.Version, target.ModulePath))
             .ToHashSet();
         var blockers = new List<(ManagedModuleUninstallTarget Target, ManagedModuleUninstallDependency Blocker)>();

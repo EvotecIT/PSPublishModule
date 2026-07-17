@@ -225,22 +225,25 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
         Hashtable module,
         IReadOnlyList<ModuleStateInstalledModuleResult> placements)
     {
+        var explicitProfilePlacement = CanUseExplicitProfilePlacement(module)
+            ? _explicitProfilePlacement
+            : null;
         var moduleRoot = !string.IsNullOrWhiteSpace(ModuleRoot)
             ? ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot)
             : placements.Count == 1
                 ? ResolveSelectedModuleRoot(placements[0])
-                : _explicitProfilePlacement?.Path;
+                : explicitProfilePlacement?.Path;
         if (!string.IsNullOrWhiteSpace(moduleRoot))
             module["ModuleRoot"] = moduleRoot!;
 
         if (placements.Count != 1)
         {
-            if (_explicitProfilePlacement is not null)
+            if (explicitProfilePlacement is not null)
             {
-                if (!string.IsNullOrWhiteSpace(_explicitProfilePlacement.PowerShellEdition))
-                    module["PowerShellEdition"] = _explicitProfilePlacement.PowerShellEdition!;
-                if (!string.IsNullOrWhiteSpace(_explicitProfilePlacement.ProfileName))
-                    module["ProfileName"] = _explicitProfilePlacement.ProfileName!;
+                if (!string.IsNullOrWhiteSpace(explicitProfilePlacement.PowerShellEdition))
+                    module["PowerShellEdition"] = explicitProfilePlacement.PowerShellEdition!;
+                if (!string.IsNullOrWhiteSpace(explicitProfilePlacement.ProfileName))
+                    module["ProfileName"] = explicitProfilePlacement.ProfileName!;
                 if (!module.ContainsKey("Scope"))
                     module["Scope"] = "CurrentUser";
             }
@@ -252,6 +255,16 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
             module["PowerShellEdition"] = placement.PowerShellEdition!;
         if (!string.IsNullOrWhiteSpace(placement.ProfileName))
             module["ProfileName"] = placement.ProfileName!;
+    }
+
+    private bool CanUseExplicitProfilePlacement(Hashtable module)
+    {
+        if (_explicitProfilePlacement is null)
+            return false;
+
+        var requestedScope = module["Scope"]?.ToString();
+        return string.IsNullOrWhiteSpace(requestedScope) ||
+               string.Equals(requestedScope, "CurrentUser", StringComparison.OrdinalIgnoreCase);
     }
 
     private static Hashtable CloneHashtable(Hashtable source)

@@ -58,29 +58,35 @@ internal sealed class ModuleStatePrivateDeliveryService
                 groupActions,
                 options);
             var workflowResult = service.Execute(request, ShouldProcess);
-            results.Add(new ModuleStateDeliveryExecutionResult
-            {
-                Operation = group.Key.Kind.ToString(),
-                OperationPerformed = workflowResult.OperationPerformed,
-                RepositoryName = workflowResult.RepositoryName,
-                RequestedTransport = workflowResult.RequestedTransport,
-                EffectiveTransport = workflowResult.EffectiveTransport,
-                DeliveryTransportReason = workflowResult.DeliveryTransportReason,
-                DependencyResults = workflowResult.DependencyResults.Select(static dependency => new ModuleStateDependencyResult
-                {
-                    Name = dependency.Name,
-                    InstalledVersion = dependency.InstalledVersion,
-                    ResolvedVersion = dependency.ResolvedVersion,
-                    RequestedVersion = dependency.RequestedVersion,
-                    Status = dependency.Status.ToString(),
-                    Installer = dependency.Installer,
-                    Message = dependency.Message
-                }).ToArray()
-            });
+            results.Add(MapExecutionResult(group.Key.Kind, workflowResult));
         }
 
         return results.ToArray();
     }
+
+    internal static ModuleStateDeliveryExecutionResult MapExecutionResult(
+        ModuleStatePlanActionKind actionKind,
+        PrivateModuleWorkflowResult workflowResult)
+        => new()
+        {
+            Skipped = workflowResult.OperationSkipped,
+            Operation = actionKind.ToString(),
+            OperationPerformed = workflowResult.OperationPerformed,
+            RepositoryName = workflowResult.RepositoryName,
+            RequestedTransport = workflowResult.RequestedTransport,
+            EffectiveTransport = workflowResult.EffectiveTransport,
+            DeliveryTransportReason = workflowResult.DeliveryTransportReason,
+            DependencyResults = workflowResult.DependencyResults.Select(static dependency => new ModuleStateDependencyResult
+            {
+                Name = dependency.Name,
+                InstalledVersion = dependency.InstalledVersion,
+                ResolvedVersion = dependency.ResolvedVersion,
+                RequestedVersion = dependency.RequestedVersion,
+                Status = dependency.Status.ToString(),
+                Installer = dependency.Installer,
+                Message = dependency.Message
+            }).ToArray()
+        };
 
     private bool ShouldProcess(string target, string action)
         => _cmdlet is AsyncPSCmdlet asyncCmdlet

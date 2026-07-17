@@ -27,15 +27,19 @@ namespace PSPublishModule;
 /// Repair keeps module copies in separate physical roots, PowerShell editions, scopes, and local user profiles
 /// independent. Missing modules require an explicit ModuleRoot or exactly one eligible scanned root; ambiguous
 /// destinations are reported and blocked. A single explicit UserProfilePath supplies the current PowerShell
-/// edition's standard CurrentUser root even when that root does not exist yet. Explicit ModuleRoot and profile
-/// destinations are merged into supplied Inventory or InventoryPath artifacts and remain part of convergence scans.
+/// edition's standard CurrentUser root even when that root does not exist yet; it never overrides an AllUsers
+/// request. Explicit ModuleRoot and profile destinations are merged into supplied Inventory or InventoryPath
+/// artifacts and remain part of convergence scans.
 /// </para>
 /// <para>
 /// Live apply performs delivery, inventories the same estate again, replans exact-path old-version cleanup from
-/// current state, and then validates loaded-module and dependency safety across relevant visible roots before every
-/// removal. Current-runspace loaded modules are protected even when IncludeLoaded is not used for inventory output.
-/// Repair performs one final inventory and returns post-apply plan and convergence evidence. Operational failures
-/// remain visible in the typed result and are also written as nonterminating errors.
+/// current state. Cleanup requires that refreshed plan to be error-free, preflights the complete exact-path removal
+/// set, validates loaded-module and dependency safety across relevant global/profile roots, and removes selected
+/// dependents before their selected dependencies. Current-runspace loaded modules are protected even when
+/// IncludeLoaded is not used for inventory output. A declined delivery or cleanup action is reported as skipped and
+/// cannot be reported as successful convergence. Repair performs one final inventory and returns post-apply plan and
+/// convergence evidence. Operational failures remain visible in the typed result and are also written as
+/// nonterminating errors.
 /// </para>
 /// <para>
 /// This is local-machine estate management suitable for workstations and servers, including service-account and
@@ -114,7 +118,7 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
     [ValidateNotNullOrEmpty]
     public string[]? ModulePath { get; set; }
 
-    /// <summary>Explicit user profile home directories whose platform-standard module roots are inventoried. One explicit profile provides the current-edition destination for missing modules.</summary>
+    /// <summary>Explicit user profile home directories whose platform-standard module roots are inventoried. One explicit profile provides the current-edition CurrentUser destination for missing modules, but never overrides AllUsers scope.</summary>
     [Parameter]
     [ValidateNotNullOrEmpty]
     public string[]? UserProfilePath { get; set; }
@@ -152,7 +156,7 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
     [ValidateNotNullOrEmpty]
     public string? VersionPolicy { get; set; }
 
-    /// <summary>Optional old-version cleanup. Live apply removes only exact planned paths after delivery and safety revalidation.</summary>
+    /// <summary>Optional old-version cleanup. Live apply replans after delivery, requires an error-free refreshed estate, batch-preflights exact paths, and removes selected dependents before dependencies.</summary>
     [Parameter]
     [ValidateSet("None", "OldVersions")]
     public string Cleanup { get; set; } = "None";

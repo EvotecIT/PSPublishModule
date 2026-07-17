@@ -58368,13 +58368,17 @@ this command when the desired outcome spans installed-state discovery, drift ana
       <maml:para>Repair keeps module copies in separate physical roots, PowerShell editions, scopes, and local user profiles&#xD;
 independent. Missing modules require an explicit ModuleRoot or exactly one eligible scanned root; ambiguous&#xD;
 destinations are reported and blocked. A single explicit UserProfilePath supplies the current PowerShell&#xD;
-edition's standard CurrentUser root even when that root does not exist yet. Explicit ModuleRoot and profile&#xD;
-destinations are merged into supplied Inventory or InventoryPath artifacts and remain part of convergence scans.</maml:para>
+edition's standard CurrentUser root even when that root does not exist yet; it never overrides an AllUsers&#xD;
+request. Explicit ModuleRoot and profile destinations are merged into supplied Inventory or InventoryPath&#xD;
+artifacts and remain part of convergence scans.</maml:para>
       <maml:para>Live apply performs delivery, inventories the same estate again, replans exact-path old-version cleanup from&#xD;
-current state, and then validates loaded-module and dependency safety across relevant visible roots before every&#xD;
-removal. Current-runspace loaded modules are protected even when IncludeLoaded is not used for inventory output.&#xD;
-Repair performs one final inventory and returns post-apply plan and convergence evidence. Operational failures&#xD;
-remain visible in the typed result and are also written as nonterminating errors.</maml:para>
+current state. Cleanup requires that refreshed plan to be error-free, preflights the complete exact-path removal&#xD;
+set, validates loaded-module and dependency safety across relevant global/profile roots, and removes selected&#xD;
+dependents before their selected dependencies. Current-runspace loaded modules are protected even when&#xD;
+IncludeLoaded is not used for inventory output. A declined delivery or cleanup action is reported as skipped and&#xD;
+cannot be reported as successful convergence. Repair performs one final inventory and returns post-apply plan and&#xD;
+convergence evidence. Operational failures remain visible in the typed result and are also written as&#xD;
+nonterminating errors.</maml:para>
       <maml:para>This is local-machine estate management suitable for workstations and servers, including service-account and&#xD;
 multi-profile roots. It does not connect to or orchestrate remote computers; invoke it in each target session or&#xD;
 through the operator's existing remoting/configuration system.</maml:para>
@@ -58421,7 +58425,7 @@ through the operator's existing remoting/configuration system.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Cleanup</maml:name>
           <maml:description>
-            <maml:para>Optional old-version cleanup. Live apply removes only exact planned paths after delivery and safety revalidation.</maml:para>
+            <maml:para>Optional old-version cleanup. Live apply replans after delivery, requires an error-free refreshed estate, batch-preflights exact paths, and removes selected dependents before dependencies.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <command:parameterValueGroup>
@@ -58777,7 +58781,7 @@ through the operator's existing remoting/configuration system.</maml:para>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>UserProfilePath</maml:name>
           <maml:description>
-            <maml:para>Explicit user profile home directories whose platform-standard module roots are inventoried. One explicit profile provides the current-edition destination for missing modules.</maml:para>
+            <maml:para>Explicit user profile home directories whose platform-standard module roots are inventoried. One explicit profile provides the current-edition CurrentUser destination for missing modules, but never overrides AllUsers scope.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
@@ -58852,7 +58856,7 @@ through the operator's existing remoting/configuration system.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Cleanup</maml:name>
         <maml:description>
-          <maml:para>Optional old-version cleanup. Live apply removes only exact planned paths after delivery and safety revalidation.</maml:para>
+          <maml:para>Optional old-version cleanup. Live apply replans after delivery, requires an error-free refreshed estate, batch-preflights exact paths, and removes selected dependents before dependencies.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <command:parameterValueGroup>
@@ -59208,7 +59212,7 @@ through the operator's existing remoting/configuration system.</maml:para>
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>UserProfilePath</maml:name>
         <maml:description>
-          <maml:para>Explicit user profile home directories whose platform-standard module roots are inventoried. One explicit profile provides the current-edition destination for missing modules.</maml:para>
+          <maml:para>Explicit user profile home directories whose platform-standard module roots are inventoried. One explicit profile provides the current-edition CurrentUser destination for missing modules, but never overrides AllUsers scope.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
         <dev:type>
