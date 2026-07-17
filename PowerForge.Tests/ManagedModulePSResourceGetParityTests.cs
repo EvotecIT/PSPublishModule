@@ -9,8 +9,11 @@ public sealed class ManagedModulePSResourceGetParityTests
     [Theory]
     [InlineData("1.2.0", "1.2.0", true)]
     [InlineData("1.2.1", "1.2.0", false)]
+    [InlineData("0.9.9", "1.*", false)]
     [InlineData("1.9.0", "1.*", true)]
-    [InlineData("2.0.0", "1.*", false)]
+    [InlineData("2.0.0", "1.*", true)]
+    [InlineData("1.4.9", "1.5.*", false)]
+    [InlineData("2.0.0", "1.5.*", true)]
     [InlineData("1.5.0", "[1.2.0,2.0.0)", true)]
     [InlineData("2.0.0", "[1.2.0,2.0.0)", false)]
     [InlineData("1.2.0-preview.1", "1.2.0-preview.1", true)]
@@ -109,6 +112,30 @@ public sealed class ManagedModulePSResourceGetParityTests
     }
 
     [Fact]
+    public void FindManagedModule_wildcard_version_uses_PSResourceGet_minimum_semantics()
+    {
+        using var feed = new TemporaryDirectory();
+        CreatePackage(feed.Path, "Company.Tools", "0.9.0");
+        CreatePackage(feed.Path, "Company.Tools", "1.0.0");
+        CreatePackage(feed.Path, "Company.Tools", "1.5.0");
+        CreatePackage(feed.Path, "Company.Tools", "2.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Find-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Version", "1.*");
+
+        var results = ps.Invoke()
+            .Select(static item => Assert.IsType<ManagedModuleVersionInfo>(item.BaseObject))
+            .OrderBy(static item => item.Version, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Equal(new[] { "1.0.0", "1.5.0", "2.0.0" }, results.Select(static item => item.Version));
+    }
+
+    [Fact]
     public void FindManagedModule_exact_prerelease_version_does_not_require_a_second_switch()
     {
         using var feed = new TemporaryDirectory();
@@ -186,11 +213,24 @@ public sealed class ManagedModulePSResourceGetParityTests
                 ["Company.Dependency.psd1"] = "@{ RootModule = 'Company.Dependency.psm1'; ModuleVersion = '2.0.0'; FunctionsToExport = @('Get-CompanyDependency') }",
                 ["Company.Dependency.psm1"] = "function Get-CompanyDependency { 'ok' }"
             });
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Exact.1.5.0.nupkg"),
+            "Company.Exact",
+            "1.5.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Exact.psd1"] = "@{ RootModule = 'Company.Exact.psm1'; ModuleVersion = '1.5.0' }",
+                ["Company.Exact.psm1"] = "# exact dependency"
+            });
         CreatePackage(
             feed.Path,
             "Company.Tools",
             "1.0.0",
-            new[] { new TestDependency("Company.Dependency", "[2.0.0,3.0.0)", targetFramework: null) });
+            new[]
+            {
+                new TestDependency("Company.Dependency", "[2.0.0,3.0.0)", targetFramework: null),
+                new TestDependency("Company.Exact", "[1.5.0]", targetFramework: null)
+            });
 
         using var ps = CreatePowerShellWithModuleImported();
         SetLocation(ps, destination.Path);
@@ -224,16 +264,29 @@ public sealed class ManagedModulePSResourceGetParityTests
             serializedDependencies = dependencyCollection.BaseObject;
         var dependencies = Assert.IsAssignableFrom<System.Collections.IEnumerable>(serializedDependencies)
             .Cast<object>()
-            .ToArray();
-        var dependency = PSObject.AsPSObject(Assert.Single(dependencies));
+            .Select(PSObject.AsPSObject)
+            .ToDictionary(item => Assert.IsType<string>(item.Properties["Name"].Value), StringComparer.OrdinalIgnoreCase);
+        var dependency = dependencies["Company.Dependency"];
         Assert.Equal("Company.Dependency", dependency.Properties["Name"].Value);
-        Assert.Equal("[2.0.0,3.0.0)", dependency.Properties["VersionRange"].Value);
-        Assert.Null(dependency.Properties["Version"]);
+        Assert.Equal("2.0.0", dependency.Properties["MinimumVersion"].Value);
+        Assert.Equal("3.0.0", dependency.Properties["MaximumVersion"].Value);
+        Assert.Equal("nuget:Company.Dependency/[2.0.0,3.0.0)", dependency.Properties["CanonicalId"].Value);
+        Assert.Null(dependency.Properties["VersionRange"]);
+        Assert.Null(dependency.Properties["RequiredVersion"]);
+        var exactDependency = dependencies["Company.Exact"];
+        Assert.Equal("1.5.0", exactDependency.Properties["RequiredVersion"].Value);
+        Assert.Equal("nuget:Company.Exact/[1.5.0]", exactDependency.Properties["CanonicalId"].Value);
+        Assert.Null(exactDependency.Properties["MinimumVersion"]);
+        Assert.Null(exactDependency.Properties["MaximumVersion"]);
+        Assert.Null(exactDependency.Properties["VersionRange"]);
 
-        var dependencyResult = Assert.Single(result.DependencyResults);
-        var dependencyMetadataPath = Path.Combine(dependencyResult.ModulePath, "PSGetModuleInfo.xml");
-        var dependencyMetadata = Assert.IsType<PSObject>(PSSerializer.Deserialize(File.ReadAllText(dependencyMetadataPath)));
-        Assert.Equal(dependencyResult.ModulePath, dependencyMetadata.Properties["InstalledLocation"].Value);
+        Assert.Equal(2, result.DependencyResults.Count);
+        foreach (var dependencyResult in result.DependencyResults)
+        {
+            var dependencyMetadataPath = Path.Combine(dependencyResult.ModulePath, "PSGetModuleInfo.xml");
+            var dependencyMetadata = Assert.IsType<PSObject>(PSSerializer.Deserialize(File.ReadAllText(dependencyMetadataPath)));
+            Assert.Equal(dependencyResult.ModulePath, dependencyMetadata.Properties["InstalledLocation"].Value);
+        }
     }
 
     [Fact]

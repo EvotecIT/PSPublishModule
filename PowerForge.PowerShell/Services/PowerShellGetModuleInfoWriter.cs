@@ -143,14 +143,37 @@ public sealed class PowerShellGetModuleInfoWriter
 
     private static object[] CreateDependencies(ManagedModulePackageMetadata? package)
         => package?.Dependencies?
-            .Select(static dependency =>
-            {
-                var item = new PSObject();
-                Add(item, "Name", dependency.Id);
-                Add(item, "VersionRange", dependency.VersionRange);
-                return (object)item;
-            })
+            .Select(static dependency => (object)CreateDependency(dependency))
             .ToArray() ?? Array.Empty<object>();
+
+    private static PSObject CreateDependency(ManagedModuleDependencyInfo dependency)
+    {
+        var item = new PSObject();
+        Add(item, "Name", dependency.Id);
+
+        var versionRange = dependency.VersionRange?.Trim();
+        if (!string.IsNullOrWhiteSpace(versionRange))
+        {
+            var parsedRange = ManagedModuleVersionRange.Parse(versionRange);
+            if (!string.IsNullOrWhiteSpace(parsedRange.ExactVersion))
+            {
+                Add(item, "RequiredVersion", parsedRange.ExactVersion);
+            }
+            else
+            {
+                if (!string.IsNullOrWhiteSpace(parsedRange.MinimumVersion))
+                    Add(item, "MinimumVersion", parsedRange.MinimumVersion);
+                if (!string.IsNullOrWhiteSpace(parsedRange.MaximumVersion))
+                    Add(item, "MaximumVersion", parsedRange.MaximumVersion);
+            }
+        }
+
+        var canonicalId = string.IsNullOrWhiteSpace(versionRange)
+            ? "nuget:" + dependency.Id
+            : "nuget:" + dependency.Id + "/" + versionRange;
+        Add(item, "CanonicalId", canonicalId);
+        return item;
+    }
 
     private static PSObject CreateAdditionalMetadata(string version)
     {

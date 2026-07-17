@@ -112,11 +112,8 @@ public static class ManagedModuleVersionSelector
 
         var segmentCount = Math.Max(3, specified.Length + 1);
         var lower = new int[segmentCount];
-        var upper = new int[segmentCount];
         Array.Copy(specified, lower, specified.Length);
-        Array.Copy(specified, upper, specified.Length);
-        upper[specified.Length - 1]++;
-        range = "[" + string.Join(".", lower) + "," + string.Join(".", upper) + ")";
+        range = "[" + string.Join(".", lower) + ",)";
         return true;
     }
 
