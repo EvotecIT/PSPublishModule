@@ -26,6 +26,14 @@ internal static partial class WebCliCommandHandlers
 
         var managedPathIds = new HashSet<string>(StringComparer.Ordinal);
         var managedPaths = new HashSet<string>(StringComparer.Ordinal);
+        var sourceManagedPaths = new List<(string Id, string Source, string Target)>();
+        var repositoryRoots = (manifest.Repositories ?? Array.Empty<PowerForgeServerRepository>())
+            .Select(static repository => repository.Path?.TrimEnd('/'))
+            .Where(static path => !string.IsNullOrWhiteSpace(path) &&
+                                  path.StartsWith("/", StringComparison.Ordinal) &&
+                                  path.IndexOfAny(['*', '?', '[']) < 0)
+            .Cast<string>()
+            .ToArray();
         foreach (var path in manifest.Paths ?? Array.Empty<PowerForgeServerPath>())
         {
             if (string.IsNullOrWhiteSpace(path.Id) || !managedPathIds.Add(path.Id))
@@ -44,6 +52,50 @@ internal static partial class WebCliCommandHandlers
                 errors.Add($"Managed path '{path.Id}' has an invalid group.");
             if (!IsValidMode(path.Mode))
                 errors.Add($"Managed path '{path.Id}' has an invalid mode.");
+            if (!string.IsNullOrWhiteSpace(path.Kind) &&
+                !string.Equals(path.Kind, "directory", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(path.Kind, "file", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(path.Kind, "symlink", StringComparison.OrdinalIgnoreCase))
+                errors.Add($"Managed path '{path.Id}' has unsupported kind '{path.Kind}'.");
+
+            if (!string.IsNullOrWhiteSpace(path.Source))
+            {
+                var normalizedSource = NormalizeCapturePath(path.Source, $"paths[{path.Id}].source", errors);
+                if (normalizedSource is not null)
+                {
+                    if (normalizedSource.IndexOfAny(['*', '?', '[']) >= 0)
+                        errors.Add($"Managed path '{path.Id}' source must use an exact path.");
+                    if (!string.Equals(path.Kind, "file", StringComparison.OrdinalIgnoreCase))
+                        errors.Add($"Source-managed path '{path.Id}' must use kind 'file'.");
+                    if (string.IsNullOrWhiteSpace(path.Owner) || string.IsNullOrWhiteSpace(path.Group) || string.IsNullOrWhiteSpace(path.Mode))
+                        errors.Add($"Source-managed path '{path.Id}' must declare owner, group, and mode.");
+                    if (normalizedPath is not null && string.Equals(normalizedSource, normalizedPath, StringComparison.Ordinal))
+                        errors.Add($"Source-managed path '{path.Id}' source and target must differ.");
+                    if (!repositoryRoots.Any(root => PathContains(root, normalizedSource)))
+                        errors.Add($"Source-managed path '{path.Id}' source must be inside a declared repository path.");
+                    if (normalizedPath is not null && repositoryRoots.Any(root => PathContains(root, normalizedPath)))
+                        errors.Add($"Source-managed path '{path.Id}' target must be outside declared repository paths.");
+                    if (normalizedPath is not null)
+                        sourceManagedPaths.Add((path.Id ?? normalizedPath, normalizedSource, normalizedPath));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(path.Validation) &&
+                !string.Equals(path.Validation, "sudoers", StringComparison.OrdinalIgnoreCase))
+                errors.Add($"Managed path '{path.Id}' has unsupported validation '{path.Validation}'.");
+            if (string.Equals(path.Validation, "sudoers", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(path.Source))
+                    errors.Add($"Sudoers-managed path '{path.Id}' must declare a source.");
+                if (!string.Equals(path.Kind, "file", StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(path.Owner, "root", StringComparison.Ordinal) ||
+                    !string.Equals(path.Group, "root", StringComparison.Ordinal) ||
+                    path.Mode is not ("440" or "0440") ||
+                    normalizedPath is null ||
+                    !normalizedPath.StartsWith("/etc/sudoers.d/", StringComparison.Ordinal) ||
+                    normalizedPath["/etc/sudoers.d/".Length..].Contains('/', StringComparison.Ordinal))
+                    errors.Add($"Sudoers-managed path '{path.Id}' must be a root-owned 0440 file directly below /etc/sudoers.d.");
+            }
         }
 
         foreach (var plainPath in plainPaths)
@@ -53,6 +105,7 @@ internal static partial class WebCliCommandHandlers
         }
 
         var secretIds = new HashSet<string>(StringComparer.Ordinal);
+        var secretPaths = new List<(string Id, string Path)>();
         foreach (var secret in manifest.Secrets ?? Array.Empty<PowerForgeServerSecret>())
         {
             if (string.IsNullOrWhiteSpace(secret.Id) || !secretIds.Add(secret.Id))
@@ -74,6 +127,8 @@ internal static partial class WebCliCommandHandlers
             string? secretPath = null;
             if (!string.IsNullOrWhiteSpace(secret.Path))
                 secretPath = NormalizeCapturePath(secret.Path, $"secrets[{secret.Id}].path", errors);
+            if (secretPath is not null)
+                secretPaths.Add((secret.Id, secretPath));
 
             if (string.Equals(secret.Capture, "exclude", StringComparison.OrdinalIgnoreCase))
             {
@@ -106,6 +161,18 @@ internal static partial class WebCliCommandHandlers
                 if (CapturePathsMayOverlap(encryptedPaths[leftIndex], encryptedPaths[rightIndex]))
                     errors.Add($"Encrypted capture paths '{encryptedPaths[leftIndex]}' and '{encryptedPaths[rightIndex]}' overlap.");
             }
+        }
+
+        foreach (var managed in sourceManagedPaths)
+        {
+            foreach (var encryptedPath in encryptedPaths.Where(path => CapturePathsMayOverlap(managed.Source, path)))
+                errors.Add($"Source-managed path '{managed.Id}' source '{managed.Source}' overlaps encrypted capture path '{encryptedPath}'.");
+            foreach (var encryptedPath in encryptedPaths.Where(path => CapturePathsMayOverlap(managed.Target, path)))
+                errors.Add($"Source-managed path '{managed.Id}' target '{managed.Target}' overlaps encrypted capture path '{encryptedPath}'.");
+            foreach (var secret in secretPaths.Where(secret => CapturePathsMayOverlap(managed.Source, secret.Path)))
+                errors.Add($"Source-managed path '{managed.Id}' source '{managed.Source}' overlaps secret '{secret.Id}' at '{secret.Path}'.");
+            foreach (var secret in secretPaths.Where(secret => CapturePathsMayOverlap(managed.Target, secret.Path)))
+                errors.Add($"Source-managed path '{managed.Id}' target '{managed.Target}' overlaps secret '{secret.Id}' at '{secret.Path}'.");
         }
 
         return errors.Distinct(StringComparer.Ordinal).ToArray();

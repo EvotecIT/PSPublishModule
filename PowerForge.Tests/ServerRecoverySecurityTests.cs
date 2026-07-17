@@ -133,6 +133,115 @@ public sealed class ServerRecoverySecurityTests
     }
 
     [Fact]
+    public void ManifestValidation_AcceptsRepositoryOwnedManagedFileSource()
+    {
+        var manifest = CreateManifest();
+        manifest.Repositories =
+        [
+            new PowerForgeServerRepository { Role = "application", Path = "/srv/example" }
+        ];
+        manifest.Paths =
+        [
+            new PowerForgeServerPath
+            {
+                Id = "public-config",
+                Path = "/etc/example/public.conf",
+                Source = "/srv/example/deploy/public.conf",
+                Kind = "file",
+                Owner = "root",
+                Group = "root",
+                Mode = "0644"
+            }
+        ];
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void ManifestValidation_RejectsUnsafeOrSecretManagedFileSources()
+    {
+        var manifest = CreateManifest();
+        manifest.Repositories =
+        [
+            new PowerForgeServerRepository { Role = "application", Path = "/srv/example" }
+        ];
+        manifest.Paths =
+        [
+            new PowerForgeServerPath
+            {
+                Id = "secret-config",
+                Path = "/etc/example/secret.env",
+                Source = "/tmp/untracked-secret.env",
+                Kind = "directory",
+                Validation = "arbitrary-command"
+            },
+            new PowerForgeServerPath
+            {
+                Id = "invalid-sudoers",
+                Path = "/tmp/powerforge-example",
+                Source = "/srv/example/deploy/powerforge-example.sudoers",
+                Kind = "file",
+                Owner = "example",
+                Group = "example",
+                Mode = "0644",
+                Validation = "sudoers"
+            }
+        ];
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("source must be inside a declared repository", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("must use kind 'file'", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("must declare owner, group, and mode", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("unsupported validation", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("overlaps encrypted capture path", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("overlaps secret 'example-secret'", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("root-owned 0440 file directly below /etc/sudoers.d", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ManifestValidation_RejectsManagedSourcesThatReadSecretsOrWriteIntoRepositories()
+    {
+        var manifest = CreateManifest();
+        manifest.Repositories =
+        [
+            new PowerForgeServerRepository { Role = "application", Path = "/srv/example" },
+            new PowerForgeServerRepository { Role = "secret-source", Path = "/etc/example" }
+        ];
+        manifest.Paths =
+        [
+            new PowerForgeServerPath
+            {
+                Id = "repository-target",
+                Path = "/srv/example/generated/public.conf",
+                Source = "/srv/example/deploy/public.conf",
+                Kind = "file",
+                Owner = "root",
+                Group = "root",
+                Mode = "0644"
+            },
+            new PowerForgeServerPath
+            {
+                Id = "secret-source",
+                Path = "/usr/local/share/example/secret.env",
+                Source = "/etc/example/secret.env",
+                Kind = "file",
+                Owner = "root",
+                Group = "root",
+                Mode = "0600"
+            }
+        ];
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("target must be outside declared repository paths", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("source '/etc/example/secret.env' overlaps encrypted capture path", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("source '/etc/example/secret.env' overlaps secret 'example-secret'", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void ManifestValidation_RejectsPathsThatCouldAlterGeneratedRestoreScript()
     {
         var manifest = CreateManifest();

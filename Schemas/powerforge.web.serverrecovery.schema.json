@@ -145,16 +145,43 @@
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string", "minLength": 1 },
-        "path": { "type": "string" },
+        "path": { "$ref": "#/$defs/AbsoluteUnixPath" },
+        "source": { "$ref": "#/$defs/AbsoluteUnixPath" },
         "owner": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$" },
         "group": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$" },
         "mode": { "type": "string", "pattern": "^[0-7]{3,4}$" },
         "kind": {
           "type": "string",
           "enum": ["directory", "file", "symlink"]
+        },
+        "validation": {
+          "type": "string",
+          "enum": ["sudoers"]
         }
       },
-      "required": ["id", "path"]
+      "required": ["id", "path"],
+      "allOf": [
+        {
+          "if": { "required": ["source"] },
+          "then": {
+            "required": ["kind", "owner", "group", "mode"],
+            "properties": { "kind": { "enum": ["file"] } }
+          }
+        },
+        {
+          "if": { "properties": { "validation": { "enum": ["sudoers"] } }, "required": ["validation"] },
+          "then": {
+            "required": ["source", "owner", "group", "mode"],
+            "properties": {
+              "kind": { "enum": ["file"] },
+              "owner": { "enum": ["root"] },
+              "group": { "enum": ["root"] },
+              "mode": { "enum": ["440", "0440"] },
+              "path": { "pattern": "^/etc/sudoers\\.d/[A-Za-z0-9_-]+$" }
+            }
+          }
+        }
+      ]
     },
     "Apache": {
       "type": "object",

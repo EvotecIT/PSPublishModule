@@ -38,6 +38,22 @@ public sealed class GitHubServerBackupActionTests
     }
 
     [Fact]
+    public void Action_ShouldSurfaceBoundedArchiveDiagnosticsWithoutPrintingCommandCaptures()
+    {
+        var script = ReadRepoFile(".github", "actions", "powerforge-server-backup", "Invoke-PowerForgeServerBackup.ps1");
+
+        Assert.Contains("Write-CaptureFailureDiagnostics", script, StringComparison.Ordinal);
+        Assert.Contains("plain-files.stderr.txt", script, StringComparison.Ordinal);
+        Assert.Contains("encrypted-secrets.stderr.txt", script, StringComparison.Ordinal);
+        Assert.Contains("-TotalCount 40", script, StringComparison.Ordinal);
+        Assert.Contains("$diagnostic.Length -gt 4096", script, StringComparison.Ordinal);
+        Assert.Contains("::stop-commands::$stopToken", script, StringComparison.Ordinal);
+        Assert.Contains("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("commands/*.stderr", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("commands\\*.stderr", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Action_ShouldStateCurrentTreeRetentionAndPreserveCompatibility()
     {
         var script = ReadRepoFile(".github", "actions", "powerforge-server-backup", "Invoke-PowerForgeServerBackup.ps1");

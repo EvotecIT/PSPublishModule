@@ -42,6 +42,16 @@ public sealed class ServerScaffoldTests
         Assert.Equal(2, manifest.Split("\"requiredDuringBootstrap\": false", StringSplitOptions.None).Length - 1);
         Assert.Contains("/usr/local/sbin/powerforge-apache-site-enable --http-site example-test.conf --https-site example-test-le-ssl.conf --certificate-name example.test", manifest, StringComparison.Ordinal);
         Assert.DoesNotContain("sudo -n a2ensite", manifest, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"bootstrap\"", manifest, StringComparison.Ordinal);
+        Assert.DoesNotContain("install-static-deployment-runtime", manifest, StringComparison.Ordinal);
+
+        var manifestNode = JsonNode.Parse(manifest)!;
+        var managedPaths = manifestNode["paths"]!.AsArray();
+        Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/usr/local/sbin/powerforge-site-deploy" &&
+                                              path["source"]!.GetValue<string>().EndsWith("/powerforge-site-deploy.sh", StringComparison.Ordinal));
+        Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/etc/powerforge/sites/example.test.env" &&
+                                              path["source"]!.GetValue<string>().EndsWith("/example.test.env", StringComparison.Ordinal));
+        Assert.Equal(2, managedPaths.Count(path => path!["validation"]?.GetValue<string>() == "sudoers"));
     }
 
     [Fact]
@@ -74,6 +84,7 @@ public sealed class ServerScaffoldTests
         Assert.DoesNotContain("github.com-example", manifest, StringComparison.Ordinal);
         Assert.DoesNotContain(files.Keys, key => key.EndsWith("repository-ssh.conf", StringComparison.Ordinal));
         Assert.DoesNotContain("$(ssh-keyscan", string.Join('\n', files.Values), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"source\": \"/srv/powerforge/sources/example/deploy/linux/github_known_hosts\"", manifest, StringComparison.Ordinal);
     }
 
     [Fact]

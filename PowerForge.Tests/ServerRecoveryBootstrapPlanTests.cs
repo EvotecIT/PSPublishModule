@@ -143,4 +143,72 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Contains("Use the captured recovery manifest", guard.Command, StringComparison.Ordinal);
         Assert.Contains("exit 3", guard.Command, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void BuildPlan_InstallsSourceManagedFilesAfterRepositories()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Repositories =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerRepository
+                {
+                    Role = "application",
+                    Url = "https://github.com/ExampleOrg/ExampleSite.git",
+                    Path = "/srv/example",
+                    Ref = "0123456789abcdef0123456789abcdef01234567"
+                }
+            ],
+            Paths =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerPath
+                {
+                    Id = "site-config",
+                    Path = "/etc/example/site.env",
+                    Source = "/srv/example/deploy/site.env",
+                    Kind = "file",
+                    Owner = "root",
+                    Group = "example",
+                    Mode = "0640"
+                }
+            ]
+        };
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        var repository = Assert.Single(steps, step => step.Category == "repositories");
+        var managedFile = Assert.Single(steps, step => step.Category == "managed-files");
+
+        Assert.True(repository.Order < managedFile.Order);
+        Assert.Equal(
+            "install -o 'root' -g 'example' -m '0640' '/srv/example/deploy/site.env' '/etc/example/site.env'",
+            managedFile.Command);
+    }
+
+    [Fact]
+    public void SudoersManagedFileUsesValidatedAtomicReplacementWithRollback()
+    {
+        var path = new PowerForge.Web.Cli.PowerForgeServerPath
+        {
+            Id = "sudoers",
+            Path = "/etc/sudoers.d/powerforge-example",
+            Source = "/srv/example/deploy/powerforge-example.sudoers",
+            Kind = "file",
+            Owner = "root",
+            Group = "root",
+            Mode = "0440",
+            Validation = "sudoers"
+        };
+
+        var command = PowerForge.Web.Cli.WebCliCommandHandlers.BuildManagedFileInstallCommand(path);
+
+        Assert.Contains("mktemp '/etc/sudoers.d/powerforge-example.powerforge.XXXXXX'", command, StringComparison.Ordinal);
+        Assert.Contains("visudo -cf \"$powerforge_sudoers_temp\"", command, StringComparison.Ordinal);
+        Assert.Contains("trap powerforge_sudoers_restore EXIT", command, StringComparison.Ordinal);
+        Assert.Contains("trap 'exit 130' INT", command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_sudoers_replaced=1", command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_sudoers_had_previous", command, StringComparison.Ordinal);
+        Assert.Contains("mv -f -- \"$powerforge_sudoers_backup\" '/etc/sudoers.d/powerforge-example'", command, StringComparison.Ordinal);
+        Assert.Contains("visudo -c || powerforge_sudoers_status=1", command, StringComparison.Ordinal);
+        Assert.Contains("trap - EXIT HUP INT TERM", command, StringComparison.Ordinal);
+    }
 }

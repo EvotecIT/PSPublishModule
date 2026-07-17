@@ -72,10 +72,12 @@ internal sealed class PowerForgeServerPath
 {
     public string? Id { get; set; }
     public string? Path { get; set; }
+    public string? Source { get; set; }
     public string? Owner { get; set; }
     public string? Group { get; set; }
     public string? Mode { get; set; }
     public string? Kind { get; set; }
+    public string? Validation { get; set; }
 }
 
 internal sealed class PowerForgeServerApache

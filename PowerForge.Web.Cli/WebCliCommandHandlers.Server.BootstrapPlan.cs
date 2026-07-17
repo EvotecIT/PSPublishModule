@@ -172,6 +172,13 @@ internal static partial class WebCliCommandHandlers
             }
         }
 
+        foreach (var path in manifest.Paths ?? Array.Empty<PowerForgeServerPath>())
+        {
+            if (string.IsNullOrWhiteSpace(path.Source) || string.IsNullOrWhiteSpace(path.Path)) continue;
+            AddStep(steps, ref order, "managed-files", $"Install managed file {path.Path}",
+                BuildManagedFileInstallCommand(path), plannedCommands: plannedCommands);
+        }
+
         foreach (var command in manifest.Bootstrap?.Commands ?? Array.Empty<PowerForgeServerNamedCommand>())
         {
             if (string.IsNullOrWhiteSpace(command.Command)) continue;
@@ -254,6 +261,48 @@ internal static partial class WebCliCommandHandlers
 
         AddStep(steps, ref order, "verify", "Run PowerForge server verify", "# Run from an operator workstation: powerforge-web server verify --manifest <manifest> --fail-on-failure", manual: true, plannedCommands: plannedCommands);
         return steps;
+    }
+
+    internal static string BuildManagedFileInstallCommand(PowerForgeServerPath path)
+    {
+        var owner = string.IsNullOrWhiteSpace(path.Owner) ? "root" : path.Owner;
+        var group = string.IsNullOrWhiteSpace(path.Group) ? "root" : path.Group;
+        var mode = string.IsNullOrWhiteSpace(path.Mode) ? "0644" : path.Mode;
+        var source = ShellQuote(path.Source ?? string.Empty);
+        var target = ShellQuote(path.Path ?? string.Empty);
+        var install = $"install -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {source}";
+        if (!string.Equals(path.Validation, "sudoers", StringComparison.OrdinalIgnoreCase))
+            return $"{install} {target}";
+
+        var temporaryTemplate = ShellQuote((path.Path ?? string.Empty) + ".powerforge.XXXXXX");
+        return string.Join('\n',
+            $"powerforge_sudoers_temp=$(mktemp {temporaryTemplate})",
+            "powerforge_sudoers_backup=\"${powerforge_sudoers_temp}.previous\"",
+            "powerforge_sudoers_had_previous=0",
+            "powerforge_sudoers_replaced=0",
+            "powerforge_sudoers_restore() {",
+            "  powerforge_sudoers_status=$?",
+            "  trap - EXIT HUP INT TERM",
+            "  if [ \"$powerforge_sudoers_replaced\" = 1 ]; then",
+            $"    if [ \"$powerforge_sudoers_had_previous\" = 1 ] && [ -e \"$powerforge_sudoers_backup\" ]; then mv -f -- \"$powerforge_sudoers_backup\" {target}; else rm -f -- {target}; fi",
+            "    visudo -c || powerforge_sudoers_status=1",
+            "  fi",
+            "  rm -f -- \"$powerforge_sudoers_temp\" \"$powerforge_sudoers_backup\" || true",
+            "  exit \"$powerforge_sudoers_status\"",
+            "}",
+            "trap powerforge_sudoers_restore EXIT",
+            "trap 'exit 129' HUP",
+            "trap 'exit 130' INT",
+            "trap 'exit 143' TERM",
+            $"{install} \"$powerforge_sudoers_temp\"",
+            "visudo -cf \"$powerforge_sudoers_temp\"",
+            $"if [ -e {target} ]; then cp -a -- {target} \"$powerforge_sudoers_backup\"; powerforge_sudoers_had_previous=1; fi",
+            $"mv -f -- \"$powerforge_sudoers_temp\" {target}",
+            "powerforge_sudoers_replaced=1",
+            "visudo -c",
+            "powerforge_sudoers_replaced=0",
+            "rm -f -- \"$powerforge_sudoers_backup\"",
+            "trap - EXIT HUP INT TERM");
     }
 
     private static string BuildRepositoryGitPrefix(PowerForgeServerRepository repository)

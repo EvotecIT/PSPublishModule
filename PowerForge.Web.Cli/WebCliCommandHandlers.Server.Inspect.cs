@@ -62,6 +62,21 @@ internal static partial class WebCliCommandHandlers
                 packages.Success ? "installed/missing from dpkg-query" : packages.Stderr.Trim());
         }
 
+        foreach (var repository in manifest.Repositories ?? Array.Empty<PowerForgeServerRepository>())
+        {
+            if (string.IsNullOrWhiteSpace(repository.Path)) continue;
+            var id = string.IsNullOrWhiteSpace(repository.Role) ? repository.Path : repository.Role;
+            AddCommandCheck(checks, $"repository.{id}.exists", "repositories", $"Git repository exists: {repository.Path}",
+                ExecuteRemote(sshCommand, target, BuildRepositoryExistsCheckCommand(repository.Path)), "Git work tree");
+            if (!string.IsNullOrWhiteSpace(repository.Ref))
+            {
+                AddCommandCheck(checks, $"repository.{id}.ref", "repositories", $"Repository is pinned: {repository.Path}",
+                    ExecuteRemote(sshCommand, target, BuildRepositoryRefCheckCommand(repository.Path, repository.Ref)), repository.Ref);
+            }
+            AddCommandCheck(checks, $"repository.{id}.clean", "repositories", $"Repository is clean: {repository.Path}",
+                ExecuteRemote(sshCommand, target, BuildRepositoryCleanCheckCommand(repository.Path)), "clean work tree");
+        }
+
         var apacheModules = ExecuteRemote(sshCommand, target, "apache2ctl -M 2>/dev/null || apachectl -M 2>/dev/null");
         foreach (var module in manifest.Packages?.ApacheModules ?? manifest.Apache?.Modules ?? Array.Empty<string>())
         {
@@ -73,14 +88,28 @@ internal static partial class WebCliCommandHandlers
 
         AddCommandCheck(checks, "apache.configtest", "apache", "Apache configtest succeeds",
             ExecuteRemote(sshCommand, target, manifest.Apache?.ValidateCommand ?? "apachectl configtest"), "Syntax OK");
+        InspectManagedFiles(sshCommand, target,
+            (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerManagedFile>())
+                .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>()),
+            "apache", checks);
 
         foreach (var path in manifest.Paths ?? Array.Empty<PowerForgeServerPath>())
         {
             if (string.IsNullOrWhiteSpace(path.Path)) continue;
             AddBooleanCheck(checks, $"path.{path.Id ?? path.Path}", "paths", $"Managed path exists: {path.Path}",
                 ExecuteRemote(sshCommand, target, BuildManagedPathCheckCommand(path)).Success,
-                path.Kind ?? "exists",
+                BuildManagedPathExpectation(path),
                 path.Path);
+            if (!string.IsNullOrWhiteSpace(path.Source))
+            {
+                AddCommandCheck(checks, $"path.{path.Id ?? path.Path}.content", "paths", $"Managed file matches source: {path.Path}",
+                    ExecuteRemote(sshCommand, target, BuildManagedFileContentCheckCommand(path.Source, path.Path)), path.Source);
+            }
+            if (string.Equals(path.Validation, "sudoers", StringComparison.OrdinalIgnoreCase))
+            {
+                AddCommandCheck(checks, $"path.{path.Id ?? path.Path}.sudoers", "paths", $"Managed sudoers file parses: {path.Path}",
+                    ExecuteRemote(sshCommand, target, BuildSudoersValidationCommand(path.Path)), "visudo parse succeeds");
+            }
         }
 
         foreach (var path in manifest.Paths?.Where(static path => path.Kind?.Equals("symlink", StringComparison.OrdinalIgnoreCase) == true) ?? Array.Empty<PowerForgeServerPath>())
@@ -182,12 +211,66 @@ internal static partial class WebCliCommandHandlers
 
     internal static string BuildManagedPathCheckCommand(PowerForgeServerPath path)
     {
-        var predicate = path.Kind?.Equals("directory", StringComparison.OrdinalIgnoreCase) == true ? "-d" : "-e";
-        return $"sudo -n test {predicate} {ShellQuote(path.Path ?? string.Empty)}";
+        var quotedPath = ShellQuote(path.Path ?? string.Empty);
+        var predicate = path.Kind?.ToLowerInvariant() switch
+        {
+            "directory" => "-d",
+            "file" => "-f",
+            "symlink" => "-L",
+            _ => "-e"
+        };
+        var checks = new List<string> { $"sudo -n test {predicate} {quotedPath}" };
+        if (!string.IsNullOrWhiteSpace(path.Owner))
+            checks.Add($"test \"$(sudo -n stat -c '%U' -- {quotedPath})\" = {ShellQuote(path.Owner)}");
+        if (!string.IsNullOrWhiteSpace(path.Group))
+            checks.Add($"test \"$(sudo -n stat -c '%G' -- {quotedPath})\" = {ShellQuote(path.Group)}");
+        if (!string.IsNullOrWhiteSpace(path.Mode))
+        {
+            var normalizedMode = path.Mode.TrimStart('0');
+            checks.Add($"test \"$(sudo -n stat -c '%a' -- {quotedPath})\" = {ShellQuote(normalizedMode.Length == 0 ? "0" : normalizedMode)}");
+        }
+        return string.Join(" && ", checks);
     }
 
     internal static string BuildManagedSymlinkTargetCommand(string path)
         => $"sudo -n readlink -f {ShellQuote(path)}";
+
+    internal static string BuildManagedFileContentCheckCommand(string source, string target)
+        => $"sudo -n cmp -s -- {ShellQuote(source)} {ShellQuote(target)}";
+
+    internal static string BuildSudoersValidationCommand(string path)
+        => $"sudo -n visudo -cf {ShellQuote(path)}";
+
+    internal static string BuildRepositoryExistsCheckCommand(string path)
+        => $"test \"$(sudo -n git -C {ShellQuote(path)} rev-parse --is-inside-work-tree)\" = 'true'";
+
+    internal static string BuildRepositoryRefCheckCommand(string path, string reference)
+        => $"test \"$(sudo -n git -C {ShellQuote(path)} rev-parse HEAD)\" = \"$(sudo -n git -C {ShellQuote(path)} rev-parse {ShellQuote(reference + "^{commit}")})\"";
+
+    internal static string BuildRepositoryCleanCheckCommand(string path)
+        => $"test -z \"$(sudo -n git -C {ShellQuote(path)} status --porcelain --untracked-files=normal)\"";
+
+    private static string BuildManagedPathExpectation(PowerForgeServerPath path)
+    {
+        var values = new[] { path.Kind, path.Owner, path.Group, path.Mode }
+            .Where(static value => !string.IsNullOrWhiteSpace(value));
+        return string.Join(' ', values);
+    }
+
+    private static void InspectManagedFiles(
+        string sshCommand,
+        string target,
+        IEnumerable<PowerForgeServerManagedFile> files,
+        string category,
+        ICollection<PowerForgeServerInspectCheck> checks)
+    {
+        foreach (var file in files)
+        {
+            if (string.IsNullOrWhiteSpace(file.Source) || string.IsNullOrWhiteSpace(file.Target)) continue;
+            AddCommandCheck(checks, $"{category}.file.{file.Target}.content", category, $"Managed file matches source: {file.Target}",
+                ExecuteRemote(sshCommand, target, BuildManagedFileContentCheckCommand(file.Source, file.Target)), file.Source);
+        }
+    }
 
     private static void InspectSystemdUnits(
         string sshCommand,
@@ -204,6 +287,12 @@ internal static partial class WebCliCommandHandlers
                 exists.Success,
                 "unit exists",
                 exists.Success ? "unit exists" : exists.Stderr.Trim());
+
+            if (!string.IsNullOrWhiteSpace(unit.Source) && !string.IsNullOrWhiteSpace(unit.Target))
+            {
+                AddCommandCheck(checks, $"systemd.{kind}.{unit.Name}.content", "systemd", $"systemd {kind} matches source: {unit.Name}",
+                    ExecuteRemote(sshCommand, target, BuildManagedFileContentCheckCommand(unit.Source, unit.Target)), unit.Source);
+            }
 
             if (!unit.Enabled) continue;
             var enabled = ExecuteRemote(sshCommand, target, $"systemctl is-enabled {ShellQuote(unit.Name)}");
