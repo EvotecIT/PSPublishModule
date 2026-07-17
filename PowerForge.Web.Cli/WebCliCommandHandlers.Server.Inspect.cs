@@ -240,7 +240,7 @@ internal static partial class WebCliCommandHandlers
             _ => $"sudo -n test -e {quotedPath}"
         };
         var checks = new List<string>();
-        if (string.Equals(path.Owner, "root", StringComparison.Ordinal) &&
+        if (!string.IsNullOrWhiteSpace(path.Owner) && IsRootUnixIdentity(path.Owner) &&
             path.Kind?.ToLowerInvariant() is "file" or "directory")
         {
             checks.Add(BuildRootControlledTargetParentInspectCommand(path.Path ?? string.Empty));

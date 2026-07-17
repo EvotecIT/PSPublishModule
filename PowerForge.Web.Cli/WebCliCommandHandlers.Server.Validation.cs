@@ -611,6 +611,10 @@ internal static partial class WebCliCommandHandlers
     private static bool IsNumericUnixIdentity(string value)
         => value.Length > 0 && value.All(static character => character is >= '0' and <= '9');
 
+    private static bool IsRootUnixIdentity(string value)
+        => string.Equals(value, "root", StringComparison.Ordinal) ||
+           string.Equals(value, "0", StringComparison.Ordinal);
+
     private static bool IsValidMode(string? value)
         => string.IsNullOrWhiteSpace(value) ||
            (value.Length is 3 or 4 && value.All(static character => character is >= '0' and <= '7'));

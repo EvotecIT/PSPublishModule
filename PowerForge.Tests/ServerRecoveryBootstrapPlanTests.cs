@@ -329,6 +329,13 @@ public sealed class ServerRecoveryBootstrapPlanTests
             "/etc/apache2/sites-available/example.conf",
             "/srv/example",
             "0644");
+        var numericRootCommand = PowerForge.Web.Cli.WebCliCommandHandlers.BuildRepositoryManagedFileInstallCommand(
+            "/srv/example/deploy/numeric.conf",
+            "/etc/example/numeric.conf",
+            "/srv/example",
+            "0644",
+            "0",
+            "0");
 
         Assert.Contains(
             "powerforge_assert_root_controlled_path \"$(dirname -- '/etc/apache2/sites-available/example.conf')\"",
@@ -342,6 +349,9 @@ public sealed class ServerRecoveryBootstrapPlanTests
             "install -T -o 'root' -g 'root' -m '0644' '/srv/example/deploy/apache.conf' '/etc/apache2/sites-available/example.conf'",
             command,
             StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path \"$(dirname -- '/etc/example/numeric.conf')\"", numericRootCommand, StringComparison.Ordinal);
+        Assert.EndsWith("install -T -o '0' -g '0' -m '0644' '/srv/example/deploy/numeric.conf' '/etc/example/numeric.conf'", numericRootCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("runuser", numericRootCommand, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -378,6 +388,8 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.EndsWith("test \"$(stat -c '%a' -- '/home/example/.ssh')\" = '700'", userCommand, StringComparison.Ordinal);
         Assert.Contains("test \"$(stat -c '%u' -- '/var/lib/example-numeric')\" = '0'", numericCommand, StringComparison.Ordinal);
         Assert.Contains("test \"$(stat -c '%g' -- '/var/lib/example-numeric')\" = '0'", numericCommand, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path '/var/lib'", numericCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("runuser", numericCommand, StringComparison.Ordinal);
     }
 
     [Fact]

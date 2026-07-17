@@ -378,14 +378,14 @@ internal static partial class WebCliCommandHandlers
         string group = "root",
         string? repositoryRef = null)
     {
-        var install = string.Equals(owner, "root", StringComparison.Ordinal)
+        var install = IsRootUnixIdentity(owner)
             ? $"install -T -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {ShellQuote(source)} {ShellQuote(target)}"
             : $"runuser -u {ShellQuote(owner)} -g {ShellQuote(group)} -- install -T -m {ShellQuote(mode)} {ShellQuote(source)} {ShellQuote(target)}";
         var commands = new List<string>
         {
             BuildManagedSourceSafetyCommand(source, repositoryRoot, useSudo: false, requireRootControl: true, repositoryRef: repositoryRef)
         };
-        if (string.Equals(owner, "root", StringComparison.Ordinal))
+        if (IsRootUnixIdentity(owner))
             commands.Add(BuildRootControlledTargetSafetyCommand(target));
         commands.Add(install);
         return string.Join('\n', commands);
@@ -412,7 +412,7 @@ internal static partial class WebCliCommandHandlers
             $"test \"$(stat -c '{ownerFormat}' -- {quotedTarget})\" = {ShellQuote(owner)}",
             $"test \"$(stat -c '{groupFormat}' -- {quotedTarget})\" = {ShellQuote(group)}",
             $"test \"$(stat -c '%a' -- {quotedTarget})\" = {ShellQuote(normalizedMode)}");
-        if (!string.Equals(owner, "root", StringComparison.Ordinal))
+        if (!IsRootUnixIdentity(owner))
         {
             return string.Join('\n',
                 existingTargetGuard,

@@ -71,6 +71,7 @@ public sealed class ServerRecoveryInspectCommandTests
 
         Assert.Contains("stat -c '%u' -- '/var/lib/example')\" = '0'", command, StringComparison.Ordinal);
         Assert.Contains("stat -c '%g' -- '/var/lib/example')\" = '65534'", command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path \"$(dirname -- '/var/lib/example')\"", command, StringComparison.Ordinal);
     }
 
     [Fact]
