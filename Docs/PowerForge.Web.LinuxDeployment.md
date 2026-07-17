@@ -27,7 +27,9 @@ jobs:
     permissions:
       actions: write
       contents: read
+      id-token: write
       packages: read
+      pages: write
     uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-deploy.yml@POWERFORGE_COMMIT
     with:
       website_root: Website
@@ -43,6 +45,10 @@ jobs:
     secrets:
       indexnow_key: ${{ secrets.INDEXNOW_KEY }}
 ```
+
+The caller grants `pages: write` and `id-token: write` because GitHub validates the permission ceiling for every job in the reusable workflow before evaluating the Linux/Pages conditions. Those permissions are consumed only by the conditional GitHub Pages job; the Linux deployment job explicitly limits its token to `actions: read` and `contents: read`.
+
+The gating `seo-doctor` step must execute in `ci` mode, use real JSON booleans, enable content-leak and canonical checks, and declare its localization mode explicitly. Set both `requireHreflang` and `requireHreflangXDefault` to `true` for localized sites, or set both to `false` for an intentionally single-language site. Localized sites must not disable `checkHreflang`. The documented kebab-case aliases are equivalent. Mixed or omitted values fail before build and deployment.
 
 The `production` environment owns variables `POWERFORGE_WEBSITE_DEPLOY_HOST`, `POWERFORGE_WEBSITE_DEPLOY_PORT`, and `POWERFORGE_WEBSITE_DEPLOY_USER`, plus secrets `DEPLOYMENT_SSH_PRIVATE_KEY` and `DEPLOYMENT_SSH_KNOWN_HOSTS`. Add `deployment_cloudflare_zone` only after the per-site token is stored as the environment secret `DEPLOYMENT_CLOUDFLARE_API_TOKEN` and the non-secret exact zone id is stored as the environment variable `CLOUDFLARE_ZONE_ID`. The called workflow then applies the managed cache policy before deployment and cache purge. Omitting the zone performs no Cloudflare API operation.
 

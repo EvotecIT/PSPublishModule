@@ -19,6 +19,8 @@ public sealed class ServerScaffoldTests
 
         Assert.DoesNotContain("run: |", workflow, StringComparison.Ordinal);
         Assert.Contains("powerforge-website-deploy.yml@" + EngineRef, workflow, StringComparison.Ordinal);
+        Assert.Contains("  id-token: write", workflow, StringComparison.Ordinal);
+        Assert.Contains("  pages: write", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment_ssh_private_key: ${{ secrets.DEPLOYMENT_SSH_PRIVATE_KEY }}", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment_ssh_known_hosts: ${{ secrets.DEPLOYMENT_SSH_KNOWN_HOSTS }}", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("CLOUDFLARE_API_TOKEN", workflow, StringComparison.Ordinal);

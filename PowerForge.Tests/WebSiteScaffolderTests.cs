@@ -123,6 +123,8 @@ public class WebSiteScaffolderTests
             Assert.True(seoDoctorStep.GetProperty("failOnNewIssues").GetBoolean());
             Assert.True(seoDoctorStep.GetProperty("checkContentLeaks").GetBoolean());
             Assert.True(seoDoctorStep.GetProperty("requireCanonical").GetBoolean());
+            Assert.False(seoDoctorStep.GetProperty("requireHreflang").GetBoolean());
+            Assert.False(seoDoctorStep.GetProperty("requireHreflangXDefault").GetBoolean());
             Assert.Equal("./_reports/seo-doctor.json", seoDoctorStep.GetProperty("reportPath").GetString());
             Assert.Equal("./_reports/seo-doctor.md", seoDoctorStep.GetProperty("summaryPath").GetString());
             Assert.Contains(seoDoctorStep.GetProperty("modes").EnumerateArray().Select(e => e.GetString() ?? string.Empty), mode => string.Equals(mode, "ci", StringComparison.OrdinalIgnoreCase));
