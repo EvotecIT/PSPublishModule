@@ -862,7 +862,7 @@ public sealed partial class ManagedModuleRepositoryClient
         CancellationToken cancellationToken)
     {
         var match = GetLocalVersions(repository, packageId, includePrerelease: true)
-            .FirstOrDefault(item => item.Version.Equals(version, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(item => ManagedModuleVersionComparer.Instance.Compare(item.Version, version) == 0);
         if (match?.PackageSource is null)
             throw CreateLocalRepositoryException(repository, "Download", $"Package '{packageId}' version '{version}' was not found in local repository '{repository.Name}'.");
 

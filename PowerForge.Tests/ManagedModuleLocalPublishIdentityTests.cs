@@ -12,16 +12,27 @@ public sealed class ManagedModuleLocalPublishIdentityTests
         var packagePath = Path.Combine(source.Path, "renamed-package.nupkg");
         TestPackageFactory.Create(packagePath, "Company.Tools", "1.0");
         var client = new ManagedModuleRepositoryClient(new NullLogger());
+        var repository = new ManagedModuleRepository("Local", destination.Path);
+        using var download = new TemporaryDirectory();
 
-        var result = await client.PublishPackageAsync(
-            new ManagedModuleRepository("Local", destination.Path),
-            packagePath);
+        var result = await client.PublishPackageAsync(repository, packagePath);
+        var versions = await client.GetVersionsAsync(repository, "Company.Tools");
+        var downloaded = await client.DownloadPackageAsync(
+            repository,
+            "Company.Tools",
+            "1.0.0",
+            download.Path);
 
         var canonicalPath = Path.Combine(destination.Path, "Company.Tools.1.0.0.nupkg");
         Assert.True(result.Published);
         Assert.Equal(canonicalPath, result.PublishSource);
         Assert.True(File.Exists(canonicalPath));
         Assert.False(File.Exists(Path.Combine(destination.Path, Path.GetFileName(packagePath))));
+        var listed = Assert.Single(versions);
+        Assert.Equal("1.0", listed.Version);
+        Assert.Equal(canonicalPath, listed.PackageSource);
+        Assert.Equal("1.0", downloaded.Metadata!.Version);
+        Assert.Equal(TestHash.ComputeSha256(canonicalPath), TestHash.ComputeSha256(downloaded.PackagePath));
     }
 
     [Fact]
