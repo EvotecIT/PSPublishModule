@@ -84,14 +84,28 @@ internal static partial class WebCliCommandHandlers
         var order = 1;
 
         AddStep(steps, ref order, "preflight", "Confirm supported host",
-            $"test -f /etc/os-release && grep -q {ShellQuote((manifest.Target?.Os ?? "ubuntu").Replace("ubuntu-", string.Empty, StringComparison.OrdinalIgnoreCase))} /etc/os-release || true",
+            BuildServerHostPreflightCommand(manifest.Target),
             plannedCommands: plannedCommands);
 
         if (manifest.Packages?.Apt?.Length > 0)
         {
             AddStep(steps, ref order, "packages", "Install apt prerequisites",
-                "apt-get update && apt-get install -y " + string.Join(' ', manifest.Packages.Apt),
+                "apt-get update && apt-get install -y " + string.Join(' ', manifest.Packages.Apt.Select(ShellQuote)),
                 plannedCommands: plannedCommands);
+        }
+
+        var dotnetPackages = GetDeclaredDotnetSdkPackageNames(manifest.Packages?.DotnetSdks);
+        if (dotnetPackages.Length > 0)
+        {
+            AddStep(steps, ref order, "runtimes", "Install .NET SDK prerequisites",
+                "apt-get update && apt-get install -y " + string.Join(' ', dotnetPackages.Select(ShellQuote)),
+                plannedCommands: plannedCommands);
+        }
+
+        if (manifest.Packages?.Powershell == true)
+        {
+            AddStep(steps, ref order, "runtimes", "Install PowerShell prerequisite",
+                BuildPowerShellInstallCommand(), plannedCommands: plannedCommands);
         }
 
         foreach (var account in manifest.Accounts ?? Array.Empty<PowerForgeServerAccount>())
@@ -187,7 +201,7 @@ internal static partial class WebCliCommandHandlers
 
         var apacheModules = manifest.Packages?.ApacheModules ?? manifest.Apache?.Modules ?? Array.Empty<string>();
         if (apacheModules.Length > 0)
-            AddStep(steps, ref order, "apache", "Enable Apache modules", "a2enmod " + string.Join(' ', apacheModules), plannedCommands: plannedCommands);
+            AddStep(steps, ref order, "apache", "Enable Apache modules", "a2enmod " + string.Join(' ', apacheModules.Select(ShellQuote)), plannedCommands: plannedCommands);
 
         foreach (var file in (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerManagedFile>())
                  .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>()))

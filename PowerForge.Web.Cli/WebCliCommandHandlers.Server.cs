@@ -80,7 +80,7 @@ internal static partial class WebCliCommandHandlers
             SshPort = manifest.Target?.SshPort,
             RepositoryCount = manifest.Repositories?.Length ?? 0,
             AccountCount = manifest.Accounts?.Length ?? 0,
-            PackageCount = manifest.Packages?.Apt?.Length ?? 0,
+            PackageCount = GetDeclaredPackageNames(manifest.Packages).Length,
             ApacheModuleCount = manifest.Packages?.ApacheModules?.Length ?? manifest.Apache?.Modules?.Length ?? 0,
             SystemdServiceCount = manifest.Systemd?.Services?.Length ?? 0,
             SystemdTimerCount = manifest.Systemd?.Timers?.Length ?? 0,
@@ -711,6 +711,8 @@ internal static partial class WebCliCommandHandlers
                    !string.IsNullOrWhiteSpace(path.Source)) == true ||
                packages?.Apt?.Length > 0 ||
                packages?.ApacheModules?.Length > 0 ||
+               packages?.DotnetSdks?.Length > 0 ||
+               packages?.Powershell == true ||
                apache?.Modules?.Length > 0 ||
                apache?.Sites?.Length > 0 ||
                apache?.Conf?.Length > 0 ||

@@ -36,6 +36,16 @@ internal static partial class WebCliCommandHandlers
             AddCommandCheck(checks, "os.release", "os", "OS release can be read", os, "success");
         }
 
+        if (!string.IsNullOrWhiteSpace(manifest.Target?.Architecture))
+        {
+            var architecture = ExecuteRemote(sshCommand, target, "uname -m");
+            var expectedArchitecture = NormalizeLinuxArchitecture(manifest.Target.Architecture);
+            AddBooleanCheck(checks, "os.architecture", "os", "CPU architecture matches manifest",
+                architecture.Success && string.Equals(architecture.Stdout.Trim(), expectedArchitecture, StringComparison.Ordinal),
+                expectedArchitecture ?? manifest.Target.Architecture,
+                architecture.Success ? architecture.Stdout.Trim() : architecture.Stderr.Trim());
+        }
+
         var sshd = ExecuteRemote(sshCommand, target, "sudo -n /usr/sbin/sshd -T 2>/dev/null | awk '/^(port|passwordauthentication|permitrootlogin|x11forwarding|maxauthtries|logingracetime) / { print }'");
         if (sshd.Success && manifest.Target?.SshPort is not null)
         {
@@ -54,7 +64,7 @@ internal static partial class WebCliCommandHandlers
         }
 
         var packages = ExecuteRemote(sshCommand, target, "dpkg-query -W -f='${binary:Package}\\n'");
-        foreach (var package in manifest.Packages?.Apt ?? Array.Empty<string>())
+        foreach (var package in GetDeclaredPackageNames(manifest.Packages))
         {
             AddBooleanCheck(checks, $"package.{package}", "packages", $"Package is installed: {package}",
                 HasExactLine(packages.Stdout, package),

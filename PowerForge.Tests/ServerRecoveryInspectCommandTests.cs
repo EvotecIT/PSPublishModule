@@ -49,6 +49,14 @@ public sealed class ServerRecoveryInspectCommandTests
         Assert.Equal("sudo -n readlink -f '/var/www/example/current'", command);
     }
 
+    [Theory]
+    [InlineData("x64", "x86_64")]
+    [InlineData("arm64", "aarch64")]
+    public void ManifestArchitecturesNormalizeToLinuxMachineNames(string value, string expected)
+    {
+        Assert.Equal(expected, WebCliCommandHandlers.NormalizeLinuxArchitecture(value));
+    }
+
     [Fact]
     public void ManagedContentAndSudoersChecksAreNonInteractiveAndValueFree()
     {

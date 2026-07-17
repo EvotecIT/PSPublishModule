@@ -75,8 +75,8 @@
         "host": { "type": "string" },
         "user": { "type": "string" },
         "sshPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
-        "os": { "type": "string" },
-        "architecture": { "type": "string" }
+        "os": { "type": "string", "pattern": "^ubuntu(?:-[0-9]{2}\\.[0-9]{2})?$" },
+        "architecture": { "type": "string", "enum": ["x64", "arm64"] }
       },
       "anyOf": [
         { "required": ["sshAlias"] },
@@ -127,15 +127,15 @@
       "properties": {
         "apt": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9+.:-]{0,127}$" }
         },
         "apacheModules": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$" }
         },
         "dotnetSdks": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string", "pattern": "^[0-9]{1,2}(?:\\.[0-9]{1,2})?$" }
         },
         "powershell": { "type": "boolean" }
       }
@@ -190,7 +190,7 @@
         "service": { "type": "string" },
         "modules": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$" }
         },
         "sites": {
           "type": "array",

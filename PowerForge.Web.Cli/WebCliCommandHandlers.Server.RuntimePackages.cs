@@ -1,0 +1,131 @@
+using System.Globalization;
+
+using static PowerForge.Web.Cli.WebCliHelpers;
+
+namespace PowerForge.Web.Cli;
+
+internal static partial class WebCliCommandHandlers
+{
+    internal static string BuildServerHostPreflightCommand(PowerForgeServerTarget? target)
+    {
+        var os = string.IsNullOrWhiteSpace(target?.Os) ? "ubuntu" : target.Os.Trim().ToLowerInvariant();
+        var version = os.StartsWith("ubuntu-", StringComparison.Ordinal)
+            ? os["ubuntu-".Length..]
+            : null;
+        var checks = new List<string>
+        {
+            "test -r /etc/os-release",
+            ". /etc/os-release",
+            "test \"$ID\" = 'ubuntu'"
+        };
+
+        if (!string.IsNullOrWhiteSpace(version))
+            checks.Add($"test \"$VERSION_ID\" = {ShellQuote(version)}");
+
+        var architecture = NormalizeLinuxArchitecture(target?.Architecture);
+        if (!string.IsNullOrWhiteSpace(architecture))
+            checks.Add($"test \"$(uname -m)\" = {ShellQuote(architecture)}");
+
+        return string.Join(" && ", checks);
+    }
+
+    internal static string[] GetDeclaredRuntimePackageNames(PowerForgeServerPackages? packages)
+    {
+        if (packages is null)
+            return Array.Empty<string>();
+
+        var names = GetDeclaredDotnetSdkPackageNames(packages.DotnetSdks).ToList();
+        if (packages.Powershell)
+            names.Add("powershell");
+
+        return names.Distinct(StringComparer.Ordinal).ToArray();
+    }
+
+    internal static string[] GetDeclaredPackageNames(PowerForgeServerPackages? packages)
+        => (packages?.Apt ?? Array.Empty<string>())
+            .Concat(GetDeclaredRuntimePackageNames(packages))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+    internal static string[] GetDeclaredDotnetSdkPackageNames(IEnumerable<string>? versions)
+    {
+        var names = new List<string>();
+        foreach (var version in versions ?? Array.Empty<string>())
+        {
+            if (!TryNormalizeDotnetSdkVersion(version, out var normalized))
+                throw new InvalidOperationException($"Unsupported .NET SDK version '{version}'.");
+            names.Add($"dotnet-sdk-{normalized}");
+        }
+        return names.Distinct(StringComparer.Ordinal).ToArray();
+    }
+
+    internal static bool TryNormalizeDotnetSdkVersion(string? value, out string normalized)
+    {
+        normalized = string.Empty;
+        if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+            return false;
+
+        var parts = value.Split('.');
+        if (parts.Length is < 1 or > 2 ||
+            parts.Any(static part => part.Length == 0 || !part.All(static character => character is >= '0' and <= '9')) ||
+            !int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var major) ||
+            major is < 1 or > 99)
+        {
+            return false;
+        }
+
+        var minor = 0;
+        if (parts.Length == 2 &&
+            (!int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out minor) || minor is < 0 or > 99))
+        {
+            return false;
+        }
+
+        normalized = $"{major}.{minor}";
+        return true;
+    }
+
+    internal static string BuildPowerShellInstallCommand()
+        => string.Join('\n',
+            "apt-get update",
+            "apt-get install -y ca-certificates curl",
+            "if ! dpkg-query -W -f='${Status}' packages-microsoft-prod 2>/dev/null | grep -q 'ok installed'; then",
+            "  . /etc/os-release",
+            "  test \"$ID\" = 'ubuntu'",
+            "  powerforge_ms_repo=$(mktemp --suffix=.deb)",
+            "  powerforge_ms_repo_cleanup() { rm -f -- \"$powerforge_ms_repo\"; }",
+            "  trap powerforge_ms_repo_cleanup EXIT",
+            "  trap 'exit 129' HUP",
+            "  trap 'exit 130' INT",
+            "  trap 'exit 143' TERM",
+            "  curl -fsSL \"https://packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb\" -o \"$powerforge_ms_repo\"",
+            "  dpkg -i \"$powerforge_ms_repo\"",
+            "  powerforge_ms_repo_cleanup",
+            "  trap - EXIT HUP INT TERM",
+            "fi",
+            "apt-get update",
+            "apt-get install -y powershell");
+
+    internal static string? NormalizeLinuxArchitecture(string? architecture)
+        => architecture?.Trim().ToLowerInvariant() switch
+        {
+            null or "" => null,
+            "x64" or "amd64" or "x86_64" => "x86_64",
+            "arm64" or "aarch64" => "aarch64",
+            _ => architecture.Trim()
+        };
+
+    internal static bool IsSafeAptPackageName(string? value)
+        => !string.IsNullOrWhiteSpace(value) &&
+           string.Equals(value, value.Trim(), StringComparison.Ordinal) &&
+           value.Length <= 128 &&
+           (char.IsAsciiLetterOrDigit(value[0])) &&
+           value.All(static character => char.IsAsciiLetterOrDigit(character) || character is '+' or '-' or '.' or ':');
+
+    internal static bool IsSafeApacheModuleName(string? value)
+        => !string.IsNullOrWhiteSpace(value) &&
+           string.Equals(value, value.Trim(), StringComparison.Ordinal) &&
+           value.Length <= 64 &&
+           (char.IsAsciiLetterOrDigit(value[0])) &&
+           value.All(static character => char.IsAsciiLetterOrDigit(character) || character is '_' or '-');
+}

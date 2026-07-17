@@ -12,6 +12,8 @@ internal static partial class WebCliCommandHandlers
         if (string.IsNullOrWhiteSpace(manifest.Target?.SshAlias) && string.IsNullOrWhiteSpace(manifest.Target?.Host))
             errors.Add("target must declare sshAlias or host.");
 
+        ValidateHostAndPackages(manifest, errors);
+
         var plainFiles = manifest.Capture?.PlainFiles ?? Array.Empty<PowerForgeServerManagedFile>();
         var encryptedFiles = manifest.Capture?.EncryptedFiles ?? Array.Empty<PowerForgeServerManagedFile>();
         var plainPaths = ValidateCaptureEntries(plainFiles, "capture.plainFiles", sensitive: false, errors);
@@ -176,6 +178,68 @@ internal static partial class WebCliCommandHandlers
         }
 
         return errors.Distinct(StringComparer.Ordinal).ToArray();
+    }
+
+    private static void ValidateHostAndPackages(
+        PowerForgeServerRecoveryManifest manifest,
+        ICollection<string> errors)
+    {
+        if (!IsSupportedUbuntuTarget(manifest.Target?.Os))
+            errors.Add("target.os must be 'ubuntu' or an Ubuntu release such as 'ubuntu-24.04'.");
+
+        var architecture = NormalizeLinuxArchitecture(manifest.Target?.Architecture);
+        if (architecture is not null and not ("x86_64" or "aarch64"))
+            errors.Add("target.architecture must be x64 or arm64.");
+
+        var packages = manifest.Packages;
+        var aptIndex = 0;
+        foreach (var package in packages?.Apt ?? Array.Empty<string>())
+        {
+            if (!IsSafeAptPackageName(package))
+                errors.Add($"packages.apt[{aptIndex}] must be a safe Debian package name.");
+            aptIndex++;
+        }
+
+        var sdkIndex = 0;
+        foreach (var version in packages?.DotnetSdks ?? Array.Empty<string>())
+        {
+            if (!TryNormalizeDotnetSdkVersion(version, out _))
+                errors.Add($"packages.dotnetSdks[{sdkIndex}] must be a major or major.minor version from 1 through 99.");
+            sdkIndex++;
+        }
+
+        var moduleIndex = 0;
+        foreach (var module in (packages?.ApacheModules ?? Array.Empty<string>())
+                 .Concat(manifest.Apache?.Modules ?? Array.Empty<string>()))
+        {
+            if (!IsSafeApacheModuleName(module))
+                errors.Add($"Apache module at index {moduleIndex} contains unsupported characters.");
+            moduleIndex++;
+        }
+
+        if (packages?.Powershell == true)
+        {
+            if (string.IsNullOrWhiteSpace(manifest.Target?.Os) ||
+                !manifest.Target.Os.StartsWith("ubuntu-", StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add("packages.powershell requires target.os to name a supported Ubuntu release.");
+            }
+            if (architecture != "x86_64")
+                errors.Add("packages.powershell currently requires target.architecture x64.");
+        }
+    }
+
+    private static bool IsSupportedUbuntuTarget(string? os)
+    {
+        if (string.IsNullOrWhiteSpace(os) || string.Equals(os, "ubuntu", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (!os.StartsWith("ubuntu-", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var version = os["ubuntu-".Length..];
+        var parts = version.Split('.');
+        return parts.Length == 2 &&
+               parts.All(static part => part.Length == 2 && part.All(static character => character is >= '0' and <= '9'));
     }
 
     private static void ValidateRepositories(

@@ -209,7 +209,7 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Contains("bootstrap", stages);
         Assert.Null(manifest.Bootstrap);
 
-        var unsupportedOnly = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        var runtimeOnly = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
         {
             Packages = new PowerForge.Web.Cli.PowerForgeServerPackages
             {
@@ -227,9 +227,53 @@ public sealed class ServerRecoveryBootstrapPlanTests
             ]
         };
 
-        Assert.DoesNotContain(
+        Assert.Contains(
             "bootstrap",
-            PowerForge.Web.Cli.WebCliCommandHandlers.BuildServerRecoveryStages(unsupportedOnly));
+            PowerForge.Web.Cli.WebCliCommandHandlers.BuildServerRecoveryStages(runtimeOnly));
+    }
+
+    [Fact]
+    public void BuildPlan_InstallsDeclaredRuntimesAndFailsClosedOnHostMismatch()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Target = new PowerForge.Web.Cli.PowerForgeServerTarget
+            {
+                Os = "ubuntu-24.04",
+                Architecture = "x64"
+            },
+            Packages = new PowerForge.Web.Cli.PowerForgeServerPackages
+            {
+                DotnetSdks = ["8", "10.0"],
+                Powershell = true
+            }
+        };
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        var preflight = Assert.Single(steps, step => step.Category == "preflight");
+        var runtimes = steps.Where(step => step.Category == "runtimes").ToArray();
+
+        Assert.Equal(2, runtimes.Length);
+        Assert.Equal(
+            "test -r /etc/os-release && . /etc/os-release && test \"$ID\" = 'ubuntu' && " +
+            "test \"$VERSION_ID\" = '24.04' && test \"$(uname -m)\" = 'x86_64'",
+            preflight.Command);
+        Assert.Equal("apt-get update && apt-get install -y 'dotnet-sdk-8.0' 'dotnet-sdk-10.0'", runtimes[0].Command);
+        Assert.Contains("packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb", runtimes[1].Command, StringComparison.Ordinal);
+        Assert.Contains("apt-get install -y ca-certificates curl", runtimes[1].Command, StringComparison.Ordinal);
+        Assert.Contains("dpkg -i \"$powerforge_ms_repo\"", runtimes[1].Command, StringComparison.Ordinal);
+        Assert.Contains("apt-get install -y powershell", runtimes[1].Command, StringComparison.Ordinal);
+        Assert.Contains("trap 'exit 130' INT", runtimes[1].Command, StringComparison.Ordinal);
+        Assert.DoesNotContain("| dpkg", runtimes[1].Command, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("8", "8.0")]
+    [InlineData("10.0", "10.0")]
+    public void DotnetSdkVersionsNormalizeToAptPackageVersions(string value, string expected)
+    {
+        Assert.True(PowerForge.Web.Cli.WebCliCommandHandlers.TryNormalizeDotnetSdkVersion(value, out var normalized));
+        Assert.Equal(expected, normalized);
     }
 
     [Fact]

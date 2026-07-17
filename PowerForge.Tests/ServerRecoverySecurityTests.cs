@@ -355,6 +355,49 @@ public sealed class ServerRecoverySecurityTests
     }
 
     [Fact]
+    public void ManifestValidation_RejectsUnsafePackagesAndUnsupportedRuntimeTargets()
+    {
+        var manifest = CreateManifest();
+        manifest.Target!.Os = "debian-13";
+        manifest.Target.Architecture = "arm64";
+        manifest.Packages = new PowerForgeServerPackages
+        {
+            Apt = ["curl;touch-pwned"],
+            ApacheModules = ["rewrite;touch-pwned"],
+            DotnetSdks = ["10.0;touch-pwned"],
+            Powershell = true
+        };
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("target.os", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("safe Debian package name", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("Apache module", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("packages.dotnetSdks", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("supported Ubuntu release", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("target.architecture x64", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ManifestValidation_AcceptsSupportedUbuntuRuntimePackages()
+    {
+        var manifest = CreateManifest();
+        manifest.Target!.Os = "ubuntu-24.04";
+        manifest.Target.Architecture = "x64";
+        manifest.Packages = new PowerForgeServerPackages
+        {
+            Apt = ["ca-certificates", "libssl3t64:amd64"],
+            ApacheModules = ["proxy_http"],
+            DotnetSdks = ["8", "10.0"],
+            Powershell = true
+        };
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Empty(errors);
+    }
+
+    [Fact]
     public void RestoreScript_UsesAllowlistAndDeclaredMetadataWithoutHeuristics()
     {
         var script = WebCliCommandHandlers.BuildRestoreSecretsScript(
