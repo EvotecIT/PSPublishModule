@@ -106,6 +106,7 @@ public class HtmlExporterMarkdownTests
         {
             Name = "SafeDocs",
             Version = "1.0.0",
+            Online = true,
             SkipCommands = true,
             SkipDependencies = true
         };
@@ -115,7 +116,7 @@ public class HtmlExporterMarkdownTests
             {
                 Title = "README",
                 Kind = "FILE",
-                Source = "Repository",
+                Source = "Remote",
                 Content = """
                 <details>
                 <summary>More</summary>
@@ -131,6 +132,7 @@ public class HtmlExporterMarkdownTests
             exporter.Export(module, items, outputPath, open: false);
 
             var html = File.ReadAllText(outputPath);
+            Assert.Contains("More", html, StringComparison.Ordinal);
             Assert.DoesNotContain("<details>", html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("<summary>", html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("<script>alert('unsafe')</script>", html, StringComparison.Ordinal);
