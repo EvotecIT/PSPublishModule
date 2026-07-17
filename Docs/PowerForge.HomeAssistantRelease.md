@@ -45,11 +45,13 @@ The reusable workflow uses GitHub's durable `queue: max` concurrency mode. Every
 
 Pin `POWERFORGE_REF` below to a reviewed PSPublishModule commit or release ref. The receiver contains no release implementation:
 
+The receiver intentionally uses `pull_request_target` for the `closed` event. GitHub otherwise downgrades `GITHUB_TOKEN` to read-only when a merged pull request came from a fork or Dependabot. The trusted default-branch receiver only passes merge metadata into PowerForge: privileged prepare and publish jobs never execute receiver code, and the credential-free build job checks out the already-merged release commit.
+
 ```yaml
 name: Release
 
 on:
-  pull_request:
+  pull_request_target:
     types: [closed]
   workflow_dispatch:
     inputs:
