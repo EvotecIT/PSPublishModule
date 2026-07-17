@@ -81,7 +81,7 @@ public sealed class ServerRecoveryInspectCommandTests
             "test \"$(sudo -n git -C '/srv/example' rev-parse HEAD)\" = \"$(sudo -n git -C '/srv/example' rev-parse '0123456789abcdef0123456789abcdef01234567^{commit}')\"",
             WebCliCommandHandlers.BuildRepositoryRefCheckCommand(path, reference));
         Assert.Equal(
-            "test -z \"$(sudo -n git -C '/srv/example' status --porcelain --untracked-files=normal)\"",
+            "test -z \"$(sudo -n git --no-optional-locks -C '/srv/example' status --porcelain --untracked-files=normal)\"",
             WebCliCommandHandlers.BuildRepositoryCleanCheckCommand(path));
     }
 }

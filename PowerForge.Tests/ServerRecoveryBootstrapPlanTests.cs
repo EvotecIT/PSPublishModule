@@ -302,5 +302,10 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Contains("mv -f -- \"$powerforge_sudoers_backup\" '/etc/sudoers.d/powerforge-example'", command, StringComparison.Ordinal);
         Assert.Contains("visudo -c || powerforge_sudoers_status=1", command, StringComparison.Ordinal);
         Assert.Contains("trap - EXIT HUP INT TERM", command, StringComparison.Ordinal);
+
+        var lines = command.Split('\n');
+        var rollbackArmed = Array.IndexOf(lines, "powerforge_sudoers_replaced=1");
+        var replacement = Array.IndexOf(lines, "mv -f -- \"$powerforge_sudoers_temp\" '/etc/sudoers.d/powerforge-example'");
+        Assert.True(rollbackArmed >= 0 && rollbackArmed < replacement);
     }
 }

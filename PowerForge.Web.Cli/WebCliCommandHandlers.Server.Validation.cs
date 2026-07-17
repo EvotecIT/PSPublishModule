@@ -73,7 +73,7 @@ internal static partial class WebCliCommandHandlers
                         errors.Add($"Source-managed path '{path.Id}' must declare owner, group, and mode.");
                     if (normalizedPath is not null && string.Equals(normalizedSource, normalizedPath, StringComparison.Ordinal))
                         errors.Add($"Source-managed path '{path.Id}' source and target must differ.");
-                    if (!repositoryRoots.Any(root => PathContains(root, normalizedSource)))
+                    if (!repositoryRoots.Any(root => PathStrictlyContains(root, normalizedSource)))
                         errors.Add($"Source-managed path '{path.Id}' source must be inside a declared repository path.");
                     if (normalizedPath is not null && repositoryRoots.Any(root => PathContains(root, normalizedPath)))
                         errors.Add($"Source-managed path '{path.Id}' target must be outside declared repository paths.");
@@ -93,10 +93,8 @@ internal static partial class WebCliCommandHandlers
                     !string.Equals(path.Owner, "root", StringComparison.Ordinal) ||
                     !string.Equals(path.Group, "root", StringComparison.Ordinal) ||
                     path.Mode is not ("440" or "0440") ||
-                    normalizedPath is null ||
-                    !normalizedPath.StartsWith("/etc/sudoers.d/", StringComparison.Ordinal) ||
-                    normalizedPath["/etc/sudoers.d/".Length..].Contains('/', StringComparison.Ordinal))
-                    errors.Add($"Sudoers-managed path '{path.Id}' must be a root-owned 0440 file directly below /etc/sudoers.d.");
+                    !IsSafeSudoersTarget(normalizedPath))
+                    errors.Add($"Sudoers-managed path '{path.Id}' must be a root-owned 0440 file with a dot-free name directly below /etc/sudoers.d.");
             }
         }
 
@@ -459,6 +457,21 @@ internal static partial class WebCliCommandHandlers
     private static bool PathContains(string parent, string candidate)
         => candidate.Equals(parent, StringComparison.Ordinal) ||
            candidate.StartsWith(parent.EndsWith("/", StringComparison.Ordinal) ? parent : parent + "/", StringComparison.Ordinal);
+
+    private static bool PathStrictlyContains(string parent, string candidate)
+        => !candidate.Equals(parent, StringComparison.Ordinal) && PathContains(parent, candidate);
+
+    private static bool IsSafeSudoersTarget(string? path)
+    {
+        const string prefix = "/etc/sudoers.d/";
+        if (string.IsNullOrWhiteSpace(path) || !path.StartsWith(prefix, StringComparison.Ordinal))
+            return false;
+
+        var name = path[prefix.Length..];
+        return name.Length > 0 &&
+               !name.Contains('/', StringComparison.Ordinal) &&
+               name.All(static character => IsAsciiLetterOrDigit(character) || character is '_' or '-');
+    }
 
     private static bool IsValidUnixIdentity(string? value)
         => string.IsNullOrWhiteSpace(value) ||

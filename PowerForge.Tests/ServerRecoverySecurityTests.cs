@@ -198,7 +198,7 @@ public sealed class ServerRecoverySecurityTests
         Assert.Contains(errors, error => error.Contains("unsupported validation", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("overlaps encrypted capture path", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("overlaps secret 'example-secret'", StringComparison.Ordinal));
-        Assert.Contains(errors, error => error.Contains("root-owned 0440 file directly below /etc/sudoers.d", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("root-owned 0440 file with a dot-free name directly below /etc/sudoers.d", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -239,6 +239,61 @@ public sealed class ServerRecoverySecurityTests
         Assert.Contains(errors, error => error.Contains("target must be outside declared repository paths", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("source '/etc/example/secret.env' overlaps encrypted capture path", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("source '/etc/example/secret.env' overlaps secret 'example-secret'", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ManifestValidation_RequiresManagedFileSourcesBelowRepositoryRoots()
+    {
+        var manifest = CreateManifest();
+        manifest.Repositories =
+        [
+            new PowerForgeServerRepository { Role = "application", Path = "/srv/example" }
+        ];
+        manifest.Paths =
+        [
+            new PowerForgeServerPath
+            {
+                Id = "repository-root-source",
+                Path = "/etc/example/public.conf",
+                Source = "/srv/example",
+                Kind = "file",
+                Owner = "root",
+                Group = "root",
+                Mode = "0644"
+            }
+        ];
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("source must be inside a declared repository path", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ManifestValidation_RejectsSudoersNamesIgnoredByIncludedir()
+    {
+        var manifest = CreateManifest();
+        manifest.Repositories =
+        [
+            new PowerForgeServerRepository { Role = "application", Path = "/srv/example" }
+        ];
+        manifest.Paths =
+        [
+            new PowerForgeServerPath
+            {
+                Id = "ignored-sudoers-name",
+                Path = "/etc/sudoers.d/powerforge.example",
+                Source = "/srv/example/deploy/powerforge-example.sudoers",
+                Kind = "file",
+                Owner = "root",
+                Group = "root",
+                Mode = "0440",
+                Validation = "sudoers"
+            }
+        ];
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("dot-free name", StringComparison.Ordinal));
     }
 
     [Fact]

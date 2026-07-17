@@ -258,7 +258,7 @@ internal static partial class WebCliCommandHandlers
         => $"test \"$(sudo -n git -C {ShellQuote(path)} rev-parse HEAD)\" = \"$(sudo -n git -C {ShellQuote(path)} rev-parse {ShellQuote(reference + "^{commit}")})\"";
 
     internal static string BuildRepositoryCleanCheckCommand(string path)
-        => $"test -z \"$(sudo -n git -C {ShellQuote(path)} status --porcelain --untracked-files=normal)\"";
+        => $"test -z \"$(sudo -n git --no-optional-locks -C {ShellQuote(path)} status --porcelain --untracked-files=normal)\"";
 
     private static string BuildManagedPathExpectation(PowerForgeServerPath path)
     {
