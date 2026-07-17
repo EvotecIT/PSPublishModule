@@ -6,7 +6,7 @@
         "type": "Direct",
         "requested": "[0.50.0, )",
         "resolved": "0.50.0",
-        "contentHash": "uY1duOtHtigrP+4twuK6GtY/g2iF0C6SWcbfXG4wld2GJKGGnXl1mrXOBKbDuMsiK836szrkpZn5bD9JQdhFeQ==",
+        "contentHash": "h9etMP2cgm5MUMaZEwWGtK2CLknjoNY9WpakobNrMZrdeTJnxhCIUEOHEICjP4SsIJ6nZO2PbSQ0NRI40eYjFw==",
         "dependencies": {
           "System.ComponentModel.Annotations": "5.0.0",
           "System.Text.Json": "9.0.17"
@@ -16,7 +16,7 @@
         "type": "Direct",
         "requested": "[0.21.0, )",
         "resolved": "0.21.0",
-        "contentHash": "1jxsJCEl/Y+oe/2p6r7/2+y5U2hx2shvRfrEqponphebrLs0vC2kOI/bM35hPyIz+1R3ajxrY8+y/H/j0f589g==",
+        "contentHash": "UAcuFRRXOaNGAKl7v7FRiIrAXu6ls5TBxLwWuAOXR5rlLvjyt3V+52SMFYYRqVlUnwdhMzNQ90+SYHgeOPFJVg==",
         "dependencies": {
           "HtmlForgeX": "0.50.0",
           "OfficeIMO.Markdown": "0.6.42",
@@ -282,13 +282,13 @@
         "type": "Direct",
         "requested": "[0.50.0, )",
         "resolved": "0.50.0",
-        "contentHash": "uY1duOtHtigrP+4twuK6GtY/g2iF0C6SWcbfXG4wld2GJKGGnXl1mrXOBKbDuMsiK836szrkpZn5bD9JQdhFeQ=="
+        "contentHash": "h9etMP2cgm5MUMaZEwWGtK2CLknjoNY9WpakobNrMZrdeTJnxhCIUEOHEICjP4SsIJ6nZO2PbSQ0NRI40eYjFw=="
       },
       "HtmlForgeX.Markdown": {
         "type": "Direct",
         "requested": "[0.21.0, )",
         "resolved": "0.21.0",
-        "contentHash": "1jxsJCEl/Y+oe/2p6r7/2+y5U2hx2shvRfrEqponphebrLs0vC2kOI/bM35hPyIz+1R3ajxrY8+y/H/j0f589g==",
+        "contentHash": "UAcuFRRXOaNGAKl7v7FRiIrAXu6ls5TBxLwWuAOXR5rlLvjyt3V+52SMFYYRqVlUnwdhMzNQ90+SYHgeOPFJVg==",
         "dependencies": {
           "HtmlForgeX": "0.50.0",
           "OfficeIMO.Markdown": "0.6.42"
@@ -967,13 +967,13 @@
         "type": "Direct",
         "requested": "[0.50.0, )",
         "resolved": "0.50.0",
-        "contentHash": "uY1duOtHtigrP+4twuK6GtY/g2iF0C6SWcbfXG4wld2GJKGGnXl1mrXOBKbDuMsiK836szrkpZn5bD9JQdhFeQ=="
+        "contentHash": "h9etMP2cgm5MUMaZEwWGtK2CLknjoNY9WpakobNrMZrdeTJnxhCIUEOHEICjP4SsIJ6nZO2PbSQ0NRI40eYjFw=="
       },
       "HtmlForgeX.Markdown": {
         "type": "Direct",
         "requested": "[0.21.0, )",
         "resolved": "0.21.0",
-        "contentHash": "1jxsJCEl/Y+oe/2p6r7/2+y5U2hx2shvRfrEqponphebrLs0vC2kOI/bM35hPyIz+1R3ajxrY8+y/H/j0f589g==",
+        "contentHash": "UAcuFRRXOaNGAKl7v7FRiIrAXu6ls5TBxLwWuAOXR5rlLvjyt3V+52SMFYYRqVlUnwdhMzNQ90+SYHgeOPFJVg==",
         "dependencies": {
           "HtmlForgeX": "0.50.0",
           "OfficeIMO.Markdown": "0.6.42"
