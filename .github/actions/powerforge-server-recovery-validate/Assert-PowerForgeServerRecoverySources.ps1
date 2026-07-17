@@ -11,13 +11,16 @@ param(
 $ErrorActionPreference = 'Stop'
 
 function Get-GitHubRepositorySlug {
-    param([Parameter(Mandatory)][string] $Url)
+    param(
+        [Parameter(Mandatory)][string] $Url,
+        [switch] $AllowUnsupported
+    )
 
     $value = $Url.Trim()
     $patterns = @(
         '^https://github\.com/(?<slug>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?$',
         '^ssh://git@github\.com(?::22)?/(?<slug>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?$',
-        '^git@github\.com(?:-[A-Za-z0-9_.-]+)?:(?<slug>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?$'
+        '^git@github\.com(?:-[A-Za-z0-9_-]+)?:(?<slug>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?$'
     )
     foreach ($pattern in $patterns) {
         $match = [regex]::Match(
@@ -29,6 +32,9 @@ function Get-GitHubRepositorySlug {
         if ($match.Success) {
             return $match.Groups['slug'].Value
         }
+    }
+    if ($AllowUnsupported) {
+        return $null
     }
     throw "Recovery repository URL is not a supported GitHub URL: $Url"
 }
@@ -105,19 +111,63 @@ function Resolve-ManagedSourcePath {
             throw 'Deployment-engine managed sources must use the exact commit pinned by this action.'
         }
     } else {
-        $sourceObject = "${repositoryRef}:$relativePath"
-        $pinnedBlob = @(& git -C $root rev-parse --verify $sourceObject 2>$null)
-        if ($LASTEXITCODE -ne 0 -or $pinnedBlob.Count -ne 1 -or $pinnedBlob[0] -notmatch '^([a-fA-F0-9]{40}|[a-fA-F0-9]{64})$') {
+        $treeEntry = @(& git -C $root ls-tree $repositoryRef -- $relativePath 2>$null)
+        if ($LASTEXITCODE -ne 0 -or $treeEntry.Count -ne 1 -or
+            $treeEntry[0] -notmatch '^(?<mode>[0-9]{6})\s+blob\s+(?<blob>[a-fA-F0-9]{40}|[a-fA-F0-9]{64})\s+') {
             throw "Managed recovery source is missing from its pinned repository commit: $source"
         }
+        if ($Matches['mode'] -notin @('100644', '100755')) {
+            throw "Managed recovery source has unsupported Git mode $($Matches['mode']) in its pinned repository commit: $source"
+        }
+        $pinnedBlob = [string]$Matches['blob']
         $currentBlob = @(& git -C $root hash-object -- $candidate 2>$null)
         if ($LASTEXITCODE -ne 0 -or $currentBlob.Count -ne 1 -or
-            -not [string]::Equals($pinnedBlob[0], $currentBlob[0], [StringComparison]::OrdinalIgnoreCase)) {
+            -not [string]::Equals($pinnedBlob, $currentBlob[0], [StringComparison]::OrdinalIgnoreCase)) {
             throw "Managed recovery source differs from its pinned repository commit: $source"
         }
     }
 
     $candidate
+}
+
+function Get-ValidatedCaptureTarget {
+    param(
+        [Parameter(Mandatory)][object[]] $Files,
+        [Parameter(Mandatory)][string] $Label
+    )
+
+    $targets = foreach ($file in $files) {
+        $target = [string]$file.target
+        $segments = @($target.Split('/', [StringSplitOptions]::RemoveEmptyEntries))
+        if ($target -notmatch '^/[A-Za-z0-9._/-]+$' -or
+            $target -eq '/' -or
+            $target.Contains('//', [StringComparison]::Ordinal) -or
+            @($segments).Where({ $_ -in @('.', '..') }).Count -gt 0) {
+            throw "$Label recovery capture path contains unsupported characters: $target"
+        }
+        $target
+    }
+    @($targets)
+}
+
+function Get-ExpectedPlainCaptureCommand {
+    param([Parameter(Mandatory)][pscustomobject] $RecoveryManifest)
+
+    $files = @($RecoveryManifest.capture.plainFiles)
+    if ($files.Count -eq 0) {
+        return ''
+    }
+
+    $targets = Get-ValidatedCaptureTarget -Files $files -Label 'Plain'
+    $parts = [Collections.Generic.List[string]]::new()
+    $parts.Add('/usr/bin/tar')
+    $parts.Add('-czf')
+    $parts.Add('-')
+    if (-not @($files).Where({ $_.required -eq $true }).Count) {
+        $parts.Add('--ignore-failed-read')
+    }
+    $parts.AddRange([string[]]$targets)
+    $parts -join ' '
 }
 
 function Get-ExpectedEncryptedCaptureCommand {
@@ -133,17 +183,7 @@ function Get-ExpectedEncryptedCaptureCommand {
         throw 'Credential-free validation requires a stable age public recipient in backupTarget.recipient.'
     }
 
-    $targets = foreach ($file in $files) {
-        $target = [string]$file.target
-        $segments = @($target.Split('/', [StringSplitOptions]::RemoveEmptyEntries))
-        if ($target -notmatch '^/[A-Za-z0-9._/-]+$' -or
-            $target -eq '/' -or
-            $target.Contains('//', [StringComparison]::Ordinal) -or
-            @($segments).Where({ $_ -in @('.', '..') }).Count -gt 0) {
-            throw "Encrypted recovery capture path contains unsupported characters: $target"
-        }
-        $target
-    }
+    $targets = Get-ValidatedCaptureTarget -Files $files -Label 'Encrypted'
 
     $parts = [Collections.Generic.List[string]]::new()
     $parts.Add('/usr/local/sbin/powerforge-server-encrypted-capture')
@@ -155,6 +195,36 @@ function Get-ExpectedEncryptedCaptureCommand {
     $parts.Add('--')
     $parts.AddRange([string[]]$targets)
     $parts -join ' '
+}
+
+function Get-ExpectedCaptureSudoersCommand {
+    param([Parameter(Mandatory)][pscustomobject] $RecoveryManifest)
+
+    $commands = [Collections.Generic.List[string]]::new()
+    $plainCommand = Get-ExpectedPlainCaptureCommand -RecoveryManifest $RecoveryManifest
+    if (-not [string]::IsNullOrWhiteSpace($plainCommand)) {
+        $commands.Add($plainCommand)
+    }
+    $encryptedCommand = Get-ExpectedEncryptedCaptureCommand -RecoveryManifest $RecoveryManifest
+    if (-not [string]::IsNullOrWhiteSpace($encryptedCommand)) {
+        $commands.Add($encryptedCommand)
+    }
+
+    foreach ($captureCommand in @($RecoveryManifest.capture.commands).Where({ $_.sensitive -ne $true })) {
+        $command = [string]$captureCommand.command
+        if ($command -notmatch '^sudo -n (?<command>.+)$') {
+            continue
+        }
+        $sudoersCommand = [string]$Matches['command']
+        if ([string]::Equals($sudoersCommand, 'apachectl -S', [StringComparison]::Ordinal)) {
+            $sudoersCommand = '/usr/sbin/apachectl -S'
+        } elseif ($sudoersCommand -notmatch '^/[A-Za-z0-9._/-]+(?: [A-Za-z0-9._~:@%+=/-]+)*$') {
+            throw "Privileged recovery capture command is not supported by credential-free validation: $command"
+        }
+        $commands.Add($sudoersCommand)
+    }
+
+    @($commands | Sort-Object -Unique)
 }
 
 $managedEntries = @(
@@ -180,14 +250,16 @@ $resolvedEntries = foreach ($entry in $managedEntries) {
 
 $expectedEncryptedCommand = Get-ExpectedEncryptedCaptureCommand -RecoveryManifest $Manifest
 if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
-    $engineRepositories = @($Manifest.repositories).Where({
-        [string]::Equals(
-            (Get-GitHubRepositorySlug -Url ([string]$_.url)),
-            $EngineRepository,
-            [StringComparison]::OrdinalIgnoreCase
-        ) -and
-        [string]::Equals([string]$_.ref, $env:POWERFORGE_ENGINE_REF, [StringComparison]::OrdinalIgnoreCase)
-    })
+    $engineRepositories = @(
+        foreach ($repository in @($Manifest.repositories)) {
+            $repositorySlug = Get-GitHubRepositorySlug -Url ([string]$repository.url) -AllowUnsupported
+            if (-not [string]::IsNullOrWhiteSpace($repositorySlug) -and
+                [string]::Equals($repositorySlug, $EngineRepository, [StringComparison]::OrdinalIgnoreCase) -and
+                [string]::Equals([string]$repository.ref, $env:POWERFORGE_ENGINE_REF, [StringComparison]::OrdinalIgnoreCase)) {
+                $repository
+            }
+        }
+    )
     if ($engineRepositories.Count -ne 1) {
         throw 'Encrypted recovery capture requires one repository pinned to the validation action engine.'
     }
@@ -212,42 +284,66 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
     $sudoersSources = @($resolvedEntries).Where({
         [string]::Equals([string]$_.Entry.validation, 'sudoers', [StringComparison]::OrdinalIgnoreCase)
     })
+    $expectedSudoersCommands = @(Get-ExpectedCaptureSudoersCommand -RecoveryManifest $Manifest)
     $authorized = $false
     foreach ($sudoersSource in $sudoersSources) {
         $lines = @(Get-Content -LiteralPath $sudoersSource.Path)
-        $commandAliases = [Collections.Generic.List[string]]::new()
+        $commandAliases = @{}
         foreach ($line in $lines) {
+            if ($line -notmatch '^\s*Cmnd_Alias\b') {
+                continue
+            }
             if ($line -notmatch '^\s*Cmnd_Alias\s+(?<alias>\S+)\s*=\s*(?<commands>.+?)\s*$') {
-                continue
+                throw 'Managed sudoers source contains a malformed command alias.'
             }
-            $commands = @([string]$Matches['commands'] -split '\s*,\s*')
-            $matchingCommands = @($commands).Where({
-                [string]::Equals($_, $expectedEncryptedCommand, [StringComparison]::Ordinal)
-            })
-            if ($matchingCommands.Count -eq 0) {
-                continue
+            $commandAlias = [string]$Matches['alias']
+            $commandText = [string]$Matches['commands']
+            if ($commandAlias -notmatch '^[A-Z][A-Z0-9_]*$') {
+                throw "Managed sudoers source contains an invalid command alias: $commandAlias"
             }
+            if ($commandAliases.ContainsKey($commandAlias)) {
+                throw "Managed sudoers source contains a duplicate command alias: $commandAlias"
+            }
+            $commands = @($commandText -split '\s*,\s*')
             if ($commands.Count -ne 1) {
-                throw 'The encrypted-capture command alias must not authorize additional commands.'
+                throw "Managed sudoers command alias must authorize exactly one command: $commandAlias"
             }
-            $commandAliases.Add([string]$Matches['alias'])
+            $commandAliases[$commandAlias] = [string]$commands[0]
         }
-        if ($commandAliases.Count -eq 1) {
-            $commandAlias = $commandAliases[0]
-            foreach ($line in $lines) {
-                if ($line -notmatch '^\s*(?<principal>\S+)\s+ALL\s*=\s*\(\s*(?<runas>[^)]+?)\s*\)\s+NOPASSWD:\s*(?<commands>.+?)\s*$' -or
-                    -not [string]::Equals([string]$Matches['principal'], $CaptureUser, [StringComparison]::Ordinal) -or
-                    -not [string]::Equals([string]$Matches['runas'], 'root', [StringComparison]::Ordinal)) {
-                    continue
+
+        $grantedAliases = [Collections.Generic.List[string]]::new()
+        foreach ($line in $lines) {
+            if ($line -notmatch '^\s*(?<principal>\S+)\s+') {
+                continue
+            }
+            $principal = [string]$Matches['principal']
+            if (-not [string]::Equals($principal, $CaptureUser, [StringComparison]::Ordinal)) {
+                continue
+            }
+            if ($line -notmatch '^\s*\S+\s+ALL\s*=\s*\(\s*(?<runas>[^)]+?)\s*\)\s+NOPASSWD:\s*(?<commands>.+?)\s*$') {
+                if ($line -match '\bNOPASSWD\s*:') {
+                    throw 'The recovery capture account NOPASSWD grant must use the exact ALL=(root) form.'
                 }
-                $authorized = @([string]$Matches['commands'] -split '\s*,\s*').Where({
-                    [string]::Equals($_, $commandAlias, [StringComparison]::Ordinal)
-                }).Count -eq 1
-                if ($authorized) {
-                    break
+                continue
+            }
+            $runAs = [string]$Matches['runas']
+            $grantText = [string]$Matches['commands']
+            if (-not [string]::Equals($runAs, 'root', [StringComparison]::Ordinal)) {
+                throw 'The recovery capture account must run its approved commands only as root.'
+            }
+            foreach ($commandAlias in @($grantText -split '\s*,\s*')) {
+                if ($commandAlias -notmatch '^[A-Z][A-Z0-9_]*$' -or -not $commandAliases.ContainsKey($commandAlias)) {
+                    throw "The recovery capture account grant references an invalid or undefined command alias: $commandAlias"
                 }
+                $grantedAliases.Add($commandAlias)
             }
         }
+
+        $grantedCommands = @($grantedAliases | ForEach-Object { [string]$commandAliases[$_] } | Sort-Object -Unique)
+        $authorized = $grantedAliases.Count -eq $grantedCommands.Count -and
+            $grantedCommands.Count -eq $expectedSudoersCommands.Count -and
+            @($grantedCommands).Where({ $_ -notin $expectedSudoersCommands }).Count -eq 0 -and
+            @($expectedSudoersCommands).Where({ $_ -notin $grantedCommands }).Count -eq 0
         if ($authorized) {
             break
         }

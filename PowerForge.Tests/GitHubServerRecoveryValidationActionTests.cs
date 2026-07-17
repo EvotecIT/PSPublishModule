@@ -51,7 +51,8 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.Contains("-CallerRepository $env:GITHUB_REPOSITORY", entrypoint, StringComparison.Ordinal);
         Assert.Contains("-CaptureUser $env:POWERFORGE_CAPTURE_USER", entrypoint, StringComparison.Ordinal);
         Assert.Contains("Resolve-ManagedSourcePath", sourceValidation, StringComparison.Ordinal);
-        Assert.Contains("git -C $root rev-parse --verify $sourceObject", sourceValidation, StringComparison.Ordinal);
+        Assert.Contains("git -C $root ls-tree $repositoryRef -- $relativePath", sourceValidation, StringComparison.Ordinal);
+        Assert.Contains("$Matches['mode'] -notin @('100644', '100755')", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("git -C $root hash-object -- $candidate", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("differs from its pinned repository commit", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("Managed recovery source must not traverse a symbolic link", sourceValidation, StringComparison.Ordinal);

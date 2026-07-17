@@ -10,7 +10,9 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
     private const string EngineRepository = "EvotecIT/PSPublishModule";
     private const string EngineRef = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     private const string Recipient = "age1example";
+    private const string ExpectedPlainCaptureCommand = "/usr/bin/tar -czf - /etc/example/config";
     private const string ExpectedCaptureCommand = "/usr/local/sbin/powerforge-server-encrypted-capture --recipient age1example -- /etc/example/secret";
+    private const string ExpectedInspectCommand = "/usr/sbin/apachectl -S";
 
     [Theory]
     [InlineData("https://github.com/EvotecIT/ExampleSite.git")]
@@ -25,10 +27,12 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         Assert.Equal("2", result.StandardOutput.Trim());
     }
 
-    [Fact]
-    public void Validator_ShouldRejectLookalikeGitHubHosts()
+    [Theory]
+    [InlineData("https://evilgithub.com/EvotecIT/ExampleSite.git")]
+    [InlineData("git@github.com-evil.com:EvotecIT/ExampleSite.git")]
+    public void Validator_ShouldRejectLookalikeGitHubHosts(string repositoryUrl)
     {
-        var result = RunValidator(repositoryUrl: "https://evilgithub.com/EvotecIT/ExampleSite.git");
+        var result = RunValidator(repositoryUrl: repositoryUrl);
 
         Assert.NotEqual(0, result.ExitCode);
         Assert.Contains("not a supported GitHub URL", result.AllOutput, StringComparison.Ordinal);
@@ -43,7 +47,9 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         var result = RunValidator(sudoers: sudoers);
 
         Assert.NotEqual(0, result.ExitCode);
-        Assert.Contains("must not authorize additional commands", result.AllOutput, StringComparison.Ordinal);
+        Assert.True(
+            result.AllOutput.Contains("must authorize exactly one command", StringComparison.Ordinal),
+            result.AllOutput);
     }
 
     [Fact]
@@ -56,7 +62,9 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         var result = RunValidator(sudoers: sudoers);
 
         Assert.NotEqual(0, result.ExitCode);
-        Assert.Contains("must not authorize additional commands", result.AllOutput, StringComparison.Ordinal);
+        Assert.True(
+            result.AllOutput.Contains("must authorize exactly one command", StringComparison.Ordinal),
+            result.AllOutput);
     }
 
     [Fact]
@@ -82,8 +90,25 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
     [InlineData(CaptureUser, "backup")]
     public void Validator_ShouldBindAuthorizationToCaptureUserAndRoot(string principal, string runAs)
     {
-        var sudoers = $"Cmnd_Alias BACKUP_ENCRYPTED = {ExpectedCaptureCommand}\n" +
-                      $"{principal} ALL=({runAs}) NOPASSWD: BACKUP_ENCRYPTED\n";
+        var sudoers = BuildExpectedSudoers(principal, runAs);
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains(
+            principal == CaptureUser ? "only as root" : "do not authorize the exact hardened encrypted-capture command",
+            result.AllOutput,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectAdditionalCaptureAccountGrants()
+    {
+        var sudoers = $"Cmnd_Alias BACKUP_PLAIN = {ExpectedPlainCaptureCommand}\n" +
+                      $"Cmnd_Alias BACKUP_ENCRYPTED = {ExpectedCaptureCommand}\n" +
+                      $"Cmnd_Alias BACKUP_INSPECT = {ExpectedInspectCommand}\n" +
+                      "Cmnd_Alias BACKUP_DIRECT_TAR = /usr/bin/tar -czf - /etc/example/secret\n" +
+                      $"{CaptureUser} ALL=(root) NOPASSWD: BACKUP_PLAIN, BACKUP_ENCRYPTED, BACKUP_INSPECT, BACKUP_DIRECT_TAR\n";
 
         var result = RunValidator(sudoers: sudoers);
 
@@ -91,11 +116,65 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         Assert.Contains("do not authorize the exact hardened encrypted-capture command", result.AllOutput, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Validator_ShouldRejectAlternateHostCaptureAccountGrants()
+    {
+        var sudoers = BuildExpectedSudoers(CaptureUser, "root") +
+                      $"{CaptureUser} localhost=(root) NOPASSWD: BACKUP_ENCRYPTED\n";
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("must use the exact ALL=(root) form", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectInvalidSudoersAliasNames()
+    {
+        var sudoers = $"Cmnd_Alias BACKUP-ENCRYPTED = {ExpectedCaptureCommand}\n" +
+                      $"{CaptureUser} ALL=(root) NOPASSWD: BACKUP-ENCRYPTED\n";
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("invalid command alias", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldIgnoreCloneOnlyNonGitHubRepositories()
+    {
+        var result = RunValidator(includeCloneOnlyRepository: true);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("2", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectSymlinkModeInPinnedSources()
+    {
+        var result = RunValidator(pinSudoersAsSymlink: true);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("unsupported Git mode 120000", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectWildcardedPlainCapturePaths()
+    {
+        var result = RunValidator(plainCaptureTarget: "/etc/example/*.conf");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("Plain recovery capture path contains unsupported characters", result.AllOutput, StringComparison.Ordinal);
+    }
+
     private static ValidationResult RunValidator(
         string repositoryUrl = "https://github.com/EvotecIT/ExampleSite.git",
         string? sudoers = null,
         bool helperFromCaller = false,
-        bool shadowEngineHelper = false)
+        bool shadowEngineHelper = false,
+        bool includeCloneOnlyRepository = false,
+        bool pinSudoersAsSymlink = false,
+        string plainCaptureTarget = "/etc/example/config")
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-recovery-source-security-" + Guid.NewGuid().ToString("N"));
         var workspace = Path.Combine(root, "caller");
@@ -110,7 +189,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
                 "#!/usr/bin/env bash\nset -euo pipefail\n");
             File.WriteAllText(
                 Path.Combine(workspace, "deploy", "linux", "backup.sudoers"),
-                sudoers ?? $"Cmnd_Alias BACKUP_ENCRYPTED = {ExpectedCaptureCommand}\n{CaptureUser} ALL=(root) NOPASSWD: BACKUP_ENCRYPTED\n");
+                sudoers ?? BuildExpectedSudoers(CaptureUser, "root"));
 
             var helperSource = "/srv/engine/Deployment/Linux/powerforge-server-encrypted-capture.sh";
             if (helperFromCaller)
@@ -127,6 +206,18 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
             }
 
             InitializeGitRepository(workspace);
+            if (pinSudoersAsSymlink)
+            {
+                var sudoersPath = Path.Combine(workspace, "deploy", "linux", "backup.sudoers");
+                var blob = RunProcess("git", workspace, "hash-object", sudoersPath).StandardOutput.Trim();
+                RunProcess(
+                    "git",
+                    workspace,
+                    "update-index",
+                    "--cacheinfo",
+                    $"120000,{blob},deploy/linux/backup.sudoers").EnsureSuccess();
+                RunProcess("git", workspace, "commit", "-m", "Pin symlink mode", "--quiet").EnsureSuccess();
+            }
             var callerRef = RunProcess("git", workspace, "rev-parse", "HEAD").StandardOutput.Trim();
             var manifestPath = Path.Combine(root, "manifest.json");
             var repositories = new List<object>
@@ -136,6 +227,8 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
             };
             if (shadowEngineHelper)
                 repositories.Add(new { url = repositoryUrl, path = "/srv/engine/Deployment", @ref = callerRef });
+            if (includeCloneOnlyRepository)
+                repositories.Add(new { url = "git@example.test:private/application.git", path = "/srv/clone-only", @ref = callerRef });
 
             var manifest = new
             {
@@ -156,7 +249,9 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
                 },
                 capture = new
                 {
-                    encryptedFiles = new[] { new { target = "/etc/example/secret", required = true } }
+                    plainFiles = new[] { new { target = plainCaptureTarget, required = true } },
+                    encryptedFiles = new[] { new { target = "/etc/example/secret", required = true } },
+                    commands = new[] { new { id = "apache-vhosts", command = "sudo -n apachectl -S", required = true } }
                 },
                 backupTarget = new { recipient = Recipient }
             };
@@ -206,6 +301,12 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
             try { Directory.Delete(root, recursive: true); } catch { /* best-effort test cleanup */ }
         }
     }
+
+    private static string BuildExpectedSudoers(string principal, string runAs)
+        => $"Cmnd_Alias BACKUP_PLAIN = {ExpectedPlainCaptureCommand}\n" +
+           $"Cmnd_Alias BACKUP_ENCRYPTED = {ExpectedCaptureCommand}\n" +
+           $"Cmnd_Alias BACKUP_INSPECT = {ExpectedInspectCommand}\n" +
+           $"{principal} ALL=({runAs}) NOPASSWD: BACKUP_PLAIN, BACKUP_ENCRYPTED, BACKUP_INSPECT\n";
 
     private static void InitializeGitRepository(string path)
     {
