@@ -150,7 +150,7 @@ internal static partial class WebCliCommandHandlers
             if (path.Kind?.Equals("directory", StringComparison.OrdinalIgnoreCase) == true)
             {
                 AddStep(steps, ref order, "filesystem", $"Create directory {path.Path}",
-                    $"install -d -o {owner} -g {group} -m {mode} {ShellQuote(path.Path)}",
+                    BuildManagedDirectoryInstallCommand(path.Path, owner, group, mode),
                     plannedCommands: plannedCommands);
             }
         }
@@ -380,6 +380,32 @@ internal static partial class WebCliCommandHandlers
         return string.Join('\n', commands);
     }
 
+    internal static string BuildManagedDirectoryInstallCommand(
+        string target,
+        string owner,
+        string group,
+        string mode)
+    {
+        var quotedTarget = ShellQuote(target);
+        var existingTargetGuard =
+            $"if [ -e {quotedTarget} ] || [ -L {quotedTarget} ]; then test -d {quotedTarget} && test ! -L {quotedTarget} || " +
+            $"{{ echo {ShellQuote($"Managed directory target must not be a symlink or non-directory: {target}")} >&2; exit 3; }}; fi";
+        if (!string.Equals(owner, "root", StringComparison.Ordinal))
+        {
+            return string.Join('\n',
+                existingTargetGuard,
+                $"runuser -u {ShellQuote(owner)} -g {ShellQuote(group)} -- install -d -m {ShellQuote(mode)} {quotedTarget}");
+        }
+
+        return string.Join('\n',
+            $"powerforge_directory_ancestor=$(dirname -- {quotedTarget})",
+            "while [ ! -e \"$powerforge_directory_ancestor\" ] && [ ! -L \"$powerforge_directory_ancestor\" ]; do powerforge_directory_ancestor=$(dirname -- \"$powerforge_directory_ancestor\"); done",
+            "powerforge_assert_root_controlled_path \"$powerforge_directory_ancestor\"",
+            existingTargetGuard,
+            $"install -d -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {quotedTarget}",
+            $"test -d {quotedTarget} && test ! -L {quotedTarget} && test \"$(stat -c '%u' -- {quotedTarget})\" = 0");
+    }
+
     internal static string BuildManagedSourceSafetyCommand(
         string source,
         string repositoryRoot,
@@ -434,6 +460,9 @@ internal static partial class WebCliCommandHandlers
     private static bool RequiresRootControlledPathGuard(PowerForgeServerRecoveryManifest manifest)
         => manifest.Repositories?.Any(static repository => !string.IsNullOrWhiteSpace(repository.Path)) == true ||
            manifest.Paths?.Any(static path => !string.IsNullOrWhiteSpace(path.Source)) == true ||
+           manifest.Paths?.Any(static path =>
+               string.Equals(path.Kind, "directory", StringComparison.OrdinalIgnoreCase) &&
+               (string.IsNullOrWhiteSpace(path.Owner) || string.Equals(path.Owner, "root", StringComparison.Ordinal))) == true ||
            (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerManagedFile>())
                .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>())
                .Any(static file => !string.IsNullOrWhiteSpace(file.Source)) ||

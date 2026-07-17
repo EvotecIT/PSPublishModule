@@ -330,6 +330,30 @@ public sealed class ServerRecoveryBootstrapPlanTests
     }
 
     [Fact]
+    public void BuildManagedDirectoryInstall_RejectsSymlinksAndLimitsPrivilegeByOwner()
+    {
+        var rootCommand = PowerForge.Web.Cli.WebCliCommandHandlers.BuildManagedDirectoryInstallCommand(
+            "/var/www/example/site/releases",
+            "root",
+            "root",
+            "0755");
+        var userCommand = PowerForge.Web.Cli.WebCliCommandHandlers.BuildManagedDirectoryInstallCommand(
+            "/home/example/.ssh",
+            "example",
+            "example",
+            "0700");
+
+        Assert.Contains("powerforge_directory_ancestor=$(dirname -- '/var/www/example/site/releases')", rootCommand, StringComparison.Ordinal);
+        Assert.Contains("while [ ! -e \"$powerforge_directory_ancestor\" ] && [ ! -L \"$powerforge_directory_ancestor\" ]", rootCommand, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path \"$powerforge_directory_ancestor\"", rootCommand, StringComparison.Ordinal);
+        Assert.Contains("test -d '/var/www/example/site/releases' && test ! -L '/var/www/example/site/releases'", rootCommand, StringComparison.Ordinal);
+        Assert.EndsWith("test -d '/var/www/example/site/releases' && test ! -L '/var/www/example/site/releases' && test \"$(stat -c '%u' -- '/var/www/example/site/releases')\" = 0", rootCommand, StringComparison.Ordinal);
+        Assert.Contains("test -d '/home/example/.ssh' && test ! -L '/home/example/.ssh'", userCommand, StringComparison.Ordinal);
+        Assert.EndsWith("runuser -u 'example' -g 'example' -- install -d -m '0700' '/home/example/.ssh'", userCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("install -d -o", userCommand, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RecoveryStages_IncludeDeclarativeBootstrapWorkWithoutLegacyCommands()
     {
         var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
