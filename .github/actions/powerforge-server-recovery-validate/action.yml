@@ -1,0 +1,49 @@
+name: PowerForge Server Recovery Validate
+description: Validate a server recovery manifest and its generated shell plans without credentials or host access.
+
+inputs:
+  manifest-path:
+    description: Repository-relative PowerForge server recovery manifest.
+    required: true
+  fail-on-warnings:
+    description: Fail when bootstrap or secret-restore plan generation emits warnings.
+    required: false
+    default: 'true'
+
+outputs:
+  bootstrap-step-count:
+    description: Number of generated bootstrap plan steps.
+    value: ${{ steps.validate.outputs.bootstrap-step-count }}
+  managed-source-count:
+    description: Number of repository-backed managed file declarations.
+    value: ${{ steps.validate.outputs.managed-source-count }}
+  secret-count:
+    description: Number of declared recovery secrets.
+    value: ${{ steps.validate.outputs.secret-count }}
+  warning-count:
+    description: Number of bootstrap and secret-restore generation warnings.
+    value: ${{ steps.validate.outputs.warning-count }}
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout caller repository
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        token: ${{ github.token }}
+        ref: ${{ github.sha }}
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+      with:
+        global-json-file: ${{ github.action_path }}/../../../global.json
+
+    - name: Validate recovery manifest and generated plans
+      id: validate
+      shell: pwsh
+      env:
+        POWERFORGE_ENGINE_REF: ${{ github.action_ref }}
+        POWERFORGE_ENGINE_REPOSITORY: ${{ github.action_repository }}
+        POWERFORGE_FAIL_ON_WARNINGS: ${{ inputs.fail-on-warnings }}
+        POWERFORGE_MANIFEST_PATH: ${{ inputs.manifest-path }}
+      run: '& "$env:GITHUB_ACTION_PATH/Invoke-PowerForgeServerRecoveryValidation.ps1"'

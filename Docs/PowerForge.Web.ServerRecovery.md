@@ -81,6 +81,25 @@ The generated runtime commands follow the supported package-manager paths docume
 
 `server restore-secrets-plan` generates a markdown plan, JSON plan, and LF-normalized `restore-secrets.sh` draft for an encrypted secret bundle. The script requires `age` and `python3`, decrypts into a mode-700 temporary directory, validates every archive member against exact encrypted capture roots, rejects traversal, duplicate paths, hard links, unsafe symlinks, special files, and extraction through existing symlink parents, then refuses to restore unless it runs as root with `POWERFORGE_RESTORE_SECRETS_CONFIRM=YES`. Declared owner, group, and mode values replace filename-based permission guesses. For a directory secret, owner and group apply to its restored archive members through descriptor-relative no-follow traversal; the declared mode applies with `fchmod` to restored directories and derives a non-executable regular-file mode from the same read/write bits (for example, `0750` directories and `0640` files). Symbolic links and unrelated pre-existing descendants are not modified, numeric UID/GID declarations remain supported, and overlapping secret roots are applied from parent to child so the most-specific metadata wins.
 
+## Pull Request Validation
+
+Use the credential-free recovery validation action in pull requests. It validates the manifest against the schema from the exact action commit, requires the manifest schema URL and action pin to match, generates bootstrap and secret-restore plans in runner-temporary storage, parses the generated scripts with Bash, and checks them with ShellCheck. It does not execute generated commands, contact the target host, capture state, restore secrets, deploy, or accept credential inputs.
+
+```yaml
+permissions:
+  contents: read
+
+jobs:
+  recovery-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: EvotecIT/PSPublishModule/.github/actions/powerforge-server-recovery-validate@<exact-commit>
+        with:
+          manifest-path: deploy/linux/example.serverrecovery.json
+```
+
+Keep `fail-on-warnings` at its default `true` for migration and maintenance pull requests. The protected backup action remains a separate environment-gated workflow because it needs SSH and backup-repository identities; PR validation must not receive those credentials.
+
 Proposed PowerShell shape:
 
 ```powershell
