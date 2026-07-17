@@ -16,6 +16,10 @@ public sealed class ManagedModulePSResourceGetParityTests
     [InlineData("1.2.0-preview.1", "1.2.0-preview.1", true)]
     [InlineData("1.5.0", ">=1.0.0 <2.0.0", true)]
     [InlineData("1.5.0", "<2.0.0 >=1.0.0", true)]
+    [InlineData("1.5.0", ">=2.0.0 >=1.0.0 <3.0.0", false)]
+    [InlineData("2.5.0", ">=2.0.0 >=1.0.0 <3.0.0", true)]
+    [InlineData("2.5.0", ">=1.0.0 <2.0.0 <3.0.0", false)]
+    [InlineData("2.0.0", ">=2.0.0 >2.0.0 <3.0.0", false)]
     public void VersionSelector_matches_PSResourceGet_version_expressions(
         string version,
         string expression,
@@ -31,6 +35,8 @@ public sealed class ManagedModulePSResourceGetParityTests
     [InlineData("[2.0.0,1.0.0]")]
     [InlineData(">=2.0.0 <1.0.0")]
     [InlineData("<1.0.0 >=2.0.0")]
+    [InlineData(">=1.0.0 <1.0.0")]
+    [InlineData("(1.0.0,1.0.0]")]
     public void VersionSelector_rejects_invalid_version_expressions(string expression)
         => Assert.Throws<ArgumentException>(() => ManagedModuleVersionSelector.IsMatch("1.0.0", expression));
 

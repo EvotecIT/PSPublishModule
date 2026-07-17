@@ -137,32 +137,44 @@ internal sealed class ManagedModuleVersionRange
             var token = rawToken.Trim();
             if (token.StartsWith(">=", StringComparison.Ordinal))
             {
-                minimumVersion = Normalize(token.Substring(2));
-                includeMinimum = true;
+                ApplyMinimum(
+                    ref minimumVersion,
+                    ref includeMinimum,
+                    Normalize(token.Substring(2)),
+                    includeCandidate: true);
                 parsedAny = true;
                 continue;
             }
 
             if (token.StartsWith(">", StringComparison.Ordinal))
             {
-                minimumVersion = Normalize(token.Substring(1));
-                includeMinimum = false;
+                ApplyMinimum(
+                    ref minimumVersion,
+                    ref includeMinimum,
+                    Normalize(token.Substring(1)),
+                    includeCandidate: false);
                 parsedAny = true;
                 continue;
             }
 
             if (token.StartsWith("<=", StringComparison.Ordinal))
             {
-                maximumVersion = Normalize(token.Substring(2));
-                includeMaximum = true;
+                ApplyMaximum(
+                    ref maximumVersion,
+                    ref includeMaximum,
+                    Normalize(token.Substring(2)),
+                    includeCandidate: true);
                 parsedAny = true;
                 continue;
             }
 
             if (token.StartsWith("<", StringComparison.Ordinal))
             {
-                maximumVersion = Normalize(token.Substring(1));
-                includeMaximum = false;
+                ApplyMaximum(
+                    ref maximumVersion,
+                    ref includeMaximum,
+                    Normalize(token.Substring(1)),
+                    includeCandidate: false);
                 parsedAny = true;
                 continue;
             }
@@ -182,6 +194,60 @@ internal sealed class ManagedModuleVersionRange
 
         range = new ManagedModuleVersionRange(minimumVersion, includeMinimum, maximumVersion, includeMaximum, null, allowsPrerelease);
         return true;
+    }
+
+    private static void ApplyMinimum(
+        ref string? currentVersion,
+        ref bool includeCurrent,
+        string? candidateVersion,
+        bool includeCandidate)
+    {
+        if (candidateVersion is null)
+            return;
+        if (currentVersion is null)
+        {
+            currentVersion = candidateVersion;
+            includeCurrent = includeCandidate;
+            return;
+        }
+
+        var comparison = ManagedModuleVersionComparer.Instance.Compare(candidateVersion, currentVersion);
+        if (comparison > 0)
+        {
+            currentVersion = candidateVersion;
+            includeCurrent = includeCandidate;
+        }
+        else if (comparison == 0)
+        {
+            includeCurrent = includeCurrent && includeCandidate;
+        }
+    }
+
+    private static void ApplyMaximum(
+        ref string? currentVersion,
+        ref bool includeCurrent,
+        string? candidateVersion,
+        bool includeCandidate)
+    {
+        if (candidateVersion is null)
+            return;
+        if (currentVersion is null)
+        {
+            currentVersion = candidateVersion;
+            includeCurrent = includeCandidate;
+            return;
+        }
+
+        var comparison = ManagedModuleVersionComparer.Instance.Compare(candidateVersion, currentVersion);
+        if (comparison < 0)
+        {
+            currentVersion = candidateVersion;
+            includeCurrent = includeCandidate;
+        }
+        else if (comparison == 0)
+        {
+            includeCurrent = includeCurrent && includeCandidate;
+        }
     }
 
     private static string? Normalize(string? value)
