@@ -78,7 +78,9 @@ public sealed class ManagedModulePSResourceGetParityTests
     [InlineData("[1.0.0+linux-x64,2.0.0-preview.1)", true)]
     [InlineData(">=1.0.0+linux-x64 <2.0.0", false)]
     [InlineData(">=1.0.0+linux-x64 <2.0.0-preview.1", true)]
-    public void VersionSelector_ignores_build_metadata_hyphens_when_detecting_prerelease(
+    [InlineData(">=2.0.0 >=1.0.0-preview.1 <3.0.0", true)]
+    [InlineData(">=1.0.0 <2.0.0 <3.0.0-preview.1", true)]
+    public void VersionSelector_detects_prerelease_from_version_boundaries(
         string expression,
         bool expected)
         => Assert.Equal(expected, ManagedModuleVersionSelector.IncludesPrerelease(expression));

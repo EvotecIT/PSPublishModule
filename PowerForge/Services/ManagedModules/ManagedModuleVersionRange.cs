@@ -147,6 +147,7 @@ internal sealed class ManagedModuleVersionRange
         var maximumVersion = default(string);
         var includeMinimum = false;
         var includeMaximum = false;
+        var allowsPrerelease = false;
         var parsedAny = false;
 
         foreach (var rawToken in value.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries))
@@ -154,10 +155,12 @@ internal sealed class ManagedModuleVersionRange
             var token = rawToken.Trim();
             if (token.StartsWith(">=", StringComparison.Ordinal))
             {
+                var candidateVersion = Normalize(token.Substring(2));
+                allowsPrerelease |= ManagedModuleVersionComparer.IsPrerelease(candidateVersion ?? string.Empty);
                 ApplyMinimum(
                     ref minimumVersion,
                     ref includeMinimum,
-                    Normalize(token.Substring(2)),
+                    candidateVersion,
                     includeCandidate: true);
                 parsedAny = true;
                 continue;
@@ -165,10 +168,12 @@ internal sealed class ManagedModuleVersionRange
 
             if (token.StartsWith(">", StringComparison.Ordinal))
             {
+                var candidateVersion = Normalize(token.Substring(1));
+                allowsPrerelease |= ManagedModuleVersionComparer.IsPrerelease(candidateVersion ?? string.Empty);
                 ApplyMinimum(
                     ref minimumVersion,
                     ref includeMinimum,
-                    Normalize(token.Substring(1)),
+                    candidateVersion,
                     includeCandidate: false);
                 parsedAny = true;
                 continue;
@@ -176,10 +181,12 @@ internal sealed class ManagedModuleVersionRange
 
             if (token.StartsWith("<=", StringComparison.Ordinal))
             {
+                var candidateVersion = Normalize(token.Substring(2));
+                allowsPrerelease |= ManagedModuleVersionComparer.IsPrerelease(candidateVersion ?? string.Empty);
                 ApplyMaximum(
                     ref maximumVersion,
                     ref includeMaximum,
-                    Normalize(token.Substring(2)),
+                    candidateVersion,
                     includeCandidate: true);
                 parsedAny = true;
                 continue;
@@ -187,10 +194,12 @@ internal sealed class ManagedModuleVersionRange
 
             if (token.StartsWith("<", StringComparison.Ordinal))
             {
+                var candidateVersion = Normalize(token.Substring(1));
+                allowsPrerelease |= ManagedModuleVersionComparer.IsPrerelease(candidateVersion ?? string.Empty);
                 ApplyMaximum(
                     ref maximumVersion,
                     ref includeMaximum,
-                    Normalize(token.Substring(1)),
+                    candidateVersion,
                     includeCandidate: false);
                 parsedAny = true;
                 continue;
@@ -215,8 +224,7 @@ internal sealed class ManagedModuleVersionRange
             maximumVersion,
             includeMaximum,
             null,
-            ManagedModuleVersionComparer.IsPrerelease(minimumVersion ?? string.Empty) ||
-            ManagedModuleVersionComparer.IsPrerelease(maximumVersion ?? string.Empty));
+            allowsPrerelease);
         return true;
     }
 
