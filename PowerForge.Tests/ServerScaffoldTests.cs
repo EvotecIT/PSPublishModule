@@ -197,7 +197,11 @@ public sealed class ServerScaffoldTests
 
         var legacyRuntime = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
         legacyRuntime["packages"]!["dotnetSdks"] = new JsonArray("1", "2", "3", "2.1", "2.2", "3.1");
-        Assert.True(EvaluateSchema(schema, legacyRuntime));
+        Assert.False(EvaluateSchema(schema, legacyRuntime));
+
+        var supportedRuntime = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        supportedRuntime["packages"]!["dotnetSdks"] = new JsonArray("8", "8.0", "10", "10.0");
+        Assert.True(EvaluateSchema(schema, supportedRuntime));
     }
 
     [Fact]

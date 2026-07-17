@@ -201,6 +201,61 @@ public sealed class ServerRecoveryBootstrapPlanTests
     }
 
     [Fact]
+    public void BuildPlan_UsesManagedFileSafetyForApacheAndSystemd()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Repositories =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerRepository
+                {
+                    Role = "application",
+                    Url = "https://github.com/ExampleOrg/ExampleSite.git",
+                    Path = "/srv/example"
+                }
+            ],
+            Apache = new PowerForge.Web.Cli.PowerForgeServerApache
+            {
+                Sites =
+                [
+                    new PowerForge.Web.Cli.PowerForgeServerManagedFile
+                    {
+                        Source = "/srv/example/deploy/apache.conf",
+                        Target = "/etc/apache2/sites-available/example.conf"
+                    }
+                ]
+            },
+            Systemd = new PowerForge.Web.Cli.PowerForgeServerSystemd
+            {
+                Services =
+                [
+                    new PowerForge.Web.Cli.PowerForgeServerSystemdUnit
+                    {
+                        Name = "example.service",
+                        Source = "/srv/example/deploy/example.service",
+                        Target = "/etc/systemd/system/example.service"
+                    }
+                ]
+            }
+        };
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        var apache = Assert.Single(steps, step => step.Title == "Install Apache file /etc/apache2/sites-available/example.conf");
+        var systemd = Assert.Single(steps, step => step.Title == "Install systemd unit example.service");
+
+        Assert.Contains("test ! -L '/srv/example/deploy/apache.conf'", apache.Command, StringComparison.Ordinal);
+        Assert.EndsWith(
+            "install -T -o 'root' -g 'root' -m '0644' '/srv/example/deploy/apache.conf' '/etc/apache2/sites-available/example.conf'",
+            apache.Command,
+            StringComparison.Ordinal);
+        Assert.Contains("test ! -L '/srv/example/deploy/example.service'", systemd.Command, StringComparison.Ordinal);
+        Assert.EndsWith(
+            "install -T -o 'root' -g 'root' -m '0644' '/srv/example/deploy/example.service' '/etc/systemd/system/example.service'",
+            systemd.Command,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RecoveryStages_IncludeDeclarativeBootstrapWorkWithoutLegacyCommands()
     {
         var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
@@ -274,23 +329,23 @@ public sealed class ServerRecoveryBootstrapPlanTests
             "test -r /etc/os-release && . /etc/os-release && test \"$ID\" = 'ubuntu' && " +
             "test \"$VERSION_ID\" = '24.04' && test \"$(uname -m)\" = 'x86_64'",
             preflight.Command);
-        Assert.Contains("packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb", runtimes[0].Command, StringComparison.Ordinal);
-        Assert.Contains("apt-get install -y ca-certificates curl", runtimes[0].Command, StringComparison.Ordinal);
-        Assert.Contains("dpkg -i \"$powerforge_ms_repo\"", runtimes[0].Command, StringComparison.Ordinal);
-        Assert.Contains("trap 'exit 130' INT", runtimes[0].Command, StringComparison.Ordinal);
-        Assert.DoesNotContain("| dpkg", runtimes[0].Command, StringComparison.Ordinal);
-        Assert.Equal("apt-get install -y 'dotnet-sdk-8.0' 'dotnet-sdk-10.0'", runtimes[1].Command);
+        Assert.Equal("apt-get update && apt-get install -y 'dotnet-sdk-8.0' 'dotnet-sdk-10.0'", runtimes[0].Command);
+        Assert.Contains("packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb", runtimes[1].Command, StringComparison.Ordinal);
+        Assert.Contains("apt-get install -y ca-certificates curl", runtimes[1].Command, StringComparison.Ordinal);
+        Assert.Contains("dpkg -i \"$powerforge_ms_repo\"", runtimes[1].Command, StringComparison.Ordinal);
+        Assert.Contains("trap 'exit 130' INT", runtimes[1].Command, StringComparison.Ordinal);
+        Assert.DoesNotContain("| dpkg", runtimes[1].Command, StringComparison.Ordinal);
         Assert.Equal("apt-get install -y powershell", runtimes[2].Command);
     }
 
     [Fact]
-    public void BuildPlan_ConfiguresMicrosoftFeedForDotnetWithoutPowerShell()
+    public void BuildPlan_UsesUbuntuFeedForDotnetWithoutPowerShell()
     {
         var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
         {
             Target = new PowerForge.Web.Cli.PowerForgeServerTarget
             {
-                Os = "ubuntu-22.04",
+                Os = "ubuntu-24.04",
                 Architecture = "x64"
             },
             Packages = new PowerForge.Web.Cli.PowerForgeServerPackages
@@ -304,21 +359,17 @@ public sealed class ServerRecoveryBootstrapPlanTests
             .Where(step => step.Category == "runtimes")
             .ToArray();
 
-        Assert.Equal(2, runtimes.Length);
-        Assert.Contains("packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb", runtimes[0].Command, StringComparison.Ordinal);
-        Assert.Equal("apt-get install -y 'dotnet-sdk-10.0'", runtimes[1].Command);
+        var runtime = Assert.Single(runtimes);
+        Assert.Equal("apt-get update && apt-get install -y 'dotnet-sdk-10.0'", runtime.Command);
+        Assert.DoesNotContain("packages.microsoft.com", runtime.Command, StringComparison.Ordinal);
         Assert.DoesNotContain(runtimes, step => step.Command?.Contains("apt-get install -y powershell", StringComparison.Ordinal) == true);
     }
 
     [Theory]
-    [InlineData("1", "1.0")]
-    [InlineData("2", "2.0")]
-    [InlineData("3", "3.0")]
     [InlineData("8", "8.0")]
+    [InlineData("8.0", "8.0")]
+    [InlineData("10", "10.0")]
     [InlineData("10.0", "10.0")]
-    [InlineData("2.1", "2.1")]
-    [InlineData("2.2", "2.2")]
-    [InlineData("3.1", "3.1")]
     public void DotnetSdkVersionsNormalizeToAptPackageVersions(string value, string expected)
     {
         Assert.True(PowerForge.Web.Cli.WebCliCommandHandlers.TryNormalizeDotnetSdkVersion(value, out var normalized));
@@ -327,10 +378,16 @@ public sealed class ServerRecoveryBootstrapPlanTests
 
     [Theory]
     [InlineData("0")]
+    [InlineData("1")]
+    [InlineData("2.1")]
+    [InlineData("3.1")]
     [InlineData("4")]
     [InlineData("4.0")]
+    [InlineData("6.0")]
     [InlineData("8.1")]
+    [InlineData("9.0")]
     [InlineData("10.99")]
+    [InlineData("11.0")]
     [InlineData("100")]
     public void DotnetSdkVersionsRejectImpossibleAptPackageVersions(string value)
     {
@@ -364,13 +421,14 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Contains("trap 'exit 130' INT", command, StringComparison.Ordinal);
         Assert.Contains("powerforge_sudoers_replaced=1", command, StringComparison.Ordinal);
         Assert.Contains("powerforge_sudoers_had_previous", command, StringComparison.Ordinal);
-        Assert.Contains("mv -f -- \"$powerforge_sudoers_backup\" '/etc/sudoers.d/powerforge-example'", command, StringComparison.Ordinal);
+        Assert.Contains("test -f '/etc/sudoers.d/powerforge-example' && test ! -L '/etc/sudoers.d/powerforge-example'", command, StringComparison.Ordinal);
+        Assert.Contains("mv -fT -- \"$powerforge_sudoers_backup\" '/etc/sudoers.d/powerforge-example'", command, StringComparison.Ordinal);
         Assert.Contains("visudo -c || powerforge_sudoers_status=1", command, StringComparison.Ordinal);
         Assert.Contains("trap - EXIT HUP INT TERM", command, StringComparison.Ordinal);
 
         var lines = command.Split('\n');
         var rollbackArmed = Array.IndexOf(lines, "powerforge_sudoers_replaced=1");
-        var replacement = Array.IndexOf(lines, "mv -f -- \"$powerforge_sudoers_temp\" '/etc/sudoers.d/powerforge-example'");
+        var replacement = Array.IndexOf(lines, "mv -fT -- \"$powerforge_sudoers_temp\" '/etc/sudoers.d/powerforge-example'");
         Assert.True(rollbackArmed >= 0 && rollbackArmed < replacement);
     }
 }

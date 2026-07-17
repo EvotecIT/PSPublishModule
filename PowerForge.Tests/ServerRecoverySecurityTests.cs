@@ -269,6 +269,67 @@ public sealed class ServerRecoverySecurityTests
     }
 
     [Fact]
+    public void ManifestValidation_AppliesRepositorySafetyToApacheAndSystemdFiles()
+    {
+        var manifest = CreateManifest();
+        manifest.Repositories =
+        [
+            new PowerForgeServerRepository { Role = "application", Path = "/srv/example" }
+        ];
+        manifest.Apache = new PowerForgeServerApache
+        {
+            Sites =
+            [
+                new PowerForgeServerManagedFile
+                {
+                    Source = "/etc/example/secret.env",
+                    Target = "/srv"
+                }
+            ]
+        };
+        manifest.Systemd = new PowerForgeServerSystemd
+        {
+            Services =
+            [
+                new PowerForgeServerSystemdUnit
+                {
+                    Name = "example.service",
+                    Source = "/srv/example/deploy/example.service",
+                    Target = "/srv/example/generated/example.service"
+                }
+            ]
+        };
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("apache.files[0].source must be inside a declared repository path", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("apache.files[0].target must not overlap declared repository paths", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("systemd.units[0].target must not overlap declared repository paths", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("apache.files[0]", StringComparison.Ordinal) && error.Contains("overlaps secret", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ManifestValidation_AllowsTargetOnlyApacheObservationEntries()
+    {
+        var manifest = CreateManifest();
+        manifest.Apache = new PowerForgeServerApache
+        {
+            Conf =
+            [
+                new PowerForgeServerManagedFile
+                {
+                    Target = "/etc/apache2/conf-available/platform-managed.conf",
+                    Required = true
+                }
+            ]
+        };
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.DoesNotContain(errors, error => error.Contains("apache.files", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void ManifestValidation_RequiresManagedFileSourcesBelowRepositoryRoots()
     {
         var manifest = CreateManifest();
@@ -456,7 +517,7 @@ public sealed class ServerRecoverySecurityTests
         Assert.Contains(errors, error => error.Contains("safe Debian package name", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Apache module", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("packages.dotnetSdks", StringComparison.Ordinal));
-        Assert.Contains(errors, error => error.Contains("supported Ubuntu release", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("target.os ubuntu-24.04", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("target.architecture x64", StringComparison.Ordinal));
     }
 
@@ -479,6 +540,19 @@ public sealed class ServerRecoverySecurityTests
         Assert.Empty(errors);
     }
 
+    [Fact]
+    public void ManifestValidation_RejectsDotnetOutsideTheProvenUbuntuLtsLane()
+    {
+        var manifest = CreateManifest();
+        manifest.Target!.Os = "ubuntu-22.04";
+        manifest.Target.Architecture = "x64";
+        manifest.Packages = new PowerForgeServerPackages { DotnetSdks = ["10.0"] };
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("packages.dotnetSdks currently requires target.os ubuntu-24.04", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("8.1")]
     [InlineData("10.99")]
@@ -489,7 +563,7 @@ public sealed class ServerRecoverySecurityTests
 
         var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
 
-        Assert.Contains(errors, error => error.Contains("known .NET SDK package band", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("supported Ubuntu 24.04 LTS SDK band", StringComparison.Ordinal));
     }
 
     [Fact]

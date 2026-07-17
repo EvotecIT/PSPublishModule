@@ -99,6 +99,24 @@ internal static partial class WebCliCommandHandlers
             }
         }
 
+        ValidateRepositoryManagedFiles(
+            (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerManagedFile>())
+                .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>()),
+            "apache.files",
+            repositoryRoots,
+            managedPaths,
+            sourceManagedPaths,
+            errors);
+        ValidateRepositoryManagedFiles(
+            (manifest.Systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>())
+                .Concat(manifest.Systemd?.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
+                .Select(static unit => new PowerForgeServerManagedFile { Source = unit.Source, Target = unit.Target }),
+            "systemd.units",
+            repositoryRoots,
+            managedPaths,
+            sourceManagedPaths,
+            errors);
+
         foreach (var plainPath in plainPaths)
         {
             foreach (var encryptedPath in encryptedPaths.Where(encryptedPath => CapturePathsMayOverlap(plainPath, encryptedPath)))
@@ -179,6 +197,53 @@ internal static partial class WebCliCommandHandlers
         return errors.Distinct(StringComparer.Ordinal).ToArray();
     }
 
+    private static void ValidateRepositoryManagedFiles(
+        IEnumerable<PowerForgeServerManagedFile> files,
+        string section,
+        IReadOnlyCollection<string> repositoryRoots,
+        ISet<string> managedPaths,
+        ICollection<(string Id, string Source, string Target)> sourceManagedPaths,
+        ICollection<string> errors)
+    {
+        var index = 0;
+        foreach (var file in files)
+        {
+            var id = $"{section}[{index}]";
+            if (string.IsNullOrWhiteSpace(file.Source))
+            {
+                if (!string.IsNullOrWhiteSpace(file.Target))
+                {
+                    var observedTarget = NormalizeCapturePath(file.Target, $"{id}.target", errors);
+                    if (observedTarget is not null && observedTarget.IndexOfAny(['*', '?', '[']) >= 0)
+                        errors.Add($"{id}.target must use an exact path.");
+                    if (observedTarget is not null && !managedPaths.Add(observedTarget))
+                        errors.Add($"Managed path '{observedTarget}' is duplicated.");
+                }
+                index++;
+                continue;
+            }
+            var source = NormalizeCapturePath(file.Source, $"{id}.source", errors);
+            var target = NormalizeCapturePath(file.Target, $"{id}.target", errors);
+            if (source is not null && source.IndexOfAny(['*', '?', '[']) >= 0)
+                errors.Add($"{id}.source must use an exact path.");
+            if (target is not null && target.IndexOfAny(['*', '?', '[']) >= 0)
+                errors.Add($"{id}.target must use an exact path.");
+            if (source is not null && target is not null)
+            {
+                if (string.Equals(source, target, StringComparison.Ordinal))
+                    errors.Add($"{id} source and target must differ.");
+                if (!repositoryRoots.Any(root => PathStrictlyContains(root, source)))
+                    errors.Add($"{id}.source must be inside a declared repository path.");
+                if (repositoryRoots.Any(root => PathContains(root, target) || PathContains(target, root)))
+                    errors.Add($"{id}.target must not overlap declared repository paths.");
+                if (!managedPaths.Add(target))
+                    errors.Add($"Managed path '{target}' is duplicated.");
+                sourceManagedPaths.Add((id, source, target));
+            }
+            index++;
+        }
+    }
+
     private static void ValidateHostAndPackages(
         PowerForgeServerRecoveryManifest manifest,
         ICollection<string> errors)
@@ -203,9 +268,12 @@ internal static partial class WebCliCommandHandlers
         foreach (var version in packages?.DotnetSdks ?? Array.Empty<string>())
         {
             if (!TryNormalizeDotnetSdkVersion(version, out _))
-                errors.Add($"packages.dotnetSdks[{sdkIndex}] must be a known .NET SDK package band: 1 or 1.0-1.1, 2 or 2.0-2.2, 3 or 3.0-3.1, or major/major.0 from 5 through 99.");
+                errors.Add($"packages.dotnetSdks[{sdkIndex}] must be a supported Ubuntu 24.04 LTS SDK band: 8/8.0 or 10/10.0.");
             sdkIndex++;
         }
+        if (packages?.DotnetSdks?.Length > 0 &&
+            !string.Equals(manifest.Target?.Os, "ubuntu-24.04", StringComparison.OrdinalIgnoreCase))
+            errors.Add("packages.dotnetSdks currently requires target.os ubuntu-24.04.");
 
         var moduleIndex = 0;
         foreach (var module in (packages?.ApacheModules ?? Array.Empty<string>())
@@ -218,10 +286,9 @@ internal static partial class WebCliCommandHandlers
 
         if (packages?.Powershell == true)
         {
-            if (string.IsNullOrWhiteSpace(manifest.Target?.Os) ||
-                !manifest.Target.Os.StartsWith("ubuntu-", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(manifest.Target?.Os, "ubuntu-24.04", StringComparison.OrdinalIgnoreCase))
             {
-                errors.Add("packages.powershell requires target.os to name a supported Ubuntu release.");
+                errors.Add("packages.powershell currently requires target.os ubuntu-24.04.");
             }
             if (architecture != "x86_64")
                 errors.Add("packages.powershell currently requires target.architecture x64.");

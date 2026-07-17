@@ -78,6 +78,9 @@ public sealed class ServerRecoveryInspectCommandTests
         Assert.Equal(
             "sudo -n cmp -s -- '/srv/example/deploy/example.env' '/etc/example.env'",
             WebCliCommandHandlers.BuildManagedFileContentCheckCommand("/srv/example/deploy/example.env", "/etc/example.env"));
+        Assert.Equal(
+            "sudo -n test -f '/etc/apache2/conf-available/platform-managed.conf' && sudo -n test ! -L '/etc/apache2/conf-available/platform-managed.conf'",
+            WebCliCommandHandlers.BuildManagedFileExistsCheckCommand("/etc/apache2/conf-available/platform-managed.conf"));
         var securedContentCheck = WebCliCommandHandlers.BuildManagedFileContentCheckCommand(
             "/srv/example/deploy/example.env",
             "/etc/example.env",

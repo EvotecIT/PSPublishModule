@@ -103,6 +103,7 @@ internal static partial class WebCliCommandHandlers
             InspectManagedFiles(sshCommand, target,
                 (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerManagedFile>())
                     .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>()),
+                manifest.Repositories,
                 "apache", checks);
         }
 
@@ -134,8 +135,8 @@ internal static partial class WebCliCommandHandlers
                 ExecuteRemote(sshCommand, target, BuildManagedSymlinkTargetCommand(path.Path)), "symlink target");
         }
 
-        InspectSystemdUnits(sshCommand, target, manifest.Systemd?.Services, "service", checks);
-        InspectSystemdUnits(sshCommand, target, manifest.Systemd?.Timers, "timer", checks);
+        InspectSystemdUnits(sshCommand, target, manifest.Systemd?.Services, manifest.Repositories, "service", checks);
+        InspectSystemdUnits(sshCommand, target, manifest.Systemd?.Timers, manifest.Repositories, "timer", checks);
 
         if (HasDeclaredFirewallState(manifest))
         {
@@ -262,6 +263,9 @@ internal static partial class WebCliCommandHandlers
     internal static string BuildManagedFileContentCheckCommand(string source, string target)
         => $"sudo -n cmp -s -- {ShellQuote(source)} {ShellQuote(target)}";
 
+    internal static string BuildManagedFileExistsCheckCommand(string target)
+        => $"sudo -n test -f {ShellQuote(target)} && sudo -n test ! -L {ShellQuote(target)}";
+
     internal static string BuildManagedFileContentCheckCommand(string source, string target, string repositoryRoot)
         => $"{BuildManagedSourceSafetyCommand(source, repositoryRoot, useSudo: true)} && " +
            BuildManagedFileContentCheckCommand(source, target);
@@ -294,14 +298,26 @@ internal static partial class WebCliCommandHandlers
         string sshCommand,
         string target,
         IEnumerable<PowerForgeServerManagedFile> files,
+        PowerForgeServerRepository[]? repositories,
         string category,
         ICollection<PowerForgeServerInspectCheck> checks)
     {
         foreach (var file in files)
         {
-            if (string.IsNullOrWhiteSpace(file.Source) || string.IsNullOrWhiteSpace(file.Target)) continue;
+            if (string.IsNullOrWhiteSpace(file.Target)) continue;
+            if (string.IsNullOrWhiteSpace(file.Source))
+            {
+                if (file.Required)
+                {
+                    AddCommandCheck(checks, $"{category}.file.{file.Target}.exists", category, $"Required managed file exists: {file.Target}",
+                        ExecuteRemote(sshCommand, target, BuildManagedFileExistsCheckCommand(file.Target)), file.Target);
+                }
+                continue;
+            }
+            var repositoryRoot = FindManagedSourceRepositoryRoot(repositories, file.Source)
+                                 ?? throw new InvalidOperationException($"Managed source '{file.Source}' is not below a declared repository root.");
             AddCommandCheck(checks, $"{category}.file.{file.Target}.content", category, $"Managed file matches source: {file.Target}",
-                ExecuteRemote(sshCommand, target, BuildManagedFileContentCheckCommand(file.Source, file.Target)), file.Source);
+                ExecuteRemote(sshCommand, target, BuildManagedFileContentCheckCommand(file.Source, file.Target, repositoryRoot)), file.Source);
         }
     }
 
@@ -309,6 +325,7 @@ internal static partial class WebCliCommandHandlers
         string sshCommand,
         string target,
         PowerForgeServerSystemdUnit[]? units,
+        PowerForgeServerRepository[]? repositories,
         string kind,
         ICollection<PowerForgeServerInspectCheck> checks)
     {
@@ -323,8 +340,10 @@ internal static partial class WebCliCommandHandlers
 
             if (!string.IsNullOrWhiteSpace(unit.Source) && !string.IsNullOrWhiteSpace(unit.Target))
             {
+                var repositoryRoot = FindManagedSourceRepositoryRoot(repositories, unit.Source)
+                                     ?? throw new InvalidOperationException($"Managed source '{unit.Source}' is not below a declared repository root.");
                 AddCommandCheck(checks, $"systemd.{kind}.{unit.Name}.content", "systemd", $"systemd {kind} matches source: {unit.Name}",
-                    ExecuteRemote(sshCommand, target, BuildManagedFileContentCheckCommand(unit.Source, unit.Target)), unit.Source);
+                    ExecuteRemote(sshCommand, target, BuildManagedFileContentCheckCommand(unit.Source, unit.Target, repositoryRoot)), unit.Source);
             }
 
             if (!unit.Enabled) continue;

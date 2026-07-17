@@ -95,22 +95,18 @@ internal static partial class WebCliCommandHandlers
         }
 
         var dotnetPackages = GetDeclaredDotnetSdkPackageNames(manifest.Packages?.DotnetSdks);
-        if (dotnetPackages.Length > 0 || manifest.Packages?.Powershell == true)
-        {
-            AddStep(steps, ref order, "runtimes", "Configure Microsoft package repository",
-                BuildMicrosoftPackageRepositoryInstallCommand(),
-                plannedCommands: plannedCommands);
-        }
-
         if (dotnetPackages.Length > 0)
         {
             AddStep(steps, ref order, "runtimes", "Install .NET SDK prerequisites",
-                "apt-get install -y " + string.Join(' ', dotnetPackages.Select(ShellQuote)),
+                "apt-get update && apt-get install -y " + string.Join(' ', dotnetPackages.Select(ShellQuote)),
                 plannedCommands: plannedCommands);
         }
 
         if (manifest.Packages?.Powershell == true)
         {
+            AddStep(steps, ref order, "runtimes", "Configure Microsoft package repository",
+                BuildMicrosoftPackageRepositoryInstallCommand(),
+                plannedCommands: plannedCommands);
             AddStep(steps, ref order, "runtimes", "Install PowerShell prerequisite",
                 BuildPowerShellInstallCommand(), plannedCommands: plannedCommands);
         }
@@ -216,8 +212,10 @@ internal static partial class WebCliCommandHandlers
                  .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>()))
         {
             if (string.IsNullOrWhiteSpace(file.Source) || string.IsNullOrWhiteSpace(file.Target)) continue;
+            var repositoryRoot = FindManagedSourceRepositoryRoot(manifest.Repositories, file.Source)
+                                 ?? throw new InvalidOperationException($"Managed source '{file.Source}' is not below a declared repository root.");
             AddStep(steps, ref order, "apache", $"Install Apache file {file.Target}",
-                $"install -m 0644 {ShellQuote(file.Source)} {ShellQuote(file.Target)}",
+                BuildRepositoryManagedFileInstallCommand(file.Source, file.Target, repositoryRoot, "0644"),
                 plannedCommands: plannedCommands);
         }
 
@@ -226,8 +224,10 @@ internal static partial class WebCliCommandHandlers
         {
             if (!string.IsNullOrWhiteSpace(unit.Source) && !string.IsNullOrWhiteSpace(unit.Target))
             {
+                var repositoryRoot = FindManagedSourceRepositoryRoot(manifest.Repositories, unit.Source)
+                                     ?? throw new InvalidOperationException($"Managed source '{unit.Source}' is not below a declared repository root.");
                 AddStep(steps, ref order, "systemd", $"Install systemd unit {unit.Name}",
-                    $"install -m 0644 {ShellQuote(unit.Source)} {ShellQuote(unit.Target)}",
+                    BuildRepositoryManagedFileInstallCommand(unit.Source, unit.Target, repositoryRoot, "0644"),
                     plannedCommands: plannedCommands);
             }
         }
@@ -297,12 +297,19 @@ internal static partial class WebCliCommandHandlers
         var owner = string.IsNullOrWhiteSpace(path.Owner) ? "root" : path.Owner;
         var group = string.IsNullOrWhiteSpace(path.Group) ? "root" : path.Group;
         var mode = string.IsNullOrWhiteSpace(path.Mode) ? "0644" : path.Mode;
+        if (!string.Equals(path.Validation, "sudoers", StringComparison.OrdinalIgnoreCase))
+            return BuildRepositoryManagedFileInstallCommand(
+                path.Source ?? string.Empty,
+                path.Path ?? string.Empty,
+                repositoryRoot,
+                mode,
+                owner,
+                group);
+
         var source = ShellQuote(path.Source ?? string.Empty);
         var target = ShellQuote(path.Path ?? string.Empty);
         var sourceSafety = BuildManagedSourceSafetyCommand(path.Source ?? string.Empty, repositoryRoot, useSudo: false);
         var install = $"install -T -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {source}";
-        if (!string.Equals(path.Validation, "sudoers", StringComparison.OrdinalIgnoreCase))
-            return $"{sourceSafety}\n{install} {target}";
 
         var temporaryTemplate = ShellQuote((path.Path ?? string.Empty) + ".powerforge.XXXXXX");
         return string.Join('\n',
@@ -315,7 +322,7 @@ internal static partial class WebCliCommandHandlers
             "  powerforge_sudoers_status=$?",
             "  trap - EXIT HUP INT TERM",
             "  if [ \"$powerforge_sudoers_replaced\" = 1 ]; then",
-            $"    if [ \"$powerforge_sudoers_had_previous\" = 1 ] && [ -e \"$powerforge_sudoers_backup\" ]; then mv -f -- \"$powerforge_sudoers_backup\" {target}; else rm -f -- {target}; fi",
+            $"    if [ \"$powerforge_sudoers_had_previous\" = 1 ] && [ -e \"$powerforge_sudoers_backup\" ]; then mv -fT -- \"$powerforge_sudoers_backup\" {target}; else rm -f -- {target}; fi",
             "    visudo -c || powerforge_sudoers_status=1",
             "  fi",
             "  rm -f -- \"$powerforge_sudoers_temp\" \"$powerforge_sudoers_backup\" || true",
@@ -327,14 +334,24 @@ internal static partial class WebCliCommandHandlers
             "trap 'exit 143' TERM",
             $"{install} \"$powerforge_sudoers_temp\"",
             "visudo -cf \"$powerforge_sudoers_temp\"",
-            $"if [ -e {target} ]; then cp -a -- {target} \"$powerforge_sudoers_backup\"; powerforge_sudoers_had_previous=1; fi",
+            $"if [ -e {target} ] || [ -L {target} ]; then test -f {target} && test ! -L {target}; cp -a -- {target} \"$powerforge_sudoers_backup\"; powerforge_sudoers_had_previous=1; fi",
             "powerforge_sudoers_replaced=1",
-            $"mv -f -- \"$powerforge_sudoers_temp\" {target}",
+            $"mv -fT -- \"$powerforge_sudoers_temp\" {target}",
             "visudo -c",
             "powerforge_sudoers_replaced=0",
             "rm -f -- \"$powerforge_sudoers_backup\"",
             "trap - EXIT HUP INT TERM");
     }
+
+    internal static string BuildRepositoryManagedFileInstallCommand(
+        string source,
+        string target,
+        string repositoryRoot,
+        string mode,
+        string owner = "root",
+        string group = "root")
+        => $"{BuildManagedSourceSafetyCommand(source, repositoryRoot, useSudo: false)}\n" +
+           $"install -T -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {ShellQuote(source)} {ShellQuote(target)}";
 
     internal static string BuildManagedSourceSafetyCommand(string source, string repositoryRoot, bool useSudo)
     {

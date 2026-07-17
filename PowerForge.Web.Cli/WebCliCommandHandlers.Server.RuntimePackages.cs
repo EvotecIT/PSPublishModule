@@ -1,5 +1,3 @@
-using System.Globalization;
-
 using static PowerForge.Web.Cli.WebCliHelpers;
 
 namespace PowerForge.Web.Cli;
@@ -65,35 +63,13 @@ internal static partial class WebCliCommandHandlers
         if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
             return false;
 
-        var parts = value.Split('.');
-        if (parts.Length is < 1 or > 2 ||
-            parts.Any(static part => part.Length == 0 || !part.All(static character => character is >= '0' and <= '9')) ||
-            !int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var major) ||
-            major is < 1 or > 99)
+        normalized = value switch
         {
-            return false;
-        }
-
-        var minor = 0;
-        if (parts.Length == 2 &&
-            !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out minor))
-        {
-            return false;
-        }
-
-        var supportedBand = major switch
-        {
-            1 => minor is 0 or 1,
-            2 => minor is >= 0 and <= 2,
-            3 => minor is 0 or 1,
-            4 => false,
-            _ => minor == 0
+            "8" or "8.0" => "8.0",
+            "10" or "10.0" => "10.0",
+            _ => string.Empty
         };
-        if (!supportedBand)
-            return false;
-
-        normalized = $"{major}.{minor}";
-        return true;
+        return normalized.Length > 0;
     }
 
     internal static string BuildMicrosoftPackageRepositoryInstallCommand()
