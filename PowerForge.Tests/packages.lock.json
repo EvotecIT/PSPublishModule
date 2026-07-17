@@ -83,16 +83,16 @@
       },
       "HtmlForgeX": {
         "type": "Transitive",
-        "resolved": "0.44.0",
-        "contentHash": "DyIafz6fxyfdWO+fUzvur50PawS0NEmPODOd3ODZ4bswXnsPnK3xRHGtxVPWfpD1+TE2Dy0xD14w2m6ISSb1Ww=="
+        "resolved": "0.50.0",
+        "contentHash": "uY1duOtHtigrP+4twuK6GtY/g2iF0C6SWcbfXG4wld2GJKGGnXl1mrXOBKbDuMsiK836szrkpZn5bD9JQdhFeQ=="
       },
       "HtmlForgeX.Markdown": {
         "type": "Transitive",
-        "resolved": "0.20.12",
-        "contentHash": "qYO9KHp/FybdhX7jxiLqODKA60ASdhCZOhBdugvRKqRgJAIQ32BcS3tD8y2euLD5voUpwROOJOJq3xBqWBpU1w==",
+        "resolved": "0.21.0",
+        "contentHash": "1jxsJCEl/Y+oe/2p6r7/2+y5U2hx2shvRfrEqponphebrLs0vC2kOI/bM35hPyIz+1R3ajxrY8+y/H/j0f589g==",
         "dependencies": {
-          "HtmlForgeX": "0.44.0",
-          "OfficeIMO.Markdown": "0.6.29"
+          "HtmlForgeX": "0.50.0",
+          "OfficeIMO.Markdown": "0.6.42"
         }
       },
       "HtmlTinkerX": {
@@ -435,8 +435,8 @@
       },
       "OfficeIMO.Markdown": {
         "type": "Transitive",
-        "resolved": "0.6.29",
-        "contentHash": "Q4JKyT4C9qYJ0cG3le9qeJQQ9DwDh0SCpsktIRtJpYiBTjlHargMU0cTK82QQFzni+0x2OHIIsvf1JWCVHKXEw=="
+        "resolved": "0.6.42",
+        "contentHash": "eApNM/lo9Sk5gET2fmNojBurTW6eRA11pJE3UGPzcBfOzOgpVHEO2PZmWPogajBjKt+YOszljcz47f5uDKaglw=="
       },
       "OfficeIMO.Markdown.Html": {
         "type": "Transitive",
@@ -895,9 +895,9 @@
       "pspublishmodule": {
         "type": "Project",
         "dependencies": {
-          "HtmlForgeX": "[0.44.0, )",
-          "HtmlForgeX.Markdown": "[0.20.12, )",
-          "OfficeIMO.Markdown": "[0.6.29, )",
+          "HtmlForgeX": "[0.50.0, )",
+          "HtmlForgeX.Markdown": "[0.21.0, )",
+          "OfficeIMO.Markdown": "[0.6.42, )",
           "PowerForge": "[1.0.0, )",
           "PowerForge.PowerShell": "[1.0.0, )",
           "Spectre.Console": "[0.55.2, )",
