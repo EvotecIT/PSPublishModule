@@ -280,6 +280,9 @@ public sealed class ServerRecoveryBootstrapPlanTests
     }
 
     [Theory]
+    [InlineData("1", "1.0")]
+    [InlineData("2", "2.0")]
+    [InlineData("3", "3.0")]
     [InlineData("8", "8.0")]
     [InlineData("10.0", "10.0")]
     [InlineData("2.1", "2.1")]

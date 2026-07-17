@@ -202,7 +202,7 @@ internal static partial class WebCliCommandHandlers
         foreach (var version in packages?.DotnetSdks ?? Array.Empty<string>())
         {
             if (!TryNormalizeDotnetSdkVersion(version, out _))
-                errors.Add($"packages.dotnetSdks[{sdkIndex}] must be a known .NET SDK package band: 1.0-1.1, 2.0-2.2, 3.0-3.1, or major/major.0 from 5 through 99.");
+                errors.Add($"packages.dotnetSdks[{sdkIndex}] must be a known .NET SDK package band: 1 or 1.0-1.1, 2 or 2.0-2.2, 3 or 3.0-3.1, or major/major.0 from 5 through 99.");
             sdkIndex++;
         }
 
