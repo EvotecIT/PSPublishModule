@@ -146,6 +146,9 @@ on:
         required: false
       deployment_cloudflare_api_token:
         required: false
+      deployment_host:
+        description: Optional masked deployment host from the caller's protected environment.
+        required: false
       deployment_ssh_private_key:
         required: false
       deployment_ssh_known_hosts:
@@ -298,7 +301,7 @@ jobs:
         with:
           artifact-name: ${{ format('powerforge-site-{0}', inputs.deployment_site) }}
           deployment-site: ${{ inputs.deployment_site }}
-          deployment-host: ${{ inputs.deployment_host || vars.POWERFORGE_WEBSITE_DEPLOY_HOST }}
+          deployment-host: ${{ secrets.deployment_host || inputs.deployment_host || vars.POWERFORGE_WEBSITE_DEPLOY_HOST }}
           deployment-port: ${{ inputs.deployment_port || vars.POWERFORGE_WEBSITE_DEPLOY_PORT || 22 }}
           deployment-user: ${{ inputs.deployment_user || vars.POWERFORGE_WEBSITE_DEPLOY_USER || 'powerforge-deploy' }}
           deployment-cloudflare-zone: ${{ inputs.deployment_cloudflare_zone }}

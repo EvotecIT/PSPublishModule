@@ -15,7 +15,9 @@ public sealed class ServerScaffoldTests
 
         var files = WebCliCommandHandlers.BuildServerScaffoldFiles(options);
         var workflow = files[".github/workflows/website-deploy.yml"];
+        var backupWorkflow = files[".github/workflows/server-backup.yml"];
         var manifest = files["deploy/linux/example.serverrecovery.json"];
+        var onboarding = files["deploy/linux/ONBOARDING.md"];
 
         Assert.DoesNotContain("run: |", workflow, StringComparison.Ordinal);
         Assert.Contains("powerforge-website-deploy.yml@" + EngineRef, workflow, StringComparison.Ordinal);
@@ -23,6 +25,8 @@ public sealed class ServerScaffoldTests
         Assert.Contains("  pages: write", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment_ssh_private_key: ${{ secrets.DEPLOYMENT_SSH_PRIVATE_KEY }}", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment_ssh_known_hosts: ${{ secrets.DEPLOYMENT_SSH_KNOWN_HOSTS }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("deployment_host: ${{ secrets.DEPLOYMENT_HOST }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("server-host: ${{ secrets.DEPLOYMENT_HOST }}", backupWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("CLOUDFLARE_API_TOKEN", workflow, StringComparison.Ordinal);
         Assert.Contains("CLOUDFLARE_PURGE_ENABLED=0", files["deploy/linux/example.test.env"], StringComparison.Ordinal);
         Assert.DoesNotContain("www.example.test", files["Website/deploy/apache.conf"], StringComparison.Ordinal);
@@ -34,6 +38,8 @@ public sealed class ServerScaffoldTests
             Assert.DoesNotContain("REPLACE_WITH_", file.Value, StringComparison.Ordinal);
         });
         Assert.Contains("keepLatestInTree", manifest, StringComparison.Ordinal);
+        Assert.DoesNotContain("192.0.2.10", string.Join('\n', files.Values), StringComparison.Ordinal);
+        Assert.Contains("protected environment secret `DEPLOYMENT_HOST`", onboarding, StringComparison.Ordinal);
         Assert.DoesNotContain("\"keepLatest\"", manifest, StringComparison.Ordinal);
         Assert.Contains("\"$schema\"", manifest, StringComparison.Ordinal);
         Assert.Contains($"EvotecIT/PSPublishModule/{EngineRef}/Schemas/powerforge.web.serverrecovery.schema.json", manifest, StringComparison.Ordinal);
@@ -47,9 +53,11 @@ public sealed class ServerScaffoldTests
         var nextSteps = WebCliCommandHandlers.BuildServerScaffoldNextSteps(options);
         Assert.Contains("authorized-key example files", nextSteps[0], StringComparison.Ordinal);
         Assert.DoesNotContain("host-key", nextSteps[0], StringComparison.Ordinal);
+        Assert.Contains("DEPLOYMENT_HOST", nextSteps[1], StringComparison.Ordinal);
 
         var manifestNode = JsonNode.Parse(manifest)!;
         Assert.Equal(2, manifestNode["schemaVersion"]!.GetValue<int>());
+        Assert.Null(manifestNode["target"]!["host"]);
         Assert.Null(manifestNode["apache"]!["reloadCommand"]);
         var managedPaths = manifestNode["paths"]!.AsArray();
         Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/usr/local/sbin/powerforge-site-deploy" &&
@@ -77,6 +85,7 @@ public sealed class ServerScaffoldTests
         Assert.Contains("--recipient age1examplepublicrecipient", sudoers, StringComparison.Ordinal);
         Assert.DoesNotContain("BACKUP_ENCRYPTED = /usr/bin/tar", sudoers, StringComparison.Ordinal);
         var manifest = files["deploy/linux/example.serverrecovery.json"];
+        Assert.Contains("\"host\": \"192.0.2.10\"", manifest, StringComparison.Ordinal);
         Assert.Contains("example-repository-private-key", manifest, StringComparison.Ordinal);
         Assert.Contains("git@github.com:ExampleOrg/ExampleSite.git", manifest, StringComparison.Ordinal);
         Assert.Contains("\"sshIdentityFile\": \"/etc/powerforge/repository-ssh/example_ed25519\"", manifest, StringComparison.Ordinal);
