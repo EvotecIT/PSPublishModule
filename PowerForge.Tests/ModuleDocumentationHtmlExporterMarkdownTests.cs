@@ -99,6 +99,52 @@ public class HtmlExporterMarkdownTests
     }
 
     [Fact]
+    public void Export_Does_Not_Trust_Raw_Html_From_Documentation_Sources()
+    {
+        var exporter = new HtmlExporter();
+        var module = new ModuleInfoModel
+        {
+            Name = "SafeDocs",
+            Version = "1.0.0",
+            SkipCommands = true,
+            SkipDependencies = true
+        };
+        var items = new[]
+        {
+            new DocumentItem
+            {
+                Title = "README",
+                Kind = "FILE",
+                Source = "Repository",
+                Content = """
+                <details>
+                <summary>More</summary>
+                <script>alert('unsafe')</script>
+                </details>
+                """
+            }
+        };
+        var outputPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.html");
+
+        try
+        {
+            exporter.Export(module, items, outputPath, open: false);
+
+            var html = File.ReadAllText(outputPath);
+            Assert.DoesNotContain("<details>", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("<summary>", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("<script>alert('unsafe')</script>", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (File.Exists(outputPath))
+            {
+                File.Delete(outputPath);
+            }
+        }
+    }
+
+    [Fact]
     public void Export_Uses_Lazy_DataTables_For_Markdown_Tables()
     {
         var exporter = new HtmlExporter();
