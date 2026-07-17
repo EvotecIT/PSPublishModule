@@ -4,6 +4,21 @@ namespace PowerForge.Tests;
 
 public sealed class ServerRecoveryInspectCommandTests
 {
+    [Fact]
+    public void OptionalSubsystemChecksRunOnlyWhenDeclared()
+    {
+        var manifest = new PowerForgeServerRecoveryManifest();
+
+        Assert.False(WebCliCommandHandlers.HasDeclaredApacheState(manifest));
+        Assert.False(WebCliCommandHandlers.HasDeclaredFirewallState(manifest));
+
+        manifest.Packages = new PowerForgeServerPackages { ApacheModules = ["headers"] };
+        manifest.Firewall = new PowerForgeServerFirewall();
+
+        Assert.True(WebCliCommandHandlers.HasDeclaredApacheState(manifest));
+        Assert.True(WebCliCommandHandlers.HasDeclaredFirewallState(manifest));
+    }
+
     [Theory]
     [InlineData("directory", "/etc/powerforge/repository-ssh", "sudo -n test -d '/etc/powerforge/repository-ssh' && sudo -n test ! -L '/etc/powerforge/repository-ssh'")]
     [InlineData("file", "/etc/powerforge/sites/example.env", "sudo -n test -f '/etc/powerforge/sites/example.env' && sudo -n test ! -L '/etc/powerforge/sites/example.env'")]
@@ -63,6 +78,17 @@ public sealed class ServerRecoveryInspectCommandTests
         Assert.Equal(
             "sudo -n cmp -s -- '/srv/example/deploy/example.env' '/etc/example.env'",
             WebCliCommandHandlers.BuildManagedFileContentCheckCommand("/srv/example/deploy/example.env", "/etc/example.env"));
+        var securedContentCheck = WebCliCommandHandlers.BuildManagedFileContentCheckCommand(
+            "/srv/example/deploy/example.env",
+            "/etc/example.env",
+            "/srv/example");
+        Assert.Contains("sudo -n test ! -L '/srv/example/deploy/example.env'", securedContentCheck, StringComparison.Ordinal);
+        Assert.Contains("sudo -n realpath -e -- '/srv/example/deploy/example.env'", securedContentCheck, StringComparison.Ordinal);
+        Assert.Contains("sudo -n realpath -e -- '/srv/example'", securedContentCheck, StringComparison.Ordinal);
+        Assert.EndsWith(
+            "sudo -n cmp -s -- '/srv/example/deploy/example.env' '/etc/example.env'",
+            securedContentCheck,
+            StringComparison.Ordinal);
         Assert.Equal(
             "sudo -n visudo -cf '/etc/sudoers.d/powerforge-example'",
             WebCliCommandHandlers.BuildSudoersValidationCommand("/etc/sudoers.d/powerforge-example"));
@@ -75,7 +101,9 @@ public sealed class ServerRecoveryInspectCommandTests
         const string reference = "0123456789abcdef0123456789abcdef01234567";
 
         Assert.Equal(
-            "test \"$(sudo -n git -C '/srv/example' rev-parse --is-inside-work-tree)\" = 'true'",
+            "powerforge_repository_path=$(sudo -n realpath -e -- '/srv/example') && " +
+            "powerforge_git_root=$(sudo -n git -C '/srv/example' rev-parse --show-toplevel) && " +
+            "test \"$powerforge_git_root\" = \"$powerforge_repository_path\"",
             WebCliCommandHandlers.BuildRepositoryExistsCheckCommand(path));
         Assert.Equal(
             "powerforge_git_head=$(sudo -n git -C '/srv/example' rev-parse HEAD) && " +

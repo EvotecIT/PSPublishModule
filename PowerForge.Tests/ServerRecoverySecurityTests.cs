@@ -236,9 +236,36 @@ public sealed class ServerRecoverySecurityTests
 
         var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
 
-        Assert.Contains(errors, error => error.Contains("target must be outside declared repository paths", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("target must not overlap declared repository paths", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("source '/etc/example/secret.env' overlaps encrypted capture path", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("source '/etc/example/secret.env' overlaps secret 'example-secret'", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ManifestValidation_RejectsManagedTargetsThatContainRepositoryRoots()
+    {
+        var manifest = CreateManifest();
+        manifest.Repositories =
+        [
+            new PowerForgeServerRepository { Role = "application", Path = "/srv/example" }
+        ];
+        manifest.Paths =
+        [
+            new PowerForgeServerPath
+            {
+                Id = "repository-parent-target",
+                Path = "/srv",
+                Source = "/srv/example/deploy/public.conf",
+                Kind = "file",
+                Owner = "root",
+                Group = "root",
+                Mode = "0644"
+            }
+        ];
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("target must not overlap declared repository paths", StringComparison.Ordinal));
     }
 
     [Fact]

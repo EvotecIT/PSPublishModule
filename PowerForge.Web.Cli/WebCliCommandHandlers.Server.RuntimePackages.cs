@@ -96,7 +96,7 @@ internal static partial class WebCliCommandHandlers
         return true;
     }
 
-    internal static string BuildPowerShellInstallCommand()
+    internal static string BuildMicrosoftPackageRepositoryInstallCommand()
         => string.Join('\n',
             "apt-get update",
             "apt-get install -y ca-certificates curl",
@@ -114,8 +114,10 @@ internal static partial class WebCliCommandHandlers
             "  powerforge_ms_repo_cleanup",
             "  trap - EXIT HUP INT TERM",
             "fi",
-            "apt-get update",
-            "apt-get install -y powershell");
+            "apt-get update");
+
+    internal static string BuildPowerShellInstallCommand()
+        => "apt-get install -y powershell";
 
     internal static string? NormalizeLinuxArchitecture(string? architecture)
         => architecture?.Trim().ToLowerInvariant() switch

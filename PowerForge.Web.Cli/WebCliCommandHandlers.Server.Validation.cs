@@ -75,8 +75,9 @@ internal static partial class WebCliCommandHandlers
                         errors.Add($"Source-managed path '{path.Id}' source and target must differ.");
                     if (!repositoryRoots.Any(root => PathStrictlyContains(root, normalizedSource)))
                         errors.Add($"Source-managed path '{path.Id}' source must be inside a declared repository path.");
-                    if (normalizedPath is not null && repositoryRoots.Any(root => PathContains(root, normalizedPath)))
-                        errors.Add($"Source-managed path '{path.Id}' target must be outside declared repository paths.");
+                    if (normalizedPath is not null && repositoryRoots.Any(root =>
+                            PathContains(root, normalizedPath) || PathContains(normalizedPath, root)))
+                        errors.Add($"Source-managed path '{path.Id}' target must not overlap declared repository paths.");
                     if (normalizedPath is not null)
                         sourceManagedPaths.Add((path.Id ?? normalizedPath, normalizedSource, normalizedPath));
                 }

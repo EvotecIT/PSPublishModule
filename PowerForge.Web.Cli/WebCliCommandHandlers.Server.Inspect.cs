@@ -87,21 +87,24 @@ internal static partial class WebCliCommandHandlers
                 ExecuteRemote(sshCommand, target, BuildRepositoryCleanCheckCommand(repository.Path)), "clean work tree");
         }
 
-        var apacheModules = ExecuteRemote(sshCommand, target, "apache2ctl -M 2>/dev/null || apachectl -M 2>/dev/null");
-        foreach (var module in manifest.Packages?.ApacheModules ?? manifest.Apache?.Modules ?? Array.Empty<string>())
+        if (HasDeclaredApacheState(manifest))
         {
-            AddBooleanCheck(checks, $"apache.module.{module}", "apache", $"Apache module is enabled: {module}",
-                apacheModules.Stdout.Contains($"{module}_module", StringComparison.OrdinalIgnoreCase),
-                $"{module}_module",
-                apacheModules.Success ? "enabled/missing from apache -M" : apacheModules.Stderr.Trim());
-        }
+            var apacheModules = ExecuteRemote(sshCommand, target, "apache2ctl -M 2>/dev/null || apachectl -M 2>/dev/null");
+            foreach (var module in manifest.Packages?.ApacheModules ?? manifest.Apache?.Modules ?? Array.Empty<string>())
+            {
+                AddBooleanCheck(checks, $"apache.module.{module}", "apache", $"Apache module is enabled: {module}",
+                    apacheModules.Stdout.Contains($"{module}_module", StringComparison.OrdinalIgnoreCase),
+                    $"{module}_module",
+                    apacheModules.Success ? "enabled/missing from apache -M" : apacheModules.Stderr.Trim());
+            }
 
-        AddCommandCheck(checks, "apache.configtest", "apache", "Apache configtest succeeds",
-            ExecuteRemote(sshCommand, target, manifest.Apache?.ValidateCommand ?? "apachectl configtest"), "Syntax OK");
-        InspectManagedFiles(sshCommand, target,
-            (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerManagedFile>())
-                .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>()),
-            "apache", checks);
+            AddCommandCheck(checks, "apache.configtest", "apache", "Apache configtest succeeds",
+                ExecuteRemote(sshCommand, target, manifest.Apache?.ValidateCommand ?? "apachectl configtest"), "Syntax OK");
+            InspectManagedFiles(sshCommand, target,
+                (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerManagedFile>())
+                    .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>()),
+                "apache", checks);
+        }
 
         foreach (var path in manifest.Paths ?? Array.Empty<PowerForgeServerPath>())
         {
@@ -112,8 +115,10 @@ internal static partial class WebCliCommandHandlers
                 path.Path);
             if (!string.IsNullOrWhiteSpace(path.Source))
             {
+                var repositoryRoot = FindManagedSourceRepositoryRoot(manifest.Repositories, path.Source)
+                                     ?? throw new InvalidOperationException($"Managed source '{path.Source}' is not below a declared repository root.");
                 AddCommandCheck(checks, $"path.{path.Id ?? path.Path}.content", "paths", $"Managed file matches source: {path.Path}",
-                    ExecuteRemote(sshCommand, target, BuildManagedFileContentCheckCommand(path.Source, path.Path)), path.Source);
+                    ExecuteRemote(sshCommand, target, BuildManagedFileContentCheckCommand(path.Source, path.Path, repositoryRoot)), path.Source);
             }
             if (string.Equals(path.Validation, "sudoers", StringComparison.OrdinalIgnoreCase))
             {
@@ -132,25 +137,28 @@ internal static partial class WebCliCommandHandlers
         InspectSystemdUnits(sshCommand, target, manifest.Systemd?.Services, "service", checks);
         InspectSystemdUnits(sshCommand, target, manifest.Systemd?.Timers, "timer", checks);
 
-        var ufw = ExecuteRemote(sshCommand, target, "sudo -n ufw status numbered");
-        AddBooleanCheck(checks, "ufw.active", "firewall", "UFW is active",
-            ufw.Stdout.Contains("Status: active", StringComparison.OrdinalIgnoreCase),
-            "active",
-            FirstMatchingLine(ufw.Stdout, "Status:") ?? ufw.Stderr.Trim());
-        foreach (var port in manifest.Firewall?.SshPorts ?? Array.Empty<int>())
+        if (HasDeclaredFirewallState(manifest))
         {
-            AddBooleanCheck(checks, $"ufw.ssh.{port}", "firewall", $"UFW allows SSH port {port}",
-                ufw.Stdout.Contains($"{port}/tcp", StringComparison.OrdinalIgnoreCase),
-                $"{port}/tcp allowed",
-                "ufw status numbered");
-        }
-        if (manifest.Firewall?.WebOriginPolicy?.Equals("cloudflare-only", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            AddBooleanCheck(checks, "ufw.cloudflare-only", "firewall", "HTTP/HTTPS are not open to Anywhere",
-                !ufw.Stdout.Contains("80/tcp                     ALLOW IN    Anywhere", StringComparison.OrdinalIgnoreCase) &&
-                !ufw.Stdout.Contains("443/tcp                    ALLOW IN    Anywhere", StringComparison.OrdinalIgnoreCase),
-                "Cloudflare ranges only",
-                "ufw status numbered");
+            var ufw = ExecuteRemote(sshCommand, target, "sudo -n ufw status numbered");
+            AddBooleanCheck(checks, "ufw.active", "firewall", "UFW is active",
+                ufw.Stdout.Contains("Status: active", StringComparison.OrdinalIgnoreCase),
+                "active",
+                FirstMatchingLine(ufw.Stdout, "Status:") ?? ufw.Stderr.Trim());
+            foreach (var port in manifest.Firewall?.SshPorts ?? Array.Empty<int>())
+            {
+                AddBooleanCheck(checks, $"ufw.ssh.{port}", "firewall", $"UFW allows SSH port {port}",
+                    ufw.Stdout.Contains($"{port}/tcp", StringComparison.OrdinalIgnoreCase),
+                    $"{port}/tcp allowed",
+                    "ufw status numbered");
+            }
+            if (manifest.Firewall?.WebOriginPolicy?.Equals("cloudflare-only", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                AddBooleanCheck(checks, "ufw.cloudflare-only", "firewall", "HTTP/HTTPS are not open to Anywhere",
+                    !ufw.Stdout.Contains("80/tcp                     ALLOW IN    Anywhere", StringComparison.OrdinalIgnoreCase) &&
+                    !ufw.Stdout.Contains("443/tcp                    ALLOW IN    Anywhere", StringComparison.OrdinalIgnoreCase),
+                    "Cloudflare ranges only",
+                    "ufw status numbered");
+            }
         }
 
         foreach (var cert in manifest.Certificates ?? Array.Empty<PowerForgeServerCertificate>())
@@ -242,17 +250,29 @@ internal static partial class WebCliCommandHandlers
         return string.Join(" && ", checks);
     }
 
+    internal static bool HasDeclaredApacheState(PowerForgeServerRecoveryManifest manifest)
+        => manifest.Apache is not null || manifest.Packages?.ApacheModules?.Length > 0;
+
+    internal static bool HasDeclaredFirewallState(PowerForgeServerRecoveryManifest manifest)
+        => manifest.Firewall is not null;
+
     internal static string BuildManagedSymlinkTargetCommand(string path)
         => $"sudo -n readlink -f {ShellQuote(path)}";
 
     internal static string BuildManagedFileContentCheckCommand(string source, string target)
         => $"sudo -n cmp -s -- {ShellQuote(source)} {ShellQuote(target)}";
 
+    internal static string BuildManagedFileContentCheckCommand(string source, string target, string repositoryRoot)
+        => $"{BuildManagedSourceSafetyCommand(source, repositoryRoot, useSudo: true)} && " +
+           BuildManagedFileContentCheckCommand(source, target);
+
     internal static string BuildSudoersValidationCommand(string path)
         => $"sudo -n visudo -cf {ShellQuote(path)}";
 
     internal static string BuildRepositoryExistsCheckCommand(string path)
-        => $"test \"$(sudo -n git -C {ShellQuote(path)} rev-parse --is-inside-work-tree)\" = 'true'";
+        => $"powerforge_repository_path=$(sudo -n realpath -e -- {ShellQuote(path)}) && " +
+           $"powerforge_git_root=$(sudo -n git -C {ShellQuote(path)} rev-parse --show-toplevel) && " +
+           "test \"$powerforge_git_root\" = \"$powerforge_repository_path\"";
 
     internal static string BuildRepositoryRefCheckCommand(string path, string reference)
         => $"powerforge_git_head=$(sudo -n git -C {ShellQuote(path)} rev-parse HEAD) && " +

@@ -191,9 +191,13 @@ public sealed class ServerRecoveryBootstrapPlanTests
         var managedFile = Assert.Single(steps, step => step.Category == "managed-files");
 
         Assert.True(repository.Order < managedFile.Order);
-        Assert.Equal(
-            "install -o 'root' -g 'example' -m '0640' '/srv/example/deploy/site.env' '/etc/example/site.env'",
-            managedFile.Command);
+        Assert.Contains("test ! -L '/srv/example/deploy/site.env'", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("realpath -e -- '/srv/example/deploy/site.env'", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("realpath -e -- '/srv/example'", managedFile.Command, StringComparison.Ordinal);
+        Assert.EndsWith(
+            "install -T -o 'root' -g 'example' -m '0640' '/srv/example/deploy/site.env' '/etc/example/site.env'",
+            managedFile.Command,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -265,18 +269,45 @@ public sealed class ServerRecoveryBootstrapPlanTests
         var preflight = Assert.Single(steps, step => step.Category == "preflight");
         var runtimes = steps.Where(step => step.Category == "runtimes").ToArray();
 
-        Assert.Equal(2, runtimes.Length);
+        Assert.Equal(3, runtimes.Length);
         Assert.Equal(
             "test -r /etc/os-release && . /etc/os-release && test \"$ID\" = 'ubuntu' && " +
             "test \"$VERSION_ID\" = '24.04' && test \"$(uname -m)\" = 'x86_64'",
             preflight.Command);
-        Assert.Equal("apt-get update && apt-get install -y 'dotnet-sdk-8.0' 'dotnet-sdk-10.0'", runtimes[0].Command);
-        Assert.Contains("packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb", runtimes[1].Command, StringComparison.Ordinal);
-        Assert.Contains("apt-get install -y ca-certificates curl", runtimes[1].Command, StringComparison.Ordinal);
-        Assert.Contains("dpkg -i \"$powerforge_ms_repo\"", runtimes[1].Command, StringComparison.Ordinal);
-        Assert.Contains("apt-get install -y powershell", runtimes[1].Command, StringComparison.Ordinal);
-        Assert.Contains("trap 'exit 130' INT", runtimes[1].Command, StringComparison.Ordinal);
-        Assert.DoesNotContain("| dpkg", runtimes[1].Command, StringComparison.Ordinal);
+        Assert.Contains("packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb", runtimes[0].Command, StringComparison.Ordinal);
+        Assert.Contains("apt-get install -y ca-certificates curl", runtimes[0].Command, StringComparison.Ordinal);
+        Assert.Contains("dpkg -i \"$powerforge_ms_repo\"", runtimes[0].Command, StringComparison.Ordinal);
+        Assert.Contains("trap 'exit 130' INT", runtimes[0].Command, StringComparison.Ordinal);
+        Assert.DoesNotContain("| dpkg", runtimes[0].Command, StringComparison.Ordinal);
+        Assert.Equal("apt-get install -y 'dotnet-sdk-8.0' 'dotnet-sdk-10.0'", runtimes[1].Command);
+        Assert.Equal("apt-get install -y powershell", runtimes[2].Command);
+    }
+
+    [Fact]
+    public void BuildPlan_ConfiguresMicrosoftFeedForDotnetWithoutPowerShell()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Target = new PowerForge.Web.Cli.PowerForgeServerTarget
+            {
+                Os = "ubuntu-22.04",
+                Architecture = "x64"
+            },
+            Packages = new PowerForge.Web.Cli.PowerForgeServerPackages
+            {
+                DotnetSdks = ["10.0"],
+                Powershell = false
+            }
+        };
+
+        var runtimes = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, [])
+            .Where(step => step.Category == "runtimes")
+            .ToArray();
+
+        Assert.Equal(2, runtimes.Length);
+        Assert.Contains("packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb", runtimes[0].Command, StringComparison.Ordinal);
+        Assert.Equal("apt-get install -y 'dotnet-sdk-10.0'", runtimes[1].Command);
+        Assert.DoesNotContain(runtimes, step => step.Command?.Contains("apt-get install -y powershell", StringComparison.Ordinal) == true);
     }
 
     [Theory]
@@ -321,8 +352,12 @@ public sealed class ServerRecoveryBootstrapPlanTests
             Validation = "sudoers"
         };
 
-        var command = PowerForge.Web.Cli.WebCliCommandHandlers.BuildManagedFileInstallCommand(path);
+        var command = PowerForge.Web.Cli.WebCliCommandHandlers.BuildManagedFileInstallCommand(path, "/srv/example");
 
+        Assert.Contains("test ! -L '/srv/example/deploy/powerforge-example.sudoers'", command, StringComparison.Ordinal);
+        Assert.Contains("realpath -e -- '/srv/example/deploy/powerforge-example.sudoers'", command, StringComparison.Ordinal);
+        Assert.Contains("case \"$powerforge_managed_source_real\"", command, StringComparison.Ordinal);
+        Assert.Contains("install -T", command, StringComparison.Ordinal);
         Assert.Contains("mktemp '/etc/sudoers.d/powerforge-example.powerforge.XXXXXX'", command, StringComparison.Ordinal);
         Assert.Contains("visudo -cf \"$powerforge_sudoers_temp\"", command, StringComparison.Ordinal);
         Assert.Contains("trap powerforge_sudoers_restore EXIT", command, StringComparison.Ordinal);
