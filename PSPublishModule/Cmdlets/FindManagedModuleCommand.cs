@@ -320,8 +320,7 @@ public sealed class FindManagedModuleCommand : PSCmdlet
                 tagFilters.All(tag => version.Tags.Any(packageTag => TagsMatch(tag, packageTag))));
         }
 
-        if (HasVersionFilter())
-            filtered = filtered.Where(version => ManagedModuleVersionSelector.IsMatch(version.Version, Version));
+        filtered = filtered.Where(version => ManagedModuleVersionSelector.IsSelectable(version, Version));
 
         if (applyFirst && hasWildcard && !AllVersions.IsPresent)
             filtered = filtered.Take(First);

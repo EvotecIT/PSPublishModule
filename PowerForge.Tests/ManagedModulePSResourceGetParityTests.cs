@@ -40,6 +40,24 @@ public sealed class ManagedModulePSResourceGetParityTests
     public void VersionSelector_rejects_invalid_version_expressions(string expression)
         => Assert.Throws<ArgumentException>(() => ManagedModuleVersionSelector.IsMatch("1.0.0", expression));
 
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("1.*", false)]
+    [InlineData("[1.0.0,2.0.0)", false)]
+    [InlineData("1.2.0", true)]
+    [InlineData("[1.2.0]", true)]
+    public void VersionSelector_allows_unlisted_versions_only_for_exact_pins(string? expression, bool expected)
+    {
+        var version = new ManagedModuleVersionInfo
+        {
+            Name = "Company.Tools",
+            Version = "1.2.0",
+            Listed = false
+        };
+
+        Assert.Equal(expected, ManagedModuleVersionSelector.IsSelectable(version, expression));
+    }
+
     [Fact]
     public void FindManagedModule_version_range_returns_every_matching_module_version()
     {
@@ -171,6 +189,9 @@ public sealed class ManagedModulePSResourceGetParityTests
         Assert.Equal(result.RepositoryName, metadata.Properties["Repository"].Value);
         Assert.Equal(result.RepositorySource, metadata.Properties["RepositorySourceLocation"].Value);
         Assert.Equal(result.ModulePath, metadata.Properties["InstalledLocation"].Value);
+        var publishedDate = Assert.IsType<DateTime>(metadata.Properties["PublishedDate"].Value);
+        var installedDate = Assert.IsType<DateTime>(metadata.Properties["InstalledDate"].Value);
+        Assert.Equal(installedDate, publishedDate);
         var serializedDependencies = metadata.Properties["Dependencies"].Value;
         if (serializedDependencies is PSObject dependencyCollection)
             serializedDependencies = dependencyCollection.BaseObject;

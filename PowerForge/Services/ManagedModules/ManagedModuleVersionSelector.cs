@@ -22,6 +22,30 @@ public static class ManagedModuleVersionSelector
     }
 
     /// <summary>
+    /// Tests whether repository version metadata is selectable for a PSResourceGet-style search expression.
+    /// Unlisted versions remain selectable only when the expression is an exact version pin.
+    /// </summary>
+    /// <param name="version">Repository version metadata to test.</param>
+    /// <param name="expression">Exact version, wildcard version, or NuGet version range.</param>
+    /// <returns><see langword="true"/> when the version is both in range and eligible for selection.</returns>
+    internal static bool IsSelectable(ManagedModuleVersionInfo version, string? expression)
+    {
+        if (version is null)
+            throw new ArgumentNullException(nameof(version));
+
+        return IsSelectable(version, ParseSearchExpression(expression));
+    }
+
+    /// <summary>
+    /// Tests whether repository version metadata is selectable for an already parsed range.
+    /// </summary>
+    internal static bool IsSelectable(ManagedModuleVersionInfo version, ManagedModuleVersionRange range)
+        => version is not null &&
+           range is not null &&
+           range.IsSatisfiedBy(version.Version) &&
+           (range.ExactVersion is not null || version.Listed);
+
+    /// <summary>
     /// Tests whether an expression explicitly includes a prerelease version boundary.
     /// </summary>
     /// <param name="expression">Exact version, wildcard version, or NuGet version range.</param>

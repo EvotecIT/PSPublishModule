@@ -59,6 +59,7 @@ public sealed class PowerShellGetModuleInfoWriter
         var manifestTags = manifestPath is null
             ? Array.Empty<string>()
             : ModuleManifestValueReader.ReadPsDataStringOrArray(manifestPath, "Tags");
+        var installedDate = result.Receipt?.CompletedAtUtc.LocalDateTime ?? DateTime.Now;
         var info = new PSObject();
         Add(info, "Name", result.Name);
         Add(info, "Version", result.Version);
@@ -67,8 +68,8 @@ public sealed class PowerShellGetModuleInfoWriter
         Add(info, "Author", ReadManifestString(manifestPath, "Author") ?? package?.Authors);
         Add(info, "CompanyName", ReadManifestString(manifestPath, "CompanyName"));
         Add(info, "Copyright", ReadManifestString(manifestPath, "Copyright"));
-        Add(info, "PublishedDate", null);
-        Add(info, "InstalledDate", DateTime.Now);
+        Add(info, "PublishedDate", installedDate);
+        Add(info, "InstalledDate", installedDate);
         Add(info, "IsPrerelease", ManagedModuleVersionComparer.IsPrerelease(result.Version));
         Add(info, "UpdatedDate", null);
         Add(info, "LicenseUri", ToUri(ReadManifestPsDataString(manifestPath, "LicenseUri") ?? package?.License));
