@@ -462,7 +462,7 @@ public sealed class ServerRecoverySecurityTests
 
         var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
 
-        Assert.Contains(errors, error => error.Contains("major or major.0", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("known .NET SDK package band", StringComparison.Ordinal));
     }
 
     [Fact]

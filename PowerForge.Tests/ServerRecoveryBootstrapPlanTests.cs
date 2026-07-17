@@ -282,6 +282,9 @@ public sealed class ServerRecoveryBootstrapPlanTests
     [Theory]
     [InlineData("8", "8.0")]
     [InlineData("10.0", "10.0")]
+    [InlineData("2.1", "2.1")]
+    [InlineData("2.2", "2.2")]
+    [InlineData("3.1", "3.1")]
     public void DotnetSdkVersionsNormalizeToAptPackageVersions(string value, string expected)
     {
         Assert.True(PowerForge.Web.Cli.WebCliCommandHandlers.TryNormalizeDotnetSdkVersion(value, out var normalized));
@@ -290,6 +293,8 @@ public sealed class ServerRecoveryBootstrapPlanTests
 
     [Theory]
     [InlineData("0")]
+    [InlineData("4")]
+    [InlineData("4.0")]
     [InlineData("8.1")]
     [InlineData("10.99")]
     [InlineData("100")]

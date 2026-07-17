@@ -76,10 +76,21 @@ internal static partial class WebCliCommandHandlers
 
         var minor = 0;
         if (parts.Length == 2 &&
-            (!int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out minor) || minor != 0))
+            !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out minor))
         {
             return false;
         }
+
+        var supportedBand = major switch
+        {
+            1 => minor is 0 or 1,
+            2 => minor is >= 0 and <= 2,
+            3 => minor is 0 or 1,
+            4 => false,
+            _ => minor == 0
+        };
+        if (!supportedBand)
+            return false;
 
         normalized = $"{major}.{minor}";
         return true;
