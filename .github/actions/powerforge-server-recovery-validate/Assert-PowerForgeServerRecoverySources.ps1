@@ -153,7 +153,7 @@ function Get-ValidatedCaptureTarget {
 function Get-ExpectedPlainCaptureCommand {
     param([Parameter(Mandatory)][pscustomobject] $RecoveryManifest)
 
-    $files = @($RecoveryManifest.capture.plainFiles)
+    $files = @(@($RecoveryManifest.capture.plainFiles) | Where-Object { $null -ne $_ })
     if ($files.Count -eq 0) {
         return ''
     }
@@ -173,7 +173,7 @@ function Get-ExpectedPlainCaptureCommand {
 function Get-ExpectedEncryptedCaptureCommand {
     param([Parameter(Mandatory)][pscustomobject] $RecoveryManifest)
 
-    $files = @($RecoveryManifest.capture.encryptedFiles)
+    $files = @(@($RecoveryManifest.capture.encryptedFiles) | Where-Object { $null -ne $_ })
     if ($files.Count -eq 0) {
         return ''
     }
@@ -210,7 +210,8 @@ function Get-ExpectedCaptureSudoersCommand {
         $commands.Add($encryptedCommand)
     }
 
-    foreach ($captureCommand in @($RecoveryManifest.capture.commands).Where({ $_.sensitive -ne $true })) {
+    $captureCommands = @(@($RecoveryManifest.capture.commands) | Where-Object { $null -ne $_ })
+    foreach ($captureCommand in $captureCommands.Where({ $_.sensitive -ne $true })) {
         $command = [string]$captureCommand.command
         if ($command -notmatch '^sudo -n (?<command>.+)$') {
             continue
@@ -224,7 +225,11 @@ function Get-ExpectedCaptureSudoersCommand {
         $commands.Add($sudoersCommand)
     }
 
-    @($commands | Sort-Object -Unique)
+    $uniqueCommands = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($command in $commands) {
+        [void] $uniqueCommands.Add($command)
+    }
+    @($uniqueCommands)
 }
 
 $managedEntries = @(
@@ -275,7 +280,11 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
             [StringComparison]::Ordinal
         ) -and
         [string]::Equals([string]$_.Entry.source, $expectedHelperSource, [StringComparison]::Ordinal) -and
-        [string]::Equals([string]$_.Path, $expectedHelperPath, [StringComparison]::Ordinal)
+        [string]::Equals([string]$_.Path, $expectedHelperPath, [StringComparison]::Ordinal) -and
+        [string]::Equals([string]$_.Entry.kind, 'file', [StringComparison]::OrdinalIgnoreCase) -and
+        [string]::Equals([string]$_.Entry.owner, 'root', [StringComparison]::Ordinal) -and
+        [string]::Equals([string]$_.Entry.group, 'root', [StringComparison]::Ordinal) -and
+        [string]::Equals([string]$_.Entry.mode, '755', [StringComparison]::Ordinal)
     })
     if ($helper.Count -ne 1) {
         throw 'Encrypted recovery capture requires the exact managed helper from the pinned PowerForge engine.'
@@ -285,11 +294,36 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
         [string]::Equals([string]$_.Entry.validation, 'sudoers', [StringComparison]::OrdinalIgnoreCase)
     })
     $expectedSudoersCommands = @(Get-ExpectedCaptureSudoersCommand -RecoveryManifest $Manifest)
-    $authorized = $false
+    $commandAliases = [Collections.Generic.Dictionary[string, string[]]]::new([StringComparer]::Ordinal)
+    $grantedAliases = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $sudoersDocuments = [Collections.Generic.List[object]]::new()
+    $captureGrantCount = 0
     foreach ($sudoersSource in $sudoersSources) {
+        if (-not [string]::Equals([string]$sudoersSource.Entry.kind, 'file', [StringComparison]::OrdinalIgnoreCase) -or
+            -not [string]::Equals([string]$sudoersSource.Entry.owner, 'root', [StringComparison]::Ordinal) -or
+            -not [string]::Equals([string]$sudoersSource.Entry.group, 'root', [StringComparison]::Ordinal) -or
+            ([string]$sudoersSource.Entry.mode) -notin @('400', '440')) {
+            throw 'Managed sudoers sources must be root-owned files with mode 400 or 440.'
+        }
         $lines = @(Get-Content -LiteralPath $sudoersSource.Path)
-        $commandAliases = @{}
+        $sudoersDocuments.Add([pscustomobject]@{
+            Path  = $sudoersSource.Path
+            Lines = $lines
+        })
         foreach ($line in $lines) {
+            $trimmedLine = $line.Trim()
+            if ($trimmedLine -match '^(?:#|@)include(?:dir)?\b') {
+                throw 'Managed sudoers sources must not include additional policy files.'
+            }
+            if ([string]::IsNullOrWhiteSpace($trimmedLine) -or $trimmedLine.StartsWith('#', [StringComparison]::Ordinal)) {
+                continue
+            }
+            if ($trimmedLine.EndsWith('\', [StringComparison]::Ordinal)) {
+                throw 'Managed sudoers sources must not use line continuations.'
+            }
+            if ($trimmedLine -match '^User_Alias\b') {
+                throw 'Managed sudoers sources must not use User_Alias entries.'
+            }
             if ($line -notmatch '^\s*Cmnd_Alias\b') {
                 continue
             }
@@ -304,27 +338,30 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
             if ($commandAliases.ContainsKey($commandAlias)) {
                 throw "Managed sudoers source contains a duplicate command alias: $commandAlias"
             }
-            $commands = @($commandText -split '\s*,\s*')
-            if ($commands.Count -ne 1) {
-                throw "Managed sudoers command alias must authorize exactly one command: $commandAlias"
-            }
-            $commandAliases[$commandAlias] = [string]$commands[0]
+            $commands = [string[]]@($commandText -split '\s*,\s*')
+            $commandAliases.Add($commandAlias, $commands)
         }
+    }
 
-        $grantedAliases = [Collections.Generic.List[string]]::new()
-        foreach ($line in $lines) {
-            if ($line -notmatch '^\s*(?<principal>\S+)\s+') {
+    foreach ($sudoersDocument in $sudoersDocuments) {
+        foreach ($line in $sudoersDocument.Lines) {
+            $trimmedLine = $line.Trim()
+            if ([string]::IsNullOrWhiteSpace($trimmedLine) -or $trimmedLine.StartsWith('#', [StringComparison]::Ordinal) -or
+                $line -notmatch '\bNOPASSWD\s*:') {
                 continue
+            }
+            if ($line -notmatch '^\s*(?<principal>\S+)\s+') {
+                throw 'Managed sudoers source contains a malformed NOPASSWD grant.'
             }
             $principal = [string]$Matches['principal']
             if (-not [string]::Equals($principal, $CaptureUser, [StringComparison]::Ordinal)) {
+                if ($principal -notmatch '^[a-z_][a-z0-9_-]{0,31}$') {
+                    throw "Managed sudoers NOPASSWD grant uses an unsupported broad or aliased principal: $principal"
+                }
                 continue
             }
             if ($line -notmatch '^\s*\S+\s+ALL\s*=\s*\(\s*(?<runas>[^)]+?)\s*\)\s+NOPASSWD:\s*(?<commands>.+?)\s*$') {
-                if ($line -match '\bNOPASSWD\s*:') {
-                    throw 'The recovery capture account NOPASSWD grant must use the exact ALL=(root) form.'
-                }
-                continue
+                throw 'The recovery capture account NOPASSWD grant must use the exact ALL=(root) form.'
             }
             $runAs = [string]$Matches['runas']
             $grantText = [string]$Matches['commands']
@@ -335,20 +372,31 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
                 if ($commandAlias -notmatch '^[A-Z][A-Z0-9_]*$' -or -not $commandAliases.ContainsKey($commandAlias)) {
                     throw "The recovery capture account grant references an invalid or undefined command alias: $commandAlias"
                 }
-                $grantedAliases.Add($commandAlias)
+                if (-not $grantedAliases.Add($commandAlias)) {
+                    throw "The recovery capture account grant repeats command alias: $commandAlias"
+                }
             }
-        }
-
-        $grantedCommands = @($grantedAliases | ForEach-Object { [string]$commandAliases[$_] } | Sort-Object -Unique)
-        $authorized = $grantedAliases.Count -eq $grantedCommands.Count -and
-            $grantedCommands.Count -eq $expectedSudoersCommands.Count -and
-            @($grantedCommands).Where({ $_ -notin $expectedSudoersCommands }).Count -eq 0 -and
-            @($expectedSudoersCommands).Where({ $_ -notin $grantedCommands }).Count -eq 0
-        if ($authorized) {
-            break
+            $captureGrantCount++
         }
     }
-    if (-not $authorized) {
+
+    $grantedCommands = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($commandAlias in $grantedAliases) {
+        $commands = $commandAliases[$commandAlias]
+        if ($commands.Count -ne 1) {
+            throw "Recovery capture command alias must authorize exactly one command: $commandAlias"
+        }
+        if (-not $grantedCommands.Add($commands[0])) {
+            throw "Recovery capture aliases must not authorize the same command more than once: $commandAlias"
+        }
+    }
+
+    $expectedCommands = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($command in $expectedSudoersCommands) {
+        [void] $expectedCommands.Add($command)
+    }
+    if ($captureGrantCount -eq 0 -or $grantedAliases.Count -ne $grantedCommands.Count -or
+        $grantedCommands.Count -ne $expectedCommands.Count -or -not $expectedCommands.SetEquals($grantedCommands)) {
         throw 'Managed sudoers sources do not authorize the exact hardened encrypted-capture command.'
     }
 }

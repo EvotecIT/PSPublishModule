@@ -53,18 +53,16 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
     }
 
     [Fact]
-    public void Validator_ShouldRejectBroaderAliasesAlongsideAnExactAlias()
+    public void Validator_ShouldIgnoreBroaderAliasesNotGrantedToCaptureUser()
     {
-        var sudoers = $"Cmnd_Alias BACKUP_ENCRYPTED = {ExpectedCaptureCommand}\n" +
-                      $"Cmnd_Alias BACKUP_ENCRYPTED_BROAD = {ExpectedCaptureCommand}, /usr/bin/tar -czf - /etc/example/secret\n" +
-                      $"{CaptureUser} ALL=(root) NOPASSWD: BACKUP_ENCRYPTED\n";
+        var sudoers = BuildExpectedSudoers(CaptureUser, "root") +
+                      $"Cmnd_Alias DEPLOY_BROAD = {ExpectedCaptureCommand}, /usr/bin/tar -czf - /etc/example/secret\n" +
+                      "deployment-user ALL=(root) NOPASSWD: DEPLOY_BROAD\n";
 
         var result = RunValidator(sudoers: sudoers);
 
-        Assert.NotEqual(0, result.ExitCode);
-        Assert.True(
-            result.AllOutput.Contains("must authorize exactly one command", StringComparison.Ordinal),
-            result.AllOutput);
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("2", result.StandardOutput.Trim());
     }
 
     [Fact]
@@ -167,6 +165,95 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         Assert.Contains("Plain recovery capture path contains unsupported characters", result.AllOutput, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Validator_ShouldRequireRootOwnedHelperMetadata()
+    {
+        var result = RunValidator(helperOwner: CaptureUser);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("exact managed helper from the pinned PowerForge engine", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRequireRootOwnedSudoersMetadata()
+    {
+        var result = RunValidator(sudoersOwner: CaptureUser);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("must be root-owned files with mode 400 or 440", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldInspectEveryManagedSudoersSource()
+    {
+        var extraSudoers = "Cmnd_Alias BACKUP_DIRECT = /usr/bin/tar -czf - /etc/example/secret\n" +
+                           $"{CaptureUser} ALL=(root) NOPASSWD: BACKUP_DIRECT\n";
+
+        var result = RunValidator(additionalSudoers: extraSudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("do not authorize the exact hardened encrypted-capture command", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldAllowUnrelatedMultiCommandAliases()
+    {
+        var extraSudoers = "Cmnd_Alias DEPLOY_TOOLS = /usr/bin/true, /usr/bin/false\n" +
+                           "deployment-user ALL=(root) NOPASSWD: DEPLOY_TOOLS\n";
+
+        var result = RunValidator(additionalSudoers: extraSudoers);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("3", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldResolveCaptureAliasesAcrossManagedSudoersSources()
+    {
+        var grant = $"{CaptureUser} ALL=(root) NOPASSWD: BACKUP_PLAIN, BACKUP_ENCRYPTED, BACKUP_INSPECT\n";
+
+        var result = RunValidator(sudoers: BuildExpectedAliases(), additionalSudoers: grant);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("3", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldTreatMissingCaptureConfigurationAsEmpty()
+    {
+        var result = RunValidator(includeCapture: false);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("2", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectUserAliasesInManagedSudoers()
+    {
+        var extraSudoers = $"User_Alias PF_BACKUP = {CaptureUser}\n" +
+                           "Cmnd_Alias BACKUP_DIRECT = /bin/sh\n" +
+                           "PF_BACKUP ALL=(root) NOPASSWD: BACKUP_DIRECT\n";
+
+        var result = RunValidator(additionalSudoers: extraSudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("must not use User_Alias entries", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldCompareGrantedCommandsCaseSensitively()
+    {
+        var sudoers = $"Cmnd_Alias BACKUP_PLAIN = {ExpectedPlainCaptureCommand.Replace("/usr/bin/tar", "/USR/BIN/TAR", StringComparison.Ordinal)}\n" +
+                      $"Cmnd_Alias BACKUP_ENCRYPTED = {ExpectedCaptureCommand}\n" +
+                      $"Cmnd_Alias BACKUP_INSPECT = {ExpectedInspectCommand}\n" +
+                      $"{CaptureUser} ALL=(root) NOPASSWD: BACKUP_PLAIN, BACKUP_ENCRYPTED, BACKUP_INSPECT\n";
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("do not authorize the exact hardened encrypted-capture command", result.AllOutput, StringComparison.Ordinal);
+    }
+
     private static ValidationResult RunValidator(
         string repositoryUrl = "https://github.com/EvotecIT/ExampleSite.git",
         string? sudoers = null,
@@ -174,7 +261,11 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         bool shadowEngineHelper = false,
         bool includeCloneOnlyRepository = false,
         bool pinSudoersAsSymlink = false,
-        string plainCaptureTarget = "/etc/example/config")
+        string plainCaptureTarget = "/etc/example/config",
+        string helperOwner = "root",
+        string sudoersOwner = "root",
+        string? additionalSudoers = null,
+        bool includeCapture = true)
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-recovery-source-security-" + Guid.NewGuid().ToString("N"));
         var workspace = Path.Combine(root, "caller");
@@ -190,6 +281,8 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
             File.WriteAllText(
                 Path.Combine(workspace, "deploy", "linux", "backup.sudoers"),
                 sudoers ?? BuildExpectedSudoers(CaptureUser, "root"));
+            if (additionalSudoers is not null)
+                File.WriteAllText(Path.Combine(workspace, "deploy", "linux", "extra.sudoers"), additionalSudoers);
 
             var helperSource = "/srv/engine/Deployment/Linux/powerforge-server-encrypted-capture.sh";
             if (helperFromCaller)
@@ -230,30 +323,57 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
             if (includeCloneOnlyRepository)
                 repositories.Add(new { url = "git@example.test:private/application.git", path = "/srv/clone-only", @ref = callerRef });
 
-            var manifest = new
+            var managedPaths = new List<object>
             {
-                repositories,
-                paths = new object[]
+                new
                 {
-                    new
-                    {
-                        path = "/usr/local/sbin/powerforge-server-encrypted-capture",
-                        source = helperSource
-                    },
-                    new
-                    {
-                        path = "/etc/sudoers.d/powerforge-example-backup",
-                        source = "/srv/caller/deploy/linux/backup.sudoers",
-                        validation = "sudoers"
-                    }
+                    path = "/usr/local/sbin/powerforge-server-encrypted-capture",
+                    source = helperSource,
+                    kind = "file",
+                    owner = helperOwner,
+                    group = "root",
+                    mode = "755"
                 },
-                capture = new
+                new
+                {
+                    path = "/etc/sudoers.d/powerforge-example-backup",
+                    source = "/srv/caller/deploy/linux/backup.sudoers",
+                    kind = "file",
+                    owner = sudoersOwner,
+                    group = "root",
+                    mode = "440",
+                    validation = "sudoers"
+                }
+            };
+            if (additionalSudoers is not null)
+            {
+                managedPaths.Add(new
+                {
+                    path = "/etc/sudoers.d/powerforge-example-extra",
+                    source = "/srv/caller/deploy/linux/extra.sudoers",
+                    kind = "file",
+                    owner = "root",
+                    group = "root",
+                    mode = "440",
+                    validation = "sudoers"
+                });
+            }
+
+            object? capture = includeCapture
+                ? new
                 {
                     plainFiles = new[] { new { target = plainCaptureTarget, required = true } },
                     encryptedFiles = new[] { new { target = "/etc/example/secret", required = true } },
                     commands = new[] { new { id = "apache-vhosts", command = "sudo -n apachectl -S", required = true } }
-                },
-                backupTarget = new { recipient = Recipient }
+                }
+                : null;
+            object? backupTarget = includeCapture ? new { recipient = Recipient } : null;
+            var manifest = new
+            {
+                repositories,
+                paths = managedPaths,
+                capture,
+                backupTarget
             };
             File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifest));
 
@@ -302,10 +422,13 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         }
     }
 
-    private static string BuildExpectedSudoers(string principal, string runAs)
+    private static string BuildExpectedAliases()
         => $"Cmnd_Alias BACKUP_PLAIN = {ExpectedPlainCaptureCommand}\n" +
            $"Cmnd_Alias BACKUP_ENCRYPTED = {ExpectedCaptureCommand}\n" +
-           $"Cmnd_Alias BACKUP_INSPECT = {ExpectedInspectCommand}\n" +
+           $"Cmnd_Alias BACKUP_INSPECT = {ExpectedInspectCommand}\n";
+
+    private static string BuildExpectedSudoers(string principal, string runAs)
+        => BuildExpectedAliases() +
            $"{principal} ALL=({runAs}) NOPASSWD: BACKUP_PLAIN, BACKUP_ENCRYPTED, BACKUP_INSPECT\n";
 
     private static void InitializeGitRepository(string path)
