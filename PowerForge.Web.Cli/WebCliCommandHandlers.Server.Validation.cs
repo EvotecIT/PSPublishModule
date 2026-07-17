@@ -28,6 +28,7 @@ internal static partial class WebCliCommandHandlers
 
         var managedPathIds = new HashSet<string>(StringComparer.Ordinal);
         var managedPaths = new HashSet<string>(StringComparer.Ordinal);
+        var managedTargets = new List<(string Id, string Path, string Kind)>();
         var sourceManagedPaths = new List<(string Id, string Source, string Target)>();
         var repositoryRoots = (manifest.Repositories ?? Array.Empty<PowerForgeServerRepository>())
             .Select(static repository => repository.Path?.TrimEnd('/'))
@@ -49,6 +50,7 @@ internal static partial class WebCliCommandHandlers
                     errors.Add($"Managed path '{path.Id}' must use an exact path.");
                 if (!managedPaths.Add(normalizedPath))
                     errors.Add($"Managed path '{normalizedPath}' is duplicated.");
+                managedTargets.Add((path.Id ?? normalizedPath, normalizedPath, path.Kind ?? string.Empty));
             }
             if (!IsValidUnixIdentity(path.Owner))
                 errors.Add($"Managed path '{path.Id}' has an invalid owner.");
@@ -109,6 +111,7 @@ internal static partial class WebCliCommandHandlers
             "apache.files",
             repositoryRoots,
             managedPaths,
+            managedTargets,
             sourceManagedPaths,
             errors);
         ValidateRepositoryManagedFiles(
@@ -118,8 +121,10 @@ internal static partial class WebCliCommandHandlers
             "systemd.units",
             repositoryRoots,
             managedPaths,
+            managedTargets,
             sourceManagedPaths,
             errors);
+        ValidateManagedTargetHierarchy(managedTargets, errors);
 
         foreach (var plainPath in plainPaths)
         {
@@ -206,6 +211,7 @@ internal static partial class WebCliCommandHandlers
         string section,
         IReadOnlyCollection<string> repositoryRoots,
         ISet<string> managedPaths,
+        ICollection<(string Id, string Path, string Kind)> managedTargets,
         ICollection<(string Id, string Source, string Target)> sourceManagedPaths,
         ICollection<string> errors)
     {
@@ -224,6 +230,8 @@ internal static partial class WebCliCommandHandlers
                         errors.Add($"{id}.target must use an exact path.");
                     if (observedTarget is not null && !managedPaths.Add(observedTarget))
                         errors.Add($"Managed path '{observedTarget}' is duplicated.");
+                    if (observedTarget is not null)
+                        managedTargets.Add((id, observedTarget, "file"));
                 }
                 index++;
                 continue;
@@ -248,9 +256,22 @@ internal static partial class WebCliCommandHandlers
                     errors.Add($"{id}.target must not overlap declared repository paths.");
                 if (!managedPaths.Add(target))
                     errors.Add($"Managed path '{target}' is duplicated.");
+                managedTargets.Add((id, target, "file"));
                 sourceManagedPaths.Add((id, source, target));
             }
             index++;
+        }
+    }
+
+    private static void ValidateManagedTargetHierarchy(
+        IReadOnlyCollection<(string Id, string Path, string Kind)> managedTargets,
+        ICollection<string> errors)
+    {
+        foreach (var file in managedTargets.Where(static target =>
+                     string.Equals(target.Kind, "file", StringComparison.OrdinalIgnoreCase)))
+        {
+            foreach (var descendant in managedTargets.Where(target => PathStrictlyContains(file.Path, target.Path)))
+                errors.Add($"Managed file target '{file.Path}' must not contain managed target '{descendant.Path}'.");
         }
     }
 
@@ -571,10 +592,24 @@ internal static partial class WebCliCommandHandlers
     }
 
     private static bool IsValidUnixIdentity(string? value)
-        => string.IsNullOrWhiteSpace(value) ||
-           (value.Length <= 32 &&
-            (IsAsciiLetterOrDigit(value[0]) || value[0] == '_') &&
-            value.All(static character => IsAsciiLetterOrDigit(character) || character is '_' or '-'));
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return true;
+        if (IsNumericUnixIdentity(value))
+        {
+            return value.Length <= 10 &&
+                   (value.Length == 1 || value[0] != '0') &&
+                   uint.TryParse(value, out var id) &&
+                   id != uint.MaxValue;
+        }
+
+        return value.Length <= 32 &&
+               (IsAsciiLetterOrDigit(value[0]) || value[0] == '_') &&
+               value.All(static character => IsAsciiLetterOrDigit(character) || character is '_' or '-');
+    }
+
+    private static bool IsNumericUnixIdentity(string value)
+        => value.Length > 0 && value.All(static character => character is >= '0' and <= '9');
 
     private static bool IsValidMode(string? value)
         => string.IsNullOrWhiteSpace(value) ||

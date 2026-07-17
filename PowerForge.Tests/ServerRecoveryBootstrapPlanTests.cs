@@ -357,6 +357,11 @@ public sealed class ServerRecoveryBootstrapPlanTests
             "example",
             "example",
             "0700");
+        var numericCommand = PowerForge.Web.Cli.WebCliCommandHandlers.BuildManagedDirectoryInstallCommand(
+            "/var/lib/example-numeric",
+            "0",
+            "0",
+            "0750");
 
         Assert.Contains("powerforge_directory_ancestor='/var/www/example/site'", rootCommand, StringComparison.Ordinal);
         Assert.Contains("while [ ! -e \"$powerforge_directory_ancestor\" ] && [ ! -L \"$powerforge_directory_ancestor\" ]", rootCommand, StringComparison.Ordinal);
@@ -371,6 +376,8 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Contains("powerforge_assert_root_controlled_path \"$powerforge_directory_ancestor\"", userCommand, StringComparison.Ordinal);
         Assert.Contains("install -d -o 'example' -g 'example' -m '0700' '/home/example/.ssh'", userCommand, StringComparison.Ordinal);
         Assert.EndsWith("test \"$(stat -c '%a' -- '/home/example/.ssh')\" = '700'", userCommand, StringComparison.Ordinal);
+        Assert.Contains("test \"$(stat -c '%u' -- '/var/lib/example-numeric')\" = '0'", numericCommand, StringComparison.Ordinal);
+        Assert.Contains("test \"$(stat -c '%g' -- '/var/lib/example-numeric')\" = '0'", numericCommand, StringComparison.Ordinal);
     }
 
     [Fact]

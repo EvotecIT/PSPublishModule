@@ -122,6 +122,33 @@ public sealed class ServerRecoverySecurityTests
     }
 
     [Fact]
+    public void ManifestValidation_AcceptsCanonicalNumericIdentitiesAndRejectsAmbiguousIds()
+    {
+        var manifest = CreateManifest();
+        manifest.Paths =
+        [
+            new PowerForgeServerPath
+            {
+                Id = "numeric-state",
+                Path = "/var/lib/example-numeric",
+                Kind = "directory",
+                Owner = "0",
+                Group = "65534",
+                Mode = "0750"
+            }
+        ];
+
+        Assert.Empty(WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest));
+
+        manifest.Paths[0].Owner = "00";
+        manifest.Paths[0].Group = uint.MaxValue.ToString();
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("invalid owner", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("invalid group", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void ManifestValidation_RejectsAmbiguousManagedPathsAndDuplicateCaptures()
     {
         var manifest = CreateManifest();
@@ -141,6 +168,46 @@ public sealed class ServerRecoverySecurityTests
         Assert.Contains(errors, error => error.Contains("Managed path id", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Managed path '/etc/example/secret.env' is duplicated", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("duplicates capture path", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ManifestValidation_RejectsTargetsNestedBelowFilesButAllowsDirectoryNesting()
+    {
+        var manifest = CreateManifest();
+        manifest.Repositories =
+        [
+            new PowerForgeServerRepository { Role = "application", Path = "/srv/example" }
+        ];
+        manifest.Paths =
+        [
+            new PowerForgeServerPath
+            {
+                Id = "config-file",
+                Path = "/opt/powerforge/config",
+                Source = "/srv/example/deploy/config",
+                Kind = "file",
+                Owner = "root",
+                Group = "root",
+                Mode = "0644"
+            },
+            new PowerForgeServerPath
+            {
+                Id = "config-child",
+                Path = "/opt/powerforge/config/child",
+                Kind = "directory",
+                Owner = "root",
+                Group = "root",
+                Mode = "0755"
+            }
+        ];
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("Managed file target '/opt/powerforge/config' must not contain managed target '/opt/powerforge/config/child'", StringComparison.Ordinal));
+
+        manifest.Paths[0].Source = null;
+        manifest.Paths[0].Kind = "directory";
+        Assert.Empty(WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest));
     }
 
     [Fact]

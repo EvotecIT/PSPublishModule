@@ -404,11 +404,13 @@ internal static partial class WebCliCommandHandlers
         var normalizedMode = mode.TrimStart('0');
         if (normalizedMode.Length == 0)
             normalizedMode = "0";
+        var ownerFormat = IsNumericUnixIdentity(owner) ? "%u" : "%U";
+        var groupFormat = IsNumericUnixIdentity(group) ? "%g" : "%G";
         var postcondition = string.Join(" && ",
             $"test -d {quotedTarget}",
             $"test ! -L {quotedTarget}",
-            $"test \"$(stat -c '%U' -- {quotedTarget})\" = {ShellQuote(owner)}",
-            $"test \"$(stat -c '%G' -- {quotedTarget})\" = {ShellQuote(group)}",
+            $"test \"$(stat -c '{ownerFormat}' -- {quotedTarget})\" = {ShellQuote(owner)}",
+            $"test \"$(stat -c '{groupFormat}' -- {quotedTarget})\" = {ShellQuote(group)}",
             $"test \"$(stat -c '%a' -- {quotedTarget})\" = {ShellQuote(normalizedMode)}");
         if (!string.Equals(owner, "root", StringComparison.Ordinal))
         {
@@ -467,19 +469,22 @@ internal static partial class WebCliCommandHandlers
         return $"{string.Join(" && ", checks)} || {{ echo {failure} >&2; exit 3; }}";
     }
 
-    internal static string BuildRootControlledPathGuardFunction()
-        => string.Join('\n',
+    internal static string BuildRootControlledPathGuardFunction(bool useSudo = false)
+    {
+        var prefix = useSudo ? "sudo -n " : string.Empty;
+        return string.Join('\n',
             "powerforge_assert_root_controlled_path() {",
             "  local powerforge_path=\"$1\"",
             "  while :; do",
-            "    test -e \"$powerforge_path\" || { echo \"Required path does not exist: $powerforge_path\" >&2; return 1; }",
-            "    test ! -L \"$powerforge_path\" || { echo \"Root-controlled path must not be a symlink: $powerforge_path\" >&2; return 1; }",
-            "    test \"$(stat -c '%u' -- \"$powerforge_path\")\" = 0 || { echo \"Root-controlled path is not owned by root: $powerforge_path\" >&2; return 1; }",
-            "    test -z \"$(find \"$powerforge_path\" -maxdepth 0 -perm /022 -print -quit)\" || { echo \"Root-controlled path is group- or world-writable: $powerforge_path\" >&2; return 1; }",
+            $"    {prefix}test -e \"$powerforge_path\" || {{ echo \"Required path does not exist: $powerforge_path\" >&2; return 1; }}",
+            $"    {prefix}test ! -L \"$powerforge_path\" || {{ echo \"Root-controlled path must not be a symlink: $powerforge_path\" >&2; return 1; }}",
+            $"    test \"$({prefix}stat -c '%u' -- \"$powerforge_path\")\" = 0 || {{ echo \"Root-controlled path is not owned by root: $powerforge_path\" >&2; return 1; }}",
+            $"    test -z \"$({prefix}find \"$powerforge_path\" -maxdepth 0 -perm /022 -print -quit)\" || {{ echo \"Root-controlled path is group- or world-writable: $powerforge_path\" >&2; return 1; }}",
             "    test \"$powerforge_path\" = / && break",
             "    powerforge_path=$(dirname -- \"$powerforge_path\")",
             "  done",
             "}");
+    }
 
     private static string BuildRootControlledTargetParentSafetyCommand(string target)
         => $"powerforge_assert_root_controlled_path \"$(dirname -- {ShellQuote(target)})\"";

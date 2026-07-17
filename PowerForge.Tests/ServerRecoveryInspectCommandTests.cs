@@ -48,12 +48,29 @@ public sealed class ServerRecoveryInspectCommandTests
 
         var command = WebCliCommandHandlers.BuildManagedPathCheckCommand(managedPath);
 
-        Assert.Equal(
-            "sudo -n test -f '/etc/powerforge/sites/example.env' && sudo -n test ! -L '/etc/powerforge/sites/example.env' && " +
-            "test \"$(sudo -n stat -c '%U' -- '/etc/powerforge/sites/example.env')\" = 'root' && " +
-            "test \"$(sudo -n stat -c '%G' -- '/etc/powerforge/sites/example.env')\" = 'powerforge' && " +
-            "test \"$(sudo -n stat -c '%a' -- '/etc/powerforge/sites/example.env')\" = '640'",
-            command);
+        Assert.Contains("sudo -n test -e \"$powerforge_path\"", command, StringComparison.Ordinal);
+        Assert.Contains("sudo -n test ! -L \"$powerforge_path\"", command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path \"$(dirname -- '/etc/powerforge/sites/example.env')\"", command, StringComparison.Ordinal);
+        Assert.Contains("sudo -n test -f '/etc/powerforge/sites/example.env' && sudo -n test ! -L '/etc/powerforge/sites/example.env'", command, StringComparison.Ordinal);
+        Assert.Contains("test \"$(sudo -n stat -c '%U' -- '/etc/powerforge/sites/example.env')\" = 'root'", command, StringComparison.Ordinal);
+        Assert.Contains("test \"$(sudo -n stat -c '%G' -- '/etc/powerforge/sites/example.env')\" = 'powerforge'", command, StringComparison.Ordinal);
+        Assert.EndsWith("test \"$(sudo -n stat -c '%a' -- '/etc/powerforge/sites/example.env')\" = '640'", command, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ManagedPathChecksUseNumericUidAndGidFormats()
+    {
+        var command = WebCliCommandHandlers.BuildManagedPathCheckCommand(new PowerForgeServerPath
+        {
+            Kind = "directory",
+            Path = "/var/lib/example",
+            Owner = "0",
+            Group = "65534",
+            Mode = "0750"
+        });
+
+        Assert.Contains("stat -c '%u' -- '/var/lib/example')\" = '0'", command, StringComparison.Ordinal);
+        Assert.Contains("stat -c '%g' -- '/var/lib/example')\" = '65534'", command, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -239,11 +239,23 @@ internal static partial class WebCliCommandHandlers
             "symlink" => $"sudo -n test -L {quotedPath}",
             _ => $"sudo -n test -e {quotedPath}"
         };
-        var checks = new List<string> { kindCheck };
+        var checks = new List<string>();
+        if (string.Equals(path.Owner, "root", StringComparison.Ordinal) &&
+            path.Kind?.ToLowerInvariant() is "file" or "directory")
+        {
+            checks.Add(BuildRootControlledTargetParentInspectCommand(path.Path ?? string.Empty));
+        }
+        checks.Add(kindCheck);
         if (!string.IsNullOrWhiteSpace(path.Owner))
-            checks.Add($"test \"$(sudo -n stat -c '%U' -- {quotedPath})\" = {ShellQuote(path.Owner)}");
+        {
+            var ownerFormat = IsNumericUnixIdentity(path.Owner) ? "%u" : "%U";
+            checks.Add($"test \"$(sudo -n stat -c '{ownerFormat}' -- {quotedPath})\" = {ShellQuote(path.Owner)}");
+        }
         if (!string.IsNullOrWhiteSpace(path.Group))
-            checks.Add($"test \"$(sudo -n stat -c '%G' -- {quotedPath})\" = {ShellQuote(path.Group)}");
+        {
+            var groupFormat = IsNumericUnixIdentity(path.Group) ? "%g" : "%G";
+            checks.Add($"test \"$(sudo -n stat -c '{groupFormat}' -- {quotedPath})\" = {ShellQuote(path.Group)}");
+        }
         if (!string.IsNullOrWhiteSpace(path.Mode))
         {
             var normalizedMode = path.Mode.TrimStart('0');
@@ -251,6 +263,11 @@ internal static partial class WebCliCommandHandlers
         }
         return string.Join(" && ", checks);
     }
+
+    private static string BuildRootControlledTargetParentInspectCommand(string target)
+        => string.Join('\n',
+            BuildRootControlledPathGuardFunction(useSudo: true),
+            $"powerforge_assert_root_controlled_path \"$(dirname -- {ShellQuote(target)})\"");
 
     internal static bool HasDeclaredApacheState(PowerForgeServerRecoveryManifest manifest)
         => manifest.Apache is not null || manifest.Packages?.ApacheModules?.Length > 0;
