@@ -13,6 +13,7 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.DoesNotContain("known-hosts", action, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("${{ secrets.", action, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd", action, StringComparison.Ordinal);
+        Assert.Contains("fetch-depth: 0", action, StringComparison.Ordinal);
         Assert.Contains("actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7", action, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_ENGINE_REF: ${{ github.action_ref }}", action, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_ENGINE_REPOSITORY: ${{ github.action_repository }}", action, StringComparison.Ordinal);
@@ -36,6 +37,28 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.DoesNotContain("ssh ", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Invoke-WebRequest", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Invoke-RestMethod", script, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Script_ShouldVerifyPinnedManagedSourcesAndEncryptedCaptureAuthorization()
+    {
+        var entrypoint = ReadRepoFile(".github", "actions", "powerforge-server-recovery-validate", "Invoke-PowerForgeServerRecoveryValidation.ps1");
+        var sourceValidation = ReadRepoFile(".github", "actions", "powerforge-server-recovery-validate", "Assert-PowerForgeServerRecoverySources.ps1");
+
+        Assert.Contains("Assert-PowerForgeServerRecoverySources.ps1", entrypoint, StringComparison.Ordinal);
+        Assert.Contains("-CallerRepository $env:GITHUB_REPOSITORY", entrypoint, StringComparison.Ordinal);
+        Assert.Contains("Resolve-ManagedSourcePath", sourceValidation, StringComparison.Ordinal);
+        Assert.Contains("git -C $root rev-parse --verify $sourceObject", sourceValidation, StringComparison.Ordinal);
+        Assert.Contains("git -C $root hash-object -- $candidate", sourceValidation, StringComparison.Ordinal);
+        Assert.Contains("differs from its pinned repository commit", sourceValidation, StringComparison.Ordinal);
+        Assert.Contains("Managed recovery source must not traverse a symbolic link", sourceValidation, StringComparison.Ordinal);
+        Assert.Contains("/usr/local/sbin/powerforge-server-encrypted-capture", sourceValidation, StringComparison.Ordinal);
+        Assert.Contains("Cmnd_Alias", sourceValidation, StringComparison.Ordinal);
+        Assert.Contains("NOPASSWD:", sourceValidation, StringComparison.Ordinal);
+        Assert.Contains("exact hardened encrypted-capture command", sourceValidation, StringComparison.Ordinal);
+        Assert.DoesNotContain("Invoke-WebRequest", sourceValidation, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Invoke-RestMethod", sourceValidation, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ssh ", sourceValidation, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

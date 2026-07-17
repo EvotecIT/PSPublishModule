@@ -15,7 +15,7 @@ outputs:
     description: Number of generated bootstrap plan steps.
     value: ${{ steps.validate.outputs.bootstrap-step-count }}
   managed-source-count:
-    description: Number of repository-backed managed file declarations.
+    description: Number of repository-backed managed files verified in pinned checkouts.
     value: ${{ steps.validate.outputs.managed-source-count }}
   secret-count:
     description: Number of declared recovery secrets.
@@ -30,6 +30,7 @@ runs:
     - name: Checkout caller repository
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
+        fetch-depth: 0
         token: ${{ github.token }}
         ref: ${{ github.sha }}
 
