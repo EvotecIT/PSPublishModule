@@ -706,11 +706,11 @@ internal static partial class WebCliCommandHandlers
         return manifest.Bootstrap?.Commands?.Length > 0 ||
                manifest.Repositories?.Length > 0 ||
                manifest.Accounts?.Length > 0 ||
-               manifest.Paths?.Length > 0 ||
+               manifest.Paths?.Any(static path =>
+                   path.Kind?.Equals("directory", StringComparison.OrdinalIgnoreCase) == true ||
+                   !string.IsNullOrWhiteSpace(path.Source)) == true ||
                packages?.Apt?.Length > 0 ||
                packages?.ApacheModules?.Length > 0 ||
-               packages?.DotnetSdks?.Length > 0 ||
-               packages?.Powershell == true ||
                apache?.Modules?.Length > 0 ||
                apache?.Sites?.Length > 0 ||
                apache?.Conf?.Length > 0 ||

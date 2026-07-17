@@ -208,6 +208,28 @@ public sealed class ServerRecoveryBootstrapPlanTests
 
         Assert.Contains("bootstrap", stages);
         Assert.Null(manifest.Bootstrap);
+
+        var unsupportedOnly = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Packages = new PowerForge.Web.Cli.PowerForgeServerPackages
+            {
+                DotnetSdks = ["10.0"],
+                Powershell = true
+            },
+            Paths =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerPath
+                {
+                    Id = "current",
+                    Path = "/var/www/example/current",
+                    Kind = "symlink"
+                }
+            ]
+        };
+
+        Assert.DoesNotContain(
+            "bootstrap",
+            PowerForge.Web.Cli.WebCliCommandHandlers.BuildServerRecoveryStages(unsupportedOnly));
     }
 
     [Fact]
