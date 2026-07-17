@@ -24,8 +24,9 @@ This command removes modules from the selected managed module root without invok
 PSResourceGet. It follows PSResourceGet-shaped uninstall selection semantics while adding managed
 dependency and loaded-module safety checks. InstalledLocation always selects the exact installed directory,
 whether it is bound directly or received from Get-ManagedModule pipeline output. Typed Get-ManagedModule rows
-retain their complete scanned-root provenance, so dependency checks still cover the visible estate when one
-exact installation is piped to this command.
+retain structured scanned-root provenance, so dependency checks preserve edition/profile visibility and require
+roots that were available during inventory to remain available. Multiple piped rows are preflighted as one batch
+across physical roots and selected dependents are removed before their selected dependencies.
 
 ## EXAMPLES
 

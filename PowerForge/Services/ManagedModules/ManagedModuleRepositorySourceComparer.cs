@@ -57,7 +57,7 @@ internal static class ManagedModuleRepositorySourceComparer
 
         try
         {
-            var fullPath = Path.GetFullPath(source);
+            var fullPath = ManagedModuleRepositoryPathResolver.ResolveLocalFolder(source);
             var root = Path.GetPathRoot(fullPath);
             path = string.Equals(fullPath, root, StringComparison.OrdinalIgnoreCase)
                 ? fullPath

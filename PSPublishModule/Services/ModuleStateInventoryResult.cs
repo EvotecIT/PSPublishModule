@@ -78,6 +78,12 @@ public sealed class ModuleStateInstalledModuleResult
     public string[] InventoryModuleRoots { get; set; } = [];
 
     /// <summary>
+    /// Gets or sets structured provenance for every root scanned with this row, including visibility and
+    /// whether the inventory successfully enumerated the root.
+    /// </summary>
+    public ModuleStateInventoryPathResult[] InventoryPaths { get; set; } = [];
+
+    /// <summary>
     /// Gets or sets the local user profile associated with this module root when known.
     /// </summary>
     public string? ProfileName { get; set; }
@@ -131,6 +137,9 @@ public sealed class ModuleStateInventoryPathResult
 
     /// <summary>Gets or sets whether failure to scan the root makes inventory incomplete.</summary>
     public bool IsRequired { get; set; }
+
+    /// <summary>Gets or sets whether inventory successfully enumerated this root.</summary>
+    public bool WasAvailable { get; set; }
 }
 
 /// <summary>

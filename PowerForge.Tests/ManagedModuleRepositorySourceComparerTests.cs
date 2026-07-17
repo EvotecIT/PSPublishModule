@@ -28,6 +28,14 @@ public sealed class ManagedModuleRepositorySourceComparerTests
     }
 
     [Fact]
+    public void Relative_local_sources_accept_portable_directory_separators()
+    {
+        Assert.True(ManagedModuleRepositorySourceComparer.Equals(
+            "packages/feed",
+            @"packages\feed"));
+    }
+
+    [Fact]
     public void Remote_source_host_is_case_insensitive_but_path_is_case_sensitive()
     {
         Assert.True(ManagedModuleRepositorySourceComparer.Equals(

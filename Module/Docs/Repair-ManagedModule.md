@@ -257,7 +257,7 @@ Accept wildcard characters: True
 ```
 
 ### -IncludeAllUserProfiles
-Discover existing standard PowerShell module roots below the local profile container. Inaccessible optional profiles or roots are reported as warnings. Use UserProfilePath or ModulePath for redirected and custom layouts.
+Discover existing standard PowerShell module roots below the local profile container. Unix root sessions scan /home and retain /root; inaccessible optional profiles or roots are reported as warnings. Use UserProfilePath or ModulePath for redirected and custom layouts.
 
 ```yaml
 Type: SwitchParameter

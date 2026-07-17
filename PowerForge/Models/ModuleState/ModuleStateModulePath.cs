@@ -9,7 +9,8 @@ internal sealed class ModuleStateModulePath
         string? powerShellEdition = null,
         string? scope = null,
         string? profileName = null,
-        bool isRequired = false)
+        bool isRequired = false,
+        bool wasAvailable = false)
     {
         Path = string.IsNullOrWhiteSpace(path)
             ? throw new ArgumentException("Module path is required.", nameof(path))
@@ -18,6 +19,7 @@ internal sealed class ModuleStateModulePath
         Scope = NormalizeOptional(scope);
         ProfileName = NormalizeOptional(profileName);
         IsRequired = isRequired;
+        WasAvailable = wasAvailable;
     }
 
     internal string Path { get; }
@@ -29,6 +31,8 @@ internal sealed class ModuleStateModulePath
     internal string? ProfileName { get; }
 
     internal bool IsRequired { get; }
+
+    internal bool WasAvailable { get; }
 
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();

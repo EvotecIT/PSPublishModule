@@ -21,6 +21,15 @@ internal static class ModuleStateInventoryResultMapper
             .Select(static path => path!)
             .Distinct(ModuleStatePathIdentity.Comparer)
             .ToArray();
+        var inventoryPaths = inventory.ModulePaths.Select(static path => new ModuleStateInventoryPathResult
+        {
+            Path = path.Path,
+            PowerShellEdition = path.PowerShellEdition,
+            Scope = path.Scope,
+            ProfileName = path.ProfileName,
+            IsRequired = path.IsRequired,
+            WasAvailable = path.WasAvailable
+        }).ToArray();
 
         return new ModuleStateInventoryResult
         {
@@ -28,14 +37,7 @@ internal static class ModuleStateInventoryResultMapper
             ModulePaths = modulePaths is { Length: > 0 }
                 ? modulePaths
                 : inventory.ModulePaths.Select(static path => path.Path).ToArray(),
-            ScannedPaths = inventory.ModulePaths.Select(static path => new ModuleStateInventoryPathResult
-            {
-                Path = path.Path,
-                PowerShellEdition = path.PowerShellEdition,
-                Scope = path.Scope,
-                ProfileName = path.ProfileName,
-                IsRequired = path.IsRequired
-            }).ToArray(),
+            ScannedPaths = inventoryPaths,
             Diagnostics = inventory.Diagnostics.Select(static diagnostic => new ModuleStateInventoryDiagnosticResult
             {
                 Severity = diagnostic.Severity.ToString(),
@@ -55,6 +57,7 @@ internal static class ModuleStateInventoryResultMapper
                 Path = module.Path,
                 ModuleRoot = module.ModuleRoot,
                 InventoryModuleRoots = inventoryModuleRoots,
+                InventoryPaths = inventoryPaths,
                 ProfileName = module.ProfileName,
                 SourceRepository = module.SourceRepository,
                 IsLoaded = module.IsLoaded,
@@ -75,7 +78,8 @@ internal static class ModuleStateInventoryResultMapper
                 path.PowerShellEdition,
                 path.Scope,
                 path.ProfileName,
-                path.IsRequired))
+                path.IsRequired,
+                path.WasAvailable))
             : (result.ModulePaths ?? Array.Empty<string>()).Select(static path => new ModuleStateModulePath(path));
         var diagnostics = (result.Diagnostics ?? Array.Empty<ModuleStateInventoryDiagnosticResult>())
             .Select(static diagnostic => new ModuleStateInventoryDiagnostic(

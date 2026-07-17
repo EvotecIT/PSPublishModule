@@ -83,9 +83,14 @@ public sealed partial class ManagedModuleUninstallService
             .ToArray();
     }
 
-    private static string[] SnapshotAvailableDependencyModuleRoots(IEnumerable<string> moduleRoots)
+    private static string[] SnapshotAvailableDependencyModuleRoots(
+        IEnumerable<string> moduleRoots,
+        IEnumerable<string>? rootsRequiringAvailability = null)
     {
         var available = new List<string>();
+        var required = new HashSet<string>(
+            rootsRequiringAvailability ?? Array.Empty<string>(),
+            ModuleStatePathIdentity.Comparer);
         foreach (var root in moduleRoots)
         {
             if (!Directory.Exists(root))
@@ -93,13 +98,16 @@ public sealed partial class ManagedModuleUninstallService
                 try
                 {
                     _ = File.GetAttributes(root);
+                    ThrowIfRequiredRootMissing(root, required);
                 }
                 catch (FileNotFoundException)
                 {
+                    ThrowIfRequiredRootMissing(root, required);
                     continue;
                 }
                 catch (DirectoryNotFoundException)
                 {
+                    ThrowIfRequiredRootMissing(root, required);
                     continue;
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
@@ -128,6 +136,15 @@ public sealed partial class ManagedModuleUninstallService
         return available.ToArray();
     }
 
+    private static void ThrowIfRequiredRootMissing(string root, ISet<string> requiredRoots)
+    {
+        if (requiredRoots.Contains(root))
+        {
+            throw new InvalidOperationException(
+                $"Dependency module root '{root}' was available during inventory but is no longer available; uninstall was blocked before mutation.");
+        }
+    }
+
     private static string[] NormalizeDependencyModuleRoots(
         string moduleRoot,
         IEnumerable<string>? dependencyModuleRoots)
@@ -139,6 +156,23 @@ public sealed partial class ManagedModuleUninstallService
             .Select(static root => ModuleStatePathIdentity.Normalize(root))
             .Distinct(ModuleStatePathIdentity.Comparer)
             .ToArray();
+    }
+
+    private static IReadOnlyList<IReadOnlyList<string>> NormalizeDependencyModuleRootGroups(
+        string moduleRoot,
+        IEnumerable<IReadOnlyList<string>>? dependencyModuleRootGroups)
+    {
+        var groups = new List<IReadOnlyList<string>>();
+        var seen = new HashSet<string>(ModuleStatePathIdentity.Comparer);
+        foreach (var group in dependencyModuleRootGroups ?? Array.Empty<IReadOnlyList<string>>())
+        {
+            var roots = NormalizeDependencyModuleRoots(moduleRoot, group);
+            var key = string.Join("\n", roots.Select(ModuleStatePathIdentity.Normalize));
+            if (seen.Add(key))
+                groups.Add(roots);
+        }
+
+        return groups;
     }
 
     private static bool HasModulePayload(string modulePath, string moduleName)

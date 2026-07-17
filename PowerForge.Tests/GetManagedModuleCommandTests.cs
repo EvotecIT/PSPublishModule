@@ -26,6 +26,9 @@ public sealed class GetManagedModuleCommandTests
         Assert.Equal("Module", result.Type);
         Assert.Equal(result.Path, result.InstalledLocation);
         Assert.Equal(new[] { moduleRoot.Path }, result.InventoryModuleRoots);
+        var provenance = Assert.Single(result.InventoryPaths);
+        Assert.Equal(moduleRoot.Path, provenance.Path);
+        Assert.True(provenance.WasAvailable);
     }
 
     [Fact]

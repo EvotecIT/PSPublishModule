@@ -393,6 +393,63 @@ public sealed class UninstallManagedModuleCommandTests
     }
 
     [Fact]
+    public void UninstallManagedModule_does_not_use_another_profiles_copy_to_satisfy_dependency()
+    {
+        using var workspace = new TemporaryDirectory();
+        var globalRoot = Path.Combine(workspace.Path, "global");
+        var aliceRoot = Path.Combine(workspace.Path, "alice");
+        var bobRoot = Path.Combine(workspace.Path, "bob");
+        CreateInstalledModule(globalRoot, "Company.Core", "1.0.0");
+        CreateInstalledModule(globalRoot, "Company.Core", "2.0.0");
+        CreateInstalledModule(aliceRoot, "Company.Tools", "1.0.0", "Company.Core", "1.0.0");
+        CreateInstalledModule(bobRoot, "Company.Core", "1.0.0");
+        var targetPath = Path.Combine(globalRoot, "Company.Core", "1.0.0");
+        var inventoryPaths = new[]
+        {
+            CreateInventoryPath(globalRoot, "Core", "AllUsers", profileName: null),
+            CreateInventoryPath(aliceRoot, "Core", "CurrentUser", "Alice"),
+            CreateInventoryPath(bobRoot, "Core", "CurrentUser", "Bob")
+        };
+        var row = CreateInventoryRow("Company.Core", "1.0.0", targetPath, globalRoot, "Core", "AllUsers", null, inventoryPaths);
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedModule")
+            .AddParameter("InputObject", new[] { row });
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+
+        Assert.Contains("required by Company.Tools", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(targetPath));
+    }
+
+    [Fact]
+    public void UninstallManagedModule_fails_closed_when_inventory_root_disappears_before_planning()
+    {
+        using var workspace = new TemporaryDirectory();
+        var targetRoot = Path.Combine(workspace.Path, "target");
+        var dependencyRoot = Path.Combine(workspace.Path, "dependencies");
+        CreateInstalledModule(targetRoot, "Company.Core", "1.0.0");
+        Directory.CreateDirectory(dependencyRoot);
+        var targetPath = Path.Combine(targetRoot, "Company.Core", "1.0.0");
+        var inventoryPaths = new[]
+        {
+            CreateInventoryPath(targetRoot, "Core", "Custom", profileName: null),
+            CreateInventoryPath(dependencyRoot, "Core", "Custom", profileName: null)
+        };
+        var row = CreateInventoryRow("Company.Core", "1.0.0", targetPath, targetRoot, "Core", "Custom", null, inventoryPaths);
+        Directory.Delete(dependencyRoot);
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedModule")
+            .AddParameter("InputObject", new[] { row });
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+
+        Assert.Contains("available during inventory", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(targetPath));
+    }
+
+    [Fact]
     public void UninstallManagedModule_direct_installed_location_removes_only_selected_same_version_location()
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -468,6 +525,39 @@ public sealed class UninstallManagedModuleCommandTests
     [pscustomobject]@{ Name = 'Company.Tools'; Version = '1.0.0'; Path = '" + EscapePowerShellSingleQuoted(toolsPath) + @"' }
 ) | Uninstall-ManagedModule
 ");
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var typed = results.Select(static result => Assert.IsType<ManagedModuleUninstallResult>(result.BaseObject)).ToArray();
+        Assert.Equal(new[] { "Company.Tools", "Company.Core" }, typed.Select(static result => result.Name).ToArray());
+        Assert.False(Directory.Exists(corePath));
+        Assert.False(Directory.Exists(toolsPath));
+    }
+
+    [Fact]
+    public void UninstallManagedModule_batches_cross_root_rows_before_dependency_preflight()
+    {
+        using var workspace = new TemporaryDirectory();
+        var coreRoot = Path.Combine(workspace.Path, "core");
+        var toolsRoot = Path.Combine(workspace.Path, "tools");
+        CreateInstalledModule(coreRoot, "Company.Core", "1.0.0");
+        CreateInstalledModule(toolsRoot, "Company.Tools", "1.0.0", "Company.Core", "1.0.0");
+        var corePath = Path.Combine(coreRoot, "Company.Core", "1.0.0");
+        var toolsPath = Path.Combine(toolsRoot, "Company.Tools", "1.0.0");
+        var inventoryPaths = new[]
+        {
+            CreateInventoryPath(coreRoot, "Core", "Custom", profileName: null),
+            CreateInventoryPath(toolsRoot, "Core", "Custom", profileName: null)
+        };
+        var rows = new[]
+        {
+            CreateInventoryRow("Company.Core", "1.0.0", corePath, coreRoot, "Core", "Custom", null, inventoryPaths),
+            CreateInventoryRow("Company.Tools", "1.0.0", toolsPath, toolsRoot, "Core", "Custom", null, inventoryPaths)
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedModule")
+            .AddParameter("InputObject", rows);
         var results = ps.Invoke();
 
         AssertNoPowerShellErrors(ps);
@@ -591,6 +681,42 @@ public sealed class UninstallManagedModuleCommandTests
         ps.Commands.Clear();
         return ps;
     }
+
+    private static ModuleStateInventoryPathResult CreateInventoryPath(
+        string path,
+        string? edition,
+        string? scope,
+        string? profileName)
+        => new()
+        {
+            Path = path,
+            PowerShellEdition = edition,
+            Scope = scope,
+            ProfileName = profileName,
+            WasAvailable = true
+        };
+
+    private static ModuleStateInstalledModuleResult CreateInventoryRow(
+        string name,
+        string version,
+        string installedLocation,
+        string moduleRoot,
+        string? edition,
+        string? scope,
+        string? profileName,
+        ModuleStateInventoryPathResult[] inventoryPaths)
+        => new()
+        {
+            Name = name,
+            Version = version,
+            InstalledLocation = installedLocation,
+            ModuleRoot = moduleRoot,
+            PowerShellEdition = edition,
+            Scope = scope,
+            ProfileName = profileName,
+            InventoryModuleRoots = inventoryPaths.Select(static path => path.Path).ToArray(),
+            InventoryPaths = inventoryPaths
+        };
 
     private static void CreateInstalledModule(
         string root,

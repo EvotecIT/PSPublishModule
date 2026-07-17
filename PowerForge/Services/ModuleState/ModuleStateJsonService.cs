@@ -68,7 +68,8 @@ internal sealed class ModuleStateJsonService
                 path.PowerShellEdition,
                 path.Scope,
                 path.ProfileName,
-                path.IsRequired));
+                path.IsRequired,
+                path.WasAvailable));
         var diagnostics = (dto.Diagnostics ?? Array.Empty<InventoryDiagnosticDto>())
             .Select(static diagnostic => new ModuleStateInventoryDiagnostic(
                 ParseSeverity(diagnostic.Severity),
@@ -259,6 +260,8 @@ internal sealed class ModuleStateJsonService
         public string? ProfileName { get; set; }
 
         public bool IsRequired { get; set; }
+
+        public bool WasAvailable { get; set; }
     }
 
     private sealed class InventoryDiagnosticDto

@@ -25,6 +25,11 @@ public sealed class ManagedModuleUninstallPlan
     /// </summary>
     public IReadOnlyList<string> DependencyModuleRoots { get; set; } = Array.Empty<string>();
 
+    /// <summary>
+    /// Visibility-specific root groups that must each pass dependency revalidation independently.
+    /// </summary>
+    internal IReadOnlyList<IReadOnlyList<string>> DependencyModuleRootGroups { get; set; } = Array.Empty<IReadOnlyList<string>>();
+
     internal IReadOnlyList<string> DependencyModuleRootsRequiringAvailability { get; set; } = Array.Empty<string>();
 
     /// <summary>

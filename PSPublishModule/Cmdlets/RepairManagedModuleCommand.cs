@@ -124,7 +124,7 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
     [ValidateNotNullOrEmpty]
     public string[]? UserProfilePath { get; set; }
 
-    /// <summary>Discover existing standard PowerShell module roots below the local profile container. Inaccessible optional profiles or roots are reported as warnings. Use UserProfilePath or ModulePath for redirected and custom layouts.</summary>
+    /// <summary>Discover existing standard PowerShell module roots below the local profile container. Unix root sessions scan /home and retain /root; inaccessible optional profiles or roots are reported as warnings. Use UserProfilePath or ModulePath for redirected and custom layouts.</summary>
     [Parameter]
     public SwitchParameter IncludeAllUserProfiles { get; set; }
 

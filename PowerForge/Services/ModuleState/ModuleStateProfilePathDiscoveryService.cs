@@ -144,11 +144,18 @@ internal sealed class ModuleStateProfilePathDiscoveryService
         string? currentUserProfilePath,
         ICollection<ModuleStateInventoryDiagnostic> diagnostics)
     {
-        var parent = string.IsNullOrWhiteSpace(localProfilesRoot)
-            ? string.IsNullOrWhiteSpace(currentUserProfilePath)
-                ? null
-                : Directory.GetParent(currentUserProfilePath)?.FullName
-            : Path.GetFullPath(localProfilesRoot!.Trim());
+        var currentProfile = string.IsNullOrWhiteSpace(currentUserProfilePath)
+            ? null
+            : Path.GetFullPath(currentUserProfilePath!.Trim());
+        var parent = ResolveLocalProfileContainer(
+            localProfilesRoot,
+            currentProfile,
+            FrameworkCompatibility.IsWindows());
+        var profiles = new List<string>();
+        if (string.IsNullOrWhiteSpace(localProfilesRoot) &&
+            !string.IsNullOrWhiteSpace(currentProfile) &&
+            Directory.Exists(currentProfile))
+            profiles.Add(currentProfile!);
         if (string.IsNullOrWhiteSpace(parent) || !Directory.Exists(parent))
         {
             diagnostics.Add(new ModuleStateInventoryDiagnostic(
@@ -156,12 +163,15 @@ internal sealed class ModuleStateProfilePathDiscoveryService
                 "ModuleState.LocalProfileDiscoveryUnavailable",
                 "The local user-profile container could not be resolved or does not exist. Use UserProfilePath or ModulePath for redirected or custom profiles.",
                 parent ?? "<local-profile-container>"));
-            return Array.Empty<string>();
+            return profiles;
         }
 
         try
         {
-            return Directory.EnumerateDirectories(parent!, "*", SearchOption.TopDirectoryOnly).ToArray();
+            return profiles
+                .Concat(Directory.EnumerateDirectories(parent!, "*", SearchOption.TopDirectoryOnly))
+                .Distinct(ModuleStatePathIdentity.Comparer)
+                .ToArray();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         {
@@ -170,8 +180,28 @@ internal sealed class ModuleStateProfilePathDiscoveryService
                 "ModuleState.LocalProfileDiscoveryFailed",
                 $"The local user-profile container '{parent}' could not be enumerated: {ex.Message}",
                 parent!));
-            return Array.Empty<string>();
+            return profiles;
         }
+    }
+
+    internal static string? ResolveLocalProfileContainer(
+        string? localProfilesRoot,
+        string? currentUserProfilePath,
+        bool isWindows)
+    {
+        if (!string.IsNullOrWhiteSpace(localProfilesRoot))
+            return Path.GetFullPath(localProfilesRoot!.Trim());
+        if (string.IsNullOrWhiteSpace(currentUserProfilePath))
+            return null;
+
+        if (isWindows)
+            return Directory.GetParent(currentUserProfilePath!)?.FullName;
+
+        var normalized = currentUserProfilePath!.Trim().Replace('\\', '/').TrimEnd('/');
+        if (string.Equals(normalized, "/root", StringComparison.Ordinal))
+            return "/home";
+        var separator = normalized.LastIndexOf('/');
+        return separator <= 0 ? "/" : normalized.Substring(0, separator);
     }
 
     private static IEnumerable<ModuleStateModulePath> EnumerateStandardModuleRoots(

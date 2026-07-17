@@ -21,9 +21,11 @@ feature roadmap.
   explicit destinations;
   cleanup replans after delivery, requires an error-free refreshed plan,
   batch-preflights exact-path uninstall safety, protects current-runspace
-  loaded modules, validates global/profile/custom cross-root dependencies,
+  loaded modules, validates global/profile/custom cross-root dependencies with
+  per-profile visibility for global cleanup targets,
   treats unknown-edition roots conservatively, fails closed when a previously
-  available dependency root cannot be inspected, orders selected dependents
+  available inventory/dependency root cannot be inspected, preserves
+  profile/edition visibility instead of pooling unrelated alternatives, orders selected dependents
   before dependencies, and returns post-apply convergence evidence without
   treating declined actions as success.
 - [x] Common PowerShellGet and stable PSResourceGet module workflows have

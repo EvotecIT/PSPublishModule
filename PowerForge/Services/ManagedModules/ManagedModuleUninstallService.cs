@@ -20,7 +20,17 @@ public sealed partial class ManagedModuleUninstallService
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
         var names = NormalizeNames(request.Name);
         var candidates = EnumerateInstalledModules(moduleRoot);
-        var dependencyModuleRoots = NormalizeDependencyModuleRoots(moduleRoot, request.DependencyModuleRoots);
+        var dependencyModuleRootGroups = NormalizeDependencyModuleRootGroups(moduleRoot, request.DependencyModuleRootGroups);
+        var rootsRequiredByInventory = (request.DependencyModuleRootsRequiringAvailability ?? Array.Empty<string>())
+            .Where(static root => !string.IsNullOrWhiteSpace(root))
+            .Select(static root => ModuleStatePathIdentity.Normalize(root))
+            .Distinct(ModuleStatePathIdentity.Comparer)
+            .ToArray();
+        var dependencyModuleRoots = NormalizeDependencyModuleRoots(
+            moduleRoot,
+            request.DependencyModuleRoots
+                .Concat(dependencyModuleRootGroups.SelectMany(static group => group))
+                .Concat(rootsRequiredByInventory));
         var matchingCandidates = candidates
             .Where(module => names.Any(pattern => pattern.IsMatch(module.Name)))
             .Where(module => string.IsNullOrWhiteSpace(request.InstalledLocation) ||
@@ -31,7 +41,7 @@ public sealed partial class ManagedModuleUninstallService
             .ToArray();
         var dependencyModuleRootsRequiringAvailability = request.SkipDependencyCheck || targets.Length == 0
             ? Array.Empty<string>()
-            : SnapshotAvailableDependencyModuleRoots(dependencyModuleRoots);
+            : SnapshotAvailableDependencyModuleRoots(dependencyModuleRoots, rootsRequiredByInventory);
         var missingNames = names
             .Where(static pattern => !pattern.IsWildcard)
             .Where(pattern => !targets.Any(target => pattern.IsMatch(target.Name)))
@@ -42,10 +52,10 @@ public sealed partial class ManagedModuleUninstallService
             ThrowIfLoaded(targets);
 
         if (!request.SkipDependencyCheck && !request.DeferDependencyCheck)
-            ThrowIfDependencyBlocked(
-                EnumerateInstalledModulesForDependencyValidation(
-                    dependencyModuleRoots,
-                    dependencyModuleRootsRequiringAvailability),
+            ThrowIfDependencyBlockedAcrossRootGroups(
+                dependencyModuleRoots,
+                dependencyModuleRootGroups,
+                dependencyModuleRootsRequiringAvailability,
                 targets,
                 targets);
 
@@ -55,6 +65,7 @@ public sealed partial class ManagedModuleUninstallService
             Version = request.Version,
             ModuleRoot = moduleRoot,
             DependencyModuleRoots = dependencyModuleRoots,
+            DependencyModuleRootGroups = dependencyModuleRootGroups,
             DependencyModuleRootsRequiringAvailability = dependencyModuleRootsRequiringAvailability,
             SkipDependencyCheck = request.SkipDependencyCheck,
             AllowLoadedModuleUninstall = request.AllowLoadedModuleUninstall,
@@ -113,12 +124,31 @@ public sealed partial class ManagedModuleUninstallService
             ThrowIfLoaded(plan.Targets);
 
         if (!plan.SkipDependencyCheck)
-            ThrowIfDependencyBlocked(
-                EnumerateInstalledModulesForDependencyValidation(
-                    NormalizeDependencyModuleRoots(plan.ModuleRoot, plan.DependencyModuleRoots),
-                    plan.DependencyModuleRootsRequiringAvailability),
+            ThrowIfDependencyBlockedAcrossRootGroups(
+                NormalizeDependencyModuleRoots(plan.ModuleRoot, plan.DependencyModuleRoots),
+                NormalizeDependencyModuleRootGroups(plan.ModuleRoot, plan.DependencyModuleRootGroups),
+                plan.DependencyModuleRootsRequiringAvailability,
                 plan.Targets,
                 plan.DependencyRemovalTargets.Count > 0 ? plan.DependencyRemovalTargets : plan.Targets);
+    }
+
+    private static void ThrowIfDependencyBlockedAcrossRootGroups(
+        IReadOnlyList<string> dependencyModuleRoots,
+        IReadOnlyList<IReadOnlyList<string>> dependencyModuleRootGroups,
+        IReadOnlyList<string> rootsRequiringAvailability,
+        IReadOnlyList<ManagedModuleUninstallTarget> targets,
+        IReadOnlyList<ManagedModuleUninstallTarget> removalTargets)
+    {
+        var groups = dependencyModuleRootGroups.Count == 0
+            ? new[] { dependencyModuleRoots }
+            : dependencyModuleRootGroups;
+        foreach (var group in groups)
+        {
+            ThrowIfDependencyBlocked(
+                EnumerateInstalledModulesForDependencyValidation(group, rootsRequiringAvailability),
+                targets,
+                removalTargets);
+        }
     }
 
     private static ManagedModuleUninstallResult UninstallTarget(

@@ -28,11 +28,13 @@ internal sealed class ModuleStateInventoryService
         var diagnostics = new List<ModuleStateInventoryDiagnostic>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var modulePaths = request.ModulePaths.ToArray();
+        var scannedPaths = new ModuleStateModulePath[modulePaths.Length];
         for (var pathIndex = 0; pathIndex < modulePaths.Length; pathIndex++)
         {
             var modulePath = modulePaths[pathIndex];
             if (!Directory.Exists(modulePath.Path))
             {
+                scannedPaths[pathIndex] = WithAvailability(modulePath, wasAvailable: false);
                 if (modulePath.IsRequired)
                 {
                     diagnostics.Add(CreatePathDiagnostic(
@@ -46,12 +48,15 @@ internal sealed class ModuleStateInventoryService
 
             if (!TryEnumerateDirectories(modulePath.Path, out var moduleDirectories, out var enumerationError))
             {
+                scannedPaths[pathIndex] = WithAvailability(modulePath, wasAvailable: false);
                 diagnostics.Add(CreatePathDiagnostic(
                     modulePath,
                     "ModuleState.InventoryPathInaccessible",
                     $"Module inventory path '{modulePath.Path}' could not be enumerated: {enumerationError!.Message}"));
                 continue;
             }
+
+            scannedPaths[pathIndex] = WithAvailability(modulePath, wasAvailable: true);
 
             foreach (var moduleDirectory in moduleDirectories)
             {
@@ -89,7 +94,7 @@ internal sealed class ModuleStateInventoryService
             .OrderBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static module => module.Version, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static module => module.Path, ModuleStatePathIdentity.Comparer),
-            modulePaths,
+            scannedPaths,
             diagnostics);
         return ModuleStateInventoryFilter.Apply(inventory, request);
     }
@@ -107,6 +112,15 @@ internal sealed class ModuleStateInventoryService
             module.ExportedCommands,
             module.ModuleRoot,
             module.ProfileName);
+
+    private static ModuleStateModulePath WithAvailability(ModuleStateModulePath path, bool wasAvailable)
+        => new(
+            path.Path,
+            path.PowerShellEdition,
+            path.Scope,
+            path.ProfileName,
+            path.IsRequired,
+            wasAvailable);
 
     internal static ModuleStateInstalledModule[] RecomputeEffectiveImportCandidates(
         IEnumerable<ModuleStateInstalledModule> installedModules,

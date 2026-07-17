@@ -58521,7 +58521,7 @@ through the operator's existing remoting/configuration system.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>IncludeAllUserProfiles</maml:name>
           <maml:description>
-            <maml:para>Discover existing standard PowerShell module roots below the local profile container. Inaccessible optional profiles or roots are reported as warnings. Use UserProfilePath or ModulePath for redirected and custom layouts.</maml:para>
+            <maml:para>Discover existing standard PowerShell module roots below the local profile container. Unix root sessions scan /home and retain /root; inaccessible optional profiles or roots are reported as warnings. Use UserProfilePath or ModulePath for redirected and custom layouts.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -58952,7 +58952,7 @@ through the operator's existing remoting/configuration system.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>IncludeAllUserProfiles</maml:name>
         <maml:description>
-          <maml:para>Discover existing standard PowerShell module roots below the local profile container. Inaccessible optional profiles or roots are reported as warnings. Use UserProfilePath or ModulePath for redirected and custom layouts.</maml:para>
+          <maml:para>Discover existing standard PowerShell module roots below the local profile container. Unix root sessions scan /home and retain /root; inaccessible optional profiles or roots are reported as warnings. Use UserProfilePath or ModulePath for redirected and custom layouts.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -69417,8 +69417,9 @@ System.Boolean</maml:name>
 PSResourceGet. It follows PSResourceGet-shaped uninstall selection semantics while adding managed&#xD;
 dependency and loaded-module safety checks. InstalledLocation always selects the exact installed directory,&#xD;
 whether it is bound directly or received from Get-ManagedModule pipeline output. Typed Get-ManagedModule rows&#xD;
-retain their complete scanned-root provenance, so dependency checks still cover the visible estate when one&#xD;
-exact installation is piped to this command.</maml:para>
+retain structured scanned-root provenance, so dependency checks preserve edition/profile visibility and require&#xD;
+roots that were available during inventory to remain available. Multiple piped rows are preflighted as one batch&#xD;
+across physical roots and selected dependents are removed before their selected dependencies.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="InputObjectParameterSet">

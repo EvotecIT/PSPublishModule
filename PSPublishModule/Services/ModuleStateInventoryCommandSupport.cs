@@ -119,7 +119,8 @@ internal static class ModuleStateInventoryCommandSupport
                     path.PowerShellEdition ?? existing.PowerShellEdition,
                     path.Scope ?? existing.Scope,
                     path.ProfileName ?? existing.ProfileName,
-                    path.IsRequired || existing.IsRequired);
+                    path.IsRequired || existing.IsRequired,
+                    path.WasAvailable || existing.WasAvailable);
                 continue;
             }
 
@@ -128,7 +129,8 @@ internal static class ModuleStateInventoryCommandSupport
                 path.PowerShellEdition,
                 path.Scope,
                 path.ProfileName,
-                path.IsRequired));
+                path.IsRequired,
+                path.WasAvailable));
         }
 
         return normalized.ToArray();

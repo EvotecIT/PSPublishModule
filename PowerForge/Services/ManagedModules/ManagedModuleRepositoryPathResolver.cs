@@ -13,6 +13,10 @@ internal static class ManagedModuleRepositoryPathResolver
         if (Uri.TryCreate(source, UriKind.Absolute, out var uri) && uri.IsFile)
             return uri.LocalPath;
 
-        return Path.GetFullPath(source.Trim().Trim('"'));
+        var path = source.Trim().Trim('"');
+        path = Path.DirectorySeparatorChar == '/'
+            ? path.Replace('\\', '/')
+            : path.Replace('/', '\\');
+        return Path.GetFullPath(path);
     }
 }

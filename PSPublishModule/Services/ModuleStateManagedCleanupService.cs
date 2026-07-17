@@ -119,6 +119,16 @@ internal sealed class ModuleStateManagedCleanupService
         if (string.IsNullOrWhiteSpace(action.TargetPath) || string.IsNullOrWhiteSpace(action.TargetModuleRoot))
             throw new InvalidOperationException($"Cleanup action for '{action.ModuleName}' does not identify an exact installed location and module root.");
 
+        var dependencyModuleRootGroups = ModuleStateDependencyRootGroupResolver.Resolve(
+            inventory.ScannedPaths,
+            action.TargetPowerShellEdition,
+            action.TargetScope,
+            action.TargetProfileName,
+            action.TargetModuleRoot!);
+        var dependencyModuleRoots = dependencyModuleRootGroups
+            .SelectMany(static group => group)
+            .Distinct(ModuleStatePathIdentity.Comparer)
+            .ToArray();
         var request = new ManagedModuleUninstallRequest
         {
             Name = new[] { action.ModuleName },
@@ -127,7 +137,14 @@ internal sealed class ModuleStateManagedCleanupService
             ShellEdition = ParseShellEdition(action.TargetPowerShellEdition),
             ModuleRoot = action.TargetModuleRoot,
             InstalledLocation = action.TargetPath,
-            DependencyModuleRoots = ResolveDependencyModuleRoots(action, inventory),
+            DependencyModuleRoots = dependencyModuleRoots,
+            DependencyModuleRootGroups = dependencyModuleRootGroups,
+            DependencyModuleRootsRequiringAvailability = (inventory.ScannedPaths ?? Array.Empty<ModuleStateInventoryPathResult>())
+                .Where(static path => path.WasAvailable)
+                .Select(static path => path.Path)
+                .Where(path => dependencyModuleRoots.Contains(path, ModuleStatePathIdentity.Comparer))
+                .Distinct(ModuleStatePathIdentity.Comparer)
+                .ToArray(),
             SkipDependencyCheck = options.SkipDependencyCheck || action.SkipDependencyCheck,
             DeferDependencyCheck = true,
             LoadedModules = options.LoadedModules
@@ -170,25 +187,6 @@ internal sealed class ModuleStateManagedCleanupService
                 }
             }
         };
-    }
-
-    private static string[] ResolveDependencyModuleRoots(
-        ModuleStatePlanAction action,
-        ModuleStateInventoryResult inventory)
-    {
-        var paths = inventory.ScannedPaths ?? Array.Empty<ModuleStateInventoryPathResult>();
-        return paths
-            .Where(path => string.IsNullOrWhiteSpace(action.TargetPowerShellEdition) ||
-                           string.IsNullOrWhiteSpace(path.PowerShellEdition) ||
-                           string.Equals(path.PowerShellEdition, action.TargetPowerShellEdition, StringComparison.OrdinalIgnoreCase))
-            .Where(path => string.IsNullOrWhiteSpace(action.TargetProfileName) ||
-                           string.IsNullOrWhiteSpace(path.ProfileName) ||
-                           string.Equals(path.ProfileName, action.TargetProfileName, StringComparison.OrdinalIgnoreCase))
-            .Select(static path => path.Path)
-            .Append(action.TargetModuleRoot!)
-            .Where(static path => !string.IsNullOrWhiteSpace(path))
-            .Distinct(ModuleStatePathIdentity.Comparer)
-            .ToArray();
     }
 
     private bool ShouldProcess(string target, string action)

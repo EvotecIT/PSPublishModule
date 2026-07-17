@@ -396,6 +396,17 @@ public sealed class RepairManagedModuleEstateTests
     }
 
     [Fact]
+    public void ProfileDiscovery_UsesHomeContainerForUnixRootAccount()
+    {
+        var container = ModuleStateProfilePathDiscoveryService.ResolveLocalProfileContainer(
+            localProfilesRoot: null,
+            currentUserProfilePath: "/root",
+            isWindows: false);
+
+        Assert.Equal("/home", container);
+    }
+
+    [Fact]
     public void Repair_InstallsIntoReceiptOnlyRootAndConverges()
     {
         using var workspace = new TemporaryDirectory();
@@ -669,6 +680,46 @@ public sealed class RepairManagedModuleEstateTests
         Assert.True(Directory.Exists(oldPath));
         Assert.True(Directory.Exists(currentPath));
         Assert.True(Directory.Exists(dependentPath));
+    }
+
+    [Fact]
+    public void Cleanup_DoesNotUseAnotherProfilesCopyToSatisfyDependency()
+    {
+        using var workspace = new TemporaryDirectory();
+        var globalRoot = Path.Combine(workspace.Path, "PowerShell", "Modules");
+        var profileAPath = Path.Combine(workspace.Path, "Alice");
+        var profileBPath = Path.Combine(workspace.Path, "Bob");
+        var profileARoot = StandardCoreProfileModuleRoot(profileAPath);
+        var profileBRoot = StandardCoreProfileModuleRoot(profileBPath);
+        var oldPath = CreateInstalledModule(globalRoot, "Company.Core", "1.0.0");
+        var currentPath = CreateInstalledModule(globalRoot, "Company.Core", "2.0.0");
+        var dependentPath = CreateInstalledModule(
+            profileARoot,
+            "Company.ProfileTools",
+            "1.0.0",
+            requiredModuleName: "Company.Core",
+            requiredModuleVersion: "1.0.0");
+        var unrelatedAlternative = CreateInstalledModule(profileBRoot, "Company.Core", "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { globalRoot })
+            .AddParameter("UserProfilePath", new[] { profileAPath, profileBPath })
+            .AddParameter("ModuleRoot", globalRoot)
+            .AddParameter("Name", new[] { "Company.Core" })
+            .AddParameter("Cleanup", "OldVersions")
+            .AddParameter("Confirm", false);
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        Assert.True(ps.HadErrors);
+        var execution = Assert.Single(result.Apply.ExecutionResults);
+        Assert.False(execution.Succeeded);
+        Assert.Contains("required by Company.ProfileTools", execution.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(oldPath));
+        Assert.True(Directory.Exists(currentPath));
+        Assert.True(Directory.Exists(dependentPath));
+        Assert.True(Directory.Exists(unrelatedAlternative));
     }
 
     [Fact]

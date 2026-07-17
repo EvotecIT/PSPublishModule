@@ -192,6 +192,35 @@ public sealed class ManagedModuleUninstallServiceTests
     }
 
     [Fact]
+    public void Uninstall_validates_dependency_alternatives_within_each_visible_root_group()
+    {
+        using var globalRoot = new TemporaryDirectory();
+        using var profileARoot = new TemporaryDirectory();
+        using var profileBRoot = new TemporaryDirectory();
+        var targetPath = CreateInstalledModule(globalRoot.Path, "Company.Core", "1.0.0");
+        CreateInstalledModule(
+            profileARoot.Path,
+            "Company.ProfileTools",
+            "1.0.0",
+            requiredModules: "    RequiredModules = @(@{ ModuleName = 'Company.Core'; RequiredVersion = '1.0.0' })");
+        CreateInstalledModule(profileBRoot.Path, "Company.Core", "1.0.0");
+        var request = CreateRequest(globalRoot.Path, "Company.Core");
+        request.Version = "1.0.0";
+        request.DependencyModuleRoots = new[] { globalRoot.Path, profileARoot.Path, profileBRoot.Path };
+        request.DependencyModuleRootGroups = new IReadOnlyList<string>[]
+        {
+            new[] { globalRoot.Path, profileARoot.Path },
+            new[] { globalRoot.Path, profileBRoot.Path }
+        };
+        var service = new ManagedModuleUninstallService();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.PlanUninstall(request));
+
+        Assert.Contains("required by Company.ProfileTools", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(targetPath));
+    }
+
+    [Fact]
     public void Uninstall_skip_dependency_check_permits_required_module_removal()
     {
         using var moduleRoot = new TemporaryDirectory();

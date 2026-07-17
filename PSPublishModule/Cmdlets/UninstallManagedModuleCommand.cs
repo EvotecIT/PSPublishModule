@@ -16,8 +16,9 @@ namespace PSPublishModule;
 /// PSResourceGet. It follows PSResourceGet-shaped uninstall selection semantics while adding managed
 /// dependency and loaded-module safety checks. InstalledLocation always selects the exact installed directory,
 /// whether it is bound directly or received from Get-ManagedModule pipeline output. Typed Get-ManagedModule rows
-/// retain their complete scanned-root provenance, so dependency checks still cover the visible estate when one
-/// exact installation is piped to this command.
+/// retain structured scanned-root provenance, so dependency checks preserve edition/profile visibility and require
+/// roots that were available during inventory to remain available. Multiple piped rows are preflighted as one batch
+/// across physical roots and selected dependents are removed before their selected dependencies.
 /// </para>
 /// </remarks>
 /// <example>
@@ -120,7 +121,8 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
                     resource.InstalledLocation,
                     ManagedModuleVersionComparer.IsPrerelease(resource.Version),
                     resource.InstalledLocation,
-                    resource.InventoryModuleRoots);
+                    resource.InventoryModuleRoots,
+                    resource);
             }
 
             return;
@@ -144,10 +146,32 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
         string? modulePath,
         bool prerelease,
         string? installedLocation = null,
-        IEnumerable<string>? dependencyModuleRoots = null)
+        IEnumerable<string>? dependencyModuleRoots = null,
+        ModuleStateInstalledModuleResult? inventoryResource = null)
     {
         var selectedLocation = ResolveInstalledLocation(installedLocation);
         var moduleRoot = ResolveModuleRoot(selectedLocation ?? modulePath, names);
+        var inventoryPaths = inventoryResource?.InventoryPaths ?? Array.Empty<ModuleStateInventoryPathResult>();
+        var dependencyModuleRootGroups = inventoryPaths.Length == 0 || string.IsNullOrWhiteSpace(moduleRoot)
+            ? Array.Empty<IReadOnlyList<string>>()
+            : ModuleStateDependencyRootGroupResolver.Resolve(
+                inventoryPaths,
+                inventoryResource!.PowerShellEdition,
+                inventoryResource.Scope,
+                inventoryResource.ProfileName,
+                moduleRoot!);
+        var resolvedDependencyModuleRoots = dependencyModuleRootGroups.Count == 0
+            ? ResolveDependencyModuleRoots(dependencyModuleRoots)
+            : dependencyModuleRootGroups
+                .SelectMany(static group => group)
+                .Distinct(PathStringComparer)
+                .ToArray();
+        var rootsRequiringAvailability = inventoryPaths
+            .Where(static path => path.WasAvailable)
+            .Select(static path => Path.GetFullPath(path.Path.Trim()))
+            .Where(path => resolvedDependencyModuleRoots.Contains(path, PathStringComparer))
+            .Distinct(PathStringComparer)
+            .ToArray();
         var service = new ManagedModuleUninstallService();
         var request = new ManagedModuleUninstallRequest
         {
@@ -158,7 +182,9 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             ShellEdition = ShellEdition,
             ModuleRoot = moduleRoot,
             InstalledLocation = selectedLocation,
-            DependencyModuleRoots = ResolveDependencyModuleRoots(dependencyModuleRoots),
+            DependencyModuleRoots = resolvedDependencyModuleRoots,
+            DependencyModuleRootGroups = dependencyModuleRootGroups,
+            DependencyModuleRootsRequiringAvailability = rootsRequiringAvailability,
             SkipDependencyCheck = SkipDependencyCheck.IsPresent,
             AllowLoadedModuleUninstall = AllowLoadedModuleUninstall.IsPresent,
             DeferLoadedModuleCheck = true,
@@ -206,6 +232,7 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
     protected override void EndProcessing()
     {
         var service = new ManagedModuleUninstallService();
+        var selectedPlans = new List<ManagedModuleUninstallPlan>();
         foreach (var plan in MergePlans(_plans))
         {
             if (Plan.IsPresent)
@@ -219,6 +246,17 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
                 WriteObject(service.Uninstall(plan), enumerateCollection: true);
                 continue;
             }
+            if (plan.MissingNames.Count > 0)
+            {
+                WriteObject(service.Uninstall(new ManagedModuleUninstallPlan
+                {
+                    Name = plan.MissingNames.ToArray(),
+                    Version = plan.Version,
+                    ModuleRoot = plan.ModuleRoot,
+                    SkipDependencyCheck = plan.SkipDependencyCheck,
+                    MissingNames = plan.MissingNames
+                }), enumerateCollection: true);
+            }
 
             var targets = plan.Targets
                 .Where(target => ShouldProcess(
@@ -228,21 +266,47 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             if (targets.Length == 0)
                 continue;
 
-            var selectedPlan = new ManagedModuleUninstallPlan
-            {
-                Name = plan.Name,
-                Version = plan.Version,
-                ModuleRoot = plan.ModuleRoot,
-                DependencyModuleRoots = plan.DependencyModuleRoots,
-                DependencyModuleRootsRequiringAvailability = plan.DependencyModuleRootsRequiringAvailability,
-                SkipDependencyCheck = plan.SkipDependencyCheck,
-                AllowLoadedModuleUninstall = plan.AllowLoadedModuleUninstall,
-                Targets = targets,
-                MissingNames = plan.MissingNames
-            };
-            WriteObject(service.Uninstall(selectedPlan), enumerateCollection: true);
+            selectedPlans.Add(CreateSelectedPlan(plan, targets));
+        }
+
+        if (selectedPlans.Count == 0)
+            return;
+
+        var selectedTargets = selectedPlans
+            .SelectMany(static plan => plan.Targets)
+            .ToArray();
+        foreach (var plan in selectedPlans)
+        {
+            plan.DependencyRemovalTargets = selectedTargets;
+            service.ValidateUninstallPlan(plan);
+        }
+
+        var orderedTargets = ManagedModuleUninstallService.OrderTargetsForRemoval(selectedTargets);
+        foreach (var target in orderedTargets)
+        {
+            var owner = selectedPlans.Single(plan => plan.Targets.Any(candidate => ReferenceEquals(candidate, target)));
+            var singleTargetPlan = CreateSelectedPlan(owner, new[] { target });
+            singleTargetPlan.DependencyRemovalTargets = selectedTargets;
+            WriteObject(service.Uninstall(singleTargetPlan), enumerateCollection: true);
         }
     }
+
+    private static ManagedModuleUninstallPlan CreateSelectedPlan(
+        ManagedModuleUninstallPlan plan,
+        IReadOnlyList<ManagedModuleUninstallTarget> targets)
+        => new()
+        {
+            Name = plan.Name,
+            Version = plan.Version,
+            ModuleRoot = plan.ModuleRoot,
+            DependencyModuleRoots = plan.DependencyModuleRoots,
+            DependencyModuleRootGroups = plan.DependencyModuleRootGroups,
+            DependencyModuleRootsRequiringAvailability = plan.DependencyModuleRootsRequiringAvailability,
+            SkipDependencyCheck = plan.SkipDependencyCheck,
+            AllowLoadedModuleUninstall = plan.AllowLoadedModuleUninstall,
+            Targets = targets,
+            MissingNames = Array.Empty<string>()
+        };
 
     private ManagedModuleLoadedModule[] ResolveLoadedModules()
     {
@@ -346,6 +410,9 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             ModuleRoot = group[0].ModuleRoot,
             DependencyModuleRoots = group.SelectMany(static plan => plan.DependencyModuleRoots)
                 .Distinct(PathStringComparer)
+                .ToArray(),
+            DependencyModuleRootGroups = group
+                .SelectMany(static plan => plan.DependencyModuleRootGroups)
                 .ToArray(),
             DependencyModuleRootsRequiringAvailability = group
                 .SelectMany(static plan => plan.DependencyModuleRootsRequiringAvailability)
