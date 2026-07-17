@@ -144,8 +144,14 @@ public sealed class ServerScaffoldTests
         var result = schema.Evaluate(manifest, new EvaluationOptions { OutputFormat = OutputFormat.List });
         var privateResult = schema.Evaluate(privateManifest, new EvaluationOptions { OutputFormat = OutputFormat.List });
 
+        var numericIdentityManifest = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        numericIdentityManifest["paths"]![0]!["owner"] = "0";
+        numericIdentityManifest["paths"]![0]!["group"] = "65534";
+        var numericIdentityResult = schema.Evaluate(numericIdentityManifest, new EvaluationOptions { OutputFormat = OutputFormat.List });
+
         Assert.True(result.IsValid);
         Assert.True(privateResult.IsValid);
+        Assert.True(numericIdentityResult.IsValid);
     }
 
     [Fact]
