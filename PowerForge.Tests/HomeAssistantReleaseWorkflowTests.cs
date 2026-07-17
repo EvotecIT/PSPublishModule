@@ -36,6 +36,7 @@ public sealed class HomeAssistantReleaseWorkflowTests {
         var skill = File.ReadAllText(Path.Combine(root, ".agents", "skills", "powerforge-homeassistant-release", "SKILL.md"));
 
         Assert.Contains("pr_number:\n        description: Merged pull request number that initiated the release.\n        required: true\n        type: string", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.Contains("pr_number:\n        description: Merged pull request number to release or recover\n        required: true\n        type: string", documentation.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
         Assert.Contains("pr_number: ${{ format('{0}', github.event.pull_request.number || inputs.pr_number) }}", documentation, StringComparison.Ordinal);
         Assert.Contains("textual PR-number contract", skill, StringComparison.Ordinal);
     }
