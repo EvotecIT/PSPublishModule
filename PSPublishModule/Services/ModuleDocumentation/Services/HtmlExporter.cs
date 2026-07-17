@@ -218,11 +218,8 @@ internal sealed partial class HtmlExporter
                                             HeadingsBaseLevel = 2,
                                             TableMode = MarkdownTableMode.DataTables,
                                             OpenLinksInNewTab = true,
-                                            Sanitize = true,
                                             AutolinkBareUrls = true,
                                             AllowRelativeLinks = true,
-                                            AllowRawHtmlInline = true,
-                                            AllowRawHtmlBlocks = true,
                                             BaseUri = it.BaseUri,
                                             DataTables = new MarkdownDataTablesOptions {
                                                 Responsive = true,
@@ -258,7 +255,7 @@ internal sealed partial class HtmlExporter
                                                 inner.AddTab(name ?? string.Empty, p =>
                                                 {
                                                     var md = s.Content ?? string.Empty; // already fenced with powershell
-                                                    var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true };
+                                                    var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true };
                                                     p.Markdown(PrepareMarkdown(module, md), options);
                                                 });
                                             }
@@ -291,7 +288,7 @@ internal sealed partial class HtmlExporter
                                 inner.AddTab(name ?? string.Empty, pp =>
                                 {
                                     var md = d.Content ?? string.Empty;
-                                    var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true, AllowRelativeLinks = true, BaseUri = d.BaseUri, TableMode = MarkdownTableMode.DataTables, DataTables = new MarkdownDataTablesOptions { Responsive = true, Export = true, ExportFormats = new[] { DataTablesExportFormat.Excel, DataTablesExportFormat.CSV, DataTablesExportFormat.Copy }, StateSave = true } };
+                                    var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, AllowRelativeLinks = true, BaseUri = d.BaseUri, TableMode = MarkdownTableMode.DataTables, DataTables = new MarkdownDataTablesOptions { Responsive = true, Export = true, ExportFormats = new[] { DataTablesExportFormat.Excel, DataTablesExportFormat.CSV, DataTablesExportFormat.Copy }, StateSave = true } };
                                     pp.Markdown(PrepareMarkdown(module, md), options);
                                 });
                             }
@@ -307,7 +304,7 @@ internal sealed partial class HtmlExporter
                                 inner.AddTab(name ?? string.Empty, pp =>
                                 {
                                     var md = d.Content ?? string.Empty;
-                                    var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true, AllowRelativeLinks = true, BaseUri = d.BaseUri, TableMode = MarkdownTableMode.DataTables, DataTables = new MarkdownDataTablesOptions { Responsive = true, Export = true, ExportFormats = new[] { DataTablesExportFormat.Excel, DataTablesExportFormat.CSV, DataTablesExportFormat.Copy }, StateSave = true } };
+                                    var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, AllowRelativeLinks = true, BaseUri = d.BaseUri, TableMode = MarkdownTableMode.DataTables, DataTables = new MarkdownDataTablesOptions { Responsive = true, Export = true, ExportFormats = new[] { DataTablesExportFormat.Excel, DataTablesExportFormat.CSV, DataTablesExportFormat.Copy }, StateSave = true } };
                                     pp.Markdown(PrepareMarkdown(module, md), options);
                                 });
                             }
@@ -326,7 +323,7 @@ internal sealed partial class HtmlExporter
                         inner.AddTab(name ?? string.Empty, pp =>
                         {
                             var md = d.Content ?? string.Empty;
-                            var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true, AllowRelativeLinks = true, BaseUri = d.BaseUri, TableMode = MarkdownTableMode.DataTables, DataTables = new MarkdownDataTablesOptions { Responsive = true, Export = true, ExportFormats = new[] { DataTablesExportFormat.Excel, DataTablesExportFormat.CSV, DataTablesExportFormat.Copy }, StateSave = true } };
+                            var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, AllowRelativeLinks = true, BaseUri = d.BaseUri, TableMode = MarkdownTableMode.DataTables, DataTables = new MarkdownDataTablesOptions { Responsive = true, Export = true, ExportFormats = new[] { DataTablesExportFormat.Excel, DataTablesExportFormat.CSV, DataTablesExportFormat.Copy }, StateSave = true } };
                             pp.Markdown(PrepareMarkdown(module, md), options);
                         });
                     }
@@ -360,9 +357,6 @@ internal sealed partial class HtmlExporter
                             {
                                 HeadingsBaseLevel = 2,
                                 AutolinkBareUrls = true,
-                                Sanitize = true,
-                                AllowRawHtmlInline = true,
-                                AllowRawHtmlBlocks = true
                             });
                         });
                     }
@@ -419,7 +413,7 @@ internal sealed partial class HtmlExporter
                                                     {
                                                         md = $"```text\n{File.ReadAllText(a.Path)}\n```";
                                                     }
-                                                    p.Markdown(PrepareMarkdown(module, md), new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
+                                                    p.Markdown(PrepareMarkdown(module, md), new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true });
                                                 });
                                             }
                                         });
@@ -450,7 +444,7 @@ internal sealed partial class HtmlExporter
                                                         md = NormalizeSourceLikeMarkdown(md);
                                                     }
 
-                                                    p.Markdown(PrepareMarkdown(module, md), new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
+                                                    p.Markdown(PrepareMarkdown(module, md), new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true });
                                                 });
                                             }
                                         });
@@ -476,7 +470,7 @@ internal sealed partial class HtmlExporter
                                                     {
                                                         md = File.ReadAllText(c.Path);
                                                     }
-                                                    p.Markdown(PrepareMarkdown(module, md), new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
+                                                    p.Markdown(PrepareMarkdown(module, md), new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true });
                                                 });
                                             }
                                         });
@@ -497,7 +491,7 @@ internal sealed partial class HtmlExporter
                                         }
                                         else
                                         {
-                                            panel.Markdown(PrepareMarkdown(module, rel.Content), new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
+                                            panel.Markdown(PrepareMarkdown(module, rel.Content), new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true });
                                         }
                                     });
                                 }
@@ -631,11 +625,11 @@ internal sealed partial class HtmlExporter
                                                     if (module.HelpAsCode && !entry.Structured)
                                                     {
                                                         var fenced = $"```powershell\n{content}\n```";
-                                                        p.Markdown(PrepareMarkdown(module, fenced), new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
+                                                        p.Markdown(PrepareMarkdown(module, fenced), new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true });
                                                     }
                                                     else
                                                     {
-                                                        p.Markdown(PrepareMarkdown(module, content), new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
+                                                        p.Markdown(PrepareMarkdown(module, content), new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true });
                                                     }
                                                 });
                                             }
