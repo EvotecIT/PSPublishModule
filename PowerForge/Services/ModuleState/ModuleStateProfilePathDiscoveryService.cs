@@ -73,7 +73,8 @@ internal sealed class ModuleStateProfilePathDiscoveryService
             var discoveredForProfile = 0;
             foreach (var moduleRoot in EnumerateStandardModuleRoots(candidate.Path, profileName))
             {
-                if (!candidate.IsRequired && !Directory.Exists(moduleRoot.Path))
+                var rootExists = Directory.Exists(moduleRoot.Path);
+                if (!candidate.IsRequired && !rootExists)
                 {
                     TryReportUnavailableModuleRoot(moduleRoot, diagnostics);
                     continue;
@@ -81,8 +82,10 @@ internal sealed class ModuleStateProfilePathDiscoveryService
                 if (!seenRoots.Add(moduleRoot.Path))
                     continue;
 
-                paths.Add(moduleRoot);
-                if (Directory.Exists(moduleRoot.Path))
+                paths.Add(candidate.IsRequired && rootExists
+                    ? WithRequired(moduleRoot)
+                    : moduleRoot);
+                if (rootExists)
                     discoveredForProfile++;
             }
 
@@ -100,6 +103,14 @@ internal sealed class ModuleStateProfilePathDiscoveryService
 
         return new ModuleStateProfilePathDiscoveryResult(paths.ToArray(), diagnostics.ToArray());
     }
+
+    private static ModuleStateModulePath WithRequired(ModuleStateModulePath moduleRoot)
+        => new(
+            moduleRoot.Path,
+            moduleRoot.PowerShellEdition,
+            moduleRoot.Scope,
+            moduleRoot.ProfileName,
+            isRequired: true);
 
     private static void TryReportUnavailableModuleRoot(
         ModuleStateModulePath moduleRoot,

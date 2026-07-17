@@ -175,7 +175,12 @@ internal static class ModuleStateInventoryCommandSupport
             source: source,
             additionalDiagnostics: additionalDiagnostics);
         var supplementalInventory = ModuleStateInventoryResultMapper.ToCoreInventory(supplementalResult);
+        var authoritativeSupplementalRoots = supplementalInventory.ModulePaths
+            .Where(static path => path.WasAvailable)
+            .Select(static path => path.Path)
+            .ToArray();
         var installedModules = baseInventory.InstalledModules
+            .Where(module => !BelongsToAnyRoot(module, authoritativeSupplementalRoots))
             .Concat(supplementalInventory.InstalledModules)
             .GroupBy(CreateInstalledModuleIdentity, ModuleStatePathIdentity.Comparer)
             .Select(static group => group.Last())
@@ -184,6 +189,7 @@ internal static class ModuleStateInventoryCommandSupport
             baseInventory.ModulePaths.Concat(supplementalInventory.ModulePaths));
         installedModules = ModuleStateInventoryService.RecomputeEffectiveImportCandidates(installedModules, mergedPaths);
         var diagnostics = baseInventory.Diagnostics
+            .Where(diagnostic => !BelongsToAnyRoot(diagnostic.Path, authoritativeSupplementalRoots))
             .Concat(supplementalInventory.Diagnostics)
             .GroupBy(CreateDiagnosticIdentity, ModuleStatePathIdentity.Comparer)
             .Select(static group => group.Last())
@@ -194,6 +200,16 @@ internal static class ModuleStateInventoryCommandSupport
             string.IsNullOrWhiteSpace(inventory.Source) ? source : inventory.Source + "+" + source,
             mergedPaths.Select(static path => path.Path).ToArray());
     }
+
+    private static bool BelongsToAnyRoot(
+        ModuleStateInstalledModule module,
+        IReadOnlyCollection<string> roots)
+        => roots.Any(root =>
+            (!string.IsNullOrWhiteSpace(module.ModuleRoot) && ModuleStatePathIdentity.Equals(module.ModuleRoot, root)) ||
+            (!string.IsNullOrWhiteSpace(module.Path) && ModuleStatePathIdentity.IsSameOrChild(module.Path!, root)));
+
+    private static bool BelongsToAnyRoot(string path, IReadOnlyCollection<string> roots)
+        => roots.Any(root => ModuleStatePathIdentity.IsSameOrChild(path, root));
 
     internal static ModuleStateLoadedModuleEvidence[] GetLoadedModules(PSCmdlet cmdlet)
     {

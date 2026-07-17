@@ -160,6 +160,51 @@ public sealed class RepairManagedModuleEstateTests
     }
 
     [Fact]
+    public void Apply_ReplacesStaleArtifactRowsWithEmptyLiveRootAndReturnsNoActionProof()
+    {
+        using var workspace = new TemporaryDirectory();
+        var moduleRoot = Path.Combine(workspace.Path, "modules");
+        Directory.CreateDirectory(moduleRoot);
+        var stalePath = Path.Combine(moduleRoot, "Company.Stale", "1.0.0");
+        var inventory = new ModuleStateInventoryResult
+        {
+            Source = "Artifact",
+            ModulePaths = new[] { moduleRoot },
+            ScannedPaths = new[] { new ModuleStateInventoryPathResult { Path = moduleRoot, IsRequired = true, WasAvailable = true } },
+            InstalledModules = new[]
+            {
+                new ModuleStateInstalledModuleResult
+                {
+                    Name = "Company.Stale",
+                    Version = "1.0.0",
+                    Path = stalePath,
+                    ModuleRoot = moduleRoot,
+                    IsEffectiveImportCandidate = true
+                }
+            }
+        };
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("Inventory", inventory)
+            .AddParameter("ModuleRoot", moduleRoot)
+            .AddParameter("Name", new[] { "Company.Stale" })
+            .AddParameter("Confirm", false);
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Empty(result.Inventory.InstalledModules);
+        Assert.Empty(result.Apply.ExecutionResults);
+        Assert.True(result.Apply.ExecutionSucceeded);
+        Assert.True(result.Apply.Converged);
+        Assert.NotNull(result.Apply.PostApplyInventory);
+        Assert.NotNull(result.Apply.PostApplyPlan);
+        Assert.True(result.Apply.PostApplyTest?.IsCompliant);
+        Assert.Empty(result.Apply.PostApplyInventory!.InstalledModules);
+    }
+
+    [Fact]
     public void Plan_BlocksMissingReceiptModuleWhenMultipleRootsAreEligible()
     {
         using var workspace = new TemporaryDirectory();
@@ -407,6 +452,31 @@ public sealed class RepairManagedModuleEstateTests
     }
 
     [Fact]
+    public void ProfileDiscovery_MarksExistingExplicitProfileRootsRequired()
+    {
+        using var workspace = new TemporaryDirectory();
+        var profilePath = Path.Combine(workspace.Path, "Alice");
+        Directory.CreateDirectory(profilePath);
+        var existingRoot = StandardCoreProfileModuleRoot(profilePath);
+        Directory.CreateDirectory(existingRoot);
+
+        var discovery = new ModuleStateProfilePathDiscoveryService().Discover(
+            profilePaths: new[] { profilePath });
+
+        var coreRoot = Assert.Single(discovery.ModulePaths, path =>
+            string.Equals(path.PowerShellEdition, "Core", StringComparison.OrdinalIgnoreCase));
+        Assert.True(coreRoot.IsRequired);
+        Assert.True(PathsEqual(existingRoot, coreRoot.Path));
+        if (OperatingSystem.IsWindows())
+        {
+            var desktopRoot = Assert.Single(discovery.ModulePaths, path =>
+                string.Equals(path.PowerShellEdition, "Desktop", StringComparison.OrdinalIgnoreCase));
+            Assert.False(desktopRoot.IsRequired);
+            Assert.False(Directory.Exists(desktopRoot.Path));
+        }
+    }
+
+    [Fact]
     public void Repair_InstallsIntoReceiptOnlyRootAndConverges()
     {
         using var workspace = new TemporaryDirectory();
@@ -643,6 +713,44 @@ public sealed class RepairManagedModuleEstateTests
         Assert.True(Directory.Exists(oldPath));
         Assert.True(Directory.Exists(currentPath));
         Assert.True(Directory.Exists(dependentPath));
+        Assert.False(result.Apply.Converged);
+    }
+
+    [Fact]
+    public void Cleanup_DoesNotUseUnrelatedAnonymousRootToSatisfyDependency()
+    {
+        using var workspace = new TemporaryDirectory();
+        var globalRoot = Path.Combine(workspace.Path, "global");
+        var dependentRoot = Path.Combine(workspace.Path, "dependent");
+        var unrelatedRoot = Path.Combine(workspace.Path, "unrelated");
+        var oldPath = CreateInstalledModule(globalRoot, "Company.Core", "1.0.0");
+        var currentPath = CreateInstalledModule(globalRoot, "Company.Core", "2.0.0");
+        var dependentPath = CreateInstalledModule(
+            dependentRoot,
+            "Company.Tools",
+            "1.0.0",
+            requiredModuleName: "Company.Core",
+            requiredModuleVersion: "1.0.0");
+        var unrelatedAlternative = CreateInstalledModule(unrelatedRoot, "Company.Core", "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { globalRoot, dependentRoot, unrelatedRoot })
+            .AddParameter("ModuleRoot", globalRoot)
+            .AddParameter("Name", new[] { "Company.Core" })
+            .AddParameter("Cleanup", "OldVersions")
+            .AddParameter("Confirm", false);
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        Assert.True(ps.HadErrors);
+        var execution = Assert.Single(result.Apply.ExecutionResults, static execution => execution.Operation == "Remove");
+        Assert.False(execution.Succeeded);
+        Assert.Contains("required by Company.Tools", execution.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(oldPath));
+        Assert.True(Directory.Exists(currentPath));
+        Assert.True(Directory.Exists(dependentPath));
+        Assert.True(Directory.Exists(unrelatedAlternative));
         Assert.False(result.Apply.Converged);
     }
 

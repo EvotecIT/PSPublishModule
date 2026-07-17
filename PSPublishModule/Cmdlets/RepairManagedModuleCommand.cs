@@ -30,7 +30,8 @@ namespace PSPublishModule;
 /// edition's standard CurrentUser root even when that root does not exist yet; it never overrides an AllUsers
 /// request. Explicit ModuleRoot and profile destinations are merged into supplied Inventory or InventoryPath
 /// artifacts and remain part of convergence scans. Module roots declared by maintenance receipts are merged the
-/// same way, including roots that do not exist until repair delivery creates them.
+/// same way, including roots that do not exist until repair delivery creates them. A successfully enumerated
+/// explicit root replaces stale artifact rows and diagnostics for that root, even when the live root is empty.
 /// </para>
 /// <para>
 /// Live apply performs delivery, inventories the same estate again, replans exact-path old-version cleanup from
@@ -38,9 +39,9 @@ namespace PSPublishModule;
 /// set, validates loaded-module and dependency safety across relevant global/profile roots, and removes selected
 /// dependents before their selected dependencies. Current-runspace loaded modules are protected even when
 /// IncludeLoaded is not used for inventory output. A declined delivery or cleanup action is reported as skipped and
-/// cannot be reported as successful convergence. Repair performs one final inventory and returns post-apply plan and
-/// convergence evidence. Operational failures remain visible in the typed result and are also written as
-/// nonterminating errors.
+/// cannot be reported as successful convergence. Repair performs a final live inventory and returns post-apply plan
+/// and convergence evidence after execution or a no-action apply. Operational failures remain visible in the typed
+/// result and are also written as nonterminating errors.
 /// </para>
 /// <para>
 /// This is local-machine estate management suitable for workstations and servers, including service-account and
@@ -119,7 +120,7 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
     [ValidateNotNullOrEmpty]
     public string[]? ModulePath { get; set; }
 
-    /// <summary>Explicit user profile home directories whose platform-standard module roots are inventoried. One explicit profile provides the current-edition CurrentUser destination for missing modules, but never overrides AllUsers scope.</summary>
+    /// <summary>Explicit user profile home directories whose platform-standard module roots are inventoried. Existing roots are required and block repair when inaccessible; a missing current-edition root remains a creatable destination. One explicit profile provides that CurrentUser destination for missing modules, but never overrides AllUsers scope.</summary>
     [Parameter]
     [ValidateNotNullOrEmpty]
     public string[]? UserProfilePath { get; set; }

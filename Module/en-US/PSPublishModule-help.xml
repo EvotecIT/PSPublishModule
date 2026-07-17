@@ -58371,15 +58371,16 @@ destinations are reported and blocked. A single explicit UserProfilePath supplie
 edition's standard CurrentUser root even when that root does not exist yet; it never overrides an AllUsers&#xD;
 request. Explicit ModuleRoot and profile destinations are merged into supplied Inventory or InventoryPath&#xD;
 artifacts and remain part of convergence scans. Module roots declared by maintenance receipts are merged the&#xD;
-same way, including roots that do not exist until repair delivery creates them.</maml:para>
+same way, including roots that do not exist until repair delivery creates them. A successfully enumerated&#xD;
+explicit root replaces stale artifact rows and diagnostics for that root, even when the live root is empty.</maml:para>
       <maml:para>Live apply performs delivery, inventories the same estate again, replans exact-path old-version cleanup from&#xD;
 current state. Cleanup requires that refreshed plan to be error-free, preflights the complete exact-path removal&#xD;
 set, validates loaded-module and dependency safety across relevant global/profile roots, and removes selected&#xD;
 dependents before their selected dependencies. Current-runspace loaded modules are protected even when&#xD;
 IncludeLoaded is not used for inventory output. A declined delivery or cleanup action is reported as skipped and&#xD;
-cannot be reported as successful convergence. Repair performs one final inventory and returns post-apply plan and&#xD;
-convergence evidence. Operational failures remain visible in the typed result and are also written as&#xD;
-nonterminating errors.</maml:para>
+cannot be reported as successful convergence. Repair performs a final live inventory and returns post-apply plan&#xD;
+and convergence evidence after execution or a no-action apply. Operational failures remain visible in the typed&#xD;
+result and are also written as nonterminating errors.</maml:para>
       <maml:para>This is local-machine estate management suitable for workstations and servers, including service-account and&#xD;
 multi-profile roots. It does not connect to or orchestrate remote computers; invoke it in each target session or&#xD;
 through the operator's existing remoting/configuration system.</maml:para>
@@ -58782,7 +58783,7 @@ through the operator's existing remoting/configuration system.</maml:para>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>UserProfilePath</maml:name>
           <maml:description>
-            <maml:para>Explicit user profile home directories whose platform-standard module roots are inventoried. One explicit profile provides the current-edition CurrentUser destination for missing modules, but never overrides AllUsers scope.</maml:para>
+            <maml:para>Explicit user profile home directories whose platform-standard module roots are inventoried. Existing roots are required and block repair when inaccessible; a missing current-edition root remains a creatable destination. One explicit profile provides that CurrentUser destination for missing modules, but never overrides AllUsers scope.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
@@ -59213,7 +59214,7 @@ through the operator's existing remoting/configuration system.</maml:para>
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>UserProfilePath</maml:name>
         <maml:description>
-          <maml:para>Explicit user profile home directories whose platform-standard module roots are inventoried. One explicit profile provides the current-edition CurrentUser destination for missing modules, but never overrides AllUsers scope.</maml:para>
+          <maml:para>Explicit user profile home directories whose platform-standard module roots are inventoried. Existing roots are required and block repair when inaccessible; a missing current-edition root remains a creatable destination. One explicit profile provides that CurrentUser destination for missing modules, but never overrides AllUsers scope.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
         <dev:type>

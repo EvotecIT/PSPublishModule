@@ -19,9 +19,10 @@ internal static class ModuleStateDependencyRootGroupResolver
                            string.IsNullOrWhiteSpace(path.PowerShellEdition) ||
                            string.Equals(path.PowerShellEdition, targetPowerShellEdition, StringComparison.OrdinalIgnoreCase))
             .ToArray();
-        var targetIsAnonymousCurrentUser = string.IsNullOrWhiteSpace(targetProfileName) &&
-                                           string.Equals(targetScope, "CurrentUser", StringComparison.OrdinalIgnoreCase);
-        var profileNames = targetIsAnonymousCurrentUser
+        var targetIsAnonymousScopedRoot = string.IsNullOrWhiteSpace(targetProfileName) &&
+                                          (string.Equals(targetScope, "CurrentUser", StringComparison.OrdinalIgnoreCase) ||
+                                           string.Equals(targetScope, "Custom", StringComparison.OrdinalIgnoreCase));
+        var profileNames = targetIsAnonymousScopedRoot
             ? Array.Empty<string>()
             : eligiblePaths
                 .Select(static path => path.ProfileName)
@@ -48,8 +49,11 @@ internal static class ModuleStateDependencyRootGroupResolver
                                   !string.Equals(path.Scope, "AllUsers", StringComparison.OrdinalIgnoreCase))
             .Select(static path => path.Path)
             .ToArray();
-        if (anonymousProfilePaths.Length > 0)
-            groups.Add(NormalizeRoots(sharedPaths.Concat(anonymousProfilePaths), targetModuleRoot));
+        if (string.IsNullOrWhiteSpace(targetProfileName))
+        {
+            groups.AddRange(anonymousProfilePaths.Select(path =>
+                (IReadOnlyList<string>)NormalizeRoots(sharedPaths.Append(path), targetModuleRoot)));
+        }
         if (groups.Count == 0)
             groups.Add(NormalizeRoots(sharedPaths, targetModuleRoot));
         return groups;

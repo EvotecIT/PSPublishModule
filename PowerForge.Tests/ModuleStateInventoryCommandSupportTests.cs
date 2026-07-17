@@ -226,6 +226,51 @@ public sealed class ModuleStateInventoryCommandSupportTests
         Assert.Equal(2, merged.InstalledModules.Length);
     }
 
+    [Fact]
+    public void MergeWithModulePathEntries_ReplacesStaleArtifactEvidenceForAvailableRoot()
+    {
+        using var workspace = new TemporaryDirectory();
+        var moduleRoot = Path.Combine(workspace.Path, "modules");
+        Directory.CreateDirectory(moduleRoot);
+        var stalePath = Path.Combine(moduleRoot, "Company.Stale", "1.0.0");
+        var inventory = new ModuleStateInventoryResult
+        {
+            Source = "Artifact",
+            ModulePaths = new[] { moduleRoot },
+            ScannedPaths = new[] { new ModuleStateInventoryPathResult { Path = moduleRoot, IsRequired = true, WasAvailable = true } },
+            InstalledModules = new[]
+            {
+                new ModuleStateInstalledModuleResult
+                {
+                    Name = "Company.Stale",
+                    Version = "1.0.0",
+                    Path = stalePath,
+                    ModuleRoot = moduleRoot
+                }
+            },
+            Diagnostics = new[]
+            {
+                new ModuleStateInventoryDiagnosticResult
+                {
+                    Severity = "Error",
+                    Code = "ModuleState.StaleArtifact",
+                    Message = "Stale artifact evidence.",
+                    Path = stalePath
+                }
+            }
+        };
+
+        var merged = ModuleStateInventoryCommandSupport.MergeWithModulePathEntries(
+            inventory,
+            new[] { new ModuleStateModulePath(moduleRoot, isRequired: true) });
+
+        Assert.Empty(merged.InstalledModules);
+        Assert.DoesNotContain(merged.Diagnostics, static diagnostic => diagnostic.Code == "ModuleState.StaleArtifact");
+        var scannedRoot = Assert.Single(merged.ScannedPaths);
+        Assert.True(scannedRoot.WasAvailable);
+        Assert.True(scannedRoot.IsRequired);
+    }
+
     private static string CreateInstalledModule(string root, string name, string version)
     {
         var path = Path.Combine(root, name, version);

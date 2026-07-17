@@ -73,26 +73,28 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
                     executionResults = executionResults.Concat(cleanupResults).ToArray();
                 }
             }
-            postApplyInventory = CollectPostApplyInventory(inventory);
-            if (postApplyInventory is not null)
-            {
-                postApplyPlan = ModuleStatePlanCommandSupport.CreatePlanResult(
-                    postApplyInventory,
-                    CreateConvergenceDesiredState(desiredState),
-                    maintenanceReceiptPaths,
-                    repair: true,
-                    ParseCleanupMode(Cleanup),
-                    Family);
-                postApplyTest = ModuleStateTestResult.FromPlan(postApplyPlan);
-            }
+            CollectPostApplyEvidence(
+                inventory,
+                desiredState,
+                maintenanceReceiptPaths,
+                out postApplyInventory,
+                out postApplyPlan,
+                out postApplyTest);
         }
 
         var executionSucceeded = executionRequested && executionResults.All(static execution => execution.Succeeded && !execution.Skipped);
         var converged = executionSucceeded && postApplyTest?.IsCompliant == true;
         if (!Plan.IsPresent && result.Receipt.CanApply && !hasActions)
         {
+            CollectPostApplyEvidence(
+                inventory,
+                desiredState,
+                maintenanceReceiptPaths,
+                out postApplyInventory,
+                out postApplyPlan,
+                out postApplyTest);
             executionSucceeded = true;
-            converged = true;
+            converged = postApplyTest?.IsCompliant == true;
         }
 
         return ModuleStateApplyResultMapper.ToCmdletResult(
@@ -106,6 +108,30 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
             postApplyTest,
             executionSucceeded,
             converged);
+    }
+
+    private void CollectPostApplyEvidence(
+        ModuleStateInventoryResult inventory,
+        object desiredState,
+        string[] maintenanceReceiptPaths,
+        out ModuleStateInventoryResult? postApplyInventory,
+        out ModuleStatePlanResult? postApplyPlan,
+        out ModuleStateTestResult? postApplyTest)
+    {
+        postApplyInventory = CollectPostApplyInventory(inventory);
+        postApplyPlan = null;
+        postApplyTest = null;
+        if (postApplyInventory is null)
+            return;
+
+        postApplyPlan = ModuleStatePlanCommandSupport.CreatePlanResult(
+            postApplyInventory,
+            CreateConvergenceDesiredState(desiredState),
+            maintenanceReceiptPaths,
+            repair: true,
+            ParseCleanupMode(Cleanup),
+            Family);
+        postApplyTest = ModuleStateTestResult.FromPlan(postApplyPlan);
     }
 
     private static ModuleStateInventoryResult? CollectPostApplyInventory(ModuleStateInventoryResult inventory)
