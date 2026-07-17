@@ -351,14 +351,28 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
             if ($trimmedLine -match '^(?:#|@)include(?:dir)?\b') {
                 throw 'Managed sudoers sources must not include additional policy files.'
             }
-            if ($trimmedLine -match '^#\d+(?:\s|,).*\bNOPASSWD\s*:') {
-                throw 'Managed sudoers sources must not use numeric user principals for NOPASSWD grants.'
-            }
-            if ([string]::IsNullOrWhiteSpace($trimmedLine) -or $trimmedLine.StartsWith('#', [StringComparison]::Ordinal)) {
+            $isNumericPrincipal = $trimmedLine -match '^#\d+(?:\s|,)'
+            if ([string]::IsNullOrWhiteSpace($trimmedLine) -or
+                ($trimmedLine.StartsWith('#', [StringComparison]::Ordinal) -and -not $isNumericPrincipal)) {
                 continue
             }
-            if ($trimmedLine -match '\bNOPASSWD\s*:' -and $trimmedLine -cnotmatch '\bNOPASSWD\s*:') {
-                throw 'Managed sudoers sources must use the canonical case-sensitive NOPASSWD: tag.'
+            $noPasswordTags = [regex]::Matches(
+                $trimmedLine,
+                '\b(?<tag>NOPASSWD)\s*:',
+                [Text.RegularExpressions.RegexOptions]::IgnoreCase -bor
+                    [Text.RegularExpressions.RegexOptions]::CultureInvariant
+            )
+            foreach ($noPasswordTag in $noPasswordTags) {
+                if (-not [string]::Equals(
+                    $noPasswordTag.Groups['tag'].Value,
+                    'NOPASSWD',
+                    [StringComparison]::Ordinal
+                )) {
+                    throw 'Managed sudoers sources must use the canonical case-sensitive NOPASSWD: tag.'
+                }
+            }
+            if ($isNumericPrincipal -and $noPasswordTags.Count -gt 0) {
+                throw 'Managed sudoers sources must not use numeric user principals for NOPASSWD grants.'
             }
             if ($trimmedLine.EndsWith('\', [StringComparison]::Ordinal)) {
                 throw 'Managed sudoers sources must not use line continuations.'

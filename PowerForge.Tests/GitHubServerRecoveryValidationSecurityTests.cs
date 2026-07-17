@@ -414,6 +414,17 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
     }
 
     [Fact]
+    public void Validator_ShouldRejectMixedCanonicalAndNonCanonicalNoPasswordTags()
+    {
+        var extraSudoers = "deployment-user ALL=(root) NOPASSWD: /usr/bin/true, nopasswd: /usr/bin/false\n";
+
+        var result = RunValidator(additionalSudoers: extraSudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("canonical case-sensitive NOPASSWD: tag", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Validator_ShouldRejectUppercaseAliasPrincipals()
     {
         var extraSudoers = "Cmnd_Alias EXTRA = /bin/sh\n" +
