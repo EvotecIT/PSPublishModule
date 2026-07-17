@@ -241,6 +241,11 @@ $managedEntries = @(
 ) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.source) }
 
 $resolvedEntries = foreach ($entry in $managedEntries) {
+    $target = if (-not [string]::IsNullOrWhiteSpace([string]$entry.path)) {
+        [string]$entry.path
+    } else {
+        [string]$entry.target
+    }
     [pscustomobject]@{
         Entry = $entry
         Path  = Resolve-ManagedSourcePath `
@@ -250,7 +255,34 @@ $resolvedEntries = foreach ($entry in $managedEntries) {
             -LocalEngineRoot $EngineRoot `
             -LocalCallerRepository $CallerRepository `
             -LocalEngineRepository $EngineRepository
+        Target = $target
     }
+}
+
+$sudoersRootSources = @($resolvedEntries).Where({
+    [string]::Equals([string]$_.Target, '/etc/sudoers', [StringComparison]::Ordinal) -or
+    [string]::Equals([string]$_.Target, '/etc/sudoers.d', [StringComparison]::Ordinal)
+})
+if ($sudoersRootSources.Count -gt 0) {
+    throw 'Repository-managed recovery sources must not replace /etc/sudoers or /etc/sudoers.d.'
+}
+$sudoersSources = @($resolvedEntries).Where({
+    ([string]$_.Target).StartsWith('/etc/sudoers.d/', [StringComparison]::Ordinal)
+})
+foreach ($sudoersSource in $sudoersSources) {
+    if (-not [string]::Equals([string]$sudoersSource.Entry.validation, 'sudoers', [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Managed files below /etc/sudoers.d must declare sudoers validation.'
+    }
+    if (([string]$sudoersSource.Target) -notmatch '^/etc/sudoers\.d/[A-Za-z0-9_-]+$') {
+        throw 'Managed sudoers targets must use a dot-free file name directly below /etc/sudoers.d.'
+    }
+}
+$misplacedSudoersSources = @($resolvedEntries).Where({
+    [string]::Equals([string]$_.Entry.validation, 'sudoers', [StringComparison]::OrdinalIgnoreCase) -and
+    -not ([string]$_.Target).StartsWith('/etc/sudoers.d/', [StringComparison]::Ordinal)
+})
+if ($misplacedSudoersSources.Count -gt 0) {
+    throw 'Managed sudoers validation is supported only for files below /etc/sudoers.d.'
 }
 
 $expectedEncryptedCommand = Get-ExpectedEncryptedCaptureCommand -RecoveryManifest $Manifest
@@ -275,7 +307,7 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
     )
     $helper = @($resolvedEntries).Where({
         [string]::Equals(
-            [string]$_.Entry.path,
+            [string]$_.Target,
             '/usr/local/sbin/powerforge-server-encrypted-capture',
             [StringComparison]::Ordinal
         ) -and
@@ -290,9 +322,6 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
         throw 'Encrypted recovery capture requires the exact managed helper from the pinned PowerForge engine.'
     }
 
-    $sudoersSources = @($resolvedEntries).Where({
-        [string]::Equals([string]$_.Entry.validation, 'sudoers', [StringComparison]::OrdinalIgnoreCase)
-    })
     $expectedSudoersCommands = @(Get-ExpectedCaptureSudoersCommand -RecoveryManifest $Manifest)
     $commandAliases = [Collections.Generic.Dictionary[string, string[]]]::new([StringComparer]::Ordinal)
     $grantedAliases = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -302,8 +331,8 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
         if (-not [string]::Equals([string]$sudoersSource.Entry.kind, 'file', [StringComparison]::OrdinalIgnoreCase) -or
             -not [string]::Equals([string]$sudoersSource.Entry.owner, 'root', [StringComparison]::Ordinal) -or
             -not [string]::Equals([string]$sudoersSource.Entry.group, 'root', [StringComparison]::Ordinal) -or
-            ([string]$sudoersSource.Entry.mode) -notin @('400', '440')) {
-            throw 'Managed sudoers sources must be root-owned files with mode 400 or 440.'
+            ([string]$sudoersSource.Entry.mode) -notin @('440', '0440')) {
+            throw 'Managed sudoers sources must be root-owned files with mode 440 or 0440.'
         }
         $lines = @(Get-Content -LiteralPath $sudoersSource.Path)
         $sudoersDocuments.Add([pscustomobject]@{
@@ -314,6 +343,9 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
             $trimmedLine = $line.Trim()
             if ($trimmedLine -match '^(?:#|@)include(?:dir)?\b') {
                 throw 'Managed sudoers sources must not include additional policy files.'
+            }
+            if ($trimmedLine -match '^#\d+\s+.*\bNOPASSWD\s*:') {
+                throw 'Managed sudoers sources must not use numeric user principals for NOPASSWD grants.'
             }
             if ([string]::IsNullOrWhiteSpace($trimmedLine) -or $trimmedLine.StartsWith('#', [StringComparison]::Ordinal)) {
                 continue

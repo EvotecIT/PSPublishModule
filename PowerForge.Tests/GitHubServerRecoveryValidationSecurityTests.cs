@@ -180,7 +180,60 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         var result = RunValidator(sudoersOwner: CaptureUser);
 
         Assert.NotEqual(0, result.ExitCode);
-        Assert.Contains("must be root-owned files with mode 400 or 440", result.AllOutput, StringComparison.Ordinal);
+        Assert.Contains("must be root-owned files with mode 440 or 0440", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("440")]
+    [InlineData("0440")]
+    public void Validator_ShouldAcceptSchemaSupportedSudoersModes(string mode)
+    {
+        var result = RunValidator(sudoersMode: mode);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("2", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectSchemaInvalidSudoersModes()
+    {
+        var result = RunValidator(sudoersMode: "400");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("must be root-owned files with mode 440 or 0440", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectUntaggedSudoersTargets()
+    {
+        var result = RunValidator(tagSudoers: false);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("must declare sudoers validation", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("/etc/sudoers", "must not replace /etc/sudoers")]
+    [InlineData("/etc/sudoers.d", "must not replace /etc/sudoers")]
+    [InlineData("/etc/sudoers.d/powerforge-apache", "must declare sudoers validation")]
+    public void Validator_ShouldRejectSudoersTargetsFromAlternateManifestSections(string target, string expectedError)
+    {
+        var result = RunValidator(alternateManagedSudoersTarget: target);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains(expectedError, result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectNumericUidPrincipals()
+    {
+        var sudoers = BuildExpectedSudoers(CaptureUser, "root") +
+                      "#1001 ALL=(root) NOPASSWD: /bin/sh\n";
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("must not use numeric user principals", result.AllOutput, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -264,6 +317,9 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         string plainCaptureTarget = "/etc/example/config",
         string helperOwner = "root",
         string sudoersOwner = "root",
+        string sudoersMode = "440",
+        bool tagSudoers = true,
+        string? alternateManagedSudoersTarget = null,
         string? additionalSudoers = null,
         bool includeCapture = true)
     {
@@ -283,6 +339,8 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
                 sudoers ?? BuildExpectedSudoers(CaptureUser, "root"));
             if (additionalSudoers is not null)
                 File.WriteAllText(Path.Combine(workspace, "deploy", "linux", "extra.sudoers"), additionalSudoers);
+            if (alternateManagedSudoersTarget is not null)
+                File.WriteAllText(Path.Combine(workspace, "deploy", "linux", "alternate.sudoers"), "# managed source fixture\n");
 
             var helperSource = "/srv/engine/Deployment/Linux/powerforge-server-encrypted-capture.sh";
             if (helperFromCaller)
@@ -341,8 +399,8 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
                     kind = "file",
                     owner = sudoersOwner,
                     group = "root",
-                    mode = "440",
-                    validation = "sudoers"
+                    mode = sudoersMode,
+                    validation = tagSudoers ? "sudoers" : null
                 }
             };
             if (additionalSudoers is not null)
@@ -368,10 +426,24 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
                 }
                 : null;
             object? backupTarget = includeCapture ? new { recipient = Recipient } : null;
+            object? apache = alternateManagedSudoersTarget is not null
+                ? new
+                {
+                    sites = new[]
+                    {
+                        new
+                        {
+                            source = "/srv/caller/deploy/linux/alternate.sudoers",
+                            target = alternateManagedSudoersTarget
+                        }
+                    }
+                }
+                : null;
             var manifest = new
             {
                 repositories,
                 paths = managedPaths,
+                apache,
                 capture,
                 backupTarget
             };
