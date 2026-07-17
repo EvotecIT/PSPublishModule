@@ -179,6 +179,7 @@ internal sealed class ModuleStateManagedCleanupService
         var paths = inventory.ScannedPaths ?? Array.Empty<ModuleStateInventoryPathResult>();
         return paths
             .Where(path => string.IsNullOrWhiteSpace(action.TargetPowerShellEdition) ||
+                           string.IsNullOrWhiteSpace(path.PowerShellEdition) ||
                            string.Equals(path.PowerShellEdition, action.TargetPowerShellEdition, StringComparison.OrdinalIgnoreCase))
             .Where(path => string.IsNullOrWhiteSpace(action.TargetProfileName) ||
                            string.IsNullOrWhiteSpace(path.ProfileName) ||

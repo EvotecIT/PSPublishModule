@@ -72,6 +72,12 @@ public sealed class ModuleStateInstalledModuleResult
     public string? ModuleRoot { get; set; }
 
     /// <summary>
+    /// Gets or sets every module root that was scanned with this inventory row. Pipeline consumers use this
+    /// provenance to preserve estate-wide safety checks even when the row itself identifies one exact install.
+    /// </summary>
+    public string[] InventoryModuleRoots { get; set; } = [];
+
+    /// <summary>
     /// Gets or sets the local user profile associated with this module root when known.
     /// </summary>
     public string? ProfileName { get; set; }

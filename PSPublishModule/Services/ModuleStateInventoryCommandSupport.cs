@@ -180,6 +180,7 @@ internal static class ModuleStateInventoryCommandSupport
             .ToArray();
         var mergedPaths = NormalizeModulePathEntries(
             baseInventory.ModulePaths.Concat(supplementalInventory.ModulePaths));
+        installedModules = ModuleStateInventoryService.RecomputeEffectiveImportCandidates(installedModules, mergedPaths);
         var diagnostics = baseInventory.Diagnostics
             .Concat(supplementalInventory.Diagnostics)
             .GroupBy(CreateDiagnosticIdentity, ModuleStatePathIdentity.Comparer)

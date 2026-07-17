@@ -58370,7 +58370,8 @@ independent. Missing modules require an explicit ModuleRoot or exactly one eligi
 destinations are reported and blocked. A single explicit UserProfilePath supplies the current PowerShell&#xD;
 edition's standard CurrentUser root even when that root does not exist yet; it never overrides an AllUsers&#xD;
 request. Explicit ModuleRoot and profile destinations are merged into supplied Inventory or InventoryPath&#xD;
-artifacts and remain part of convergence scans.</maml:para>
+artifacts and remain part of convergence scans. Module roots declared by maintenance receipts are merged the&#xD;
+same way, including roots that do not exist until repair delivery creates them.</maml:para>
       <maml:para>Live apply performs delivery, inventories the same estate again, replans exact-path old-version cleanup from&#xD;
 current state. Cleanup requires that refreshed plan to be error-free, preflights the complete exact-path removal&#xD;
 set, validates loaded-module and dependency safety across relevant global/profile roots, and removes selected&#xD;
@@ -58592,7 +58593,7 @@ through the operator's existing remoting/configuration system.</maml:para>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>MaintenanceReceiptPath</maml:name>
           <maml:description>
-            <maml:para>Optional module-state maintenance receipt artifacts used for drift checks.</maml:para>
+            <maml:para>Optional module-state maintenance receipt artifacts used for drift checks. Receipt-declared module roots are inventoried and retained for post-apply convergence.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
@@ -59023,7 +59024,7 @@ through the operator's existing remoting/configuration system.</maml:para>
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>MaintenanceReceiptPath</maml:name>
         <maml:description>
-          <maml:para>Optional module-state maintenance receipt artifacts used for drift checks.</maml:para>
+          <maml:para>Optional module-state maintenance receipt artifacts used for drift checks. Receipt-declared module roots are inventoried and retained for post-apply convergence.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
         <dev:type>
@@ -69415,9 +69416,74 @@ System.Boolean</maml:name>
       <maml:para>This command removes modules from the selected managed module root without invoking PowerShellGet or&#xD;
 PSResourceGet. It follows PSResourceGet-shaped uninstall selection semantics while adding managed&#xD;
 dependency and loaded-module safety checks. InstalledLocation always selects the exact installed directory,&#xD;
-whether it is bound directly or received from Get-ManagedModule pipeline output.</maml:para>
+whether it is bound directly or received from Get-ManagedModule pipeline output. Typed Get-ManagedModule rows&#xD;
+retain their complete scanned-root provenance, so dependency checks still cover the visible estate when one&#xD;
+exact installation is piped to this command.</maml:para>
     </maml:description>
     <command:syntax>
+      <command:syntaxItem parameterSetName="InputObjectParameterSet">
+        <maml:name>Uninstall-ManagedModule</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AllowLoadedModuleUninstall</maml:name>
+          <maml:description>
+            <maml:para>Allow removal of module versions that appear loaded in the current PowerShell session.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByValue)" position="0" aliases="None">
+          <maml:name>InputObject</maml:name>
+          <maml:description>
+            <maml:para>Installed module rows returned by Get-ManagedModule to uninstall.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">ModuleStateInstalledModuleResult[]</command:parameterValue>
+          <dev:type>
+            <maml:name>ModuleStateInstalledModuleResult[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>LoadedModule</maml:name>
+          <maml:description>
+            <maml:para>Loaded module evidence used to block risky in-session uninstalls.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ManagedModuleLoadedModule[]</command:parameterValue>
+          <dev:type>
+            <maml:name>ManagedModuleLoadedModule[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Plan</maml:name>
+          <maml:description>
+            <maml:para>Return an inspectable uninstall plan without removing files.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="SkipDependenciesCheck">
+          <maml:name>SkipDependencyCheck</maml:name>
+          <maml:description>
+            <maml:para>Skip checking whether removed modules are still required by other installed modules.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
       <command:syntaxItem parameterSetName="NameParameterSet">
         <maml:name>Uninstall-ManagedModule</maml:name>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
@@ -69558,69 +69624,6 @@ whether it is bound directly or received from Get-ManagedModule pipeline output.
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-      </command:syntaxItem>
-      <command:syntaxItem parameterSetName="InputObjectParameterSet">
-        <maml:name>Uninstall-ManagedModule</maml:name>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>AllowLoadedModuleUninstall</maml:name>
-          <maml:description>
-            <maml:para>Allow removal of module versions that appear loaded in the current PowerShell session.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="True (ByValue)" position="0" aliases="None">
-          <maml:name>InputObject</maml:name>
-          <maml:description>
-            <maml:para>Installed module rows returned by Get-ManagedModule to uninstall.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">ModuleStateInstalledModuleResult[]</command:parameterValue>
-          <dev:type>
-            <maml:name>ModuleStateInstalledModuleResult[]</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>LoadedModule</maml:name>
-          <maml:description>
-            <maml:para>Loaded module evidence used to block risky in-session uninstalls.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">ManagedModuleLoadedModule[]</command:parameterValue>
-          <dev:type>
-            <maml:name>ManagedModuleLoadedModule[]</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Plan</maml:name>
-          <maml:description>
-            <maml:para>Return an inspectable uninstall plan without removing files.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="SkipDependenciesCheck">
-          <maml:name>SkipDependencyCheck</maml:name>
-          <maml:description>
-            <maml:para>Skip checking whether removed modules are still required by other installed modules.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -70142,7 +70145,8 @@ PowerForge.ManagedModuleUninstallPlan</maml:name>
     <maml:description>
       <maml:para>This command provides the module-update functionality of Update-PSResource. It inspects the selected module&#xD;
 root and updates only when the repository contains a newer selected version, or installs a named target when the&#xD;
-selected scope has no copy. When Name is omitted, all installed modules in the selected roots are considered.</maml:para>
+selected scope has no copy. When Name is omitted, all installed modules in the selected roots are considered.&#xD;
+Hash-constrained pipeline input is buffered and validated as one package target before any update starts.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">

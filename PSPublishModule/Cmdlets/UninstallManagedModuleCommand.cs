@@ -15,7 +15,9 @@ namespace PSPublishModule;
 /// This command removes modules from the selected managed module root without invoking PowerShellGet or
 /// PSResourceGet. It follows PSResourceGet-shaped uninstall selection semantics while adding managed
 /// dependency and loaded-module safety checks. InstalledLocation always selects the exact installed directory,
-/// whether it is bound directly or received from Get-ManagedModule pipeline output.
+/// whether it is bound directly or received from Get-ManagedModule pipeline output. Typed Get-ManagedModule rows
+/// retain their complete scanned-root provenance, so dependency checks still cover the visible estate when one
+/// exact installation is piped to this command.
 /// </para>
 /// </remarks>
 /// <example>
@@ -30,7 +32,7 @@ namespace PSPublishModule;
 /// <summary>Uninstall the exact installed module returned by Get-ManagedModule</summary>
 /// <code>Get-ManagedModule -Name Company.Tools -Version 1.2.0 | Uninstall-ManagedModule</code>
 /// </example>
-[Cmdlet(VerbsLifecycle.Uninstall, "ManagedModule", SupportsShouldProcess = true, DefaultParameterSetName = NameParameterSet)]
+[Cmdlet(VerbsLifecycle.Uninstall, "ManagedModule", SupportsShouldProcess = true, DefaultParameterSetName = InputObjectParameterSet)]
 [OutputType(typeof(ManagedModuleUninstallResult), typeof(ManagedModuleUninstallPlan))]
 public sealed class UninstallManagedModuleCommand : PSCmdlet
 {
@@ -117,7 +119,8 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
                     resource.Version,
                     resource.InstalledLocation,
                     ManagedModuleVersionComparer.IsPrerelease(resource.Version),
-                    resource.InstalledLocation);
+                    resource.InstalledLocation,
+                    resource.InventoryModuleRoots);
             }
 
             return;
@@ -131,7 +134,8 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             Version,
             ModuleRoot,
             Prerelease.IsPresent,
-            selectedInstalledLocation);
+            selectedInstalledLocation,
+            dependencyModuleRoots: null);
     }
 
     private void AddPlan(
@@ -139,7 +143,8 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
         string? version,
         string? modulePath,
         bool prerelease,
-        string? installedLocation = null)
+        string? installedLocation = null,
+        IEnumerable<string>? dependencyModuleRoots = null)
     {
         var selectedLocation = ResolveInstalledLocation(installedLocation);
         var moduleRoot = ResolveModuleRoot(selectedLocation ?? modulePath, names);
@@ -153,6 +158,7 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             ShellEdition = ShellEdition,
             ModuleRoot = moduleRoot,
             InstalledLocation = selectedLocation,
+            DependencyModuleRoots = ResolveDependencyModuleRoots(dependencyModuleRoots),
             SkipDependencyCheck = SkipDependencyCheck.IsPresent,
             AllowLoadedModuleUninstall = AllowLoadedModuleUninstall.IsPresent,
             DeferLoadedModuleCheck = true,
@@ -163,6 +169,13 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
 
         _plans.Add(plan);
     }
+
+    private static string[] ResolveDependencyModuleRoots(IEnumerable<string>? inventoryModuleRoots)
+        => (inventoryModuleRoots ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(static path => Path.GetFullPath(path.Trim()))
+            .Distinct(PathStringComparer)
+            .ToArray();
 
     private string? ResolveInstalledLocation(string? installedLocation)
     {
@@ -221,6 +234,7 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
                 Version = plan.Version,
                 ModuleRoot = plan.ModuleRoot,
                 DependencyModuleRoots = plan.DependencyModuleRoots,
+                DependencyModuleRootsRequiringAvailability = plan.DependencyModuleRootsRequiringAvailability,
                 SkipDependencyCheck = plan.SkipDependencyCheck,
                 AllowLoadedModuleUninstall = plan.AllowLoadedModuleUninstall,
                 Targets = targets,
@@ -331,6 +345,10 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             Version = versions.Length == 1 ? versions[0] : null,
             ModuleRoot = group[0].ModuleRoot,
             DependencyModuleRoots = group.SelectMany(static plan => plan.DependencyModuleRoots)
+                .Distinct(PathStringComparer)
+                .ToArray(),
+            DependencyModuleRootsRequiringAvailability = group
+                .SelectMany(static plan => plan.DependencyModuleRootsRequiringAvailability)
                 .Distinct(PathStringComparer)
                 .ToArray(),
             SkipDependencyCheck = group[0].SkipDependencyCheck,

@@ -30,11 +30,11 @@ References:
 | PSResourceGet 1.2.0 | Managed command | Status | Notes |
 | --- | --- | --- | --- |
 | `Find-PSResource` | `Find-ManagedModule` | Supported for modules | Name and wildcard search, exact/wildcard/range `-Version`, tags, resource type `Module`, prerelease, all versions, dependency expansion, credentials, proxy, direct sources, and saved profiles. Command-name and DSC-resource-name content search are explicit gaps. |
-| `Get-InstalledPSResource` | `Get-ManagedModule` | Supported for modules | Name/wildcard, version, prerelease, scope, explicit module paths, and typed installed rows. The rows pipe directly to uninstall. |
+| `Get-InstalledPSResource` | `Get-ManagedModule` | Supported for modules | Name/wildcard, version, prerelease, scope, explicit module paths, and typed installed rows. The rows retain scanned-root provenance and pipe directly to exact-path uninstall. |
 | `Install-PSResource` | `Install-ManagedModule` | Supported for modules | Name, typed find output, exact/bounded/range versions, required-resource maps/files, dependency closure, scope/custom root, prerelease, reinstall, license, clobber policy, signature checks, credentials, proxy, planning, `WhatIf`, and typed results. |
 | `Save-PSResource` | `Save-ManagedModule` | Supported for modules | Name or typed find output, current-directory default, unpacked or `-AsNupkg`, `-IncludeXml`, dependencies, exact/bounded/range versions, credentials, proxy, planning, `WhatIf`, and typed results. |
-| `Update-PSResource` | `Update-ManagedModule` | Supported for modules | Named or discovered installed modules, version policies, scope/custom root, prerelease, reinstall, license, clobber and signature policy, credentials, proxy, planning, and `WhatIf`. |
-| `Uninstall-PSResource` | `Uninstall-ManagedModule` | Supported for modules | Name/wildcard or typed installed input, exact/range version targeting, prerelease, scope/custom root, dependency and loaded-module safety, planning, `WhatIf`, and `Confirm`. |
+| `Update-PSResource` | `Update-ManagedModule` | Supported for modules | Named or discovered installed modules, version policies, scope/custom root, prerelease, reinstall, license, clobber and signature policy, credentials, proxy, planning, and `WhatIf`. Hash-constrained pipeline targets are validated as one operation before mutation. |
+| `Uninstall-PSResource` | `Uninstall-ManagedModule` | Supported for modules | Name/wildcard or typed installed input, exact/range version targeting, prerelease, scope/custom root, estate-wide dependency and loaded-module safety, planning, `WhatIf`, and `Confirm`. |
 | `Publish-PSResource` | `Publish-ManagedModule` | Supported for modules | Packs a module folder or publishes an existing `-NupkgPath`; supports local and NuGet-compatible publish targets, credentials, proxy, manifest validation policy, dependency checks, overwrite policy, and typed results. `-ModulePrefix` for Microsoft Artifact Registry is an explicit transport gap. |
 | `Compress-PSResource` | `Compress-ManagedResource` | Supported for modules | Creates a module `.nupkg` without publishing it. Script compression remains an explicit non-module gap. |
 
@@ -106,7 +106,8 @@ is planned solely for command-name parity.
   dependency drift, source/scope drift, family coherence, loaded-module safety,
   receipt repair, and exact-path old-version cleanup. It keeps PowerShell
   editions, scopes, custom roots, and local user profiles independent, blocks
-  ambiguous missing-module destinations, and verifies post-apply convergence.
+  ambiguous missing-module destinations, retains receipt-declared roots through
+  delivery, and verifies post-apply convergence.
 - Install, save, update, uninstall, and repair expose inspectable plans.
 - Package SHA256, allowed-author, repository-trust, signature, receipt, cache,
   and transactional promotion evidence are first-class managed contracts.

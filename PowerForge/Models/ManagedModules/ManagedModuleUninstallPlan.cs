@@ -25,6 +25,8 @@ public sealed class ManagedModuleUninstallPlan
     /// </summary>
     public IReadOnlyList<string> DependencyModuleRoots { get; set; } = Array.Empty<string>();
 
+    internal IReadOnlyList<string> DependencyModuleRootsRequiringAvailability { get; set; } = Array.Empty<string>();
+
     /// <summary>
     /// True when dependency checks are skipped.
     /// </summary>

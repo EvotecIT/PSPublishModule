@@ -13,7 +13,7 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
 {
     private ModuleStateModulePath? _explicitProfilePlacement;
 
-    private ModuleStateInventoryResult ResolveInventory()
+    private ModuleStateInventoryResult ResolveInventory(IReadOnlyCollection<string> maintenanceReceiptPaths)
     {
         var loadedModules = IncludeLoaded.IsPresent
             ? ModuleStateInventoryCommandSupport.GetLoadedModules(this)
@@ -44,7 +44,11 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
             profilePaths,
             IncludeAllUserProfiles.IsPresent);
         _explicitProfilePlacement = ResolveExplicitProfilePlacement(profilePaths, profileDiscovery.ModulePaths);
-        var supplementalPaths = targetPaths.Concat(profileDiscovery.ModulePaths).ToArray();
+        var receiptPaths = ResolveMaintenanceReceiptModulePaths(maintenanceReceiptPaths);
+        var supplementalPaths = targetPaths
+            .Concat(profileDiscovery.ModulePaths)
+            .Concat(receiptPaths)
+            .ToArray();
         if (Inventory is not null)
         {
             return ModuleStateInventoryCommandSupport.MergeWithModulePathEntries(
@@ -68,10 +72,37 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
         }
 
         return ModuleStateInventoryCommandSupport.CreateInventoryResultFromModulePathEntries(
-            basePaths.Concat(targetPaths).Concat(profileDiscovery.ModulePaths),
+            basePaths.Concat(supplementalPaths),
             loadedModules,
-            source: profileDiscovery.ModulePaths.Length > 0 ? "ModulePath+UserProfile" : "ModulePath",
+            source: ResolveInventorySource(profileDiscovery.ModulePaths.Length > 0, receiptPaths.Length > 0),
             additionalDiagnostics: profileDiscovery.Diagnostics);
+    }
+
+    private static ModuleStateModulePath[] ResolveMaintenanceReceiptModulePaths(
+        IEnumerable<string> maintenanceReceiptPaths)
+    {
+        var json = new ModuleStateJsonService();
+        return ModuleStateInventoryCommandSupport.NormalizeModulePathEntries(
+            (maintenanceReceiptPaths ?? Array.Empty<string>())
+                .Select(json.LoadMaintenanceReceipt)
+                .SelectMany(static receipt => receipt.Modules)
+                .Where(static module => !string.IsNullOrWhiteSpace(module.ModuleRoot))
+                .Select(static module => new ModuleStateModulePath(
+                    module.ModuleRoot!,
+                    module.PowerShellEdition,
+                    module.Scope,
+                    module.ProfileName,
+                    isRequired: false)));
+    }
+
+    private static string ResolveInventorySource(bool includesProfiles, bool includesReceipts)
+    {
+        var sources = new List<string> { "ModulePath" };
+        if (includesProfiles)
+            sources.Add("UserProfile");
+        if (includesReceipts)
+            sources.Add("MaintenanceReceipt");
+        return string.Join("+", sources);
     }
 
     private ModuleStateModulePath? ResolveExplicitProfilePlacement(

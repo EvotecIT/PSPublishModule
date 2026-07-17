@@ -179,6 +179,61 @@ public sealed class ModuleStateInventoryCommandSupportTests
         Assert.Equal("1.2.0-preview1", version);
     }
 
+    [Fact]
+    public void MergeWithModulePathEntries_recomputes_effective_candidate_from_merged_root_order()
+    {
+        using var workspace = new TemporaryDirectory();
+        var preferredRoot = Path.Combine(workspace.Path, "preferred");
+        var supplementalRoot = Path.Combine(workspace.Path, "supplemental");
+        var preferredPath = CreateInstalledModule(preferredRoot, "Company.Tools", "1.0.0");
+        CreateInstalledModule(supplementalRoot, "Company.Tools", "2.0.0");
+        var inventory = new ModuleStateInventoryResult
+        {
+            Source = "Artifact",
+            ModulePaths = new[] { preferredRoot },
+            ScannedPaths = new[]
+            {
+                new ModuleStateInventoryPathResult
+                {
+                    Path = preferredRoot,
+                    PowerShellEdition = "Core",
+                    Scope = "CurrentUser",
+                    IsRequired = true
+                }
+            },
+            InstalledModules = new[]
+            {
+                new ModuleStateInstalledModuleResult
+                {
+                    Name = "Company.Tools",
+                    Version = "1.0.0",
+                    Path = preferredPath,
+                    ModuleRoot = preferredRoot,
+                    PowerShellEdition = "Core",
+                    Scope = "CurrentUser",
+                    IsEffectiveImportCandidate = true
+                }
+            }
+        };
+
+        var merged = ModuleStateInventoryCommandSupport.MergeWithModulePathEntries(
+            inventory,
+            new[] { new ModuleStateModulePath(supplementalRoot, "Core", "CurrentUser") });
+
+        var winner = Assert.Single(merged.InstalledModules, static module => module.IsEffectiveImportCandidate);
+        Assert.Equal("1.0.0", winner.Version);
+        Assert.Equal(preferredRoot, winner.ModuleRoot);
+        Assert.Equal(2, merged.InstalledModules.Length);
+    }
+
+    private static string CreateInstalledModule(string root, string name, string version)
+    {
+        var path = Path.Combine(root, name, version);
+        Directory.CreateDirectory(path);
+        File.WriteAllText(Path.Combine(path, name + ".psd1"), "@{ ModuleVersion = '" + version + "' }");
+        return path;
+    }
+
     private static string? InvokeInferScope(string path)
     {
         var result = InvokeInferScopeNullable(path);

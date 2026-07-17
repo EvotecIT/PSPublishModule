@@ -164,6 +164,40 @@ public sealed class UpdateManagedModuleCommandTests
         Assert.True(File.Exists(Path.Combine(moduleRoot.Path, "Microsoft.Graph.Authentication", "2.38.0", "Microsoft.Graph.Authentication.psd1")));
     }
 
+    [Fact]
+    public void UpdateManagedModule_hash_constrained_pipeline_rejects_all_targets_before_mutation()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        foreach (var name in new[] { "Company.Tools", "Company.Other" })
+        {
+            TestPackageFactory.Create(
+                Path.Combine(feed.Path, name + ".1.1.0.nupkg"),
+                name,
+                "1.1.0",
+                files: CreateModuleFiles(name, "1.1.0"));
+            var installedPath = Path.Combine(moduleRoot.Path, name, "1.0.0");
+            Directory.CreateDirectory(installedPath);
+            File.WriteAllText(Path.Combine(installedPath, name + ".psd1"), "@{ ModuleVersion = '1.0.0' }");
+        }
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddScript(
+                "param($Feed, $Root) 'Company.Tools','Company.Other' | Update-ManagedModule -Repository $Feed -RepositoryName Local -Path $Root -ExpectedPackageSha256 ('0' * 64) -AllowClobber")
+            .AddParameter("Feed", feed.Path)
+            .AddParameter("Root", moduleRoot.Path);
+
+        _ = ps.Invoke();
+
+        Assert.True(ps.HadErrors);
+        Assert.Contains(ps.Streams.Error, error =>
+            error.ToString().Contains("exactly one", StringComparison.OrdinalIgnoreCase));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0")));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Other", "1.1.0")));
+        Assert.True(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0")));
+        Assert.True(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Other", "1.0.0")));
+    }
+
     private static PowerShell CreatePowerShellWithModuleImported()
     {
         var ps = PowerShell.Create();

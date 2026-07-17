@@ -18,6 +18,7 @@ Update-ManagedModule [[-Name] <string[]>] [[-Repository] <string>] [-RepositoryN
 This command provides the module-update functionality of Update-PSResource. It inspects the selected module
 root and updates only when the repository contains a newer selected version, or installs a named target when the
 selected scope has no copy. When Name is omitted, all installed modules in the selected roots are considered.
+Hash-constrained pipeline input is buffered and validated as one package target before any update starts.
 
 ## EXAMPLES
 

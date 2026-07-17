@@ -28,7 +28,8 @@ independent. Missing modules require an explicit ModuleRoot or exactly one eligi
 destinations are reported and blocked. A single explicit UserProfilePath supplies the current PowerShell
 edition's standard CurrentUser root even when that root does not exist yet; it never overrides an AllUsers
 request. Explicit ModuleRoot and profile destinations are merged into supplied Inventory or InventoryPath
-artifacts and remain part of convergence scans.
+artifacts and remain part of convergence scans. Module roots declared by maintenance receipts are merged the
+same way, including roots that do not exist until repair delivery creates them.
 
 Live apply performs delivery, inventories the same estate again, replans exact-path old-version cleanup from
 current state. Cleanup requires that refreshed plan to be error-free, preflights the complete exact-path removal
@@ -352,7 +353,7 @@ Accept wildcard characters: True
 ```
 
 ### -MaintenanceReceiptPath
-Optional module-state maintenance receipt artifacts used for drift checks.
+Optional module-state maintenance receipt artifacts used for drift checks. Receipt-declared module roots are inventoried and retained for post-apply convergence.
 
 ```yaml
 Type: String[]

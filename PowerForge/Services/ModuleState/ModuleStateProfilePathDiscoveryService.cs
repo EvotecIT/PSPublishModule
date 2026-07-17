@@ -11,6 +11,17 @@ internal sealed class ModuleStateProfilePathDiscoveryService
         IEnumerable<string>? profilePaths = null,
         bool includeAllLocalProfiles = false,
         string? localProfilesRoot = null)
+        => Discover(
+            profilePaths,
+            includeAllLocalProfiles,
+            localProfilesRoot,
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+
+    internal ModuleStateProfilePathDiscoveryResult Discover(
+        IEnumerable<string>? profilePaths,
+        bool includeAllLocalProfiles,
+        string? localProfilesRoot,
+        string? currentUserProfilePath)
     {
         var diagnostics = new List<ModuleStateInventoryDiagnostic>();
         var requestedProfiles = new List<ProfileCandidate>();
@@ -22,7 +33,7 @@ internal sealed class ModuleStateProfilePathDiscoveryService
 
         if (includeAllLocalProfiles)
         {
-            foreach (var profilePath in DiscoverLocalProfileDirectories(localProfilesRoot, diagnostics))
+            foreach (var profilePath in DiscoverLocalProfileDirectories(localProfilesRoot, currentUserProfilePath, diagnostics))
                 requestedProfiles.Add(new ProfileCandidate(profilePath, isRequired: false));
         }
 
@@ -130,13 +141,13 @@ internal sealed class ModuleStateProfilePathDiscoveryService
 
     private static IEnumerable<string> DiscoverLocalProfileDirectories(
         string? localProfilesRoot,
+        string? currentUserProfilePath,
         ICollection<ModuleStateInventoryDiagnostic> diagnostics)
     {
-        var currentProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var parent = string.IsNullOrWhiteSpace(localProfilesRoot)
-            ? string.IsNullOrWhiteSpace(currentProfile)
+            ? string.IsNullOrWhiteSpace(currentUserProfilePath)
                 ? null
-                : Directory.GetParent(currentProfile)?.FullName
+                : Directory.GetParent(currentUserProfilePath)?.FullName
             : Path.GetFullPath(localProfilesRoot!.Trim());
         if (string.IsNullOrWhiteSpace(parent) || !Directory.Exists(parent))
         {
@@ -144,7 +155,7 @@ internal sealed class ModuleStateProfilePathDiscoveryService
                 ModuleStateConflictSeverity.Warning,
                 "ModuleState.LocalProfileDiscoveryUnavailable",
                 "The local user-profile container could not be resolved or does not exist. Use UserProfilePath or ModulePath for redirected or custom profiles.",
-                parent ?? string.Empty));
+                parent ?? "<local-profile-container>"));
             return Array.Empty<string>();
         }
 

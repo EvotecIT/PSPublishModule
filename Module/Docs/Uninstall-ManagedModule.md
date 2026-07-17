@@ -9,21 +9,23 @@ schema: 2.0.0
 Uninstalls installed PowerShell module versions through the managed module engine.
 
 ## SYNTAX
-### NameParameterSet (Default)
-```powershell
-Uninstall-ManagedModule [-Name] <string[]> [-Version <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-InstalledLocation <string>] [-SkipDependencyCheck] [-LoadedModule <ManagedModuleLoadedModule[]>] [-AllowLoadedModuleUninstall] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
-```
-
-### InputObjectParameterSet
+### InputObjectParameterSet (Default)
 ```powershell
 Uninstall-ManagedModule [-InputObject] <ModuleStateInstalledModuleResult[]> [-SkipDependencyCheck] [-LoadedModule <ManagedModuleLoadedModule[]>] [-AllowLoadedModuleUninstall] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
+### NameParameterSet
+```powershell
+Uninstall-ManagedModule [-Name] <string[]> [-Version <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-InstalledLocation <string>] [-SkipDependencyCheck] [-LoadedModule <ManagedModuleLoadedModule[]>] [-AllowLoadedModuleUninstall] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
 This command removes modules from the selected managed module root without invoking PowerShellGet or
 PSResourceGet. It follows PSResourceGet-shaped uninstall selection semantics while adding managed
 dependency and loaded-module safety checks. InstalledLocation always selects the exact installed directory,
-whether it is bound directly or received from Get-ManagedModule pipeline output.
+whether it is bound directly or received from Get-ManagedModule pipeline output. Typed Get-ManagedModule rows
+retain their complete scanned-root provenance, so dependency checks still cover the visible estate when one
+exact installation is piped to this command.
 
 ## EXAMPLES
 
@@ -52,7 +54,7 @@ Allow removal of module versions that appear loaded in the current PowerShell se
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: NameParameterSet, InputObjectParameterSet
+Parameter Sets: InputObjectParameterSet, NameParameterSet
 Aliases: None
 Possible values:
 
@@ -100,7 +102,7 @@ Loaded module evidence used to block risky in-session uninstalls.
 
 ```yaml
 Type: ManagedModuleLoadedModule[]
-Parameter Sets: NameParameterSet, InputObjectParameterSet
+Parameter Sets: InputObjectParameterSet, NameParameterSet
 Aliases: None
 Possible values:
 
@@ -148,7 +150,7 @@ Return an inspectable uninstall plan without removing files.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: NameParameterSet, InputObjectParameterSet
+Parameter Sets: InputObjectParameterSet, NameParameterSet
 Aliases: None
 Possible values:
 
@@ -212,7 +214,7 @@ Skip checking whether removed modules are still required by other installed modu
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: NameParameterSet, InputObjectParameterSet
+Parameter Sets: InputObjectParameterSet, NameParameterSet
 Aliases: SkipDependenciesCheck
 Possible values:
 

@@ -21,7 +21,6 @@ public sealed partial class ManagedModuleUninstallService
         var names = NormalizeNames(request.Name);
         var candidates = EnumerateInstalledModules(moduleRoot);
         var dependencyModuleRoots = NormalizeDependencyModuleRoots(moduleRoot, request.DependencyModuleRoots);
-        var dependencyCandidates = EnumerateInstalledModules(dependencyModuleRoots);
         var matchingCandidates = candidates
             .Where(module => names.Any(pattern => pattern.IsMatch(module.Name)))
             .Where(module => string.IsNullOrWhiteSpace(request.InstalledLocation) ||
@@ -30,6 +29,9 @@ public sealed partial class ManagedModuleUninstallService
         var targets = SelectTargets(matchingCandidates, request)
             .Select(candidate => ToTarget(candidate, moduleRoot, request))
             .ToArray();
+        var dependencyModuleRootsRequiringAvailability = request.SkipDependencyCheck || targets.Length == 0
+            ? Array.Empty<string>()
+            : SnapshotAvailableDependencyModuleRoots(dependencyModuleRoots);
         var missingNames = names
             .Where(static pattern => !pattern.IsWildcard)
             .Where(pattern => !targets.Any(target => pattern.IsMatch(target.Name)))
@@ -40,7 +42,12 @@ public sealed partial class ManagedModuleUninstallService
             ThrowIfLoaded(targets);
 
         if (!request.SkipDependencyCheck && !request.DeferDependencyCheck)
-            ThrowIfDependencyBlocked(dependencyCandidates, targets, targets);
+            ThrowIfDependencyBlocked(
+                EnumerateInstalledModulesForDependencyValidation(
+                    dependencyModuleRoots,
+                    dependencyModuleRootsRequiringAvailability),
+                targets,
+                targets);
 
         return new ManagedModuleUninstallPlan
         {
@@ -48,6 +55,7 @@ public sealed partial class ManagedModuleUninstallService
             Version = request.Version,
             ModuleRoot = moduleRoot,
             DependencyModuleRoots = dependencyModuleRoots,
+            DependencyModuleRootsRequiringAvailability = dependencyModuleRootsRequiringAvailability,
             SkipDependencyCheck = request.SkipDependencyCheck,
             AllowLoadedModuleUninstall = request.AllowLoadedModuleUninstall,
             Targets = targets,
@@ -106,7 +114,9 @@ public sealed partial class ManagedModuleUninstallService
 
         if (!plan.SkipDependencyCheck)
             ThrowIfDependencyBlocked(
-                EnumerateInstalledModules(NormalizeDependencyModuleRoots(plan.ModuleRoot, plan.DependencyModuleRoots)),
+                EnumerateInstalledModulesForDependencyValidation(
+                    NormalizeDependencyModuleRoots(plan.ModuleRoot, plan.DependencyModuleRoots),
+                    plan.DependencyModuleRootsRequiringAvailability),
                 plan.Targets,
                 plan.DependencyRemovalTargets.Count > 0 ? plan.DependencyRemovalTargets : plan.Targets);
     }
@@ -535,20 +545,35 @@ public sealed partial class ManagedModuleUninstallService
         }
     }
 
-    private static IReadOnlyList<string> EnumerateDirectories(string path)
+    private static IReadOnlyList<string> EnumerateDirectories(string path, bool failIfUnavailable = false)
     {
         try
         {
-            return Directory.Exists(path)
-                ? Directory.GetDirectories(path)
-                : Array.Empty<string>();
+            if (!Directory.Exists(path))
+            {
+                if (failIfUnavailable)
+                    throw new InvalidOperationException($"Dependency module path '{path}' is no longer available; uninstall was blocked before mutation.");
+                return Array.Empty<string>();
+            }
+
+            return Directory.GetDirectories(path);
         }
         catch (IOException)
         {
+            if (failIfUnavailable)
+                throw new InvalidOperationException($"Dependency module path '{path}' could not be enumerated; uninstall was blocked before mutation.");
             return Array.Empty<string>();
         }
         catch (UnauthorizedAccessException)
         {
+            if (failIfUnavailable)
+                throw new InvalidOperationException($"Dependency module path '{path}' could not be enumerated; uninstall was blocked before mutation.");
+            return Array.Empty<string>();
+        }
+        catch (System.Security.SecurityException)
+        {
+            if (failIfUnavailable)
+                throw new InvalidOperationException($"Dependency module path '{path}' could not be enumerated; uninstall was blocked before mutation.");
             return Array.Empty<string>();
         }
     }

@@ -381,6 +381,60 @@ public sealed class RepairManagedModuleEstateTests
     }
 
     [Fact]
+    public void ProfileDiscovery_ReportsStableDiagnosticWhenCurrentProfileCannotBeResolved()
+    {
+        var discovery = new ModuleStateProfilePathDiscoveryService().Discover(
+            profilePaths: null,
+            includeAllLocalProfiles: true,
+            localProfilesRoot: null,
+            currentUserProfilePath: string.Empty);
+
+        var diagnostic = Assert.Single(discovery.Diagnostics);
+        Assert.Equal("ModuleState.LocalProfileDiscoveryUnavailable", diagnostic.Code);
+        Assert.Equal("<local-profile-container>", diagnostic.Path);
+        Assert.Empty(discovery.ModulePaths);
+    }
+
+    [Fact]
+    public void Repair_InstallsIntoReceiptOnlyRootAndConverges()
+    {
+        using var workspace = new TemporaryDirectory();
+        using var feed = new TemporaryDirectory();
+        var receiptRoot = Path.Combine(workspace.Path, "receipt-only", "Modules");
+        var receiptPath = CreateMaintenanceReceipt(
+            workspace.Path,
+            "Company.Receipt.Root",
+            receiptRoot,
+            "Core",
+            "CurrentUser");
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Receipt.Root.1.0.0.nupkg"),
+            "Company.Receipt.Root",
+            "1.0.0",
+            files: new Dictionary<string, string>
+            {
+                ["Company.Receipt.Root.psd1"] = "@{ ModuleVersion = '1.0.0' }"
+            });
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("Inventory", new ModuleStateInventoryResult { Source = "Empty" })
+            .AddParameter("MaintenanceReceiptPath", new[] { receiptPath })
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("Confirm", false);
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        AssertNoPowerShellErrors(ps);
+        Assert.Contains(result.Inventory.ScannedPaths, path => PathsEqual(path.Path, receiptRoot));
+        Assert.True(File.Exists(Path.Combine(receiptRoot, "Company.Receipt.Root", "1.0.0", "Company.Receipt.Root.psd1")));
+        Assert.True(result.Apply.ExecutionSucceeded);
+        Assert.True(result.Apply.Converged);
+        Assert.True(result.Apply.PostApplyTest?.IsCompliant);
+        Assert.Contains(result.Apply.PostApplyInventory!.ScannedPaths, path => PathsEqual(path.Path, receiptRoot));
+    }
+
+    [Fact]
     public void Cleanup_RemovesOldVersionsWithinEachEditionAndConverges()
     {
         using var workspace = new TemporaryDirectory();
@@ -547,6 +601,41 @@ public sealed class RepairManagedModuleEstateTests
     }
 
     [Fact]
+    public void Cleanup_PreservesVersionRequiredByUnknownEditionCustomRoot()
+    {
+        using var workspace = new TemporaryDirectory();
+        var targetRoot = Path.Combine(workspace.Path, "PowerShell", "Modules");
+        var dependentRoot = Path.Combine(workspace.Path, "CustomModules");
+        var oldPath = CreateInstalledModule(targetRoot, "Company.Core", "1.0.0");
+        var currentPath = CreateInstalledModule(targetRoot, "Company.Core", "2.0.0");
+        var dependentPath = CreateInstalledModule(
+            dependentRoot,
+            "Company.CustomTools",
+            "1.0.0",
+            requiredModuleName: "Company.Core",
+            requiredModuleVersion: "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Repair-ManagedModule")
+            .AddParameter("ModulePath", new[] { targetRoot, dependentRoot })
+            .AddParameter("ModuleRoot", targetRoot)
+            .AddParameter("Name", new[] { "Company.Core" })
+            .AddParameter("Cleanup", "OldVersions")
+            .AddParameter("Confirm", false);
+
+        var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
+
+        Assert.True(ps.HadErrors);
+        var execution = Assert.Single(result.Apply.ExecutionResults);
+        Assert.False(execution.Succeeded);
+        Assert.Contains("required by Company.CustomTools", execution.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(oldPath));
+        Assert.True(Directory.Exists(currentPath));
+        Assert.True(Directory.Exists(dependentPath));
+        Assert.False(result.Apply.Converged);
+    }
+
+    [Fact]
     public void Cleanup_PreservesGlobalVersionRequiredByExplicitProfileModule()
     {
         using var workspace = new TemporaryDirectory();
@@ -687,11 +776,23 @@ public sealed class RepairManagedModuleEstateTests
     }
 
     private static string CreateMaintenanceReceipt(string directory, string moduleName)
+        => CreateMaintenanceReceipt(directory, moduleName, moduleRoot: null, powerShellEdition: null, scope: null);
+
+    private static string CreateMaintenanceReceipt(
+        string directory,
+        string moduleName,
+        string? moduleRoot,
+        string? powerShellEdition,
+        string? scope)
     {
         var path = Path.Combine(directory, "module-maintenance.json");
-        File.WriteAllText(
-            path,
-            "{\"maintainedModules\":[{\"name\":\"" + moduleName + "\",\"version\":\"1.0.0\"}]}");
+        var optionalProperties = string.IsNullOrWhiteSpace(moduleRoot)
+            ? string.Empty
+            : ",\"moduleRoot\":\"" + moduleRoot!.Replace("\\", "\\\\") +
+              "\",\"powerShellEdition\":\"" + powerShellEdition +
+              "\",\"scope\":\"" + scope + "\"";
+        File.WriteAllText(path, "{\"maintainedModules\":[{\"name\":\"" + moduleName +
+                                "\",\"version\":\"1.0.0\"" + optionalProperties + "}]}");
         return path;
     }
 

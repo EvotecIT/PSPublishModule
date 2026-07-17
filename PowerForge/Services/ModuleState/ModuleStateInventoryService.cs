@@ -108,6 +108,63 @@ internal sealed class ModuleStateInventoryService
             module.ModuleRoot,
             module.ProfileName);
 
+    internal static ModuleStateInstalledModule[] RecomputeEffectiveImportCandidates(
+        IEnumerable<ModuleStateInstalledModule> installedModules,
+        IReadOnlyList<ModuleStateModulePath> modulePaths)
+    {
+        var modules = (installedModules ?? Array.Empty<ModuleStateInstalledModule>()).ToArray();
+        var paths = modulePaths ?? Array.Empty<ModuleStateModulePath>();
+        var effectiveModules = new HashSet<ModuleStateInstalledModule>();
+        foreach (var group in modules.GroupBy(
+                     static module => string.Join(
+                         "|",
+                         module.Name,
+                         module.PowerShellEdition ?? string.Empty,
+                         module.ProfileName ?? string.Empty),
+                     StringComparer.OrdinalIgnoreCase))
+        {
+            var placed = group
+                .Select(module => new
+                {
+                    Module = module,
+                    ModulePathIndex = ResolveModulePathIndex(module, paths)
+                })
+                .Where(static candidate => candidate.ModulePathIndex != int.MaxValue)
+                .OrderBy(static candidate => candidate.ModulePathIndex)
+                .ThenByDescending(static candidate => ModuleStateVersion.TryParse(candidate.Module.Version, out var version) ? version : default)
+                .ThenBy(static candidate => candidate.Module.Path, ModuleStatePathIdentity.Comparer)
+                .FirstOrDefault();
+            var winner = placed?.Module
+                         ?? group.FirstOrDefault(static module => module.IsEffectiveImportCandidate)
+                         ?? group
+                             .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
+                             .ThenBy(static module => module.Path, ModuleStatePathIdentity.Comparer)
+                             .First();
+            effectiveModules.Add(winner);
+        }
+
+        return modules
+            .Select(module => MarkEffective(module, effectiveModules.Contains(module)))
+            .ToArray();
+    }
+
+    private static int ResolveModulePathIndex(
+        ModuleStateInstalledModule module,
+        IReadOnlyList<ModuleStateModulePath> modulePaths)
+    {
+        for (var index = 0; index < modulePaths.Count; index++)
+        {
+            var root = modulePaths[index].Path;
+            if ((!string.IsNullOrWhiteSpace(module.ModuleRoot) && ModuleStatePathIdentity.Equals(module.ModuleRoot, root)) ||
+                (!string.IsNullOrWhiteSpace(module.Path) && ModuleStatePathIdentity.IsSameOrChild(module.Path, root)))
+            {
+                return index;
+            }
+        }
+
+        return int.MaxValue;
+    }
+
     private static IEnumerable<ModuleStateInstalledModule> DiscoverModule(DirectoryInfo moduleDirectory, ModuleStateModulePath modulePath)
     {
         var directManifest = FindManifest(moduleDirectory, moduleDirectory.Name);

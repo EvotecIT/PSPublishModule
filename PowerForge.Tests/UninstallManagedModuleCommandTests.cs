@@ -362,6 +362,37 @@ public sealed class UninstallManagedModuleCommandTests
     }
 
     [Fact]
+    public void UninstallManagedModule_piped_inventory_row_checks_dependents_across_scanned_roots()
+    {
+        using var workspace = new TemporaryDirectory();
+        var targetRoot = Path.Combine(workspace.Path, "target");
+        var dependentRoot = Path.Combine(workspace.Path, "dependent");
+        CreateInstalledModule(targetRoot, "Company.Core", "1.0.0");
+        CreateInstalledModule(
+            dependentRoot,
+            "Company.Tools",
+            "1.0.0",
+            "Company.Core",
+            "1.0.0");
+        var targetPath = Path.Combine(targetRoot, "Company.Core", "1.0.0");
+        var dependentPath = Path.Combine(dependentRoot, "Company.Tools", "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddScript(
+                "param($TargetRoot, $DependentRoot) Get-ManagedModule -ModulePath @($TargetRoot, $DependentRoot) -Name 'Company.Core' | Uninstall-ManagedModule")
+            .AddParameter("TargetRoot", targetRoot)
+            .AddParameter("DependentRoot", dependentRoot);
+
+        _ = ps.Invoke();
+
+        Assert.True(ps.HadErrors);
+        Assert.Contains(ps.Streams.Error, error =>
+            error.ToString().Contains("required by Company.Tools", StringComparison.OrdinalIgnoreCase));
+        Assert.True(Directory.Exists(targetPath));
+        Assert.True(Directory.Exists(dependentPath));
+    }
+
+    [Fact]
     public void UninstallManagedModule_direct_installed_location_removes_only_selected_same_version_location()
     {
         using var moduleRoot = new TemporaryDirectory();

@@ -97,6 +97,8 @@ Update-ManagedModule -Name Company.Tools -Repository PSGallery
 Update-ManagedModule -Name Company.Tools -VersionPolicy '>=1.2.0 <2.0.0' -ProfileName CompanyModules
 ```
 
+When `-ExpectedPackageSha256` is used with pipeline names, the command buffers the complete pipeline and requires exactly one distinct package target before starting any update. A multi-target hash request fails atomically rather than updating an early pipeline item first.
+
 ### Repair
 
 ```powershell
@@ -115,9 +117,9 @@ Use `-InstallMissing` with literal `-Name` values when a named baseline should a
 
 Repair preserves physical estate identity across module root, PowerShell edition, scope, and local user profile. Use `-UserProfilePath` for explicit profile homes or `-IncludeAllUserProfiles` for existing standard roots below the local profile container. Use explicit `-ModulePath` for redirected, service-account, mounted, or otherwise nonstandard server roots. Inaccessible optional `PSModulePath`, discovered profile, and discovered module-root entries are warnings; inaccessible explicitly requested roots remain blocking errors. `-ModuleRoot` narrows selection and delivery to one physical target. A single explicit profile supplies its platform-standard current-edition CurrentUser root for missing-module delivery even when the module root has not been created yet, but it never redirects a command-level or per-resource `AllUsers` request into that profile. Other missing modules are applicable only when `-ModuleRoot` is explicit or exactly one scanned root is eligible; ambiguous or scope-incompatible destinations block apply.
 
-Supplied `-Inventory` and `-InventoryPath` artifacts remain useful as baseline evidence, but they do not hide an explicit destination: `-ModuleRoot` and `-UserProfilePath` roots are scanned and merged into the working inventory, then retained for post-apply convergence checks.
+Supplied `-Inventory` and `-InventoryPath` artifacts remain useful as baseline evidence, but they do not hide an explicit destination: `-ModuleRoot`, `-UserProfilePath`, and maintenance-receipt roots are scanned and merged into the working inventory, then retained for post-apply convergence checks. A receipt-only root may be created by delivery and is visible to the final convergence scan.
 
-`-Cleanup OldVersions` is executable, not plan-only. Delivery completes first, repair inventories the same estate again, and cleanup is replanned from that current state so a newly installed latest version can make its former fallback eligible for removal in the same run. Cleanup does not mutate any path when that refreshed plan contains errors. Every removal names one exact installed directory, and the complete selected batch is planned, confirmed, and dependency-preflighted before deletion begins. Selected dependents are removed before their selected dependencies, so mutually related stale versions do not become action-order dependent. The managed uninstall engine merges current-runspace loaded-module evidence even when `-IncludeLoaded` was omitted; global targets validate dependencies in every scanned same-edition profile/global root, while profile targets validate that profile plus unprofiled roots. Exact-path, `ShouldProcess`, `WhatIf`, and confirmation safety remain active. Declined actions are reported as skipped and cannot produce `ExecutionSucceeded` or `Converged`. Repair stops cleanup after an operational failure, inventories the same roots one final time, and returns `ExecutionSucceeded`, `Converged`, and post-apply inventory, plan, and test evidence.
+`-Cleanup OldVersions` is executable, not plan-only. Delivery completes first, repair inventories the same estate again, and cleanup is replanned from that current state so a newly installed latest version can make its former fallback eligible for removal in the same run. Cleanup does not mutate any path when that refreshed plan contains errors. Every removal names one exact installed directory, and the complete selected batch is planned, confirmed, and dependency-preflighted before deletion begins. Selected dependents are removed before their selected dependencies, so mutually related stale versions do not become action-order dependent. The managed uninstall engine merges current-runspace loaded-module evidence even when `-IncludeLoaded` was omitted; global targets validate dependencies in every scanned same-edition profile/global root, unknown-edition custom roots are included conservatively, and profile targets validate that profile plus unprofiled roots. A dependency root that was available during planning must remain enumerable through destructive preflight or cleanup fails closed without mutation. Exact-path, `ShouldProcess`, `WhatIf`, and confirmation safety remain active. Declined actions are reported as skipped and cannot produce `ExecutionSucceeded` or `Converged`. Repair stops cleanup after an operational failure, inventories the same roots one final time, and returns `ExecutionSucceeded`, `Converged`, and post-apply inventory, plan, and test evidence.
 
 Repair operates on the local machine/session. This makes the same command suitable for workstations, build agents, service accounts, and servers with multiple PowerShell editions or user profiles, but it is not remote fleet orchestration. Use PowerShell remoting or the existing configuration-management system to invoke the local contract on each server.
 
@@ -127,6 +129,8 @@ Repair operates on the local machine/session. This makes the same command suitab
 Get-ManagedModule -Name Microsoft.Graph.* -IncludeLoaded -ShowSummary
 Get-ManagedModule -Path C:\OfflineModules -AsInventory
 ```
+
+Typed installed rows retain the roots scanned for their inventory. Piping one exact row to `Uninstall-ManagedModule` therefore keeps dependency validation across the originating visible estate instead of narrowing safety checks to only that row's physical root.
 
 ### Uninstall
 

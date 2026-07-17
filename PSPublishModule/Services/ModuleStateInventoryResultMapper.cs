@@ -14,6 +14,14 @@ internal static class ModuleStateInventoryResultMapper
         if (inventory is null)
             throw new ArgumentNullException(nameof(inventory));
 
+        var inventoryModuleRoots = inventory.ModulePaths
+            .Select(static path => path.Path)
+            .Concat(inventory.InstalledModules.Select(static module => module.ModuleRoot))
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(static path => path!)
+            .Distinct(ModuleStatePathIdentity.Comparer)
+            .ToArray();
+
         return new ModuleStateInventoryResult
         {
             Source = source,
@@ -38,7 +46,7 @@ internal static class ModuleStateInventoryResultMapper
                 Scope = diagnostic.Scope,
                 ProfileName = diagnostic.ProfileName
             }).ToArray(),
-            InstalledModules = inventory.InstalledModules.Select(static module => new ModuleStateInstalledModuleResult
+            InstalledModules = inventory.InstalledModules.Select(module => new ModuleStateInstalledModuleResult
             {
                 Name = module.Name,
                 Version = module.Version,
@@ -46,6 +54,7 @@ internal static class ModuleStateInventoryResultMapper
                 Scope = module.Scope,
                 Path = module.Path,
                 ModuleRoot = module.ModuleRoot,
+                InventoryModuleRoots = inventoryModuleRoots,
                 ProfileName = module.ProfileName,
                 SourceRepository = module.SourceRepository,
                 IsLoaded = module.IsLoaded,

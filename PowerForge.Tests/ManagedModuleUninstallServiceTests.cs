@@ -171,6 +171,27 @@ public sealed class ManagedModuleUninstallServiceTests
     }
 
     [Fact]
+    public void Uninstall_fails_closed_when_preflight_dependency_root_disappears()
+    {
+        using var targetRoot = new TemporaryDirectory();
+        using var workspace = new TemporaryDirectory();
+        var dependencyRoot = Path.Combine(workspace.Path, "visible-dependencies");
+        Directory.CreateDirectory(dependencyRoot);
+        var targetPath = CreateInstalledModule(targetRoot.Path, "Company.Core", "1.0.0");
+        var request = CreateRequest(targetRoot.Path, "Company.Core");
+        request.DependencyModuleRoots = new[] { targetRoot.Path, dependencyRoot };
+        request.DeferDependencyCheck = true;
+        var service = new ManagedModuleUninstallService();
+        var plan = service.PlanUninstall(request);
+        Directory.Delete(dependencyRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Uninstall(plan));
+
+        Assert.Contains("no longer available", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(targetPath));
+    }
+
+    [Fact]
     public void Uninstall_skip_dependency_check_permits_required_module_removal()
     {
         using var moduleRoot = new TemporaryDirectory();
