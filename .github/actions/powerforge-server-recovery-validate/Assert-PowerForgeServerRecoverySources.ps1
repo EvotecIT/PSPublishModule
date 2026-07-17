@@ -20,7 +20,7 @@ function Get-GitHubRepositorySlug {
     $patterns = @(
         '^https://github\.com/(?<slug>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?$',
         '^ssh://git@github\.com(?::22)?/(?<slug>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?$',
-        '^git@github\.com(?:-[A-Za-z0-9_-]+)?:(?<slug>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?$'
+        '^git@github\.com:(?<slug>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?$'
     )
     foreach ($pattern in $patterns) {
         $match = [regex]::Match(
@@ -213,7 +213,10 @@ function Get-ExpectedCaptureSudoersCommand {
     $captureCommands = @(@($RecoveryManifest.capture.commands) | Where-Object { $null -ne $_ })
     foreach ($captureCommand in $captureCommands.Where({ $_.sensitive -ne $true })) {
         $command = ([string]$captureCommand.command).Trim()
-        if ($command -notmatch '^sudo -n (?<command>.+)$') {
+        if ($command -cnotmatch '^sudo -n (?<command>.+)$') {
+            if ($command -match '^sudo\s') {
+                throw "Privileged recovery capture command must use the canonical case-sensitive sudo -n prefix: $command"
+            }
             continue
         }
         $sudoersCommand = [string]$Matches['command']
@@ -354,6 +357,9 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
             if ([string]::IsNullOrWhiteSpace($trimmedLine) -or $trimmedLine.StartsWith('#', [StringComparison]::Ordinal)) {
                 continue
             }
+            if ($trimmedLine -match '\bNOPASSWD\s*:' -and $trimmedLine -cnotmatch '\bNOPASSWD\s*:') {
+                throw 'Managed sudoers sources must use the canonical case-sensitive NOPASSWD: tag.'
+            }
             if ($trimmedLine.EndsWith('\', [StringComparison]::Ordinal)) {
                 throw 'Managed sudoers sources must not use line continuations.'
             }
@@ -389,7 +395,7 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
         foreach ($line in $sudoersDocument.Lines) {
             $trimmedLine = $line.Trim()
             if ([string]::IsNullOrWhiteSpace($trimmedLine) -or $trimmedLine.StartsWith('#', [StringComparison]::Ordinal) -or
-                $line -notmatch '\bNOPASSWD\s*:') {
+                $line -cnotmatch '\bNOPASSWD\s*:') {
                 continue
             }
             if ($line -notmatch '^\s*(?<principal>\S+)\s+') {
@@ -397,12 +403,12 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
             }
             $principal = [string]$Matches['principal']
             if (-not [string]::Equals($principal, $CaptureUser, [StringComparison]::Ordinal)) {
-                if ($principal -notmatch '^[a-z_][a-z0-9_-]{0,31}$') {
+                if ($principal -cnotmatch '^[a-z_][a-z0-9_-]{0,31}$') {
                     throw "Managed sudoers NOPASSWD grant uses an unsupported broad or aliased principal: $principal"
                 }
                 continue
             }
-            if ($line -notmatch '^\s*\S+\s+ALL\s*=\s*\(\s*(?<runas>[^)]+?)\s*\)\s+NOPASSWD:\s*(?<commands>.+?)\s*$') {
+            if ($line -cnotmatch '^\s*\S+\s+ALL\s*=\s*\(\s*(?<runas>[^)]+?)\s*\)\s+NOPASSWD:\s*(?<commands>.+?)\s*$') {
                 throw 'The recovery capture account NOPASSWD grant must use the exact ALL=(root) form.'
             }
             $runAs = [string]$Matches['runas']

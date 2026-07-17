@@ -18,7 +18,6 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
     [InlineData("https://github.com/EvotecIT/ExampleSite.git")]
     [InlineData("ssh://git@github.com/EvotecIT/ExampleSite.git")]
     [InlineData("git@github.com:EvotecIT/ExampleSite.git")]
-    [InlineData("git@github.com-example:EvotecIT/ExampleSite.git")]
     public void Validator_ShouldAcceptExplicitGitHubRepositoryForms(string repositoryUrl)
     {
         var result = RunValidator(repositoryUrl: repositoryUrl);
@@ -30,6 +29,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
     [Theory]
     [InlineData("https://evilgithub.com/EvotecIT/ExampleSite.git")]
     [InlineData("git@github.com-evil.com:EvotecIT/ExampleSite.git")]
+    [InlineData("git@github.com-example:EvotecIT/ExampleSite.git")]
     public void Validator_ShouldRejectLookalikeGitHubHosts(string repositoryUrl)
     {
         var result = RunValidator(repositoryUrl: repositoryUrl);
@@ -376,6 +376,53 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
 
         Assert.NotEqual(0, result.ExitCode);
         Assert.Contains("must not disable authentication", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectNonCanonicalSudoCapturePrefixes()
+    {
+        var result = RunValidator(captureCommand: "SUDO -n apachectl -S");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("canonical case-sensitive sudo -n prefix", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("nopasswd:")]
+    [InlineData("NoPasswd:")]
+    public void Validator_ShouldRejectNonCanonicalNoPasswordTags(string tag)
+    {
+        var sudoers = BuildExpectedSudoers(CaptureUser, "root")
+            .Replace("NOPASSWD:", tag, StringComparison.Ordinal);
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("canonical case-sensitive NOPASSWD: tag", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldIgnoreNoPasswordTextInComments()
+    {
+        var sudoers = BuildExpectedSudoers(CaptureUser, "root") +
+                      "# lowercase nopasswd: text is only documentation\n";
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("2", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectUppercaseAliasPrincipals()
+    {
+        var extraSudoers = "Cmnd_Alias EXTRA = /bin/sh\n" +
+                           "PF_BACKUP ALL=(root) NOPASSWD: EXTRA\n";
+
+        var result = RunValidator(additionalSudoers: extraSudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("unsupported broad or aliased principal", result.AllOutput, StringComparison.Ordinal);
     }
 
     private static ValidationResult RunValidator(
