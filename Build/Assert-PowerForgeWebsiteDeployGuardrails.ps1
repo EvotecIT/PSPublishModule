@@ -87,12 +87,23 @@ if ($gatingSteps.Count -eq 0) {
 
 $completeSteps = @($gatingSteps | Where-Object {
     $_.Contains('checkContentLeaks') -and ($_['checkContentLeaks'] -eq $true) -and
-    $_.Contains('requireCanonical') -and ($_['requireCanonical'] -eq $true) -and
-    $_.Contains('requireHreflang') -and ($_['requireHreflang'] -eq $true) -and
-    $_.Contains('requireHreflangXDefault') -and ($_['requireHreflangXDefault'] -eq $true)
+    $_.Contains('requireCanonical') -and ($_['requireCanonical'] -eq $true)
 })
 if ($completeSteps.Count -eq 0) {
-    throw 'Deploy guardrail requires a gating seo-doctor step with content-leak, canonical, hreflang, and x-default checks enabled.'
+    throw 'Deploy guardrail requires a gating seo-doctor step with content-leak and canonical checks enabled.'
 }
 
-Write-Host "Validated $($seoDoctorSteps.Count) seo-doctor step(s); $($gatingSteps.Count) gate deployment; $($completeSteps.Count) enforce localized SEO/content-leak guardrails."
+$explicitModeSteps = @($completeSteps | Where-Object {
+    $_.Contains('requireHreflang') -and
+    $_.Contains('requireHreflangXDefault') -and
+    ($_['requireHreflang'] -is [bool]) -and
+    ($_['requireHreflangXDefault'] -is [bool]) -and
+    ($_['requireHreflang'] -eq $_['requireHreflangXDefault'])
+})
+if ($explicitModeSteps.Count -eq 0) {
+    throw 'Deploy guardrail requires an explicit SEO localization mode: set requireHreflang and requireHreflangXDefault to true for localized sites or false for single-language sites.'
+}
+
+$localizedSteps = @($explicitModeSteps | Where-Object { $_['requireHreflang'] -eq $true })
+$singleLanguageSteps = @($explicitModeSteps | Where-Object { $_['requireHreflang'] -eq $false })
+Write-Host "Validated $($seoDoctorSteps.Count) seo-doctor step(s); $($gatingSteps.Count) gate deployment; $($completeSteps.Count) enforce content-leak/canonical checks; localization modes: $($localizedSteps.Count) localized, $($singleLanguageSteps.Count) single-language."

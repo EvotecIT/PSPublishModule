@@ -16,7 +16,7 @@ public sealed class GitHubWebsiteDeployGuardrailTests
     }
 
     [Fact]
-    public void Guardrail_ShouldAcceptCompleteSeoDoctorAndRejectEscapingExtends()
+    public void Guardrail_ShouldAcceptExplicitSeoModesAndRejectAmbiguousOrEscapingConfig()
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-guardrail-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -42,6 +42,61 @@ public sealed class GitHubWebsiteDeployGuardrailTests
             var accepted = RunGuardrail(root, "pipeline.json");
             Assert.Equal(0, accepted.ExitCode);
             Assert.Contains("Validated 1 seo-doctor", accepted.Output, StringComparison.Ordinal);
+
+            File.WriteAllText(validPath, JsonSerializer.Serialize(new
+            {
+                steps = new object[]
+                {
+                    new
+                    {
+                        task = "seo-doctor",
+                        failOnWarnings = true,
+                        checkContentLeaks = true,
+                        requireCanonical = true,
+                        requireHreflang = false,
+                        requireHreflangXDefault = false
+                    }
+                }
+            }));
+            var singleLanguage = RunGuardrail(root, "pipeline.json");
+            Assert.Equal(0, singleLanguage.ExitCode);
+            Assert.Contains("1 single-language", singleLanguage.Output, StringComparison.Ordinal);
+
+            File.WriteAllText(validPath, JsonSerializer.Serialize(new
+            {
+                steps = new object[]
+                {
+                    new
+                    {
+                        task = "seo-doctor",
+                        failOnWarnings = true,
+                        checkContentLeaks = true,
+                        requireCanonical = true
+                    }
+                }
+            }));
+            var ambiguous = RunGuardrail(root, "pipeline.json");
+            Assert.NotEqual(0, ambiguous.ExitCode);
+            Assert.Contains("explicit SEO localization mode", ambiguous.Output, StringComparison.Ordinal);
+
+            File.WriteAllText(validPath, JsonSerializer.Serialize(new
+            {
+                steps = new object[]
+                {
+                    new
+                    {
+                        task = "seo-doctor",
+                        failOnWarnings = true,
+                        checkContentLeaks = true,
+                        requireCanonical = true,
+                        requireHreflang = true,
+                        requireHreflangXDefault = false
+                    }
+                }
+            }));
+            var mismatched = RunGuardrail(root, "pipeline.json");
+            Assert.NotEqual(0, mismatched.ExitCode);
+            Assert.Contains("explicit SEO localization mode", mismatched.Output, StringComparison.Ordinal);
 
             File.WriteAllText(validPath, "{\"extends\":\"../outside.json\"}");
             var rejected = RunGuardrail(root, "pipeline.json");
