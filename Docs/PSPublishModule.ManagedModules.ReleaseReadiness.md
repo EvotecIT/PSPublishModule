@@ -16,6 +16,9 @@ feature roadmap.
 - [x] Managed find, inventory, save, install, update, uninstall, publish,
   compression, and estate repair use shared C# engines behind thin PowerShell
   cmdlets.
+- [x] Estate repair keeps physical roots, PowerShell editions, scopes, and local
+  profiles independent; cleanup uses exact-path uninstall safety and returns
+  post-apply convergence evidence.
 - [x] Common PowerShellGet and stable PSResourceGet module workflows have
   documented managed equivalents, including typed pipelines and version-range
   selection.

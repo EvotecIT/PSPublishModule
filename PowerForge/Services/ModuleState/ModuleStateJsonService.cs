@@ -57,10 +57,28 @@ internal sealed class ModuleStateJsonService
                 module.SourceRepository,
                 module.IsLoaded,
                 module.IsEffectiveImportCandidate,
-                module.ExportedCommands));
+                module.ExportedCommands,
+                module.ModuleRoot,
+                module.ProfileName));
         }
 
-        return new ModuleStateInventory(modules);
+        var modulePaths = (dto.ScannedPaths ?? dto.ModulePaths?.Select(static path => new InventoryPathDto { Path = path }).ToArray() ?? Array.Empty<InventoryPathDto>())
+            .Select(static path => new ModuleStateModulePath(
+                path.Path ?? string.Empty,
+                path.PowerShellEdition,
+                path.Scope,
+                path.ProfileName,
+                path.IsRequired));
+        var diagnostics = (dto.Diagnostics ?? Array.Empty<InventoryDiagnosticDto>())
+            .Select(static diagnostic => new ModuleStateInventoryDiagnostic(
+                ParseSeverity(diagnostic.Severity),
+                diagnostic.Code ?? "ModuleState.InventoryDiagnostic",
+                diagnostic.Message ?? "Module inventory diagnostic.",
+                diagnostic.Path ?? string.Empty,
+                diagnostic.PowerShellEdition,
+                diagnostic.Scope,
+                diagnostic.ProfileName));
+        return new ModuleStateInventory(modules, modulePaths, diagnostics);
     }
 
     internal ModuleStateDesiredState ReadDesiredState(string json)
@@ -76,14 +94,17 @@ internal sealed class ModuleStateJsonService
                 module.VersionPolicy ?? module.Version ?? module.RequiredVersion,
                 module.AllowedSources ?? module.Repositories ?? ToArray(module.Repository),
                 module.Scope,
-                module.TargetPath ?? module.Path ?? module.ModuleRoot ?? module.DestinationPath,
+                module.TargetPath ?? module.Path ?? module.DestinationPath,
                 module.ExpectedPackageSha256 ?? module.PackageSha256 ?? module.Sha256,
                 module.Prerelease || module.IncludePrerelease,
                 module.Reinstall || module.Force,
                 module.AcceptLicense,
                 module.AllowClobber,
                 module.SkipDependencyCheck,
-                module.RepositorySource ?? module.DeliveryRepository ?? module.RepositoryUri));
+                module.RepositorySource ?? module.DeliveryRepository ?? module.RepositoryUri,
+                module.ModuleRoot,
+                module.PowerShellEdition,
+                module.ProfileName ?? module.UserProfile));
         }
 
         var families = new List<ModuleStateFamilyPolicy>();
@@ -110,7 +131,10 @@ internal sealed class ModuleStateJsonService
                 module.Name ?? string.Empty,
                 module.Version ?? string.Empty,
                 module.SourceRepository,
-                module.Scope));
+                module.Scope,
+                module.ModuleRoot,
+                module.PowerShellEdition,
+                module.ProfileName));
         }
 
         return new ModuleStateMaintenanceReceipt(
@@ -123,6 +147,12 @@ internal sealed class ModuleStateJsonService
     private sealed class InventoryDto
     {
         public InstalledModuleDto[]? InstalledModules { get; set; }
+
+        public string[]? ModulePaths { get; set; }
+
+        public InventoryPathDto[]? ScannedPaths { get; set; }
+
+        public InventoryDiagnosticDto[]? Diagnostics { get; set; }
     }
 
     private sealed class InstalledModuleDto
@@ -136,6 +166,10 @@ internal sealed class ModuleStateJsonService
         public string? Scope { get; set; }
 
         public string? Path { get; set; }
+
+        public string? ModuleRoot { get; set; }
+
+        public string? ProfileName { get; set; }
 
         public string? SourceRepository { get; set; }
 
@@ -185,6 +219,12 @@ internal sealed class ModuleStateJsonService
 
         public string? ModuleRoot { get; set; }
 
+        public string? PowerShellEdition { get; set; }
+
+        public string? ProfileName { get; set; }
+
+        public string? UserProfile { get; set; }
+
         public string? DestinationPath { get; set; }
 
         public string? ExpectedPackageSha256 { get; set; }
@@ -208,6 +248,36 @@ internal sealed class ModuleStateJsonService
         public bool SkipDependencyCheck { get; set; }
     }
 
+    private sealed class InventoryPathDto
+    {
+        public string? Path { get; set; }
+
+        public string? PowerShellEdition { get; set; }
+
+        public string? Scope { get; set; }
+
+        public string? ProfileName { get; set; }
+
+        public bool IsRequired { get; set; }
+    }
+
+    private sealed class InventoryDiagnosticDto
+    {
+        public string? Severity { get; set; }
+
+        public string? Code { get; set; }
+
+        public string? Message { get; set; }
+
+        public string? Path { get; set; }
+
+        public string? PowerShellEdition { get; set; }
+
+        public string? Scope { get; set; }
+
+        public string? ProfileName { get; set; }
+    }
+
     private static string[]? ToArray(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : new[] { value!.Trim() };
 
@@ -220,6 +290,11 @@ internal sealed class ModuleStateJsonService
             ? transport
             : null;
     }
+
+    private static ModuleStateConflictSeverity ParseSeverity(string? value)
+        => Enum.TryParse<ModuleStateConflictSeverity>(value, ignoreCase: true, out var severity)
+            ? severity
+            : ModuleStateConflictSeverity.Warning;
 
     private sealed class FamilyPolicyDto
     {
@@ -262,5 +337,11 @@ internal sealed class ModuleStateJsonService
         public string? SourceRepository { get; set; }
 
         public string? Scope { get; set; }
+
+        public string? ModuleRoot { get; set; }
+
+        public string? PowerShellEdition { get; set; }
+
+        public string? ProfileName { get; set; }
     }
 }

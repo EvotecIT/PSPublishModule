@@ -32,15 +32,26 @@ internal sealed class ModuleStatePlanner
             throw new ArgumentNullException(nameof(request));
 
         var actions = new List<ModuleStatePlanAction>();
+        var placementFindings = new List<ModuleStateConflictFinding>();
         foreach (var desiredModule in request.DesiredModules)
         {
             var installedModules = SelectInstalledModules(request.Inventory, desiredModule.Name);
-            var installedModule = SelectInstalledModule(installedModules, desiredModule.Scope, desiredModule.TargetPath);
+            var targetModuleRoot = ResolveTargetModuleRoot(request, desiredModule);
+            var actionTargetPath = desiredModule.TargetPath ?? targetModuleRoot;
+            var installedModule = SelectInstalledModule(
+                installedModules,
+                desiredModule.Scope,
+                actionTargetPath,
+                desiredModule.PowerShellEdition,
+                desiredModule.ProfileName);
             var versionPolicy = ModuleStateVersionPolicy.Parse(desiredModule.VersionPolicy, desiredModule.IncludePrerelease);
             var targetRepository = ResolveTargetRepository(desiredModule);
             var targetRepositorySource = desiredModule.TargetRepositorySource;
             if (installedModule is null)
             {
+                var ambiguityFinding = CreateAmbiguousPlacementFinding(request, desiredModule);
+                if (ambiguityFinding is not null)
+                    placementFindings.Add(ambiguityFinding);
                 actions.Add(new ModuleStatePlanAction(
                     ResolveMissingActionKind(desiredModule),
                     desiredModule.Name,
@@ -53,14 +64,17 @@ internal sealed class ModuleStatePlanner
                         : "Module is not installed in desired scope.",
                     force: desiredModule.Force,
                     targetScope: desiredModule.Scope,
-                    targetPath: desiredModule.TargetPath,
+                    targetPath: actionTargetPath,
                     targetRepository: targetRepository,
                     expectedPackageSha256: desiredModule.ExpectedPackageSha256,
                     includePrerelease: desiredModule.IncludePrerelease,
                     acceptLicense: desiredModule.AcceptLicense,
                     allowClobber: desiredModule.AllowClobber,
                     skipDependencyCheck: desiredModule.SkipDependencyCheck,
-                    targetRepositorySource: targetRepositorySource));
+                    targetRepositorySource: targetRepositorySource,
+                    targetModuleRoot: targetModuleRoot,
+                    targetPowerShellEdition: desiredModule.PowerShellEdition,
+                    targetProfileName: desiredModule.ProfileName));
                 continue;
             }
 
@@ -74,14 +88,17 @@ internal sealed class ModuleStatePlanner
                     "Installed module version does not satisfy desired policy.",
                     force: desiredModule.Force,
                     targetScope: desiredModule.Scope,
-                    targetPath: desiredModule.TargetPath,
+                    targetPath: actionTargetPath,
                     targetRepository: targetRepository,
                     expectedPackageSha256: desiredModule.ExpectedPackageSha256,
                     includePrerelease: desiredModule.IncludePrerelease,
                     acceptLicense: desiredModule.AcceptLicense,
                     allowClobber: desiredModule.AllowClobber,
                     skipDependencyCheck: desiredModule.SkipDependencyCheck,
-                    targetRepositorySource: targetRepositorySource));
+                    targetRepositorySource: targetRepositorySource,
+                    targetModuleRoot: targetModuleRoot ?? installedModule.ModuleRoot,
+                    targetPowerShellEdition: desiredModule.PowerShellEdition ?? installedModule.PowerShellEdition,
+                    targetProfileName: desiredModule.ProfileName ?? installedModule.ProfileName));
                 continue;
             }
 
@@ -95,14 +112,17 @@ internal sealed class ModuleStatePlanner
                     "Installed module version satisfies desired policy but source repository does not match desired state.",
                     force: true,
                     targetScope: string.IsNullOrWhiteSpace(desiredModule.Scope) ? installedModule.Scope : desiredModule.Scope,
-                    targetPath: desiredModule.TargetPath,
+                    targetPath: actionTargetPath,
                     targetRepository: targetRepository,
                     expectedPackageSha256: desiredModule.ExpectedPackageSha256,
                     includePrerelease: desiredModule.IncludePrerelease,
                     acceptLicense: desiredModule.AcceptLicense,
                     allowClobber: desiredModule.AllowClobber,
                     skipDependencyCheck: desiredModule.SkipDependencyCheck,
-                    targetRepositorySource: targetRepositorySource));
+                    targetRepositorySource: targetRepositorySource,
+                    targetModuleRoot: targetModuleRoot ?? installedModule.ModuleRoot,
+                    targetPowerShellEdition: desiredModule.PowerShellEdition ?? installedModule.PowerShellEdition,
+                    targetProfileName: desiredModule.ProfileName ?? installedModule.ProfileName));
                 continue;
             }
 
@@ -116,14 +136,17 @@ internal sealed class ModuleStatePlanner
                     "Installed module version satisfies desired policy but package hash verification is required.",
                     force: true,
                     targetScope: string.IsNullOrWhiteSpace(desiredModule.Scope) ? installedModule.Scope : desiredModule.Scope,
-                    targetPath: desiredModule.TargetPath,
+                    targetPath: actionTargetPath,
                     targetRepository: targetRepository,
                     expectedPackageSha256: desiredModule.ExpectedPackageSha256,
                     includePrerelease: desiredModule.IncludePrerelease,
                     acceptLicense: desiredModule.AcceptLicense,
                     allowClobber: desiredModule.AllowClobber,
                     skipDependencyCheck: desiredModule.SkipDependencyCheck,
-                    targetRepositorySource: targetRepositorySource));
+                    targetRepositorySource: targetRepositorySource,
+                    targetModuleRoot: targetModuleRoot ?? installedModule.ModuleRoot,
+                    targetPowerShellEdition: desiredModule.PowerShellEdition ?? installedModule.PowerShellEdition,
+                    targetProfileName: desiredModule.ProfileName ?? installedModule.ProfileName));
                 continue;
             }
 
@@ -137,14 +160,17 @@ internal sealed class ModuleStatePlanner
                     "Desired state requested reinstall of the selected module version.",
                     force: true,
                     targetScope: string.IsNullOrWhiteSpace(desiredModule.Scope) ? installedModule.Scope : desiredModule.Scope,
-                    targetPath: desiredModule.TargetPath,
+                    targetPath: actionTargetPath,
                     targetRepository: targetRepository,
                     expectedPackageSha256: desiredModule.ExpectedPackageSha256,
                     includePrerelease: desiredModule.IncludePrerelease,
                     acceptLicense: desiredModule.AcceptLicense,
                     allowClobber: desiredModule.AllowClobber,
                     skipDependencyCheck: desiredModule.SkipDependencyCheck,
-                    targetRepositorySource: targetRepositorySource));
+                    targetRepositorySource: targetRepositorySource,
+                    targetModuleRoot: targetModuleRoot ?? installedModule.ModuleRoot,
+                    targetPowerShellEdition: desiredModule.PowerShellEdition ?? installedModule.PowerShellEdition,
+                    targetProfileName: desiredModule.ProfileName ?? installedModule.ProfileName));
                 continue;
             }
 
@@ -155,14 +181,17 @@ internal sealed class ModuleStatePlanner
                 desiredModule.VersionPolicy,
                 "Installed module version satisfies desired policy.",
                 targetScope: desiredModule.Scope,
-                targetPath: desiredModule.TargetPath,
+                targetPath: actionTargetPath,
                 targetRepository: targetRepository,
                 expectedPackageSha256: desiredModule.ExpectedPackageSha256,
                 includePrerelease: desiredModule.IncludePrerelease,
                 acceptLicense: desiredModule.AcceptLicense,
                 allowClobber: desiredModule.AllowClobber,
                 skipDependencyCheck: desiredModule.SkipDependencyCheck,
-                targetRepositorySource: targetRepositorySource));
+                targetRepositorySource: targetRepositorySource,
+                targetModuleRoot: targetModuleRoot ?? installedModule.ModuleRoot,
+                targetPowerShellEdition: desiredModule.PowerShellEdition ?? installedModule.PowerShellEdition,
+                targetProfileName: desiredModule.ProfileName ?? installedModule.ProfileName));
         }
 
         var plannedActions = request.Repair
@@ -170,15 +199,33 @@ internal sealed class ModuleStatePlanner
             : actions.ToArray();
         var cleanupPlan = _cleanupPlanner.CreateCleanupPlan(request);
         var finalActions = plannedActions.Concat(cleanupPlan.Actions).ToArray();
+        var repairActionPlacementFindings = finalActions
+            .Select(action => CreateRepairActionPlacementFinding(request, action))
+            .Where(static finding => finding is not null)
+            .Cast<ModuleStateConflictFinding>();
 
-        var findings = _familyAnalyzer
+        var inventoryFindings = request.Inventory.Diagnostics.Select(static diagnostic => new ModuleStateConflictFinding(
+            diagnostic.Severity,
+            diagnostic.Code,
+            diagnostic.Message,
+            string.Empty,
+            Array.Empty<string>(),
+            Array.Empty<string>(),
+            diagnostic.Scope,
+            path: diagnostic.Path,
+            powerShellEdition: diagnostic.PowerShellEdition,
+            profileName: diagnostic.ProfileName));
+        var findings = inventoryFindings
+            .Concat(placementFindings)
+            .Concat(repairActionPlacementFindings)
+            .Concat(_familyAnalyzer
             .Analyze(request.Inventory, request.FamilyPolicies)
             .Concat(_conflictAnalyzer.Analyze(
                 request.Inventory,
                 request.DesiredModules,
                 includeCrossScopeCommandConflicts: request.Repair))
             .Concat(_receiptAnalyzer.Analyze(request.Inventory, request.MaintenanceReceipts))
-            .Concat(cleanupPlan.Findings)
+            .Concat(cleanupPlan.Findings))
             .ToArray();
         return new ModuleStatePlan(finalActions, DowngradeActionCoveredFindings(findings, finalActions));
     }
@@ -191,13 +238,19 @@ internal sealed class ModuleStatePlanner
     private static ModuleStateInstalledModule? SelectInstalledModule(
         IEnumerable<ModuleStateInstalledModule> installedModules,
         string? desiredScope,
-        string? targetPath)
+        string? targetPath,
+        string? powerShellEdition,
+        string? profileName)
     {
         var candidates = installedModules
             .Where(module =>
                 (string.IsNullOrWhiteSpace(desiredScope)
                  || string.Equals(module.Scope, desiredScope, StringComparison.OrdinalIgnoreCase)) &&
-                (string.IsNullOrWhiteSpace(targetPath) || IsUnderTargetPath(module.Path, targetPath!)))
+                (string.IsNullOrWhiteSpace(targetPath) || ModuleStatePathIdentity.IsSameOrChild(module.Path, targetPath)) &&
+                (string.IsNullOrWhiteSpace(powerShellEdition) ||
+                 string.Equals(module.PowerShellEdition, powerShellEdition, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(profileName) ||
+                 string.Equals(module.ProfileName, profileName, StringComparison.OrdinalIgnoreCase)))
             .ToArray();
 
         return candidates
@@ -213,6 +266,117 @@ internal sealed class ModuleStatePlanner
         => desiredModule.AllowedSources.Length == 1
             ? desiredModule.AllowedSources[0]
             : null;
+
+    private static string? ResolveTargetModuleRoot(
+        ModuleStatePlanRequest request,
+        ModuleStateDesiredModule desiredModule)
+    {
+        if (!string.IsNullOrWhiteSpace(desiredModule.ModuleRoot))
+            return desiredModule.ModuleRoot;
+        if (!request.Repair || !string.IsNullOrWhiteSpace(desiredModule.TargetPath))
+            return null;
+
+        var candidates = SelectPlacementPaths(request.Inventory, desiredModule).ToArray();
+        return candidates.Length == 1 ? candidates[0].Path : null;
+    }
+
+    private static ModuleStateConflictFinding? CreateAmbiguousPlacementFinding(
+        ModuleStatePlanRequest request,
+        ModuleStateDesiredModule desiredModule)
+    {
+        if (!request.Repair ||
+            !string.IsNullOrWhiteSpace(desiredModule.ModuleRoot) ||
+            !string.IsNullOrWhiteSpace(desiredModule.TargetPath))
+        {
+            return null;
+        }
+
+        var candidates = SelectPlacementPaths(request.Inventory, desiredModule).ToArray();
+        if (candidates.Length == 1)
+            return null;
+
+        if (candidates.Length == 0)
+        {
+            return new ModuleStateConflictFinding(
+                ModuleStateConflictSeverity.Error,
+                "ModuleState.RepairTargetMissing",
+                $"Module '{desiredModule.Name}' is missing from the selected inventory and no eligible module root is available. Specify ModuleRoot or include exactly one target through ModulePath or profile selection before applying repair.",
+                string.Empty,
+                new[] { desiredModule.Name },
+                Array.Empty<string>(),
+                desiredModule.Scope,
+                powerShellEdition: desiredModule.PowerShellEdition,
+                profileName: desiredModule.ProfileName);
+        }
+
+        return new ModuleStateConflictFinding(
+            ModuleStateConflictSeverity.Error,
+            "ModuleState.AmbiguousRepairTarget",
+            $"Module '{desiredModule.Name}' is missing from the selected inventory, but {candidates.Length} module roots are eligible. Specify ModuleRoot, narrow ModulePath, Scope, PowerShellEdition, or profile selection before applying repair.",
+            string.Empty,
+            new[] { desiredModule.Name },
+            Array.Empty<string>(),
+            desiredModule.Scope,
+            path: string.Join("; ", candidates.Select(static candidate => candidate.Path)),
+            powerShellEdition: desiredModule.PowerShellEdition,
+            profileName: desiredModule.ProfileName);
+    }
+
+    private static ModuleStateConflictFinding? CreateRepairActionPlacementFinding(
+        ModuleStatePlanRequest request,
+        ModuleStatePlanAction action)
+    {
+        if (!request.Repair ||
+            !action.IsRepair ||
+            action.Kind != ModuleStatePlanActionKind.Install ||
+            !string.IsNullOrWhiteSpace(action.TargetModuleRoot) ||
+            !string.IsNullOrWhiteSpace(action.TargetPath))
+        {
+            return null;
+        }
+
+        var candidates = request.Inventory.ModulePaths
+            .Where(path =>
+                (string.IsNullOrWhiteSpace(action.TargetScope) ||
+                 string.Equals(path.Scope, action.TargetScope, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(action.TargetPowerShellEdition) ||
+                 string.Equals(path.PowerShellEdition, action.TargetPowerShellEdition, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(action.TargetProfileName) ||
+                 string.Equals(path.ProfileName, action.TargetProfileName, StringComparison.OrdinalIgnoreCase)))
+            .Take(2)
+            .ToArray();
+        if (candidates.Length == 1)
+            return null;
+
+        var code = candidates.Length == 0
+            ? "ModuleState.RepairTargetMissing"
+            : "ModuleState.AmbiguousRepairTarget";
+        var message = candidates.Length == 0
+            ? $"Repair requires installing missing module '{action.ModuleName}', but no eligible module root is available. Specify ModuleRoot or include exactly one target through ModulePath or profile selection."
+            : $"Repair requires installing missing module '{action.ModuleName}', but multiple module roots are eligible. Specify ModuleRoot, narrow ModulePath, Scope, PowerShellEdition, or profile selection before applying repair.";
+        return new ModuleStateConflictFinding(
+            ModuleStateConflictSeverity.Error,
+            code,
+            message,
+            string.Empty,
+            new[] { action.ModuleName },
+            Array.Empty<string>(),
+            action.TargetScope,
+            path: string.Join("; ", candidates.Select(static candidate => candidate.Path)),
+            powerShellEdition: action.TargetPowerShellEdition,
+            profileName: action.TargetProfileName);
+    }
+
+    private static IEnumerable<ModuleStateModulePath> SelectPlacementPaths(
+        ModuleStateInventory inventory,
+        ModuleStateDesiredModule desiredModule)
+        => inventory.ModulePaths.Where(path =>
+            (string.IsNullOrWhiteSpace(desiredModule.Scope) ||
+             string.Equals(path.Scope, desiredModule.Scope, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrWhiteSpace(desiredModule.PowerShellEdition) ||
+             string.Equals(path.PowerShellEdition, desiredModule.PowerShellEdition, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrWhiteSpace(desiredModule.ProfileName) ||
+             string.Equals(path.ProfileName, desiredModule.ProfileName, StringComparison.OrdinalIgnoreCase)));
 
     private static ModuleStatePlanActionKind ResolveMissingActionKind(ModuleStateDesiredModule desiredModule)
         => string.IsNullOrWhiteSpace(desiredModule.TargetPath)
@@ -237,23 +401,6 @@ internal sealed class ModuleStatePlanner
            !string.IsNullOrWhiteSpace(installedModule.SourceRepository) &&
            !desiredModule.AllowedSources.Contains(installedModule.SourceRepository, StringComparer.OrdinalIgnoreCase);
 
-    private static bool IsUnderTargetPath(string? modulePath, string targetPath)
-    {
-        if (string.IsNullOrWhiteSpace(modulePath))
-            return false;
-
-        var normalizedModulePath = NormalizePath(modulePath!);
-        var normalizedTargetPath = NormalizePath(targetPath);
-        var comparison = FrameworkCompatibility.GetPathStringComparison(targetPath);
-        return string.Equals(normalizedModulePath, normalizedTargetPath, comparison) ||
-               normalizedModulePath.StartsWith(normalizedTargetPath + "/", comparison);
-    }
-
-    private static string NormalizePath(string path)
-        => path.Trim()
-            .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)
-            .Replace('\\', '/');
-
     private static ModuleStateConflictFinding[] DowngradeActionCoveredFindings(
         ModuleStateConflictFinding[] findings,
         ModuleStatePlanAction[] actions)
@@ -271,7 +418,10 @@ internal sealed class ModuleStatePlanner
                     finding.ModuleNames,
                     finding.Versions,
                     finding.Scope,
-                    finding.SourceRepository)
+                    finding.SourceRepository,
+                    finding.Path,
+                    finding.PowerShellEdition,
+                    finding.ProfileName)
                 : finding)
             .ToArray();
     }

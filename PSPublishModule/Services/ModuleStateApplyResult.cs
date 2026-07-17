@@ -26,7 +26,7 @@ public sealed class ModuleStateApplyResult
     public string? MaintenanceReceiptOutputPath { get; set; }
 
     /// <summary>
-    /// Gets or sets the number of actionable install or update operations.
+    /// Gets or sets the number of actionable install, update, save, or cleanup operations.
     /// </summary>
     public int ActionCount { get; set; }
 
@@ -41,19 +41,39 @@ public sealed class ModuleStateApplyResult
     public ModuleStateDeliveryCommandResult[] Commands { get; set; } = [];
 
     /// <summary>
-    /// Gets or sets whether execution through the private-module workflow was requested.
+    /// Gets or sets whether managed repair execution was requested.
     /// </summary>
     public bool ExecutionRequested { get; set; }
 
     /// <summary>
-    /// Gets or sets results returned by the private-module workflow when execution was requested.
+    /// Gets or sets delivery and exact-path cleanup results when execution was requested.
     /// </summary>
     public ModuleStateDeliveryExecutionResult[] ExecutionResults { get; set; } = [];
 
     /// <summary>
-    /// Gets or sets post-apply inventory evidence when requested.
+    /// Gets or sets post-apply inventory evidence collected from the same physical roots after execution.
     /// </summary>
     public ModuleStateInventoryResult? PostApplyInventory { get; set; }
+
+    /// <summary>
+    /// Gets or sets the plan produced from post-apply inventory evidence.
+    /// </summary>
+    public ModuleStatePlanResult? PostApplyPlan { get; set; }
+
+    /// <summary>
+    /// Gets or sets the compliance result produced from post-apply inventory evidence.
+    /// </summary>
+    public ModuleStateTestResult? PostApplyTest { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether every requested execution operation completed without an operational failure.
+    /// </summary>
+    public bool ExecutionSucceeded { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether post-apply inventory converged to a compliant plan.
+    /// </summary>
+    public bool Converged { get; set; }
 }
 
 /// <summary>
@@ -108,7 +128,17 @@ public sealed class ModuleStateDeliveryCommandResult
 public sealed class ModuleStateDeliveryExecutionResult
 {
     /// <summary>
-    /// Gets or sets the operation executed by the private-module workflow.
+    /// Gets or sets whether the operation completed without an operational failure.
+    /// </summary>
+    public bool Succeeded { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the operational failure message when the operation did not succeed.
+    /// </summary>
+    public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// Gets or sets the managed delivery or cleanup operation.
     /// </summary>
     public string Operation { get; set; } = string.Empty;
 
@@ -116,6 +146,11 @@ public sealed class ModuleStateDeliveryExecutionResult
     /// Gets or sets whether the workflow performed the operation.
     /// </summary>
     public bool OperationPerformed { get; set; }
+
+    /// <summary>
+    /// Gets or sets the exact filesystem target associated with the operation when applicable.
+    /// </summary>
+    public string? TargetPath { get; set; }
 
     /// <summary>
     /// Gets or sets the repository name used by the workflow.

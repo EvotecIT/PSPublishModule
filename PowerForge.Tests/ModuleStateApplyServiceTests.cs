@@ -651,6 +651,28 @@ public sealed class ModuleStateApplyServiceTests
     }
 
     [Fact]
+    public void CreateMaintenanceReceipt_PreservesSameModuleAcrossPhysicalRoots()
+    {
+        const string aliceRoot = "C:\\Users\\Alice\\Documents\\PowerShell\\Modules";
+        const string bobRoot = "C:\\Users\\Bob\\Documents\\PowerShell\\Modules";
+        var plan = new ModuleStatePlan(
+            new[]
+            {
+                new ModuleStatePlanAction(ModuleStatePlanActionKind.NoAction, "Company.Tools", "1.2.0", "=1.2.0", "satisfied", targetScope: "CurrentUser", targetModuleRoot: aliceRoot, targetPowerShellEdition: "Core", targetProfileName: "Alice"),
+                new ModuleStatePlanAction(ModuleStatePlanActionKind.NoAction, "Company.Tools", "1.2.0", "=1.2.0", "satisfied", targetScope: "CurrentUser", targetModuleRoot: bobRoot, targetPowerShellEdition: "Core", targetProfileName: "Bob")
+            },
+            Array.Empty<ModuleStateConflictFinding>());
+        var service = new ModuleStateApplyService();
+        var result = service.Prepare(plan, new ModuleStateDeliveryOptions(repository: "Company"));
+
+        var receipt = service.CreateMaintenanceReceipt(result, sourceRepository: "Company");
+
+        Assert.Equal(2, receipt.Modules.Length);
+        Assert.Contains(receipt.Modules, static module => module.ModuleRoot == aliceRoot && module.ProfileName == "Alice" && module.PowerShellEdition == "Core");
+        Assert.Contains(receipt.Modules, static module => module.ModuleRoot == bobRoot && module.ProfileName == "Bob" && module.PowerShellEdition == "Core");
+    }
+
+    [Fact]
     public void WriteMaintenanceReceipt_WritesDriftCheckableJson()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

@@ -138,7 +138,10 @@ public sealed class ModuleStateJsonServiceTests
       "name": "Company.Tools",
       "version": "1.2.0",
       "sourceRepository": "CompanyModules",
-      "scope": "AllUsers"
+      "scope": "AllUsers",
+      "moduleRoot": "C:\\Program Files\\PowerShell\\Modules",
+      "powerShellEdition": "Core",
+      "profileName": "ServerAdmin"
     }
   ]
 }
@@ -152,6 +155,9 @@ public sealed class ModuleStateJsonServiceTests
         Assert.Equal("1.2.0", module.Version);
         Assert.Equal("CompanyModules", module.SourceRepository);
         Assert.Equal("AllUsers", module.Scope);
+        Assert.Equal("C:\\Program Files\\PowerShell\\Modules", module.ModuleRoot);
+        Assert.Equal("Core", module.PowerShellEdition);
+        Assert.Equal("ServerAdmin", module.ProfileName);
     }
 
     [Fact]

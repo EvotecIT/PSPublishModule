@@ -159,6 +159,43 @@ public sealed class ModuleStateRepairPlannerTests
     }
 
     [Fact]
+    public void CreateRepairActions_RepairsOnlyTheReceiptPhysicalRoot()
+    {
+        var selectedRoot = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "receipt-selected");
+        var otherRoot = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "receipt-other");
+        var inventory = new ModuleStateInventory(new[]
+        {
+            new ModuleStateInstalledModule("Company.Tools", "1.0.0", powerShellEdition: "Core", scope: "CurrentUser", moduleRoot: selectedRoot, profileName: "Alice"),
+            new ModuleStateInstalledModule("Company.Tools", "1.2.0", powerShellEdition: "Core", scope: "CurrentUser", moduleRoot: otherRoot, profileName: "Bob")
+        });
+        var receipts = new[]
+        {
+            new ModuleStateMaintenanceReceipt(
+                null,
+                new[]
+                {
+                    new ModuleStateMaintenanceReceiptModule(
+                        "Company.Tools",
+                        "1.2.0",
+                        scope: "CurrentUser",
+                        moduleRoot: selectedRoot,
+                        powerShellEdition: "Core",
+                        profileName: "Alice")
+                })
+        };
+
+        var action = Assert.Single(new ModuleStateRepairPlanner().CreateRepairActions(
+            inventory,
+            receipts,
+            Array.Empty<ModuleStatePlanAction>()));
+
+        Assert.Equal(ModuleStatePlanActionKind.Update, action.Kind);
+        Assert.Equal("1.0.0", action.InstalledVersion);
+        Assert.True(ModuleStatePathIdentity.Equals(selectedRoot, action.TargetModuleRoot));
+        Assert.Equal("Alice", action.TargetProfileName);
+    }
+
+    [Fact]
     public void CreateRepairActions_PreservesConflictingReceiptVersionsForSameScope()
     {
         var inventory = new ModuleStateInventory(new[]
@@ -243,7 +280,7 @@ public sealed class ModuleStateRepairPlannerTests
     }
 
     [Fact]
-    public void CreateRepairActions_TargetsFamilyRepairAtMismatchedScope()
+    public void CreateRepairActions_DoesNotAlignFamiliesAcrossScopes()
     {
         var inventory = new ModuleStateInventory(new[]
         {
@@ -258,18 +295,13 @@ public sealed class ModuleStateRepairPlannerTests
                 new[] { "Microsoft.Graph.Authentication", "Microsoft.Graph.Users" })
         };
 
-        var action = Assert.Single(new ModuleStateRepairPlanner().CreateRepairActions(
+        var actions = new ModuleStateRepairPlanner().CreateRepairActions(
             inventory,
             Array.Empty<ModuleStateMaintenanceReceipt>(),
             Array.Empty<ModuleStatePlanAction>(),
-            familyPolicies));
+            familyPolicies);
 
-        Assert.Equal(ModuleStatePlanActionKind.Update, action.Kind);
-        Assert.Equal("Microsoft.Graph.Authentication", action.ModuleName);
-        Assert.Equal("2.36.0", action.InstalledVersion);
-        Assert.Equal("=2.38.0", action.VersionPolicy);
-        Assert.Equal("CurrentUser", action.TargetScope);
-        Assert.True(action.IsRepair);
+        Assert.Empty(actions);
     }
 
     [Fact]

@@ -25,19 +25,43 @@ internal sealed class ModuleStateInventoryService
             throw new ArgumentNullException(nameof(request));
 
         var modules = new List<DiscoveredModule>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var diagnostics = new List<ModuleStateInventoryDiagnostic>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         var modulePaths = request.ModulePaths.ToArray();
         for (var pathIndex = 0; pathIndex < modulePaths.Length; pathIndex++)
         {
             var modulePath = modulePaths[pathIndex];
             if (!Directory.Exists(modulePath.Path))
-                continue;
+            {
+                if (modulePath.IsRequired)
+                {
+                    diagnostics.Add(CreatePathDiagnostic(
+                        modulePath,
+                        "ModuleState.InventoryPathMissing",
+                        $"Required module inventory path '{modulePath.Path}' does not exist."));
+                }
 
-            foreach (var moduleDirectory in EnumerateDirectoriesSafe(modulePath.Path))
+                continue;
+            }
+
+            if (!TryEnumerateDirectories(modulePath.Path, out var moduleDirectories, out var enumerationError))
+            {
+                diagnostics.Add(CreatePathDiagnostic(
+                    modulePath,
+                    "ModuleState.InventoryPathInaccessible",
+                    $"Module inventory path '{modulePath.Path}' could not be enumerated: {enumerationError!.Message}"));
+                continue;
+            }
+
+            foreach (var moduleDirectory in moduleDirectories)
             {
                 foreach (var module in DiscoverModule(moduleDirectory, modulePath))
                 {
-                    var key = string.Join("|", module.Name, module.Version, module.PowerShellEdition, module.Scope, module.Path);
+                    var key = string.Join(
+                        "|",
+                        ModuleStatePathIdentity.CreatePlacementKey(module.Name, module.PowerShellEdition, module.Scope, module.ModuleRoot),
+                        module.Version,
+                        NormalizePathKey(module.Path));
                     if (seen.Add(key))
                         modules.Add(new DiscoveredModule(module, pathIndex));
                 }
@@ -46,11 +70,17 @@ internal sealed class ModuleStateInventoryService
 
         var effectiveModules = new HashSet<ModuleStateInstalledModule>(
             modules
-                .GroupBy(static module => string.Join("|", module.Module.Name, module.Module.PowerShellEdition ?? string.Empty), StringComparer.OrdinalIgnoreCase)
+                .GroupBy(
+                    static module => string.Join(
+                        "|",
+                        module.Module.Name,
+                        module.Module.PowerShellEdition ?? string.Empty,
+                        module.Module.ProfileName ?? string.Empty),
+                    StringComparer.OrdinalIgnoreCase)
                 .Select(static group => group
                     .OrderBy(static module => module.ModulePathIndex)
                     .ThenByDescending(static module => ModuleStateVersion.TryParse(module.Module.Version, out var version) ? version : default)
-                    .ThenBy(static module => module.Module.Path, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(static module => module.Module.Path, ModuleStatePathIdentity.Comparer)
                     .First()
                     .Module));
 
@@ -58,7 +88,9 @@ internal sealed class ModuleStateInventoryService
             .Select(module => MarkEffective(module.Module, effectiveModules.Contains(module.Module)))
             .OrderBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static module => module.Version, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static module => module.Path, StringComparer.OrdinalIgnoreCase));
+            .ThenBy(static module => module.Path, ModuleStatePathIdentity.Comparer),
+            modulePaths,
+            diagnostics);
         return ModuleStateInventoryFilter.Apply(inventory, request);
     }
 
@@ -72,7 +104,9 @@ internal sealed class ModuleStateInventoryService
             module.SourceRepository,
             module.IsLoaded,
             isEffective,
-            module.ExportedCommands);
+            module.ExportedCommands,
+            module.ModuleRoot,
+            module.ProfileName);
 
     private static IEnumerable<ModuleStateInstalledModule> DiscoverModule(DirectoryInfo moduleDirectory, ModuleStateModulePath modulePath)
     {
@@ -126,7 +160,9 @@ internal sealed class ModuleStateInventoryService
             modulePath.Scope,
             manifest.DirectoryName ?? manifest.FullName,
             TryReadSourceRepository(manifestText, manifest.Directory),
-            exportedCommands: ReadCommandExports(manifest.FullName));
+            exportedCommands: ReadCommandExports(manifest.FullName),
+            moduleRoot: modulePath.Path,
+            profileName: modulePath.ProfileName);
     }
 
     private static ModuleStateInstalledModule CreateScriptModule(
@@ -140,7 +176,9 @@ internal sealed class ModuleStateInventoryService
             modulePath.PowerShellEdition,
             modulePath.Scope,
             scriptModule.DirectoryName ?? scriptModule.FullName,
-            TryReadSourceRepository(manifestText: null, scriptModule.Directory));
+            TryReadSourceRepository(manifestText: null, scriptModule.Directory),
+            moduleRoot: modulePath.Path,
+            profileName: modulePath.ProfileName);
 
     private static ModuleStateInstalledModule CreateBinaryModule(
         string moduleName,
@@ -153,7 +191,9 @@ internal sealed class ModuleStateInventoryService
             modulePath.PowerShellEdition,
             modulePath.Scope,
             binaryModule.DirectoryName ?? binaryModule.FullName,
-            TryReadSourceRepository(manifestText: null, binaryModule.Directory));
+            TryReadSourceRepository(manifestText: null, binaryModule.Directory),
+            moduleRoot: modulePath.Path,
+            profileName: modulePath.ProfileName);
 
     private static FileInfo? FindManifest(DirectoryInfo directory, string moduleName)
     {
@@ -377,6 +417,49 @@ internal sealed class ModuleStateInventoryService
         {
             return Array.Empty<DirectoryInfo>();
         }
+    }
+
+    private static bool TryEnumerateDirectories(
+        string path,
+        out DirectoryInfo[] directories,
+        out Exception? error)
+    {
+        try
+        {
+            directories = new DirectoryInfo(path)
+                .EnumerateDirectories("*", SearchOption.TopDirectoryOnly)
+                .ToArray();
+            error = null;
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            directories = Array.Empty<DirectoryInfo>();
+            error = ex;
+            return false;
+        }
+    }
+
+    private static ModuleStateInventoryDiagnostic CreatePathDiagnostic(
+        ModuleStateModulePath modulePath,
+        string code,
+        string message)
+        => new(
+            ModuleStateConflictSeverity.Error,
+            code,
+            message,
+            modulePath.Path,
+            modulePath.PowerShellEdition,
+            modulePath.Scope,
+            modulePath.ProfileName);
+
+    private static string NormalizePathKey(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        var normalized = ModuleStatePathIdentity.Normalize(path!);
+        return FrameworkCompatibility.IsWindows() ? normalized.ToUpperInvariant() : normalized;
     }
 
     private readonly struct DiscoveredModule

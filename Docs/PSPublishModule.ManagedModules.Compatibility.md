@@ -105,11 +105,17 @@ Repair-ManagedModule -Family Graph -Repository PSGallery -Plan -ShowSummary
 Repair-ManagedModule -MaintenanceReceiptPath .\module-maintenance.json -Repository CompanyModules -Plan
 Repair-ManagedModule -Name Company.Tools,Company.Web -InstallMissing -Latest -Repository PSGallery -Plan -ShowSummary
 Repair-ManagedModule -RequiredResourceFile .\required-resources.psd1 -Latest -Repository PSGallery -Plan -ShowSummary
+Repair-ManagedModule -ModulePath $ps5Root,$ps7Root -Latest -Cleanup OldVersions -Repository PSGallery -Plan
+Repair-ManagedModule -UserProfilePath C:\Users\Alice,C:\Users\Service.PowerShell -Name Company.* -Latest -Repository CompanyModules -Plan
 ```
 
 Repair plans include manifest dependency health. An installed module whose own version is otherwise fine can still receive an install-repair action when its manifest `RequiredModules` are missing or outside the declared version policy. External runtime dependencies declared through `PrivateData.PSData.ExternalModuleDependencies` are not treated as managed install dependencies.
 
 Use `-InstallMissing` with literal `-Name` values when a named baseline should also seed modules that are not installed yet. Required-resource repair is the richer form for repeatable baselines with per-module options; it treats the resource map as desired module state. Missing modules are planned as managed installs, installed modules can be updated when `-Latest` or a version policy requires it, and cleanup remains explicit through `-Cleanup OldVersions`.
+
+Repair preserves physical estate identity across module root, PowerShell edition, scope, and local user profile. Use `-UserProfilePath` for explicit profile homes or `-IncludeAllUserProfiles` for standard roots below the local profile container. Use explicit `-ModulePath` for redirected, service-account, mounted, or otherwise nonstandard server roots. `-ModuleRoot` narrows selection and delivery to one physical target. A missing module is applicable only when `-ModuleRoot` is explicit or exactly one scanned root is eligible; ambiguous destinations block apply.
+
+`-Cleanup OldVersions` is executable, not plan-only. Delivery completes first, then repair revalidates and removes exact old-version directories through the managed uninstall engine. Loaded-module, dependency, exact-path, `ShouldProcess`, `WhatIf`, and confirmation safety remain active. Repair stops cleanup after an operational failure, re-inventories the same roots, and returns `ExecutionSucceeded`, `Converged`, and post-apply inventory, plan, and test evidence.
 
 ### Installed Inventory
 
@@ -235,7 +241,7 @@ This checklist is the guardrail for replacing common PowerShellGet and PSResourc
 - [x] Document unsupported non-module resource use cases explicitly: remaining script lifecycle gaps, DSC resources as resource kinds, role capability search, command-name search, and provider-specific bootstrap behavior.
 - [x] Add initial managed script resource save/install support with PSScriptInfo validation and local-feed proof.
 - [x] Add repair/maintenance benchmark lanes for stale versions, source drift, scope drift, and family coherence.
-- [x] Add repair/maintenance benchmark lanes for loaded-module safety and cleanup planning, with command-level plan tests that prove loaded-module findings and cleanup actions remain visible without mutation.
+- [x] Add repair/maintenance coverage for loaded-module safety and exact-path cleanup execution, including dependency blocking, stale-estate revalidation, multiple physical roots, and post-apply convergence.
 - [x] Add install/save/update no-op and force benchmark lanes so existing-target behavior is measured across managed, PowerShellGet, PSResourceGet, and the install-only speed gate where an equivalent operation exists.
 
 ## Model Contracts
@@ -285,7 +291,7 @@ Cmdlets should map parameters into these models and write result objects. They s
 - `-Force` is not required for dependency repair. If the repository-selected installed version is present but its managed manifest dependencies are missing or unsatisfied, install repairs those dependencies while leaving the healthy root module in place.
 - `Update-ManagedModule -Force` reinstalls the selected target version when the selected target is already the installed version.
 - `Update-ManagedModule -Force` does not silently downgrade a newer installed version to an older selected version. Downgrade behavior needs a separate explicit policy so stale-version repair and operator mistakes do not collapse into the same switch.
-- `Repair-ManagedModule -Force` marks prepared managed/private install, update, and save delivery commands as forced. In `-Plan` mode this is visible on the prepared command object and command arguments, but no mutation occurs.
+- `Repair-ManagedModule -Force` marks managed/private install, update, and save delivery as forced. In `-Plan` mode this is visible on the action and prepared command evidence, but no mutation occurs.
 - `Repair-ManagedModule` can plan a non-forced install repair for an installed module whose manifest dependency graph is broken. The repair action targets the installed root module version so the managed installer can restore the dependency closure without replacing the healthy root module unless `-Force` is supplied.
 - `-Force` does not imply destructive old-version cleanup. Cleanup remains a separate maintenance/repair decision.
 - `Publish-ManagedModule -Force` bypasses managed preflight duplicate/version guards where the target repository supports replacement or accepts the pushed package. It does not guarantee that a remote feed will overwrite an existing package.

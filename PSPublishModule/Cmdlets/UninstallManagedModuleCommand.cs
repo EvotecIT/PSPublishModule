@@ -73,6 +73,11 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string? ModuleRoot { get; set; }
 
+    /// <summary>Exact installed location supplied by Get-ManagedModule pipeline rows. It takes precedence over ModuleRoot.</summary>
+    [Parameter(ValueFromPipelineByPropertyName = true, ParameterSetName = NameParameterSet)]
+    [ValidateNotNullOrEmpty]
+    public string? InstalledLocation { get; set; }
+
     /// <summary>Skip checking whether removed modules are still required by other installed modules.</summary>
     [Parameter]
     [Alias("SkipDependenciesCheck")]
@@ -122,7 +127,7 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             Version,
             ModuleRoot,
             Prerelease.IsPresent,
-            ResolvePipelineInstalledLocation(ModuleRoot, Name));
+            ResolvePipelineInstalledLocation(InstalledLocation ?? ModuleRoot, Name));
     }
 
     private void AddPlan(

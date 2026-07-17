@@ -96,7 +96,13 @@ internal sealed class ModuleStateApplyService
             .Select(action => CreateMaintenanceReceiptModule(action, sourceRepository, observedByName))
             .Where(static module => module is not null)
             .Cast<ModuleStateMaintenanceReceiptModule>()
-            .GroupBy(static module => string.Join("|", module.Name, module.Scope ?? string.Empty), StringComparer.OrdinalIgnoreCase)
+            .GroupBy(
+                static module => ModuleStatePathIdentity.CreatePlacementKey(
+                    module.Name,
+                    module.PowerShellEdition,
+                    module.Scope,
+                    module.ModuleRoot),
+                StringComparer.Ordinal)
             .Select(static group => group.First())
             .OrderBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -136,7 +142,10 @@ internal sealed class ModuleStateApplyService
                 name = module.Name,
                 version = module.Version,
                 sourceRepository = module.SourceRepository,
-                scope = module.Scope
+                scope = module.Scope,
+                moduleRoot = module.ModuleRoot,
+                powerShellEdition = module.PowerShellEdition,
+                profileName = module.ProfileName
             }).ToArray()
         };
 
@@ -151,8 +160,12 @@ internal sealed class ModuleStateApplyService
         if (plan.HasErrors && !deliveryOptions.AllowErrorFindings)
             return "Plan has error findings. Re-run with an explicit allow-conflict choice after reviewing findings.";
 
-        if (plan.Actions.Any(static action => action.Kind == ModuleStatePlanActionKind.Remove))
-            return "Plan includes cleanup actions that private module delivery does not execute. Review the plan and run without Cleanup to execute install/update delivery only.";
+        if (plan.Actions.Any(static action =>
+                action.Kind == ModuleStatePlanActionKind.Remove &&
+                (string.IsNullOrWhiteSpace(action.TargetPath) || string.IsNullOrWhiteSpace(action.TargetModuleRoot))))
+        {
+            return "Plan includes cleanup actions without both an exact installed location and physical module root.";
+        }
 
         if (plan.Actions.Any(static action => action.Kind == ModuleStatePlanActionKind.Save) &&
             deliveryOptions.Transport != ModuleStateDeliveryTransport.ManagedModule)
@@ -372,7 +385,10 @@ internal sealed class ModuleStateApplyService
             action.ModuleName,
             version!,
             observedModule?.SourceRepository,
-            observedModule?.Scope ?? action.TargetScope);
+            observedModule?.Scope ?? action.TargetScope,
+            observedModule?.ModuleRoot ?? action.TargetModuleRoot,
+            observedModule?.PowerShellEdition ?? action.TargetPowerShellEdition,
+            observedModule?.ProfileName ?? action.TargetProfileName);
     }
 
     private static bool HasCommandDeliveryTarget(ModuleStateDeliveryCommand command)
@@ -416,6 +432,13 @@ internal sealed class ModuleStateApplyService
                     string.IsNullOrWhiteSpace(module.Scope) ||
                     string.Equals(module.Scope, action.TargetScope, StringComparison.OrdinalIgnoreCase));
         }
+
+        if (!string.IsNullOrWhiteSpace(action.TargetModuleRoot))
+            candidates = candidates.Where(module => ModuleStatePathIdentity.Equals(module.ModuleRoot, action.TargetModuleRoot));
+        if (!string.IsNullOrWhiteSpace(action.TargetPowerShellEdition))
+            candidates = candidates.Where(module => string.Equals(module.PowerShellEdition, action.TargetPowerShellEdition, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(action.TargetProfileName))
+            candidates = candidates.Where(module => string.Equals(module.ProfileName, action.TargetProfileName, StringComparison.OrdinalIgnoreCase));
 
         var expectedRepository = action.TargetRepository ?? sourceRepository;
         if (!string.IsNullOrWhiteSpace(expectedRepository))

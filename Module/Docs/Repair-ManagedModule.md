@@ -6,12 +6,12 @@ schema: 2.0.0
 ---
 # Repair-ManagedModule
 ## SYNOPSIS
-Repairs installed PowerShell modules through the managed module-state engine.
+Repairs and verifies installed PowerShell modules through the managed module-state engine.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Repair-ManagedModule [[-Name] <string[]>] [-InstallMissing] [-RequiredResource <Object>] [-RequiredResourceFile <string>] [-Inventory <ModuleStateInventoryResult>] [-InventoryPath <string>] [-ModulePath <string[]>] [-IncludeLoaded] [-MaintenanceReceiptPath <string[]>] [-Latest] [-Version <string>] [-MinimumVersion <string>] [-VersionPolicy <string>] [-Cleanup <string>] [-Family <string[]>] [-Scope <string>] [-ProfileName <string>] [-Repository <string>] [-Transport <ModuleStateDeliveryTransport>] [-ModuleRoot <string>] [-Prerelease] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-AllowConflict] [-Plan] [-ShowSummary] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Repair-ManagedModule [[-Name] <string[]>] [-InstallMissing] [-RequiredResource <Object>] [-RequiredResourceFile <string>] [-Inventory <ModuleStateInventoryResult>] [-InventoryPath <string>] [-ModulePath <string[]>] [-UserProfilePath <string[]>] [-IncludeAllUserProfiles] [-IncludeLoaded] [-MaintenanceReceiptPath <string[]>] [-Latest] [-Version <string>] [-MinimumVersion <string>] [-VersionPolicy <string>] [-Cleanup <string>] [-Family <string[]>] [-Scope <string>] [-ProfileName <string>] [-Repository <string>] [-Transport <ModuleStateDeliveryTransport>] [-ModuleRoot <string>] [-Prerelease] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-AllowConflict] [-Plan] [-ShowSummary] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -22,6 +22,14 @@ managed delivery engine.
 
 PSResourceGet has no equivalent estate-repair command. Use the lifecycle cmdlets for one requested operation and
 this command when the desired outcome spans installed-state discovery, drift analysis, repair, and cleanup.
+
+Repair keeps module copies in separate physical roots, PowerShell editions, scopes, and local user profiles
+independent. Missing modules require an explicit ModuleRoot or exactly one eligible scanned root; ambiguous
+destinations are reported and blocked.
+
+Live apply performs delivery before exact-path old-version cleanup, revalidates loaded-module and dependency
+safety, inventories the same roots again, and returns post-apply plan and convergence evidence. Operational
+failures remain visible in the typed result and are also written as nonterminating errors.
 
 ## EXAMPLES
 
@@ -52,6 +60,24 @@ Repair-ManagedModule -RequiredResourceFile .\required-resources.psd1 -Latest -Re
 ### EXAMPLE 5
 ```powershell
 Repair-ManagedModule -MaintenanceReceiptPath .\module-maintenance.json -ProfileName CompanyModules -AcceptLicense
+```
+
+
+### EXAMPLE 6
+```powershell
+Repair-ManagedModule -ModulePath $ps5Root,$ps7Root -Latest -Cleanup OldVersions -Repository PSGallery -Plan -ShowSummary
+```
+
+
+### EXAMPLE 7
+```powershell
+Repair-ManagedModule -UserProfilePath C:\Users\Alice,C:\Users\Service.PowerShell -Name Company.* -Latest -Repository CompanyModules -Plan -ShowSummary
+```
+
+
+### EXAMPLE 8
+```powershell
+Repair-ManagedModule -IncludeAllUserProfiles -Latest -Cleanup OldVersions -Repository CompanyModules -Confirm:$false -ShowSummary
 ```
 
 
@@ -106,7 +132,7 @@ Accept wildcard characters: True
 ```
 
 ### -Cleanup
-Optional cleanup planning for managed modules.
+Optional old-version cleanup. Live apply removes only exact planned paths after delivery and safety revalidation.
 
 ```yaml
 Type: String
@@ -203,6 +229,22 @@ Accept wildcard characters: True
 
 ### -Force
 Force reinstall when repair selects the same installed version.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IncludeAllUserProfiles
+Discover standard PowerShell module roots below the current local profile container. Use UserProfilePath or ModulePath for redirected and custom layouts.
 
 ```yaml
 Type: SwitchParameter
@@ -330,7 +372,7 @@ Accept wildcard characters: True
 ```
 
 ### -ModulePath
-Explicit module roots to inventory. When omitted, PSModulePath is used.
+Explicit required module roots to inventory. Missing or inaccessible roots block apply. When omitted, optional PSModulePath entries are used.
 
 ```yaml
 Type: String[]
@@ -346,7 +388,7 @@ Accept wildcard characters: True
 ```
 
 ### -ModuleRoot
-Custom module root for managed delivery.
+Explicit physical module root used to narrow inventory selection and managed delivery. It also resolves missing-module destination ambiguity.
 
 ```yaml
 Type: String
@@ -378,7 +420,7 @@ Accept wildcard characters: True
 ```
 
 ### -Plan
-Return the repair plan without applying install/update actions.
+Return the full repair and cleanup plan without applying any actions.
 
 ```yaml
 Type: SwitchParameter
@@ -529,6 +571,22 @@ Type: ModuleStateDeliveryTransport
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: PrivateModule, ManagedModule, Auto
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -UserProfilePath
+Explicit user profile home directories whose standard Windows PowerShell and PowerShell 7 module roots are inventoried.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
 
 Required: False
 Position: named

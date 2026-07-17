@@ -182,7 +182,7 @@ internal sealed class ModuleStatePrivateDeliveryService
         IReadOnlyList<ModuleStatePlanAction> actions,
         ModuleStatePrivateDeliveryOptions options)
         => actions
-            .Select(static action => action.TargetPath)
+            .Select(static action => action.TargetModuleRoot ?? action.TargetPath)
             .FirstOrDefault(static path => !string.IsNullOrWhiteSpace(path))
            ?? options.ManagedModuleRoot;
 
@@ -463,7 +463,7 @@ internal sealed class DeliveryGroupKeyComparer : IEqualityComparer<DeliveryGroup
             string.Equals(x.Repository, y.Repository, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(x.ModuleName, y.ModuleName, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(x.TargetScope, y.TargetScope, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(x.TargetPath, y.TargetPath, StringComparison.OrdinalIgnoreCase);
+            ModuleStatePathIdentity.Equals(x.TargetPath, y.TargetPath);
 
     public int GetHashCode(DeliveryGroupKey obj)
     {
@@ -476,8 +476,16 @@ internal sealed class DeliveryGroupKeyComparer : IEqualityComparer<DeliveryGroup
             hash = (hash * 397) ^ obj.ManagedSkipDependencyCheck.GetHashCode();
             hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.ModuleName ?? string.Empty);
             hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.TargetScope ?? string.Empty);
-            return (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.TargetPath ?? string.Empty);
+            return (hash * 397) ^ GetPathHashCode(obj.TargetPath);
         }
+    }
+
+    private static int GetPathHashCode(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return 0;
+
+        return ModuleStatePathIdentity.Comparer.GetHashCode(ModuleStatePathIdentity.Normalize(path!));
     }
 }
 

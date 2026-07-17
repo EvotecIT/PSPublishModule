@@ -11,7 +11,7 @@ Uninstalls installed PowerShell module versions through the managed module engin
 ## SYNTAX
 ### NameParameterSet (Default)
 ```powershell
-Uninstall-ManagedModule [-Name] <string[]> [-Version <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-SkipDependencyCheck] [-LoadedModule <ManagedModuleLoadedModule[]>] [-AllowLoadedModuleUninstall] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
+Uninstall-ManagedModule [-Name] <string[]> [-Version <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-InstalledLocation <string>] [-SkipDependencyCheck] [-LoadedModule <ManagedModuleLoadedModule[]>] [-AllowLoadedModuleUninstall] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### InputObjectParameterSet
@@ -75,6 +75,22 @@ Required: True
 Position: 0
 Default value: None
 Accept pipeline input: True (ByValue)
+Accept wildcard characters: True
+```
+
+### -InstalledLocation
+Exact installed location supplied by Get-ManagedModule pipeline rows. It takes precedence over ModuleRoot.
+
+```yaml
+Type: String
+Parameter Sets: NameParameterSet
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: True (ByPropertyName)
 Accept wildcard characters: True
 ```
 

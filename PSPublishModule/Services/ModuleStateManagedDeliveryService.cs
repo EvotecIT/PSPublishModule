@@ -24,6 +24,19 @@ internal sealed class ModuleStateManagedDeliveryService
         PowerForge.ModuleStateApplyResult applyResult,
         ModuleStateManagedDeliveryOptions options,
         CancellationToken cancellationToken = default)
+        => await ExecuteCoreAsync(applyResult, options, captureFailures: false, cancellationToken).ConfigureAwait(false);
+
+    internal async Task<ModuleStateDeliveryExecutionResult[]> ExecuteForRepairAsync(
+        PowerForge.ModuleStateApplyResult applyResult,
+        ModuleStateManagedDeliveryOptions options,
+        CancellationToken cancellationToken = default)
+        => await ExecuteCoreAsync(applyResult, options, captureFailures: true, cancellationToken).ConfigureAwait(false);
+
+    private async Task<ModuleStateDeliveryExecutionResult[]> ExecuteCoreAsync(
+        PowerForge.ModuleStateApplyResult applyResult,
+        ModuleStateManagedDeliveryOptions options,
+        bool captureFailures,
+        CancellationToken cancellationToken)
     {
         if (applyResult is null)
             throw new ArgumentNullException(nameof(applyResult));
@@ -43,13 +56,21 @@ internal sealed class ModuleStateManagedDeliveryService
 
         foreach (var action in actions)
         {
-            var repository = ResolveRepository(action, options);
-            results.Add(await (action.Kind switch
+            try
             {
-                ModuleStatePlanActionKind.Update => ExecuteUpdateAsync(updateService, repository, action, options, cancellationToken),
-                ModuleStatePlanActionKind.Save => ExecuteSaveAsync(installService, repository, action, options, cancellationToken),
-                _ => ExecuteInstallAsync(installService, repository, action, options, cancellationToken)
-            }).ConfigureAwait(false));
+                var repository = ResolveRepository(action, options);
+                results.Add(await (action.Kind switch
+                {
+                    ModuleStatePlanActionKind.Update => ExecuteUpdateAsync(updateService, repository, action, options, cancellationToken),
+                    ModuleStatePlanActionKind.Save => ExecuteSaveAsync(installService, repository, action, options, cancellationToken),
+                    _ => ExecuteInstallAsync(installService, repository, action, options, cancellationToken)
+                }).ConfigureAwait(false));
+            }
+            catch (Exception ex) when (captureFailures && ex is not OperationCanceledException)
+            {
+                results.Add(CreateFailedResult(action, ex));
+                break;
+            }
         }
 
         return results.ToArray();
@@ -71,6 +92,7 @@ internal sealed class ModuleStateManagedDeliveryService
         {
             Operation = "Install",
             OperationPerformed = InstallWroteFiles(result),
+            TargetPath = result.ModulePath,
             RepositoryName = repository.Name,
             RequestedTransport = ModuleStateDeliveryTransport.ManagedModule,
             EffectiveTransport = ModuleStateDeliveryTransport.ManagedModule,
@@ -107,6 +129,7 @@ internal sealed class ModuleStateManagedDeliveryService
         {
             Operation = "Update",
             OperationPerformed = result.Status != ManagedModuleUpdateStatus.UpToDate,
+            TargetPath = result.ModulePath,
             RepositoryName = repository.Name,
             RequestedTransport = ModuleStateDeliveryTransport.ManagedModule,
             EffectiveTransport = ModuleStateDeliveryTransport.ManagedModule,
@@ -143,6 +166,7 @@ internal sealed class ModuleStateManagedDeliveryService
         {
             Operation = "Save",
             OperationPerformed = result.Status == ManagedModuleInstallStatus.Installed,
+            TargetPath = result.ModulePath,
             RepositoryName = repository.Name,
             RequestedTransport = ModuleStateDeliveryTransport.ManagedModule,
             EffectiveTransport = ModuleStateDeliveryTransport.ManagedModule,
@@ -274,7 +298,7 @@ internal sealed class ModuleStateManagedDeliveryService
             : action.TargetRepositorySource;
 
     private static string? ResolveModuleRoot(ModuleStatePlanAction action, ModuleStateManagedDeliveryOptions options)
-        => string.IsNullOrWhiteSpace(action.TargetPath) ? options.ModuleRoot : action.TargetPath;
+        => FirstNonEmpty(action.TargetModuleRoot, action.TargetPath, options.ModuleRoot);
 
     private static ManagedModuleInstallScope ResolveScope(string? scope, string? targetPath, string? moduleRoot)
         => !string.IsNullOrWhiteSpace(targetPath) || !string.IsNullOrWhiteSpace(moduleRoot)
@@ -307,6 +331,7 @@ internal sealed class ModuleStateManagedDeliveryService
         {
             Operation = operation,
             OperationPerformed = false,
+            TargetPath = action.TargetPath,
             RepositoryName = repositoryName,
             RequestedTransport = ModuleStateDeliveryTransport.ManagedModule,
             EffectiveTransport = ModuleStateDeliveryTransport.ManagedModule,
@@ -321,6 +346,33 @@ internal sealed class ModuleStateManagedDeliveryService
                     Status = "Skipped",
                     Installer = "ManagedModule",
                     Message = "ShouldProcess declined the operation."
+                }
+            }
+        };
+
+    private static ModuleStateDeliveryExecutionResult CreateFailedResult(
+        ModuleStatePlanAction action,
+        Exception exception)
+        => new()
+        {
+            Succeeded = false,
+            ErrorMessage = exception.Message,
+            Operation = action.Kind.ToString(),
+            OperationPerformed = false,
+            TargetPath = action.TargetPath,
+            RequestedTransport = ModuleStateDeliveryTransport.ManagedModule,
+            EffectiveTransport = ModuleStateDeliveryTransport.ManagedModule,
+            DeliveryTransportReason = "Managed module repair delivery stopped after an operational failure.",
+            DependencyResults = new[]
+            {
+                new ModuleStateDependencyResult
+                {
+                    Name = action.ModuleName,
+                    InstalledVersion = action.InstalledVersion,
+                    RequestedVersion = action.VersionPolicy,
+                    Status = "Failed",
+                    Installer = "ManagedModule",
+                    Message = exception.Message
                 }
             }
         };

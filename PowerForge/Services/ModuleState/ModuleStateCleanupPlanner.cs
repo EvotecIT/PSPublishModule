@@ -19,12 +19,12 @@ internal sealed class ModuleStateCleanupPlanner
 
         var actions = new List<ModuleStatePlanAction>();
         var findings = new List<ModuleStateConflictFinding>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var moduleGroup in GetManagedModuleGroups(request))
         {
             var installedModules = moduleGroup.ToArray();
-            var keepModules = ResolveKeepModules(request, moduleGroup.Key, installedModules);
+            var keepModules = ResolveKeepModules(request, installedModules);
             if (keepModules.Count == 0)
                 continue;
 
@@ -50,7 +50,10 @@ internal sealed class ModuleStateCleanupPlanner
                     "cleanup:old-versions",
                     "Installed module version is older than the managed version selected by ModuleState cleanup.",
                     targetScope: installedModule.Scope,
-                    targetPath: installedModule.Path));
+                    targetPath: installedModule.Path,
+                    targetModuleRoot: ModuleStatePathIdentity.ResolveModuleRoot(installedModule),
+                    targetPowerShellEdition: installedModule.PowerShellEdition,
+                    targetProfileName: installedModule.ProfileName));
             }
         }
 
@@ -60,15 +63,20 @@ internal sealed class ModuleStateCleanupPlanner
     private static IEnumerable<IGrouping<string, ModuleStateInstalledModule>> GetManagedModuleGroups(ModuleStatePlanRequest request)
     {
         var selectedModules = new List<ModuleStateInstalledModule>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var desiredModule in request.DesiredModules)
         {
+            var targetRoot = desiredModule.TargetPath ?? desiredModule.ModuleRoot;
             AddCleanupCandidates(
                 request.Inventory.InstalledModules.Where(module =>
                     string.Equals(module.Name, desiredModule.Name, StringComparison.OrdinalIgnoreCase) &&
                     (string.IsNullOrWhiteSpace(desiredModule.Scope) ||
                      string.Equals(module.Scope, desiredModule.Scope, StringComparison.OrdinalIgnoreCase)) &&
-                    (string.IsNullOrWhiteSpace(desiredModule.TargetPath) || IsUnderTargetPath(module.Path, desiredModule.TargetPath!))),
+                    (string.IsNullOrWhiteSpace(targetRoot) || ModuleStatePathIdentity.IsSameOrChild(module.Path, targetRoot)) &&
+                    (string.IsNullOrWhiteSpace(desiredModule.PowerShellEdition) ||
+                     string.Equals(module.PowerShellEdition, desiredModule.PowerShellEdition, StringComparison.OrdinalIgnoreCase)) &&
+                    (string.IsNullOrWhiteSpace(desiredModule.ProfileName) ||
+                     string.Equals(module.ProfileName, desiredModule.ProfileName, StringComparison.OrdinalIgnoreCase))),
                 selectedModules,
                 seen);
         }
@@ -79,20 +87,34 @@ internal sealed class ModuleStateCleanupPlanner
                 request.Inventory.InstalledModules.Where(module =>
                     string.Equals(module.Name, receiptModule.Name, StringComparison.OrdinalIgnoreCase) &&
                     (string.IsNullOrWhiteSpace(receiptModule.Scope) ||
-                     string.Equals(module.Scope, receiptModule.Scope, StringComparison.OrdinalIgnoreCase))),
+                     string.Equals(module.Scope, receiptModule.Scope, StringComparison.OrdinalIgnoreCase)) &&
+                    (string.IsNullOrWhiteSpace(receiptModule.ModuleRoot) ||
+                     ModuleStatePathIdentity.Equals(module.ModuleRoot, receiptModule.ModuleRoot)) &&
+                    (string.IsNullOrWhiteSpace(receiptModule.PowerShellEdition) ||
+                     string.Equals(module.PowerShellEdition, receiptModule.PowerShellEdition, StringComparison.OrdinalIgnoreCase)) &&
+                    (string.IsNullOrWhiteSpace(receiptModule.ProfileName) ||
+                     string.Equals(module.ProfileName, receiptModule.ProfileName, StringComparison.OrdinalIgnoreCase))),
                 selectedModules,
                 seen);
         }
 
-        return selectedModules.GroupBy(static module => module.Name, StringComparer.OrdinalIgnoreCase);
+        return selectedModules.GroupBy(
+            static module => ModuleStatePathIdentity.CreatePlacementKey(
+                module.Name,
+                module.PowerShellEdition,
+                module.Scope,
+                ModuleStatePathIdentity.ResolveModuleRoot(module)),
+            StringComparer.Ordinal);
     }
 
     private static HashSet<string> ResolveKeepModules(
         ModuleStatePlanRequest request,
-        string moduleName,
         ModuleStateInstalledModule[] installedModules)
     {
-        var keepModules = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var keepModules = new HashSet<string>(StringComparer.Ordinal);
+        var moduleName = installedModules.FirstOrDefault()?.Name;
+        if (string.IsNullOrWhiteSpace(moduleName))
+            return keepModules;
 
         foreach (var receiptModule in request.MaintenanceReceipts.SelectMany(static receipt => receipt.Modules))
         {
@@ -102,7 +124,13 @@ internal sealed class ModuleStateCleanupPlanner
             foreach (var installedModule in installedModules.Where(module =>
                          VersionsEquivalent(module.Version, receiptModule.Version) &&
                          (string.IsNullOrWhiteSpace(receiptModule.Scope) ||
-                          string.Equals(module.Scope, receiptModule.Scope, StringComparison.OrdinalIgnoreCase))))
+                          string.Equals(module.Scope, receiptModule.Scope, StringComparison.OrdinalIgnoreCase)) &&
+                         (string.IsNullOrWhiteSpace(receiptModule.ModuleRoot) ||
+                          ModuleStatePathIdentity.Equals(module.ModuleRoot, receiptModule.ModuleRoot)) &&
+                         (string.IsNullOrWhiteSpace(receiptModule.PowerShellEdition) ||
+                          string.Equals(module.PowerShellEdition, receiptModule.PowerShellEdition, StringComparison.OrdinalIgnoreCase)) &&
+                         (string.IsNullOrWhiteSpace(receiptModule.ProfileName) ||
+                          string.Equals(module.ProfileName, receiptModule.ProfileName, StringComparison.OrdinalIgnoreCase))))
             {
                 keepModules.Add(CreateKeepKey(installedModule));
             }
@@ -118,7 +146,8 @@ internal sealed class ModuleStateCleanupPlanner
                 .Where(module =>
                     (string.IsNullOrWhiteSpace(desiredModule.Scope) ||
                      string.Equals(module.Scope, desiredModule.Scope, StringComparison.OrdinalIgnoreCase)) &&
-                    (string.IsNullOrWhiteSpace(desiredModule.TargetPath) || IsUnderTargetPath(module.Path, desiredModule.TargetPath!)))
+                    (string.IsNullOrWhiteSpace(desiredModule.TargetPath ?? desiredModule.ModuleRoot) ||
+                     ModuleStatePathIdentity.IsSameOrChild(module.Path, desiredModule.TargetPath ?? desiredModule.ModuleRoot)))
                 .ToArray();
             if (candidates.Length == 0)
                 continue;
@@ -167,30 +196,28 @@ internal sealed class ModuleStateCleanupPlanner
     {
         foreach (var module in candidates)
         {
-            var key = string.Join("|", module.Name, module.Version, module.Path ?? string.Empty);
+            var key = string.Join(
+                "|",
+                ModuleStatePathIdentity.CreatePlacementKey(
+                    module.Name,
+                    module.PowerShellEdition,
+                    module.Scope,
+                    ModuleStatePathIdentity.ResolveModuleRoot(module)),
+                module.Version,
+                NormalizeOptionalPath(module.Path));
             if (seen.Add(key))
                 selectedModules.Add(module);
         }
     }
 
-    private static bool IsUnderTargetPath(string? modulePath, string targetPath)
-    {
-        if (string.IsNullOrWhiteSpace(modulePath))
-            return false;
-
-        var normalizedModulePath = NormalizePath(modulePath!);
-        var normalizedTargetPath = NormalizePath(targetPath);
-        return string.Equals(normalizedModulePath, normalizedTargetPath, StringComparison.OrdinalIgnoreCase) ||
-               normalizedModulePath.StartsWith(normalizedTargetPath + "/", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string NormalizePath(string path)
-        => path.Trim()
-            .TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)
-            .Replace('\\', '/');
-
     private static string NormalizeOptionalPath(string? path)
-        => string.IsNullOrWhiteSpace(path) ? string.Empty : NormalizePath(path!);
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        var normalized = ModuleStatePathIdentity.Normalize(path!);
+        return FrameworkCompatibility.IsWindows() ? normalized.ToUpperInvariant() : normalized;
+    }
 }
 
 internal sealed class ModuleStateCleanupPlan

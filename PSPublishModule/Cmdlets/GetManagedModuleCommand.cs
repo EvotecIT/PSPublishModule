@@ -139,7 +139,8 @@ public sealed class GetManagedModuleCommand : PSCmdlet
             loadedModules,
             Name,
             Version,
-            Scope);
+            Scope,
+            pathsRequired: ModulePath is { Length: > 0 });
     }
 
     private string ResolveExistingPath(string path, string parameterName)

@@ -58355,7 +58355,7 @@ should be predictable and safe. Supports -WhatIf, retries and optional backups.<
       <command:verb>Repair</command:verb>
       <command:noun>ManagedModule</command:noun>
       <maml:description>
-        <maml:para>Repairs installed PowerShell modules through the managed module-state engine.</maml:para>
+        <maml:para>Repairs and verifies installed PowerShell modules through the managed module-state engine.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
@@ -58365,6 +58365,12 @@ scope, family, and cleanup actions, and can apply the plan through the&#xD;
 managed delivery engine.</maml:para>
       <maml:para>PSResourceGet has no equivalent estate-repair command. Use the lifecycle cmdlets for one requested operation and&#xD;
 this command when the desired outcome spans installed-state discovery, drift analysis, repair, and cleanup.</maml:para>
+      <maml:para>Repair keeps module copies in separate physical roots, PowerShell editions, scopes, and local user profiles&#xD;
+independent. Missing modules require an explicit ModuleRoot or exactly one eligible scanned root; ambiguous&#xD;
+destinations are reported and blocked.</maml:para>
+      <maml:para>Live apply performs delivery before exact-path old-version cleanup, revalidates loaded-module and dependency&#xD;
+safety, inventories the same roots again, and returns post-apply plan and convergence evidence. Operational&#xD;
+failures remain visible in the typed result and are also written as nonterminating errors.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
@@ -58408,7 +58414,7 @@ this command when the desired outcome spans installed-state discovery, drift ana
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Cleanup</maml:name>
           <maml:description>
-            <maml:para>Optional cleanup planning for managed modules.</maml:para>
+            <maml:para>Optional old-version cleanup. Live apply removes only exact planned paths after delivery and safety revalidation.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <command:parameterValueGroup>
@@ -58492,6 +58498,18 @@ this command when the desired outcome spans installed-state discovery, drift ana
           <maml:name>Force</maml:name>
           <maml:description>
             <maml:para>Force reinstall when repair selects the same installed version.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IncludeAllUserProfiles</maml:name>
+          <maml:description>
+            <maml:para>Discover standard PowerShell module roots below the current local profile container. Use UserProfilePath or ModulePath for redirected and custom layouts.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -58587,7 +58605,7 @@ this command when the desired outcome spans installed-state discovery, drift ana
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ModulePath</maml:name>
           <maml:description>
-            <maml:para>Explicit module roots to inventory. When omitted, PSModulePath is used.</maml:para>
+            <maml:para>Explicit required module roots to inventory. Missing or inaccessible roots block apply. When omitted, optional PSModulePath entries are used.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
@@ -58599,7 +58617,7 @@ this command when the desired outcome spans installed-state discovery, drift ana
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Path">
           <maml:name>ModuleRoot</maml:name>
           <maml:description>
-            <maml:para>Custom module root for managed delivery.</maml:para>
+            <maml:para>Explicit physical module root used to narrow inventory selection and managed delivery. It also resolves missing-module destination ambiguity.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -58623,7 +58641,7 @@ this command when the desired outcome spans installed-state discovery, drift ana
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Plan</maml:name>
           <maml:description>
-            <maml:para>Return the repair plan without applying install/update actions.</maml:para>
+            <maml:para>Return the full repair and cleanup plan without applying any actions.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -58749,6 +58767,18 @@ this command when the desired outcome spans installed-state discovery, drift ana
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>UserProfilePath</maml:name>
+          <maml:description>
+            <maml:para>Explicit user profile home directories whose standard Windows PowerShell and PowerShell 7 module roots are inventoried.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="RequiredVersion">
           <maml:name>Version</maml:name>
           <maml:description>
@@ -58815,7 +58845,7 @@ this command when the desired outcome spans installed-state discovery, drift ana
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Cleanup</maml:name>
         <maml:description>
-          <maml:para>Optional cleanup planning for managed modules.</maml:para>
+          <maml:para>Optional old-version cleanup. Live apply removes only exact planned paths after delivery and safety revalidation.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <command:parameterValueGroup>
@@ -58899,6 +58929,18 @@ this command when the desired outcome spans installed-state discovery, drift ana
         <maml:name>Force</maml:name>
         <maml:description>
           <maml:para>Force reinstall when repair selects the same installed version.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>IncludeAllUserProfiles</maml:name>
+        <maml:description>
+          <maml:para>Discover standard PowerShell module roots below the current local profile container. Use UserProfilePath or ModulePath for redirected and custom layouts.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -58994,7 +59036,7 @@ this command when the desired outcome spans installed-state discovery, drift ana
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>ModulePath</maml:name>
         <maml:description>
-          <maml:para>Explicit module roots to inventory. When omitted, PSModulePath is used.</maml:para>
+          <maml:para>Explicit required module roots to inventory. Missing or inaccessible roots block apply. When omitted, optional PSModulePath entries are used.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
         <dev:type>
@@ -59006,7 +59048,7 @@ this command when the desired outcome spans installed-state discovery, drift ana
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="Path">
         <maml:name>ModuleRoot</maml:name>
         <maml:description>
-          <maml:para>Custom module root for managed delivery.</maml:para>
+          <maml:para>Explicit physical module root used to narrow inventory selection and managed delivery. It also resolves missing-module destination ambiguity.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -59030,7 +59072,7 @@ this command when the desired outcome spans installed-state discovery, drift ana
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Plan</maml:name>
         <maml:description>
-          <maml:para>Return the repair plan without applying install/update actions.</maml:para>
+          <maml:para>Return the full repair and cleanup plan without applying any actions.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -59156,6 +59198,18 @@ this command when the desired outcome spans installed-state discovery, drift ana
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>UserProfilePath</maml:name>
+        <maml:description>
+          <maml:para>Explicit user profile home directories whose standard Windows PowerShell and PowerShell 7 module roots are inventoried.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="RequiredVersion">
         <maml:name>Version</maml:name>
         <maml:description>
@@ -59236,6 +59290,27 @@ PSPublishModule.ModuleStateInventoryResult</maml:name>
       <command:example>
         <maml:title>Apply receipt-drift repair through a managed repository profile</maml:title>
         <dev:code>Repair-ManagedModule -MaintenanceReceiptPath .\module-maintenance.json -ProfileName CompanyModules -AcceptLicense</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Preview repair across Windows PowerShell and PowerShell 7 roots</maml:title>
+        <dev:code>Repair-ManagedModule -ModulePath $ps5Root,$ps7Root -Latest -Cleanup OldVersions -Repository PSGallery -Plan -ShowSummary</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Preview modules installed for multiple local user profiles</maml:title>
+        <dev:code>Repair-ManagedModule -UserProfilePath C:\Users\Alice,C:\Users\Service.PowerShell -Name Company.* -Latest -Repository CompanyModules -Plan -ShowSummary</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Apply safe old-version cleanup and verify convergence</maml:title>
+        <dev:code>Repair-ManagedModule -IncludeAllUserProfiles -Latest -Cleanup OldVersions -Repository CompanyModules -Confirm:$false -ShowSummary</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -69345,6 +69420,18 @@ dependency and loaded-module safety checks.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="named" aliases="None">
+          <maml:name>InstalledLocation</maml:name>
+          <maml:description>
+            <maml:para>Exact installed location supplied by Get-ManagedModule pipeline rows. It takes precedence over ModuleRoot.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>LoadedModule</maml:name>
           <maml:description>
@@ -69549,6 +69636,18 @@ dependency and loaded-module safety checks.</maml:para>
         <command:parameterValue required="true" variableLength="false">ModuleStateInstalledModuleResult[]</command:parameterValue>
         <dev:type>
           <maml:name>ModuleStateInstalledModuleResult[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByPropertyName)" position="named" aliases="None">
+        <maml:name>InstalledLocation</maml:name>
+        <maml:description>
+          <maml:para>Exact installed location supplied by Get-ManagedModule pipeline rows. It takes precedence over ModuleRoot.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

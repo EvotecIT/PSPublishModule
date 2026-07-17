@@ -16,6 +16,16 @@ public sealed class ModuleStateInventoryResult
     public string[] ModulePaths { get; set; } = [];
 
     /// <summary>
+    /// Gets or sets structured module roots that were scanned, including edition, scope, and user-profile identity.
+    /// </summary>
+    public ModuleStateInventoryPathResult[] ScannedPaths { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets diagnostics produced while resolving or scanning module roots.
+    /// </summary>
+    public ModuleStateInventoryDiagnosticResult[] Diagnostics { get; set; } = [];
+
+    /// <summary>
     /// Gets or sets installed modules discovered in the inventory.
     /// </summary>
     public ModuleStateInstalledModuleResult[] InstalledModules { get; set; } = [];
@@ -57,6 +67,16 @@ public sealed class ModuleStateInstalledModuleResult
     public string? Path { get; set; }
 
     /// <summary>
+    /// Gets or sets the physical module root containing this installed module copy.
+    /// </summary>
+    public string? ModuleRoot { get; set; }
+
+    /// <summary>
+    /// Gets or sets the local user profile associated with this module root when known.
+    /// </summary>
+    public string? ProfileName { get; set; }
+
+    /// <summary>
     /// Gets or sets the PSResourceGet-compatible installed location.
     /// </summary>
     public string? InstalledLocation
@@ -84,4 +104,52 @@ public sealed class ModuleStateInstalledModuleResult
     /// Gets or sets command names explicitly exported by the module manifest when known.
     /// </summary>
     public string[] ExportedCommands { get; set; } = [];
+}
+
+/// <summary>
+/// PowerShell-facing module root scanned by module-state inventory.
+/// </summary>
+public sealed class ModuleStateInventoryPathResult
+{
+    /// <summary>Gets or sets the physical module root.</summary>
+    public string Path { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the PowerShell edition associated with the root.</summary>
+    public string? PowerShellEdition { get; set; }
+
+    /// <summary>Gets or sets the installation scope associated with the root.</summary>
+    public string? Scope { get; set; }
+
+    /// <summary>Gets or sets the local user profile associated with the root.</summary>
+    public string? ProfileName { get; set; }
+
+    /// <summary>Gets or sets whether failure to scan the root makes inventory incomplete.</summary>
+    public bool IsRequired { get; set; }
+}
+
+/// <summary>
+/// PowerShell-facing module-state inventory diagnostic.
+/// </summary>
+public sealed class ModuleStateInventoryDiagnosticResult
+{
+    /// <summary>Gets or sets the diagnostic severity.</summary>
+    public string Severity { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the stable diagnostic code.</summary>
+    public string Code { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the diagnostic message.</summary>
+    public string Message { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the affected path.</summary>
+    public string Path { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the affected PowerShell edition.</summary>
+    public string? PowerShellEdition { get; set; }
+
+    /// <summary>Gets or sets the affected installation scope.</summary>
+    public string? Scope { get; set; }
+
+    /// <summary>Gets or sets the affected local user profile.</summary>
+    public string? ProfileName { get; set; }
 }

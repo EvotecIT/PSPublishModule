@@ -471,7 +471,7 @@ public sealed class RepairManagedModuleCommandTests
     }
 
     [Fact]
-    public void RepairManagedModule_ForceDoesNotApplyCleanupRemoval()
+    public void RepairManagedModule_AppliesExactCleanupRemovalAndVerifiesConvergence()
     {
         using var moduleRoot = new TemporaryDirectory();
         var oldPath = CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
@@ -487,13 +487,22 @@ public sealed class RepairManagedModuleCommandTests
         var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
 
         AssertNoPowerShellErrors(ps);
-        Assert.False(result.Apply.CanApply);
-        Assert.Contains("cleanup actions", result.Apply.BlockedReason, StringComparison.OrdinalIgnoreCase);
+        Assert.True(result.Apply.CanApply);
+        Assert.Null(result.Apply.BlockedReason);
         Assert.Empty(result.Apply.Commands);
-        Assert.False(result.Apply.ExecutionRequested);
-        Assert.Empty(result.Apply.ExecutionResults);
-        Assert.True(Directory.Exists(oldPath));
+        Assert.True(result.Apply.ExecutionRequested);
+        var execution = Assert.Single(result.Apply.ExecutionResults);
+        Assert.True(execution.Succeeded);
+        Assert.True(execution.OperationPerformed);
+        Assert.Equal("Remove", execution.Operation);
+        Assert.Equal(oldPath, execution.TargetPath);
+        Assert.False(Directory.Exists(oldPath));
         Assert.True(Directory.Exists(currentPath));
+        Assert.True(result.Apply.ExecutionSucceeded);
+        Assert.True(result.Apply.Converged);
+        Assert.NotNull(result.Apply.PostApplyInventory);
+        Assert.NotNull(result.Apply.PostApplyPlan);
+        Assert.True(result.Apply.PostApplyTest?.IsCompliant);
     }
 
     [Fact]

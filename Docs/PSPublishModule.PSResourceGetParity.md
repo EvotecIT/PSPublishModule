@@ -104,7 +104,9 @@ is planned solely for command-name parity.
 
 - `Repair-ManagedModule` plans and applies estate repair for missing modules,
   dependency drift, source/scope drift, family coherence, loaded-module safety,
-  receipt repair, and explicit old-version cleanup.
+  receipt repair, and exact-path old-version cleanup. It keeps PowerShell
+  editions, scopes, custom roots, and local user profiles independent, blocks
+  ambiguous missing-module destinations, and verifies post-apply convergence.
 - Install, save, update, uninstall, and repair expose inspectable plans.
 - Package SHA256, allowed-author, repository-trust, signature, receipt, cache,
   and transactional promotion evidence are first-class managed contracts.
