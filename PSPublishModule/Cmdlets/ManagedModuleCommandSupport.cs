@@ -330,36 +330,7 @@ internal static class ManagedModuleCommandSupport
     }
 
     private static bool SourcesEqual(string expected, string? actual)
-    {
-        if (string.IsNullOrWhiteSpace(actual))
-            return false;
-
-        return string.Equals(
-            NormalizeSourceForComparison(expected),
-            NormalizeSourceForComparison(actual!),
-            StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string NormalizeSourceForComparison(string source)
-    {
-        var trimmed = source.Trim().Trim('"');
-        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
-            trimmed = uri.IsFile ? uri.LocalPath : trimmed.TrimEnd('/');
-
-        if (Path.IsPathRooted(trimmed) || LooksLikeLocalPath(trimmed))
-        {
-            try
-            {
-                return Path.GetFullPath(trimmed).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            }
-            catch
-            {
-                return trimmed.TrimEnd('/', '\\');
-            }
-        }
-
-        return trimmed.TrimEnd('/', '\\');
-    }
+        => ManagedModuleRepositorySourceComparer.Equals(expected, actual);
 
     private static string ResolveRepositorySource(
         PSCmdlet cmdlet,

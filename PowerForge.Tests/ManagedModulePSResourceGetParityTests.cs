@@ -322,6 +322,64 @@ public sealed class ManagedModulePSResourceGetParityTests
         Assert.True(File.Exists(Path.Combine(output.Path, Path.GetFileName(packagePath))));
     }
 
+    [Fact]
+    public void PublishManagedModule_validates_existing_nupkg_before_replacing_output_copy()
+    {
+        using var packages = new TemporaryDirectory();
+        using var output = new TemporaryDirectory();
+        using var repository = new TemporaryDirectory();
+        var packageName = "Company.Tools.1.0.0.nupkg";
+        var packagePath = Path.Combine(packages.Path, packageName);
+        var outputPath = Path.Combine(output.Path, packageName);
+        File.WriteAllText(packagePath, "not a NuGet package");
+        TestPackageFactory.Create(outputPath, "Company.Tools", "1.0.0");
+        var originalOutput = File.ReadAllBytes(outputPath);
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Publish-ManagedModule")
+            .AddParameter("NupkgPath", packagePath)
+            .AddParameter("Repository", repository.Path)
+            .AddParameter("OutputDirectory", output.Path)
+            .AddParameter("SkipDependenciesCheck")
+            .AddParameter("Force");
+
+        Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+        Assert.Equal(originalOutput, File.ReadAllBytes(outputPath));
+        Assert.False(File.Exists(Path.Combine(repository.Path, packageName)));
+    }
+
+    [Theory]
+    [InlineData("Install-ManagedModule")]
+    [InlineData("Save-ManagedModule")]
+    public void Expected_package_hash_rejects_multiple_pipeline_targets_before_writes(string targetCommand)
+    {
+        using var feed = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        CreatePackage(feed.Path, "Company.One", "1.0.0");
+        CreatePackage(feed.Path, "Company.Two", "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Find-ManagedModule")
+            .AddParameter("Name", new[] { "Company.One", "Company.Two" })
+            .AddParameter("Repository", feed.Path)
+            .AddCommand(targetCommand)
+            .AddParameter("ExpectedPackageSha256", new string('a', 64));
+        if (string.Equals(targetCommand, "Install-ManagedModule", StringComparison.Ordinal))
+        {
+            ps.AddParameter("Scope", ManagedModuleInstallScope.Custom)
+                .AddParameter("ModuleRoot", destination.Path);
+        }
+        else
+        {
+            ps.AddParameter("Path", destination.Path);
+        }
+
+        var exception = Assert.Throws<CmdletInvocationException>(() => ps.Invoke());
+
+        Assert.Contains("exactly one module", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(destination.Path));
+    }
+
     [Theory]
     [InlineData("Find-ManagedModule", "Version")]
     [InlineData("Install-ManagedModule", "InputObject")]

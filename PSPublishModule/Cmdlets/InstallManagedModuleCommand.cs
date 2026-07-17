@@ -41,6 +41,7 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
     private const string InputObjectParameterSet = "InputObjectParameterSet";
     private const string RequiredResourceParameterSet = "RequiredResourceParameterSet";
     private const string RequiredResourceFileParameterSet = "RequiredResourceFileParameterSet";
+    private readonly List<ManagedModuleRequiredResourceTarget> _expectedHashTargets = new();
 
     /// <summary>Module names to install.</summary>
     [Parameter(Mandatory = true, Position = 0, ValueFromPipeline = true, ValueFromPipelineByPropertyName = true, ParameterSetName = NameParameterSet)]
@@ -221,7 +222,19 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
     public SwitchParameter Quiet { get; set; }
 
     /// <summary>Installs the requested modules.</summary>
-    protected override async Task ProcessRecordAsync()
+    protected override Task ProcessRecordAsync()
+    {
+        var targets = ResolveTargets().ToArray();
+        if (!string.IsNullOrWhiteSpace(ExpectedPackageSha256))
+        {
+            _expectedHashTargets.AddRange(targets);
+            return Task.CompletedTask;
+        }
+
+        return ProcessTargetsAsync(targets);
+    }
+
+    private async Task ProcessTargetsAsync(IReadOnlyCollection<ManagedModuleRequiredResourceTarget> targets)
     {
         var moduleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot);
         var packageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory);
@@ -232,8 +245,6 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
         var service = new ManagedModuleInstallService(logger, repositoryClient);
         ManagedModuleCommandSupport.ValidateClobberSwitches(AllowClobber.IsPresent, NoClobber.IsPresent);
         var writeSummary = ManagedModuleCommandSupport.ShouldWriteSummary(ShowSummary.IsPresent, Quiet.IsPresent);
-        var targets = ResolveTargets().ToArray();
-        ManagedModuleCommandSupport.ValidateSinglePackageHashTarget(ExpectedPackageSha256, targets.Select(static target => target.Name).ToArray());
         var defaultRepository = ManagedModuleCommandSupport.CreateRepository(
             this,
             RepositoryName,
@@ -288,6 +299,18 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
             if (writeSummary)
                 ManagedModuleSummaryWriter.Write(result);
         }
+    }
+
+    /// <summary>Validates and executes hash-constrained pipeline input after every target is known.</summary>
+    protected override async Task EndProcessingAsync()
+    {
+        if (_expectedHashTargets.Count == 0)
+            return;
+
+        ManagedModuleCommandSupport.ValidateSinglePackageHashTarget(
+            ExpectedPackageSha256,
+            _expectedHashTargets.Select(static target => target.Name).ToArray());
+        await ProcessTargetsAsync(_expectedHashTargets).ConfigureAwait(false);
     }
 
     private IEnumerable<ManagedModuleRequiredResourceTarget> ResolveTargets()

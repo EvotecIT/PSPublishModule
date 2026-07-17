@@ -93,6 +93,8 @@ public sealed class ManagedModulePublishService
         if (!string.Equals(Path.GetExtension(packagePath), ".nupkg", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"Package path must reference a .nupkg file: {packagePath}");
 
+        var metadata = _packageReader.ReadMetadata(packagePath);
+
         if (!string.IsNullOrWhiteSpace(request.OutputDirectory))
         {
             var outputDirectory = Path.GetFullPath(request.OutputDirectory!.Trim().Trim('"'));
@@ -115,7 +117,6 @@ public sealed class ManagedModulePublishService
             }
         }
 
-        var metadata = _packageReader.ReadMetadata(packagePath);
         return new ManagedModulePackResult
         {
             Name = metadata.Id,

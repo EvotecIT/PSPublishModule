@@ -41,6 +41,7 @@ public sealed class SaveManagedModuleCommand : AsyncPSCmdlet
     private const string NameParameterSet = "NameParameterSet";
     private const string InputObjectParameterSet = "InputObjectParameterSet";
     private readonly List<ManagedModuleInstallResult> _results = new();
+    private readonly List<ManagedModuleRequiredResourceTarget> _expectedHashTargets = new();
 
     /// <summary>Module names to save.</summary>
     [Parameter(Mandatory = true, Position = 0, ValueFromPipelineByPropertyName = true, ParameterSetName = NameParameterSet)]
@@ -208,7 +209,19 @@ public sealed class SaveManagedModuleCommand : AsyncPSCmdlet
     public SwitchParameter Quiet { get; set; }
 
     /// <summary>Saves requested modules.</summary>
-    protected override async Task ProcessRecordAsync()
+    protected override Task ProcessRecordAsync()
+    {
+        var targets = ResolveTargets().ToArray();
+        if (!string.IsNullOrWhiteSpace(ExpectedPackageSha256))
+        {
+            _expectedHashTargets.AddRange(targets);
+            return Task.CompletedTask;
+        }
+
+        return ProcessTargetsAsync(targets);
+    }
+
+    private async Task ProcessTargetsAsync(IReadOnlyCollection<ManagedModuleRequiredResourceTarget> targets)
     {
         if (AsNupkg.IsPresent && IncludeXml.IsPresent)
             throw new InvalidOperationException("AsNupkg and IncludeXml cannot be used together.");
@@ -226,8 +239,6 @@ public sealed class SaveManagedModuleCommand : AsyncPSCmdlet
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var repositoryClient = ManagedModuleCommandSupport.CreateRepositoryClient(this, logger, Proxy, ProxyCredential);
         var service = new ManagedModuleInstallService(logger, repositoryClient);
-        var targets = ResolveTargets().ToArray();
-        ManagedModuleCommandSupport.ValidateSinglePackageHashTarget(ExpectedPackageSha256, targets.Select(static target => target.Name).ToArray());
         var writeSummary = ManagedModuleCommandSupport.ShouldWriteSummary(ShowSummary.IsPresent, Quiet.IsPresent);
 
         foreach (var target in targets)
@@ -324,16 +335,23 @@ public sealed class SaveManagedModuleCommand : AsyncPSCmdlet
     }
 
     /// <summary>Writes optional offline bundle metadata after all save results are available.</summary>
-    protected override Task EndProcessingAsync()
+    protected override async Task EndProcessingAsync()
     {
+        if (_expectedHashTargets.Count > 0)
+        {
+            ManagedModuleCommandSupport.ValidateSinglePackageHashTarget(
+                ExpectedPackageSha256,
+                _expectedHashTargets.Select(static target => target.Name).ToArray());
+            await ProcessTargetsAsync(_expectedHashTargets).ConfigureAwait(false);
+        }
+
         if (Plan.IsPresent || string.IsNullOrWhiteSpace(BundleMetadataPath) || _results.Count == 0)
-            return Task.CompletedTask;
+            return;
 
         var metadataPath = ManagedModuleCommandSupport.ResolveProviderPath(this, BundleMetadataPath);
         if (!ShouldProcess(metadataPath, "Write managed module bundle metadata"))
-            return Task.CompletedTask;
+            return;
 
         new ManagedModuleBundleMetadataWriter().Write(metadataPath!, _results);
-        return Task.CompletedTask;
     }
 }
