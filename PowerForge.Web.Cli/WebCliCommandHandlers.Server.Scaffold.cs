@@ -69,7 +69,9 @@ internal static partial class WebCliCommandHandlers
     internal static string[] BuildServerScaffoldNextSteps(PowerForgeServerScaffoldOptions options)
         =>
         [
-            "Review deploy/linux/ONBOARDING.md and replace the authorized-key and reviewed host-key example files.",
+            options.PrivateRepository
+                ? "Review deploy/linux/ONBOARDING.md and replace the authorized-key and reviewed host-key example files."
+                : "Review deploy/linux/ONBOARDING.md and replace the authorized-key example files.",
             "Create and branch-restrict the production GitHub environment before storing secrets.",
             "Run server plan, bootstrap-plan, inspect, and verify before the first protected deployment.",
             options.CloudflareEnabled

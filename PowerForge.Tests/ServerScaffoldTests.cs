@@ -44,6 +44,9 @@ public sealed class ServerScaffoldTests
         Assert.DoesNotContain("sudo -n a2ensite", manifest, StringComparison.Ordinal);
         Assert.DoesNotContain("\"bootstrap\"", manifest, StringComparison.Ordinal);
         Assert.DoesNotContain("install-static-deployment-runtime", manifest, StringComparison.Ordinal);
+        var nextSteps = WebCliCommandHandlers.BuildServerScaffoldNextSteps(options);
+        Assert.Contains("authorized-key example files", nextSteps[0], StringComparison.Ordinal);
+        Assert.DoesNotContain("host-key", nextSteps[0], StringComparison.Ordinal);
 
         var manifestNode = JsonNode.Parse(manifest)!;
         var managedPaths = manifestNode["paths"]!.AsArray();
