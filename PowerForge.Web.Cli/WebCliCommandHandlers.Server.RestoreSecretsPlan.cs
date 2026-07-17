@@ -30,16 +30,17 @@ internal static partial class WebCliCommandHandlers
 
         var managedPaths = (manifest.Paths ?? Array.Empty<PowerForgeServerPath>())
             .Where(static path => !string.IsNullOrWhiteSpace(path.Path))
-            .GroupBy(static path => path.Path!, StringComparer.Ordinal)
+            .GroupBy(static path => path.Path!.TrimEnd('/'), StringComparer.Ordinal)
             .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.Ordinal);
         var secrets = (manifest.Secrets ?? Array.Empty<PowerForgeServerSecret>())
             .Select(secret =>
             {
-                managedPaths.TryGetValue(secret.Path ?? string.Empty, out var managedPath);
+                var normalizedPath = secret.Path?.TrimEnd('/');
+                managedPaths.TryGetValue(normalizedPath ?? string.Empty, out var managedPath);
                 return new PowerForgeServerRestoreSecretEntry
                 {
                     Id = secret.Id,
-                    Path = secret.Path,
+                    Path = normalizedPath,
                     Env = secret.Env,
                     RestoreMode = secret.RestoreMode,
                     RequiredFor = secret.RequiredFor is { Length: > 0 } ? string.Join(", ", secret.RequiredFor) : null,
@@ -333,10 +334,10 @@ internal static partial class WebCliCommandHandlers
         foreach (var secret in secrets
                      .Where(secret =>
                          !string.IsNullOrWhiteSpace(secret.Path) &&
-                         allowedArchivePaths.Any(allowedPath => PathContains(allowedPath, secret.Path!)))
-                     .OrderBy(secret => secret.Path!.Count(static character => character == '/')))
+                         allowedArchivePaths.Any(allowedPath => PathContains(allowedPath, secret.Path!.TrimEnd('/'))))
+                     .OrderBy(secret => secret.Path!.TrimEnd('/').Count(static character => character == '/')))
         {
-            var pathValue = ShellQuote(secret.Path!);
+            var pathValue = ShellQuote(secret.Path!.TrimEnd('/'));
             var isDirectory = string.Equals(secret.RestoreMode, "directory", StringComparison.OrdinalIgnoreCase);
             if (isDirectory)
             {

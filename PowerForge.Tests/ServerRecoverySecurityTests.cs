@@ -369,7 +369,7 @@ public sealed class ServerRecoverySecurityTests
                 new PowerForgeServerRestoreSecretEntry
                 {
                     Id = "service-directory",
-                    Path = "/etc/example",
+                    Path = "/etc/example///",
                     Owner = "root",
                     Group = "example-service",
                     Mode = "750",
