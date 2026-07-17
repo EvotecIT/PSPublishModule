@@ -80,6 +80,9 @@ public sealed class HomeAssistantReleasePrepareSpec {
     /// <summary>Expected merge commit SHA supplied by the workflow event.</summary>
     public string? MergeCommitSha { get; set; }
 
+    /// <summary>Current GitHub Actions workflow run used to identify trusted release checks.</summary>
+    public long? WorkflowRunId { get; set; }
+
     /// <summary>Default branch to receive the version-only release commit.</summary>
     public string DefaultBranch { get; set; } = "main";
 

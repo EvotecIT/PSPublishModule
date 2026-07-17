@@ -102,6 +102,7 @@ internal static partial class Program {
             Token = ReadToken(argv),
             PullRequestNumber = pullRequestNumber,
             MergeCommitSha = TryGetOptionValue(argv, "--merge-sha") ?? Environment.GetEnvironmentVariable("POWERFORGE_MERGE_SHA"),
+            WorkflowRunId = ParseOptionalPositiveLong(argv, "--workflow-run-id", "GITHUB_RUN_ID"),
             DefaultBranch = TryGetOptionValue(argv, "--default-branch") ?? Environment.GetEnvironmentVariable("POWERFORGE_DEFAULT_BRANCH") ?? "main",
             Increment = increment,
             Apply = argv.Any(value => value.Equals("--apply", StringComparison.OrdinalIgnoreCase)),
@@ -146,6 +147,14 @@ internal static partial class Program {
     private static int ParsePositiveInteger(string[] argv, string option, string environmentVariable) {
         var value = TryGetOptionValue(argv, option) ?? Environment.GetEnvironmentVariable(environmentVariable);
         if (!int.TryParse(value, out var parsed) || parsed <= 0)
+            throw new ArgumentException($"{option} must be a positive integer.");
+        return parsed;
+    }
+
+    private static long? ParseOptionalPositiveLong(string[] argv, string option, string environmentVariable) {
+        var value = TryGetOptionValue(argv, option) ?? Environment.GetEnvironmentVariable(environmentVariable);
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        if (!long.TryParse(value, out var parsed) || parsed <= 0)
             throw new ArgumentException($"{option} must be a positive integer.");
         return parsed;
     }

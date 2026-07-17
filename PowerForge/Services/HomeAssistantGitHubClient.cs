@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -60,19 +61,36 @@ internal sealed class HomeAssistantGitHubClient : IHomeAssistantGitHubClient {
         return result;
     }
 
-    public HomeAssistantCheckSummary GetCheckSummary(string commitSha) {
+    public HomeAssistantCheckSummary GetCheckSummary(string commitSha, long? excludedWorkflowRunId) {
         if (string.IsNullOrWhiteSpace(commitSha)) throw new ArgumentException("Commit SHA is required.", nameof(commitSha));
         var result = new HomeAssistantCheckSummary();
+        var workflowRuns = new Dictionary<long, HomeAssistantWorkflowRun>();
         for (var page = 1; page <= 10; page++) {
             var value = GetObject($"/repos/{_owner}/{_repository}/commits/{commitSha}/check-runs?per_page=100&filter=latest&page={page}");
             if (value["check_runs"] is not JsonArray runs) return result;
 
             foreach (var run in runs.OfType<JsonObject>()) {
-                result.Total++;
                 var name = GetString(run, "name");
                 var status = GetString(run, "status");
                 var conclusion = GetString(run, "conclusion");
-                if (!string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase) || !IsAcceptedConclusion(conclusion))
+                var completed = string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase);
+                var accepted = completed && IsAcceptedConclusion(conclusion);
+                var blocking = !accepted;
+                var workflowRunId = GetGitHubActionsWorkflowRunId(run);
+                if (excludedWorkflowRunId.HasValue && workflowRunId.HasValue) {
+                    if (workflowRunId.Value == excludedWorkflowRunId.Value && IsReleaseCheckName(name))
+                        continue;
+                    if (IsReleaseCheckName(name) && IsCompletedFailedReleaseWorkflow(
+                            excludedWorkflowRunId.Value,
+                            workflowRunId.Value,
+                            commitSha,
+                            workflowRuns)) {
+                        continue;
+                    }
+                }
+
+                result.Total++;
+                if (blocking)
                     result.BlockingChecks.Add($"{name}: {(string.IsNullOrWhiteSpace(conclusion) ? status : conclusion)}");
             }
 
@@ -184,6 +202,63 @@ internal sealed class HomeAssistantGitHubClient : IHomeAssistantGitHubClient {
         => conclusion.Equals("success", StringComparison.OrdinalIgnoreCase) ||
            conclusion.Equals("neutral", StringComparison.OrdinalIgnoreCase) ||
            conclusion.Equals("skipped", StringComparison.OrdinalIgnoreCase);
+
+    private static long? GetGitHubActionsWorkflowRunId(JsonObject run) {
+        if (!string.Equals(GetString(run["app"] as JsonObject, "slug"), "github-actions", StringComparison.OrdinalIgnoreCase))
+            return null;
+        var detailsUrl = GetString(run, "details_url");
+        if (!Uri.TryCreate(detailsUrl, UriKind.Absolute, out var uri)) return null;
+        var segments = uri.AbsolutePath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+        for (var index = 0; index + 2 < segments.Length; index++) {
+            if (string.Equals(segments[index], "actions", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(segments[index + 1], "runs", StringComparison.OrdinalIgnoreCase) &&
+                long.TryParse(segments[index + 2], out var workflowRunId) && workflowRunId > 0) {
+                return workflowRunId;
+            }
+        }
+
+        return null;
+    }
+
+    private bool IsCompletedFailedReleaseWorkflow(
+        long currentWorkflowRunId,
+        long candidateWorkflowRunId,
+        string commitSha,
+        IDictionary<long, HomeAssistantWorkflowRun> cache) {
+        var current = GetWorkflowRun(currentWorkflowRunId, cache);
+        var candidate = GetWorkflowRun(candidateWorkflowRunId, cache);
+        return !string.IsNullOrWhiteSpace(current.Path) &&
+               string.Equals(current.Path, candidate.Path, StringComparison.OrdinalIgnoreCase) &&
+               IsReleaseEvent(current.Event) &&
+               IsReleaseEvent(candidate.Event) &&
+               string.Equals(candidate.HeadSha, commitSha, StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(candidate.Status, "completed", StringComparison.OrdinalIgnoreCase) &&
+               !IsAcceptedConclusion(candidate.Conclusion);
+    }
+
+    private HomeAssistantWorkflowRun GetWorkflowRun(long workflowRunId, IDictionary<long, HomeAssistantWorkflowRun> cache) {
+        if (cache.TryGetValue(workflowRunId, out var cached)) return cached;
+        var value = GetObject($"/repos/{_owner}/{_repository}/actions/runs/{workflowRunId}");
+        var result = new HomeAssistantWorkflowRun {
+            Id = value["id"]?.GetValue<long>() ?? workflowRunId,
+            Path = GetString(value, "path"),
+            Event = GetString(value, "event"),
+            HeadSha = GetString(value, "head_sha"),
+            Status = GetString(value, "status"),
+            Conclusion = GetString(value, "conclusion")
+        };
+        cache[workflowRunId] = result;
+        return result;
+    }
+
+    private static bool IsReleaseCheckName(string name)
+        => string.Equals(name, "release / prepare", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(name, "release / build", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(name, "release / publish", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsReleaseEvent(string eventName)
+        => string.Equals(eventName, "pull_request_target", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(eventName, "workflow_dispatch", StringComparison.OrdinalIgnoreCase);
 
     private static string Trim(string value) {
         var normalized = (value ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ').Trim();
