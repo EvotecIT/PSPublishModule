@@ -59,6 +59,19 @@ public sealed class ManagedModulePSResourceGetParityTests
     }
 
     [Fact]
+    public void VersionSelector_rejects_invalid_repository_version_metadata()
+    {
+        var version = new ManagedModuleVersionInfo
+        {
+            Name = "Company.Tools",
+            Version = "invalid",
+            Listed = true
+        };
+
+        Assert.Throws<ArgumentException>(() => ManagedModuleVersionSelector.IsSelectable(version, "0.0.0"));
+    }
+
+    [Fact]
     public void FindManagedModule_version_range_returns_every_matching_module_version()
     {
         using var feed = new TemporaryDirectory();

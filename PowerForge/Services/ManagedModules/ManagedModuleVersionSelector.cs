@@ -13,11 +13,7 @@ public static class ManagedModuleVersionSelector
     /// <returns><see langword="true"/> when the version satisfies the expression.</returns>
     public static bool IsMatch(string version, string? expression)
     {
-        if (string.IsNullOrWhiteSpace(version))
-            throw new ArgumentException("Version is required.", nameof(version));
-
-        var normalizedVersion = version.Trim();
-        ValidateVersion(normalizedVersion, nameof(version), version);
+        var normalizedVersion = NormalizeVersion(version, nameof(version));
         return ParseSearchExpression(expression).IsSatisfiedBy(normalizedVersion);
     }
 
@@ -40,10 +36,14 @@ public static class ManagedModuleVersionSelector
     /// Tests whether repository version metadata is selectable for an already parsed range.
     /// </summary>
     internal static bool IsSelectable(ManagedModuleVersionInfo version, ManagedModuleVersionRange range)
-        => version is not null &&
-           range is not null &&
-           range.IsSatisfiedBy(version.Version) &&
-           (range.ExactVersion is not null || version.Listed);
+    {
+        if (version is null || range is null)
+            return false;
+
+        var normalizedVersion = NormalizeVersion(version.Version, nameof(version));
+        return range.IsSatisfiedBy(normalizedVersion) &&
+               (range.ExactVersion is not null || version.Listed);
+    }
 
     /// <summary>
     /// Tests whether an expression explicitly includes a prerelease version boundary.
@@ -214,6 +214,16 @@ public static class ManagedModuleVersionSelector
         var comparison = ManagedModuleVersionComparer.Instance.Compare(minimum, maximum);
         if (comparison > 0 || (comparison == 0 && (!includeMinimum || !includeMaximum)))
             throw InvalidExpression(expression);
+    }
+
+    private static string NormalizeVersion(string? version, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+            throw new ArgumentException("Version is required.", parameterName);
+
+        var normalizedVersion = version!.Trim();
+        ValidateVersion(normalizedVersion, parameterName, version);
+        return normalizedVersion;
     }
 
     private static void ValidateVersion(string value, string parameterName, string originalExpression)
