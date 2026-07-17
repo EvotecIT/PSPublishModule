@@ -183,6 +183,13 @@ public sealed class ServerScaffoldTests
         var incompleteRepositorySsh = JsonNode.Parse(privateFiles["deploy/linux/example.serverrecovery.json"])!.AsObject();
         incompleteRepositorySsh["repositories"]![0]!.AsObject().Remove("sshKnownHostsFile");
         Assert.False(EvaluateSchema(schema, incompleteRepositorySsh));
+
+        var incompleteSudoers = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        var sudoersPath = incompleteSudoers["paths"]!.AsArray()
+            .First(path => path!["validation"]?.GetValue<string>() == "sudoers")!
+            .AsObject();
+        sudoersPath.Remove("kind");
+        Assert.False(EvaluateSchema(schema, incompleteSudoers));
     }
 
     [Fact]

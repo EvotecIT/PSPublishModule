@@ -681,12 +681,12 @@ internal static partial class WebCliCommandHandlers
         return builder.ToString();
     }
 
-    private static string[] BuildServerRecoveryStages(PowerForgeServerRecoveryManifest manifest)
+    internal static string[] BuildServerRecoveryStages(PowerForgeServerRecoveryManifest manifest)
     {
         var stages = new List<string> { "inspect" };
         if (manifest.Capture is not null)
             stages.Add("capture");
-        if (manifest.Bootstrap?.Commands?.Length > 0)
+        if (HasServerRecoveryBootstrapWork(manifest))
             stages.Add("bootstrap");
         if (manifest.Secrets?.Length > 0)
             stages.Add("restore-secrets");
@@ -696,5 +696,27 @@ internal static partial class WebCliCommandHandlers
             stages.Add("verify");
 
         return stages.ToArray();
+    }
+
+    private static bool HasServerRecoveryBootstrapWork(PowerForgeServerRecoveryManifest manifest)
+    {
+        var packages = manifest.Packages;
+        var apache = manifest.Apache;
+        var systemd = manifest.Systemd;
+        return manifest.Bootstrap?.Commands?.Length > 0 ||
+               manifest.Repositories?.Length > 0 ||
+               manifest.Accounts?.Length > 0 ||
+               manifest.Paths?.Length > 0 ||
+               packages?.Apt?.Length > 0 ||
+               packages?.ApacheModules?.Length > 0 ||
+               packages?.DotnetSdks?.Length > 0 ||
+               packages?.Powershell == true ||
+               apache?.Modules?.Length > 0 ||
+               apache?.Sites?.Length > 0 ||
+               apache?.Conf?.Length > 0 ||
+               systemd?.Services?.Length > 0 ||
+               systemd?.Timers?.Length > 0 ||
+               manifest.Firewall is not null ||
+               manifest.Secrets?.Any(static secret => secret.RequiredDuringBootstrap != false) == true;
     }
 }

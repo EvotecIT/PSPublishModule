@@ -185,6 +185,32 @@ public sealed class ServerRecoveryBootstrapPlanTests
     }
 
     [Fact]
+    public void RecoveryStages_IncludeDeclarativeBootstrapWorkWithoutLegacyCommands()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Paths =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerPath
+                {
+                    Id = "site-config",
+                    Path = "/etc/example/site.env",
+                    Source = "/srv/example/deploy/site.env",
+                    Kind = "file",
+                    Owner = "root",
+                    Group = "root",
+                    Mode = "0640"
+                }
+            ]
+        };
+
+        var stages = PowerForge.Web.Cli.WebCliCommandHandlers.BuildServerRecoveryStages(manifest);
+
+        Assert.Contains("bootstrap", stages);
+        Assert.Null(manifest.Bootstrap);
+    }
+
+    [Fact]
     public void SudoersManagedFileUsesValidatedAtomicReplacementWithRollback()
     {
         var path = new PowerForge.Web.Cli.PowerForgeServerPath

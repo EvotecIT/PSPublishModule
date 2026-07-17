@@ -171,7 +171,7 @@
         {
           "if": { "properties": { "validation": { "enum": ["sudoers"] } }, "required": ["validation"] },
           "then": {
-            "required": ["source", "owner", "group", "mode"],
+            "required": ["source", "owner", "group", "mode", "kind"],
             "properties": {
               "kind": { "enum": ["file"] },
               "owner": { "enum": ["root"] },

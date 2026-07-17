@@ -5,8 +5,8 @@ namespace PowerForge.Tests;
 public sealed class ServerRecoveryInspectCommandTests
 {
     [Theory]
-    [InlineData("directory", "/etc/powerforge/repository-ssh", "sudo -n test -d '/etc/powerforge/repository-ssh'")]
-    [InlineData("file", "/etc/powerforge/sites/example.env", "sudo -n test -f '/etc/powerforge/sites/example.env'")]
+    [InlineData("directory", "/etc/powerforge/repository-ssh", "sudo -n test -d '/etc/powerforge/repository-ssh' && sudo -n test ! -L '/etc/powerforge/repository-ssh'")]
+    [InlineData("file", "/etc/powerforge/sites/example.env", "sudo -n test -f '/etc/powerforge/sites/example.env' && sudo -n test ! -L '/etc/powerforge/sites/example.env'")]
     [InlineData("symlink", "/var/www/example/current", "sudo -n test -L '/var/www/example/current'")]
     public void ManagedPathChecksUseNonInteractiveSudo(string kind, string path, string expected)
     {
@@ -34,7 +34,7 @@ public sealed class ServerRecoveryInspectCommandTests
         var command = WebCliCommandHandlers.BuildManagedPathCheckCommand(managedPath);
 
         Assert.Equal(
-            "sudo -n test -f '/etc/powerforge/sites/example.env' && " +
+            "sudo -n test -f '/etc/powerforge/sites/example.env' && sudo -n test ! -L '/etc/powerforge/sites/example.env' && " +
             "test \"$(sudo -n stat -c '%U' -- '/etc/powerforge/sites/example.env')\" = 'root' && " +
             "test \"$(sudo -n stat -c '%G' -- '/etc/powerforge/sites/example.env')\" = 'powerforge' && " +
             "test \"$(sudo -n stat -c '%a' -- '/etc/powerforge/sites/example.env')\" = '640'",

@@ -212,14 +212,14 @@ internal static partial class WebCliCommandHandlers
     internal static string BuildManagedPathCheckCommand(PowerForgeServerPath path)
     {
         var quotedPath = ShellQuote(path.Path ?? string.Empty);
-        var predicate = path.Kind?.ToLowerInvariant() switch
+        var kindCheck = path.Kind?.ToLowerInvariant() switch
         {
-            "directory" => "-d",
-            "file" => "-f",
-            "symlink" => "-L",
-            _ => "-e"
+            "directory" => $"sudo -n test -d {quotedPath} && sudo -n test ! -L {quotedPath}",
+            "file" => $"sudo -n test -f {quotedPath} && sudo -n test ! -L {quotedPath}",
+            "symlink" => $"sudo -n test -L {quotedPath}",
+            _ => $"sudo -n test -e {quotedPath}"
         };
-        var checks = new List<string> { $"sudo -n test {predicate} {quotedPath}" };
+        var checks = new List<string> { kindCheck };
         if (!string.IsNullOrWhiteSpace(path.Owner))
             checks.Add($"test \"$(sudo -n stat -c '%U' -- {quotedPath})\" = {ShellQuote(path.Owner)}");
         if (!string.IsNullOrWhiteSpace(path.Group))
