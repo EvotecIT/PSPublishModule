@@ -185,8 +185,9 @@ internal static class ModuleStateInventoryCommandSupport
             .GroupBy(CreateInstalledModuleIdentity, ModuleStatePathIdentity.Comparer)
             .Select(static group => group.Last())
             .ToArray();
-        var mergedPaths = NormalizeModulePathEntries(
-            baseInventory.ModulePaths.Concat(supplementalInventory.ModulePaths));
+        var mergedPaths = MergeInventoryModulePaths(
+            baseInventory.ModulePaths,
+            supplementalInventory.ModulePaths);
         installedModules = ModuleStateInventoryService.RecomputeEffectiveImportCandidates(installedModules, mergedPaths);
         var diagnostics = baseInventory.Diagnostics
             .Where(diagnostic => !BelongsToAnyRoot(diagnostic.Path, authoritativeSupplementalRoots))
@@ -199,6 +200,28 @@ internal static class ModuleStateInventoryCommandSupport
             merged,
             string.IsNullOrWhiteSpace(inventory.Source) ? source : inventory.Source + "+" + source,
             mergedPaths.Select(static path => path.Path).ToArray());
+    }
+
+    private static ModuleStateModulePath[] MergeInventoryModulePaths(
+        IEnumerable<ModuleStateModulePath> basePaths,
+        IEnumerable<ModuleStateModulePath> supplementalPaths)
+    {
+        var supplemental = NormalizeModulePathEntries(supplementalPaths);
+        return NormalizeModulePathEntries(basePaths.Concat(supplemental))
+            .Select(path =>
+            {
+                var current = supplemental.LastOrDefault(candidate => ModuleStatePathIdentity.Equals(candidate.Path, path.Path));
+                return current is null
+                    ? path
+                    : new ModuleStateModulePath(
+                        path.Path,
+                        current.PowerShellEdition ?? path.PowerShellEdition,
+                        current.Scope ?? path.Scope,
+                        current.ProfileName ?? path.ProfileName,
+                        path.IsRequired || current.IsRequired,
+                        current.WasAvailable);
+            })
+            .ToArray();
     }
 
     private static bool BelongsToAnyRoot(

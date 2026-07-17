@@ -170,7 +170,7 @@ public sealed partial class ManagedModuleRepositoryClient
         };
     }
 
-    private static ManagedModulePackagePublishResult PublishLocalPackage(
+    private ManagedModulePackagePublishResult PublishLocalPackage(
         ManagedModuleRepository repository,
         string packagePath,
         bool force)
@@ -181,7 +181,24 @@ public sealed partial class ManagedModuleRepositoryClient
 
         var destinationDirectory = ManagedModuleRepositoryPathResolver.ResolveLocalFolder(repository.Source);
         Directory.CreateDirectory(destinationDirectory);
-        var destinationPath = Path.Combine(destinationDirectory, Path.GetFileName(package));
+        var packageMetadata = _packageReader.ReadMetadata(package);
+        var safePackageId = ManagedModulePackageIdentity.RequireSafeId(packageMetadata.Id, nameof(packageMetadata.Id));
+        var safeVersion = ManagedModulePackageIdentity.RequireSafeVersion(packageMetadata.Version, nameof(packageMetadata.Version));
+        var canonicalDestinationPath = Path.Combine(destinationDirectory, $"{safePackageId}.{safeVersion}.nupkg");
+        var identityMatches = FindLocalPackageIdentityMatches(
+            destinationDirectory,
+            packageMetadata.Id,
+            packageMetadata.Version);
+        if (identityMatches.Length > 1)
+        {
+            throw new InvalidOperationException(
+                $"Local repository '{repository.Name}' contains multiple package files for " +
+                $"'{packageMetadata.Id}' version '{packageMetadata.Version}': {string.Join(", ", identityMatches)}");
+        }
+
+        var destinationPath = identityMatches.Length == 1
+            ? identityMatches[0]
+            : canonicalDestinationPath;
         if (File.Exists(destinationPath) && !force)
         {
             return new ManagedModulePackagePublishResult
@@ -198,7 +215,7 @@ public sealed partial class ManagedModuleRepositoryClient
                 package,
                 destinationPath,
                 FrameworkCompatibility.GetPathStringComparison(destinationDirectory)) &&
-            !FilesHaveSameContents(package, destinationPath))
+            !ManagedModuleFileComparer.HaveSameContents(package, destinationPath))
         {
             File.Copy(package, destinationPath, overwrite: true);
         }
@@ -211,47 +228,30 @@ public sealed partial class ManagedModuleRepositoryClient
         };
     }
 
-    private static bool FilesHaveSameContents(string leftPath, string rightPath)
+    private string[] FindLocalPackageIdentityMatches(
+        string destinationDirectory,
+        string packageId,
+        string version)
     {
-        if (!File.Exists(rightPath))
-            return false;
-
-        var leftLength = new FileInfo(leftPath).Length;
-        if (leftLength != new FileInfo(rightPath).Length)
-            return false;
-
-        const int bufferSize = 81920;
-        var leftBuffer = new byte[bufferSize];
-        var rightBuffer = new byte[bufferSize];
-        using var left = new FileStream(
-            leftPath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read | FileShare.Delete,
-            bufferSize,
-            FileOptions.SequentialScan);
-        using var right = new FileStream(
-            rightPath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read | FileShare.Delete,
-            bufferSize,
-            FileOptions.SequentialScan);
-        while (true)
+        var matches = new List<string>();
+        foreach (var candidate in Directory.EnumerateFiles(destinationDirectory, "*.nupkg", SearchOption.AllDirectories))
         {
-            var leftRead = left.Read(leftBuffer, 0, leftBuffer.Length);
-            var rightRead = right.Read(rightBuffer, 0, rightBuffer.Length);
-            if (leftRead != rightRead)
-                return false;
-            if (leftRead == 0)
-                return true;
-
-            for (var index = 0; index < leftRead; index++)
+            try
             {
-                if (leftBuffer[index] != rightBuffer[index])
-                    return false;
+                var metadata = _packageReader.ReadMetadata(candidate);
+                if (metadata.Id.Equals(packageId, StringComparison.OrdinalIgnoreCase) &&
+                    metadata.Version.Equals(version, StringComparison.OrdinalIgnoreCase))
+                {
+                    matches.Add(candidate);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Verbose($"Managed module local feed skipped '{candidate}' while checking publish identity: {ex.Message}");
             }
         }
+
+        return matches.ToArray();
     }
 
     private static bool IsPackagePublishResource(JsonElement resource)

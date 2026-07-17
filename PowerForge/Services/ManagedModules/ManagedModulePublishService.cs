@@ -108,10 +108,14 @@ public sealed class ManagedModulePublishService
                         destinationPath,
                         FrameworkCompatibility.GetPathStringComparison(outputDirectory)))
                 {
-                    if (File.Exists(destinationPath) && !request.Force)
-                        throw new IOException($"Package already exists at destination path: {destinationPath}");
+                    if (!ManagedModuleFileComparer.HaveSameContents(packagePath, destinationPath))
+                    {
+                        if (File.Exists(destinationPath) && !request.Force)
+                            throw new IOException($"Package already exists at destination path: {destinationPath}");
 
-                    File.Copy(packagePath, destinationPath, overwrite: true);
+                        File.Copy(packagePath, destinationPath, overwrite: true);
+                    }
+
                     packagePath = destinationPath;
                 }
             }

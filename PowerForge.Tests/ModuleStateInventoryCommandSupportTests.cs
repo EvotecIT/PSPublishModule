@@ -271,6 +271,48 @@ public sealed class ModuleStateInventoryCommandSupportTests
         Assert.True(scannedRoot.IsRequired);
     }
 
+    [Fact]
+    public void MergeWithModulePathEntries_UsesCurrentUnavailableStateForSupplementalRoot()
+    {
+        using var workspace = new TemporaryDirectory();
+        var moduleRoot = Path.Combine(workspace.Path, "missing-modules");
+        var stalePath = Path.Combine(moduleRoot, "Company.Stale", "1.0.0");
+        var inventory = new ModuleStateInventoryResult
+        {
+            Source = "Artifact",
+            ModulePaths = new[] { moduleRoot },
+            ScannedPaths = new[]
+            {
+                new ModuleStateInventoryPathResult
+                {
+                    Path = moduleRoot,
+                    IsRequired = true,
+                    WasAvailable = true
+                }
+            },
+            InstalledModules = new[]
+            {
+                new ModuleStateInstalledModuleResult
+                {
+                    Name = "Company.Stale",
+                    Version = "1.0.0",
+                    Path = stalePath,
+                    ModuleRoot = moduleRoot
+                }
+            }
+        };
+
+        var merged = ModuleStateInventoryCommandSupport.MergeWithModulePathEntries(
+            inventory,
+            new[] { new ModuleStateModulePath(moduleRoot, isRequired: true) });
+
+        var scannedRoot = Assert.Single(merged.ScannedPaths);
+        Assert.False(scannedRoot.WasAvailable);
+        Assert.True(scannedRoot.IsRequired);
+        Assert.Single(merged.InstalledModules);
+        Assert.Contains(merged.Diagnostics, static diagnostic => diagnostic.Code == "ModuleState.InventoryPathMissing");
+    }
+
     private static string CreateInstalledModule(string root, string name, string version)
     {
         var path = Path.Combine(root, name, version);

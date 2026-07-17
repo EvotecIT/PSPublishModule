@@ -7,6 +7,18 @@ namespace PowerForge;
 
 internal sealed class ModuleStateProfilePathDiscoveryService
 {
+    private readonly Func<string, ModuleStateDirectoryProbeResult> _directoryProbe;
+
+    internal ModuleStateProfilePathDiscoveryService()
+        : this(ModuleStateDirectoryProbe.Probe)
+    {
+    }
+
+    internal ModuleStateProfilePathDiscoveryService(Func<string, ModuleStateDirectoryProbeResult> directoryProbe)
+    {
+        _directoryProbe = directoryProbe ?? throw new ArgumentNullException(nameof(directoryProbe));
+    }
+
     internal ModuleStateProfilePathDiscoveryResult Discover(
         IEnumerable<string>? profilePaths = null,
         bool includeAllLocalProfiles = false,
@@ -45,14 +57,19 @@ internal sealed class ModuleStateProfilePathDiscoveryService
             if (!seenProfiles.Add(candidate.Path))
                 continue;
 
-            if (!Directory.Exists(candidate.Path))
+            var profileProbe = _directoryProbe(candidate.Path);
+            if (profileProbe.Status != ModuleStateDirectoryProbeStatus.Available)
             {
                 if (candidate.IsRequired)
                 {
                     diagnostics.Add(new ModuleStateInventoryDiagnostic(
                         ModuleStateConflictSeverity.Error,
-                        "ModuleState.UserProfileMissing",
-                        $"Required user profile path '{candidate.Path}' does not exist.",
+                        profileProbe.Status == ModuleStateDirectoryProbeStatus.Missing
+                            ? "ModuleState.UserProfileMissing"
+                            : "ModuleState.UserProfileUnavailable",
+                        profileProbe.Status == ModuleStateDirectoryProbeStatus.Missing
+                            ? $"Required user profile path '{candidate.Path}' does not exist."
+                            : $"Required user profile path '{candidate.Path}' could not be inspected: {profileProbe.Reason}",
                         candidate.Path,
                         profileName: Path.GetFileName(candidate.Path)));
                 }
@@ -73,10 +90,20 @@ internal sealed class ModuleStateProfilePathDiscoveryService
             var discoveredForProfile = 0;
             foreach (var moduleRoot in EnumerateStandardModuleRoots(candidate.Path, profileName))
             {
-                var rootExists = Directory.Exists(moduleRoot.Path);
+                var rootProbe = _directoryProbe(moduleRoot.Path);
+                var rootExists = rootProbe.Status == ModuleStateDirectoryProbeStatus.Available;
+                if (rootProbe.Status == ModuleStateDirectoryProbeStatus.Inaccessible)
+                {
+                    diagnostics.Add(CreateUnavailableModuleRootDiagnostic(
+                        moduleRoot,
+                        rootProbe.Reason ?? "The module root could not be inspected.",
+                        candidate.IsRequired ? ModuleStateConflictSeverity.Error : ModuleStateConflictSeverity.Warning));
+                    if (candidate.IsRequired && seenRoots.Add(moduleRoot.Path))
+                        paths.Add(WithRequired(moduleRoot));
+                    continue;
+                }
                 if (!candidate.IsRequired && !rootExists)
                 {
-                    TryReportUnavailableModuleRoot(moduleRoot, diagnostics);
                     continue;
                 }
                 if (!seenRoots.Add(moduleRoot.Path))
@@ -112,39 +139,14 @@ internal sealed class ModuleStateProfilePathDiscoveryService
             moduleRoot.ProfileName,
             isRequired: true);
 
-    private static void TryReportUnavailableModuleRoot(
-        ModuleStateModulePath moduleRoot,
-        ICollection<ModuleStateInventoryDiagnostic> diagnostics)
-    {
-        try
-        {
-            var attributes = File.GetAttributes(moduleRoot.Path);
-            if ((attributes & FileAttributes.Directory) != 0)
-            {
-                diagnostics.Add(CreateUnavailableModuleRootDiagnostic(
-                    moduleRoot,
-                    "The discovered module root exists but could not be inspected."));
-            }
-        }
-        catch (FileNotFoundException)
-        {
-        }
-        catch (DirectoryNotFoundException)
-        {
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
-        {
-            diagnostics.Add(CreateUnavailableModuleRootDiagnostic(moduleRoot, ex.Message));
-        }
-    }
-
     private static ModuleStateInventoryDiagnostic CreateUnavailableModuleRootDiagnostic(
         ModuleStateModulePath moduleRoot,
-        string reason)
+        string reason,
+        ModuleStateConflictSeverity severity)
         => new(
-            ModuleStateConflictSeverity.Warning,
+            severity,
             "ModuleState.UserProfileModuleRootUnavailable",
-            $"Discovered user-profile module root '{moduleRoot.Path}' could not be inspected: {reason}",
+            $"User-profile module root '{moduleRoot.Path}' could not be inspected: {reason}",
             moduleRoot.Path,
             moduleRoot.PowerShellEdition,
             moduleRoot.Scope,
