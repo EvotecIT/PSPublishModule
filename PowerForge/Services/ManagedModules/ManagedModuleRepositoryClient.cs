@@ -861,8 +861,19 @@ public sealed partial class ManagedModuleRepositoryClient
         string destinationDirectory,
         CancellationToken cancellationToken)
     {
-        var match = GetLocalVersions(repository, packageId, includePrerelease: true)
-            .FirstOrDefault(item => ManagedModuleVersionComparer.Instance.Compare(item.Version, version) == 0);
+        var matches = GetLocalVersions(repository, packageId, includePrerelease: true)
+            .Where(item => ManagedModuleVersionComparer.Instance.Compare(item.Version, version) == 0)
+            .ToArray();
+        if (matches.Length > 1)
+        {
+            throw CreateLocalRepositoryException(
+                repository,
+                "Download",
+                $"Local repository '{repository.Name}' contains multiple package files for " +
+                $"'{packageId}' version '{version}': {string.Join(", ", matches.Select(static item => item.PackageSource))}");
+        }
+
+        var match = matches.SingleOrDefault();
         if (match?.PackageSource is null)
             throw CreateLocalRepositoryException(repository, "Download", $"Package '{packageId}' version '{version}' was not found in local repository '{repository.Name}'.");
 

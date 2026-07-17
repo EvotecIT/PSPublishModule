@@ -70,19 +70,25 @@ public sealed class ManagedModuleLocalPublishIdentityTests
     {
         using var source = new TemporaryDirectory();
         using var destination = new TemporaryDirectory();
+        using var download = new TemporaryDirectory();
         var packagePath = Path.Combine(source.Path, "incoming.nupkg");
         TestPackageFactory.Create(packagePath, "Company.Tools", "1.0.0");
-        TestPackageFactory.Create(Path.Combine(destination.Path, "first.nupkg"), "Company.Tools", "1.0.0");
-        TestPackageFactory.Create(Path.Combine(destination.Path, "second.nupkg"), "Company.Tools", "1.0.0");
+        TestPackageFactory.Create(Path.Combine(destination.Path, "first.nupkg"), "Company.Tools", "1.0");
+        TestPackageFactory.Create(Path.Combine(destination.Path, "second.nupkg"), "Company.Tools", "1.0.0+build.5");
         var client = new ManagedModuleRepositoryClient(new NullLogger());
+        var repository = new ManagedModuleRepository("Local", destination.Path);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.PublishPackageAsync(
-            new ManagedModuleRepository("Local", destination.Path),
+            repository,
             packagePath,
             force: true));
+        var downloadException = await Assert.ThrowsAsync<ManagedModuleRepositoryException>(() =>
+            client.DownloadPackageAsync(repository, "Company.Tools", "1.0.0", download.Path));
 
         Assert.Contains("multiple package files", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Company.Tools", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("multiple package files", downloadException.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Download", downloadException.Operation);
         Assert.Equal(2, Directory.EnumerateFiles(destination.Path, "*.nupkg", SearchOption.AllDirectories).Count());
     }
 }
