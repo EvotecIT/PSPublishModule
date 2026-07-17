@@ -86,7 +86,7 @@ jobs:
       github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-The reusable workflow serializes and queues releases per repository and invokes the matching tagged action. The action installs an exact `PowerForge.Build` package version, so the workflow, action, and engine do not drift between retries.
+The reusable workflow serializes and queues releases per repository and invokes the matching action at the immutable release commit. The action installs an exact `PowerForge.Build` package version, so the workflow, action, and engine do not drift between retries.
 
 The shared workflow deliberately uses three jobs with different permissions:
 
