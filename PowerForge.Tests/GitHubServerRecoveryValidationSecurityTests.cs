@@ -362,6 +362,8 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
     [Theory]
     [InlineData("Defaults !authenticate")]
     [InlineData($"Defaults:{CaptureUser} !authenticate")]
+    [InlineData($"Defaults exempt_group={CaptureUser}")]
+    [InlineData($"Defaults exempt_group = {CaptureUser}")]
     public void Validator_ShouldRejectAuthenticationDisablingDefaults(string defaults)
     {
         var sudoers = BuildExpectedSudoers(CaptureUser, "root") +

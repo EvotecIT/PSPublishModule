@@ -360,9 +360,11 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
             if ($trimmedLine -match '^User_Alias\b') {
                 throw 'Managed sudoers sources must not use User_Alias entries.'
             }
-            if ($trimmedLine -cmatch '^Defaults(?:[:@>!]\S+)?\s+' -and
-                $trimmedLine -cmatch '(?:^|[,\s])!authenticate(?:$|[,\s])') {
-                throw 'Managed sudoers sources must not disable authentication with Defaults !authenticate.'
+            $isDefaultsLine = $trimmedLine -cmatch '^Defaults(?:[:@>!]\S+)?\s+'
+            if ($isDefaultsLine -and
+                ($trimmedLine -cmatch '(?:^|[,\s])!authenticate(?:$|[,\s])' -or
+                 $trimmedLine -cmatch '(?:^|[,\s])exempt_group\s*=')) {
+                throw 'Managed sudoers sources must not disable authentication with Defaults !authenticate or exempt_group.'
             }
             if ($line -cnotmatch '^\s*Cmnd_Alias\b') {
                 continue
