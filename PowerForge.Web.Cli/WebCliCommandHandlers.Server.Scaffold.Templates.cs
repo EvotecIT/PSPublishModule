@@ -133,7 +133,15 @@ internal static partial class WebCliCommandHandlers
             SchemaVersion = 2,
             Name = $"{options.SiteId}-production-linux",
             Description = $"Generated recovery manifest for the {options.Domain} static website.",
-            Target = new PowerForgeServerTarget { SshAlias = "powerforge-site-host", Host = options.Host, User = "ubuntu", SshPort = options.SshPort, Os = "ubuntu-24.04", Architecture = "x64" },
+            Target = new PowerForgeServerTarget
+            {
+                SshAlias = "powerforge-site-host",
+                Host = options.PrivateRepository ? options.Host : null,
+                User = "ubuntu",
+                SshPort = options.SshPort,
+                Os = "ubuntu-24.04",
+                Architecture = "x64"
+            },
             Repositories =
             [
                 applicationRepository,
@@ -328,7 +336,6 @@ internal static partial class WebCliCommandHandlers
             "ONBOARDING.md",
             ("__SITE_ID__", options.SiteId),
             ("__BRANCH__", options.Branch),
-            ("__HOST__", options.Host),
             ("__SSH_PORT__", options.SshPort.ToString(System.Globalization.CultureInfo.InvariantCulture)),
             ("__DOMAIN__", options.Domain),
             ("__REPOSITORY_STEP__", repository),

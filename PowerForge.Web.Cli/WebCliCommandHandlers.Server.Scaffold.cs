@@ -72,7 +72,7 @@ internal static partial class WebCliCommandHandlers
             options.PrivateRepository
                 ? "Review deploy/linux/ONBOARDING.md and replace the authorized-key and reviewed host-key example files."
                 : "Review deploy/linux/ONBOARDING.md and replace the authorized-key example files.",
-            "Create and branch-restrict the production GitHub environment before storing secrets.",
+            "Create and branch-restrict the production GitHub environment, then store DEPLOYMENT_HOST and the separate deployment/backup identities there.",
             "Run server plan, bootstrap-plan, inspect, and verify before the first protected deployment.",
             options.CloudflareEnabled
                 ? "Provision a per-site Cloudflare token and zone id before enabling the generated workflow."

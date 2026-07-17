@@ -9,12 +9,28 @@ public sealed class GitHubServerBackupActionTests
         var script = ReadRepoFile(".github", "actions", "powerforge-server-backup", "Invoke-PowerForgeServerBackup.ps1");
 
         Assert.Contains("server-ssh-private-key", action, StringComparison.Ordinal);
+        Assert.Contains("server-host", action, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_SERVER_HOST: ${{ inputs.server-host }}", action, StringComparison.Ordinal);
         Assert.Contains("backup-repository-ssh-private-key", action, StringComparison.Ordinal);
         Assert.Contains("server_ed25519", script, StringComparison.Ordinal);
         Assert.Contains("backup_repository_ed25519", script, StringComparison.Ordinal);
         Assert.Contains("StrictHostKeyChecking yes", script, StringComparison.Ordinal);
         Assert.Contains("IdentitiesOnly yes", script, StringComparison.Ordinal);
         Assert.DoesNotContain("ssh-keyscan", script, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Action_ShouldPreferProtectedHostAndPreserveManifestFallback()
+    {
+        var action = ReadRepoFile(".github", "actions", "powerforge-server-backup", "action.yml");
+        var script = ReadRepoFile(".github", "actions", "powerforge-server-backup", "Invoke-PowerForgeServerBackup.ps1");
+
+        Assert.Contains("Optional capture-host override from the caller job's protected environment", action, StringComparison.Ordinal);
+        Assert.Contains("[string]::IsNullOrWhiteSpace($env:POWERFORGE_SERVER_HOST)", script, StringComparison.Ordinal);
+        Assert.Contains("[string]$manifest.target.host", script, StringComparison.Ordinal);
+        Assert.Contains("$env:POWERFORGE_SERVER_HOST.Trim()", script, StringComparison.Ordinal);
+        Assert.Contains("server-host or target.host must be a valid hostname or IP address", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("$manifest.target.host = $captureHost", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -42,7 +58,7 @@ public sealed class GitHubServerBackupActionTests
     {
         var script = ReadRepoFile(".github", "actions", "powerforge-server-backup", "Invoke-PowerForgeServerBackup.ps1");
 
-        Assert.Contains("Write-CaptureFailureDiagnostics", script, StringComparison.Ordinal);
+        Assert.Contains("Write-CaptureFailureDiagnostic", script, StringComparison.Ordinal);
         Assert.Contains("plain-files.stderr.txt", script, StringComparison.Ordinal);
         Assert.Contains("encrypted-secrets.stderr.txt", script, StringComparison.Ordinal);
         Assert.Contains("-TotalCount 40", script, StringComparison.Ordinal);
