@@ -116,10 +116,11 @@ internal static partial class WebCliCommandHandlers
                 path.Path);
             if (!string.IsNullOrWhiteSpace(path.Source))
             {
-                var repositoryRoot = FindManagedSourceRepositoryRoot(manifest.Repositories, path.Source)
-                                     ?? throw new InvalidOperationException($"Managed source '{path.Source}' is not below a declared repository root.");
+                var repository = FindManagedSourceRepository(manifest.Repositories, path.Source)
+                                 ?? throw new InvalidOperationException($"Managed source '{path.Source}' is not below a declared repository root.");
+                var repositoryRoot = repository.Path!.TrimEnd('/');
                 AddCommandCheck(checks, $"path.{path.Id ?? path.Path}.content", "paths", $"Managed file matches source: {path.Path}",
-                    ExecuteRemote(sshCommand, target, BuildManagedFileContentCheckCommand(path.Source, path.Path, repositoryRoot)), path.Source);
+                    ExecuteRemote(sshCommand, target, BuildManagedFileContentCheckCommand(path.Source, path.Path, repositoryRoot, repository.Ref)), path.Source);
             }
             if (string.Equals(path.Validation, "sudoers", StringComparison.OrdinalIgnoreCase))
             {
@@ -266,8 +267,12 @@ internal static partial class WebCliCommandHandlers
     internal static string BuildManagedFileExistsCheckCommand(string target)
         => $"sudo -n test -f {ShellQuote(target)} && sudo -n test ! -L {ShellQuote(target)}";
 
-    internal static string BuildManagedFileContentCheckCommand(string source, string target, string repositoryRoot)
-        => $"{BuildManagedSourceSafetyCommand(source, repositoryRoot, useSudo: true)} && " +
+    internal static string BuildManagedFileContentCheckCommand(
+        string source,
+        string target,
+        string repositoryRoot,
+        string? repositoryRef = null)
+        => $"{BuildManagedSourceSafetyCommand(source, repositoryRoot, useSudo: true, repositoryRef: repositoryRef)} && " +
            BuildManagedFileContentCheckCommand(source, target);
 
     internal static string BuildRepositoryManagedFileCheckCommand(
@@ -276,9 +281,10 @@ internal static partial class WebCliCommandHandlers
         string repositoryRoot,
         string owner = "root",
         string group = "root",
-        string mode = "0644")
+        string mode = "0644",
+        string? repositoryRef = null)
         => string.Join(" && ",
-            BuildManagedSourceSafetyCommand(source, repositoryRoot, useSudo: true),
+            BuildManagedSourceSafetyCommand(source, repositoryRoot, useSudo: true, repositoryRef: repositoryRef),
             BuildManagedPathCheckCommand(new PowerForgeServerPath
             {
                 Path = target,
@@ -293,20 +299,25 @@ internal static partial class WebCliCommandHandlers
         => $"sudo -n visudo -cf {ShellQuote(path)}";
 
     internal static string BuildRepositoryExistsCheckCommand(string path)
-        => $"powerforge_repository_path=$(sudo -n realpath -e -- {ShellQuote(path)}) && " +
+        => $"{BuildRepositoryPathSafetyCommand(path)} && " +
            $"powerforge_git_root=$({BuildRepositoryGitCommand("rev-parse --show-toplevel")}) && " +
            "test \"$powerforge_git_root\" = \"$powerforge_repository_path\"";
 
     internal static string BuildRepositoryRefCheckCommand(string path, string reference)
-        => $"powerforge_repository_path=$(sudo -n realpath -e -- {ShellQuote(path)}) && " +
+        => $"{BuildRepositoryPathSafetyCommand(path)} && " +
            $"powerforge_git_head=$({BuildRepositoryGitCommand("rev-parse HEAD")}) && " +
            $"powerforge_git_expected=$({BuildRepositoryGitCommand($"rev-parse {ShellQuote(reference + "^{commit}")}")}) && " +
            "test \"$powerforge_git_head\" = \"$powerforge_git_expected\"";
 
     internal static string BuildRepositoryCleanCheckCommand(string path)
-        => $"powerforge_repository_path=$(sudo -n realpath -e -- {ShellQuote(path)}) && " +
+        => $"{BuildRepositoryPathSafetyCommand(path)} && " +
            $"powerforge_git_status=$({BuildRepositoryGitCommand("status --porcelain --untracked-files=normal", noOptionalLocks: true)}) && " +
            "test -z \"$powerforge_git_status\"";
+
+    private static string BuildRepositoryPathSafetyCommand(string path)
+        => $"sudo -n test -d {ShellQuote(path)} && sudo -n test ! -L {ShellQuote(path)} && " +
+           $"powerforge_repository_path=$(sudo -n realpath -e -- {ShellQuote(path)}) && " +
+           $"test \"$powerforge_repository_path\" = {ShellQuote(path)}";
 
     private static string BuildRepositoryGitCommand(string arguments, bool noOptionalLocks = false)
         => $"sudo -n git {(noOptionalLocks ? "--no-optional-locks " : string.Empty)}" +
@@ -339,10 +350,11 @@ internal static partial class WebCliCommandHandlers
                 }
                 continue;
             }
-            var repositoryRoot = FindManagedSourceRepositoryRoot(repositories, file.Source)
-                                 ?? throw new InvalidOperationException($"Managed source '{file.Source}' is not below a declared repository root.");
+            var repository = FindManagedSourceRepository(repositories, file.Source)
+                             ?? throw new InvalidOperationException($"Managed source '{file.Source}' is not below a declared repository root.");
+            var repositoryRoot = repository.Path!.TrimEnd('/');
             AddCommandCheck(checks, $"{category}.file.{file.Target}.content", category, $"Managed file matches source: {file.Target}",
-                ExecuteRemote(sshCommand, target, BuildRepositoryManagedFileCheckCommand(file.Source, file.Target, repositoryRoot)), file.Source);
+                ExecuteRemote(sshCommand, target, BuildRepositoryManagedFileCheckCommand(file.Source, file.Target, repositoryRoot, repositoryRef: repository.Ref)), file.Source);
         }
     }
 
@@ -365,10 +377,11 @@ internal static partial class WebCliCommandHandlers
 
             if (!string.IsNullOrWhiteSpace(unit.Source) && !string.IsNullOrWhiteSpace(unit.Target))
             {
-                var repositoryRoot = FindManagedSourceRepositoryRoot(repositories, unit.Source)
-                                     ?? throw new InvalidOperationException($"Managed source '{unit.Source}' is not below a declared repository root.");
+                var repository = FindManagedSourceRepository(repositories, unit.Source)
+                                 ?? throw new InvalidOperationException($"Managed source '{unit.Source}' is not below a declared repository root.");
+                var repositoryRoot = repository.Path!.TrimEnd('/');
                 AddCommandCheck(checks, $"systemd.{kind}.{unit.Name}.content", "systemd", $"systemd {kind} matches source: {unit.Name}",
-                    ExecuteRemote(sshCommand, target, BuildRepositoryManagedFileCheckCommand(unit.Source, unit.Target, repositoryRoot)), unit.Source);
+                    ExecuteRemote(sshCommand, target, BuildRepositoryManagedFileCheckCommand(unit.Source, unit.Target, repositoryRoot, repositoryRef: repository.Ref)), unit.Source);
             }
 
             if (!unit.Enabled) continue;

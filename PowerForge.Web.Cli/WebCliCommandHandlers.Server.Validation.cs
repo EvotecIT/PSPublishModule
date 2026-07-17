@@ -327,6 +327,7 @@ internal static partial class WebCliCommandHandlers
             .Where(static command => !string.IsNullOrWhiteSpace(command.Id))
             .GroupBy(static command => command.Id!, StringComparer.Ordinal)
             .ToDictionary(static group => group.Key, static group => group.ToArray(), StringComparer.Ordinal);
+        var repositoryPaths = new List<(int Index, string Path)>();
         var index = 0;
         foreach (var repository in repositories ?? Array.Empty<PowerForgeServerRepository>())
         {
@@ -334,6 +335,8 @@ internal static partial class WebCliCommandHandlers
             var repositoryPath = NormalizeCapturePath(repository.Path, $"{field}.path", errors);
             if (repositoryPath is not null && HasTrailingPathSeparator(repository.Path))
                 errors.Add($"{field}.path must not end with '/'.");
+            if (repositoryPath is not null)
+                repositoryPaths.Add((index, repositoryPath));
 
             var prerequisites = new HashSet<string>(StringComparer.Ordinal);
             var prerequisiteIndex = 0;
@@ -382,6 +385,17 @@ internal static partial class WebCliCommandHandlers
             }
 
             index++;
+        }
+
+        for (var leftIndex = 0; leftIndex < repositoryPaths.Count; leftIndex++)
+        {
+            for (var rightIndex = leftIndex + 1; rightIndex < repositoryPaths.Count; rightIndex++)
+            {
+                var left = repositoryPaths[leftIndex];
+                var right = repositoryPaths[rightIndex];
+                if (PathContains(left.Path, right.Path) || PathContains(right.Path, left.Path))
+                    errors.Add($"repositories[{left.Index}].path and repositories[{right.Index}].path must not be duplicate or nested.");
+            }
         }
     }
 

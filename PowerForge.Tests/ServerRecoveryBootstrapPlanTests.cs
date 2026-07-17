@@ -85,6 +85,9 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Contains("StrictHostKeyChecking=yes", repositorySteps[1].Command, StringComparison.Ordinal);
         Assert.Contains("UserKnownHostsFile=", repositorySteps[1].Command, StringComparison.Ordinal);
         Assert.Contains("git -C '/srv/example' checkout --detach '0123456789abcdef0123456789abcdef01234567'", repositorySteps[1].Command, StringComparison.Ordinal);
+        Assert.Contains("if runuser -u 'example-service' -g 'example-service' -- install -d -m '750' '/var/lib/example-service'; then :; else", path.Command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path '/var/lib'", path.Command, StringComparison.Ordinal);
+        Assert.Contains("install -d -o 'example-service' -g 'example-service' -m '750' '/var/lib/example-service'", path.Command, StringComparison.Ordinal);
         Assert.Empty(warnings);
     }
 
@@ -194,6 +197,11 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Contains("test ! -L '/srv/example/deploy/site.env'", managedFile.Command, StringComparison.Ordinal);
         Assert.Contains("realpath -e -- '/srv/example/deploy/site.env'", managedFile.Command, StringComparison.Ordinal);
         Assert.Contains("realpath -e -- '/srv/example'", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("cat-file -t '0123456789abcdef0123456789abcdef01234567:deploy/site.env'", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("test \"$powerforge_managed_source_type\" = blob", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path \"$powerforge_managed_source_real\" || { echo", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("Managed source must be a safe tracked file in the declared repository revision", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("exit 3", managedFile.Command, StringComparison.Ordinal);
         Assert.EndsWith(
             "install -T -o 'root' -g 'example' -m '0640' '/srv/example/deploy/site.env' '/etc/example/site.env'",
             managedFile.Command,
@@ -302,6 +310,7 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Contains("git --no-optional-locks -C '/srv/powerforge/sources/example' status --porcelain --untracked-files=normal", repository.Command, StringComparison.Ordinal);
         Assert.Contains("Repository must be clean before installing managed files", repository.Command, StringComparison.Ordinal);
         Assert.Contains("powerforge_assert_root_controlled_path \"$powerforge_managed_source_real\"", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("cat-file -t 'HEAD:deploy/authorized_keys'", managedFile.Command, StringComparison.Ordinal);
         Assert.EndsWith(
             "runuser -u 'example' -g 'example' -- install -T -m '0600' '/srv/powerforge/sources/example/deploy/authorized_keys' '/home/example/.ssh/authorized_keys'",
             managedFile.Command,
@@ -351,10 +360,14 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Contains("powerforge_assert_root_controlled_path \"$powerforge_directory_ancestor\"", rootCommand, StringComparison.Ordinal);
         Assert.Contains("mkdir -p -- '/var/www/example/site'", rootCommand, StringComparison.Ordinal);
         Assert.Contains("test -d '/var/www/example/site/releases' && test ! -L '/var/www/example/site/releases'", rootCommand, StringComparison.Ordinal);
-        Assert.EndsWith("test -d '/var/www/example/site/releases' && test ! -L '/var/www/example/site/releases' && test \"$(stat -c '%u' -- '/var/www/example/site/releases')\" = 0", rootCommand, StringComparison.Ordinal);
+        Assert.Contains("test \"$(stat -c '%U' -- '/var/www/example/site/releases')\" = 'root'", rootCommand, StringComparison.Ordinal);
+        Assert.Contains("test \"$(stat -c '%G' -- '/var/www/example/site/releases')\" = 'root'", rootCommand, StringComparison.Ordinal);
+        Assert.EndsWith("test \"$(stat -c '%a' -- '/var/www/example/site/releases')\" = '755'", rootCommand, StringComparison.Ordinal);
         Assert.Contains("test -d '/home/example/.ssh' && test ! -L '/home/example/.ssh'", userCommand, StringComparison.Ordinal);
-        Assert.EndsWith("runuser -u 'example' -g 'example' -- install -d -m '0700' '/home/example/.ssh'", userCommand, StringComparison.Ordinal);
-        Assert.DoesNotContain("install -d -o", userCommand, StringComparison.Ordinal);
+        Assert.Contains("if runuser -u 'example' -g 'example' -- install -d -m '0700' '/home/example/.ssh'; then :; else", userCommand, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path \"$powerforge_directory_ancestor\"", userCommand, StringComparison.Ordinal);
+        Assert.Contains("install -d -o 'example' -g 'example' -m '0700' '/home/example/.ssh'", userCommand, StringComparison.Ordinal);
+        Assert.EndsWith("test \"$(stat -c '%a' -- '/home/example/.ssh')\" = '700'", userCommand, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -203,10 +203,11 @@ internal static partial class WebCliCommandHandlers
         foreach (var path in manifest.Paths ?? Array.Empty<PowerForgeServerPath>())
         {
             if (string.IsNullOrWhiteSpace(path.Source) || string.IsNullOrWhiteSpace(path.Path)) continue;
-            var repositoryRoot = FindManagedSourceRepositoryRoot(manifest.Repositories, path.Source)
-                                 ?? throw new InvalidOperationException($"Managed source '{path.Source}' is not below a declared repository root.");
+            var repository = FindManagedSourceRepository(manifest.Repositories, path.Source)
+                             ?? throw new InvalidOperationException($"Managed source '{path.Source}' is not below a declared repository root.");
+            var repositoryRoot = repository.Path!.TrimEnd('/');
             AddStep(steps, ref order, "managed-files", $"Install managed file {path.Path}",
-                BuildManagedFileInstallCommand(path, repositoryRoot), plannedCommands: plannedCommands);
+                BuildManagedFileInstallCommand(path, repositoryRoot, repository.Ref), plannedCommands: plannedCommands);
         }
 
         foreach (var command in manifest.Bootstrap?.Commands ?? Array.Empty<PowerForgeServerNamedCommand>())
@@ -223,10 +224,11 @@ internal static partial class WebCliCommandHandlers
                  .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>()))
         {
             if (string.IsNullOrWhiteSpace(file.Source) || string.IsNullOrWhiteSpace(file.Target)) continue;
-            var repositoryRoot = FindManagedSourceRepositoryRoot(manifest.Repositories, file.Source)
-                                 ?? throw new InvalidOperationException($"Managed source '{file.Source}' is not below a declared repository root.");
+            var repository = FindManagedSourceRepository(manifest.Repositories, file.Source)
+                             ?? throw new InvalidOperationException($"Managed source '{file.Source}' is not below a declared repository root.");
+            var repositoryRoot = repository.Path!.TrimEnd('/');
             AddStep(steps, ref order, "apache", $"Install Apache file {file.Target}",
-                BuildRepositoryManagedFileInstallCommand(file.Source, file.Target, repositoryRoot, "0644"),
+                BuildRepositoryManagedFileInstallCommand(file.Source, file.Target, repositoryRoot, "0644", repositoryRef: repository.Ref),
                 plannedCommands: plannedCommands);
         }
 
@@ -235,10 +237,11 @@ internal static partial class WebCliCommandHandlers
         {
             if (!string.IsNullOrWhiteSpace(unit.Source) && !string.IsNullOrWhiteSpace(unit.Target))
             {
-                var repositoryRoot = FindManagedSourceRepositoryRoot(manifest.Repositories, unit.Source)
-                                     ?? throw new InvalidOperationException($"Managed source '{unit.Source}' is not below a declared repository root.");
+                var repository = FindManagedSourceRepository(manifest.Repositories, unit.Source)
+                                 ?? throw new InvalidOperationException($"Managed source '{unit.Source}' is not below a declared repository root.");
+                var repositoryRoot = repository.Path!.TrimEnd('/');
                 AddStep(steps, ref order, "systemd", $"Install systemd unit {unit.Name}",
-                    BuildRepositoryManagedFileInstallCommand(unit.Source, unit.Target, repositoryRoot, "0644"),
+                    BuildRepositoryManagedFileInstallCommand(unit.Source, unit.Target, repositoryRoot, "0644", repositoryRef: repository.Ref),
                     plannedCommands: plannedCommands);
             }
         }
@@ -303,7 +306,10 @@ internal static partial class WebCliCommandHandlers
         return steps;
     }
 
-    internal static string BuildManagedFileInstallCommand(PowerForgeServerPath path, string repositoryRoot)
+    internal static string BuildManagedFileInstallCommand(
+        PowerForgeServerPath path,
+        string repositoryRoot,
+        string? repositoryRef = null)
     {
         var owner = string.IsNullOrWhiteSpace(path.Owner) ? "root" : path.Owner;
         var group = string.IsNullOrWhiteSpace(path.Group) ? "root" : path.Group;
@@ -315,11 +321,17 @@ internal static partial class WebCliCommandHandlers
                 repositoryRoot,
                 mode,
                 owner,
-                group);
+                group,
+                repositoryRef);
 
         var source = ShellQuote(path.Source ?? string.Empty);
         var target = ShellQuote(path.Path ?? string.Empty);
-        var sourceSafety = BuildManagedSourceSafetyCommand(path.Source ?? string.Empty, repositoryRoot, useSudo: false, requireRootControl: true);
+        var sourceSafety = BuildManagedSourceSafetyCommand(
+            path.Source ?? string.Empty,
+            repositoryRoot,
+            useSudo: false,
+            requireRootControl: true,
+            repositoryRef: repositoryRef);
         var targetSafety = BuildRootControlledTargetParentSafetyCommand(path.Path ?? string.Empty);
         var install = $"install -T -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {source}";
 
@@ -363,14 +375,15 @@ internal static partial class WebCliCommandHandlers
         string repositoryRoot,
         string mode,
         string owner = "root",
-        string group = "root")
+        string group = "root",
+        string? repositoryRef = null)
     {
         var install = string.Equals(owner, "root", StringComparison.Ordinal)
             ? $"install -T -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {ShellQuote(source)} {ShellQuote(target)}"
             : $"runuser -u {ShellQuote(owner)} -g {ShellQuote(group)} -- install -T -m {ShellQuote(mode)} {ShellQuote(source)} {ShellQuote(target)}";
         var commands = new List<string>
         {
-            BuildManagedSourceSafetyCommand(source, repositoryRoot, useSudo: false, requireRootControl: true)
+            BuildManagedSourceSafetyCommand(source, repositoryRoot, useSudo: false, requireRootControl: true, repositoryRef: repositoryRef)
         };
         if (string.Equals(owner, "root", StringComparison.Ordinal))
             commands.Add(BuildRootControlledTargetSafetyCommand(target));
@@ -388,43 +401,64 @@ internal static partial class WebCliCommandHandlers
         var existingTargetGuard =
             $"if [ -e {quotedTarget} ] || [ -L {quotedTarget} ]; then test -d {quotedTarget} && test ! -L {quotedTarget} || " +
             $"{{ echo {ShellQuote($"Managed directory target must not be a symlink or non-directory: {target}")} >&2; exit 3; }}; fi";
+        var normalizedMode = mode.TrimStart('0');
+        if (normalizedMode.Length == 0)
+            normalizedMode = "0";
+        var postcondition = string.Join(" && ",
+            $"test -d {quotedTarget}",
+            $"test ! -L {quotedTarget}",
+            $"test \"$(stat -c '%U' -- {quotedTarget})\" = {ShellQuote(owner)}",
+            $"test \"$(stat -c '%G' -- {quotedTarget})\" = {ShellQuote(group)}",
+            $"test \"$(stat -c '%a' -- {quotedTarget})\" = {ShellQuote(normalizedMode)}");
         if (!string.Equals(owner, "root", StringComparison.Ordinal))
         {
             return string.Join('\n',
                 existingTargetGuard,
-                $"runuser -u {ShellQuote(owner)} -g {ShellQuote(group)} -- install -d -m {ShellQuote(mode)} {quotedTarget}");
+                $"if runuser -u {ShellQuote(owner)} -g {ShellQuote(group)} -- install -d -m {ShellQuote(mode)} {quotedTarget}; then :; else",
+                BuildRootControlledParentPreparationCommand(target, "directory"),
+                existingTargetGuard,
+                $"install -d -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {quotedTarget}",
+                "fi",
+                postcondition);
         }
 
         return string.Join('\n',
             BuildRootControlledParentPreparationCommand(target, "directory"),
             existingTargetGuard,
             $"install -d -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {quotedTarget}",
-            $"test -d {quotedTarget} && test ! -L {quotedTarget} && test \"$(stat -c '%u' -- {quotedTarget})\" = 0");
+            postcondition);
     }
 
     internal static string BuildManagedSourceSafetyCommand(
         string source,
         string repositoryRoot,
         bool useSudo,
-        bool requireRootControl = false)
+        bool requireRootControl = false,
+        string? repositoryRef = null)
     {
         var prefix = useSudo ? "sudo -n " : string.Empty;
         var quotedSource = ShellQuote(source);
         var quotedRepository = ShellQuote(repositoryRoot);
+        var repositoryRelativePath = source[(repositoryRoot.TrimEnd('/').Length + 1)..];
+        var revision = string.IsNullOrWhiteSpace(repositoryRef) ? "HEAD" : repositoryRef;
+        var sourceObject = ShellQuote($"{revision}:{repositoryRelativePath}");
         var checks = new List<string>
         {
             $"{prefix}test -f {quotedSource}",
             $"{prefix}test ! -L {quotedSource}",
             $"powerforge_managed_source_real=$({prefix}realpath -e -- {quotedSource})",
             $"powerforge_managed_repository_real=$({prefix}realpath -e -- {quotedRepository})",
-            "case \"$powerforge_managed_source_real\" in \"$powerforge_managed_repository_real\"/*) ;; *) echo 'Managed source resolves outside its declared repository.' >&2; exit 3 ;; esac"
+            "case \"$powerforge_managed_source_real\" in \"$powerforge_managed_repository_real\"/*) ;; *) echo 'Managed source resolves outside its declared repository.' >&2; exit 3 ;; esac",
+            $"powerforge_managed_source_type=$({prefix}git -c \"safe.directory=$powerforge_managed_repository_real\" -C \"$powerforge_managed_repository_real\" cat-file -t {sourceObject})",
+            "test \"$powerforge_managed_source_type\" = blob"
         };
         if (requireRootControl)
         {
             checks.Add($"test \"$powerforge_managed_repository_real\" = {quotedRepository}");
             checks.Add("powerforge_assert_root_controlled_path \"$powerforge_managed_source_real\"");
         }
-        return string.Join(" && ", checks);
+        var failure = ShellQuote($"Managed source must be a safe tracked file in the declared repository revision: {source}");
+        return $"{string.Join(" && ", checks)} || {{ echo {failure} >&2; exit 3; }}";
     }
 
     internal static string BuildRootControlledPathGuardFunction()
@@ -486,9 +520,7 @@ internal static partial class WebCliCommandHandlers
     private static bool RequiresRootControlledPathGuard(PowerForgeServerRecoveryManifest manifest)
         => manifest.Repositories?.Any(static repository => !string.IsNullOrWhiteSpace(repository.Path)) == true ||
            manifest.Paths?.Any(static path => !string.IsNullOrWhiteSpace(path.Source)) == true ||
-           manifest.Paths?.Any(static path =>
-               string.Equals(path.Kind, "directory", StringComparison.OrdinalIgnoreCase) &&
-               (string.IsNullOrWhiteSpace(path.Owner) || string.Equals(path.Owner, "root", StringComparison.Ordinal))) == true ||
+           manifest.Paths?.Any(static path => string.Equals(path.Kind, "directory", StringComparison.OrdinalIgnoreCase)) == true ||
            (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerManagedFile>())
                .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>())
                .Any(static file => !string.IsNullOrWhiteSpace(file.Source)) ||
@@ -503,16 +535,19 @@ internal static partial class WebCliCommandHandlers
         return separator <= 0 ? "/" : normalized[..separator];
     }
 
-    internal static string? FindManagedSourceRepositoryRoot(
+    internal static PowerForgeServerRepository? FindManagedSourceRepository(
         IEnumerable<PowerForgeServerRepository>? repositories,
         string source)
         => (repositories ?? Array.Empty<PowerForgeServerRepository>())
-            .Select(static repository => repository.Path?.TrimEnd('/'))
-            .Where(static path => !string.IsNullOrWhiteSpace(path))
-            .Cast<string>()
-            .Where(root => PathStrictlyContains(root, source))
-            .OrderByDescending(static root => root.Length)
+            .Where(static repository => !string.IsNullOrWhiteSpace(repository.Path))
+            .Where(repository => PathStrictlyContains(repository.Path!.TrimEnd('/'), source))
+            .OrderByDescending(static repository => repository.Path!.Length)
             .FirstOrDefault();
+
+    internal static string? FindManagedSourceRepositoryRoot(
+        IEnumerable<PowerForgeServerRepository>? repositories,
+        string source)
+        => FindManagedSourceRepository(repositories, source)?.Path?.TrimEnd('/');
 
     private static string BuildRepositoryGitPrefix(PowerForgeServerRepository repository)
     {

@@ -538,6 +538,23 @@ public sealed class ServerRecoverySecurityTests
     }
 
     [Fact]
+    public void ManifestValidation_RejectsDuplicateOrNestedRepositoryRoots()
+    {
+        var manifest = CreateManifest();
+        manifest.Repositories =
+        [
+            new PowerForgeServerRepository { Role = "outer", Path = "/srv/example" },
+            new PowerForgeServerRepository { Role = "nested", Path = "/srv/example/source" },
+            new PowerForgeServerRepository { Role = "duplicate", Path = "/srv/example" }
+        ];
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("repositories[0].path and repositories[1].path must not be duplicate or nested", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("repositories[0].path and repositories[2].path must not be duplicate or nested", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void ManifestValidation_RequiresExactRequiredRevisionCaptureCommand()
     {
         var manifest = CreateManifest();
