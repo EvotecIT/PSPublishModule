@@ -534,6 +534,64 @@ public sealed class ManagedModulePackServiceTests
     }
 
     [Fact]
+    public async Task Publish_existing_package_copies_to_case_distinct_output_on_case_sensitive_file_system()
+    {
+        if (FrameworkCompatibility.PathStringComparison() != StringComparison.Ordinal)
+            return;
+
+        using var root = new TemporaryDirectory();
+        var sourceDirectory = Path.Combine(root.Path, "feed");
+        var outputDirectory = Path.Combine(root.Path, "Feed");
+        var publishDirectory = Path.Combine(root.Path, "published");
+        Directory.CreateDirectory(sourceDirectory);
+        Directory.CreateDirectory(publishDirectory);
+        var packagePath = Path.Combine(sourceDirectory, "Company.Tools.1.0.0.nupkg");
+        TestPackageFactory.Create(packagePath, "Company.Tools", "1.0.0");
+        var service = new ManagedModulePublishService(new NullLogger());
+
+        var result = await service.PublishAsync(new ManagedModulePublishRequest
+        {
+            PackagePath = packagePath,
+            Repository = new ManagedModuleRepository("Local", publishDirectory),
+            OutputDirectory = outputDirectory,
+            SkipDependenciesCheck = true
+        });
+
+        Assert.True(result.Published);
+        Assert.True(File.Exists(Path.Combine(outputDirectory, Path.GetFileName(packagePath))));
+        Assert.True(File.Exists(Path.Combine(publishDirectory, Path.GetFileName(packagePath))));
+    }
+
+    [Fact]
+    public async Task Publish_existing_package_keeps_case_distinct_output_and_repository_on_case_sensitive_file_system()
+    {
+        if (FrameworkCompatibility.PathStringComparison() != StringComparison.Ordinal)
+            return;
+
+        using var root = new TemporaryDirectory();
+        var sourceDirectory = Path.Combine(root.Path, "packages");
+        var outputDirectory = Path.Combine(root.Path, "feed");
+        var publishDirectory = Path.Combine(root.Path, "Feed");
+        Directory.CreateDirectory(sourceDirectory);
+        Directory.CreateDirectory(publishDirectory);
+        var packagePath = Path.Combine(sourceDirectory, "Company.Tools.1.0.0.nupkg");
+        TestPackageFactory.Create(packagePath, "Company.Tools", "1.0.0");
+        var service = new ManagedModulePublishService(new NullLogger());
+
+        var result = await service.PublishAsync(new ManagedModulePublishRequest
+        {
+            PackagePath = packagePath,
+            Repository = new ManagedModuleRepository("Local", publishDirectory),
+            OutputDirectory = outputDirectory,
+            SkipDependenciesCheck = true
+        });
+
+        Assert.True(result.Published);
+        Assert.True(File.Exists(Path.Combine(outputDirectory, Path.GetFileName(packagePath))));
+        Assert.True(File.Exists(Path.Combine(publishDirectory, Path.GetFileName(packagePath))));
+    }
+
+    [Fact]
     public async Task Publish_stages_outside_local_feed_when_output_directory_is_repository()
     {
         using var moduleRoot = new TemporaryDirectory();

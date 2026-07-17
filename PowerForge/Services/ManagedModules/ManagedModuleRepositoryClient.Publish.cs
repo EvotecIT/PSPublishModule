@@ -194,7 +194,10 @@ public sealed partial class ManagedModuleRepositoryClient
             };
         }
 
-        if (!string.Equals(package, destinationPath, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(
+                package,
+                destinationPath,
+                FrameworkCompatibility.GetPathStringComparison(destinationDirectory)))
             File.Copy(package, destinationPath, overwrite: true);
 
         return new ManagedModulePackagePublishResult

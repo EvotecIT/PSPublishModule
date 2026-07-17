@@ -101,7 +101,10 @@ public sealed class ManagedModulePublishService
             {
                 Directory.CreateDirectory(outputDirectory);
                 var destinationPath = Path.Combine(outputDirectory, Path.GetFileName(packagePath));
-                if (!string.Equals(packagePath, destinationPath, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(
+                        packagePath,
+                        destinationPath,
+                        FrameworkCompatibility.GetPathStringComparison(outputDirectory)))
                 {
                     if (File.Exists(destinationPath) && !request.Force)
                         throw new IOException($"Package already exists at destination path: {destinationPath}");
@@ -252,7 +255,7 @@ public sealed class ManagedModulePublishService
             return string.Equals(
                 outputDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
                 repositoryDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                StringComparison.OrdinalIgnoreCase);
+                FrameworkCompatibility.GetPathStringComparison(outputDirectory));
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
