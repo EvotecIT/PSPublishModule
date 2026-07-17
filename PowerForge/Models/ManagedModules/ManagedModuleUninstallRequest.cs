@@ -36,6 +36,11 @@ public sealed class ManagedModuleUninstallRequest
     public string? ModuleRoot { get; set; }
 
     /// <summary>
+    /// Exact installed module directory to remove when the request originates from installed-resource inventory.
+    /// </summary>
+    public string? InstalledLocation { get; set; }
+
+    /// <summary>
     /// Skip checking whether removed modules are still required by other installed modules.
     /// </summary>
     public bool SkipDependencyCheck { get; set; }

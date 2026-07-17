@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using PowerForge;
@@ -1079,6 +1081,26 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Fact]
+    public async Task PublishPackageAsync_skips_copy_when_force_source_aliases_destination()
+    {
+        using var source = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        var packagePath = Path.Combine(source.Path, "Company.Tools.1.0.0.nupkg");
+        var destinationPath = Path.Combine(destination.Path, Path.GetFileName(packagePath));
+        File.WriteAllBytes(packagePath, TestPackageFactory.CreateBytes("Company.Tools", "1.0.0"));
+        CreateHardLink(destinationPath, packagePath);
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger());
+        var repository = new ManagedModuleRepository("Local", destination.Path);
+
+        var result = await repositoryClient.PublishPackageAsync(repository, packagePath, force: true);
+
+        Assert.True(result.Published);
+        Assert.False(result.Duplicate);
+        Assert.Equal(destinationPath, result.PublishSource);
+        Assert.Equal(File.ReadAllBytes(packagePath), File.ReadAllBytes(destinationPath));
+    }
+
+    [Fact]
     public async Task PublishPackageAsync_classifies_remote_conflict_as_duplicate()
     {
         using var temp = new TemporaryDirectory();
@@ -1706,6 +1728,22 @@ public sealed class ManagedModuleRepositoryClientTests
             return new HttpResponseMessage(HttpStatusCode.OK);
         }
     }
+
+    private static void CreateHardLink(string linkPath, string existingPath)
+    {
+        var created = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? CreateHardLinkWindows(linkPath, existingPath, IntPtr.Zero)
+            : CreateHardLinkUnix(existingPath, linkPath) == 0;
+        if (!created)
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+    }
+
+    [DllImport("kernel32.dll", EntryPoint = "CreateHardLinkW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CreateHardLinkWindows(string fileName, string existingFileName, IntPtr securityAttributes);
+
+    [DllImport("libc", EntryPoint = "link", SetLastError = true)]
+    private static extern int CreateHardLinkUnix(string existingPath, string linkPath);
 
     private sealed class FailingHandler : HttpMessageHandler
     {

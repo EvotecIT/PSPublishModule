@@ -22,6 +22,8 @@ public sealed class ManagedModuleUninstallService
         var candidates = EnumerateInstalledModules(moduleRoot);
         var matchingCandidates = candidates
             .Where(module => names.Any(pattern => pattern.IsMatch(module.Name)))
+            .Where(module => string.IsNullOrWhiteSpace(request.InstalledLocation) ||
+                             PathsEqual(module.ModulePath, request.InstalledLocation!))
             .ToArray();
         var targets = SelectTargets(matchingCandidates, request)
             .Select(candidate => ToTarget(candidate, moduleRoot, request))
@@ -557,6 +559,9 @@ public sealed class ManagedModuleUninstallService
                normalizedLoadedPath.StartsWith(normalizedModulePath + Path.DirectorySeparatorChar, PathStringComparison) ||
                normalizedLoadedPath.StartsWith(normalizedModulePath + Path.AltDirectorySeparatorChar, PathStringComparison);
     }
+
+    private static bool PathsEqual(string left, string right)
+        => string.Equals(NormalizePath(left), NormalizePath(right), PathStringComparison);
 
     private static void EnsureTargetUnderRoot(string moduleRoot, string modulePath)
     {

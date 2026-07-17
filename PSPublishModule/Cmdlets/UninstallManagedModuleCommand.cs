@@ -110,18 +110,30 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
                     new[] { resource.Name },
                     resource.Version,
                     resource.InstalledLocation,
-                    ManagedModuleVersionComparer.IsPrerelease(resource.Version));
+                    ManagedModuleVersionComparer.IsPrerelease(resource.Version),
+                    resource.InstalledLocation);
             }
 
             return;
         }
 
-        AddPlan(Name, Version, ModuleRoot, Prerelease.IsPresent);
+        AddPlan(
+            Name,
+            Version,
+            ModuleRoot,
+            Prerelease.IsPresent,
+            ResolvePipelineInstalledLocation(ModuleRoot, Name));
     }
 
-    private void AddPlan(string[] names, string? version, string? modulePath, bool prerelease)
+    private void AddPlan(
+        string[] names,
+        string? version,
+        string? modulePath,
+        bool prerelease,
+        string? installedLocation = null)
     {
-        var moduleRoot = ResolveModuleRoot(modulePath, names);
+        var selectedLocation = ResolveInstalledLocation(installedLocation);
+        var moduleRoot = ResolveModuleRoot(selectedLocation ?? modulePath, names);
         var service = new ManagedModuleUninstallService();
         var request = new ManagedModuleUninstallRequest
         {
@@ -131,6 +143,7 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             Scope = string.IsNullOrWhiteSpace(moduleRoot) ? Scope : ManagedModuleInstallScope.Custom,
             ShellEdition = ShellEdition,
             ModuleRoot = moduleRoot,
+            InstalledLocation = selectedLocation,
             SkipDependencyCheck = SkipDependencyCheck.IsPresent,
             AllowLoadedModuleUninstall = AllowLoadedModuleUninstall.IsPresent,
             DeferLoadedModuleCheck = true,
@@ -140,6 +153,31 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
         var plan = service.PlanUninstall(request);
 
         _plans.Add(plan);
+    }
+
+    private string? ResolveInstalledLocation(string? installedLocation)
+    {
+        var resolved = ManagedModuleCommandSupport.ResolveProviderPath(this, installedLocation);
+        return !string.IsNullOrWhiteSpace(resolved) && File.Exists(resolved)
+            ? Path.GetDirectoryName(resolved)
+            : resolved;
+    }
+
+    private string? ResolvePipelineInstalledLocation(string? modulePath, string[] names)
+    {
+        if (!MyInvocation.ExpectingInput ||
+            names.Length != 1 ||
+            string.IsNullOrWhiteSpace(names[0]))
+        {
+            return null;
+        }
+
+        var selectedLocation = ResolveInstalledLocation(modulePath);
+        return !string.IsNullOrWhiteSpace(selectedLocation) &&
+               Directory.Exists(selectedLocation) &&
+               HasInstalledModulePayload(selectedLocation!, names[0])
+            ? selectedLocation
+            : null;
     }
 
     /// <summary>Runs planned uninstall operations after all pipeline input has been collected.</summary>

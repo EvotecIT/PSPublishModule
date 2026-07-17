@@ -197,8 +197,11 @@ public sealed partial class ManagedModuleRepositoryClient
         if (!string.Equals(
                 package,
                 destinationPath,
-                FrameworkCompatibility.GetPathStringComparison(destinationDirectory)))
+                FrameworkCompatibility.GetPathStringComparison(destinationDirectory)) &&
+            !FilesHaveSameContents(package, destinationPath))
+        {
             File.Copy(package, destinationPath, overwrite: true);
+        }
 
         return new ManagedModulePackagePublishResult
         {
@@ -206,6 +209,49 @@ public sealed partial class ManagedModuleRepositoryClient
             PublishSource = destinationPath,
             Published = true
         };
+    }
+
+    private static bool FilesHaveSameContents(string leftPath, string rightPath)
+    {
+        if (!File.Exists(rightPath))
+            return false;
+
+        var leftLength = new FileInfo(leftPath).Length;
+        if (leftLength != new FileInfo(rightPath).Length)
+            return false;
+
+        const int bufferSize = 81920;
+        var leftBuffer = new byte[bufferSize];
+        var rightBuffer = new byte[bufferSize];
+        using var left = new FileStream(
+            leftPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read | FileShare.Delete,
+            bufferSize,
+            FileOptions.SequentialScan);
+        using var right = new FileStream(
+            rightPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read | FileShare.Delete,
+            bufferSize,
+            FileOptions.SequentialScan);
+        while (true)
+        {
+            var leftRead = left.Read(leftBuffer, 0, leftBuffer.Length);
+            var rightRead = right.Read(rightBuffer, 0, rightBuffer.Length);
+            if (leftRead != rightRead)
+                return false;
+            if (leftRead == 0)
+                return true;
+
+            for (var index = 0; index < leftRead; index++)
+            {
+                if (leftBuffer[index] != rightBuffer[index])
+                    return false;
+            }
+        }
     }
 
     private static bool IsPackagePublishResource(JsonElement resource)
