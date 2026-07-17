@@ -114,6 +114,7 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.Contains(".github/actions/powerforge-server-recovery-validate/**", workflow, StringComparison.Ordinal);
         Assert.Contains("PowerForge.Tests/GitHubServerRecoveryValidation*.cs", workflow, StringComparison.Ordinal);
         Assert.Contains("PowerForge.Tests/ServerScaffoldTests.cs", workflow, StringComparison.Ordinal);
+        Assert.Equal(2, CountOccurrences(workflow, "PowerForge.Web.Cli/ServerRecoveryModels.cs"));
         Assert.Contains("FullyQualifiedName~GitHubServerRecoveryValidation", workflow, StringComparison.Ordinal);
         Assert.Contains("FullyQualifiedName~ServerRecoverySecurityTests", workflow, StringComparison.Ordinal);
         Assert.Contains("FullyQualifiedName~ServerScaffoldTests", workflow, StringComparison.Ordinal);
@@ -123,6 +124,18 @@ public sealed class GitHubServerRecoveryValidationActionTests
 
     private static string ReadRepoFile(params string[] relativePath)
         => File.ReadAllText(GetRepoPath(relativePath));
+
+    private static int CountOccurrences(string value, string fragment)
+    {
+        var count = 0;
+        var offset = 0;
+        while ((offset = value.IndexOf(fragment, offset, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            offset += fragment.Length;
+        }
+        return count;
+    }
 
     private static string GetRepoPath(params string[] relativePath)
     {
