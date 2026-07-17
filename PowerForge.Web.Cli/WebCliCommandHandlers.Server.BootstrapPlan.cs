@@ -414,7 +414,7 @@ internal static partial class WebCliCommandHandlers
         {
             return string.Join('\n',
                 existingTargetGuard,
-                $"if runuser -u {ShellQuote(owner)} -g {ShellQuote(group)} -- install -d -m {ShellQuote(mode)} {quotedTarget}; then :; else",
+                $"if runuser -u {ShellQuote(owner)} -g {ShellQuote(group)} -- install -d -m {ShellQuote(mode)} {quotedTarget} && {postcondition}; then :; else",
                 BuildRootControlledParentPreparationCommand(target, "directory"),
                 existingTargetGuard,
                 $"install -d -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {quotedTarget}",
@@ -442,6 +442,8 @@ internal static partial class WebCliCommandHandlers
         var repositoryRelativePath = source[(repositoryRoot.TrimEnd('/').Length + 1)..];
         var revision = string.IsNullOrWhiteSpace(repositoryRef) ? "HEAD" : repositoryRef;
         var sourceObject = ShellQuote($"{revision}:{repositoryRelativePath}");
+        var revisionArgument = ShellQuote(revision);
+        var relativePathArgument = ShellQuote(repositoryRelativePath);
         var checks = new List<string>
         {
             $"{prefix}test -f {quotedSource}",
@@ -449,8 +451,12 @@ internal static partial class WebCliCommandHandlers
             $"powerforge_managed_source_real=$({prefix}realpath -e -- {quotedSource})",
             $"powerforge_managed_repository_real=$({prefix}realpath -e -- {quotedRepository})",
             "case \"$powerforge_managed_source_real\" in \"$powerforge_managed_repository_real\"/*) ;; *) echo 'Managed source resolves outside its declared repository.' >&2; exit 3 ;; esac",
+            $"powerforge_managed_source_entry=$({prefix}git -c \"safe.directory=$powerforge_managed_repository_real\" -C \"$powerforge_managed_repository_real\" ls-tree {revisionArgument} -- {relativePathArgument})",
+            "powerforge_managed_source_mode=${powerforge_managed_source_entry%% *}",
+            "case \"$powerforge_managed_source_mode\" in 100644|100755) ;; *) false ;; esac",
             $"powerforge_managed_source_type=$({prefix}git -c \"safe.directory=$powerforge_managed_repository_real\" -C \"$powerforge_managed_repository_real\" cat-file -t {sourceObject})",
-            "test \"$powerforge_managed_source_type\" = blob"
+            "test \"$powerforge_managed_source_type\" = blob",
+            $"{prefix}git -c \"safe.directory=$powerforge_managed_repository_real\" -C \"$powerforge_managed_repository_real\" cat-file -p {sourceObject} | {prefix}cmp -s -- {quotedSource} -"
         };
         if (requireRootControl)
         {

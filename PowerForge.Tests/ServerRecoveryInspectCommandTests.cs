@@ -88,8 +88,10 @@ public sealed class ServerRecoveryInspectCommandTests
         Assert.Contains("sudo -n test ! -L '/srv/example/deploy/example.env'", securedContentCheck, StringComparison.Ordinal);
         Assert.Contains("sudo -n realpath -e -- '/srv/example/deploy/example.env'", securedContentCheck, StringComparison.Ordinal);
         Assert.Contains("sudo -n realpath -e -- '/srv/example'", securedContentCheck, StringComparison.Ordinal);
+        Assert.Contains("sudo -n git -c \"safe.directory=$powerforge_managed_repository_real\" -C \"$powerforge_managed_repository_real\" ls-tree 'HEAD' -- 'deploy/example.env'", securedContentCheck, StringComparison.Ordinal);
+        Assert.Contains("case \"$powerforge_managed_source_mode\" in 100644|100755)", securedContentCheck, StringComparison.Ordinal);
         Assert.Contains("sudo -n git -c \"safe.directory=$powerforge_managed_repository_real\" -C \"$powerforge_managed_repository_real\" cat-file -t 'HEAD:deploy/example.env'", securedContentCheck, StringComparison.Ordinal);
-        Assert.Contains("test \"$powerforge_managed_source_type\" = blob || { echo", securedContentCheck, StringComparison.Ordinal);
+        Assert.Contains("sudo -n git -c \"safe.directory=$powerforge_managed_repository_real\" -C \"$powerforge_managed_repository_real\" cat-file -p 'HEAD:deploy/example.env' | sudo -n cmp -s -- '/srv/example/deploy/example.env' - || { echo", securedContentCheck, StringComparison.Ordinal);
         Assert.EndsWith(
             "sudo -n cmp -s -- '/srv/example/deploy/example.env' '/etc/example.env'",
             securedContentCheck,
