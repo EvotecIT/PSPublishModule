@@ -21,6 +21,30 @@ function Write-ActionOutput {
     "$Name=$Value" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 }
 
+function Write-CaptureFailureDiagnostics {
+    param([Parameter(Mandatory)][string] $CaptureRoot)
+
+    foreach ($name in @('plain-files.stderr.txt', 'encrypted-secrets.stderr.txt')) {
+        $path = Join-Path $CaptureRoot $name
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -eq 0) {
+            continue
+        }
+
+        # Only tar/encryption stderr is surfaced. Command captures may contain sensitive service output.
+        $diagnostic = ((Get-Content -LiteralPath $path -TotalCount 40) -join [Environment]::NewLine)
+        $diagnostic = $diagnostic -replace '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '?'
+        if ($diagnostic.Length -gt 4096) {
+            $diagnostic = $diagnostic.Substring(0, 4096) + [Environment]::NewLine + '[truncated]'
+        }
+        $stopToken = [Guid]::NewGuid().ToString('N')
+        Write-Host "::group::PowerForge capture diagnostic: $name"
+        Write-Host "::stop-commands::$stopToken"
+        Write-Host $diagnostic
+        Write-Host "::$stopToken::"
+        Write-Host '::endgroup::'
+    }
+}
+
 if ($env:RUNNER_OS -ne 'Linux') {
     throw 'PowerForge server backup requires a Linux runner.'
 }
@@ -202,7 +226,11 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
     }
 
     dotnet $cli server capture --manifest $captureManifestPath --out $captureRoot --ssh $serverSshCommand --encrypt-remote --fail-on-failure
-    Assert-LastExitCode 'Capturing and encrypting server recovery state'
+    $captureExitCode = $LASTEXITCODE
+    if ($captureExitCode -ne 0) {
+        Write-CaptureFailureDiagnostics -CaptureRoot $captureRoot
+        throw "Capturing and encrypting server recovery state failed with exit code $captureExitCode."
+    }
 
     foreach ($relativePath in @(
         'capture-summary.json',

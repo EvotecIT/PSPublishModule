@@ -29,7 +29,7 @@ mkdir -p "$restore_root" "$plan_root" "$fake_bin"
 chmod 0711 "$test_root" "$restore_root"
 cat >"$test_root/manifest.json" <<EOF
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "restore-fixture",
   "target": { "host": "fixture.invalid" },
   "paths": [

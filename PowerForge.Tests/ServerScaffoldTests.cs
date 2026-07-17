@@ -42,6 +42,21 @@ public sealed class ServerScaffoldTests
         Assert.Equal(2, manifest.Split("\"requiredDuringBootstrap\": false", StringSplitOptions.None).Length - 1);
         Assert.Contains("/usr/local/sbin/powerforge-apache-site-enable --http-site example-test.conf --https-site example-test-le-ssl.conf --certificate-name example.test", manifest, StringComparison.Ordinal);
         Assert.DoesNotContain("sudo -n a2ensite", manifest, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"bootstrap\"", manifest, StringComparison.Ordinal);
+        Assert.DoesNotContain("install-static-deployment-runtime", manifest, StringComparison.Ordinal);
+        var nextSteps = WebCliCommandHandlers.BuildServerScaffoldNextSteps(options);
+        Assert.Contains("authorized-key example files", nextSteps[0], StringComparison.Ordinal);
+        Assert.DoesNotContain("host-key", nextSteps[0], StringComparison.Ordinal);
+
+        var manifestNode = JsonNode.Parse(manifest)!;
+        Assert.Equal(2, manifestNode["schemaVersion"]!.GetValue<int>());
+        Assert.Null(manifestNode["apache"]!["reloadCommand"]);
+        var managedPaths = manifestNode["paths"]!.AsArray();
+        Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/usr/local/sbin/powerforge-site-deploy" &&
+                                              path["source"]!.GetValue<string>().EndsWith("/powerforge-site-deploy.sh", StringComparison.Ordinal));
+        Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/etc/powerforge/sites/example.test.env" &&
+                                              path["source"]!.GetValue<string>().EndsWith("/example.test.env", StringComparison.Ordinal));
+        Assert.Equal(2, managedPaths.Count(path => path!["validation"]?.GetValue<string>() == "sudoers"));
     }
 
     [Fact]
@@ -74,6 +89,14 @@ public sealed class ServerScaffoldTests
         Assert.DoesNotContain("github.com-example", manifest, StringComparison.Ordinal);
         Assert.DoesNotContain(files.Keys, key => key.EndsWith("repository-ssh.conf", StringComparison.Ordinal));
         Assert.DoesNotContain("$(ssh-keyscan", string.Join('\n', files.Values), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"source\": \"/srv/powerforge/sources/example/deploy/linux/github_known_hosts\"", manifest, StringComparison.Ordinal);
+        Assert.Contains("deploy/linux/github_known_hosts.example", files.Keys);
+        Assert.DoesNotContain("deploy/linux/github_known_hosts", files.Keys);
+        var onboarding = files["deploy/linux/ONBOARDING.md"];
+        Assert.Contains("remove the `.example` suffix", onboarding, StringComparison.Ordinal);
+        Assert.Contains("commit the resulting public host-key file", onboarding, StringComparison.Ordinal);
+        Assert.Contains("the committed `deploy/linux/github_known_hosts`", onboarding, StringComparison.Ordinal);
+        Assert.Contains("authorized-key and reviewed host-key example files", WebCliCommandHandlers.BuildServerScaffoldNextSteps(options)[0], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -121,8 +144,14 @@ public sealed class ServerScaffoldTests
         var result = schema.Evaluate(manifest, new EvaluationOptions { OutputFormat = OutputFormat.List });
         var privateResult = schema.Evaluate(privateManifest, new EvaluationOptions { OutputFormat = OutputFormat.List });
 
+        var numericIdentityManifest = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        numericIdentityManifest["paths"]![0]!["owner"] = "0";
+        numericIdentityManifest["paths"]![0]!["group"] = "65534";
+        var numericIdentityResult = schema.Evaluate(numericIdentityManifest, new EvaluationOptions { OutputFormat = OutputFormat.List });
+
         Assert.True(result.IsValid);
         Assert.True(privateResult.IsValid);
+        Assert.True(numericIdentityResult.IsValid);
     }
 
     [Fact]
@@ -162,6 +191,55 @@ public sealed class ServerScaffoldTests
         var incompleteRepositorySsh = JsonNode.Parse(privateFiles["deploy/linux/example.serverrecovery.json"])!.AsObject();
         incompleteRepositorySsh["repositories"]![0]!.AsObject().Remove("sshKnownHostsFile");
         Assert.False(EvaluateSchema(schema, incompleteRepositorySsh));
+
+        var incompleteSudoers = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        var sudoersPath = incompleteSudoers["paths"]!.AsArray()
+            .First(path => path!["validation"]?.GetValue<string>() == "sudoers")!
+            .AsObject();
+        sudoersPath.Remove("kind");
+        Assert.False(EvaluateSchema(schema, incompleteSudoers));
+
+        var impossibleRuntime = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        impossibleRuntime["packages"]!["dotnetSdks"] = new JsonArray("8.1");
+        Assert.False(EvaluateSchema(schema, impossibleRuntime));
+
+        var legacyRuntime = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        legacyRuntime["packages"]!["dotnetSdks"] = new JsonArray("1", "2", "3", "2.1", "2.2", "3.1");
+        Assert.False(EvaluateSchema(schema, legacyRuntime));
+
+        var supportedRuntime = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        supportedRuntime["packages"]!["dotnetSdks"] = new JsonArray("8", "8.0", "10", "10.0");
+        Assert.True(EvaluateSchema(schema, supportedRuntime));
+
+        var uppercaseAptPackage = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        uppercaseAptPackage["packages"]!["apt"] = new JsonArray("Curl");
+        Assert.False(EvaluateSchema(schema, uppercaseAptPackage));
+
+        var legacySchema = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        legacySchema["schemaVersion"] = 1;
+        Assert.False(EvaluateSchema(schema, legacySchema));
+
+        var trailingManagedSource = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        var sourceManagedPath = trailingManagedSource["paths"]!.AsArray()
+            .First(path => path?["source"] is not null)!;
+        sourceManagedPath["source"] = sourceManagedPath["source"]!.GetValue<string>() + "/";
+        Assert.False(EvaluateSchema(schema, trailingManagedSource));
+
+        var trailingManagedDirectory = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        var managedDirectory = trailingManagedDirectory["paths"]!.AsArray()
+            .First(path => path?["kind"]?.GetValue<string>() == "directory")!;
+        managedDirectory["path"] = managedDirectory["path"]!.GetValue<string>() + "/";
+        Assert.False(EvaluateSchema(schema, trailingManagedDirectory));
+
+        var trailingRepository = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        var repositoryPath = trailingRepository["repositories"]!.AsArray()[0]!["path"]!;
+        trailingRepository["repositories"]!.AsArray()[0]!["path"] = repositoryPath.GetValue<string>() + "/";
+        Assert.False(EvaluateSchema(schema, trailingRepository));
+
+        var trailingApacheTarget = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        var apacheSite = trailingApacheTarget["apache"]!["sites"]!.AsArray()[0]!;
+        apacheSite["target"] = apacheSite["target"]!.GetValue<string>() + "/";
+        Assert.False(EvaluateSchema(schema, trailingApacheTarget));
     }
 
     [Fact]

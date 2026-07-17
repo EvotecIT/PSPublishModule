@@ -32,15 +32,7 @@ internal static partial class WebCliCommandHandlers
             File.WriteAllText(resolvedPath, NormalizeGeneratedText(file.Value), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         }
 
-        var nextSteps = new[]
-        {
-            "Review deploy/linux/ONBOARDING.md and replace only the public-key example files.",
-            "Create and branch-restrict the production GitHub environment before storing secrets.",
-            "Run server plan, bootstrap-plan, inspect, and verify before the first protected deployment.",
-            options.CloudflareEnabled
-                ? "Provision a per-site Cloudflare token and zone id before enabling the generated workflow."
-                : "Cloudflare remains disabled; add --cloudflare only after per-site credentials are ready."
-        };
+        var nextSteps = BuildServerScaffoldNextSteps(options);
         var result = new PowerForgeServerScaffoldResult
         {
             OutputRoot = outputRoot,
@@ -73,6 +65,19 @@ internal static partial class WebCliCommandHandlers
             logger.Info("- " + nextStep);
         return 0;
     }
+
+    internal static string[] BuildServerScaffoldNextSteps(PowerForgeServerScaffoldOptions options)
+        =>
+        [
+            options.PrivateRepository
+                ? "Review deploy/linux/ONBOARDING.md and replace the authorized-key and reviewed host-key example files."
+                : "Review deploy/linux/ONBOARDING.md and replace the authorized-key example files.",
+            "Create and branch-restrict the production GitHub environment before storing secrets.",
+            "Run server plan, bootstrap-plan, inspect, and verify before the first protected deployment.",
+            options.CloudflareEnabled
+                ? "Provision a per-site Cloudflare token and zone id before enabling the generated workflow."
+                : "Cloudflare remains disabled; add --cloudflare only after per-site credentials are ready."
+        ];
 
     internal static IReadOnlyDictionary<string, string> BuildServerScaffoldFiles(PowerForgeServerScaffoldOptions options)
     {
