@@ -37,7 +37,7 @@ Use at most one release label. Conflicting labels fail the run rather than guess
 
 If the repository has no GitHub release yet, PowerForge publishes the synchronized metadata version as the initial baseline instead of incrementing past an unreleased version.
 
-Before changing anything, PowerForge confirms that the pull request is merged, its merge SHA matches the event, the checked-out default branch contains that merge, and the PR head has completed checks with accepted conclusions (`success`, `neutral`, or `skipped`).
+Before changing anything, PowerForge confirms that the pull request is merged, its merge SHA matches the event, the checked-out default branch contains that merge, and the PR head has completed checks with accepted conclusions (`success`, `neutral`, or `skipped`). PowerForge excludes the current release run from settling itself. During recovery it excludes a prior failed release check only after the Actions API proves that it came from the same trusted receiver workflow path and release event; other pending or failed checks remain blocking.
 
 The reusable workflow uses GitHub's durable `queue: max` concurrency mode. Every merged-PR trigger waits for the repository release lock instead of replacing an older pending run, so an intermediate `release:minor` or `release:major` decision is not discarded during a merge burst. Each queued trigger applies its own policy to the then-current default branch.
 
@@ -73,6 +73,7 @@ jobs:
   release:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     permissions:
+      actions: read
       checks: read
       contents: write
       pull-requests: read

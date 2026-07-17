@@ -19,6 +19,15 @@ internal sealed class HomeAssistantCheckSummary {
     internal List<string> BlockingChecks { get; } = new();
 }
 
+internal sealed class HomeAssistantWorkflowRun {
+    internal long Id { get; set; }
+    internal string Path { get; set; } = string.Empty;
+    internal string Event { get; set; } = string.Empty;
+    internal string HeadSha { get; set; } = string.Empty;
+    internal string Status { get; set; } = string.Empty;
+    internal string Conclusion { get; set; } = string.Empty;
+}
+
 internal sealed class HomeAssistantGitHubRelease {
     internal long Id { get; set; }
     internal string TagName { get; set; } = string.Empty;
@@ -52,7 +61,7 @@ internal sealed class HomeAssistantRepositorySnapshot {
 
 internal interface IHomeAssistantGitHubClient {
     HomeAssistantPullRequest GetPullRequest(int number);
-    HomeAssistantCheckSummary GetCheckSummary(string commitSha);
+    HomeAssistantCheckSummary GetCheckSummary(string commitSha, long? excludedWorkflowRunId);
     HomeAssistantGitHubRelease? GetLatestRelease();
     HomeAssistantGitHubRelease? FindReleaseByMarker(string marker);
     HomeAssistantGitHubRelease? GetReleaseByTag(string tagName);

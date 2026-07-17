@@ -70,7 +70,7 @@ public sealed class HomeAssistantReleaseService {
             }
         }
 
-        ValidateChecks(github, pullRequest);
+        ValidateChecks(github, pullRequest, spec.WorkflowRunId);
         _git.EnsureContainsMerge(root, mergeCommitSha);
         var preparedReleaseCommit = _git.FindPreparedReleaseCommit(
             root,
@@ -312,8 +312,11 @@ public sealed class HomeAssistantReleaseService {
         return pullRequest;
     }
 
-    private static void ValidateChecks(IHomeAssistantGitHubClient github, HomeAssistantPullRequest pullRequest) {
-        var checks = github.GetCheckSummary(pullRequest.HeadSha);
+    private static void ValidateChecks(
+        IHomeAssistantGitHubClient github,
+        HomeAssistantPullRequest pullRequest,
+        long? excludedWorkflowRunId) {
+        var checks = github.GetCheckSummary(pullRequest.HeadSha, excludedWorkflowRunId);
         if (checks.Total == 0)
             throw new InvalidOperationException($"No check runs were found for pull request head {pullRequest.HeadSha}; refusing an unvalidated release.");
         if (checks.BlockingChecks.Count > 0)
@@ -348,6 +351,8 @@ public sealed class HomeAssistantReleaseService {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         if (string.IsNullOrWhiteSpace(spec.RepositoryRoot)) throw new ArgumentException("RepositoryRoot is required.", nameof(spec));
         ValidateGitHubIdentity(spec.Owner, spec.Repository, spec.Token, spec.PullRequestNumber);
+        if (spec.WorkflowRunId.HasValue && spec.WorkflowRunId.Value <= 0)
+            throw new ArgumentException("WorkflowRunId must be positive when supplied.", nameof(spec));
         if (string.IsNullOrWhiteSpace(spec.DefaultBranch)) throw new ArgumentException("DefaultBranch is required.", nameof(spec));
         if (string.IsNullOrWhiteSpace(spec.ServerUrl)) throw new ArgumentException("ServerUrl is required.", nameof(spec));
     }

@@ -216,12 +216,14 @@ public sealed class HomeAssistantReleaseTests {
             Repository = "example",
             Token = "token",
             PullRequestNumber = 42,
-            MergeCommitSha = sourceMergeSha
+            MergeCommitSha = sourceMergeSha,
+            WorkflowRunId = 29561117925L
         });
 
         Assert.Equal(HomeAssistantReleaseAction.Planned, result.Action);
         Assert.Equal(HomeAssistantVersionIncrement.Patch, result.Increment);
         Assert.Equal("0.2.7", result.ReleaseVersion);
+        Assert.Equal(29561117925L, github.ExcludedWorkflowRunId);
     }
 
     [Fact]
@@ -687,9 +689,13 @@ public sealed class HomeAssistantReleaseTests {
         internal HomeAssistantGitHubRelease? LatestRelease { get; set; }
         internal HomeAssistantGitHubRelease? TagRelease { get; set; }
         internal string? TagCommitSha { get; set; }
+        internal long? ExcludedWorkflowRunId { get; private set; }
 
         public HomeAssistantPullRequest GetPullRequest(int number) => PullRequest;
-        public HomeAssistantCheckSummary GetCheckSummary(string commitSha) => new() { Total = 1 };
+        public HomeAssistantCheckSummary GetCheckSummary(string commitSha, long? excludedWorkflowRunId) {
+            ExcludedWorkflowRunId = excludedWorkflowRunId;
+            return new HomeAssistantCheckSummary { Total = 1 };
+        }
         public HomeAssistantGitHubRelease? GetLatestRelease() => LatestRelease;
         public HomeAssistantGitHubRelease? FindReleaseByMarker(string marker) => MarkerRelease;
         public HomeAssistantGitHubRelease? GetReleaseByTag(string tagName) => TagRelease ?? MarkerRelease;
