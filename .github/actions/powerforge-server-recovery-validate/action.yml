@@ -5,6 +5,9 @@ inputs:
   manifest-path:
     description: Repository-relative PowerForge server recovery manifest.
     required: true
+  capture-user:
+    description: Linux account authorized to perform encrypted recovery capture.
+    required: true
   fail-on-warnings:
     description: Fail when bootstrap or secret-restore plan generation emits warnings.
     required: false
@@ -45,6 +48,7 @@ runs:
       env:
         POWERFORGE_ENGINE_REF: ${{ github.action_ref }}
         POWERFORGE_ENGINE_REPOSITORY: ${{ github.action_repository }}
+        POWERFORGE_CAPTURE_USER: ${{ inputs.capture-user }}
         POWERFORGE_FAIL_ON_WARNINGS: ${{ inputs.fail-on-warnings }}
         POWERFORGE_MANIFEST_PATH: ${{ inputs.manifest-path }}
       run: '& "$env:GITHUB_ACTION_PATH/Invoke-PowerForgeServerRecoveryValidation.ps1"'

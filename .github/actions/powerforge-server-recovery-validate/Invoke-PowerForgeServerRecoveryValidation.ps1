@@ -114,6 +114,9 @@ if ($env:POWERFORGE_ENGINE_REF -notmatch '^[a-fA-F0-9]{40}$') {
 if ($env:POWERFORGE_ENGINE_REPOSITORY -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
     throw 'The action repository must resolve to an owner/repository name.'
 }
+if ($env:POWERFORGE_CAPTURE_USER -notmatch '^[a-z_][a-z0-9_-]{0,31}$') {
+    throw 'capture-user must be a valid Linux account name.'
+}
 
 $workspace = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([IO.Path]::DirectorySeparatorChar)
 $workspacePrefix = $workspace + [IO.Path]::DirectorySeparatorChar
@@ -161,7 +164,8 @@ try {
         -Workspace $workspace `
         -EngineRoot $engineRoot `
         -CallerRepository $env:GITHUB_REPOSITORY `
-        -EngineRepository $env:POWERFORGE_ENGINE_REPOSITORY
+        -EngineRepository $env:POWERFORGE_ENGINE_REPOSITORY `
+        -CaptureUser $env:POWERFORGE_CAPTURE_USER
 
     $project = Join-Path $engineRoot 'PowerForge.Web.Cli/PowerForge.Web.Cli.csproj'
     $build = Invoke-ProcessCapture -FileName 'dotnet' -Arguments @(

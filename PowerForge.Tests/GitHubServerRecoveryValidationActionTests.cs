@@ -8,6 +8,7 @@ public sealed class GitHubServerRecoveryValidationActionTests
         var action = ReadRepoFile(".github", "actions", "powerforge-server-recovery-validate", "action.yml");
 
         Assert.Contains("manifest-path:", action, StringComparison.Ordinal);
+        Assert.Contains("capture-user:", action, StringComparison.Ordinal);
         Assert.Contains("fail-on-warnings:", action, StringComparison.Ordinal);
         Assert.DoesNotContain("private-key", action, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("known-hosts", action, StringComparison.OrdinalIgnoreCase);
@@ -17,6 +18,7 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.Contains("actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7", action, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_ENGINE_REF: ${{ github.action_ref }}", action, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_ENGINE_REPOSITORY: ${{ github.action_repository }}", action, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_CAPTURE_USER: ${{ inputs.capture-user }}", action, StringComparison.Ordinal);
         Assert.DoesNotContain("run: |", action, StringComparison.Ordinal);
     }
 
@@ -47,6 +49,7 @@ public sealed class GitHubServerRecoveryValidationActionTests
 
         Assert.Contains("Assert-PowerForgeServerRecoverySources.ps1", entrypoint, StringComparison.Ordinal);
         Assert.Contains("-CallerRepository $env:GITHUB_REPOSITORY", entrypoint, StringComparison.Ordinal);
+        Assert.Contains("-CaptureUser $env:POWERFORGE_CAPTURE_USER", entrypoint, StringComparison.Ordinal);
         Assert.Contains("Resolve-ManagedSourcePath", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("git -C $root rev-parse --verify $sourceObject", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("git -C $root hash-object -- $candidate", sourceValidation, StringComparison.Ordinal);
@@ -56,6 +59,10 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.Contains("Cmnd_Alias", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("NOPASSWD:", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("exact hardened encrypted-capture command", sourceValidation, StringComparison.Ordinal);
+        Assert.Contains("$commands.Count -ne 1", sourceValidation, StringComparison.Ordinal);
+        Assert.Contains("$CaptureUser", sourceValidation, StringComparison.Ordinal);
+        Assert.Contains("$expectedHelperSource", sourceValidation, StringComparison.Ordinal);
+        Assert.Contains("$expectedHelperPath", sourceValidation, StringComparison.Ordinal);
         Assert.DoesNotContain("Invoke-WebRequest", sourceValidation, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Invoke-RestMethod", sourceValidation, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("ssh ", sourceValidation, StringComparison.OrdinalIgnoreCase);
@@ -70,6 +77,7 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.Contains("Test-Json -SchemaFile $schemaPath -ErrorAction Stop", script, StringComparison.Ordinal);
         Assert.Contains("$manifest.'$schema'", script, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_ENGINE_REPOSITORY)/$($env:POWERFORGE_ENGINE_REF)", script, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_CAPTURE_USER -notmatch '^[a-z_][a-z0-9_-]{0,31}$'", script, StringComparison.Ordinal);
         Assert.Contains("IsPathRooted($env:POWERFORGE_MANIFEST_PATH)", script, StringComparison.Ordinal);
         Assert.Contains("manifestPath.StartsWith($workspacePrefix", script, StringComparison.Ordinal);
         Assert.Contains("[IO.Path]::GetRelativePath($Root, $Path)", script, StringComparison.Ordinal);

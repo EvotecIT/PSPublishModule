@@ -4,7 +4,8 @@ param(
     [Parameter(Mandatory)][string] $Workspace,
     [Parameter(Mandatory)][string] $EngineRoot,
     [Parameter(Mandatory)][string] $CallerRepository,
-    [Parameter(Mandatory)][string] $EngineRepository
+    [Parameter(Mandatory)][string] $EngineRepository,
+    [Parameter(Mandatory)][string] $CaptureUser
 )
 
 $ErrorActionPreference = 'Stop'
@@ -12,14 +13,24 @@ $ErrorActionPreference = 'Stop'
 function Get-GitHubRepositorySlug {
     param([Parameter(Mandatory)][string] $Url)
 
-    $match = [regex]::Match(
-        $Url.Trim(),
-        '(?i)github\.com(?:-[A-Za-z0-9_.-]+)?[:/](?<slug>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?$'
+    $value = $Url.Trim()
+    $patterns = @(
+        '^https://github\.com/(?<slug>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?$',
+        '^ssh://git@github\.com(?::22)?/(?<slug>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?$',
+        '^git@github\.com(?:-[A-Za-z0-9_.-]+)?:(?<slug>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?$'
     )
-    if (-not $match.Success) {
-        throw "Recovery repository URL is not a supported GitHub URL: $Url"
+    foreach ($pattern in $patterns) {
+        $match = [regex]::Match(
+            $value,
+            $pattern,
+            [Text.RegularExpressions.RegexOptions]::IgnoreCase -bor
+                [Text.RegularExpressions.RegexOptions]::CultureInvariant
+        )
+        if ($match.Success) {
+            return $match.Groups['slug'].Value
+        }
     }
-    $match.Groups['slug'].Value
+    throw "Recovery repository URL is not a supported GitHub URL: $Url"
 }
 
 function Assert-PathHasNoReparsePoint {
@@ -169,15 +180,33 @@ $resolvedEntries = foreach ($entry in $managedEntries) {
 
 $expectedEncryptedCommand = Get-ExpectedEncryptedCaptureCommand -RecoveryManifest $Manifest
 if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
+    $engineRepositories = @($Manifest.repositories).Where({
+        [string]::Equals(
+            (Get-GitHubRepositorySlug -Url ([string]$_.url)),
+            $EngineRepository,
+            [StringComparison]::OrdinalIgnoreCase
+        ) -and
+        [string]::Equals([string]$_.ref, $env:POWERFORGE_ENGINE_REF, [StringComparison]::OrdinalIgnoreCase)
+    })
+    if ($engineRepositories.Count -ne 1) {
+        throw 'Encrypted recovery capture requires one repository pinned to the validation action engine.'
+    }
+    $expectedHelperSource = ([string]$engineRepositories[0].path).TrimEnd('/') +
+        '/Deployment/Linux/powerforge-server-encrypted-capture.sh'
+    $expectedHelperPath = [IO.Path]::GetFullPath(
+        (Join-Path $EngineRoot 'Deployment/Linux/powerforge-server-encrypted-capture.sh')
+    )
     $helper = @($resolvedEntries).Where({
         [string]::Equals(
             [string]$_.Entry.path,
             '/usr/local/sbin/powerforge-server-encrypted-capture',
             [StringComparison]::Ordinal
-        )
+        ) -and
+        [string]::Equals([string]$_.Entry.source, $expectedHelperSource, [StringComparison]::Ordinal) -and
+        [string]::Equals([string]$_.Path, $expectedHelperPath, [StringComparison]::Ordinal)
     })
     if ($helper.Count -ne 1) {
-        throw 'Encrypted recovery capture requires one managed PowerForge encryption helper.'
+        throw 'Encrypted recovery capture requires the exact managed helper from the pinned PowerForge engine.'
     }
 
     $sudoersSources = @($resolvedEntries).Where({
@@ -186,25 +215,29 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
     $authorized = $false
     foreach ($sudoersSource in $sudoersSources) {
         $lines = @(Get-Content -LiteralPath $sudoersSource.Path)
-        $commandAlias = ''
+        $commandAliases = [Collections.Generic.List[string]]::new()
         foreach ($line in $lines) {
             if ($line -notmatch '^\s*Cmnd_Alias\s+(?<alias>\S+)\s*=\s*(?<commands>.+?)\s*$') {
                 continue
             }
-            $commands = [string]$Matches['commands']
-            foreach ($command in $commands -split '\s*,\s*') {
-                if ([string]::Equals($command, $expectedEncryptedCommand, [StringComparison]::Ordinal)) {
-                    $commandAlias = [string]$Matches['alias']
-                    break
-                }
+            $commands = @([string]$Matches['commands'] -split '\s*,\s*')
+            $matchingCommands = @($commands).Where({
+                [string]::Equals($_, $expectedEncryptedCommand, [StringComparison]::Ordinal)
+            })
+            if ($matchingCommands.Count -eq 0) {
+                continue
             }
-            if (-not [string]::IsNullOrWhiteSpace($commandAlias)) {
-                break
+            if ($commands.Count -ne 1) {
+                throw 'The encrypted-capture command alias must not authorize additional commands.'
             }
+            $commandAliases.Add([string]$Matches['alias'])
         }
-        if (-not [string]::IsNullOrWhiteSpace($commandAlias)) {
+        if ($commandAliases.Count -eq 1) {
+            $commandAlias = $commandAliases[0]
             foreach ($line in $lines) {
-                if ($line -notmatch '^[^#]*\bNOPASSWD:\s*(?<commands>.+?)\s*$') {
+                if ($line -notmatch '^\s*(?<principal>\S+)\s+ALL\s*=\s*\(\s*(?<runas>[^)]+?)\s*\)\s+NOPASSWD:\s*(?<commands>.+?)\s*$' -or
+                    -not [string]::Equals([string]$Matches['principal'], $CaptureUser, [StringComparison]::Ordinal) -or
+                    -not [string]::Equals([string]$Matches['runas'], 'root', [StringComparison]::Ordinal)) {
                     continue
                 }
                 $authorized = @([string]$Matches['commands'] -split '\s*,\s*').Where({
