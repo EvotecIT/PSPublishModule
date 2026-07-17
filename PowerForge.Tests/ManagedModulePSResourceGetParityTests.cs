@@ -71,6 +71,18 @@ public sealed class ManagedModulePSResourceGetParityTests
         Assert.Throws<ArgumentException>(() => ManagedModuleVersionSelector.IsSelectable(version, "0.0.0"));
     }
 
+    [Theory]
+    [InlineData("1.0.0+linux-x64", false)]
+    [InlineData("1.0.0-preview.1+linux-x64", true)]
+    [InlineData("[1.0.0+linux-x64,2.0.0)", false)]
+    [InlineData("[1.0.0+linux-x64,2.0.0-preview.1)", true)]
+    [InlineData(">=1.0.0+linux-x64 <2.0.0", false)]
+    [InlineData(">=1.0.0+linux-x64 <2.0.0-preview.1", true)]
+    public void VersionSelector_ignores_build_metadata_hyphens_when_detecting_prerelease(
+        string expression,
+        bool expected)
+        => Assert.Equal(expected, ManagedModuleVersionSelector.IncludesPrerelease(expression));
+
     [Fact]
     public void FindManagedModule_version_range_returns_every_matching_module_version()
     {

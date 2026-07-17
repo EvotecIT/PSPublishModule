@@ -52,7 +52,6 @@ internal sealed class ManagedModuleVersionRange
             return Any;
 
         var trimmed = value!.Trim();
-        var allowsPrerelease = ManagedModuleVersionComparer.IsPrerelease(trimmed);
         if (trimmed.StartsWith("=", StringComparison.Ordinal))
         {
             var exact = Normalize(trimmed.Substring(1));
@@ -61,22 +60,41 @@ internal sealed class ManagedModuleVersionRange
                 : new ManagedModuleVersionRange(null, false, null, false, exact, ManagedModuleVersionComparer.IsPrerelease(exact!));
         }
 
-        if (TryParseComparatorRange(trimmed, allowsPrerelease, out var comparatorRange))
+        if (TryParseComparatorRange(trimmed, out var comparatorRange))
             return comparatorRange;
 
         if (!HasRangeDelimiters(trimmed))
-            return new ManagedModuleVersionRange(trimmed, includeMinimum: true, null, false, null, allowsPrerelease);
+            return new ManagedModuleVersionRange(
+                trimmed,
+                includeMinimum: true,
+                null,
+                false,
+                null,
+                ManagedModuleVersionComparer.IsPrerelease(trimmed));
 
         var includeMinimum = trimmed.StartsWith("[", StringComparison.Ordinal);
         var includeMaximum = trimmed.EndsWith("]", StringComparison.Ordinal);
         var body = trimmed.Trim('[', ']', '(', ')').Trim();
         if (!body.Contains(",", StringComparison.Ordinal))
-            return new ManagedModuleVersionRange(null, false, null, false, body, allowsPrerelease);
+            return new ManagedModuleVersionRange(
+                null,
+                false,
+                null,
+                false,
+                body,
+                ManagedModuleVersionComparer.IsPrerelease(body));
 
         var parts = body.Split(new[] { ',' }, 2);
         var minimum = Normalize(parts[0]);
         var maximum = parts.Length > 1 ? Normalize(parts[1]) : null;
-        return new ManagedModuleVersionRange(minimum, includeMinimum, maximum, includeMaximum, null, allowsPrerelease);
+        return new ManagedModuleVersionRange(
+            minimum,
+            includeMinimum,
+            maximum,
+            includeMaximum,
+            null,
+            ManagedModuleVersionComparer.IsPrerelease(minimum ?? string.Empty) ||
+            ManagedModuleVersionComparer.IsPrerelease(maximum ?? string.Empty));
     }
 
     public bool IsSatisfiedBy(string version)
@@ -123,7 +141,6 @@ internal sealed class ManagedModuleVersionRange
 
     private static bool TryParseComparatorRange(
         string value,
-        bool allowsPrerelease,
         out ManagedModuleVersionRange range)
     {
         var minimumVersion = default(string);
@@ -192,7 +209,14 @@ internal sealed class ManagedModuleVersionRange
             return false;
         }
 
-        range = new ManagedModuleVersionRange(minimumVersion, includeMinimum, maximumVersion, includeMaximum, null, allowsPrerelease);
+        range = new ManagedModuleVersionRange(
+            minimumVersion,
+            includeMinimum,
+            maximumVersion,
+            includeMaximum,
+            null,
+            ManagedModuleVersionComparer.IsPrerelease(minimumVersion ?? string.Empty) ||
+            ManagedModuleVersionComparer.IsPrerelease(maximumVersion ?? string.Empty));
         return true;
     }
 
