@@ -362,6 +362,29 @@ public sealed class UninstallManagedModuleCommandTests
     }
 
     [Fact]
+    public void UninstallManagedModule_direct_installed_location_removes_only_selected_same_version_location()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        CreateFlatInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var flatManifest = Path.Combine(moduleRoot.Path, "Company.Tools", "Company.Tools.psd1");
+        var selectedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Uninstall-ManagedModule")
+            .AddParameter("Name", "Company.Tools")
+            .AddParameter("Version", "1.0.0")
+            .AddParameter("InstalledLocation", selectedPath);
+        var results = ps.Invoke();
+
+        AssertNoPowerShellErrors(ps);
+        var result = Assert.IsType<ManagedModuleUninstallResult>(Assert.Single(results).BaseObject);
+        Assert.Equal(selectedPath, result.ModulePath);
+        Assert.False(Directory.Exists(selectedPath));
+        Assert.True(File.Exists(flatManifest));
+    }
+
+    [Fact]
     public void UninstallManagedModule_binds_piped_module_file_path()
     {
         using var moduleRoot = new TemporaryDirectory();

@@ -41,6 +41,12 @@ public sealed class ManagedModuleUninstallRequest
     public string? InstalledLocation { get; set; }
 
     /// <summary>
+    /// Module roots whose installed modules participate in dependency validation. The target
+    /// root is always included even when it is not listed explicitly.
+    /// </summary>
+    public IReadOnlyList<string> DependencyModuleRoots { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// Skip checking whether removed modules are still required by other installed modules.
     /// </summary>
     public bool SkipDependencyCheck { get; set; }

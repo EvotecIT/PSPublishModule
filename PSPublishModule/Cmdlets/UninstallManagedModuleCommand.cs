@@ -14,7 +14,8 @@ namespace PSPublishModule;
 /// <para>
 /// This command removes modules from the selected managed module root without invoking PowerShellGet or
 /// PSResourceGet. It follows PSResourceGet-shaped uninstall selection semantics while adding managed
-/// dependency and loaded-module safety checks.
+/// dependency and loaded-module safety checks. InstalledLocation always selects the exact installed directory,
+/// whether it is bound directly or received from Get-ManagedModule pipeline output.
 /// </para>
 /// </remarks>
 /// <example>
@@ -122,12 +123,15 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             return;
         }
 
+        var selectedInstalledLocation = MyInvocation.BoundParameters.ContainsKey(nameof(InstalledLocation))
+            ? InstalledLocation
+            : ResolvePipelineInstalledLocation(ModuleRoot, Name);
         AddPlan(
             Name,
             Version,
             ModuleRoot,
             Prerelease.IsPresent,
-            ResolvePipelineInstalledLocation(InstalledLocation ?? ModuleRoot, Name));
+            selectedInstalledLocation);
     }
 
     private void AddPlan(
@@ -216,6 +220,7 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
                 Name = plan.Name,
                 Version = plan.Version,
                 ModuleRoot = plan.ModuleRoot,
+                DependencyModuleRoots = plan.DependencyModuleRoots,
                 SkipDependencyCheck = plan.SkipDependencyCheck,
                 AllowLoadedModuleUninstall = plan.AllowLoadedModuleUninstall,
                 Targets = targets,
@@ -325,6 +330,9 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             Name = group.SelectMany(static plan => plan.Name).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
             Version = versions.Length == 1 ? versions[0] : null,
             ModuleRoot = group[0].ModuleRoot,
+            DependencyModuleRoots = group.SelectMany(static plan => plan.DependencyModuleRoots)
+                .Distinct(PathStringComparer)
+                .ToArray(),
             SkipDependencyCheck = group[0].SkipDependencyCheck,
             AllowLoadedModuleUninstall = group[0].AllowLoadedModuleUninstall,
             Targets = group

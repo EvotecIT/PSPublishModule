@@ -25,11 +25,19 @@ this command when the desired outcome spans installed-state discovery, drift ana
 
 Repair keeps module copies in separate physical roots, PowerShell editions, scopes, and local user profiles
 independent. Missing modules require an explicit ModuleRoot or exactly one eligible scanned root; ambiguous
-destinations are reported and blocked.
+destinations are reported and blocked. A single explicit UserProfilePath supplies the current PowerShell
+edition's standard CurrentUser root even when that root does not exist yet. Explicit ModuleRoot and profile
+destinations are merged into supplied Inventory or InventoryPath artifacts and remain part of convergence scans.
 
-Live apply performs delivery before exact-path old-version cleanup, revalidates loaded-module and dependency
-safety, inventories the same roots again, and returns post-apply plan and convergence evidence. Operational
-failures remain visible in the typed result and are also written as nonterminating errors.
+Live apply performs delivery, inventories the same estate again, replans exact-path old-version cleanup from
+current state, and then validates loaded-module and dependency safety across relevant visible roots before every
+removal. Current-runspace loaded modules are protected even when IncludeLoaded is not used for inventory output.
+Repair performs one final inventory and returns post-apply plan and convergence evidence. Operational failures
+remain visible in the typed result and are also written as nonterminating errors.
+
+This is local-machine estate management suitable for workstations and servers, including service-account and
+multi-profile roots. It does not connect to or orchestrate remote computers; invoke it in each target session or
+through the operator's existing remoting/configuration system.
 
 ## EXAMPLES
 
@@ -244,7 +252,7 @@ Accept wildcard characters: True
 ```
 
 ### -IncludeAllUserProfiles
-Discover standard PowerShell module roots below the current local profile container. Use UserProfilePath or ModulePath for redirected and custom layouts.
+Discover existing standard PowerShell module roots below the local profile container. Inaccessible optional profiles or roots are reported as warnings. Use UserProfilePath or ModulePath for redirected and custom layouts.
 
 ```yaml
 Type: SwitchParameter
@@ -260,7 +268,7 @@ Accept wildcard characters: True
 ```
 
 ### -IncludeLoaded
-Include modules loaded in the current runspace as inventory evidence.
+Include modules loaded in the current runspace as inventory and plan evidence. Cleanup protects current-runspace modules regardless of this reporting option.
 
 ```yaml
 Type: SwitchParameter
@@ -292,7 +300,7 @@ Accept wildcard characters: True
 ```
 
 ### -Inventory
-Existing inventory object. When omitted, local module paths are inventoried.
+Existing inventory object. Explicit ModuleRoot and UserProfilePath destinations are merged into it and included in post-apply convergence scans.
 
 ```yaml
 Type: ModuleStateInventoryResult
@@ -580,7 +588,7 @@ Accept wildcard characters: True
 ```
 
 ### -UserProfilePath
-Explicit user profile home directories whose standard Windows PowerShell and PowerShell 7 module roots are inventoried.
+Explicit user profile home directories whose platform-standard module roots are inventoried. One explicit profile provides the current-edition destination for missing modules.
 
 ```yaml
 Type: String[]

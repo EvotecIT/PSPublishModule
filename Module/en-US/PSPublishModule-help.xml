@@ -58367,10 +58367,17 @@ managed delivery engine.</maml:para>
 this command when the desired outcome spans installed-state discovery, drift analysis, repair, and cleanup.</maml:para>
       <maml:para>Repair keeps module copies in separate physical roots, PowerShell editions, scopes, and local user profiles&#xD;
 independent. Missing modules require an explicit ModuleRoot or exactly one eligible scanned root; ambiguous&#xD;
-destinations are reported and blocked.</maml:para>
-      <maml:para>Live apply performs delivery before exact-path old-version cleanup, revalidates loaded-module and dependency&#xD;
-safety, inventories the same roots again, and returns post-apply plan and convergence evidence. Operational&#xD;
-failures remain visible in the typed result and are also written as nonterminating errors.</maml:para>
+destinations are reported and blocked. A single explicit UserProfilePath supplies the current PowerShell&#xD;
+edition's standard CurrentUser root even when that root does not exist yet. Explicit ModuleRoot and profile&#xD;
+destinations are merged into supplied Inventory or InventoryPath artifacts and remain part of convergence scans.</maml:para>
+      <maml:para>Live apply performs delivery, inventories the same estate again, replans exact-path old-version cleanup from&#xD;
+current state, and then validates loaded-module and dependency safety across relevant visible roots before every&#xD;
+removal. Current-runspace loaded modules are protected even when IncludeLoaded is not used for inventory output.&#xD;
+Repair performs one final inventory and returns post-apply plan and convergence evidence. Operational failures&#xD;
+remain visible in the typed result and are also written as nonterminating errors.</maml:para>
+      <maml:para>This is local-machine estate management suitable for workstations and servers, including service-account and&#xD;
+multi-profile roots. It does not connect to or orchestrate remote computers; invoke it in each target session or&#xD;
+through the operator's existing remoting/configuration system.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
@@ -58509,7 +58516,7 @@ failures remain visible in the typed result and are also written as nonterminati
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>IncludeAllUserProfiles</maml:name>
           <maml:description>
-            <maml:para>Discover standard PowerShell module roots below the current local profile container. Use UserProfilePath or ModulePath for redirected and custom layouts.</maml:para>
+            <maml:para>Discover existing standard PowerShell module roots below the local profile container. Inaccessible optional profiles or roots are reported as warnings. Use UserProfilePath or ModulePath for redirected and custom layouts.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -58521,7 +58528,7 @@ failures remain visible in the typed result and are also written as nonterminati
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>IncludeLoaded</maml:name>
           <maml:description>
-            <maml:para>Include modules loaded in the current runspace as inventory evidence.</maml:para>
+            <maml:para>Include modules loaded in the current runspace as inventory and plan evidence. Cleanup protects current-runspace modules regardless of this reporting option.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -58545,7 +58552,7 @@ failures remain visible in the typed result and are also written as nonterminati
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByValue)" position="named" aliases="None">
           <maml:name>Inventory</maml:name>
           <maml:description>
-            <maml:para>Existing inventory object. When omitted, local module paths are inventoried.</maml:para>
+            <maml:para>Existing inventory object. Explicit ModuleRoot and UserProfilePath destinations are merged into it and included in post-apply convergence scans.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">ModuleStateInventoryResult</command:parameterValue>
           <dev:type>
@@ -58770,7 +58777,7 @@ failures remain visible in the typed result and are also written as nonterminati
         <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>UserProfilePath</maml:name>
           <maml:description>
-            <maml:para>Explicit user profile home directories whose standard Windows PowerShell and PowerShell 7 module roots are inventoried.</maml:para>
+            <maml:para>Explicit user profile home directories whose platform-standard module roots are inventoried. One explicit profile provides the current-edition destination for missing modules.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
@@ -58940,7 +58947,7 @@ failures remain visible in the typed result and are also written as nonterminati
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>IncludeAllUserProfiles</maml:name>
         <maml:description>
-          <maml:para>Discover standard PowerShell module roots below the current local profile container. Use UserProfilePath or ModulePath for redirected and custom layouts.</maml:para>
+          <maml:para>Discover existing standard PowerShell module roots below the local profile container. Inaccessible optional profiles or roots are reported as warnings. Use UserProfilePath or ModulePath for redirected and custom layouts.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -58952,7 +58959,7 @@ failures remain visible in the typed result and are also written as nonterminati
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>IncludeLoaded</maml:name>
         <maml:description>
-          <maml:para>Include modules loaded in the current runspace as inventory evidence.</maml:para>
+          <maml:para>Include modules loaded in the current runspace as inventory and plan evidence. Cleanup protects current-runspace modules regardless of this reporting option.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -58976,7 +58983,7 @@ failures remain visible in the typed result and are also written as nonterminati
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="True (ByValue)" position="named" aliases="None">
         <maml:name>Inventory</maml:name>
         <maml:description>
-          <maml:para>Existing inventory object. When omitted, local module paths are inventoried.</maml:para>
+          <maml:para>Existing inventory object. Explicit ModuleRoot and UserProfilePath destinations are merged into it and included in post-apply convergence scans.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">ModuleStateInventoryResult</command:parameterValue>
         <dev:type>
@@ -59201,7 +59208,7 @@ failures remain visible in the typed result and are also written as nonterminati
       <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>UserProfilePath</maml:name>
         <maml:description>
-          <maml:para>Explicit user profile home directories whose standard Windows PowerShell and PowerShell 7 module roots are inventoried.</maml:para>
+          <maml:para>Explicit user profile home directories whose platform-standard module roots are inventoried. One explicit profile provides the current-edition destination for missing modules.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
         <dev:type>
@@ -69403,7 +69410,8 @@ System.Boolean</maml:name>
     <maml:description>
       <maml:para>This command removes modules from the selected managed module root without invoking PowerShellGet or&#xD;
 PSResourceGet. It follows PSResourceGet-shaped uninstall selection semantics while adding managed&#xD;
-dependency and loaded-module safety checks.</maml:para>
+dependency and loaded-module safety checks. InstalledLocation always selects the exact installed directory,&#xD;
+whether it is bound directly or received from Get-ManagedModule pipeline output.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="NameParameterSet">

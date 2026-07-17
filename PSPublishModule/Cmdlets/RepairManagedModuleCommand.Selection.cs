@@ -11,18 +11,13 @@ namespace PSPublishModule;
 
 public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
 {
+    private ModuleStateModulePath? _explicitProfilePlacement;
+
     private ModuleStateInventoryResult ResolveInventory()
     {
         var loadedModules = IncludeLoaded.IsPresent
             ? ModuleStateInventoryCommandSupport.GetLoadedModules(this)
             : null;
-
-        if (Inventory is not null)
-            return ModuleStateInventoryCommandSupport.IncludeLoadedModules(Inventory, loadedModules);
-        if (!string.IsNullOrWhiteSpace(InventoryPath))
-            return ModuleStateInventoryCommandSupport.CreateInventoryResultFromFile(
-                ResolveFilePath(InventoryPath!, nameof(InventoryPath)),
-                loadedModules);
 
         var basePaths = ModuleStateInventoryCommandSupport.CreateModulePathEntries(
             ModulePath is { Length: > 0 }
@@ -48,11 +43,51 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
         var profileDiscovery = new ModuleStateProfilePathDiscoveryService().Discover(
             profilePaths,
             IncludeAllUserProfiles.IsPresent);
+        _explicitProfilePlacement = ResolveExplicitProfilePlacement(profilePaths, profileDiscovery.ModulePaths);
+        var supplementalPaths = targetPaths.Concat(profileDiscovery.ModulePaths).ToArray();
+        if (Inventory is not null)
+        {
+            return ModuleStateInventoryCommandSupport.MergeWithModulePathEntries(
+                Inventory,
+                supplementalPaths,
+                loadedModules,
+                source: "ExplicitTarget",
+                additionalDiagnostics: profileDiscovery.Diagnostics);
+        }
+        if (!string.IsNullOrWhiteSpace(InventoryPath))
+        {
+            var artifactInventory = ModuleStateInventoryCommandSupport.CreateInventoryResultFromFile(
+                ResolveFilePath(InventoryPath!, nameof(InventoryPath)),
+                loadedModules);
+            return ModuleStateInventoryCommandSupport.MergeWithModulePathEntries(
+                artifactInventory,
+                supplementalPaths,
+                loadedModules,
+                source: "ExplicitTarget",
+                additionalDiagnostics: profileDiscovery.Diagnostics);
+        }
+
         return ModuleStateInventoryCommandSupport.CreateInventoryResultFromModulePathEntries(
             basePaths.Concat(targetPaths).Concat(profileDiscovery.ModulePaths),
             loadedModules,
             source: profileDiscovery.ModulePaths.Length > 0 ? "ModulePath+UserProfile" : "ModulePath",
             additionalDiagnostics: profileDiscovery.Diagnostics);
+    }
+
+    private ModuleStateModulePath? ResolveExplicitProfilePlacement(
+        IReadOnlyList<string> profilePaths,
+        IReadOnlyList<ModuleStateModulePath> discoveredModulePaths)
+    {
+        if (!string.IsNullOrWhiteSpace(ModuleRoot) || profilePaths.Count != 1)
+            return null;
+
+        var edition = SessionState.PSVariable.GetValue("PSEdition")?.ToString();
+        if (string.IsNullOrWhiteSpace(edition))
+            edition = "Desktop";
+        var profileName = new DirectoryInfo(profilePaths[0]).Name;
+        return discoveredModulePaths.SingleOrDefault(path =>
+            string.Equals(path.ProfileName, profileName, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(path.PowerShellEdition, edition, StringComparison.OrdinalIgnoreCase));
     }
 
     private object CreateDesiredState(
@@ -194,12 +229,23 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
             ? ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot)
             : placements.Count == 1
                 ? ResolveSelectedModuleRoot(placements[0])
-                : null;
+                : _explicitProfilePlacement?.Path;
         if (!string.IsNullOrWhiteSpace(moduleRoot))
             module["ModuleRoot"] = moduleRoot!;
 
         if (placements.Count != 1)
+        {
+            if (_explicitProfilePlacement is not null)
+            {
+                if (!string.IsNullOrWhiteSpace(_explicitProfilePlacement.PowerShellEdition))
+                    module["PowerShellEdition"] = _explicitProfilePlacement.PowerShellEdition!;
+                if (!string.IsNullOrWhiteSpace(_explicitProfilePlacement.ProfileName))
+                    module["ProfileName"] = _explicitProfilePlacement.ProfileName!;
+                if (!module.ContainsKey("Scope"))
+                    module["Scope"] = "CurrentUser";
+            }
             return;
+        }
 
         var placement = placements[0];
         if (!string.IsNullOrWhiteSpace(placement.PowerShellEdition))

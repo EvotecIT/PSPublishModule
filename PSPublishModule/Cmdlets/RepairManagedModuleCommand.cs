@@ -26,12 +26,21 @@ namespace PSPublishModule;
 /// <para>
 /// Repair keeps module copies in separate physical roots, PowerShell editions, scopes, and local user profiles
 /// independent. Missing modules require an explicit ModuleRoot or exactly one eligible scanned root; ambiguous
-/// destinations are reported and blocked.
+/// destinations are reported and blocked. A single explicit UserProfilePath supplies the current PowerShell
+/// edition's standard CurrentUser root even when that root does not exist yet. Explicit ModuleRoot and profile
+/// destinations are merged into supplied Inventory or InventoryPath artifacts and remain part of convergence scans.
 /// </para>
 /// <para>
-/// Live apply performs delivery before exact-path old-version cleanup, revalidates loaded-module and dependency
-/// safety, inventories the same roots again, and returns post-apply plan and convergence evidence. Operational
-/// failures remain visible in the typed result and are also written as nonterminating errors.
+/// Live apply performs delivery, inventories the same estate again, replans exact-path old-version cleanup from
+/// current state, and then validates loaded-module and dependency safety across relevant visible roots before every
+/// removal. Current-runspace loaded modules are protected even when IncludeLoaded is not used for inventory output.
+/// Repair performs one final inventory and returns post-apply plan and convergence evidence. Operational failures
+/// remain visible in the typed result and are also written as nonterminating errors.
+/// </para>
+/// <para>
+/// This is local-machine estate management suitable for workstations and servers, including service-account and
+/// multi-profile roots. It does not connect to or orchestrate remote computers; invoke it in each target session or
+/// through the operator's existing remoting/configuration system.
 /// </para>
 /// </remarks>
 /// <example>
@@ -90,7 +99,7 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
     [ValidateNotNullOrEmpty]
     public string? RequiredResourceFile { get; set; }
 
-    /// <summary>Existing inventory object. When omitted, local module paths are inventoried.</summary>
+    /// <summary>Existing inventory object. Explicit ModuleRoot and UserProfilePath destinations are merged into it and included in post-apply convergence scans.</summary>
     [Parameter(ValueFromPipeline = true)]
     [ValidateNotNull]
     public ModuleStateInventoryResult? Inventory { get; set; }
@@ -105,16 +114,16 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
     [ValidateNotNullOrEmpty]
     public string[]? ModulePath { get; set; }
 
-    /// <summary>Explicit user profile home directories whose standard Windows PowerShell and PowerShell 7 module roots are inventoried.</summary>
+    /// <summary>Explicit user profile home directories whose platform-standard module roots are inventoried. One explicit profile provides the current-edition destination for missing modules.</summary>
     [Parameter]
     [ValidateNotNullOrEmpty]
     public string[]? UserProfilePath { get; set; }
 
-    /// <summary>Discover standard PowerShell module roots below the current local profile container. Use UserProfilePath or ModulePath for redirected and custom layouts.</summary>
+    /// <summary>Discover existing standard PowerShell module roots below the local profile container. Inaccessible optional profiles or roots are reported as warnings. Use UserProfilePath or ModulePath for redirected and custom layouts.</summary>
     [Parameter]
     public SwitchParameter IncludeAllUserProfiles { get; set; }
 
-    /// <summary>Include modules loaded in the current runspace as inventory evidence.</summary>
+    /// <summary>Include modules loaded in the current runspace as inventory and plan evidence. Cleanup protects current-runspace modules regardless of this reporting option.</summary>
     [Parameter]
     public SwitchParameter IncludeLoaded { get; set; }
 

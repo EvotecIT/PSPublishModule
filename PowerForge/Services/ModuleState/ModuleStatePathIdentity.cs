@@ -14,9 +14,15 @@ internal static class ModuleStatePathIdentity
         : StringComparison.Ordinal;
 
     internal static string Normalize(string path)
-        => Path.GetFullPath(path.Trim())
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-            .Replace('\\', '/');
+    {
+        var fullPath = Path.GetFullPath(path.Trim());
+        var pathRoot = Path.GetPathRoot(fullPath);
+        var normalized = !string.IsNullOrWhiteSpace(pathRoot) &&
+                         string.Equals(fullPath, pathRoot, Comparison)
+            ? fullPath
+            : fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return normalized.Replace('\\', '/');
+    }
 
     internal static bool Equals(string? left, string? right)
     {
@@ -33,8 +39,11 @@ internal static class ModuleStatePathIdentity
 
         var normalizedPath = Normalize(path!);
         var normalizedRoot = Normalize(root!);
+        var rootPrefix = normalizedRoot.EndsWith("/", StringComparison.Ordinal)
+            ? normalizedRoot
+            : normalizedRoot + "/";
         return string.Equals(normalizedPath, normalizedRoot, Comparison) ||
-               normalizedPath.StartsWith(normalizedRoot + "/", Comparison);
+               normalizedPath.StartsWith(rootPrefix, Comparison);
     }
 
     internal static string CreatePlacementKey(

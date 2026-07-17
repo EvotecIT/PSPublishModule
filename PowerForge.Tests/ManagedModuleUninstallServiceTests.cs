@@ -149,6 +149,28 @@ public sealed class ManagedModuleUninstallServiceTests
     }
 
     [Fact]
+    public void PlanUninstall_blocks_removal_when_module_in_another_visible_root_requires_target()
+    {
+        using var targetRoot = new TemporaryDirectory();
+        using var dependentRoot = new TemporaryDirectory();
+        var targetPath = CreateInstalledModule(targetRoot.Path, "Company.Core", "1.0.0");
+        var dependentPath = CreateInstalledModule(
+            dependentRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            requiredModules: "    RequiredModules = @(@{ ModuleName = 'Company.Core'; RequiredVersion = '1.0.0' })");
+        var request = CreateRequest(targetRoot.Path, "Company.Core");
+        request.DependencyModuleRoots = new[] { targetRoot.Path, dependentRoot.Path };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new ManagedModuleUninstallService().PlanUninstall(request));
+
+        Assert.Contains("Company.Core 1.0.0 is required by Company.Tools 1.0.0", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(targetPath));
+        Assert.True(Directory.Exists(dependentPath));
+    }
+
+    [Fact]
     public void Uninstall_skip_dependency_check_permits_required_module_removal()
     {
         using var moduleRoot = new TemporaryDirectory();

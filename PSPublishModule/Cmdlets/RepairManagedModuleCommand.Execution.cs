@@ -54,6 +54,25 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
                 credentialSecretFilePath,
                 managedDeliveryOptions,
                 requiredResourceInputSupplied).ConfigureAwait(false);
+            if (executionResults.All(static execution => execution.Succeeded))
+            {
+                var cleanupInventory = CollectPostApplyInventory(inventory);
+                if (cleanupInventory is not null)
+                {
+                    var cleanupPlan = ModuleStatePlanCommandSupport.CreatePlanResult(
+                        cleanupInventory,
+                        CreateConvergenceDesiredState(desiredState),
+                        maintenanceReceiptPaths,
+                        repair: true,
+                        ParseCleanupMode(Cleanup),
+                        Family);
+                    var cleanupResults = new ModuleStateManagedCleanupService(this).Execute(
+                        ModuleStatePlanResultMapper.ToCorePlan(cleanupPlan),
+                        cleanupInventory,
+                        managedDeliveryOptions);
+                    executionResults = executionResults.Concat(cleanupResults).ToArray();
+                }
+            }
             postApplyInventory = CollectPostApplyInventory(inventory);
             if (postApplyInventory is not null)
             {
@@ -225,11 +244,7 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
             }
         }
 
-        if (deliveryResults.Any(static execution => !execution.Succeeded))
-            return deliveryResults;
-
-        var cleanupResults = new ModuleStateManagedCleanupService(this).Execute(result, managedDeliveryOptions);
-        return deliveryResults.Concat(cleanupResults).ToArray();
+        return deliveryResults;
     }
 
     private static ModuleStateDeliveryExecutionResult CreateExecutionFailure(string operation, Exception exception)
@@ -368,14 +383,40 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
             : null;
     }
 
-    private static ManagedModuleLoadedModule[] ResolveLoadedModules(ModuleStateInventoryResult? inventory)
-        => (inventory?.InstalledModules ?? Array.Empty<ModuleStateInstalledModuleResult>())
+    private ManagedModuleLoadedModule[] ResolveLoadedModules(ModuleStateInventoryResult? inventory)
+    {
+        var inventoryLoaded = (inventory?.InstalledModules ?? Array.Empty<ModuleStateInstalledModuleResult>())
             .Where(static module => module.IsLoaded)
             .Select(static module => new ManagedModuleLoadedModule
             {
                 Name = module.Name,
                 Version = module.Version,
+                Path = module.Path,
                 ModuleBase = module.Path
-            })
+            });
+        var sessionLoaded = ModuleStateInventoryCommandSupport.GetLoadedModules(this)
+            .Select(static module => new ManagedModuleLoadedModule
+            {
+                Name = module.Name ?? string.Empty,
+                Version = module.Version,
+                Path = module.Path,
+                ModuleBase = module.Path
+            });
+        return inventoryLoaded
+            .Concat(sessionLoaded)
+            .Where(static module => !string.IsNullOrWhiteSpace(module.Name))
+            .GroupBy(CreateLoadedModuleIdentity, ModuleStatePathIdentity.Comparer)
+            .Select(static group => group.First())
             .ToArray();
+    }
+
+    private static string CreateLoadedModuleIdentity(ManagedModuleLoadedModule module)
+    {
+        var path = module.Path ?? module.ModuleBase;
+        return string.Join(
+            "|",
+            module.Name.ToUpperInvariant(),
+            (module.Version ?? string.Empty).ToUpperInvariant(),
+            string.IsNullOrWhiteSpace(path) ? string.Empty : ModuleStatePathIdentity.Normalize(path!));
+    }
 }

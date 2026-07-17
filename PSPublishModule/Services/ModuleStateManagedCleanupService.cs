@@ -14,15 +14,18 @@ internal sealed class ModuleStateManagedCleanupService
         => _cmdlet = cmdlet ?? throw new ArgumentNullException(nameof(cmdlet));
 
     internal ModuleStateDeliveryExecutionResult[] Execute(
-        PowerForge.ModuleStateApplyResult applyResult,
+        ModuleStatePlan plan,
+        ModuleStateInventoryResult inventory,
         ModuleStateManagedDeliveryOptions options)
     {
-        if (applyResult is null)
-            throw new ArgumentNullException(nameof(applyResult));
+        if (plan is null)
+            throw new ArgumentNullException(nameof(plan));
+        if (inventory is null)
+            throw new ArgumentNullException(nameof(inventory));
         if (options is null)
             throw new ArgumentNullException(nameof(options));
 
-        var actions = applyResult.Plan.Actions
+        var actions = plan.Actions
             .Where(static action => action.Kind == ModuleStatePlanActionKind.Remove)
             .ToArray();
         if (actions.Length == 0)
@@ -34,7 +37,7 @@ internal sealed class ModuleStateManagedCleanupService
         {
             try
             {
-                results.Add(ExecuteAction(service, action, options));
+                results.Add(ExecuteAction(service, action, inventory, options));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -49,6 +52,7 @@ internal sealed class ModuleStateManagedCleanupService
     private ModuleStateDeliveryExecutionResult ExecuteAction(
         ManagedModuleUninstallService service,
         ModuleStatePlanAction action,
+        ModuleStateInventoryResult inventory,
         ModuleStateManagedDeliveryOptions options)
     {
         if (string.IsNullOrWhiteSpace(action.TargetPath) || string.IsNullOrWhiteSpace(action.TargetModuleRoot))
@@ -62,6 +66,7 @@ internal sealed class ModuleStateManagedCleanupService
             ShellEdition = ParseShellEdition(action.TargetPowerShellEdition),
             ModuleRoot = action.TargetModuleRoot,
             InstalledLocation = action.TargetPath,
+            DependencyModuleRoots = ResolveDependencyModuleRoots(action, inventory),
             SkipDependencyCheck = options.SkipDependencyCheck || action.SkipDependencyCheck,
             LoadedModules = options.LoadedModules
         };
@@ -99,6 +104,25 @@ internal sealed class ModuleStateManagedCleanupService
                 }
             }
         };
+    }
+
+    private static string[] ResolveDependencyModuleRoots(
+        ModuleStatePlanAction action,
+        ModuleStateInventoryResult inventory)
+    {
+        var paths = inventory.ScannedPaths ?? Array.Empty<ModuleStateInventoryPathResult>();
+        return paths
+            .Where(path => string.IsNullOrWhiteSpace(action.TargetPowerShellEdition) ||
+                           string.Equals(path.PowerShellEdition, action.TargetPowerShellEdition, StringComparison.OrdinalIgnoreCase))
+            .Where(path => string.IsNullOrWhiteSpace(action.TargetProfileName)
+                ? string.IsNullOrWhiteSpace(path.ProfileName)
+                : string.IsNullOrWhiteSpace(path.ProfileName) ||
+                  string.Equals(path.ProfileName, action.TargetProfileName, StringComparison.OrdinalIgnoreCase))
+            .Select(static path => path.Path)
+            .Append(action.TargetModuleRoot!)
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(ModuleStatePathIdentity.Comparer)
+            .ToArray();
     }
 
     private bool ShouldProcess(string target, string action)

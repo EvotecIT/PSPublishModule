@@ -17,8 +17,10 @@ feature roadmap.
   compression, and estate repair use shared C# engines behind thin PowerShell
   cmdlets.
 - [x] Estate repair keeps physical roots, PowerShell editions, scopes, and local
-  profiles independent; cleanup uses exact-path uninstall safety and returns
-  post-apply convergence evidence.
+  profiles independent; supplied inventories retain explicit destinations;
+  cleanup replans after delivery, uses exact-path uninstall safety, protects
+  current-runspace loaded modules, validates visible cross-root dependencies,
+  and returns post-apply convergence evidence.
 - [x] Common PowerShellGet and stable PSResourceGet module workflows have
   documented managed equivalents, including typed pipelines and version-range
   selection.

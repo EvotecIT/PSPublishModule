@@ -45,6 +45,15 @@ internal sealed class ModuleStateProfilePathDiscoveryService
                         candidate.Path,
                         profileName: Path.GetFileName(candidate.Path)));
                 }
+                else
+                {
+                    diagnostics.Add(new ModuleStateInventoryDiagnostic(
+                        ModuleStateConflictSeverity.Warning,
+                        "ModuleState.UserProfileUnavailable",
+                        $"Discovered user profile path '{candidate.Path}' is no longer accessible.",
+                        candidate.Path,
+                        profileName: Path.GetFileName(candidate.Path)));
+                }
 
                 continue;
             }
@@ -53,11 +62,17 @@ internal sealed class ModuleStateProfilePathDiscoveryService
             var discoveredForProfile = 0;
             foreach (var moduleRoot in EnumerateStandardModuleRoots(candidate.Path, profileName))
             {
-                if (!Directory.Exists(moduleRoot.Path) || !seenRoots.Add(moduleRoot.Path))
+                if (!candidate.IsRequired && !Directory.Exists(moduleRoot.Path))
+                {
+                    TryReportUnavailableModuleRoot(moduleRoot, diagnostics);
+                    continue;
+                }
+                if (!seenRoots.Add(moduleRoot.Path))
                     continue;
 
                 paths.Add(moduleRoot);
-                discoveredForProfile++;
+                if (Directory.Exists(moduleRoot.Path))
+                    discoveredForProfile++;
             }
 
             if (candidate.IsRequired && discoveredForProfile == 0)
@@ -74,6 +89,44 @@ internal sealed class ModuleStateProfilePathDiscoveryService
 
         return new ModuleStateProfilePathDiscoveryResult(paths.ToArray(), diagnostics.ToArray());
     }
+
+    private static void TryReportUnavailableModuleRoot(
+        ModuleStateModulePath moduleRoot,
+        ICollection<ModuleStateInventoryDiagnostic> diagnostics)
+    {
+        try
+        {
+            var attributes = File.GetAttributes(moduleRoot.Path);
+            if ((attributes & FileAttributes.Directory) != 0)
+            {
+                diagnostics.Add(CreateUnavailableModuleRootDiagnostic(
+                    moduleRoot,
+                    "The discovered module root exists but could not be inspected."));
+            }
+        }
+        catch (FileNotFoundException)
+        {
+        }
+        catch (DirectoryNotFoundException)
+        {
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            diagnostics.Add(CreateUnavailableModuleRootDiagnostic(moduleRoot, ex.Message));
+        }
+    }
+
+    private static ModuleStateInventoryDiagnostic CreateUnavailableModuleRootDiagnostic(
+        ModuleStateModulePath moduleRoot,
+        string reason)
+        => new(
+            ModuleStateConflictSeverity.Warning,
+            "ModuleState.UserProfileModuleRootUnavailable",
+            $"Discovered user-profile module root '{moduleRoot.Path}' could not be inspected: {reason}",
+            moduleRoot.Path,
+            moduleRoot.PowerShellEdition,
+            moduleRoot.Scope,
+            moduleRoot.ProfileName);
 
     private static IEnumerable<string> DiscoverLocalProfileDirectories(
         string? localProfilesRoot,
@@ -114,16 +167,21 @@ internal sealed class ModuleStateProfilePathDiscoveryService
         string profilePath,
         string profileName)
     {
-        yield return new ModuleStateModulePath(
-            Path.Combine(profilePath, "Documents", "PowerShell", "Modules"),
-            powerShellEdition: "Core",
-            scope: "CurrentUser",
-            profileName: profileName);
-        yield return new ModuleStateModulePath(
-            Path.Combine(profilePath, "Documents", "WindowsPowerShell", "Modules"),
-            powerShellEdition: "Desktop",
-            scope: "CurrentUser",
-            profileName: profileName);
+        if (FrameworkCompatibility.IsWindows())
+        {
+            yield return new ModuleStateModulePath(
+                Path.Combine(profilePath, "Documents", "PowerShell", "Modules"),
+                powerShellEdition: "Core",
+                scope: "CurrentUser",
+                profileName: profileName);
+            yield return new ModuleStateModulePath(
+                Path.Combine(profilePath, "Documents", "WindowsPowerShell", "Modules"),
+                powerShellEdition: "Desktop",
+                scope: "CurrentUser",
+                profileName: profileName);
+            yield break;
+        }
+
         yield return new ModuleStateModulePath(
             Path.Combine(profilePath, ".local", "share", "powershell", "Modules"),
             powerShellEdition: "Core",

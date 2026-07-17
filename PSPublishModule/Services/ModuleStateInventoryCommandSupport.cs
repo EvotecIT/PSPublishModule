@@ -155,6 +155,43 @@ internal static class ModuleStateInventoryCommandSupport
             inventory.ModulePaths ?? Array.Empty<string>());
     }
 
+    internal static ModuleStateInventoryResult MergeWithModulePathEntries(
+        ModuleStateInventoryResult inventory,
+        IEnumerable<ModuleStateModulePath> modulePaths,
+        IEnumerable<ModuleStateLoadedModuleEvidence>? loadedModules = null,
+        string source = "SupplementalModulePath",
+        IEnumerable<ModuleStateInventoryDiagnostic>? additionalDiagnostics = null)
+    {
+        if (inventory is null)
+            throw new ArgumentNullException(nameof(inventory));
+
+        var baseInventory = ModuleStateInventoryResultMapper.ToCoreInventory(
+            IncludeLoadedModules(inventory, loadedModules));
+        var supplementalResult = CreateInventoryResultFromModulePathEntries(
+            modulePaths,
+            loadedModules,
+            source: source,
+            additionalDiagnostics: additionalDiagnostics);
+        var supplementalInventory = ModuleStateInventoryResultMapper.ToCoreInventory(supplementalResult);
+        var installedModules = baseInventory.InstalledModules
+            .Concat(supplementalInventory.InstalledModules)
+            .GroupBy(CreateInstalledModuleIdentity, ModuleStatePathIdentity.Comparer)
+            .Select(static group => group.Last())
+            .ToArray();
+        var mergedPaths = NormalizeModulePathEntries(
+            baseInventory.ModulePaths.Concat(supplementalInventory.ModulePaths));
+        var diagnostics = baseInventory.Diagnostics
+            .Concat(supplementalInventory.Diagnostics)
+            .GroupBy(CreateDiagnosticIdentity, ModuleStatePathIdentity.Comparer)
+            .Select(static group => group.Last())
+            .ToArray();
+        var merged = new ModuleStateInventory(installedModules, mergedPaths, diagnostics);
+        return ModuleStateInventoryResultMapper.ToCmdletResult(
+            merged,
+            string.IsNullOrWhiteSpace(inventory.Source) ? source : inventory.Source + "+" + source,
+            mergedPaths.Select(static path => path.Path).ToArray());
+    }
+
     internal static ModuleStateLoadedModuleEvidence[] GetLoadedModules(PSCmdlet cmdlet)
     {
         if (cmdlet is null)
@@ -206,6 +243,26 @@ internal static class ModuleStateInventoryCommandSupport
         => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
+
+    private static string CreateInstalledModuleIdentity(ModuleStateInstalledModule module)
+        => string.Join(
+            "|",
+            module.Name.ToUpperInvariant(),
+            module.Version.ToUpperInvariant(),
+            string.IsNullOrWhiteSpace(module.Path)
+                ? ModuleStatePathIdentity.CreateEstateKey(
+                    module.PowerShellEdition,
+                    module.Scope,
+                    module.ModuleRoot,
+                    module.ProfileName)
+                : ModuleStatePathIdentity.Normalize(module.Path!));
+
+    private static string CreateDiagnosticIdentity(ModuleStateInventoryDiagnostic diagnostic)
+        => string.Join(
+            "|",
+            diagnostic.Code.ToUpperInvariant(),
+            ModuleStatePathIdentity.Normalize(diagnostic.Path),
+            diagnostic.Message);
 
     private static string? InferPowerShellEdition(string path)
     {

@@ -22,7 +22,8 @@ Uninstall-ManagedModule [-InputObject] <ModuleStateInstalledModuleResult[]> [-Sk
 ## DESCRIPTION
 This command removes modules from the selected managed module root without invoking PowerShellGet or
 PSResourceGet. It follows PSResourceGet-shaped uninstall selection semantics while adding managed
-dependency and loaded-module safety checks.
+dependency and loaded-module safety checks. InstalledLocation always selects the exact installed directory,
+whether it is bound directly or received from Get-ManagedModule pipeline output.
 
 ## EXAMPLES
 

@@ -21,6 +21,11 @@ public sealed class ManagedModuleUninstallPlan
     public string ModuleRoot { get; set; } = string.Empty;
 
     /// <summary>
+    /// Module roots whose installed modules participate in dependency revalidation.
+    /// </summary>
+    public IReadOnlyList<string> DependencyModuleRoots { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// True when dependency checks are skipped.
     /// </summary>
     public bool SkipDependencyCheck { get; set; }

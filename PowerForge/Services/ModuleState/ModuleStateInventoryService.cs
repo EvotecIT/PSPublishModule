@@ -440,12 +440,12 @@ internal sealed class ModuleStateInventoryService
         }
     }
 
-    private static ModuleStateInventoryDiagnostic CreatePathDiagnostic(
+    internal static ModuleStateInventoryDiagnostic CreatePathDiagnostic(
         ModuleStateModulePath modulePath,
         string code,
         string message)
         => new(
-            ModuleStateConflictSeverity.Error,
+            modulePath.IsRequired ? ModuleStateConflictSeverity.Error : ModuleStateConflictSeverity.Warning,
             code,
             message,
             modulePath.Path,
