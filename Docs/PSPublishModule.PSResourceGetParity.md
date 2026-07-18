@@ -12,6 +12,7 @@ References:
 
 - [PSResourceGet command reference](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.psresourceget/?view=powershellget-3.x)
 - [PSResourceGet 1.2.0 release notes](https://learn.microsoft.com/en-us/powershell/gallery/powershellget/psresourceget-release-notes?view=powershellget-3.x)
+- [PSResourceGet 1.2.0 Authenticode implementation](https://github.com/PowerShell/PSResourceGet/blob/v1.2.0/src/code/Utils.cs)
 - [Managed module compatibility contract](PSPublishModule.ManagedModules.Compatibility.md)
 - [Managed module release readiness](PSPublishModule.ManagedModules.ReleaseReadiness.md)
 
@@ -77,7 +78,7 @@ provider gaps; direct credentials and supported NuGet endpoints remain usable.
 | `-TrustRepository` | The reusable engine never prompts. Use trusted profiles and `-RequireTrustedRepository` rather than a prompt-suppression switch whose meaning would be inverted. | Managed difference |
 | `-PassThru` | Managed lifecycle commands always return typed result or plan objects; an extra output-enabling switch is unnecessary. | Managed difference |
 | `-TemporaryPath` | Staging is owned and cleaned by the engine. `-PackageCacheDirectory` is available for durable package-cache control. | Managed difference |
-| `-AuthenticodeCheck` | Extracted signable files are checked before promotion on Windows. Complete catalog policy, timestamp, and short-lived certificate-chain evidence remains open. | Explicit gap |
+| `-AuthenticodeCheck` | Extracted signable files, including `.cat` files, are validated with native WinTrust before promotion on Windows. This matches the stable 1.2.0 implementation's effective signature check. On non-Windows hosts the managed command fails closed instead of warning and continuing unchecked. | Managed difference |
 | Repository priority fanout | Profiles store priority, but lifecycle commands do not silently fan out across all profiles. Select a profile or source explicitly. | Managed difference |
 | `-CredentialProvider` | Static credentials and API keys are supported; automatic provider bootstrap is not. | Explicit gap |
 | `-ModulePrefix` | Microsoft Artifact Registry prefix application is not supported by the current package transport. | Explicit gap |
@@ -120,8 +121,9 @@ is planned solely for command-name parity.
   pipeline interoperability.
 - [x] Keep module XML help and generated command docs aligned with the actual
   public surface.
-- [ ] Complete catalog, timestamp, and short-lived certificate-chain proof for
-  `-AuthenticodeCheck`.
+- [x] Match stable PSResourceGet 1.2.0 `-AuthenticodeCheck` behavior for module
+  files and signed catalogs on Windows. Deeper catalog-content and certificate
+  lifecycle fixtures remain future security hardening, not a module-parity gap.
 - [ ] Add non-module lifecycle commands only behind a shared resource model that
   does not slow module find/install/save/update paths.
 - [ ] Add provider-specific credential bootstrap or MAR transport only when the
