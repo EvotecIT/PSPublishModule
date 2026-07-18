@@ -19,7 +19,17 @@ internal sealed class ManagedModuleVersionComparer : IComparer<string>
     }
 
     internal static bool IsPrerelease(string version)
-        => !string.IsNullOrWhiteSpace(version) && version.IndexOf('-') >= 0;
+    {
+        if (string.IsNullOrWhiteSpace(version))
+            return false;
+
+        var normalizedVersion = version.Trim();
+        var buildMetadataIndex = normalizedVersion.IndexOf('+');
+        if (buildMetadataIndex >= 0)
+            normalizedVersion = normalizedVersion.Substring(0, buildMetadataIndex);
+
+        return normalizedVersion.IndexOf('-') >= 0;
+    }
 
     private sealed class ManagedModuleVersionParts : IComparable<ManagedModuleVersionParts>
     {

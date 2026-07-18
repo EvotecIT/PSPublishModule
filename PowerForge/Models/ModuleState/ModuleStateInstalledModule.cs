@@ -15,7 +15,9 @@ internal sealed class ModuleStateInstalledModule
         string? sourceRepository = null,
         bool isLoaded = false,
         bool isEffectiveImportCandidate = false,
-        IEnumerable<string>? exportedCommands = null)
+        IEnumerable<string>? exportedCommands = null,
+        string? moduleRoot = null,
+        string? profileName = null)
     {
         Name = string.IsNullOrWhiteSpace(name)
             ? throw new ArgumentException("Module name is required.", nameof(name))
@@ -36,6 +38,8 @@ internal sealed class ModuleStateInstalledModule
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(static command => command, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        ModuleRoot = NormalizeOptional(moduleRoot);
+        ProfileName = NormalizeOptional(profileName);
     }
 
     internal string Name { get; }
@@ -55,6 +59,10 @@ internal sealed class ModuleStateInstalledModule
     internal bool IsEffectiveImportCandidate { get; }
 
     internal string[] ExportedCommands { get; }
+
+    internal string? ModuleRoot { get; }
+
+    internal string? ProfileName { get; }
 
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();

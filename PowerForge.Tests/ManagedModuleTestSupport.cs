@@ -1,4 +1,6 @@
 using System.IO.Compression;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 
 namespace PowerForge.Tests;
@@ -162,4 +164,23 @@ internal static class TestHash
         using var sha256 = SHA256.Create();
         return BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
     }
+}
+
+internal static class TestFileLink
+{
+    public static void CreateHardLink(string linkPath, string existingPath)
+    {
+        var created = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? CreateHardLinkWindows(linkPath, existingPath, IntPtr.Zero)
+            : CreateHardLinkUnix(existingPath, linkPath) == 0;
+        if (!created)
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+    }
+
+    [DllImport("kernel32.dll", EntryPoint = "CreateHardLinkW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CreateHardLinkWindows(string fileName, string existingFileName, IntPtr securityAttributes);
+
+    [DllImport("libc", EntryPoint = "link", SetLastError = true)]
+    private static extern int CreateHardLinkUnix(string existingPath, string linkPath);
 }

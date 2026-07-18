@@ -13,6 +13,11 @@ public sealed class ManagedModulePublishRequest
     public string ModulePath { get; set; } = string.Empty;
 
     /// <summary>
+    /// Optional existing .nupkg path to publish without repacking a module folder.
+    /// </summary>
+    public string? PackagePath { get; set; }
+
+    /// <summary>
     /// Optional explicit module manifest path.
     /// </summary>
     public string? ManifestPath { get; set; }

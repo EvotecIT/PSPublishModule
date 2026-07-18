@@ -47,8 +47,8 @@
       },
       "AngleSharp.Css": {
         "type": "Transitive",
-        "resolved": "1.0.0-beta.213",
-        "contentHash": "R6Fn8GnapJi0uqJODCDUM0aYftaomcWhrk1Ty+U8E4zsTd+So4ZyDHS6J9Nni9b8WMCCp+pnMAehmVwbsgYMeQ==",
+        "resolved": "1.0.0-beta.216",
+        "contentHash": "RVt/B1pp7HREgerDw8BVZSDC+Uqh+yeL/OGtu57mLLhBBPIQ1oSYrPKOYgdt0EZEK34l7BNCjx4BaQRNRN/ZIw==",
         "dependencies": {
           "AngleSharp": "[1.0.0, 2.0.0)"
         }
@@ -64,8 +64,8 @@
       },
       "AngleSharp.Js": {
         "type": "Transitive",
-        "resolved": "1.0.0-beta.47",
-        "contentHash": "zSBLEBwoSBwU0JKtHX6DF5X4CDML/Sn92LrAlpy+XbI8wOCkZ8DVqh5mLlHXq8s6cVaOX2PzhPV5m7wv/6MT3A==",
+        "resolved": "1.0.0-beta.49",
+        "contentHash": "K8LNWxFokKzoF6XKVa4fXrWRKJd1VwnhDvMshbpsdv0uMlOErUsK4yBOGiGBWvI/0pwVepJelJ8+O2MfAu0ptw==",
         "dependencies": {
           "AngleSharp": "[1.0.0, 2.0.0)",
           "Jint": "[4.0.0, 5.0.0)"
@@ -97,13 +97,13 @@
       },
       "HtmlTinkerX": {
         "type": "Transitive",
-        "resolved": "2.0.20",
-        "contentHash": "WB6fOpmVc8gcbbpgksOMraY8a3Y9VsNdYKksbZLDxS6D1E6+a1JhEIlgmxqfzFRH+pUI1MY/zqc+BiKbcNktuA==",
+        "resolved": "2.2.0",
+        "contentHash": "qB7S0sMrR/nnVwu0qpq0uKE4IrWOj2GCgSrUHYi7zrCCNmVaewDGtqly3JxMRGNsJA/iIUzXM9h8fgsUGWxVZQ==",
         "dependencies": {
           "AngleSharp": "1.5.2",
-          "AngleSharp.Css": "1.0.0-beta.213",
+          "AngleSharp.Css": "1.0.0-beta.216",
           "AngleSharp.Diffing": "1.1.1",
-          "AngleSharp.Js": "1.0.0-beta.47",
+          "AngleSharp.Js": "1.0.0-beta.49",
           "ChartForgeX": "0.1.6",
           "HtmlAgilityPack": "1.12.4",
           "Jint": "4.8.0",
@@ -897,7 +897,7 @@
       "powerforge.web": {
         "type": "Project",
         "dependencies": {
-          "HtmlTinkerX": "[2.0.20, )",
+          "HtmlTinkerX": "[2.2.0, )",
           "Magick.NET-Q8-AnyCPU": "[14.14.0, )",
           "OfficeIMO.Markdown": "[0.6.13, )",
           "PowerForge": "[1.0.4, )",

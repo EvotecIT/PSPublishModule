@@ -280,6 +280,71 @@ public sealed class ServerRecoverySecurityTests
     }
 
     [Fact]
+    public void ManifestValidation_RejectsUntaggedSudoersTargets()
+    {
+        var manifest = CreateManifest();
+        manifest.Repositories =
+        [
+            new PowerForgeServerRepository { Role = "application", Path = "/srv/example" }
+        ];
+        manifest.Paths =
+        [
+            new PowerForgeServerPath
+            {
+                Id = "untagged-sudoers",
+                Path = "/etc/sudoers.d/powerforge-example",
+                Source = "/srv/example/deploy/powerforge-example.sudoers",
+                Kind = "file",
+                Owner = "root",
+                Group = "root",
+                Mode = "0440"
+            }
+        ];
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("must declare validation 'sudoers'", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ManifestValidation_RejectsSudoersTargetsOutsideManagedPaths()
+    {
+        var manifest = CreateManifest();
+        manifest.Repositories =
+        [
+            new PowerForgeServerRepository { Role = "application", Path = "/srv/example" }
+        ];
+        manifest.Apache = new PowerForgeServerApache
+        {
+            Sites =
+            [
+                new PowerForgeServerManagedFile
+                {
+                    Source = "/srv/example/deploy/apache.sudoers",
+                    Target = "/etc/sudoers.d/powerforge-apache"
+                }
+            ]
+        };
+        manifest.Systemd = new PowerForgeServerSystemd
+        {
+            Services =
+            [
+                new PowerForgeServerSystemdUnit
+                {
+                    Name = "powerforge-example.service",
+                    Source = "/srv/example/deploy/example.service",
+                    Target = "/etc/sudoers"
+                }
+            ]
+        };
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("apache.files[0].target must not manage", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("systemd.units[0].target must not manage", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void ManifestValidation_RejectsManagedSourcesThatReadSecretsOrWriteIntoRepositories()
     {
         var manifest = CreateManifest();

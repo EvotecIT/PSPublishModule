@@ -1,0 +1,974 @@
+using System.Diagnostics;
+using System.Text.Json;
+
+namespace PowerForge.Tests;
+
+public sealed class GitHubServerRecoveryValidationSecurityTests
+{
+    private const string CaptureUser = "powerforge-example-backup";
+    private const string CallerRepository = "EvotecIT/ExampleSite";
+    private const string EngineRepository = "EvotecIT/PSPublishModule";
+    private const string EngineRef = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    private const string Recipient = "age1example";
+    private const string ExpectedPlainCaptureCommand = "/usr/bin/tar -czf - /etc/example/config";
+    private const string ExpectedCaptureCommand = "/usr/local/sbin/powerforge-server-encrypted-capture --recipient age1example -- /etc/example/secret";
+    private const string ExpectedInspectCommand = "/usr/sbin/apachectl -S";
+
+    [Theory]
+    [InlineData("https://github.com/EvotecIT/ExampleSite.git")]
+    [InlineData("ssh://git@github.com/EvotecIT/ExampleSite.git")]
+    [InlineData("git@github.com:EvotecIT/ExampleSite.git")]
+    public void Validator_ShouldAcceptExplicitGitHubRepositoryForms(string repositoryUrl)
+    {
+        var result = RunValidator(repositoryUrl: repositoryUrl);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("2", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldResolveEngineAndCallerSourcesWhenRepositorySlugsMatch()
+    {
+        var result = RunValidator(
+            repositoryUrl: "https://github.com/EvotecIT/PSPublishModule.git",
+            callerRepository: EngineRepository);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("2", result.StandardOutput.Trim());
+    }
+
+    [Theory]
+    [InlineData("https://evilgithub.com/EvotecIT/ExampleSite.git")]
+    [InlineData("git@github.com-evil.com:EvotecIT/ExampleSite.git")]
+    [InlineData("git@github.com-example:EvotecIT/ExampleSite.git")]
+    public void Validator_ShouldRejectLookalikeGitHubHosts(string repositoryUrl)
+    {
+        var result = RunValidator(repositoryUrl: repositoryUrl);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("not a supported GitHub URL", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectBroaderEncryptedCaptureAliases()
+    {
+        var sudoers = $"Cmnd_Alias BACKUP_ENCRYPTED = {ExpectedCaptureCommand}, /usr/bin/tar -czf - /etc/example/secret\n" +
+                      $"{CaptureUser} ALL=(root) NOPASSWD: BACKUP_ENCRYPTED\n";
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.True(
+            result.AllOutput.Contains("must authorize exactly one command", StringComparison.Ordinal),
+            result.AllOutput);
+    }
+
+    [Fact]
+    public void Validator_ShouldIgnoreBroaderAliasesNotGrantedToCaptureUser()
+    {
+        var sudoers = BuildExpectedSudoers(CaptureUser, "root") +
+                      $"Cmnd_Alias DEPLOY_BROAD = {ExpectedCaptureCommand}, /usr/bin/tar -czf - /etc/example/secret\n" +
+                      "deployment-user ALL=(root) NOPASSWD: DEPLOY_BROAD\n";
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("2", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectCallerControlledEncryptionHelpers()
+    {
+        var result = RunValidator(helperFromCaller: true);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("exact managed helper from the pinned PowerForge engine", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectRepositoryPathsThatShadowTheEngineHelper()
+    {
+        var result = RunValidator(shadowEngineHelper: true);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("exact managed helper from the pinned PowerForge engine", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("other-user", "root")]
+    [InlineData(CaptureUser, "backup")]
+    public void Validator_ShouldBindAuthorizationToCaptureUserAndRoot(string principal, string runAs)
+    {
+        var sudoers = BuildExpectedSudoers(principal, runAs);
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains(
+            principal == CaptureUser ? "only as root" : "do not authorize the exact hardened encrypted-capture command",
+            result.AllOutput,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectAdditionalCaptureAccountGrants()
+    {
+        var sudoers = $"Cmnd_Alias BACKUP_PLAIN = {ExpectedPlainCaptureCommand}\n" +
+                      $"Cmnd_Alias BACKUP_ENCRYPTED = {ExpectedCaptureCommand}\n" +
+                      $"Cmnd_Alias BACKUP_INSPECT = {ExpectedInspectCommand}\n" +
+                      "Cmnd_Alias BACKUP_DIRECT_TAR = /usr/bin/tar -czf - /etc/example/secret\n" +
+                      $"{CaptureUser} ALL=(root) NOPASSWD: BACKUP_PLAIN, BACKUP_ENCRYPTED, BACKUP_INSPECT, BACKUP_DIRECT_TAR\n";
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("do not authorize the exact hardened encrypted-capture command", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectAlternateHostCaptureAccountGrants()
+    {
+        var sudoers = BuildExpectedSudoers(CaptureUser, "root") +
+                      $"{CaptureUser} localhost=(root) NOPASSWD: BACKUP_ENCRYPTED\n";
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("must use the exact ALL=(root) form", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectInvalidSudoersAliasNames()
+    {
+        var sudoers = $"Cmnd_Alias BACKUP-ENCRYPTED = {ExpectedCaptureCommand}\n" +
+                      $"{CaptureUser} ALL=(root) NOPASSWD: BACKUP-ENCRYPTED\n";
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("invalid command alias", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldIgnoreCloneOnlyNonGitHubRepositories()
+    {
+        var result = RunValidator(includeCloneOnlyRepository: true);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("2", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldIgnoreCloneOnlyRepositoriesWithoutUrls()
+    {
+        var result = RunValidator(includeCloneOnlyRepositoryWithoutUrl: true);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("2", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectSymlinkModeInPinnedSources()
+    {
+        var result = RunValidator(pinSudoersAsSymlink: true);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("unsupported Git mode 120000", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectWildcardedPlainCapturePaths()
+    {
+        var result = RunValidator(plainCaptureTarget: "/etc/example/*.conf");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("Plain recovery capture path contains unsupported characters", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRequireRootOwnedHelperMetadata()
+    {
+        var result = RunValidator(helperOwner: CaptureUser);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("exact managed helper from the pinned PowerForge engine", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("755")]
+    [InlineData("0755")]
+    public void Validator_ShouldAcceptSchemaEquivalentHelperModes(string mode)
+    {
+        var result = RunValidator(helperMode: mode);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("2", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldRequireRootOwnedSudoersMetadata()
+    {
+        var result = RunValidator(sudoersOwner: CaptureUser);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("must be root-owned files with mode 440 or 0440", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("440")]
+    [InlineData("0440")]
+    public void Validator_ShouldAcceptSchemaSupportedSudoersModes(string mode)
+    {
+        var result = RunValidator(sudoersMode: mode);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("2", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectSchemaInvalidSudoersModes()
+    {
+        var result = RunValidator(sudoersMode: "400");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("must be root-owned files with mode 440 or 0440", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectUntaggedSudoersTargets()
+    {
+        var result = RunValidator(tagSudoers: false);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("must declare sudoers validation", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("/etc/sudoers", "must not replace /etc/sudoers")]
+    [InlineData("/etc/sudoers.d", "must not replace /etc/sudoers")]
+    [InlineData("/etc/sudoers.d/powerforge-apache", "must declare sudoers validation")]
+    public void Validator_ShouldRejectSudoersTargetsFromAlternateManifestSections(string target, string expectedError)
+    {
+        var result = RunValidator(alternateManagedSudoersTarget: target);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains(expectedError, result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("#1001 ALL=(root) NOPASSWD: /bin/sh")]
+    [InlineData("#1001,other-user ALL=(root) NOPASSWD: /bin/sh")]
+    public void Validator_ShouldRejectNumericUidPrincipals(string numericGrant)
+    {
+        var sudoers = BuildExpectedSudoers(CaptureUser, "root") +
+                      numericGrant + "\n";
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("must not use numeric user principals", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldInspectEveryManagedSudoersSource()
+    {
+        var extraSudoers = "Cmnd_Alias BACKUP_DIRECT = /usr/bin/tar -czf - /etc/example/secret\n" +
+                           $"{CaptureUser} ALL=(root) NOPASSWD: BACKUP_DIRECT\n";
+
+        var result = RunValidator(additionalSudoers: extraSudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("do not authorize the exact hardened encrypted-capture command", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldAllowUnrelatedMultiCommandAliases()
+    {
+        var extraSudoers = "Cmnd_Alias DEPLOY_TOOLS = /usr/bin/true, /usr/bin/false\n" +
+                           "deployment-user ALL=(root) NOPASSWD: DEPLOY_TOOLS\n";
+
+        var result = RunValidator(additionalSudoers: extraSudoers);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("3", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldResolveCaptureAliasesAcrossManagedSudoersSources()
+    {
+        var grant = $"{CaptureUser} ALL=(root) NOPASSWD: BACKUP_PLAIN, BACKUP_ENCRYPTED, BACKUP_INSPECT\n";
+
+        var result = RunValidator(sudoers: BuildExpectedAliases(), additionalSudoers: grant);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("3", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldTreatMissingCaptureConfigurationAsEmpty()
+    {
+        var result = RunValidator(includeCapture: false);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("2", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectSudoersIncludesWithoutEncryptedCapture()
+    {
+        var result = RunValidator(
+            sudoers: "@includedir /etc/sudoers.d\n",
+            includeCapture: false);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("must not include additional policy files", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectCaptureGrantsWithoutEncryptedCapture()
+    {
+        var result = RunValidator(
+            sudoers: BuildExpectedSudoers(CaptureUser, "root"),
+            includeCapture: false);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("when encrypted capture is not configured", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectUserAliasesInManagedSudoers()
+    {
+        var extraSudoers = $"User_Alias PF_BACKUP = {CaptureUser}\n" +
+                           "Cmnd_Alias BACKUP_DIRECT = /bin/sh\n" +
+                           "PF_BACKUP ALL=(root) NOPASSWD: BACKUP_DIRECT\n";
+
+        var result = RunValidator(additionalSudoers: extraSudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("must not use User_Alias entries", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldCompareGrantedCommandsCaseSensitively()
+    {
+        var sudoers = $"Cmnd_Alias BACKUP_PLAIN = {ExpectedPlainCaptureCommand.Replace("/usr/bin/tar", "/USR/BIN/TAR", StringComparison.Ordinal)}\n" +
+                      $"Cmnd_Alias BACKUP_ENCRYPTED = {ExpectedCaptureCommand}\n" +
+                      $"Cmnd_Alias BACKUP_INSPECT = {ExpectedInspectCommand}\n" +
+                      $"{CaptureUser} ALL=(root) NOPASSWD: BACKUP_PLAIN, BACKUP_ENCRYPTED, BACKUP_INSPECT\n";
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("do not authorize the exact hardened encrypted-capture command", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectLowercaseCommandAliases()
+    {
+        var sudoers = BuildExpectedSudoers(CaptureUser, "root")
+            .Replace("BACKUP_INSPECT", "backup_inspect", StringComparison.Ordinal);
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("invalid command alias", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectUppercaseAgeRecipients()
+    {
+        var result = RunValidator(recipient: "AGE1EXAMPLE");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("stable age public recipient", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRequireInlineRecipientForCredentialFreeValidation()
+    {
+        var result = RunValidator(recipient: "", recipientEnv: "POWERFORGE_AGE_RECIPIENT");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("does not resolve backupTarget.recipientEnv", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldNormalizePrivilegedCaptureCommandWhitespace()
+    {
+        var result = RunValidator(captureCommand: "  sudo -n apachectl -S  ");
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("2", result.StandardOutput.Trim());
+    }
+
+    [Theory]
+    [InlineData("Defaults !authenticate")]
+    [InlineData($"Defaults:{CaptureUser} !authenticate")]
+    [InlineData($"Defaults: {CaptureUser} !authenticate")]
+    [InlineData($"Defaults exempt_group={CaptureUser}")]
+    [InlineData($"Defaults exempt_group = {CaptureUser}")]
+    [InlineData($"Defaults: {CaptureUser} exempt_group={CaptureUser}")]
+    public void Validator_ShouldRejectAuthenticationDisablingDefaults(string defaults)
+    {
+        var sudoers = BuildExpectedSudoers(CaptureUser, "root") +
+                      defaults + "\n" +
+                      $"{CaptureUser} ALL=(root) /bin/sh\n";
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("must not disable authentication", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectNonCanonicalSudoCapturePrefixes()
+    {
+        var result = RunValidator(captureCommand: "SUDO -n apachectl -S");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("canonical case-sensitive sudo -n prefix", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("test -x /usr/sbin/apachectl && sudo -n /usr/sbin/apachectl -S")]
+    [InlineData("/usr/bin/sudo -n /usr/sbin/apachectl -S")]
+    [InlineData("sudo</dev/null -n /usr/sbin/apachectl -S")]
+    [InlineData("s\\udo -n /usr/sbin/apachectl -S")]
+    [InlineData("su''do -n /usr/sbin/apachectl -S")]
+    [InlineData("su\"\"do -n /usr/sbin/apachectl -S")]
+    [InlineData("s\\\nudo -n /usr/sbin/apachectl -S")]
+    public void Validator_ShouldRejectEmbeddedSudoCaptureCommands(string command)
+    {
+        var result = RunValidator(captureCommand: command);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("canonical case-sensitive sudo -n prefix", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("$SUDO -n /usr/sbin/apachectl -S")]
+    [InlineData("s${UNSET}udo -n /usr/sbin/apachectl -S")]
+    [InlineData("$(printf sudo) -n /usr/sbin/apachectl -S")]
+    [InlineData("`printf sudo` -n /usr/sbin/apachectl -S")]
+    public void Validator_ShouldRejectDynamicShellExpansionInCaptureCommands(string command)
+    {
+        var result = RunValidator(captureCommand: command);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("unsupported dynamic shell expansion", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("dpkg-query -W -f='${binary:Package}\\t${Version}\\n'")]
+    [InlineData("systemctl list-units 'evotec-*' --all --no-pager")]
+    [InlineData("systemctl list-units \"evotec-*\" --all --no-pager")]
+    public void Validator_ShouldAllowExpansionSyntaxInsideQuotedArguments(string command)
+    {
+        var sudoers = $"Cmnd_Alias BACKUP_PLAIN = {ExpectedPlainCaptureCommand}\n" +
+                      $"Cmnd_Alias BACKUP_ENCRYPTED = {ExpectedCaptureCommand}\n" +
+                      $"{CaptureUser} ALL=(root) NOPASSWD: BACKUP_PLAIN, BACKUP_ENCRYPTED\n";
+        var result = RunValidator(
+            sudoers: sudoers,
+            captureCommand: command);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+    }
+
+    [Theory]
+    [InlineData("/usr/bin/s[u]do -n /usr/sbin/apachectl -S")]
+    [InlineData("/usr/bin/s?do -n /usr/sbin/apachectl -S")]
+    [InlineData("/usr/bin/s*do -n /usr/sbin/apachectl -S")]
+    [InlineData("/usr/bin/s{u,}do -n /usr/sbin/apachectl -S")]
+    public void Validator_ShouldRejectUnquotedShellExpansionInCaptureCommands(string command)
+    {
+        var result = RunValidator(captureCommand: command);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("unsupported pathname or brace shell expansion", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("sudo -n /usr/bin/sudo -n /usr/sbin/apachectl -S")]
+    [InlineData("sudo -n /bin/sh -c sudo")]
+    [InlineData("sudo -n /bin/sh -c sudo</dev/null")]
+    public void Validator_ShouldRejectNestedSudoCaptureCommands(string command)
+    {
+        var result = RunValidator(captureCommand: command);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("exactly one canonical sudo -n prefix", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("sudo -n /bin/sh")]
+    [InlineData("sudo -n /usr/bin/true")]
+    public void Validator_ShouldRejectPrivilegedCommandsWithoutFixedArguments(string command)
+    {
+        var result = RunValidator(captureCommand: command);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("must include fixed arguments", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("sudo -n /usr/bin/chmod 0666 /etc/shadow")]
+    [InlineData("sudo -n /usr/bin/cat /etc/shadow")]
+    public void Validator_ShouldRejectPrivilegedCommandsOutsideReadOnlyAllowlist(string command)
+    {
+        var result = RunValidator(captureCommand: command);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("approved read-only command set", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("sudo -n ufw status numbered")]
+    [InlineData("sudo -n /usr/sbin/ufw status numbered")]
+    public void Validator_ShouldAllowApprovedFirewallStatusCapture(string command)
+    {
+        var sudoers = BuildExpectedSudoers(CaptureUser, "root")
+            .Replace(ExpectedInspectCommand, "/usr/sbin/ufw status numbered", StringComparison.Ordinal);
+
+        var result = RunValidator(sudoers: sudoers, captureCommand: command);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectSudoersThatFailVisudo()
+    {
+        var result = RunValidator(
+            additionalSudoers: "this is not valid sudoers\n");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("failed visudo syntax validation", result.AllOutput, StringComparison.Ordinal);
+        Assert.Equal(2, result.VisudoInvocations.Length);
+        Assert.DoesNotContain("VISUDO_STDOUT_SENTINEL", result.AllOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("VISUDO_STDERR_SENTINEL", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRunVisudoForEveryManagedSourceWithExactArguments()
+    {
+        var additionalSudoers = "Cmnd_Alias DEPLOY_TOOLS = /usr/bin/true, /usr/bin/false\n" +
+                                "deployment-user ALL=(root) NOPASSWD: DEPLOY_TOOLS\n";
+
+        var result = RunValidator(additionalSudoers: additionalSudoers);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal(3, result.VisudoInvocations.Length);
+        Assert.Contains(result.VisudoInvocations, path => path.EndsWith("backup.sudoers", StringComparison.Ordinal));
+        Assert.Contains(result.VisudoInvocations, path => path.EndsWith("extra.sudoers", StringComparison.Ordinal));
+        Assert.Contains(result.VisudoInvocations, path => Path.GetFileName(path).StartsWith("powerforge-managed-sudoers-", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void LinuxValidator_ShouldUseRealVisudoBoundary()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        Assert.True(File.Exists("/usr/sbin/visudo"));
+        var valid = RunValidator(visudoPathOverride: "/usr/sbin/visudo");
+        var invalid = RunValidator(
+            additionalSudoers: "this is not valid sudoers\n",
+            visudoPathOverride: "/usr/sbin/visudo");
+
+        Assert.True(valid.ExitCode == 0, valid.AllOutput);
+        Assert.NotEqual(0, invalid.ExitCode);
+        Assert.Contains("failed visudo syntax validation", invalid.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LinuxValidator_ShouldRejectCrossFileSudoersAliasConflicts()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        const string duplicateHostAlias = "Host_Alias POWERFORGE_TARGETS = localhost\n";
+        var result = RunValidator(
+            sudoers: duplicateHostAlias + BuildExpectedSudoers(CaptureUser, "root"),
+            additionalSudoers: duplicateHostAlias,
+            visudoPathOverride: "/usr/sbin/visudo");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("Combined managed sudoers policy failed visudo syntax validation", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("nopasswd:")]
+    [InlineData("NoPasswd:")]
+    public void Validator_ShouldRejectNonCanonicalNoPasswordTags(string tag)
+    {
+        var sudoers = BuildExpectedSudoers(CaptureUser, "root")
+            .Replace("NOPASSWD:", tag, StringComparison.Ordinal);
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("canonical case-sensitive NOPASSWD: tag", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldIgnoreNoPasswordTextInComments()
+    {
+        var sudoers = BuildExpectedSudoers(CaptureUser, "root") +
+                      "# lowercase nopasswd: text is only documentation\n";
+
+        var result = RunValidator(sudoers: sudoers);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("2", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectMixedCanonicalAndNonCanonicalNoPasswordTags()
+    {
+        var extraSudoers = "deployment-user ALL=(root) NOPASSWD: /usr/bin/true, nopasswd: /usr/bin/false\n";
+
+        var result = RunValidator(additionalSudoers: extraSudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("canonical case-sensitive NOPASSWD: tag", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectUppercaseAliasPrincipals()
+    {
+        var extraSudoers = "Cmnd_Alias EXTRA = /bin/sh\n" +
+                           "PF_BACKUP ALL=(root) NOPASSWD: EXTRA\n";
+
+        var result = RunValidator(additionalSudoers: extraSudoers);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("unsupported broad or aliased principal", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    private static ValidationResult RunValidator(
+        string repositoryUrl = "https://github.com/EvotecIT/ExampleSite.git",
+        string? sudoers = null,
+        bool helperFromCaller = false,
+        bool shadowEngineHelper = false,
+        bool includeCloneOnlyRepository = false,
+        bool includeCloneOnlyRepositoryWithoutUrl = false,
+        bool pinSudoersAsSymlink = false,
+        string plainCaptureTarget = "/etc/example/config",
+        string helperOwner = "root",
+        string helperMode = "755",
+        string sudoersOwner = "root",
+        string sudoersMode = "440",
+        bool tagSudoers = true,
+        string? alternateManagedSudoersTarget = null,
+        string? additionalSudoers = null,
+        bool includeCapture = true,
+        string recipient = Recipient,
+        string? recipientEnv = null,
+        string captureCommand = "sudo -n apachectl -S",
+        string? visudoPathOverride = null,
+        string callerRepository = CallerRepository,
+        string engineRepository = EngineRepository)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-recovery-source-security-" + Guid.NewGuid().ToString("N"));
+        var workspace = Path.Combine(root, "caller");
+        var engineRoot = Path.Combine(root, "engine");
+        Directory.CreateDirectory(Path.Combine(workspace, "deploy", "linux"));
+        Directory.CreateDirectory(Path.Combine(engineRoot, "Deployment", "Linux"));
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(engineRoot, "Deployment", "Linux", "powerforge-server-encrypted-capture.sh"),
+                "#!/usr/bin/env bash\nset -euo pipefail\n");
+            File.WriteAllText(
+                Path.Combine(workspace, "deploy", "linux", "backup.sudoers"),
+                sudoers ?? (includeCapture ? BuildExpectedSudoers(CaptureUser, "root") : "# no privileged capture grants\n"));
+            if (additionalSudoers is not null)
+                File.WriteAllText(Path.Combine(workspace, "deploy", "linux", "extra.sudoers"), additionalSudoers);
+            if (alternateManagedSudoersTarget is not null)
+                File.WriteAllText(Path.Combine(workspace, "deploy", "linux", "alternate.sudoers"), "# managed source fixture\n");
+
+            var helperSource = "/srv/engine/Deployment/Linux/powerforge-server-encrypted-capture.sh";
+            if (helperFromCaller)
+            {
+                File.WriteAllText(Path.Combine(workspace, "deploy", "linux", "fake-helper.sh"), "#!/usr/bin/env bash\nexit 0\n");
+                helperSource = "/srv/caller/deploy/linux/fake-helper.sh";
+            }
+            if (shadowEngineHelper)
+            {
+                Directory.CreateDirectory(Path.Combine(workspace, "Linux"));
+                File.WriteAllText(
+                    Path.Combine(workspace, "Linux", "powerforge-server-encrypted-capture.sh"),
+                    "#!/usr/bin/env bash\nexit 0\n");
+            }
+
+            InitializeGitRepository(workspace);
+            if (pinSudoersAsSymlink)
+            {
+                var sudoersPath = Path.Combine(workspace, "deploy", "linux", "backup.sudoers");
+                var blob = RunProcess("git", workspace, "hash-object", sudoersPath).StandardOutput.Trim();
+                RunProcess(
+                    "git",
+                    workspace,
+                    "update-index",
+                    "--cacheinfo",
+                    $"120000,{blob},deploy/linux/backup.sudoers").EnsureSuccess();
+                RunProcess("git", workspace, "commit", "-m", "Pin symlink mode", "--quiet").EnsureSuccess();
+            }
+            var callerRef = RunProcess("git", workspace, "rev-parse", "HEAD").StandardOutput.Trim();
+            var manifestPath = Path.Combine(root, "manifest.json");
+            var repositories = new List<object>
+            {
+                new { url = repositoryUrl, path = "/srv/caller", @ref = callerRef },
+                new { url = "https://github.com/EvotecIT/PSPublishModule.git", path = "/srv/engine", @ref = EngineRef }
+            };
+            if (shadowEngineHelper)
+                repositories.Add(new { url = repositoryUrl, path = "/srv/engine/Deployment", @ref = callerRef });
+            if (includeCloneOnlyRepository)
+                repositories.Add(new { url = "git@example.test:private/application.git", path = "/srv/clone-only", @ref = callerRef });
+            if (includeCloneOnlyRepositoryWithoutUrl)
+                repositories.Add(new { role = "application", path = "/srv/manual-clone", @ref = callerRef });
+
+            var managedPaths = new List<object>
+            {
+                new
+                {
+                    path = "/usr/local/sbin/powerforge-server-encrypted-capture",
+                    source = helperSource,
+                    kind = "file",
+                    owner = helperOwner,
+                    group = "root",
+                    mode = helperMode
+                },
+                new
+                {
+                    path = "/etc/sudoers.d/powerforge-example-backup",
+                    source = "/srv/caller/deploy/linux/backup.sudoers",
+                    kind = "file",
+                    owner = sudoersOwner,
+                    group = "root",
+                    mode = sudoersMode,
+                    validation = tagSudoers ? "sudoers" : null
+                }
+            };
+            if (additionalSudoers is not null)
+            {
+                managedPaths.Add(new
+                {
+                    path = "/etc/sudoers.d/powerforge-example-extra",
+                    source = "/srv/caller/deploy/linux/extra.sudoers",
+                    kind = "file",
+                    owner = "root",
+                    group = "root",
+                    mode = "440",
+                    validation = "sudoers"
+                });
+            }
+
+            object? capture = includeCapture
+                ? new
+                {
+                    plainFiles = new[] { new { target = plainCaptureTarget, required = true } },
+                    encryptedFiles = new[] { new { target = "/etc/example/secret", required = true } },
+                    commands = new[] { new { id = "apache-vhosts", command = captureCommand, required = true } }
+                }
+                : null;
+            object? backupTarget = includeCapture
+                ? recipientEnv is null
+                    ? new { recipient }
+                    : new { recipientEnv }
+                : null;
+            object? apache = alternateManagedSudoersTarget is not null
+                ? new
+                {
+                    sites = new[]
+                    {
+                        new
+                        {
+                            source = "/srv/caller/deploy/linux/alternate.sudoers",
+                            target = alternateManagedSudoersTarget
+                        }
+                    }
+                }
+                : null;
+            var manifest = new
+            {
+                repositories,
+                paths = managedPaths,
+                apache,
+                capture,
+                backupTarget
+            };
+            File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifest));
+
+            var wrapperPath = Path.Combine(root, "invoke-validator.ps1");
+            File.WriteAllText(wrapperPath, """
+                param(
+                    [Parameter(Mandatory)][string] $ValidatorPath,
+                    [Parameter(Mandatory)][string] $ManifestPath,
+                    [Parameter(Mandatory)][string] $Workspace,
+                    [Parameter(Mandatory)][string] $EngineRoot,
+                    [Parameter(Mandatory)][string] $EngineRef,
+                    [Parameter(Mandatory)][string] $CallerRepository,
+                    [Parameter(Mandatory)][string] $EngineRepository,
+                    [Parameter(Mandatory)][string] $CaptureUser,
+                    [Parameter(Mandatory)][string] $VisudoPath
+                )
+                $ErrorActionPreference = 'Stop'
+                $env:POWERFORGE_ENGINE_REF = $EngineRef
+                $manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json -Depth 100
+                try {
+                    & $ValidatorPath `
+                        -Manifest $manifest `
+                        -Workspace $Workspace `
+                        -EngineRoot $EngineRoot `
+                        -CallerRepository $CallerRepository `
+                        -EngineRepository $EngineRepository `
+                        -CaptureUser $CaptureUser `
+                        -VisudoPath $VisudoPath
+                } catch {
+                    [Console]::Error.WriteLine($_.Exception.Message)
+                    exit 1
+                }
+                """);
+
+            var validatorPath = GetRepoPath(
+                ".github", "actions", "powerforge-server-recovery-validate", "Assert-PowerForgeServerRecoverySources.ps1");
+            var visudoLogPath = Path.Combine(root, "visudo-invocations.log");
+            var visudoPath = visudoPathOverride ?? CreateVisudoStub(root, visudoLogPath);
+            var result = RunProcess(
+                "pwsh",
+                root,
+                "-NoLogo", "-NoProfile", "-File", wrapperPath,
+                "-ValidatorPath", validatorPath,
+                "-ManifestPath", manifestPath,
+                "-Workspace", workspace,
+                "-EngineRoot", engineRoot,
+                "-EngineRef", EngineRef,
+                "-CallerRepository", callerRepository,
+                "-EngineRepository", engineRepository,
+                "-CaptureUser", CaptureUser,
+                "-VisudoPath", visudoPath);
+            return result with
+            {
+                VisudoInvocations = File.Exists(visudoLogPath)
+                    ? File.ReadAllLines(visudoLogPath)
+                    : []
+            };
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort test cleanup */ }
+        }
+    }
+
+    private static string BuildExpectedAliases()
+        => $"Cmnd_Alias BACKUP_PLAIN = {ExpectedPlainCaptureCommand}\n" +
+           $"Cmnd_Alias BACKUP_ENCRYPTED = {ExpectedCaptureCommand}\n" +
+           $"Cmnd_Alias BACKUP_INSPECT = {ExpectedInspectCommand}\n";
+
+    private static string BuildExpectedSudoers(string principal, string runAs)
+        => BuildExpectedAliases() +
+           $"{principal} ALL=({runAs}) NOPASSWD: BACKUP_PLAIN, BACKUP_ENCRYPTED, BACKUP_INSPECT\n";
+
+    private static string CreateVisudoStub(string root, string logPath)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var path = Path.Combine(root, "visudo.cmd");
+            File.WriteAllText(path, $"""
+                @echo off
+                setlocal
+                if not "%~1"=="-c" exit /b 91
+                if not "%~2"=="-f" exit /b 92
+                if "%~3"=="" exit /b 93
+                if not "%~4"=="" exit /b 94
+                if not exist "%~3" exit /b 95
+                echo %~3>>"{logPath}"
+                findstr /C:"this is not valid sudoers" "%~3" >nul
+                if not errorlevel 1 (
+                  echo VISUDO_STDOUT_SENTINEL
+                  echo VISUDO_STDERR_SENTINEL 1>&2
+                  exit /b 1
+                )
+                exit /b 0
+                """);
+            return path;
+        }
+
+        var stub = Path.Combine(root, "visudo-stub.sh");
+        File.WriteAllText(stub, $$"""
+            #!/usr/bin/env sh
+            set -eu
+            [ "$#" -eq 3 ] || exit 91
+            [ "$1" = '-c' ] || exit 92
+            [ "$2" = '-f' ] || exit 93
+            [ -f "$3" ] || exit 94
+            printf '%s\n' "$3" >> '{{logPath}}'
+            if grep -Fq 'this is not valid sudoers' "$3"; then
+              echo 'VISUDO_STDOUT_SENTINEL'
+              echo 'VISUDO_STDERR_SENTINEL' >&2
+              exit 1
+            fi
+            exit 0
+            """);
+        File.SetUnixFileMode(stub, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        return stub;
+    }
+
+    private static void InitializeGitRepository(string path)
+    {
+        RunProcess("git", path, "init", "-b", "main").EnsureSuccess();
+        RunProcess("git", path, "config", "user.name", "PowerForge Tests").EnsureSuccess();
+        RunProcess("git", path, "config", "user.email", "powerforge-tests@example.invalid").EnsureSuccess();
+        RunProcess("git", path, "config", "commit.gpgsign", "false").EnsureSuccess();
+        RunProcess("git", path, "add", ".").EnsureSuccess();
+        RunProcess("git", path, "commit", "-m", "Recovery fixture", "--quiet").EnsureSuccess();
+    }
+
+    private static ValidationResult RunProcess(string fileName, string workingDirectory, params string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var argument in arguments)
+            startInfo.ArgumentList.Add(argument);
+
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start {fileName}.");
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return new ValidationResult(process.ExitCode, stdout, stderr);
+    }
+
+    private static string GetRepoPath(params string[] relativePath)
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        for (var i = 0; i < 12 && current is not null; i++)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "PowerForge", "PowerForge.csproj")))
+                return Path.Combine([current.FullName, .. relativePath]);
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Unable to locate repository root.");
+    }
+
+    private readonly record struct ValidationResult(int ExitCode, string StandardOutput, string StandardError)
+    {
+        public string[] VisudoInvocations { get; init; } = [];
+
+        public string AllOutput => StandardOutput + StandardError;
+
+        public void EnsureSuccess()
+        {
+            if (ExitCode != 0)
+                throw new InvalidOperationException(AllOutput);
+        }
+    }
+}

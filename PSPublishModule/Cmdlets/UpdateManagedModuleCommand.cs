@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
@@ -12,8 +13,10 @@ namespace PSPublishModule;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This command inspects the selected module root and updates only when the repository contains a newer selected
-/// version, or installs the target when the selected scope has no copy.
+/// This command provides the module-update functionality of <c>Update-PSResource</c>. It inspects the selected module
+/// root and updates only when the repository contains a newer selected version, or installs a named target when the
+/// selected scope has no copy. When Name is omitted, all installed modules in the selected roots are considered.
+/// Hash-constrained pipeline input is buffered and validated as one package target before any update starts.
 /// </para>
 /// </remarks>
 /// <example>
@@ -24,12 +27,19 @@ namespace PSPublishModule;
 /// <summary>Update a module in an explicit module root from a local feed</summary>
 /// <code>Update-ManagedModule -Name Company.Tools -Repository C:\Packages -Path C:\Modules</code>
 /// </example>
+/// <example>
+/// <summary>Preview updates for every module in the current-user root</summary>
+/// <code>Update-ManagedModule -Scope CurrentUser -Plan</code>
+/// </example>
 [Cmdlet(VerbsData.Update, "ManagedModule", SupportsShouldProcess = true)]
 [OutputType(typeof(ManagedModuleUpdateResult), typeof(ManagedModuleUpdatePlan))]
 public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
 {
+    private readonly List<string> _expectedHashNames = [];
+    private bool _expectedHashInputSeen;
+
     /// <summary>Module names to update.</summary>
-    [Parameter(Position = 0, ValueFromPipelineByPropertyName = true)]
+    [Parameter(Position = 0, ValueFromPipeline = true, ValueFromPipelineByPropertyName = true)]
     [Alias("ModuleName")]
     [ValidateNotNullOrEmpty]
     public string[] Name { get; set; } = Array.Empty<string>();
@@ -169,7 +179,7 @@ public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
     [Alias("SkipDependenciesCheck")]
     public SwitchParameter SkipDependencyCheck { get; set; }
 
-    /// <summary>Loaded module evidence used to block risky in-session updates.</summary>
+    /// <summary>Additional loaded module evidence used with modules detected automatically in the current PowerShell session.</summary>
     [Parameter]
     public ManagedModuleLoadedModule[] LoadedModule { get; set; } = Array.Empty<ManagedModuleLoadedModule>();
 
@@ -200,7 +210,7 @@ public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
     [Parameter]
     public SwitchParameter RequireSourceMatch { get; set; }
 
-    /// <summary>Allow updating even when matching loaded module evidence is supplied.</summary>
+    /// <summary>Allow updating even when a matching module is loaded in the current session or supplied as evidence.</summary>
     [Parameter]
     public SwitchParameter AllowLoadedModuleUpdate { get; set; }
 
@@ -217,7 +227,21 @@ public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
     public SwitchParameter Quiet { get; set; }
 
     /// <summary>Updates requested modules.</summary>
-    protected override async Task ProcessRecordAsync()
+    protected override Task ProcessRecordAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(ExpectedPackageSha256))
+        {
+            _expectedHashInputSeen = true;
+            _expectedHashNames.AddRange((Name ?? Array.Empty<string>())
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Select(static name => name.Trim()));
+            return Task.CompletedTask;
+        }
+
+        return ProcessModuleNamesAsync(Name);
+    }
+
+    private async Task ProcessModuleNamesAsync(IEnumerable<string>? requestedNames)
     {
         var moduleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot);
         var packageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory);
@@ -234,8 +258,14 @@ public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
         var service = new ManagedModuleUpdateService(logger, repositoryClient);
         var targetScope = string.IsNullOrWhiteSpace(moduleRoot) ? Scope : ManagedModuleInstallScope.Custom;
         var targetModuleRoot = ManagedModuleInstallRootResolver.Resolve(targetScope, ShellEdition, moduleRoot);
-        var moduleNames = ResolveModuleNames(targetModuleRoot).ToArray();
-        var updateAllInstalled = Name.Length == 0;
+        var normalizedRequestedNames = (requestedNames ?? Array.Empty<string>())
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Select(static name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var moduleNames = ResolveModuleNames(targetModuleRoot, normalizedRequestedNames).ToArray();
+        var updateAllInstalled = normalizedRequestedNames.Length == 0;
+        var loadedModules = ModuleStateInventoryCommandSupport.ResolveManagedLoadedModules(this, LoadedModule);
         var writeSummary = ManagedModuleCommandSupport.ShouldWriteSummary(ShowSummary.IsPresent, Quiet.IsPresent);
         if (moduleNames.Length == 0)
         {
@@ -270,7 +300,7 @@ public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
                     AcceptLicense = AcceptLicense.IsPresent,
                     AuthenticodeCheck = AuthenticodeCheck.IsPresent,
                     SkipDependencyCheck = SkipDependencyCheck.IsPresent,
-                    LoadedModules = LoadedModule,
+                    LoadedModules = loadedModules,
                     FamilyPolicy = ResolveFamilyPolicy(),
                     SourcePolicy = ResolveSourcePolicy(),
                     AllowLoadedModuleUpdate = AllowLoadedModuleUpdate.IsPresent
@@ -301,14 +331,24 @@ public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
         }
     }
 
-    private string[] ResolveModuleNames(string moduleRoot)
+    /// <summary>Validates and executes a hash-constrained update after every pipeline target is known.</summary>
+    protected override Task EndProcessingAsync()
     {
-        if (Name.Length > 0)
-            return Name
-                .Where(static name => !string.IsNullOrWhiteSpace(name))
-                .Select(static name => name.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
+        if (!_expectedHashInputSeen)
+            return Task.CompletedTask;
+
+        var requestedNames = _expectedHashNames
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (requestedNames.Length > 0)
+            ManagedModuleCommandSupport.ValidateSinglePackageHashTarget(ExpectedPackageSha256, requestedNames);
+        return ProcessModuleNamesAsync(requestedNames);
+    }
+
+    private static string[] ResolveModuleNames(string moduleRoot, IReadOnlyCollection<string> requestedNames)
+    {
+        if (requestedNames.Count > 0)
+            return requestedNames.ToArray();
 
         if (!Directory.Exists(moduleRoot))
             return Array.Empty<string>();

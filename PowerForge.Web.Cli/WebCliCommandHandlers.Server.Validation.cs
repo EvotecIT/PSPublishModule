@@ -92,6 +92,11 @@ internal static partial class WebCliCommandHandlers
             if (!string.IsNullOrWhiteSpace(path.Validation) &&
                 !string.Equals(path.Validation, "sudoers", StringComparison.OrdinalIgnoreCase))
                 errors.Add($"Managed path '{path.Id}' has unsupported validation '{path.Validation}'.");
+            if (string.Equals(normalizedPath, "/etc/sudoers", StringComparison.Ordinal))
+                errors.Add($"Managed path '{path.Id}' must not replace /etc/sudoers.");
+            else if (IsSudoersPolicyTarget(normalizedPath) &&
+                     !string.Equals(path.Validation, "sudoers", StringComparison.OrdinalIgnoreCase))
+                errors.Add($"Managed path '{path.Id}' below /etc/sudoers.d must declare validation 'sudoers'.");
             if (string.Equals(path.Validation, "sudoers", StringComparison.OrdinalIgnoreCase))
             {
                 if (string.IsNullOrWhiteSpace(path.Source))
@@ -228,6 +233,8 @@ internal static partial class WebCliCommandHandlers
                         errors.Add($"{id}.target must not end with '/'.");
                     if (observedTarget is not null && observedTarget.IndexOfAny(['*', '?', '[']) >= 0)
                         errors.Add($"{id}.target must use an exact path.");
+                    if (IsSudoersPolicyTarget(observedTarget))
+                        errors.Add($"{id}.target must not manage /etc/sudoers or files below /etc/sudoers.d.");
                     if (observedTarget is not null && !managedPaths.Add(observedTarget))
                         errors.Add($"Managed path '{observedTarget}' is duplicated.");
                     if (observedTarget is not null)
@@ -246,6 +253,8 @@ internal static partial class WebCliCommandHandlers
                 errors.Add($"{id}.source must use an exact path.");
             if (target is not null && target.IndexOfAny(['*', '?', '[']) >= 0)
                 errors.Add($"{id}.target must use an exact path.");
+            if (IsSudoersPolicyTarget(target))
+                errors.Add($"{id}.target must not manage /etc/sudoers or files below /etc/sudoers.d.");
             if (source is not null && target is not null)
             {
                 if (string.Equals(source, target, StringComparison.Ordinal))
@@ -590,6 +599,11 @@ internal static partial class WebCliCommandHandlers
                !name.Contains('/', StringComparison.Ordinal) &&
                name.All(static character => IsAsciiLetterOrDigit(character) || character is '_' or '-');
     }
+
+    private static bool IsSudoersPolicyTarget(string? path)
+        => string.Equals(path, "/etc/sudoers", StringComparison.Ordinal) ||
+           string.Equals(path, "/etc/sudoers.d", StringComparison.Ordinal) ||
+           (path?.StartsWith("/etc/sudoers.d/", StringComparison.Ordinal) ?? false);
 
     private static bool IsValidUnixIdentity(string? value)
     {

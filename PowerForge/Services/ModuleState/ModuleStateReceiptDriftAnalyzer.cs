@@ -20,6 +20,7 @@ internal sealed class ModuleStateReceiptDriftAnalyzer
             {
                 var installedModules = inventory.InstalledModules
                     .Where(module => string.Equals(module.Name, receiptModule.Name, StringComparison.OrdinalIgnoreCase))
+                    .Where(module => MatchesReceiptPlacement(module, receiptModule))
                     .ToArray();
 
                 AddMissingOrVersionDriftFinding(findings, receipt, receiptModule, installedModules);
@@ -141,8 +142,22 @@ internal sealed class ModuleStateReceiptDriftAnalyzer
             message + receiptSuffix,
             string.Empty,
             new[] { module.Name },
-            versions);
+            versions,
+            module.Scope,
+            path: module.ModuleRoot,
+            powerShellEdition: module.PowerShellEdition,
+            profileName: module.ProfileName);
     }
+
+    private static bool MatchesReceiptPlacement(
+        ModuleStateInstalledModule installedModule,
+        ModuleStateMaintenanceReceiptModule receiptModule)
+        => (string.IsNullOrWhiteSpace(receiptModule.ModuleRoot) ||
+            ModuleStatePathIdentity.Equals(ModuleStatePathIdentity.ResolveModuleRoot(installedModule), receiptModule.ModuleRoot)) &&
+           (string.IsNullOrWhiteSpace(receiptModule.PowerShellEdition) ||
+            string.Equals(installedModule.PowerShellEdition, receiptModule.PowerShellEdition, StringComparison.OrdinalIgnoreCase)) &&
+           (string.IsNullOrWhiteSpace(receiptModule.ProfileName) ||
+            string.Equals(installedModule.ProfileName, receiptModule.ProfileName, StringComparison.OrdinalIgnoreCase));
 
     private static bool VersionsEqual(string installedVersion, string receiptVersion)
     {

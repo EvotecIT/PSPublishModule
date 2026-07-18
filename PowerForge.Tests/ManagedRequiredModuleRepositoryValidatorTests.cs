@@ -38,7 +38,7 @@ public sealed class ManagedRequiredModuleRepositoryValidatorTests
             buildResult,
             remoteSideEffectObserved: () => remoteSideEffects++);
 
-        Assert.True(File.Exists(Path.Combine(targetPath, "Company.Core.1.0.0.nupkg")));
+        Assert.True(LocalPackageExists(targetPath, "Company.Core", "1.0.0"));
         Assert.Equal(1, remoteSideEffects);
     }
 
@@ -81,9 +81,9 @@ public sealed class ManagedRequiredModuleRepositoryValidatorTests
             buildResult,
             remoteSideEffectObserved: () => remoteSideEffects++);
 
-        Assert.True(File.Exists(Path.Combine(target.Path, "Company.Core.1.0.0.nupkg")));
-        Assert.True(File.Exists(Path.Combine(target.Path, "Company.Dependency.1.0.0.nupkg")));
-        Assert.False(File.Exists(Path.Combine(target.Path, "Company.Dependency.2.0.0.nupkg")));
+        Assert.True(LocalPackageExists(target.Path, "Company.Core", "1.0.0"));
+        Assert.True(LocalPackageExists(target.Path, "Company.Dependency", "1.0.0"));
+        Assert.False(LocalPackageExists(target.Path, "Company.Dependency", "2.0.0"));
         Assert.Equal(2, remoteSideEffects);
     }
 
@@ -190,4 +190,14 @@ public sealed class ManagedRequiredModuleRepositoryValidatorTests
             installMissingModulesCredential: null,
             stagingWasGenerated: true,
             deleteGeneratedStagingAfterRun: true);
+
+    private static bool LocalPackageExists(string repositoryPath, string packageId, string version)
+    {
+        if (!Directory.Exists(repositoryPath))
+            return false;
+
+        var expectedFileName = $"{packageId}.{version}.nupkg";
+        return Directory.EnumerateFiles(repositoryPath, "*.nupkg", SearchOption.TopDirectoryOnly)
+            .Any(path => string.Equals(Path.GetFileName(path), expectedFileName, StringComparison.OrdinalIgnoreCase));
+    }
 }

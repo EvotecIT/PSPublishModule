@@ -152,6 +152,7 @@ internal sealed class PrivateModuleWorkflowService
                 return new PrivateModuleWorkflowResult
                 {
                     OperationPerformed = false,
+                    OperationSkipped = true,
                     RepositoryName = registration.RepositoryName,
                     RequestedTransport = request.DeliveryTransport,
                     EffectiveTransport = skippedTransport.EffectiveTransport,
@@ -218,6 +219,7 @@ internal sealed class PrivateModuleWorkflowService
                 return new PrivateModuleWorkflowResult
                 {
                     OperationPerformed = false,
+                    OperationSkipped = true,
                     RepositoryName = registration.RepositoryName,
                     RequestedTransport = request.DeliveryTransport,
                     EffectiveTransport = skippedTransport.EffectiveTransport,
@@ -269,6 +271,7 @@ internal sealed class PrivateModuleWorkflowService
             return new PrivateModuleWorkflowResult
             {
                 OperationPerformed = false,
+                OperationSkipped = true,
                 RepositoryName = repositoryName,
                 RequestedTransport = request.DeliveryTransport,
                 EffectiveTransport = effectiveTransport,

@@ -21,6 +21,18 @@ public sealed class ManagedModuleUninstallPlan
     public string ModuleRoot { get; set; } = string.Empty;
 
     /// <summary>
+    /// Module roots whose installed modules participate in dependency revalidation.
+    /// </summary>
+    public IReadOnlyList<string> DependencyModuleRoots { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Visibility-specific root groups that must each pass dependency revalidation independently.
+    /// </summary>
+    internal IReadOnlyList<IReadOnlyList<string>> DependencyModuleRootGroups { get; set; } = Array.Empty<IReadOnlyList<string>>();
+
+    internal IReadOnlyList<string> DependencyModuleRootsRequiringAvailability { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// True when dependency checks are skipped.
     /// </summary>
     public bool SkipDependencyCheck { get; set; }
@@ -34,6 +46,8 @@ public sealed class ManagedModuleUninstallPlan
     /// Selected installed module versions.
     /// </summary>
     public IReadOnlyList<ManagedModuleUninstallTarget> Targets { get; set; } = Array.Empty<ManagedModuleUninstallTarget>();
+
+    internal IReadOnlyList<ManagedModuleUninstallTarget> DependencyRemovalTargets { get; set; } = Array.Empty<ManagedModuleUninstallTarget>();
 
     /// <summary>
     /// Explicit module names from the request that did not match any installed module.

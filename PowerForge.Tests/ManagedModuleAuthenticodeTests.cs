@@ -38,6 +38,39 @@ public sealed class ManagedModuleAuthenticodeTests
     }
 
     [Fact]
+    public async Task InstallAsync_rejects_unsigned_mof_without_promoting_package()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.0.0.nupkg"),
+            "Company.Tools",
+            "1.0.0",
+            files: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Company.Tools.mof"] = "instance of Company_Tools { Name = \"unsigned\"; };"
+            });
+        var service = new ManagedModuleInstallService(new NullLogger());
+
+        var exception = await Assert.ThrowsAnyAsync<Exception>(() => service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Local", feed.Path),
+            Name = "Company.Tools",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            AuthenticodeCheck = true
+        }));
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            Assert.IsType<ManagedModuleAuthenticodeException>(exception);
+        else
+            Assert.IsType<PlatformNotSupportedException>(exception);
+
+        Assert.False(File.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0", "Company.Tools.mof")));
+    }
+
+    [Fact]
     public async Task InstallPlan_records_authenticode_check_without_writing_files()
     {
         using var feed = new TemporaryDirectory();
