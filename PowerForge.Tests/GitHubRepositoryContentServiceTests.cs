@@ -117,6 +117,74 @@ public sealed class GitHubRepositoryContentServiceTests
     }
 
     [Fact]
+    public void Sync_RejectsDirectoryDestinationBeforeWritingAnyFile()
+    {
+        var root = CreateTempRoot();
+        var first = Path.Combine(root, "SPONSORS.md");
+        const string original = "<!-- POWERFORGE:sponsors:START -->\nold\n<!-- POWERFORGE:sponsors:END -->\n";
+        File.WriteAllText(first, original);
+        var directoryDestination = Path.Combine(root, "README.md");
+        Directory.CreateDirectory(directoryDestination);
+        using var httpClient = new HttpClient(new SponsorsHandler(_ => Response(Node("alice", "Alice", 5))));
+        var service = new GitHubRepositoryContentService(sponsorsClient: new GitHubSponsorsClient(httpClient));
+
+        var exception = Assert.Throws<IOException>(() => service.Sync(new GitHubRepositoryContentSpec
+        {
+            Token = "token",
+            Sponsors = new GitHubSponsorsContentSpec
+            {
+                Enabled = true,
+                SponsorableLogin = "owner",
+                IncludeFormer = false,
+                Outputs = new[]
+                {
+                    new GitHubSponsorsOutputSpec { Path = "SPONSORS.md", BlockId = "sponsors" },
+                    new GitHubSponsorsOutputSpec { Path = "README.md", BlockId = "sponsors", CreateIfMissing = true }
+                }
+            }
+        }, root));
+
+        Assert.Contains("existing directory", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(original, File.ReadAllText(first));
+    }
+
+    [Fact]
+    public void Sync_RejectsFileAncestorBeforeWritingAnyFile()
+    {
+        var root = CreateTempRoot();
+        var first = Path.Combine(root, "SPONSORS.md");
+        const string original = "<!-- POWERFORGE:sponsors:START -->\nold\n<!-- POWERFORGE:sponsors:END -->\n";
+        File.WriteAllText(first, original);
+        File.WriteAllText(Path.Combine(root, "occupied"), "not a directory");
+        using var httpClient = new HttpClient(new SponsorsHandler(_ => Response(Node("alice", "Alice", 5))));
+        var service = new GitHubRepositoryContentService(sponsorsClient: new GitHubSponsorsClient(httpClient));
+
+        var exception = Assert.Throws<IOException>(() => service.Sync(new GitHubRepositoryContentSpec
+        {
+            Token = "token",
+            Sponsors = new GitHubSponsorsContentSpec
+            {
+                Enabled = true,
+                SponsorableLogin = "owner",
+                IncludeFormer = false,
+                Outputs = new[]
+                {
+                    new GitHubSponsorsOutputSpec { Path = "SPONSORS.md", BlockId = "sponsors" },
+                    new GitHubSponsorsOutputSpec
+                    {
+                        Path = Path.Combine("occupied", "README.md"),
+                        BlockId = "sponsors",
+                        CreateIfMissing = true
+                    }
+                }
+            }
+        }, root));
+
+        Assert.Contains("existing file ancestor", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(original, File.ReadAllText(first));
+    }
+
+    [Fact]
     public void Sync_RejectsMultipleBlocksForSameMissingDocumentBeforeWriting()
     {
         var root = CreateTempRoot();

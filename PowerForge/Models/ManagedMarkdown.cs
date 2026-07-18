@@ -13,12 +13,30 @@ public enum ManagedMarkdownMissingBlockBehavior
 }
 
 /// <summary>
+/// Marker syntax accepted by a managed Markdown update.
+/// </summary>
+public enum ManagedMarkdownMarkerFormat
+{
+    /// <summary>Require namespaced markers such as <c>POWERFORGE:sponsors:START</c>.</summary>
+    Namespaced,
+
+    /// <summary>Require legacy two-part markers such as <c>sponsors:start</c>.</summary>
+    LegacyBlockId,
+
+    /// <summary>Accept either namespaced or legacy markers, but never both for the same block.</summary>
+    NamespacedOrLegacyBlockId
+}
+
+/// <summary>
 /// Request for creating or updating a marker-delimited Markdown block.
 /// </summary>
 public sealed class ManagedMarkdownUpdateRequest
 {
     /// <summary>Marker namespace used before the block identifier.</summary>
     public string MarkerNamespace { get; set; } = "POWERFORGE";
+
+    /// <summary>Marker syntax accepted for this update. Namespaced markers are required by default.</summary>
+    public ManagedMarkdownMarkerFormat MarkerFormat { get; set; } = ManagedMarkdownMarkerFormat.Namespaced;
 
     /// <summary>Markdown document path.</summary>
     public string Path { get; set; } = string.Empty;

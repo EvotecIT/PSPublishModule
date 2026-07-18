@@ -77,6 +77,8 @@ public sealed class GitHubContentActionTests
         Assert.Contains(".powerforge-runtime/pspublishmodule", workflow, StringComparison.Ordinal);
         Assert.Contains("job.workflow_repository", workflow, StringComparison.Ordinal);
         Assert.Contains("job.workflow_sha", workflow, StringComparison.Ordinal);
+        Assert.Contains("group: powerforge-github-content-${{ github.repository }}-${{ github.ref }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("cancel-in-progress: false", workflow, StringComparison.Ordinal);
         Assert.Contains("default: \"\"", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("default: \"main\"", workflow, StringComparison.Ordinal);
     }

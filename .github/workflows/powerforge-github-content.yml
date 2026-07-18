@@ -30,6 +30,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: powerforge-github-content-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   content:
     runs-on: ubuntu-latest

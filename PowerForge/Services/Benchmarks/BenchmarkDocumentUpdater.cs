@@ -19,6 +19,7 @@ public sealed class BenchmarkDocumentUpdater
         var result = _updater.Update(new ManagedMarkdownUpdateRequest
         {
             MarkerNamespace = "BENCHMARK",
+            MarkerFormat = ManagedMarkdownMarkerFormat.NamespacedOrLegacyBlockId,
             Path = path,
             BlockId = blockId,
             Markdown = markdown,
@@ -40,5 +41,9 @@ public sealed class BenchmarkDocumentUpdater
     /// <param name="path">Markdown document path.</param>
     /// <param name="blockId">Block identifier.</param>
     public void ValidateBlock(string path, string blockId)
-        => _updater.ValidateBlock(path, blockId, "BENCHMARK");
+        => _updater.ValidateBlock(
+            path,
+            blockId,
+            "BENCHMARK",
+            ManagedMarkdownMarkerFormat.NamespacedOrLegacyBlockId);
 }

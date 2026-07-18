@@ -17,6 +17,8 @@ public sealed class ManagedMarkdownDocumentUpdater
         var path = NormalizePath(request.Path);
         var markerNamespace = NormalizeMarkerNamespace(request.MarkerNamespace);
         var blockId = NormalizeBlockId(request.BlockId);
+        var markerFormat = NormalizeMarkerFormat(request.MarkerFormat);
+        ValidateDestinationPath(path);
         if (!File.Exists(path))
         {
             if (!request.CreateIfMissing)
@@ -25,7 +27,7 @@ public sealed class ManagedMarkdownDocumentUpdater
         }
 
         var document = ReadDocument(path);
-        var location = FindBlock(document.Text, markerNamespace, blockId);
+        var location = FindBlock(document.Text, markerNamespace, blockId, markerFormat);
         if (location is null && request.MissingBlockBehavior != ManagedMarkdownMissingBlockBehavior.Append)
             throw new InvalidOperationException($"Managed block '{blockId}' was not found in '{path}'.");
     }
@@ -42,7 +44,9 @@ public sealed class ManagedMarkdownDocumentUpdater
         var path = NormalizePath(request.Path);
         var markerNamespace = NormalizeMarkerNamespace(request.MarkerNamespace);
         var blockId = NormalizeBlockId(request.BlockId);
+        var markerFormat = NormalizeMarkerFormat(request.MarkerFormat);
         var replacement = NormalizeMarkdown(request.Markdown);
+        ValidateDestinationPath(path);
         var exists = File.Exists(path);
 
         DocumentText document;
@@ -56,20 +60,20 @@ public sealed class ManagedMarkdownDocumentUpdater
                 throw new FileNotFoundException($"Managed Markdown document was not found: {path}", path);
 
             document = DocumentText.NewUtf8();
-            updated = CreateDocument(markerNamespace, blockId, replacement, request.NewDocumentTitle, Environment.NewLine);
+            updated = CreateDocument(markerNamespace, blockId, replacement, request.NewDocumentTitle, Environment.NewLine, markerFormat);
             created = true;
         }
         else
         {
             document = ReadDocument(path);
-            var location = FindBlock(document.Text, markerNamespace, blockId);
+            var location = FindBlock(document.Text, markerNamespace, blockId, markerFormat);
 
             if (location is null)
             {
                 if (request.MissingBlockBehavior != ManagedMarkdownMissingBlockBehavior.Append)
                     throw new InvalidOperationException($"Managed block '{blockId}' was not found in '{path}'.");
 
-                updated = AppendBlock(document.Text, markerNamespace, blockId, replacement, DetectPreferredLineEnding(document.Text));
+                updated = AppendBlock(document.Text, markerNamespace, blockId, replacement, DetectPreferredLineEnding(document.Text), markerFormat);
                 appended = true;
             }
             else
@@ -112,19 +116,41 @@ public sealed class ManagedMarkdownDocumentUpdater
     /// <param name="blockId">Managed block identifier.</param>
     /// <param name="markerNamespace">Expected marker namespace.</param>
     public void ValidateBlock(string path, string blockId, string markerNamespace)
+        => ValidateBlock(path, blockId, markerNamespace, ManagedMarkdownMarkerFormat.Namespaced);
+
+    /// <summary>
+    /// Validates that a managed block with the specified namespace and marker format exists without modifying the document.
+    /// </summary>
+    /// <param name="path">Markdown document path.</param>
+    /// <param name="blockId">Managed block identifier.</param>
+    /// <param name="markerNamespace">Expected marker namespace.</param>
+    /// <param name="markerFormat">Accepted marker syntax.</param>
+    public void ValidateBlock(
+        string path,
+        string blockId,
+        string markerNamespace,
+        ManagedMarkdownMarkerFormat markerFormat)
     {
         var fullPath = NormalizePath(path);
         var normalizedMarkerNamespace = NormalizeMarkerNamespace(markerNamespace);
         var normalizedBlockId = NormalizeBlockId(blockId);
+        var normalizedMarkerFormat = NormalizeMarkerFormat(markerFormat);
+        ValidateDestinationPath(fullPath);
         if (!File.Exists(fullPath))
             throw new FileNotFoundException($"Managed Markdown document was not found: {fullPath}", fullPath);
 
         var content = ReadDocument(fullPath).Text;
-        if (FindBlock(content, normalizedMarkerNamespace, normalizedBlockId) is null)
+        if (FindBlock(content, normalizedMarkerNamespace, normalizedBlockId, normalizedMarkerFormat) is null)
             throw new InvalidOperationException($"Managed block '{normalizedBlockId}' was not found in '{fullPath}'.");
     }
 
-    private static string CreateDocument(string markerNamespace, string blockId, string markdown, string? title, string newline)
+    private static string CreateDocument(
+        string markerNamespace,
+        string blockId,
+        string markdown,
+        string? title,
+        string newline,
+        ManagedMarkdownMarkerFormat markerFormat)
     {
         var builder = new StringBuilder();
         if (!string.IsNullOrWhiteSpace(title))
@@ -132,11 +158,17 @@ public sealed class ManagedMarkdownDocumentUpdater
             builder.Append("# ").Append(title!.Trim()).Append(newline).Append(newline);
         }
 
-        AppendManagedBlock(builder, markerNamespace, blockId, markdown, newline);
+        AppendManagedBlock(builder, markerNamespace, blockId, markdown, newline, markerFormat);
         return builder.ToString();
     }
 
-    private static string AppendBlock(string original, string markerNamespace, string blockId, string markdown, string newline)
+    private static string AppendBlock(
+        string original,
+        string markerNamespace,
+        string blockId,
+        string markdown,
+        string newline,
+        ManagedMarkdownMarkerFormat markerFormat)
     {
         var builder = new StringBuilder(original);
         if (builder.Length > 0)
@@ -145,16 +177,39 @@ public sealed class ManagedMarkdownDocumentUpdater
                 builder.Append(newline);
             builder.Append(newline);
         }
-        AppendManagedBlock(builder, markerNamespace, blockId, markdown, newline);
+        AppendManagedBlock(builder, markerNamespace, blockId, markdown, newline, markerFormat);
         return builder.ToString();
     }
 
-    private static void AppendManagedBlock(StringBuilder builder, string markerNamespace, string blockId, string markdown, string newline)
+    private static void AppendManagedBlock(
+        StringBuilder builder,
+        string markerNamespace,
+        string blockId,
+        string markdown,
+        string newline,
+        ManagedMarkdownMarkerFormat markerFormat)
     {
-        builder.Append("<!-- ").Append(markerNamespace).Append(':').Append(blockId).Append(":START -->").Append(newline);
+        var writeFormat = markerFormat == ManagedMarkdownMarkerFormat.LegacyBlockId
+            ? ManagedMarkdownMarkerFormat.LegacyBlockId
+            : ManagedMarkdownMarkerFormat.Namespaced;
+        AppendMarker(builder, markerNamespace, blockId, "START", newline, writeFormat);
         if (markdown.Length > 0)
             builder.Append(ConvertLineEndings(markdown, newline)).Append(newline);
-        builder.Append("<!-- ").Append(markerNamespace).Append(':').Append(blockId).Append(":END -->").Append(newline);
+        AppendMarker(builder, markerNamespace, blockId, "END", newline, writeFormat);
+    }
+
+    private static void AppendMarker(
+        StringBuilder builder,
+        string markerNamespace,
+        string blockId,
+        string side,
+        string newline,
+        ManagedMarkdownMarkerFormat markerFormat)
+    {
+        builder.Append("<!-- ");
+        if (markerFormat == ManagedMarkdownMarkerFormat.Namespaced)
+            builder.Append(markerNamespace).Append(':');
+        builder.Append(blockId).Append(':').Append(side).Append(" -->").Append(newline);
     }
 
     private static string ReplaceBlock(string original, BlockLocation block, string replacement)
@@ -169,15 +224,31 @@ public sealed class ManagedMarkdownDocumentUpdater
         return prefix + ConvertLineEndings(replacement, newline) + newline + suffix;
     }
 
-    private static BlockLocation? FindBlock(string content, string markerNamespace, string blockId)
+    private static BlockLocation? FindBlock(
+        string content,
+        string markerNamespace,
+        string blockId,
+        ManagedMarkdownMarkerFormat markerFormat)
+    {
+        if (markerFormat != ManagedMarkdownMarkerFormat.NamespacedOrLegacyBlockId)
+            return FindBlock(content, markerNamespace, blockId, markerFormat == ManagedMarkdownMarkerFormat.LegacyBlockId);
+
+        var namespaced = FindBlock(content, markerNamespace, blockId, legacy: false);
+        var legacy = FindBlock(content, markerNamespace, blockId, legacy: true);
+        if (namespaced is not null && legacy is not null)
+            throw new InvalidOperationException($"Managed block '{blockId}' has both namespaced and legacy markers.");
+        return namespaced ?? legacy;
+    }
+
+    private static BlockLocation? FindBlock(string content, string markerNamespace, string blockId, bool legacy)
     {
         var starts = new List<LineLocation>();
         var ends = new List<LineLocation>();
         foreach (var line in EnumerateLines(content))
         {
             var value = content.Substring(line.Start, line.ContentEnd - line.Start);
-            if (IsMarker(value, markerNamespace, blockId, "START")) starts.Add(line);
-            if (IsMarker(value, markerNamespace, blockId, "END")) ends.Add(line);
+            if (IsMarker(value, markerNamespace, blockId, "START", legacy)) starts.Add(line);
+            if (IsMarker(value, markerNamespace, blockId, "END", legacy)) ends.Add(line);
         }
 
         if (starts.Count == 0 && ends.Count == 0)
@@ -211,7 +282,7 @@ public sealed class ManagedMarkdownDocumentUpdater
         }
     }
 
-    private static bool IsMarker(string? line, string markerNamespace, string blockId, string side)
+    private static bool IsMarker(string? line, string markerNamespace, string blockId, string side, bool legacy)
     {
         var text = (line ?? string.Empty).Trim();
         if (!text.StartsWith("<!--", StringComparison.Ordinal) || !text.EndsWith("-->", StringComparison.Ordinal))
@@ -219,6 +290,13 @@ public sealed class ManagedMarkdownDocumentUpdater
 
         var body = text.Substring(4, text.Length - 7).Trim();
         var parts = body.Split(':').Select(part => part.Trim()).ToArray();
+        if (legacy)
+        {
+            return parts.Length == 2
+                   && string.Equals(parts[0], blockId, StringComparison.OrdinalIgnoreCase)
+                   && string.Equals(parts[1], side, StringComparison.OrdinalIgnoreCase);
+        }
+
         return parts.Length == 3
                && string.Equals(parts[0], markerNamespace, StringComparison.OrdinalIgnoreCase)
                && string.Equals(parts[1], blockId, StringComparison.OrdinalIgnoreCase)
@@ -333,6 +411,36 @@ public sealed class ManagedMarkdownDocumentUpdater
         if (normalized.Contains(':') || normalized.Contains('\r') || normalized.Contains('\n') || normalized.Contains("-->", StringComparison.Ordinal))
             throw new ArgumentException("Marker namespace cannot contain colons, line breaks, or an HTML comment terminator.", nameof(markerNamespace));
         return normalized;
+    }
+
+    private static ManagedMarkdownMarkerFormat NormalizeMarkerFormat(ManagedMarkdownMarkerFormat markerFormat)
+    {
+        if (!Enum.IsDefined(typeof(ManagedMarkdownMarkerFormat), markerFormat))
+            throw new ArgumentOutOfRangeException(nameof(markerFormat), markerFormat, "Unsupported managed Markdown marker format.");
+        return markerFormat;
+    }
+
+    private static void ValidateDestinationPath(string path)
+    {
+        if (Directory.Exists(path))
+            throw new IOException($"Managed Markdown document path is an existing directory: {path}");
+
+        var parent = System.IO.Path.GetDirectoryName(path);
+        while (!string.IsNullOrWhiteSpace(parent))
+        {
+            if (File.Exists(parent))
+            {
+                throw new IOException(
+                    $"Managed Markdown document path has an existing file ancestor '{parent}': {path}");
+            }
+            if (Directory.Exists(parent))
+                return;
+
+            var next = System.IO.Path.GetDirectoryName(parent);
+            if (string.Equals(next, parent, StringComparison.Ordinal))
+                return;
+            parent = next;
+        }
     }
 
     private static string NormalizeMarkdown(string? markdown)

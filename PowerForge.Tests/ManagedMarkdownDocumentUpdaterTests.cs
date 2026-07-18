@@ -109,6 +109,42 @@ public sealed class ManagedMarkdownDocumentUpdaterTests
     }
 
     [Fact]
+    public void Update_PreservesDocumentedTwoPartBenchmarkMarkers()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "README.md");
+        const string original = "Before\n<!-- managed-module-benchmark-table:start -->\nold\n<!-- managed-module-benchmark-table:end -->\nAfter\n";
+        File.WriteAllText(path, original);
+
+        var updater = new BenchmarkDocumentUpdater();
+        updater.ValidateBlock(path, "managed-module-benchmark-table");
+        var result = updater.UpdateBlock(path, "managed-module-benchmark-table", "new\nvalue");
+
+        Assert.True(result.Changed);
+        Assert.Equal(
+            "Before\n<!-- managed-module-benchmark-table:start -->\nnew\nvalue\n<!-- managed-module-benchmark-table:end -->\nAfter\n",
+            Normalize(File.ReadAllText(path)));
+    }
+
+    [Fact]
+    public void ValidateUpdate_RejectsExistingDirectoryEvenWhenCreationIsAllowed()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "SPONSORS.md");
+        Directory.CreateDirectory(path);
+
+        var exception = Assert.Throws<IOException>(() => new ManagedMarkdownDocumentUpdater().ValidateUpdate(new ManagedMarkdownUpdateRequest
+        {
+            Path = path,
+            BlockId = "sponsors",
+            Markdown = "replacement",
+            CreateIfMissing = true
+        }));
+
+        Assert.Contains("existing directory", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Update_PreservesUtf8BomAndEveryByteOutsideMixedEndingBlock()
     {
         var root = CreateTempRoot();
