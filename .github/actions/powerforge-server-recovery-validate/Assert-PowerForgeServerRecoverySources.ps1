@@ -222,6 +222,9 @@ function Get-ExpectedCaptureSudoersCommand {
             continue
         }
         $sudoersCommand = [string]$Matches['command']
+        if ($sudoersCommand -match '(?<![A-Za-z0-9_.-])sudo(?:\s|$)') {
+            throw "Privileged recovery capture command must contain exactly one canonical sudo -n prefix: $command"
+        }
         if ([string]::Equals($sudoersCommand, 'apachectl -S', [StringComparison]::Ordinal)) {
             $sudoersCommand = '/usr/sbin/apachectl -S'
         } elseif ($sudoersCommand -notmatch '^/[A-Za-z0-9._/-]+(?: [A-Za-z0-9._~:@%+=/-]+)*$') {

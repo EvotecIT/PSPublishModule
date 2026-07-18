@@ -407,15 +407,59 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         Assert.Contains("canonical case-sensitive sudo -n prefix", result.AllOutput, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("sudo -n /usr/bin/sudo -n /usr/sbin/apachectl -S")]
+    [InlineData("sudo -n /bin/sh -c sudo")]
+    public void Validator_ShouldRejectNestedSudoCaptureCommands(string command)
+    {
+        var result = RunValidator(captureCommand: command);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("exactly one canonical sudo -n prefix", result.AllOutput, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Validator_ShouldRejectSudoersThatFailVisudo()
     {
         var result = RunValidator(
-            additionalSudoers: "this is not valid sudoers\n",
-            expectVisudoFailure: true);
+            additionalSudoers: "this is not valid sudoers\n");
 
         Assert.NotEqual(0, result.ExitCode);
         Assert.Contains("failed visudo syntax validation", result.AllOutput, StringComparison.Ordinal);
+        Assert.Equal(2, result.VisudoInvocations.Length);
+        Assert.DoesNotContain("VISUDO_STDOUT_SENTINEL", result.AllOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("VISUDO_STDERR_SENTINEL", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRunVisudoForEveryManagedSourceWithExactArguments()
+    {
+        var additionalSudoers = "Cmnd_Alias DEPLOY_TOOLS = /usr/bin/true, /usr/bin/false\n" +
+                                "deployment-user ALL=(root) NOPASSWD: DEPLOY_TOOLS\n";
+
+        var result = RunValidator(additionalSudoers: additionalSudoers);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal(2, result.VisudoInvocations.Length);
+        Assert.Contains(result.VisudoInvocations, path => path.EndsWith("backup.sudoers", StringComparison.Ordinal));
+        Assert.Contains(result.VisudoInvocations, path => path.EndsWith("extra.sudoers", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void LinuxValidator_ShouldUseRealVisudoBoundary()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        Assert.True(File.Exists("/usr/sbin/visudo"));
+        var valid = RunValidator(visudoPathOverride: "/usr/sbin/visudo");
+        var invalid = RunValidator(
+            additionalSudoers: "this is not valid sudoers\n",
+            visudoPathOverride: "/usr/sbin/visudo");
+
+        Assert.True(valid.ExitCode == 0, valid.AllOutput);
+        Assert.NotEqual(0, invalid.ExitCode);
+        Assert.Contains("failed visudo syntax validation", invalid.AllOutput, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -483,11 +527,11 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         bool tagSudoers = true,
         string? alternateManagedSudoersTarget = null,
         string? additionalSudoers = null,
-        bool expectVisudoFailure = false,
         bool includeCapture = true,
         string recipient = Recipient,
         string? recipientEnv = null,
-        string captureCommand = "sudo -n apachectl -S")
+        string captureCommand = "sudo -n apachectl -S",
+        string? visudoPathOverride = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-recovery-source-security-" + Guid.NewGuid().ToString("N"));
         var workspace = Path.Combine(root, "caller");
@@ -654,8 +698,9 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
 
             var validatorPath = GetRepoPath(
                 ".github", "actions", "powerforge-server-recovery-validate", "Assert-PowerForgeServerRecoverySources.ps1");
-            var visudoPath = ResolveVisudoPath(root, expectVisudoFailure);
-            return RunProcess(
+            var visudoLogPath = Path.Combine(root, "visudo-invocations.log");
+            var visudoPath = visudoPathOverride ?? CreateVisudoStub(root, visudoLogPath);
+            var result = RunProcess(
                 "pwsh",
                 root,
                 "-NoLogo", "-NoProfile", "-File", wrapperPath,
@@ -668,6 +713,12 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
                 "-EngineRepository", EngineRepository,
                 "-CaptureUser", CaptureUser,
                 "-VisudoPath", visudoPath);
+            return result with
+            {
+                VisudoInvocations = File.Exists(visudoLogPath)
+                    ? File.ReadAllLines(visudoLogPath)
+                    : []
+            };
         }
         finally
         {
@@ -684,20 +735,47 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         => BuildExpectedAliases() +
            $"{principal} ALL=({runAs}) NOPASSWD: BACKUP_PLAIN, BACKUP_ENCRYPTED, BACKUP_INSPECT\n";
 
-    private static string ResolveVisudoPath(string root, bool expectFailure)
+    private static string CreateVisudoStub(string root, string logPath)
     {
-        if (OperatingSystem.IsLinux() && File.Exists("/usr/sbin/visudo"))
-            return "/usr/sbin/visudo";
-
         if (OperatingSystem.IsWindows())
         {
             var path = Path.Combine(root, "visudo.cmd");
-            File.WriteAllText(path, $"@exit /b {(expectFailure ? 1 : 0)}\r\n");
+            File.WriteAllText(path, $"""
+                @echo off
+                setlocal
+                if not "%~1"=="-c" exit /b 91
+                if not "%~2"=="-f" exit /b 92
+                if "%~3"=="" exit /b 93
+                if not "%~4"=="" exit /b 94
+                if not exist "%~3" exit /b 95
+                echo %~3>>"{logPath}"
+                findstr /C:"this is not valid sudoers" "%~3" >nul
+                if not errorlevel 1 (
+                  echo VISUDO_STDOUT_SENTINEL
+                  echo VISUDO_STDERR_SENTINEL 1>&2
+                  exit /b 1
+                )
+                exit /b 0
+                """);
             return path;
         }
 
         var stub = Path.Combine(root, "visudo-stub.sh");
-        File.WriteAllText(stub, $"#!/usr/bin/env sh\nexit {(expectFailure ? 1 : 0)}\n");
+        File.WriteAllText(stub, $$"""
+            #!/usr/bin/env sh
+            set -eu
+            [ "$#" -eq 3 ] || exit 91
+            [ "$1" = '-c' ] || exit 92
+            [ "$2" = '-f' ] || exit 93
+            [ -f "$3" ] || exit 94
+            printf '%s\n' "$3" >> '{{logPath}}'
+            if grep -Fq 'this is not valid sudoers' "$3"; then
+              echo 'VISUDO_STDOUT_SENTINEL'
+              echo 'VISUDO_STDERR_SENTINEL' >&2
+              exit 1
+            fi
+            exit 0
+            """);
         File.SetUnixFileMode(stub, UnixFileMode.UserRead | UnixFileMode.UserExecute);
         return stub;
     }
@@ -748,6 +826,8 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
 
     private readonly record struct ValidationResult(int ExitCode, string StandardOutput, string StandardError)
     {
+        public string[] VisudoInvocations { get; init; } = [];
+
         public string AllOutput => StandardOutput + StandardError;
 
         public void EnsureSuccess()
