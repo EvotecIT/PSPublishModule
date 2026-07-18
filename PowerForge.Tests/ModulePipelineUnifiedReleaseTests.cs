@@ -1220,6 +1220,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
     {
         Directory.CreateDirectory(moduleRoot);
+        Directory.CreateDirectory(Path.Combine(moduleRoot, ".git"));
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psm1"), "function Get-Test { 'ok' }");
 
         var psd1 = string.Join(Environment.NewLine, new[]
@@ -1234,6 +1235,18 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         }) + Environment.NewLine;
 
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psd1"), psd1);
+    }
+
+    private static string GetCoordinatedReleaseCheckpointRoot(string projectRoot)
+        => Path.Combine(
+            ModulePipelineRunner.ResolveSynchronizedReleaseStateRoot(projectRoot),
+            "coordinated-release");
+
+    private static void AssertNoCoordinatedReleaseCheckpoint(string projectRoot)
+    {
+        var checkpointRoot = GetCoordinatedReleaseCheckpointRoot(projectRoot);
+        if (Directory.Exists(checkpointRoot))
+            Assert.Empty(Directory.GetFiles(checkpointRoot, "*.json"));
     }
 
     private static void WriteProjectBuildConfig(string rootPath, string relativePath)

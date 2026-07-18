@@ -89,6 +89,8 @@ public sealed partial class ModulePipelineRunner
 
             if (state.PipelineFailure is not null)
                 session.NotifySkippedOnFailure();
+
+            ExitSynchronizedReleaseCheckpointScope(state);
         }
     }
 

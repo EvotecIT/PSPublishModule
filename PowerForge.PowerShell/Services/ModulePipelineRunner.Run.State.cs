@@ -42,6 +42,7 @@ public sealed partial class ModulePipelineRunner
         public ModuleReleaseCoordinationResult? ReleaseCoordinationResult { get; set; }
         public SynchronizedReleaseCheckpoint? SynchronizedReleaseCheckpoint { get; set; }
         public string? SynchronizedReleaseCheckpointPath { get; set; }
+        public System.IO.FileStream? SynchronizedReleaseCheckpointLock { get; set; }
         public bool IsResumingSynchronizedRelease { get; set; }
         public int PlannedSynchronizedOperationCount { get; set; }
         public List<ModulePipelineActionResult> ActionResults { get; } = new();

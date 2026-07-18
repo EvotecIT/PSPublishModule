@@ -11,8 +11,6 @@ public sealed partial class ModulePipelineRunner
         ModulePipelinePlan plan,
         ModulePipelineRunState state)
     {
-        state.PlannedSynchronizedOperationCount = ResolvePlannedSynchronizedPublishOperationKeys(plan).Length;
-
         var path = ResolveSynchronizedReleaseCheckpointPath(plan);
         var checkpointExists = File.Exists(path);
         if (!ShouldUseSynchronizedReleaseCheckpoint(plan, state))
@@ -49,7 +47,7 @@ public sealed partial class ModulePipelineRunner
                 ex);
         }
 
-        if (checkpoint is null || checkpoint.SchemaVersion != 2)
+        if (checkpoint is null || checkpoint.SchemaVersion != 3)
         {
             throw new InvalidOperationException(
                 $"Coordinated release checkpoint '{path}' has an unsupported schema. Delete it only if the incomplete release should be abandoned.");
@@ -457,19 +455,35 @@ public sealed partial class ModulePipelineRunner
         var versions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in release.ResolvedVersionsByProject)
         {
-            if (!string.IsNullOrWhiteSpace(entry.Key) && !string.IsNullOrWhiteSpace(entry.Value))
-                versions[entry.Key.Trim()] = entry.Value.Trim();
+            if (string.IsNullOrWhiteSpace(entry.Key))
+                continue;
+            if (!PackageVersionUtility.TryNormalizeExact(entry.Value, out var normalizedEntryVersion))
+            {
+                throw new InvalidOperationException(
+                    $"Package lane '{laneLabel}' returned invalid version state for project '{entry.Key}'.");
+            }
+
+            versions[entry.Key.Trim()] = normalizedEntryVersion;
         }
-        foreach (var project in release.Projects)
+        foreach (var project in release.Projects.Where(static project => project.IsPackable))
         {
-            if (!string.IsNullOrWhiteSpace(project.ProjectName) && !string.IsNullOrWhiteSpace(project.NewVersion))
-                versions[project.ProjectName.Trim()] = project.NewVersion!.Trim();
+            var projectVersion = ResolveExactSynchronizedReleaseProjectVersion(release, project);
+            if (string.IsNullOrWhiteSpace(projectVersion))
+            {
+                throw new InvalidOperationException(
+                    $"Package lane '{laneLabel}' did not return exact version state for project '{ResolveSynchronizedReleaseProjectLabel(project)}'.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(project.ProjectName))
+                versions[project.ProjectName.Trim()] = projectVersion!;
+            if (!string.IsNullOrWhiteSpace(project.PackageId))
+                versions[project.PackageId.Trim()] = projectVersion!;
         }
 
-        var defaultVersion = string.IsNullOrWhiteSpace(release.ResolvedVersion)
+        var defaultVersionCandidate = string.IsNullOrWhiteSpace(release.ResolvedVersion)
             ? versions.Values.FirstOrDefault()
             : release.ResolvedVersion;
-        if (string.IsNullOrWhiteSpace(defaultVersion))
+        if (!PackageVersionUtility.TryNormalizeExact(defaultVersionCandidate, out var defaultVersion))
         {
             throw new InvalidOperationException(
                 $"Package lane '{laneLabel}' did not return an exact release version.");
@@ -480,7 +494,7 @@ public sealed partial class ModulePipelineRunner
             Source = source,
             Label = laneLabel,
             CheckpointKey = checkpointKey,
-            DefaultVersion = defaultVersion!.Trim(),
+            DefaultVersion = defaultVersion,
             VersionsByProject = versions
         };
     }
@@ -488,11 +502,60 @@ public sealed partial class ModulePipelineRunner
     private static bool HasCheckpointableReleaseVersions(ProjectBuildHostExecutionResult result)
     {
         var release = result.Result.Release;
-        return release is not null &&
-               (!string.IsNullOrWhiteSpace(release.ResolvedVersion) ||
-                release.ResolvedVersionsByProject.Count > 0 ||
-                release.Projects.Any(static project => !string.IsNullOrWhiteSpace(project.NewVersion)));
+        if (release is null)
+            return false;
+
+        if ((!string.IsNullOrWhiteSpace(release.ResolvedVersion) &&
+             !PackageVersionUtility.TryNormalizeExact(release.ResolvedVersion, out _)) ||
+            release.ResolvedVersionsByProject.Any(static entry =>
+                !string.IsNullOrWhiteSpace(entry.Key) &&
+                !PackageVersionUtility.TryNormalizeExact(entry.Value, out _)))
+        {
+            return false;
+        }
+
+        var participatingProjects = release.Projects
+            .Where(static project => project.IsPackable)
+            .ToArray();
+        if (participatingProjects.Length == 0)
+            return PackageVersionUtility.TryNormalizeExact(release.ResolvedVersion, out _);
+
+        return participatingProjects.All(project =>
+            (!string.IsNullOrWhiteSpace(project.ProjectName) || !string.IsNullOrWhiteSpace(project.PackageId)) &&
+            !string.IsNullOrWhiteSpace(ResolveExactSynchronizedReleaseProjectVersion(release, project)));
     }
+
+    private static string? ResolveExactSynchronizedReleaseProjectVersion(
+        DotNetRepositoryReleaseResult release,
+        DotNetRepositoryProjectResult project)
+    {
+        string? version = null;
+        if (!string.IsNullOrWhiteSpace(project.ProjectName) &&
+            release.ResolvedVersionsByProject.TryGetValue(project.ProjectName, out var projectVersion))
+        {
+            version = projectVersion;
+        }
+        else if (!string.IsNullOrWhiteSpace(project.PackageId) &&
+                 release.ResolvedVersionsByProject.TryGetValue(project.PackageId, out var packageVersion))
+        {
+            version = packageVersion;
+        }
+        else
+        {
+            version = project.NewVersion;
+        }
+
+        return PackageVersionUtility.TryNormalizeExact(version, out var normalizedVersion)
+            ? normalizedVersion
+            : null;
+    }
+
+    private static string ResolveSynchronizedReleaseProjectLabel(DotNetRepositoryProjectResult project)
+        => !string.IsNullOrWhiteSpace(project.ProjectName)
+            ? project.ProjectName.Trim()
+            : !string.IsNullOrWhiteSpace(project.PackageId)
+                ? project.PackageId.Trim()
+                : "<unknown>";
 
     private static bool SynchronizedReleaseLaneVersionsEqual(
         SynchronizedReleaseLaneCheckpoint first,
@@ -529,6 +592,8 @@ public sealed partial class ModulePipelineRunner
             checkpoint.CompletedOperations is null ||
             checkpoint.OperationFingerprints is null ||
             checkpoint.OperationFingerprints.Length == 0 ||
+            checkpoint.PayloadFingerprint is null ||
+            checkpoint.PayloadComponents is null ||
             checkpoint.PlannedLanes is null ||
             checkpoint.PlannedLanes.Length == 0 ||
             checkpoint.AttemptedLanes is null ||
@@ -576,6 +641,14 @@ public sealed partial class ModulePipelineRunner
                         storedPlanned.Contains(operation, StringComparer.OrdinalIgnoreCase)) &&
                     checkpoint.CompletedOperations.All(operation =>
                         checkpoint.AttemptedOperations.Contains(operation, StringComparer.OrdinalIgnoreCase)) &&
+                    (checkpoint.AttemptedOperations.Length == 0 ||
+                     (IsSynchronizedReleaseFingerprint(checkpoint.PayloadFingerprint) &&
+                      checkpoint.PayloadComponents.Length > 0 &&
+                      checkpoint.PayloadComponents.All(static component => !string.IsNullOrWhiteSpace(component)) &&
+                      string.Equals(
+                          checkpoint.PayloadFingerprint,
+                          CreateSynchronizedReleaseFingerprint(checkpoint.PayloadComponents),
+                          StringComparison.OrdinalIgnoreCase))) &&
                     (hasExactVersion ||
                      (string.IsNullOrWhiteSpace(checkpoint.Version) &&
                       checkpoint.AttemptedOperations.Length == 0 &&
@@ -604,5 +677,9 @@ public sealed partial class ModulePipelineRunner
 
     private static string? NormalizeCheckpointValue(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
+
+    private static bool IsSynchronizedReleaseFingerprint(string? value)
+        => value?.Length == 64 && value.All(static character =>
+            character is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F');
 
 }

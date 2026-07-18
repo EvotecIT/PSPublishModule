@@ -16,6 +16,7 @@ public sealed partial class ModulePipelineRunner
             return;
         }
 
+        BindSynchronizedReleasePayloadFingerprint(buildResult, state);
         var publishOrder = ResolvePublishOrder(plan);
         var packageNuGetPublished = false;
         var packageGitHubPublished = false;

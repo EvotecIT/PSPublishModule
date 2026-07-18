@@ -19,7 +19,7 @@ public sealed partial class ModulePipelineRunner
             $"{safeModuleName}.json");
     }
 
-    private static string ResolveSynchronizedReleaseStateRoot(string projectRoot)
+    internal static string ResolveSynchronizedReleaseStateRoot(string projectRoot)
     {
         var current = new DirectoryInfo(Path.GetFullPath(projectRoot));
         while (current is not null)
@@ -44,7 +44,54 @@ public sealed partial class ModulePipelineRunner
             current = current.Parent;
         }
 
-        return Path.Combine(Path.GetFullPath(projectRoot), ".powerforge");
+        var canonicalProjectRoot = Path.GetFullPath(projectRoot);
+        if (Path.DirectorySeparatorChar == '\\')
+            canonicalProjectRoot = canonicalProjectRoot.ToUpperInvariant();
+
+        var localStateRoot = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(localStateRoot))
+            localStateRoot = Path.GetTempPath();
+
+        return Path.Combine(
+            localStateRoot,
+            "PowerForge",
+            "coordinated-release-projects",
+            CreateSynchronizedReleaseFingerprint("ProjectRoot", canonicalProjectRoot));
+    }
+
+    private void EnterSynchronizedReleaseCheckpointScope(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state)
+    {
+        state.PlannedSynchronizedOperationCount = ResolvePlannedSynchronizedPublishOperationKeys(plan).Length;
+        var checkpointPath = ResolveSynchronizedReleaseCheckpointPath(plan);
+        if (state.PlannedSynchronizedOperationCount == 0 && !File.Exists(checkpointPath))
+            return;
+
+        var lockPath = checkpointPath + ".lock";
+        var directory = Path.GetDirectoryName(lockPath) ?? throw new InvalidOperationException(
+            $"Coordinated release lock path '{lockPath}' has no parent directory.");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            state.SynchronizedReleaseCheckpointLock = new FileStream(
+                lockPath,
+                FileMode.OpenOrCreate,
+                FileAccess.ReadWrite,
+                FileShare.None);
+        }
+        catch (IOException ex)
+        {
+            throw new InvalidOperationException(
+                $"Another coordinated release is already active for module '{plan.ModuleName}' and project '{plan.ProjectRoot}'.",
+                ex);
+        }
+    }
+
+    private static void ExitSynchronizedReleaseCheckpointScope(ModulePipelineRunState state)
+    {
+        state.SynchronizedReleaseCheckpointLock?.Dispose();
+        state.SynchronizedReleaseCheckpointLock = null;
     }
 
     private static void SaveSynchronizedReleaseCheckpoint(ModulePipelineRunState state)
@@ -94,7 +141,7 @@ public sealed partial class ModulePipelineRunner
 
     private sealed class SynchronizedReleaseCheckpoint
     {
-        public int SchemaVersion { get; set; } = 2;
+        public int SchemaVersion { get; set; } = 3;
         public string ModuleName { get; set; } = string.Empty;
         public ReleaseVersionSource ReleaseSource { get; set; }
         public string? PrimaryProject { get; set; }
@@ -103,6 +150,8 @@ public sealed partial class ModulePipelineRunner
         public string[] AttemptedOperations { get; set; } = Array.Empty<string>();
         public string[] CompletedOperations { get; set; } = Array.Empty<string>();
         public string[] OperationFingerprints { get; set; } = Array.Empty<string>();
+        public string PayloadFingerprint { get; set; } = string.Empty;
+        public string[] PayloadComponents { get; set; } = Array.Empty<string>();
         public string[] PlannedLanes { get; set; } = Array.Empty<string>();
         public string[] AttemptedLanes { get; set; } = Array.Empty<string>();
         public SynchronizedReleaseLaneCheckpoint[] Lanes { get; set; } = Array.Empty<SynchronizedReleaseLaneCheckpoint>();

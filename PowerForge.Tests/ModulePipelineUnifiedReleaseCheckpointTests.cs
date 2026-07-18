@@ -112,7 +112,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
 
             Assert.Contains("gallery outage", exception.Message, StringComparison.OrdinalIgnoreCase);
-            var checkpointRoot = Path.Combine(root.FullName, ".powerforge", "coordinated-release");
+            var checkpointRoot = GetCoordinatedReleaseCheckpointRoot(root.FullName);
             Assert.Single(Directory.GetFiles(checkpointRoot, "*.json"));
             Assert.False(Directory.Exists(Path.Combine(root.FullName, "Artefacts", ".powerforge")));
         }
@@ -180,7 +180,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
 
             Assert.Equal(synchronizedVersion, result.Plan.ResolvedVersion);
             Assert.Equal(1, gitHubPublishCount);
-            Assert.False(Directory.Exists(Path.Combine(root.FullName, ".powerforge", "coordinated-release")));
+            AssertNoCoordinatedReleaseCheckpoint(root.FullName);
         }
         finally
         {
@@ -256,7 +256,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Assert.Equal("2.0.11", result.Plan.ResolvedVersion);
             Assert.Equal(1, sourcePublishCount);
             Assert.Equal(2, companionPublishCount);
-            Assert.False(Directory.Exists(Path.Combine(root.FullName, ".powerforge", "coordinated-release")));
+            AssertNoCoordinatedReleaseCheckpoint(root.FullName);
         }
         finally
         {
@@ -308,6 +308,12 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                     request,
                     configPath,
                     includePackage: false);
+                result.Result.Release!.Projects.Add(new DotNetRepositoryProjectResult
+                {
+                    ProjectName = $"{projectName}.Tests",
+                    PackageId = $"{projectName}.Tests",
+                    IsPackable = false
+                });
                 if (runNumber == 1 && companion && request.PublishNuget != true)
                 {
                     result.Success = false;
@@ -339,7 +345,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
 
             Assert.Equal("2.0.11", result.Plan.ResolvedVersion);
             Assert.True(resumedCompanionUsedExactVersion);
-            Assert.False(Directory.Exists(Path.Combine(root.FullName, ".powerforge", "coordinated-release")));
+            AssertNoCoordinatedReleaseCheckpoint(root.FullName);
         }
         finally
         {
@@ -388,6 +394,142 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
 
             Assert.Contains("without exact version state", secondException.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(0, retryExecutorCalls);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(firstStagingPath)) Directory.Delete(firstStagingPath, recursive: true); } catch { }
+            try { if (Directory.Exists(secondStagingPath)) Directory.Delete(secondStagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_RejectsRetryWhenFailedLaneHasOnlyPartialProjectVersionState()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var firstStagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        var secondStagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "2.0.10");
+            WriteSynchronizedProjectBuildConfig(root.FullName, "project.build.json", moduleName, publishNuGet: false);
+
+            var firstRunner = CreateRunner(
+                new FakeHostedOperations(new List<string>()),
+                (request, configuration, configPath) =>
+                {
+                    var result = CreateProjectBuildResult(
+                        root.FullName,
+                        moduleName,
+                        "2.0.11",
+                        Path.Combine(root.FullName, "Artifacts", "NuGet"),
+                        request,
+                        configPath,
+                        includePackage: false);
+                    result.Result.Release!.Projects.Add(new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = "Companion",
+                        PackageId = "Companion",
+                        IsPackable = true
+                    });
+                    result.Success = false;
+                    result.ErrorMessage = "Simulated partial multi-project failure.";
+                    return result;
+                });
+            var firstException = Assert.Throws<InvalidOperationException>(() => firstRunner.Run(
+                CreateGalleryReleaseSpec(root.FullName, firstStagingPath, moduleName)));
+            Assert.Contains("partial multi-project failure", firstException.Message, StringComparison.OrdinalIgnoreCase);
+
+            var retryExecutorCalls = 0;
+            var secondRunner = CreateRunner(
+                new FakeHostedOperations(new List<string>()),
+                (request, configuration, configPath) =>
+                {
+                    retryExecutorCalls++;
+                    return CreateProjectBuildResult(
+                        root.FullName,
+                        moduleName,
+                        "2.0.11",
+                        Path.Combine(root.FullName, "Artifacts", "NuGet"),
+                        request,
+                        configPath,
+                        includePackage: false);
+                });
+            var secondException = Assert.Throws<InvalidOperationException>(() => secondRunner.Run(
+                CreateGalleryReleaseSpec(root.FullName, secondStagingPath, moduleName)));
+
+            Assert.Contains("without exact version state", secondException.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(0, retryExecutorCalls);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(firstStagingPath)) Directory.Delete(firstStagingPath, recursive: true); } catch { }
+            try { if (Directory.Exists(secondStagingPath)) Directory.Delete(secondStagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_RejectsChangedPayloadBeforeResumingRemainingPublishes()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var firstStagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        var secondStagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "2.0.10");
+            WriteSynchronizedProjectBuildConfig(root.FullName, "project.build.json", moduleName, publishNuGet: false);
+
+            var gitHubPublishCount = 0;
+            ProjectBuildHostExecutionResult ExecutePackageBuild(
+                ProjectBuildHostRequest request,
+                ProjectBuildConfiguration? configuration,
+                string? configPath)
+                => CreateProjectBuildResult(
+                    root.FullName,
+                    moduleName,
+                    "2.0.11",
+                    Path.Combine(root.FullName, "Artifacts", "NuGet"),
+                    request,
+                    configPath,
+                    includePackage: false);
+            GitHubReleasePublishResult PublishGitHub(GitHubReleasePublishRequest request)
+            {
+                gitHubPublishCount++;
+                return new GitHubReleasePublishResult
+                {
+                    Succeeded = true,
+                    ReleaseCreationSucceeded = true,
+                    AllAssetUploadsSucceeded = true,
+                    HtmlUrl = $"https://github.com/EvotecIT/{moduleName}/releases/tag/{request.TagName}"
+                };
+            }
+
+            var firstHosted = new FakeHostedOperations(new List<string>())
+            {
+                ModuleAction = (action, context) => CreateActionResult(action, context, succeeded: false)
+            };
+            var firstRunner = CreateRunner(firstHosted, ExecutePackageBuild, PublishGitHub);
+            Assert.Throws<InvalidOperationException>(() => firstRunner.Run(
+                CreateGitHubPostPublishSpec(root.FullName, firstStagingPath, moduleName)));
+            Assert.Equal(1, gitHubPublishCount);
+
+            File.WriteAllText(
+                Path.Combine(root.FullName, $"{moduleName}.psm1"),
+                "function Get-Test { 'changed' }");
+            var secondHosted = new FakeHostedOperations(new List<string>())
+            {
+                ModuleAction = (action, context) => CreateActionResult(action, context, succeeded: true)
+            };
+            var secondRunner = CreateRunner(secondHosted, ExecutePackageBuild, PublishGitHub);
+            var secondException = Assert.Throws<InvalidOperationException>(() => secondRunner.Run(
+                CreateGitHubPostPublishSpec(root.FullName, secondStagingPath, moduleName)));
+
+            Assert.Contains("payload differs", secondException.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains($"module/{moduleName}.psm1", secondException.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(1, gitHubPublishCount);
         }
         finally
         {

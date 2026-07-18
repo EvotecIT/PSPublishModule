@@ -137,7 +137,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
 
             Assert.Contains("gallery outage", firstException.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(3, packagePublishCount);
-            var checkpointRoot = Path.Combine(root.FullName, ".powerforge", "coordinated-release");
+            var checkpointRoot = GetCoordinatedReleaseCheckpointRoot(root.FullName);
             Assert.Single(Directory.GetFiles(checkpointRoot, "*.json"));
 
             runNumber = 2;
@@ -160,7 +160,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Assert.Equal(synchronizedVersion, result.Plan.ResolvedVersion);
             Assert.Equal(3, packagePublishCount);
             Assert.Equal(new[] { synchronizedVersion }, secondHosted.PublishedModuleVersions);
-            Assert.False(Directory.Exists(checkpointRoot));
+            AssertNoCoordinatedReleaseCheckpoint(root.FullName);
         }
         finally
         {
@@ -243,7 +243,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Assert.Contains("post-publish failure", firstException.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(1, packagePublishCount);
             Assert.Single(firstHosted.PublishedModuleVersions);
-            var checkpointRoot = Path.Combine(root.FullName, ".powerforge", "coordinated-release");
+            var checkpointRoot = GetCoordinatedReleaseCheckpointRoot(root.FullName);
             Assert.Single(Directory.GetFiles(checkpointRoot, "*.json"));
 
             var disabledSynchronizationHosted = new FakeHostedOperations(new List<string>());
@@ -334,7 +334,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Assert.Equal(synchronizedVersion, result.Plan.ResolvedVersion);
             Assert.Equal(1, packagePublishCount);
             Assert.Empty(finalHosted.PublishedModuleVersions);
-            Assert.False(Directory.Exists(checkpointRoot));
+            AssertNoCoordinatedReleaseCheckpoint(root.FullName);
         }
         finally
         {
