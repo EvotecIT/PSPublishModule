@@ -278,6 +278,26 @@ public sealed partial class ManagedModuleUninstallService
             IsLoaded = IsLoaded(candidate, request.LoadedModules)
         };
 
+    /// <summary>
+    /// Recomputes target loaded-state flags from the host's latest module evidence.
+    /// </summary>
+    internal static void RefreshLoadedState(
+        IEnumerable<ManagedModuleUninstallTarget> targets,
+        IReadOnlyList<ManagedModuleLoadedModule>? loadedModules)
+    {
+        if (targets is null)
+            throw new ArgumentNullException(nameof(targets));
+
+        foreach (var target in targets)
+        {
+            target.IsLoaded = IsLoaded(
+                target.Name,
+                target.Version,
+                target.ModulePath,
+                loadedModules);
+        }
+    }
+
     private static void ThrowIfLoaded(IReadOnlyList<ManagedModuleUninstallTarget> targets)
     {
         var loaded = targets.Where(static target => target.IsLoaded).ToArray();
@@ -381,12 +401,19 @@ public sealed partial class ManagedModuleUninstallService
     }
 
     private static bool IsLoaded(InstalledModuleCandidate candidate, IReadOnlyList<ManagedModuleLoadedModule>? loadedModules)
+        => IsLoaded(candidate.Name, candidate.Version, candidate.ModulePath, loadedModules);
+
+    private static bool IsLoaded(
+        string name,
+        string version,
+        string modulePath,
+        IReadOnlyList<ManagedModuleLoadedModule>? loadedModules)
         => (loadedModules ?? Array.Empty<ManagedModuleLoadedModule>()).Any(loaded =>
-            string.Equals(loaded.Name, candidate.Name, StringComparison.OrdinalIgnoreCase) &&
-            (string.IsNullOrWhiteSpace(loaded.Version) || VersionsEqual(candidate.Version, loaded.Version!)) &&
+            string.Equals(loaded.Name, name, StringComparison.OrdinalIgnoreCase) &&
+            (string.IsNullOrWhiteSpace(loaded.Version) || VersionsEqual(version, loaded.Version!)) &&
             (string.IsNullOrWhiteSpace(loaded.ModuleBase) && string.IsNullOrWhiteSpace(loaded.Path) ||
-             PathMatches(candidate.ModulePath, loaded.ModuleBase) ||
-             PathMatches(candidate.ModulePath, loaded.Path)));
+             PathMatches(modulePath, loaded.ModuleBase) ||
+             PathMatches(modulePath, loaded.Path)));
 
     private static bool VersionsEqual(string left, string right)
     {

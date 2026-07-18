@@ -235,7 +235,7 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
         var plans = MergePlans(_plans);
         if (Plan.IsPresent)
         {
-            ValidatePlansAsBatch(service, plans);
+            RefreshAndValidatePlansAsBatch(service, plans, ResolveLoadedModules());
             foreach (var plan in plans)
                 WriteObject(plan, enumerateCollection: false);
             return;
@@ -275,16 +275,60 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
         if (selectedPlans.Count == 0)
             return;
 
-        var selectedTargets = ValidatePlansAsBatch(service, selectedPlans);
+        ExecuteSelectedPlans(
+            service,
+            selectedPlans,
+            ResolveLoadedModules,
+            results => WriteObject(results, enumerateCollection: true));
+    }
 
+    /// <summary>
+    /// Revalidates and executes selected plans with fresh loaded-module evidence before the batch and each mutation.
+    /// </summary>
+    internal static void ExecuteSelectedPlans(
+        ManagedModuleUninstallService service,
+        IReadOnlyList<ManagedModuleUninstallPlan> selectedPlans,
+        Func<IReadOnlyList<ManagedModuleLoadedModule>> resolveLoadedModules,
+        Action<IReadOnlyList<ManagedModuleUninstallResult>> writeResults)
+    {
+        if (service is null)
+            throw new ArgumentNullException(nameof(service));
+        if (selectedPlans is null)
+            throw new ArgumentNullException(nameof(selectedPlans));
+        if (resolveLoadedModules is null)
+            throw new ArgumentNullException(nameof(resolveLoadedModules));
+        if (writeResults is null)
+            throw new ArgumentNullException(nameof(writeResults));
+
+        var selectedTargets = RefreshAndValidatePlansAsBatch(
+            service,
+            selectedPlans,
+            resolveLoadedModules());
         var orderedTargets = ManagedModuleUninstallService.OrderTargetsForRemoval(selectedTargets);
         foreach (var target in orderedTargets)
         {
             var owner = selectedPlans.Single(plan => plan.Targets.Any(candidate => ReferenceEquals(candidate, target)));
             var singleTargetPlan = CreateSelectedPlan(owner, new[] { target });
             singleTargetPlan.DependencyRemovalTargets = selectedTargets;
-            WriteObject(service.Uninstall(singleTargetPlan), enumerateCollection: true);
+            ManagedModuleUninstallService.RefreshLoadedState(
+                singleTargetPlan.Targets,
+                resolveLoadedModules());
+            writeResults(service.Uninstall(singleTargetPlan));
         }
+    }
+
+    /// <summary>
+    /// Refreshes loaded-state flags and validates the complete selected dependency-removal batch.
+    /// </summary>
+    internal static ManagedModuleUninstallTarget[] RefreshAndValidatePlansAsBatch(
+        ManagedModuleUninstallService service,
+        IReadOnlyList<ManagedModuleUninstallPlan> plans,
+        IReadOnlyList<ManagedModuleLoadedModule> loadedModules)
+    {
+        ManagedModuleUninstallService.RefreshLoadedState(
+            plans.SelectMany(static plan => plan.Targets),
+            loadedModules);
+        return ValidatePlansAsBatch(service, plans);
     }
 
     private static ManagedModuleUninstallTarget[] ValidatePlansAsBatch(

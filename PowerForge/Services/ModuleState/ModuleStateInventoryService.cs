@@ -32,10 +32,18 @@ internal sealed class ModuleStateInventoryService
         for (var pathIndex = 0; pathIndex < modulePaths.Length; pathIndex++)
         {
             var modulePath = modulePaths[pathIndex];
-            if (!Directory.Exists(modulePath.Path))
+            var directoryProbe = ModuleStateDirectoryProbe.Probe(modulePath.Path);
+            if (directoryProbe.Status != ModuleStateDirectoryProbeStatus.Available)
             {
                 scannedPaths[pathIndex] = WithAvailability(modulePath, wasAvailable: false);
-                if (modulePath.IsRequired)
+                if (directoryProbe.Status == ModuleStateDirectoryProbeStatus.Inaccessible)
+                {
+                    diagnostics.Add(CreatePathDiagnostic(
+                        modulePath,
+                        "ModuleState.InventoryPathInaccessible",
+                        $"Module inventory path '{modulePath.Path}' could not be inspected: {directoryProbe.Reason}"));
+                }
+                else if (modulePath.IsRequired)
                 {
                     diagnostics.Add(CreatePathDiagnostic(
                         modulePath,

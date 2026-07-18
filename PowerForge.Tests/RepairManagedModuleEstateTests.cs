@@ -5,7 +5,7 @@ using PSPublishModule;
 namespace PowerForge.Tests;
 
 [Collection("ModuleRepositoryProfileEnvironment")]
-public sealed class RepairManagedModuleEstateTests
+public sealed partial class RepairManagedModuleEstateTests
 {
     [Fact]
     public void Plan_KeepsPowerShellEditionsAndPhysicalRootsIndependent()
@@ -157,6 +157,8 @@ public sealed class RepairManagedModuleEstateTests
         var action = Assert.Single(result.Plan.Actions, static action => action.ModuleName == "Company.Missing");
         Assert.True(PathsEqual(action.TargetModuleRoot, destinationRoot));
         Assert.DoesNotContain(result.Plan.Findings, static finding => finding.Code is "ModuleState.AmbiguousRepairTarget" or "ModuleState.RepairTargetMissing");
+        Assert.DoesNotContain(result.Inventory.Diagnostics, static diagnostic =>
+            diagnostic.Code is "ModuleState.InventoryPathMissing" or "ModuleState.InventoryPathInaccessible");
     }
 
     [Fact]

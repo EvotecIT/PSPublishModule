@@ -23,17 +23,20 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
             ? ModuleStateInventoryCommandSupport.CreateModulePathEntries(ModulePath, pathsRequired: true)
             : ModuleStateInventoryCommandSupport.CreateEnvironmentModulePathEntries();
         var explicitTargetRoot = ResolveManagedDeliveryModuleRoot();
+        var explicitTargetRootIsRequired = !string.IsNullOrWhiteSpace(ModuleRoot) &&
+                                           !string.IsNullOrWhiteSpace(explicitTargetRoot) &&
+                                           ModuleStateDirectoryProbe.Probe(explicitTargetRoot!).Status != ModuleStateDirectoryProbeStatus.Missing;
         var targetPaths = string.IsNullOrWhiteSpace(explicitTargetRoot)
             ? Array.Empty<ModuleStateModulePath>()
             : ModuleStateInventoryCommandSupport.CreateModulePathEntries(
                     new[] { explicitTargetRoot! },
-                    pathsRequired: false)
+                    pathsRequired: explicitTargetRootIsRequired)
                 .Select(path => new ModuleStateModulePath(
                     path.Path,
                     path.PowerShellEdition,
                     Scope ?? path.Scope,
                     path.ProfileName,
-                    isRequired: false))
+                    isRequired: path.IsRequired))
                 .ToArray();
         var profilePaths = (UserProfilePath ?? Array.Empty<string>())
             .Select(path => SessionState.Path.GetUnresolvedProviderPathFromPSPath(path))

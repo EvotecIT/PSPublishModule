@@ -352,6 +352,34 @@ public sealed class ManagedModuleUninstallServiceTests
     }
 
     [Fact]
+    public void RefreshLoadedState_recomputes_stale_uninstall_targets()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var modulePath = CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var service = new ManagedModuleUninstallService();
+        var request = CreateRequest(moduleRoot.Path, "Company.Tools");
+        request.DeferLoadedModuleCheck = true;
+        var plan = service.PlanUninstall(request);
+        var target = Assert.Single(plan.Targets);
+        Assert.False(target.IsLoaded);
+
+        ManagedModuleUninstallService.RefreshLoadedState(plan.Targets, new[]
+        {
+            new ManagedModuleLoadedModule
+            {
+                Name = "Company.Tools",
+                Version = "1.0.0",
+                ModuleBase = modulePath
+            }
+        });
+
+        Assert.True(target.IsLoaded);
+        var exception = Assert.Throws<InvalidOperationException>(() => service.ValidateUninstallPlan(plan));
+        Assert.Contains("AllowLoadedModuleUninstall", exception.Message, StringComparison.Ordinal);
+        Assert.True(Directory.Exists(modulePath));
+    }
+
+    [Fact]
     public void Uninstall_deferred_loaded_check_allows_unloaded_confirmed_subset()
     {
         using var moduleRoot = new TemporaryDirectory();
