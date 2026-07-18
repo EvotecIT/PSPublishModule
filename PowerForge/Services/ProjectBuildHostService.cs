@@ -134,7 +134,12 @@ public sealed class ProjectBuildHostService
             _validateGitHubPreflight,
             _signAssemblies,
             _validateAssemblySigning)
-            .Execute(config, configDirectory, preparation, request.ExecuteBuild);
+            .Execute(
+                config,
+                configDirectory,
+                preparation,
+                request.ExecuteBuild,
+                request.RemotePublishAttempted);
 
         return new ProjectBuildHostExecutionResult {
             Success = workflow.Result.Success,

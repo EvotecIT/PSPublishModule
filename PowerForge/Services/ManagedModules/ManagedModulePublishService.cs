@@ -53,6 +53,7 @@ public sealed class ManagedModulePublishService
         await VerifyDependenciesAsync(request, metadata, cancellationToken).ConfigureAwait(false);
         var publishRepository = request.PublishRepository ?? request.Repository;
 
+        request.RemotePublishAttempted?.Invoke();
         var publish = await _repositoryClient.PublishPackageAsync(
             publishRepository,
             package.PackagePath,

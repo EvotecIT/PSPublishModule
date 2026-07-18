@@ -42,7 +42,8 @@ public sealed partial class ModulePublisher
         RepositoryCredential? publishCredential,
         string versionText,
         string temporaryPackagePath,
-        bool skipDependenciesCheck)
+        bool skipDependenciesCheck,
+        Action? remotePublishAttempted)
     {
         var managedResult = new ManagedModulePublishService(_logger).PublishAsync(
                 new ManagedModulePublishRequest
@@ -55,7 +56,8 @@ public sealed partial class ModulePublisher
                     PublishCredential = publishCredential,
                     SkipDependenciesCheck = skipDependenciesCheck,
                     SkipModuleManifestValidate = false,
-                    Force = publish.Force
+                    Force = publish.Force,
+                    RemotePublishAttempted = remotePublishAttempted
                 })
             .GetAwaiter()
             .GetResult();

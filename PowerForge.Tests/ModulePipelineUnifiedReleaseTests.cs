@@ -1280,6 +1280,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         public List<string> PublishedModuleVersions { get; } = new();
         public Func<PublishConfiguration, ModulePipelinePlan, ModulePublishVersionPreflightResult>? ModulePublishVersionPreflight { get; set; }
         public Func<PublishConfiguration, ModulePipelinePlan, bool, ModulePublishVersionPreflightResult>? ModulePublishVersionPreflightWithExistingPolicy { get; set; }
+        public Action<PublishConfiguration, ModulePipelinePlan>? ModulePublishPreflightAction { get; set; }
+        public Action<Action?>? ModulePublishRemoteSideEffectAction { get; set; }
         public Action<PublishConfiguration, ModulePipelinePlan>? ModulePublishAction { get; set; }
         public Func<ModulePipelineActionConfiguration, ModulePipelineActionContext, ModulePipelineActionResult>? ModuleAction { get; set; }
 
@@ -1318,8 +1320,13 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             ModulePipelinePlan plan,
             ModuleBuildResult buildResult,
             IReadOnlyList<ArtefactBuildResult> artefactResults,
-            bool includeScriptFolders)
+            bool includeScriptFolders,
+            Action? remotePublishAttempted,
+            Action? remoteSideEffectObserved)
         {
+            ModulePublishPreflightAction?.Invoke(publish, plan);
+            ModulePublishRemoteSideEffectAction?.Invoke(remoteSideEffectObserved);
+            remotePublishAttempted?.Invoke();
             ModulePublishAction?.Invoke(publish, plan);
             _events.Add($"module:{publish.Destination}");
             PublishedModuleVersions.Add(plan.ResolvedVersion);

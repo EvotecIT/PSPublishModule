@@ -611,6 +611,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
                     _logger.Info($"Publishing {Path.GetFileName(pkg)}...");
                     var packagePublishWatch = Stopwatch.StartNew();
+                    spec.RemotePublishAttempted?.Invoke();
                     var pushResult = PushPackage(
                         pkg,
                         spec.PublishApiKey!,

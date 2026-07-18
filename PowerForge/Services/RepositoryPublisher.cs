@@ -125,6 +125,11 @@ public sealed class RepositoryPublisher
 
             if (tool == PublishTool.PowerShellGet)
             {
+                if (request.RemotePublishAttempted is not null &&
+                    !_powerShellGet.IsAvailable(out var availabilityMessage))
+                    throw new PowerShellToolNotAvailableException("PowerShellGet", availabilityMessage ?? "PowerShellGet is not available.");
+
+                request.RemotePublishAttempted?.Invoke();
                 _powerShellGet.Publish(
                     new PowerShellGetPublishOptions(
                         path: fullPath,
@@ -134,6 +139,11 @@ public sealed class RepositoryPublisher
             }
             else
             {
+                if (request.RemotePublishAttempted is not null &&
+                    !_psResourceGet.IsAvailable(out var availabilityMessage))
+                    throw new PowerShellToolNotAvailableException("PSResourceGet", availabilityMessage ?? "PSResourceGet is not available.");
+
+                request.RemotePublishAttempted?.Invoke();
                 _psResourceGet.Publish(
                     new PSResourcePublishOptions(
                         path: fullPath,

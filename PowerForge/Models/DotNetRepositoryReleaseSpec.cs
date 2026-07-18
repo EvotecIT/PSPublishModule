@@ -5,6 +5,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class DotNetRepositoryReleaseSpec
 {
+    internal Action? RemotePublishAttempted { get; set; }
+
     /// <summary>Root path of the repository to scan for projects.</summary>
     public string RootPath { get; set; } = string.Empty;
 

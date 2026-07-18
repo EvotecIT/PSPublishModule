@@ -135,8 +135,13 @@ public sealed partial class ModulePipelineRunner
                 continue;
             }
 
-            MarkSynchronizedReleaseOperationAttempted(state, operationKey);
-            ExecuteModulePublish(plan, session, buildResult, state, publish);
+            ExecuteModulePublish(
+                plan,
+                session,
+                buildResult,
+                state,
+                publish,
+                () => MarkSynchronizedReleaseOperationAttempted(state, operationKey));
             completed.Add(publish);
             MarkSynchronizedReleaseOperationCompleted(state, operationKey);
         }
@@ -147,20 +152,23 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineExecutionSession session,
         ModuleBuildResult buildResult,
         ModulePipelineRunState state,
-        ConfigurationPublishSegment publish)
+        ConfigurationPublishSegment publish,
+        Action remotePublishAttempted)
     {
         var step = session.GetPublishStep(publish);
         session.Start(step);
         try
         {
             state.PublishResults.Add(ShouldPublishUnifiedGitHubRelease(plan, publish.Configuration)
-                ? PublishUnifiedGitHubRelease(publish.Configuration, plan, state)
+                ? PublishUnifiedGitHubRelease(publish.Configuration, plan, state, remotePublishAttempted)
                 : _hostedOperations.PublishModule(
                     publish.Configuration,
                     plan,
                     buildResult,
                     state.ArtefactResults,
-                    includeScriptFolders: !state.PackageWithoutScriptFolders));
+                    includeScriptFolders: !state.PackageWithoutScriptFolders,
+                    remotePublishAttempted: remotePublishAttempted,
+                    remoteSideEffectObserved: () => MarkSynchronizedReleaseRemoteSideEffectObserved(state)));
             session.Done(step);
         }
         catch (Exception ex)

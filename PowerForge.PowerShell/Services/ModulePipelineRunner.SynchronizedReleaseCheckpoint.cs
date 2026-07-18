@@ -13,8 +13,11 @@ public sealed partial class ModulePipelineRunner
     {
         var path = ResolveSynchronizedReleaseCheckpointPath(plan);
         var checkpointExists = File.Exists(path);
-        var inspectBuildGateCheckpoint = checkpointExists && plan.GateMode == ConfigurationGateMode.Build;
-        if (!ShouldUseSynchronizedReleaseCheckpoint(plan, state) && !inspectBuildGateCheckpoint)
+        var sourceMutatingGate = plan.GateMode is ConfigurationGateMode.Manifest or
+            ConfigurationGateMode.Documentation or
+            ConfigurationGateMode.Build;
+        var inspectSourceMutatingGateCheckpoint = checkpointExists && sourceMutatingGate;
+        if (!ShouldUseSynchronizedReleaseCheckpoint(plan, state) && !inspectSourceMutatingGateCheckpoint)
         {
             if (plan.GateMode is ConfigurationGateMode.Manifest or
                 ConfigurationGateMode.Documentation or
@@ -48,25 +51,25 @@ public sealed partial class ModulePipelineRunner
                 ex);
         }
 
-        if (checkpoint is null || checkpoint.SchemaVersion != 4)
+        if (checkpoint is null || checkpoint.SchemaVersion != 5)
         {
             throw new InvalidOperationException(
                 $"Coordinated release checkpoint '{path}' has an unsupported schema. Delete it only if the incomplete release should be abandoned.");
         }
 
-        if (plan.GateMode == ConfigurationGateMode.Build)
+        if (sourceMutatingGate)
         {
             if (IsPristineSynchronizedReleaseCheckpoint(checkpoint))
             {
                 File.Delete(path);
                 DeleteEmptySynchronizedReleaseCheckpointDirectories(path);
                 _logger.Warn(
-                    $"Discarded unused coordinated release checkpoint '{path}' before running the build gate because no package lane or publish operation had started.");
+                    $"Discarded unused coordinated release checkpoint '{path}' before running the {plan.GateMode} gate because no package lane or publish operation had started.");
                 return;
             }
 
             throw new InvalidOperationException(
-                $"Gate mode Build cannot run while coordinated release checkpoint '{path}' is incomplete because package builds may mutate release-bound source versions. Resume or explicitly abandon the coordinated release before running the build gate.");
+                $"Gate mode {plan.GateMode} cannot run while coordinated release checkpoint '{path}' is incomplete because it may mutate release-bound source files. Resume or explicitly abandon the coordinated release before running this gate.");
         }
 
         try
@@ -88,7 +91,7 @@ public sealed partial class ModulePipelineRunner
             ? "pending version resolution"
             : checkpoint.Version;
         _logger.Warn(
-            $"Resuming incomplete coordinated release ({versionDescription}) from '{path}'. Completed publish operations: {DescribeCompletedOperations(checkpoint)}.");
+            $"Resuming incomplete coordinated release ({versionDescription}) from '{path}'. Completed publish operations: {DescribeCompletedOperations(checkpoint)}. Auxiliary remote side effects observed: {(checkpoint.AuxiliaryRemoteSideEffectsObserved ? "yes" : "no")}.");
     }
 
     private void InitializeSynchronizedReleaseCheckpoint(
@@ -396,6 +399,16 @@ public sealed partial class ModulePipelineRunner
         SaveSynchronizedReleaseCheckpoint(state);
     }
 
+    private void MarkSynchronizedReleaseRemoteSideEffectObserved(ModulePipelineRunState state)
+    {
+        var checkpoint = state.SynchronizedReleaseCheckpoint;
+        if (checkpoint is null || checkpoint.AuxiliaryRemoteSideEffectsObserved)
+            return;
+
+        checkpoint.AuxiliaryRemoteSideEffectsObserved = true;
+        SaveSynchronizedReleaseCheckpoint(state);
+    }
+
     private void MarkSynchronizedReleaseOperationCompleted(
         ModulePipelineRunState state,
         string operationKey)
@@ -481,31 +494,22 @@ public sealed partial class ModulePipelineRunner
         var release = result.Result.Release ?? throw new InvalidOperationException(
             $"Package lane '{laneLabel}' did not return release version details.");
         var versions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var entry in release.ResolvedVersionsByProject)
-        {
-            if (string.IsNullOrWhiteSpace(entry.Key))
-                continue;
-            if (!PackageVersionUtility.TryNormalizeExact(entry.Value, out var normalizedEntryVersion))
-            {
-                throw new InvalidOperationException(
-                    $"Package lane '{laneLabel}' returned invalid version state for project '{entry.Key}'.");
-            }
-
-            versions[entry.Key.Trim()] = normalizedEntryVersion;
-        }
-        foreach (var project in release.Projects.Where(static project => project.IsPackable))
+        foreach (var project in release.Projects)
         {
             var projectVersion = ResolveExactSynchronizedReleaseProjectVersion(release, project);
             if (string.IsNullOrWhiteSpace(projectVersion))
             {
-                throw new InvalidOperationException(
-                    $"Package lane '{laneLabel}' did not return exact version state for project '{ResolveSynchronizedReleaseProjectLabel(project)}'.");
+                if (project.IsPackable)
+                {
+                    throw new InvalidOperationException(
+                        $"Package lane '{laneLabel}' did not return exact version state for project '{ResolveSynchronizedReleaseProjectLabel(project)}'.");
+                }
+
+                continue;
             }
 
             if (!string.IsNullOrWhiteSpace(project.ProjectName))
                 versions[project.ProjectName.Trim()] = projectVersion!;
-            if (!string.IsNullOrWhiteSpace(project.PackageId))
-                versions[project.PackageId.Trim()] = projectVersion!;
         }
 
         var defaultVersionCandidate = string.IsNullOrWhiteSpace(release.ResolvedVersion)
@@ -710,6 +714,7 @@ public sealed partial class ModulePipelineRunner
            string.IsNullOrWhiteSpace(checkpoint.Version) &&
            (checkpoint.AttemptedLanes?.Length ?? 0) == 0 &&
            (checkpoint.Lanes?.Length ?? 0) == 0 &&
+           !checkpoint.AuxiliaryRemoteSideEffectsObserved &&
            (checkpoint.AttemptedOperations?.Length ?? 0) == 0 &&
            (checkpoint.CompletedOperations?.Length ?? 0) == 0;
 

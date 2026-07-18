@@ -39,6 +39,7 @@ public sealed class ProjectBuildWorkflowServiceTests
     public void Execute_returns_preflight_failure_before_release_execution()
     {
         var executeCalls = 0;
+        var remotePublishAttempts = 0;
         var service = new ProjectBuildWorkflowService(
             new NullLogger(),
             executeRelease: spec =>
@@ -62,9 +63,11 @@ public sealed class ProjectBuildWorkflowServiceTests
                 RootPath = Directory.GetCurrentDirectory(),
                 Spec = new DotNetRepositoryReleaseSpec { RootPath = Directory.GetCurrentDirectory() }
             },
-            executeBuild: true);
+            executeBuild: true,
+            remotePublishAttempted: () => remotePublishAttempts++);
 
         Assert.Equal(1, executeCalls);
+        Assert.Equal(0, remotePublishAttempts);
         Assert.False(workflow.Result.Success);
         Assert.Contains("GitHubAccessToken", workflow.Result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
     }
@@ -73,6 +76,8 @@ public sealed class ProjectBuildWorkflowServiceTests
     public void Execute_runs_release_and_github_publish_when_requested()
     {
         var callIndex = 0;
+        var remotePublishAttempts = 0;
+        var remoteAttemptRecordedBeforePublish = false;
         var logger = new RecordingLogger();
         var service = new ProjectBuildWorkflowService(
             logger,
@@ -108,6 +113,7 @@ public sealed class ProjectBuildWorkflowServiceTests
             },
             publishGitHub: request =>
             {
+                remoteAttemptRecordedBeforePublish = remotePublishAttempts == 1;
                 Assert.Equal("EvotecIT", request.Owner);
                 Assert.Equal("PSPublishModule", request.Repository);
                 Assert.Equal("token", request.Token);
@@ -146,9 +152,12 @@ public sealed class ProjectBuildWorkflowServiceTests
                 RootPath = Directory.GetCurrentDirectory(),
                 Spec = new DotNetRepositoryReleaseSpec { RootPath = Directory.GetCurrentDirectory(), PublishFailFast = true }
             },
-            executeBuild: true);
+            executeBuild: true,
+            remotePublishAttempted: () => remotePublishAttempts++);
 
         Assert.Equal(2, callIndex);
+        Assert.Equal(1, remotePublishAttempts);
+        Assert.True(remoteAttemptRecordedBeforePublish);
         Assert.True(workflow.Result.Success);
         Assert.Single(workflow.Result.GitHub);
         Assert.NotNull(workflow.GitHubPublishSummary);

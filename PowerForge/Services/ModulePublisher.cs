@@ -62,6 +62,23 @@ public sealed partial class ModulePublisher
         ModuleBuildResult buildResult,
         IReadOnlyList<ArtefactBuildResult> artefactResults,
         bool includeScriptFolders = true)
+        => Publish(
+            publish,
+            plan,
+            buildResult,
+            artefactResults,
+            includeScriptFolders,
+            remotePublishAttempted: null,
+            remoteSideEffectObserved: null);
+
+    internal ModulePublishResult Publish(
+        PublishConfiguration publish,
+        ModulePipelinePlan plan,
+        ModuleBuildResult buildResult,
+        IReadOnlyList<ArtefactBuildResult> artefactResults,
+        bool includeScriptFolders,
+        Action? remotePublishAttempted,
+        Action? remoteSideEffectObserved)
     {
         if (publish is null) throw new ArgumentNullException(nameof(publish));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
@@ -87,8 +104,18 @@ public sealed partial class ModulePublisher
 
         return publish.Destination switch
         {
-            PublishDestination.PowerShellGallery => PublishToRepository(publish, plan, buildResult, includeScriptFolders),
-            PublishDestination.GitHub => PublishToGitHub(publish, plan, artefactResults),
+            PublishDestination.PowerShellGallery => PublishToRepository(
+                publish,
+                plan,
+                buildResult,
+                includeScriptFolders,
+                remotePublishAttempted,
+                remoteSideEffectObserved),
+            PublishDestination.GitHub => PublishToGitHub(
+                publish,
+                plan,
+                artefactResults,
+                remotePublishAttempted),
             _ => throw new NotSupportedException($"Unsupported publish destination: {publish.Destination}")
         };
     }
@@ -284,7 +311,13 @@ public sealed partial class ModulePublisher
         return value.Trim();
     }
 
-    private ModulePublishResult PublishToRepository(PublishConfiguration publish, ModulePipelinePlan plan, ModuleBuildResult buildResult, bool includeScriptFolders)
+    private ModulePublishResult PublishToRepository(
+        PublishConfiguration publish,
+        ModulePipelinePlan plan,
+        ModuleBuildResult buildResult,
+        bool includeScriptFolders,
+        Action? remotePublishAttempted,
+        Action? remoteSideEffectObserved)
     {
         var (repositoryName, repoConfig) = ResolveRepository(publish);
         var isPsGallery = string.Equals(repositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase);
@@ -320,20 +353,22 @@ public sealed partial class ModulePublisher
                     buildResult,
                     repositoryName,
                     repoConfig,
-                    includeScriptFolders);
+                    includeScriptFolders,
+                    remotePublishAttempted,
+                    remoteSideEffectObserved);
             }
 
             try
             {
-                return PublishToRepositoryWithTool(PublishTool.PSResourceGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders);
+                return PublishToRepositoryWithTool(PublishTool.PSResourceGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved);
             }
             catch (PowerShellToolNotAvailableException)
             {
-                return PublishToRepositoryWithTool(PublishTool.PowerShellGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders);
+                return PublishToRepositoryWithTool(PublishTool.PowerShellGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved);
             }
         }
 
-        return PublishToRepositoryWithTool(tool, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders);
+        return PublishToRepositoryWithTool(tool, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved);
     }
 
     private ModulePublishResult PublishToRepositoryWithTool(
@@ -343,7 +378,9 @@ public sealed partial class ModulePublisher
         ModuleBuildResult buildResult,
         string repositoryName,
         PublishRepositoryConfiguration? repoConfig,
-        bool includeScriptFolders)
+        bool includeScriptFolders,
+        Action? remotePublishAttempted,
+        Action? remoteSideEffectObserved)
     {
         if (publish.PublishRequiredModules && tool == PublishTool.PowerShellGet)
         {
@@ -409,7 +446,8 @@ public sealed partial class ModulePublisher
                     readCredential,
                     publishCredential,
                     plan,
-                    buildResult);
+                    buildResult,
+                    remoteSideEffectObserved);
 
                 temporaryPackagePath = Path.Combine(Path.GetTempPath(), "PowerForge", "managed-publish", Guid.NewGuid().ToString("N"));
                 PublishToRepositoryWithManagedModule(
@@ -422,7 +460,8 @@ public sealed partial class ModulePublisher
                     publishCredential,
                     versionText,
                     temporaryPackagePath,
-                    skipDependenciesCheck: true);
+                    skipDependenciesCheck: true,
+                    remotePublishAttempted: remotePublishAttempted);
                 CleanupTemporaryPublishPath(temporaryPublishPath);
                 temporaryPublishPath = null;
                 return CreateRepositoryPublishResult(repositoryName, versionText, tool);
@@ -436,7 +475,8 @@ public sealed partial class ModulePublisher
                     readCredential,
                     repositoryForPublish,
                     plan,
-                    buildResult);
+                    buildResult,
+                    remoteSideEffectObserved);
             }
 
             _repositoryPublisher.Publish(
@@ -450,7 +490,8 @@ public sealed partial class ModulePublisher
                     Repository = repositoryForPublish,
                     DestinationPath = null,
                     SkipDependenciesCheck = tool != PublishTool.PowerShellGet,
-                    SkipModuleManifestValidate = false
+                    SkipModuleManifestValidate = false,
+                    RemotePublishAttempted = remotePublishAttempted
                 });
 
             _logger.Info($"Published {plan.ModuleName} {versionText} to repository '{repositoryName}' using {tool}.");
@@ -856,7 +897,11 @@ public sealed partial class ModulePublisher
         return (name, repoConfig);
     }
 
-    private ModulePublishResult PublishToGitHub(PublishConfiguration publish, ModulePipelinePlan plan, IReadOnlyList<ArtefactBuildResult> artefactResults)
+    private ModulePublishResult PublishToGitHub(
+        PublishConfiguration publish,
+        ModulePipelinePlan plan,
+        IReadOnlyList<ArtefactBuildResult> artefactResults,
+        Action? remotePublishAttempted)
     {
         if (string.IsNullOrWhiteSpace(publish.UserName))
             throw new InvalidOperationException("UserName is required for GitHub publishing.");
@@ -872,8 +917,12 @@ public sealed partial class ModulePublisher
 
         var selected = SelectPackedArtefacts(artefactResults, publish.ID);
         var assets = selected.Select(a => a.OutputPath).ToArray();
+        var missingAsset = assets.FirstOrDefault(static asset => string.IsNullOrWhiteSpace(asset) || !File.Exists(asset));
+        if (missingAsset is not null)
+            throw new FileNotFoundException($"GitHub release asset was not found: {missingAsset}", missingAsset);
 
         _logger.Info($"Publishing GitHub release {owner}/{repo} tag '{tag}' with {assets.Length} asset(s)");
+        remotePublishAttempted?.Invoke();
         var created = _gitHub.PublishRelease(
             owner: owner,
             repo: repo,

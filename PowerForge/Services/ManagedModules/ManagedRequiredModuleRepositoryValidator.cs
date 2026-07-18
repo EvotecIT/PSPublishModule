@@ -22,8 +22,9 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
         RepositoryCredential? targetCredential,
         RepositoryCredential? targetPublishCredential,
         ModulePipelinePlan plan,
-        ModuleBuildResult buildResult)
-        => ValidateAsync(publish, targetRepository, targetCredential, targetPublishCredential, plan, buildResult).GetAwaiter().GetResult();
+        ModuleBuildResult buildResult,
+        Action? remoteSideEffectObserved = null)
+        => ValidateAsync(publish, targetRepository, targetCredential, targetPublishCredential, plan, buildResult, remoteSideEffectObserved).GetAwaiter().GetResult();
 
     private async Task ValidateAsync(
         PublishConfiguration publish,
@@ -32,6 +33,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
         RepositoryCredential? targetPublishCredential,
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
+        Action? remoteSideEffectObserved,
         CancellationToken cancellationToken = default)
     {
         if (publish is null) throw new ArgumentNullException(nameof(publish));
@@ -88,6 +90,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
                         cacheDirectory,
                         mirroredPackages,
                         visitingPackages,
+                        remoteSideEffectObserved,
                         cancellationToken).ConfigureAwait(false);
 
                     if (await TargetContainsMatchingVersionAsync(targetRepository, targetCredential, requiredModule.ModuleName, range, cancellationToken).ConfigureAwait(false))
@@ -131,6 +134,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
         string cacheDirectory,
         ISet<string> mirroredPackages,
         ISet<string> visitingPackages,
+        Action? remoteSideEffectObserved,
         CancellationToken cancellationToken)
     {
         var selected = await SelectSourceVersionAsync(sourceRepository, sourceCredential, packageId, range, cancellationToken).ConfigureAwait(false);
@@ -170,9 +174,11 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
                     cacheDirectory,
                     mirroredPackages,
                     visitingPackages,
+                    remoteSideEffectObserved,
                     cancellationToken).ConfigureAwait(false);
             }
 
+            remoteSideEffectObserved?.Invoke();
             var publish = await _repositoryClient.PublishPackageAsync(
                 targetRepository,
                 download.PackagePath,

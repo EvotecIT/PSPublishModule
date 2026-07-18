@@ -92,8 +92,17 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
         IReadOnlyList<ArtefactBuildResult> artefactResults,
-        bool includeScriptFolders)
-        => new ModulePublisher(_logger, _runner).Publish(publish, plan, buildResult, artefactResults, includeScriptFolders);
+        bool includeScriptFolders,
+        Action? remotePublishAttempted,
+        Action? remoteSideEffectObserved)
+        => new ModulePublisher(_logger, _runner).Publish(
+            publish,
+            plan,
+            buildResult,
+            artefactResults,
+            includeScriptFolders,
+            remotePublishAttempted,
+            remoteSideEffectObserved);
 
     public ModulePublishVersionPreflightResult ValidateModulePublishVersion(
         PublishConfiguration publish,

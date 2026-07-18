@@ -151,7 +151,7 @@ public sealed partial class ModulePipelineRunner
 
     private sealed class SynchronizedReleaseCheckpoint
     {
-        public int SchemaVersion { get; set; } = 4;
+        public int SchemaVersion { get; set; } = 5;
         public string ModuleName { get; set; } = string.Empty;
         public ReleaseVersionSource ReleaseSource { get; set; }
         public string? PrimaryProject { get; set; }
@@ -159,6 +159,7 @@ public sealed partial class ModulePipelineRunner
         public string[] PlannedOperations { get; set; } = Array.Empty<string>();
         public string[] AttemptedOperations { get; set; } = Array.Empty<string>();
         public string[] CompletedOperations { get; set; } = Array.Empty<string>();
+        public bool AuxiliaryRemoteSideEffectsObserved { get; set; }
         public string[] OperationFingerprints { get; set; } = Array.Empty<string>();
         public string SourceFingerprint { get; set; } = string.Empty;
         public string[] SourceComponents { get; set; } = Array.Empty<string>();

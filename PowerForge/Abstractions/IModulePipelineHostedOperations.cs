@@ -34,7 +34,9 @@ internal interface IModulePipelineHostedOperations
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
         IReadOnlyList<ArtefactBuildResult> artefactResults,
-        bool includeScriptFolders);
+        bool includeScriptFolders,
+        Action? remotePublishAttempted,
+        Action? remoteSideEffectObserved);
 
     ModulePipelineActionResult RunAction(
         ModulePipelineActionConfiguration action,
