@@ -49533,6 +49533,19 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SynchronizeModuleVersion</maml:name>
+          <maml:description>
+            <maml:para>Uses the selected package/project release version for the module build as well.&#xD;
+The selected lane must run before the module and use UseAsReleaseVersionSource.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Version</maml:name>
           <maml:description>
             <maml:para>Explicit release version used when VersionSource is Manual.</maml:para>
@@ -49609,6 +49622,19 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SynchronizeModuleVersion</maml:name>
+        <maml:description>
+          <maml:para>Uses the selected package/project release version for the module build as well.&#xD;
+The selected lane must run before the module and use UseAsReleaseVersionSource.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

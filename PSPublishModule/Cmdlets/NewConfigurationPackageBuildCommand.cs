@@ -429,6 +429,12 @@ public sealed class NewConfigurationReleaseCommand : PSCmdlet
     /// <summary>Primary package/project used when the version source is package/project build.</summary>
     [Parameter] public string? PrimaryProject { get; set; }
 
+    /// <summary>
+    /// Uses the selected package/project release version for the module build as well.
+    /// The selected lane must run before the module and use <c>UseAsReleaseVersionSource</c>.
+    /// </summary>
+    [Parameter] public SwitchParameter SynchronizeModuleVersion { get; set; }
+
     /// <summary>Preferred build order for high-level release lanes.</summary>
     [Parameter] public string[]? BuildOrder { get; set; }
 
@@ -446,6 +452,7 @@ public sealed class NewConfigurationReleaseCommand : PSCmdlet
                 VersionSource = VersionSource,
                 Version = Normalize(Version),
                 PrimaryProject = Normalize(PrimaryProject),
+                SynchronizeModuleVersion = SynchronizeModuleVersion.IsPresent,
                 BuildOrder = BuildOrder,
                 PublishOrder = PublishOrder
             }

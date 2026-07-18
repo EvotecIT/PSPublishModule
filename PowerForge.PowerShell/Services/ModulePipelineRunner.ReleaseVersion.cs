@@ -69,10 +69,57 @@ public sealed partial class ModulePipelineRunner
         _ = ResolveRequestedPackageReleaseVersion(plan, state);
     }
 
+    private void SynchronizeModuleVersionFromReleaseSource(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state)
+    {
+        var release = plan.Release?.Configuration;
+        if (release?.SynchronizeModuleVersion != true)
+        {
+            return;
+        }
+
+        if (release.VersionSource != ReleaseVersionSource.ProjectBuild &&
+            release.VersionSource != ReleaseVersionSource.PackageBuild)
+        {
+            throw new InvalidOperationException(
+                "SynchronizeModuleVersion requires Release VersionSource ProjectBuild or PackageBuild.");
+        }
+
+        var releaseVersion = ResolveCandidateVersion(
+            state.ReleaseVersionCandidates,
+            release.VersionSource,
+            release.PrimaryProject,
+            explicitOnly: true,
+            required: true)!;
+
+        if (releaseVersion.IndexOf('+') >= 0)
+        {
+            throw new InvalidOperationException(
+                $"Release version '{releaseVersion}' contains build metadata, which cannot be represented by a PowerShell module version.");
+        }
+
+        if (!PackageVersionUtility.TryNormalizeExact(releaseVersion, out var normalizedVersion))
+        {
+            throw new InvalidOperationException(
+                $"Release version '{releaseVersion}' is not a valid exact package version and cannot be used as the module version.");
+        }
+
+        plan.ResolvedVersion = PackageVersionUtility.GetNumericVersion(normalizedVersion);
+        var preRelease = PackageVersionUtility.GetPrereleaseVersion(normalizedVersion);
+        plan.PreRelease = string.IsNullOrWhiteSpace(preRelease) ? null : preRelease;
+        plan.BuildSpec.Version = plan.ResolvedVersion;
+
+        _logger.Info(
+            $"Module version synchronized to release source '{release.VersionSource}': {normalizedVersion}.");
+    }
+
     private static string ResolveManualReleaseVersion(ReleaseConfiguration release)
     {
         if (string.IsNullOrWhiteSpace(release.Version))
+        {
             throw new InvalidOperationException("Release VersionSource Manual requires Version.");
+        }
 
         return release.Version!.Trim();
     }

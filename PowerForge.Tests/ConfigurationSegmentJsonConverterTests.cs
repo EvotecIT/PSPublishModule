@@ -307,7 +307,8 @@ public sealed class ConfigurationSegmentJsonConverterTests
                   "Configuration": {
                     "StageRoot": "Artifacts/Release",
                     "VersionSource": "PackageBuild",
-                    "PrimaryProject": "HtmlTinkerX"
+                    "PrimaryProject": "HtmlTinkerX",
+                    "SynchronizeModuleVersion": true
                   }
                 }
               ]
@@ -337,6 +338,7 @@ public sealed class ConfigurationSegmentJsonConverterTests
         Assert.Equal("Artifacts/Release", release.Configuration.StageRoot);
         Assert.Equal(ReleaseVersionSource.PackageBuild, release.Configuration.VersionSource);
         Assert.Equal("HtmlTinkerX", release.Configuration.PrimaryProject);
+        Assert.True(release.Configuration.SynchronizeModuleVersion);
     }
 
     [Fact]

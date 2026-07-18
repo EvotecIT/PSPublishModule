@@ -459,6 +459,12 @@ public sealed class ReleaseConfiguration
     /// <summary>Primary package/project used when the version source is package/project build.</summary>
     public string? PrimaryProject { get; set; }
 
+    /// <summary>
+    /// When enabled, uses the selected package/project release version for the module build as well.
+    /// The selected lane must run before the module and be marked with <c>UseAsReleaseVersionSource</c>.
+    /// </summary>
+    public bool SynchronizeModuleVersion { get; set; }
+
     /// <summary>Explicit release version used when <see cref="VersionSource"/> is <see cref="ReleaseVersionSource.Manual"/>.</summary>
     public string? Version { get; set; }
 

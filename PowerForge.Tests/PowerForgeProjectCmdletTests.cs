@@ -216,6 +216,7 @@ public sealed class PowerForgeProjectCmdletTests
         ps.AddCommand("New-ConfigurationRelease")
             .AddParameter("VersionSource", ReleaseVersionSource.PackageBuild)
             .AddParameter("PrimaryProject", "HtmlTinkerX")
+            .AddParameter("SynchronizeModuleVersion")
             .AddParameter("BuildOrder", new[] { "PackageBuild", "Module" })
             .AddParameter("PublishOrder", new[] { "NuGet", "PowerShellGallery", "GitHub" });
 
@@ -226,6 +227,7 @@ public sealed class PowerForgeProjectCmdletTests
         Assert.Equal(Path.Combine("Artefacts", "UploadReady"), segment.Configuration.StageRoot);
         Assert.Equal(ReleaseVersionSource.PackageBuild, segment.Configuration.VersionSource);
         Assert.Equal("HtmlTinkerX", segment.Configuration.PrimaryProject);
+        Assert.True(segment.Configuration.SynchronizeModuleVersion);
         Assert.Equal(new[] { "PackageBuild", "Module" }, segment.Configuration.BuildOrder);
         Assert.Equal(new[] { "NuGet", "PowerShellGallery", "GitHub" }, segment.Configuration.PublishOrder);
     }

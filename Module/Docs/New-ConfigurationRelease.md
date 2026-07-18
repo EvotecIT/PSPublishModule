@@ -11,7 +11,7 @@ Creates repo-level release coordination settings for a module and package build.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationRelease [-StageRoot <string>] [-VersionSource <ReleaseVersionSource>] [-Version <string>] [-PrimaryProject <string>] [-BuildOrder <string[]>] [-PublishOrder <string[]>] [<CommonParameters>]
+New-ConfigurationRelease [-StageRoot <string>] [-VersionSource <ReleaseVersionSource>] [-Version <string>] [-PrimaryProject <string>] [-SynchronizeModuleVersion] [-BuildOrder <string[]>] [-PublishOrder <string[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -80,6 +80,23 @@ Staged release root where upload-ready assets should be copied.
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SynchronizeModuleVersion
+Uses the selected package/project release version for the module build as well.
+The selected lane must run before the module and use UseAsReleaseVersionSource.
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

@@ -397,8 +397,15 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         }
     }
 
-    [Fact]
-    public void Run_UsesProjectBuildReleaseVersionWithoutChangingModulePublishVersion()
+    [Theory]
+    [InlineData(false, "2.0.11", "2.1.6", null)]
+    [InlineData(true, "2.0.11", "2.0.11", null)]
+    [InlineData(true, "2.0.11-beta.2", "2.0.11", "beta.2")]
+    public void Run_UsesProjectBuildReleaseVersionWithOptInModuleSynchronization(
+        bool synchronizeModuleVersion,
+        string projectVersion,
+        string expectedModuleVersion,
+        string? expectedPreRelease)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
@@ -409,7 +416,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             WriteProjectBuildConfig(root.FullName, Path.Combine("Build", "project.build.json"));
 
             var packageOutput = Path.Combine(root.FullName, "Artifacts", "NuGet");
-            var packagePath = Path.Combine(packageOutput, "Mailozaurr.2.0.11.nupkg");
+            var packagePath = Path.Combine(packageOutput, $"Mailozaurr.{projectVersion}.nupkg");
             var hostedOperations = new FakeHostedOperations(new List<string>());
             var runner = new ModulePipelineRunner(
                 new NullLogger(),
@@ -424,14 +431,14 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                     Directory.CreateDirectory(packageOutput);
                     File.WriteAllText(packagePath, "package");
 
-                    var release = new DotNetRepositoryReleaseResult { Success = true, ResolvedVersion = "2.0.11" };
-                    release.ResolvedVersionsByProject[moduleName] = "2.0.11";
+                    var release = new DotNetRepositoryReleaseResult { Success = true, ResolvedVersion = projectVersion };
+                    release.ResolvedVersionsByProject[moduleName] = projectVersion;
                     var project = new DotNetRepositoryProjectResult
                     {
                         ProjectName = moduleName,
                         PackageId = moduleName,
                         IsPackable = true,
-                        NewVersion = "2.0.11"
+                        NewVersion = projectVersion
                     };
                     project.Packages.Add(packagePath);
                     release.Projects.Add(project);
@@ -478,7 +485,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                         {
                             StageRoot = Path.Combine(root.FullName, "Artifacts", "Unified"),
                             VersionSource = ReleaseVersionSource.ProjectBuild,
-                            PrimaryProject = moduleName
+                            PrimaryProject = moduleName,
+                            SynchronizeModuleVersion = synchronizeModuleVersion
                         }
                     },
                     new ConfigurationPublishSegment
@@ -496,13 +504,26 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
 
             var result = runner.Run(spec);
 
-            Assert.Equal("2.1.6", result.Plan.ResolvedVersion);
-            Assert.Equal("2.1.6", result.Plan.BuildSpec.Version);
-            Assert.Contains("ModuleVersion = '2.1.6'", File.ReadAllText(result.BuildResult.ManifestPath), StringComparison.Ordinal);
+            Assert.Equal(expectedModuleVersion, result.Plan.ResolvedVersion);
+            Assert.Equal(expectedPreRelease, result.Plan.PreRelease);
+            Assert.Equal(expectedModuleVersion, result.Plan.BuildSpec.Version);
+            Assert.Contains($"ModuleVersion = '{expectedModuleVersion}'", File.ReadAllText(result.BuildResult.ManifestPath), StringComparison.Ordinal);
+            if (string.IsNullOrWhiteSpace(expectedPreRelease))
+            {
+                Assert.False(ManifestEditor.TryGetPsDataStringArray(result.BuildResult.ManifestPath, "Prerelease", out _));
+            }
+            else
+            {
+                Assert.True(ManifestEditor.TryGetPsDataStringArray(result.BuildResult.ManifestPath, "Prerelease", out var manifestPreRelease));
+                Assert.Equal(new[] { expectedPreRelease }, manifestPreRelease);
+            }
             Assert.NotNull(result.ReleaseCoordinationResult);
-            Assert.Equal("2.1.6", result.ReleaseCoordinationResult!.ModuleVersion);
-            Assert.Equal("2.0.11", result.ReleaseCoordinationResult.ReleaseVersion);
-            Assert.Equal(new[] { "2.1.6" }, hostedOperations.PublishedModuleVersions);
+            var expectedPublishedModuleVersion = string.IsNullOrWhiteSpace(expectedPreRelease)
+                ? expectedModuleVersion
+                : $"{expectedModuleVersion}-{expectedPreRelease}";
+            Assert.Equal(expectedPublishedModuleVersion, result.ReleaseCoordinationResult!.ModuleVersion);
+            Assert.Equal(projectVersion, result.ReleaseCoordinationResult.ReleaseVersion);
+            Assert.Equal(new[] { expectedModuleVersion }, hostedOperations.PublishedModuleVersions);
         }
         finally
         {
