@@ -1,6 +1,7 @@
 using Microsoft.Win32.SafeHandles;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace PowerForge;
 
@@ -35,17 +36,26 @@ internal static class ExistingFilePathIdentityResolver
 
     private static string ReadWindowsFileIdentity(SafeFileHandle handle)
     {
-        if (!GetFileInformationByHandleEx(
+        if (GetFileInformationByHandleEx(
                 handle,
                 WindowsFileInfoByHandleClass.FileIdInfo,
                 out var information,
                 checked((uint)Marshal.SizeOf<WindowsFileIdInfo>())))
+        {
+            return FormatWindowsFileIdentity(
+                information.VolumeSerialNumber,
+                information.FileId.Part0,
+                information.FileId.Part1);
+        }
+
+        var extendedIdentityError = Marshal.GetLastWin32Error();
+        if (!CanUseLegacyWindowsFileIdentity(handle))
+            throw new Win32Exception(extendedIdentityError);
+        if (!GetFileInformationByHandle(handle, out var legacyInformation))
             throw new Win32Exception(Marshal.GetLastWin32Error());
 
-        return FormatWindowsFileIdentity(
-            information.VolumeSerialNumber,
-            information.FileId.Part0,
-            information.FileId.Part1);
+        return $"windows-legacy:{legacyInformation.VolumeSerialNumber:X8}:" +
+               $"{legacyInformation.FileIndexHigh:X8}{legacyInformation.FileIndexLow:X8}";
     }
 
     /// <summary>
@@ -53,6 +63,41 @@ internal static class ExistingFilePathIdentityResolver
     /// </summary>
     internal static string FormatWindowsFileIdentity(ulong volumeSerialNumber, ulong identifierPart0, ulong identifierPart1)
         => $"windows:{volumeSerialNumber:X16}:{identifierPart0:X16}{identifierPart1:X16}";
+
+    private static bool CanUseLegacyWindowsFileIdentity(SafeFileHandle handle)
+    {
+        try
+        {
+            var fileSystemName = new StringBuilder(32);
+            if (!GetVolumeInformationByHandle(
+                    handle,
+                    null,
+                    0,
+                    out _,
+                    out _,
+                    out _,
+                    fileSystemName,
+                    checked((uint)fileSystemName.Capacity)))
+            {
+                return false;
+            }
+
+            return IsLegacyWindowsFileIdentitySafe(fileSystemName.ToString(), volumeInformationApiUnavailable: false);
+        }
+        catch (EntryPointNotFoundException)
+        {
+            // GetVolumeInformationByHandleW and ReFS both begin with Windows 8 / Server 2012.
+            return IsLegacyWindowsFileIdentitySafe(null, volumeInformationApiUnavailable: true);
+        }
+    }
+
+    /// <summary>
+    /// Limits the legacy 64-bit Windows file identifier to systems and filesystems where ReFS collisions cannot occur.
+    /// </summary>
+    internal static bool IsLegacyWindowsFileIdentitySafe(string? fileSystemName, bool volumeInformationApiUnavailable)
+        => volumeInformationApiUnavailable ||
+           (!string.IsNullOrWhiteSpace(fileSystemName) &&
+            !string.Equals(fileSystemName, "ReFS", StringComparison.OrdinalIgnoreCase));
 
 #if NET8_0_OR_GREATER
     private static string ReadUnixFileIdentity(SafeFileHandle handle)
@@ -76,6 +121,28 @@ internal static class ExistingFilePathIdentityResolver
     {
         internal ulong VolumeSerialNumber;
         internal WindowsFileId128 FileId;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowsFileTime
+    {
+        internal uint LowDateTime;
+        internal uint HighDateTime;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowsFileInformation
+    {
+        internal uint FileAttributes;
+        internal WindowsFileTime CreationTime;
+        internal WindowsFileTime LastAccessTime;
+        internal WindowsFileTime LastWriteTime;
+        internal uint VolumeSerialNumber;
+        internal uint FileSizeHigh;
+        internal uint FileSizeLow;
+        internal uint NumberOfLinks;
+        internal uint FileIndexHigh;
+        internal uint FileIndexLow;
     }
 
     private enum WindowsFileInfoByHandleClass
@@ -116,6 +183,24 @@ internal static class ExistingFilePathIdentityResolver
         WindowsFileInfoByHandleClass fileInformationClass,
         out WindowsFileIdInfo information,
         uint bufferSize);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetFileInformationByHandle(
+        SafeFileHandle file,
+        out WindowsFileInformation information);
+
+    [DllImport("kernel32.dll", EntryPoint = "GetVolumeInformationByHandleW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetVolumeInformationByHandle(
+        SafeFileHandle file,
+        StringBuilder? volumeName,
+        uint volumeNameSize,
+        out uint volumeSerialNumber,
+        out uint maximumComponentLength,
+        out uint fileSystemFlags,
+        StringBuilder fileSystemName,
+        uint fileSystemNameSize);
 
 #if NET8_0_OR_GREATER
     [DllImport("System.Native", EntryPoint = "SystemNative_FStat", SetLastError = true)]

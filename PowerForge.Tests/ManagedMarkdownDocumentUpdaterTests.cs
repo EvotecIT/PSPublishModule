@@ -240,6 +240,29 @@ public sealed class ManagedMarkdownDocumentUpdaterTests
         Assert.NotEqual(first, differentUpperHalf);
     }
 
+    [Theory]
+    [InlineData("NTFS", true)]
+    [InlineData("FAT32", true)]
+    [InlineData("ReFS", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void LegacyWindowsFileIdentity_RejectsReFsAndUnknownFileSystems(string? fileSystemName, bool expected)
+    {
+        Assert.Equal(
+            expected,
+            ExistingFilePathIdentityResolver.IsLegacyWindowsFileIdentitySafe(
+                fileSystemName,
+                volumeInformationApiUnavailable: false));
+    }
+
+    [Fact]
+    public void LegacyWindowsFileIdentity_AllowsSystemsThatPredateReFs()
+    {
+        Assert.True(ExistingFilePathIdentityResolver.IsLegacyWindowsFileIdentitySafe(
+            fileSystemName: null,
+            volumeInformationApiUnavailable: true));
+    }
+
     [Fact]
     public void UpdateMany_RejectsDuplicateLogicalTargetWithoutWriting()
     {
