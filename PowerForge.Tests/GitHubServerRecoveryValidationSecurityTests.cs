@@ -26,6 +26,17 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         Assert.Equal("2", result.StandardOutput.Trim());
     }
 
+    [Fact]
+    public void Validator_ShouldResolveEngineAndCallerSourcesWhenRepositorySlugsMatch()
+    {
+        var result = RunValidator(
+            repositoryUrl: "https://github.com/EvotecIT/PSPublishModule.git",
+            callerRepository: EngineRepository);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("2", result.StandardOutput.Trim());
+    }
+
     [Theory]
     [InlineData("https://evilgithub.com/EvotecIT/ExampleSite.git")]
     [InlineData("git@github.com-evil.com:EvotecIT/ExampleSite.git")]
@@ -499,6 +510,30 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         Assert.Contains("must include fixed arguments", result.AllOutput, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("sudo -n /usr/bin/chmod 0666 /etc/shadow")]
+    [InlineData("sudo -n /usr/bin/cat /etc/shadow")]
+    public void Validator_ShouldRejectPrivilegedCommandsOutsideReadOnlyAllowlist(string command)
+    {
+        var result = RunValidator(captureCommand: command);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("approved read-only command set", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("sudo -n ufw status numbered")]
+    [InlineData("sudo -n /usr/sbin/ufw status numbered")]
+    public void Validator_ShouldAllowApprovedFirewallStatusCapture(string command)
+    {
+        var sudoers = BuildExpectedSudoers(CaptureUser, "root")
+            .Replace(ExpectedInspectCommand, "/usr/sbin/ufw status numbered", StringComparison.Ordinal);
+
+        var result = RunValidator(sudoers: sudoers, captureCommand: command);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+    }
+
     [Fact]
     public void Validator_ShouldRejectSudoersThatFailVisudo()
     {
@@ -521,9 +556,10 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         var result = RunValidator(additionalSudoers: additionalSudoers);
 
         Assert.True(result.ExitCode == 0, result.AllOutput);
-        Assert.Equal(2, result.VisudoInvocations.Length);
+        Assert.Equal(3, result.VisudoInvocations.Length);
         Assert.Contains(result.VisudoInvocations, path => path.EndsWith("backup.sudoers", StringComparison.Ordinal));
         Assert.Contains(result.VisudoInvocations, path => path.EndsWith("extra.sudoers", StringComparison.Ordinal));
+        Assert.Contains(result.VisudoInvocations, path => Path.GetFileName(path).StartsWith("powerforge-managed-sudoers-", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -541,6 +577,22 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         Assert.True(valid.ExitCode == 0, valid.AllOutput);
         Assert.NotEqual(0, invalid.ExitCode);
         Assert.Contains("failed visudo syntax validation", invalid.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LinuxValidator_ShouldRejectCrossFileSudoersAliasConflicts()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        const string duplicateHostAlias = "Host_Alias POWERFORGE_TARGETS = localhost\n";
+        var result = RunValidator(
+            sudoers: duplicateHostAlias + BuildExpectedSudoers(CaptureUser, "root"),
+            additionalSudoers: duplicateHostAlias,
+            visudoPathOverride: "/usr/sbin/visudo");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("Combined managed sudoers policy failed visudo syntax validation", result.AllOutput, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -612,7 +664,9 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         string recipient = Recipient,
         string? recipientEnv = null,
         string captureCommand = "sudo -n apachectl -S",
-        string? visudoPathOverride = null)
+        string? visudoPathOverride = null,
+        string callerRepository = CallerRepository,
+        string engineRepository = EngineRepository)
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-recovery-source-security-" + Guid.NewGuid().ToString("N"));
         var workspace = Path.Combine(root, "caller");
@@ -790,8 +844,8 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
                 "-Workspace", workspace,
                 "-EngineRoot", engineRoot,
                 "-EngineRef", EngineRef,
-                "-CallerRepository", CallerRepository,
-                "-EngineRepository", EngineRepository,
+                "-CallerRepository", callerRepository,
+                "-EngineRepository", engineRepository,
                 "-CaptureUser", CaptureUser,
                 "-VisudoPath", visudoPath);
             return result with

@@ -118,8 +118,9 @@ if ($env:POWERFORGE_ENGINE_REF -notmatch '^[a-fA-F0-9]{40}$') {
 if ($env:POWERFORGE_ENGINE_REPOSITORY -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
     throw 'The action repository must resolve to an owner/repository name.'
 }
-if ($env:POWERFORGE_CAPTURE_USER -cnotmatch '^[a-z_][a-z0-9_-]{0,31}$') {
-    throw 'capture-user must be a valid Linux account name.'
+if ($env:POWERFORGE_CAPTURE_USER -cnotmatch '^[a-z_][a-z0-9_-]{0,31}$' -or
+    $env:POWERFORGE_CAPTURE_USER -ceq 'root') {
+    throw 'capture-user must be a valid non-root Linux account name.'
 }
 
 $workspace = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([IO.Path]::DirectorySeparatorChar)

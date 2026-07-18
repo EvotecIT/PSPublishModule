@@ -12,6 +12,12 @@ param(
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 
+$approvedPrivilegedCaptureCommands = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
+$approvedPrivilegedCaptureCommands.Add('apachectl -S', '/usr/sbin/apachectl -S')
+$approvedPrivilegedCaptureCommands.Add('/usr/sbin/apachectl -S', '/usr/sbin/apachectl -S')
+$approvedPrivilegedCaptureCommands.Add('ufw status numbered', '/usr/sbin/ufw status numbered')
+$approvedPrivilegedCaptureCommands.Add('/usr/sbin/ufw status numbered', '/usr/sbin/ufw status numbered')
+
 function Get-GitHubRepositorySlug {
     param(
         [Parameter(Mandatory)][string] $Url,
@@ -82,10 +88,25 @@ function Resolve-ManagedSourcePath {
     }
 
     $repositorySlug = Get-GitHubRepositorySlug -Url ([string]$repository.url)
-    $localRoot = if ([string]::Equals($repositorySlug, $LocalCallerRepository, [StringComparison]::OrdinalIgnoreCase)) {
-        $LocalWorkspace
-    } elseif ([string]::Equals($repositorySlug, $LocalEngineRepository, [StringComparison]::OrdinalIgnoreCase)) {
+    $repositoryRef = [string]$repository.ref
+    $matchesCallerRepository = [string]::Equals(
+        $repositorySlug,
+        $LocalCallerRepository,
+        [StringComparison]::OrdinalIgnoreCase
+    )
+    $matchesEngineRepository = [string]::Equals(
+        $repositorySlug,
+        $LocalEngineRepository,
+        [StringComparison]::OrdinalIgnoreCase
+    )
+    $usesEngineCheckout = $matchesEngineRepository -and (
+        -not $matchesCallerRepository -or
+        [string]::Equals($repositoryRef, $env:POWERFORGE_ENGINE_REF, [StringComparison]::OrdinalIgnoreCase)
+    )
+    $localRoot = if ($usesEngineCheckout) {
         $LocalEngineRoot
+    } elseif ($matchesCallerRepository) {
+        $LocalWorkspace
     } else {
         throw "Managed recovery source repository is not available to credential-free validation: $repositorySlug"
     }
@@ -104,11 +125,10 @@ function Resolve-ManagedSourcePath {
         throw "Managed recovery source does not resolve to a file in its pinned checkout: $source"
     }
     Assert-PathHasNoReparsePoint -Root $root -Path $candidate
-    $repositoryRef = [string]$repository.ref
     if ($repositoryRef -notmatch '^([a-fA-F0-9]{40}|[a-fA-F0-9]{64})$') {
         throw "Managed recovery source repository is not pinned to an exact commit: $repositorySlug"
     }
-    if ([string]::Equals($repositorySlug, $LocalEngineRepository, [StringComparison]::OrdinalIgnoreCase)) {
+    if ($usesEngineCheckout) {
         if (-not [string]::Equals($repositoryRef, $env:POWERFORGE_ENGINE_REF, [StringComparison]::OrdinalIgnoreCase)) {
             throw 'Deployment-engine managed sources must use the exact commit pinned by this action.'
         }
@@ -273,15 +293,14 @@ function Get-ExpectedCaptureSudoersCommand {
         if ($comparisonSudoersCommand -match '(?<![A-Za-z0-9_.-])sudo(?![A-Za-z0-9_.-])') {
             throw "Privileged recovery capture command must contain exactly one canonical sudo -n prefix: $command"
         }
-        if ([string]::Equals($sudoersCommand, 'apachectl -S', [StringComparison]::Ordinal)) {
-            $sudoersCommand = '/usr/sbin/apachectl -S'
-        } elseif ($sudoersCommand -notmatch '^/[A-Za-z0-9._/-]+ [A-Za-z0-9._~:@%+=/-]+(?: [A-Za-z0-9._~:@%+=/-]+)*$') {
-            if ($sudoersCommand -match '^/[A-Za-z0-9._/-]+$') {
-                throw "Privileged recovery capture command must include fixed arguments: $command"
-            }
-            throw "Privileged recovery capture command is not supported by credential-free validation: $command"
+        if ($sudoersCommand -match '^/[A-Za-z0-9._/-]+$') {
+            throw "Privileged recovery capture command must include fixed arguments: $command"
         }
-        $commands.Add($sudoersCommand)
+        [string]$approvedCommand = ''
+        if (-not $approvedPrivilegedCaptureCommands.TryGetValue($sudoersCommand, [ref]$approvedCommand)) {
+            throw "Privileged recovery capture command is not in the approved read-only command set: $command"
+        }
+        $commands.Add($approvedCommand)
     }
 
     $uniqueCommands = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -530,6 +549,31 @@ foreach ($sudoersDocument in $sudoersDocuments) {
     & $VisudoPath '-c' '-f' $sudoersDocument.Path *> $null
     if ($LASTEXITCODE -ne 0) {
         throw "Managed sudoers source failed visudo syntax validation: $($sudoersDocument.Target)"
+    }
+}
+
+if ($sudoersDocuments.Count -gt 1) {
+    $combinedSudoersPath = Join-Path `
+        ([IO.Path]::GetTempPath()) `
+        ('powerforge-managed-sudoers-' + [Guid]::NewGuid().ToString('N') + '.sudoers')
+    try {
+        $combinedSudoersLines = [Collections.Generic.List[string]]::new()
+        foreach ($sudoersDocument in $sudoersDocuments) {
+            $combinedSudoersLines.Add("# Managed source: $($sudoersDocument.Target)")
+            $combinedSudoersLines.AddRange([string[]]$sudoersDocument.Lines)
+            $combinedSudoersLines.Add('')
+        }
+        [IO.File]::WriteAllLines(
+            $combinedSudoersPath,
+            $combinedSudoersLines,
+            [Text.UTF8Encoding]::new($false)
+        )
+        & $VisudoPath '-c' '-f' $combinedSudoersPath *> $null
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Combined managed sudoers policy failed visudo syntax validation.'
+        }
+    } finally {
+        Remove-Item -LiteralPath $combinedSudoersPath -Force -ErrorAction SilentlyContinue
     }
 }
 

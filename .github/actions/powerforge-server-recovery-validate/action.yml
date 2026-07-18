@@ -6,7 +6,7 @@ inputs:
     description: Repository-relative PowerForge server recovery manifest.
     required: true
   capture-user:
-    description: Linux account authorized to perform encrypted recovery capture.
+    description: Dedicated non-root Linux account authorized to perform encrypted recovery capture.
     required: true
   fail-on-warnings:
     description: Fail when bootstrap or secret-restore plan generation emits warnings.
