@@ -379,6 +379,33 @@ foreach ($sudoersSource in $sudoersSources) {
 }
 
 $expectedEncryptedCommand = Get-ExpectedEncryptedCaptureCommand -RecoveryManifest $Manifest
+if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
+    $captureAccounts = @(@($Manifest.accounts) | Where-Object {
+        [string]::Equals([string]$_.name, $CaptureUser, [StringComparison]::Ordinal)
+    })
+    if ($captureAccounts.Count -ne 1 -or [string]::IsNullOrWhiteSpace([string]$captureAccounts[0].home)) {
+        throw 'Encrypted recovery capture requires exactly one managed capture account with an explicit home directory.'
+    }
+    $authorizedKeysTarget = ([string]$captureAccounts[0].home).TrimEnd('/') + '/.ssh/authorized_keys'
+    $authorizedKeysSources = @($resolvedEntries).Where({
+        [string]::Equals([string]$_.Target, $authorizedKeysTarget, [StringComparison]::Ordinal) -and
+        [string]::Equals([string]$_.Entry.kind, 'file', [StringComparison]::OrdinalIgnoreCase) -and
+        [string]::Equals([string]$_.Entry.owner, $CaptureUser, [StringComparison]::Ordinal) -and
+        [string]::Equals([string]$_.Entry.group, $CaptureUser, [StringComparison]::Ordinal) -and
+        ([string]$_.Entry.mode) -in @('600', '0600')
+    })
+    if ($authorizedKeysSources.Count -ne 1) {
+        throw 'Encrypted recovery capture requires one managed mode-600 authorized_keys file owned by the capture account.'
+    }
+    $authorizedKeyLines = @(
+        (Get-Content -LiteralPath $authorizedKeysSources[0].Path -Raw) -split "`r?`n" |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
+    if ($authorizedKeyLines.Count -ne 1 -or
+        $authorizedKeyLines[0] -cnotmatch '^restrict ssh-ed25519 [A-Za-z0-9+/]+={0,3}(?: [^\r\n]+)?$') {
+        throw 'The recovery capture account authorized_keys source must contain exactly one restrict-prefixed Ed25519 public key.'
+    }
+}
 $commandAliases = [Collections.Generic.Dictionary[string, string[]]]::new([StringComparer]::Ordinal)
 $grantedAliases = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 $captureGrantCount = 0

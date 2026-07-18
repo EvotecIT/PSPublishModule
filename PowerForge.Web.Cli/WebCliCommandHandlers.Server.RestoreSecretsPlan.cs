@@ -32,6 +32,7 @@ internal static partial class WebCliCommandHandlers
             .Where(static path => !string.IsNullOrWhiteSpace(path.Path))
             .GroupBy(static path => path.Path!.TrimEnd('/'), StringComparer.Ordinal)
             .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.Ordinal);
+        var stagingRoot = BuildRestoreSecretsStagingRoot(manifest.Name);
         var secrets = (manifest.Secrets ?? Array.Empty<PowerForgeServerSecret>())
             .Select(secret =>
             {
@@ -46,7 +47,11 @@ internal static partial class WebCliCommandHandlers
                     RequiredFor = secret.RequiredFor is { Length: > 0 } ? string.Join(", ", secret.RequiredFor) : null,
                     Owner = secret.Owner ?? managedPath?.Owner,
                     Group = secret.Group ?? managedPath?.Group,
-                    Mode = secret.Mode ?? managedPath?.Mode
+                    Mode = secret.Mode ?? managedPath?.Mode,
+                    RestoreAfterRepositories = secret.RestoreAfterRepositories,
+                    StagedPath = secret.RestoreAfterRepositories && normalizedPath is not null
+                        ? stagingRoot + normalizedPath
+                        : null
                 };
             })
             .ToArray();
@@ -55,7 +60,7 @@ internal static partial class WebCliCommandHandlers
         var markdownPath = Path.Combine(outputRoot, "restore-secrets-plan.md");
         var scriptPath = Path.Combine(outputRoot, "restore-secrets.sh");
         WriteRestoreSecretsMarkdown(markdownPath, manifest, archivePath, allowedArchivePaths, secrets, warnings);
-        WriteRestoreSecretsScript(scriptPath, archivePath, allowedArchivePaths, secrets);
+        WriteRestoreSecretsScript(scriptPath, archivePath, allowedArchivePaths, secrets, stagingRoot);
 
         var result = new PowerForgeServerRestoreSecretsPlanResult
         {
@@ -66,6 +71,7 @@ internal static partial class WebCliCommandHandlers
             ArchivePath = archivePath,
             Encryption = manifest.BackupTarget?.Encryption,
             RecipientEnv = manifest.BackupTarget?.RecipientEnv,
+            StagingRoot = secrets.Any(static secret => secret.RestoreAfterRepositories) ? stagingRoot : null,
             AllowedArchivePaths = allowedArchivePaths,
             Secrets = secrets,
             Warnings = warnings.ToArray()
@@ -140,7 +146,10 @@ internal static partial class WebCliCommandHandlers
             var ownership = string.IsNullOrWhiteSpace(secret.Owner) && string.IsNullOrWhiteSpace(secret.Group)
                 ? "archive ownership"
                 : $"{secret.Owner ?? string.Empty}:{secret.Group ?? string.Empty}";
-            builder.AppendLine($"- `{secret.Id}` -> `{secret.Path ?? secret.Env ?? "manual"}` ({secret.RestoreMode ?? "file"}; {ownership}; mode {secret.Mode ?? "from archive"})");
+            var restoreTiming = secret.RestoreAfterRepositories
+                ? $"staged at {secret.StagedPath} until pinned repositories are cloned"
+                : "restored immediately";
+            builder.AppendLine($"- `{secret.Id}` -> `{secret.Path ?? secret.Env ?? "manual"}` ({secret.RestoreMode ?? "file"}; {ownership}; mode {secret.Mode ?? "from archive"}; {restoreTiming})");
         }
 
         if (warnings.Count > 0)
@@ -159,14 +168,22 @@ internal static partial class WebCliCommandHandlers
         string path,
         string archivePath,
         IReadOnlyList<string> allowedArchivePaths,
-        IReadOnlyList<PowerForgeServerRestoreSecretEntry> secrets)
-        => File.WriteAllText(path, BuildRestoreSecretsScript(archivePath, allowedArchivePaths, secrets));
+        IReadOnlyList<PowerForgeServerRestoreSecretEntry> secrets,
+        string stagingRoot)
+        => File.WriteAllText(path, BuildRestoreSecretsScript(archivePath, allowedArchivePaths, secrets, stagingRoot));
 
     internal static string BuildRestoreSecretsScript(
         string archivePath,
         IReadOnlyList<string> allowedArchivePaths,
-        IReadOnlyList<PowerForgeServerRestoreSecretEntry> secrets)
+        IReadOnlyList<PowerForgeServerRestoreSecretEntry> secrets,
+        string? stagingRoot = null)
     {
+        var deferredSecrets = secrets
+            .Where(static secret => secret.RestoreAfterRepositories && !string.IsNullOrWhiteSpace(secret.Path))
+            .ToArray();
+        if (deferredSecrets.Length > 0 && string.IsNullOrWhiteSpace(stagingRoot))
+            throw new InvalidOperationException("Repository-overlapping secret restore requires a deterministic staging root.");
+
         var builder = new StringBuilder();
         builder.AppendLine("#!/usr/bin/env bash");
         builder.AppendLine("set -Eeuo pipefail");
@@ -223,6 +240,8 @@ internal static partial class WebCliCommandHandlers
         builder.AppendLine("        normalized = posixpath.normpath(original)");
         builder.AppendLine("        if original.startswith('/') or normalized in ('', '.', '..') or normalized.startswith('../'):");
         builder.AppendLine("            raise SystemExit(f'Unsafe archive path: {original}')");
+        builder.AppendLine("        if original != normalized:");
+        builder.AppendLine("            raise SystemExit(f'Non-canonical archive path: {original}')");
         builder.AppendLine("        if normalized in seen:");
         builder.AppendLine("            raise SystemExit(f'Duplicate archive path: {original}')");
         builder.AppendLine("        seen.add(normalized)");
@@ -259,7 +278,27 @@ internal static partial class WebCliCommandHandlers
         builder.AppendLine("fi");
         builder.AppendLine("[ \"$(id -u)\" -eq 0 ] || { echo 'Secret restore must run as root.' >&2; exit 3; }");
         builder.AppendLine();
-        builder.AppendLine("tar --no-same-owner --no-same-permissions --no-overwrite-dir --no-acls --no-selinux --no-xattrs -xzf \"$tmp_dir/secrets.tar.gz\" -C /");
+        if (deferredSecrets.Length > 0)
+        {
+            builder.AppendLine($"staging_root={ShellQuote(stagingRoot!)}");
+            builder.AppendLine("if [ ! -e /var/lib/powerforge ] && [ ! -L /var/lib/powerforge ]; then install -d -o root -g root -m 0755 /var/lib/powerforge; fi");
+            builder.AppendLine("if ! { test -d /var/lib/powerforge && test ! -L /var/lib/powerforge && test \"$(stat -c '%U:%G' /var/lib/powerforge)\" = 'root:root' && test -z \"$(find /var/lib/powerforge -maxdepth 0 -perm /022 -print -quit)\"; }; then echo 'Secret staging base is not a root-controlled directory.' >&2; exit 3; fi");
+            builder.AppendLine("if [ ! -e /var/lib/powerforge/restore-secrets ] && [ ! -L /var/lib/powerforge/restore-secrets ]; then install -d -o root -g root -m 0700 /var/lib/powerforge/restore-secrets; fi");
+            builder.AppendLine("if ! { test -d /var/lib/powerforge/restore-secrets && test ! -L /var/lib/powerforge/restore-secrets && test \"$(stat -c '%U:%G %a' /var/lib/powerforge/restore-secrets)\" = 'root:root 700'; }; then echo 'Secret staging parent is not a root-owned mode-700 directory.' >&2; exit 3; fi");
+            builder.AppendLine("if [ -e \"$staging_root\" ] || [ -L \"$staging_root\" ]; then if ! { test -d \"$staging_root\" && test ! -L \"$staging_root\" && test \"$(stat -c '%U:%G %a' \"$staging_root\")\" = 'root:root 700'; }; then echo 'Secret staging root is unsafe.' >&2; exit 3; fi; find \"$staging_root\" -mindepth 1 -delete; else install -d -o root -g root -m 0700 \"$staging_root\"; fi");
+        }
+        var directExtract = new StringBuilder("tar --no-same-owner --no-same-permissions --no-overwrite-dir --no-acls --no-selinux --no-xattrs");
+        foreach (var secret in deferredSecrets)
+            directExtract.Append(" --exclude=").Append(ShellQuote(secret.Path!.TrimStart('/')));
+        directExtract.Append(" -xzf \"$tmp_dir/secrets.tar.gz\" -C /");
+        builder.AppendLine(directExtract.ToString());
+        if (deferredSecrets.Length > 0)
+        {
+            var stagedExtract = new StringBuilder("tar --no-same-owner --no-same-permissions --no-overwrite-dir --no-acls --no-selinux --no-xattrs -xzf \"$tmp_dir/secrets.tar.gz\" -C \"$staging_root\" --");
+            foreach (var secret in deferredSecrets)
+                stagedExtract.Append(' ').Append(ShellQuote(secret.Path!.TrimStart('/')));
+            builder.AppendLine(stagedExtract.ToString());
+        }
         if (secrets.Any(secret =>
                 string.Equals(secret.RestoreMode, "directory", StringComparison.OrdinalIgnoreCase) &&
                 (!string.IsNullOrWhiteSpace(secret.Owner) ||
@@ -333,6 +372,7 @@ internal static partial class WebCliCommandHandlers
         }
         foreach (var secret in secrets
                      .Where(secret =>
+                         !secret.RestoreAfterRepositories &&
                          !string.IsNullOrWhiteSpace(secret.Path) &&
                          allowedArchivePaths.Any(allowedPath => PathContains(allowedPath, secret.Path!.TrimEnd('/'))))
                      .OrderBy(secret => secret.Path!.TrimEnd('/').Count(static character => character == '/')))
@@ -369,8 +409,18 @@ internal static partial class WebCliCommandHandlers
             if (!string.IsNullOrWhiteSpace(secret.Mode))
                 builder.AppendLine($"if [ -e {pathValue} ]; then chmod {secret.Mode} -- {pathValue}; fi");
         }
+        if (deferredSecrets.Length > 0)
+            builder.AppendLine("echo \"Repository-overlapping secrets staged under $staging_root; run the generated bootstrap plan to install them after clone.\"");
         builder.AppendLine("echo 'Secrets restored. Run server verify next.'");
 
         return builder.ToString().Replace("\r\n", "\n", StringComparison.Ordinal);
+    }
+
+    internal static string BuildRestoreSecretsStagingRoot(string? manifestName)
+    {
+        var bytes = System.Security.Cryptography.SHA256.HashData(
+            Encoding.UTF8.GetBytes(string.IsNullOrWhiteSpace(manifestName) ? "server" : manifestName));
+        var key = Convert.ToHexString(bytes)[..16].ToLowerInvariant();
+        return $"/var/lib/powerforge/restore-secrets/{key}";
     }
 }

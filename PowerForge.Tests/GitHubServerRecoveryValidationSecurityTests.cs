@@ -13,6 +13,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
     private const string ExpectedPlainCaptureCommand = "/usr/bin/tar -czf - /etc/example/config";
     private const string ExpectedCaptureCommand = "/usr/local/sbin/powerforge-server-encrypted-capture --recipient age1example -- /etc/example/secret";
     private const string ExpectedInspectCommand = "/usr/sbin/apachectl -S";
+    private const string RestrictedCaptureKey = "restrict ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPowerForgeRecoveryFixtureKey example";
 
     [Theory]
     [InlineData("https://github.com/EvotecIT/ExampleSite.git")]
@@ -23,7 +24,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         var result = RunValidator(repositoryUrl: repositoryUrl);
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Equal("2", result.StandardOutput.Trim());
+        Assert.Equal("3", result.StandardOutput.Trim());
     }
 
     [Fact]
@@ -34,7 +35,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
             callerRepository: EngineRepository);
 
         Assert.True(result.ExitCode == 0, result.AllOutput);
-        Assert.Equal("2", result.StandardOutput.Trim());
+        Assert.Equal("3", result.StandardOutput.Trim());
     }
 
     [Theory]
@@ -73,7 +74,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         var result = RunValidator(sudoers: sudoers);
 
         Assert.True(result.ExitCode == 0, result.AllOutput);
-        Assert.Equal("2", result.StandardOutput.Trim());
+        Assert.Equal("3", result.StandardOutput.Trim());
     }
 
     [Fact]
@@ -83,6 +84,43 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
 
         Assert.NotEqual(0, result.ExitCode);
         Assert.Contains("exact managed helper from the pinned PowerForge engine", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRequireManagedCaptureAccount()
+    {
+        var result = RunValidator(includeCaptureAccount: false);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("exactly one managed capture account", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectUnrestrictedCaptureAuthorizedKey()
+    {
+        var result = RunValidator(
+            authorizedKeyContent: RestrictedCaptureKey.Replace("restrict ", string.Empty, StringComparison.Ordinal));
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("exactly one restrict-prefixed Ed25519 public key", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectMultipleCaptureAuthorizedKeys()
+    {
+        var result = RunValidator(authorizedKeyContent: RestrictedCaptureKey + "\n" + RestrictedCaptureKey);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("exactly one restrict-prefixed Ed25519 public key", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRequireCaptureOwnedAuthorizedKeyMetadata()
+    {
+        var result = RunValidator(authorizedKeyOwner: "root");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("one managed mode-600 authorized_keys file owned by the capture account", result.AllOutput, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -155,7 +193,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         var result = RunValidator(includeCloneOnlyRepository: true);
 
         Assert.True(result.ExitCode == 0, result.AllOutput);
-        Assert.Equal("2", result.StandardOutput.Trim());
+        Assert.Equal("3", result.StandardOutput.Trim());
     }
 
     [Fact]
@@ -164,7 +202,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         var result = RunValidator(includeCloneOnlyRepositoryWithoutUrl: true);
 
         Assert.True(result.ExitCode == 0, result.AllOutput);
-        Assert.Equal("2", result.StandardOutput.Trim());
+        Assert.Equal("3", result.StandardOutput.Trim());
     }
 
     [Fact]
@@ -202,7 +240,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         var result = RunValidator(helperMode: mode);
 
         Assert.True(result.ExitCode == 0, result.AllOutput);
-        Assert.Equal("2", result.StandardOutput.Trim());
+        Assert.Equal("3", result.StandardOutput.Trim());
     }
 
     [Fact]
@@ -222,7 +260,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         var result = RunValidator(sudoersMode: mode);
 
         Assert.True(result.ExitCode == 0, result.AllOutput);
-        Assert.Equal("2", result.StandardOutput.Trim());
+        Assert.Equal("3", result.StandardOutput.Trim());
     }
 
     [Fact]
@@ -290,7 +328,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         var result = RunValidator(additionalSudoers: extraSudoers);
 
         Assert.True(result.ExitCode == 0, result.AllOutput);
-        Assert.Equal("3", result.StandardOutput.Trim());
+        Assert.Equal("4", result.StandardOutput.Trim());
     }
 
     [Fact]
@@ -301,7 +339,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         var result = RunValidator(sudoers: BuildExpectedAliases(), additionalSudoers: grant);
 
         Assert.True(result.ExitCode == 0, result.AllOutput);
-        Assert.Equal("3", result.StandardOutput.Trim());
+        Assert.Equal("4", result.StandardOutput.Trim());
     }
 
     [Fact]
@@ -398,7 +436,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         var result = RunValidator(captureCommand: "  sudo -n apachectl -S  ");
 
         Assert.True(result.ExitCode == 0, result.AllOutput);
-        Assert.Equal("2", result.StandardOutput.Trim());
+        Assert.Equal("3", result.StandardOutput.Trim());
     }
 
     [Theory]
@@ -618,7 +656,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         var result = RunValidator(sudoers: sudoers);
 
         Assert.True(result.ExitCode == 0, result.AllOutput);
-        Assert.Equal("2", result.StandardOutput.Trim());
+        Assert.Equal("3", result.StandardOutput.Trim());
     }
 
     [Fact]
@@ -666,7 +704,10 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         string captureCommand = "sudo -n apachectl -S",
         string? visudoPathOverride = null,
         string callerRepository = CallerRepository,
-        string engineRepository = EngineRepository)
+        string engineRepository = EngineRepository,
+        bool includeCaptureAccount = true,
+        string authorizedKeyContent = RestrictedCaptureKey,
+        string authorizedKeyOwner = CaptureUser)
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-recovery-source-security-" + Guid.NewGuid().ToString("N"));
         var workspace = Path.Combine(root, "caller");
@@ -682,6 +723,9 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
             File.WriteAllText(
                 Path.Combine(workspace, "deploy", "linux", "backup.sudoers"),
                 sudoers ?? (includeCapture ? BuildExpectedSudoers(CaptureUser, "root") : "# no privileged capture grants\n"));
+            File.WriteAllText(
+                Path.Combine(workspace, "deploy", "linux", "backup-authorized_keys"),
+                authorizedKeyContent + "\n");
             if (additionalSudoers is not null)
                 File.WriteAllText(Path.Combine(workspace, "deploy", "linux", "extra.sudoers"), additionalSudoers);
             if (alternateManagedSudoersTarget is not null)
@@ -750,6 +794,18 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
                     validation = tagSudoers ? "sudoers" : null
                 }
             };
+            if (includeCapture)
+            {
+                managedPaths.Add(new
+                {
+                    path = $"/var/lib/{CaptureUser}/.ssh/authorized_keys",
+                    source = "/srv/caller/deploy/linux/backup-authorized_keys",
+                    kind = "file",
+                    owner = authorizedKeyOwner,
+                    group = CaptureUser,
+                    mode = "600"
+                });
+            }
             if (additionalSudoers is not null)
             {
                 managedPaths.Add(new
@@ -792,6 +848,9 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
                 : null;
             var manifest = new
             {
+                accounts = includeCapture && includeCaptureAccount
+                    ? new[] { new { name = CaptureUser, home = $"/var/lib/{CaptureUser}" } }
+                    : null,
                 repositories,
                 paths = managedPaths,
                 apache,

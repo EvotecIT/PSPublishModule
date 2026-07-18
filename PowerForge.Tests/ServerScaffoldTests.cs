@@ -56,7 +56,8 @@ public sealed class ServerScaffoldTests
         Assert.Contains($"EvotecIT/PSPublishModule/{EngineRef}/Schemas/powerforge.web.serverrecovery.schema.json", manifest, StringComparison.Ordinal);
         Assert.DoesNotContain("EvotecIT/PSPublishModule/main/Schemas/powerforge.web.serverrecovery.schema.json", manifest, StringComparison.Ordinal);
         Assert.Contains("restricted SSH accounts", manifest, StringComparison.Ordinal);
-        Assert.Equal(2, manifest.Split("\"requiredDuringBootstrap\": false", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1, manifest.Split("\"requiredDuringBootstrap\": false", StringSplitOptions.None).Length - 1);
+        Assert.DoesNotContain("/etc/letsencrypt/accounts", manifest, StringComparison.Ordinal);
         Assert.Contains("/usr/local/sbin/powerforge-apache-site-enable --http-site example-test.conf --https-site example-test-le-ssl.conf --certificate-name example.test", manifest, StringComparison.Ordinal);
         Assert.DoesNotContain("sudo -n a2ensite", manifest, StringComparison.Ordinal);
         Assert.DoesNotContain("\"bootstrap\"", manifest, StringComparison.Ordinal);
@@ -70,6 +71,7 @@ public sealed class ServerScaffoldTests
         Assert.Equal(2, manifestNode["schemaVersion"]!.GetValue<int>());
         Assert.Null(manifestNode["target"]!["host"]);
         Assert.Null(manifestNode["apache"]!["reloadCommand"]);
+        Assert.Equal($"/var/lock/powerforge-site-{options.SiteId}.lock", manifestNode["operationLocks"]![0]!.GetValue<string>());
         var managedPaths = manifestNode["paths"]!.AsArray();
         Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/usr/local/sbin/powerforge-site-deploy" &&
                                               path["source"]!.GetValue<string>().EndsWith("/powerforge-site-deploy.sh", StringComparison.Ordinal));
@@ -337,6 +339,28 @@ public sealed class ServerScaffoldTests
         var apacheSite = trailingApacheTarget["apache"]!["sites"]!.AsArray()[0]!;
         apacheSite["target"] = apacheSite["target"]!.GetValue<string>() + "/";
         Assert.False(EvaluateSchema(schema, trailingApacheTarget));
+
+        var invalidOperationLock = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        invalidOperationLock["operationLocks"] = new JsonArray("/tmp/powerforge-site-example.lock");
+        Assert.False(EvaluateSchema(schema, invalidOperationLock));
+
+        var duplicateOperationLock = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        duplicateOperationLock["operationLocks"] = new JsonArray(
+            "/var/lock/powerforge-site-example.lock",
+            "/var/lock/powerforge-site-example.lock");
+        Assert.False(EvaluateSchema(schema, duplicateOperationLock));
+
+        var apacheActivation = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        apacheActivation["apache"]!["sites"]![0]!["enabled"] = true;
+        Assert.True(EvaluateSchema(schema, apacheActivation));
+        apacheActivation["apache"]!["sites"]![0]!["enabled"] = "yes";
+        Assert.False(EvaluateSchema(schema, apacheActivation));
+
+        var deferredSecret = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        deferredSecret["secrets"]![0]!["restoreAfterRepositories"] = true;
+        Assert.True(EvaluateSchema(schema, deferredSecret));
+        deferredSecret["secrets"]![0]!["restoreAfterRepositories"] = "yes";
+        Assert.False(EvaluateSchema(schema, deferredSecret));
     }
 
     [Fact]

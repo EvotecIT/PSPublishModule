@@ -13,11 +13,14 @@ internal static partial class WebCliCommandHandlers
             errors.Add("target must declare sshAlias or host.");
 
         ValidateHostAndPackages(manifest, errors);
+        ValidateOperationLocks(manifest, errors);
 
         var plainFiles = manifest.Capture?.PlainFiles ?? Array.Empty<PowerForgeServerManagedFile>();
         var encryptedFiles = manifest.Capture?.EncryptedFiles ?? Array.Empty<PowerForgeServerManagedFile>();
         var plainPaths = ValidateCaptureEntries(plainFiles, "capture.plainFiles", sensitive: false, errors);
         var encryptedPaths = ValidateCaptureEntries(encryptedFiles, "capture.encryptedFiles", sensitive: true, errors);
+        foreach (var encryptedPath in encryptedPaths.Where(IsEstateWideLetsEncryptCapturePath))
+            errors.Add($"Encrypted capture path '{encryptedPath}' is too broad; capture exact certificate lineages or ACME account directories instead of shared Let's Encrypt roots.");
         var retention = manifest.BackupTarget?.Retention;
         if (retention?.KeepDays is not null)
             errors.Add("backupTarget.retention.keepDays is not implemented; use keepLatestInTree for current-tree retention.");
@@ -110,10 +113,19 @@ internal static partial class WebCliCommandHandlers
             }
         }
 
-        ValidateRepositoryManagedFiles(
-            (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerManagedFile>())
-                .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>()),
-            "apache.files",
+        ValidateApacheManagedFiles(
+            manifest.Apache?.Sites,
+            "apache.sites",
+            "/etc/apache2/sites-available/",
+            repositoryRoots,
+            managedPaths,
+            managedTargets,
+            sourceManagedPaths,
+            errors);
+        ValidateApacheManagedFiles(
+            manifest.Apache?.Conf,
+            "apache.conf",
+            "/etc/apache2/conf-available/",
             repositoryRoots,
             managedPaths,
             managedTargets,
@@ -162,6 +174,28 @@ internal static partial class WebCliCommandHandlers
                 secretPath = NormalizeCapturePath(secret.Path, $"secrets[{secret.Id}].path", errors);
             if (secretPath is not null)
                 secretPaths.Add((secret.Id, secretPath));
+
+            var repositoryRoot = secretPath is null
+                ? null
+                : repositoryRoots
+                    .Where(root => PathContains(root, secretPath))
+                    .OrderByDescending(static root => root.Length)
+                    .FirstOrDefault();
+            if (repositoryRoot is not null)
+            {
+                if (string.Equals(repositoryRoot, secretPath, StringComparison.Ordinal))
+                    errors.Add($"Secret '{secret.Id}' must not replace declared repository root '{repositoryRoot}'.");
+                else if (!secret.RestoreAfterRepositories)
+                    errors.Add($"Secret '{secret.Id}' at '{secretPath}' is inside repository '{repositoryRoot}' and must set restoreAfterRepositories=true.");
+                if (!string.Equals(secret.RestoreMode, "file", StringComparison.OrdinalIgnoreCase))
+                    errors.Add($"Repository-overlapping secret '{secret.Id}' must use restoreMode 'file'.");
+                if (string.IsNullOrWhiteSpace(secret.Owner) || string.IsNullOrWhiteSpace(secret.Group) || string.IsNullOrWhiteSpace(secret.Mode))
+                    errors.Add($"Repository-overlapping secret '{secret.Id}' must declare owner, group, and mode for deterministic post-clone installation.");
+            }
+            else if (secret.RestoreAfterRepositories)
+            {
+                errors.Add($"Secret '{secret.Id}' sets restoreAfterRepositories=true but is not inside a declared repository path.");
+            }
 
             if (string.Equals(secret.Capture, "exclude", StringComparison.OrdinalIgnoreCase))
             {
@@ -271,6 +305,81 @@ internal static partial class WebCliCommandHandlers
             index++;
         }
     }
+
+    private static void ValidateApacheManagedFiles(
+        IEnumerable<PowerForgeServerApacheFile>? files,
+        string section,
+        string targetRoot,
+        IReadOnlyCollection<string> repositoryRoots,
+        ISet<string> managedPaths,
+        ICollection<(string Id, string Path, string Kind)> managedTargets,
+        ICollection<(string Id, string Source, string Target)> sourceManagedPaths,
+        ICollection<string> errors)
+    {
+        var entries = (files ?? Array.Empty<PowerForgeServerApacheFile>()).ToArray();
+        for (var index = 0; index < entries.Length; index++)
+        {
+            var target = entries[index].Target;
+            if (string.IsNullOrWhiteSpace(target) ||
+                !target.StartsWith(targetRoot, StringComparison.Ordinal) ||
+                !target.EndsWith(".conf", StringComparison.Ordinal) ||
+                target[targetRoot.Length..].Contains('/', StringComparison.Ordinal))
+            {
+                errors.Add($"{section}[{index}].target must be an exact .conf file directly below '{targetRoot.TrimEnd('/')}'.");
+            }
+        }
+
+        ValidateRepositoryManagedFiles(
+            entries.Select(static file => new PowerForgeServerManagedFile
+            {
+                Source = file.Source,
+                Target = file.Target,
+                Required = file.Required
+            }),
+            section,
+            repositoryRoots,
+            managedPaths,
+            managedTargets,
+            sourceManagedPaths,
+            errors);
+    }
+
+    private static void ValidateOperationLocks(
+        PowerForgeServerRecoveryManifest manifest,
+        ICollection<string> errors)
+    {
+        var locks = manifest.OperationLocks ?? Array.Empty<string>();
+        if (manifest.Capture is not null && manifest.Deploy?.Commands?.Length > 0 && locks.Length == 0)
+            errors.Add("operationLocks is required when a manifest contains both capture and deploy work.");
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 0; index < locks.Length; index++)
+        {
+            var path = NormalizeCapturePath(locks[index], $"operationLocks[{index}]", errors);
+            if (path is null)
+                continue;
+            var name = path.StartsWith("/var/lock/", StringComparison.Ordinal)
+                ? path["/var/lock/".Length..]
+                : string.Empty;
+            if (name.Length is 0 or > 131 ||
+                !name.EndsWith(".lock", StringComparison.Ordinal) ||
+                name.Contains('/', StringComparison.Ordinal) ||
+                !name[..^".lock".Length].All(static character => IsAsciiLetterOrDigit(character) || character is '_' or '.' or '-'))
+            {
+                errors.Add($"operationLocks[{index}] must be an exact .lock file directly below /var/lock.");
+            }
+            if (!seen.Add(path))
+                errors.Add($"operationLocks[{index}] duplicates lock path '{path}'.");
+        }
+    }
+
+    private static bool IsEstateWideLetsEncryptCapturePath(string path)
+        => new[]
+        {
+            "/etc/letsencrypt/accounts",
+            "/etc/letsencrypt/archive",
+            "/etc/letsencrypt/live"
+        }.Any(root => PathContains(path, root));
 
     private static void ValidateManagedTargetHierarchy(
         IReadOnlyCollection<(string Id, string Path, string Kind)> managedTargets,

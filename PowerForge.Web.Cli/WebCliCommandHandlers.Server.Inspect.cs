@@ -87,6 +87,12 @@ internal static partial class WebCliCommandHandlers
                 ExecuteRemote(sshCommand, target, BuildRepositoryCleanCheckCommand(repository.Path)), "clean work tree");
         }
 
+        foreach (var operationLock in manifest.OperationLocks ?? Array.Empty<string>())
+        {
+            AddCommandCheck(checks, $"lock.{operationLock}", "locking", $"Shared operation lock is safe: {operationLock}",
+                ExecuteRemote(sshCommand, target, BuildOperationLockCheckCommand(operationLock)), "root:root 644 regular file");
+        }
+
         if (HasDeclaredApacheState(manifest))
         {
             var apacheModules = ExecuteRemote(sshCommand, target, "apache2ctl -M 2>/dev/null || apachectl -M 2>/dev/null");
@@ -101,10 +107,18 @@ internal static partial class WebCliCommandHandlers
             AddCommandCheck(checks, "apache.configtest", "apache", "Apache configtest succeeds",
                 ExecuteRemote(sshCommand, target, manifest.Apache?.ValidateCommand ?? "apachectl configtest"), "Syntax OK");
             InspectManagedFiles(sshCommand, target,
-                (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerManagedFile>())
-                    .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>()),
+                (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerApacheFile>())
+                    .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerApacheFile>())
+                    .Select(static file => new PowerForgeServerManagedFile
+                    {
+                        Source = file.Source,
+                        Target = file.Target,
+                        Required = file.Required
+                    }),
                 manifest.Repositories,
                 "apache", checks);
+            InspectApacheActivation(sshCommand, target, manifest.Apache?.Sites, "site", "/etc/apache2/sites-enabled", checks);
+            InspectApacheActivation(sshCommand, target, manifest.Apache?.Conf, "conf", "/etc/apache2/conf-enabled", checks);
         }
 
         foreach (var path in manifest.Paths ?? Array.Empty<PowerForgeServerPath>())
@@ -278,6 +292,10 @@ internal static partial class WebCliCommandHandlers
     internal static string BuildManagedSymlinkTargetCommand(string path)
         => $"sudo -n readlink -f {ShellQuote(path)}";
 
+    internal static string BuildOperationLockCheckCommand(string path)
+        => $"sudo -n test -f {ShellQuote(path)} && sudo -n test ! -L {ShellQuote(path)} && " +
+           $"test \"$(sudo -n stat -c '%U:%G %a' -- {ShellQuote(path)})\" = 'root:root 644'";
+
     internal static string BuildManagedFileContentCheckCommand(string source, string target)
         => $"sudo -n cmp -s -- {ShellQuote(source)} {ShellQuote(target)}";
 
@@ -372,6 +390,33 @@ internal static partial class WebCliCommandHandlers
             var repositoryRoot = repository.Path!.TrimEnd('/');
             AddCommandCheck(checks, $"{category}.file.{file.Target}.content", category, $"Managed file matches source: {file.Target}",
                 ExecuteRemote(sshCommand, target, BuildRepositoryManagedFileCheckCommand(file.Source, file.Target, repositoryRoot, repositoryRef: repository.Ref)), file.Source);
+        }
+    }
+
+    private static void InspectApacheActivation(
+        string sshCommand,
+        string target,
+        PowerForgeServerApacheFile[]? files,
+        string kind,
+        string enabledRoot,
+        ICollection<PowerForgeServerInspectCheck> checks)
+    {
+        foreach (var file in files ?? Array.Empty<PowerForgeServerApacheFile>())
+        {
+            if (file.Enabled is null || string.IsNullOrWhiteSpace(file.Target))
+                continue;
+            var name = Path.GetFileName(file.Target);
+            var enabledPath = enabledRoot.TrimEnd('/') + "/" + name;
+            var command = file.Enabled == true
+                ? $"sudo -n test -L {ShellQuote(enabledPath)} && test \"$(sudo -n readlink -f {ShellQuote(enabledPath)})\" = {ShellQuote(file.Target)}"
+                : $"sudo -n test ! -e {ShellQuote(enabledPath)} && sudo -n test ! -L {ShellQuote(enabledPath)}";
+            AddCommandCheck(
+                checks,
+                $"apache.{kind}.{name}.activation",
+                "apache",
+                $"Apache {kind} activation matches manifest: {name}",
+                ExecuteRemote(sshCommand, target, command),
+                file.Enabled == true ? "enabled" : "disabled");
         }
     }
 

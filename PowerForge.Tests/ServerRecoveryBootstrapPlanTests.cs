@@ -229,10 +229,20 @@ public sealed class ServerRecoveryBootstrapPlanTests
             {
                 Sites =
                 [
-                    new PowerForge.Web.Cli.PowerForgeServerManagedFile
+                    new PowerForge.Web.Cli.PowerForgeServerApacheFile
                     {
                         Source = "/srv/example/deploy/apache.conf",
-                        Target = "/etc/apache2/sites-available/example.conf"
+                        Target = "/etc/apache2/sites-available/example.conf",
+                        Enabled = true
+                    }
+                ],
+                Conf =
+                [
+                    new PowerForge.Web.Cli.PowerForgeServerApacheFile
+                    {
+                        Source = "/srv/example/deploy/platform.conf",
+                        Target = "/etc/apache2/conf-available/platform.conf",
+                        Enabled = false
                     }
                 ]
             },
@@ -252,6 +262,9 @@ public sealed class ServerRecoveryBootstrapPlanTests
 
         var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
         var apache = Assert.Single(steps, step => step.Title == "Install Apache file /etc/apache2/sites-available/example.conf");
+        var apacheConf = Assert.Single(steps, step => step.Title == "Install Apache file /etc/apache2/conf-available/platform.conf");
+        var enableSite = Assert.Single(steps, step => step.Title == "Enable Apache site example.conf");
+        var disableConf = Assert.Single(steps, step => step.Title == "Disable Apache conf platform.conf");
         var systemd = Assert.Single(steps, step => step.Title == "Install systemd unit example.service");
 
         Assert.Contains("test ! -L '/srv/example/deploy/apache.conf'", apache.Command, StringComparison.Ordinal);
@@ -259,6 +272,9 @@ public sealed class ServerRecoveryBootstrapPlanTests
             "install -T -o 'root' -g 'root' -m '0644' '/srv/example/deploy/apache.conf' '/etc/apache2/sites-available/example.conf'",
             apache.Command,
             StringComparison.Ordinal);
+        Assert.Contains("test ! -L '/srv/example/deploy/platform.conf'", apacheConf.Command, StringComparison.Ordinal);
+        Assert.Equal("a2ensite 'example.conf'", enableSite.Command);
+        Assert.Equal("a2disconf 'platform.conf'", disableConf.Command);
         Assert.Contains("test ! -L '/srv/example/deploy/example.service'", systemd.Command, StringComparison.Ordinal);
         Assert.EndsWith(
             "install -T -o 'root' -g 'root' -m '0644' '/srv/example/deploy/example.service' '/etc/systemd/system/example.service'",
@@ -390,6 +406,53 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Contains("test \"$(stat -c '%g' -- '/var/lib/example-numeric')\" = '0'", numericCommand, StringComparison.Ordinal);
         Assert.Contains("powerforge_assert_root_controlled_path '/var/lib'", numericCommand, StringComparison.Ordinal);
         Assert.DoesNotContain("runuser", numericCommand, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildPlan_InstallsRepositorySecretOnlyAfterCloneAndPrunesStagingTree()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Name = "example",
+            OperationLocks = ["/var/lock/powerforge-site-example.lock"],
+            Repositories =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerRepository
+                {
+                    Role = "application",
+                    Url = "https://github.com/ExampleOrg/ExampleSite.git",
+                    Path = "/srv/example"
+                }
+            ],
+            Secrets =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerSecret
+                {
+                    Id = "repository-key",
+                    Path = "/srv/example/.deploy-key",
+                    RestoreAfterRepositories = true,
+                    RestoreMode = "file",
+                    Owner = "root",
+                    Group = "root",
+                    Mode = "0600"
+                }
+            ]
+        };
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        var operationLock = Assert.Single(steps, step => step.Category == "locking");
+        var repository = Assert.Single(steps, step => step.Category == "repositories");
+        var secret = Assert.Single(steps, step => step.Title == "Install staged secret repository-key");
+        var cleanup = Assert.Single(steps, step => step.Title == "Remove empty secret staging directory");
+
+        Assert.True(operationLock.Order < repository.Order);
+        Assert.True(repository.Order < secret.Order);
+        Assert.Contains("root:root 644", operationLock.Command, StringComparison.Ordinal);
+        Assert.Contains("/var/lib/powerforge/restore-secrets/", secret.Command, StringComparison.Ordinal);
+        Assert.Contains("/srv/example/.deploy-key", secret.Command, StringComparison.Ordinal);
+        Assert.Contains("install -T -o 'root' -g 'root' -m '0600'", secret.Command, StringComparison.Ordinal);
+        Assert.Contains("find '/var/lib/powerforge/restore-secrets/", cleanup.Command, StringComparison.Ordinal);
+        Assert.Contains("-depth -mindepth 1 -type d -empty -delete", cleanup.Command, StringComparison.Ordinal);
     }
 
     [Fact]

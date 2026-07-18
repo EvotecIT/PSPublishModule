@@ -163,4 +163,23 @@ public sealed class WebCliServerCaptureTests
                 new PowerForgeServerManagedFile { Target = "/etc/example/secr\u00E9t.env", Required = true }
             ], "age1example"));
     }
+
+    [Fact]
+    public void BuildRemoteCaptureLockCommand_HoldsEveryDeclaredLockForSessionLifetime()
+    {
+        var command = WebCliCommandHandlers.BuildRemoteCaptureLockCommand(
+        [
+            "/var/lock/powerforge-site-example.lock",
+            "/var/lock/powerforge-contact-example.lock",
+            "/var/lock/powerforge-site-example.lock"
+        ]);
+
+        Assert.Equal(1, command.Split("powerforge-site-example.lock", StringSplitOptions.None).Length - 1);
+        Assert.Contains("flock -n '/var/lock/powerforge-site-example.lock'", command, StringComparison.Ordinal);
+        Assert.Contains("flock -n '/var/lock/powerforge-contact-example.lock'", command, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_CAPTURE_LOCKED", command, StringComparison.Ordinal);
+        Assert.Contains("cat >/dev/null", command, StringComparison.Ordinal);
+        Assert.Throws<InvalidOperationException>(() =>
+            WebCliCommandHandlers.BuildRemoteCaptureLockCommand(["/tmp/example.lock"]));
+    }
 }

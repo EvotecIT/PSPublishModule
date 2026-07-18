@@ -82,6 +82,15 @@ public sealed class ServerRecoveryInspectCommandTests
         Assert.Equal("sudo -n readlink -f '/var/www/example/current'", command);
     }
 
+    [Fact]
+    public void OperationLockChecksRequireExactRootOwnedRegularFile()
+    {
+        Assert.Equal(
+            "sudo -n test -f '/var/lock/powerforge-site-example.lock' && sudo -n test ! -L '/var/lock/powerforge-site-example.lock' && " +
+            "test \"$(sudo -n stat -c '%U:%G %a' -- '/var/lock/powerforge-site-example.lock')\" = 'root:root 644'",
+            WebCliCommandHandlers.BuildOperationLockCheckCommand("/var/lock/powerforge-site-example.lock"));
+    }
+
     [Theory]
     [InlineData("x64", "x86_64")]
     [InlineData("arm64", "aarch64")]

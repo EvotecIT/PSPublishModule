@@ -70,7 +70,6 @@ internal static partial class WebCliCommandHandlers
 
         var encryptedFiles = new List<PowerForgeServerManagedFile>
         {
-            RequiredSecretFile("/etc/letsencrypt/accounts"),
             RequiredSecretFile($"/etc/letsencrypt/archive/{options.Domain}"),
             RequiredSecretFile($"/etc/letsencrypt/live/{options.Domain}")
         };
@@ -81,15 +80,6 @@ internal static partial class WebCliCommandHandlers
                 Id = $"letsencrypt-{options.SiteId}-private-keys",
                 Path = $"/etc/letsencrypt/archive/{options.Domain}",
                 RequiredFor = ["certificate-continuity"],
-                RequiredDuringBootstrap = false,
-                Capture = "encrypted",
-                RestoreMode = "directory"
-            },
-            new()
-            {
-                Id = "letsencrypt-acme-account",
-                Path = "/etc/letsencrypt/accounts",
-                RequiredFor = ["certificate-renewal"],
                 RequiredDuringBootstrap = false,
                 Capture = "encrypted",
                 RestoreMode = "directory"
@@ -146,6 +136,7 @@ internal static partial class WebCliCommandHandlers
                 Os = "ubuntu-24.04",
                 Architecture = "x64"
             },
+            OperationLocks = [$"/var/lock/powerforge-site-{options.SiteId}.lock"],
             Repositories =
             [
                 applicationRepository,
@@ -168,8 +159,8 @@ internal static partial class WebCliCommandHandlers
                 Modules = ["headers", "rewrite", "ssl"],
                 Sites =
                 [
-                    new PowerForgeServerManagedFile { Source = $"{websiteRepositoryRoot}/deploy/apache.conf", Target = $"/etc/apache2/sites-available/{domainFile}.conf", Required = true },
-                    new PowerForgeServerManagedFile { Source = $"{websiteRepositoryRoot}/deploy/apache-ssl.conf", Target = $"/etc/apache2/sites-available/{domainFile}-le-ssl.conf", Required = true }
+                    new PowerForgeServerApacheFile { Source = $"{websiteRepositoryRoot}/deploy/apache.conf", Target = $"/etc/apache2/sites-available/{domainFile}.conf", Required = true, Enabled = true },
+                    new PowerForgeServerApacheFile { Source = $"{websiteRepositoryRoot}/deploy/apache-ssl.conf", Target = $"/etc/apache2/sites-available/{domainFile}-le-ssl.conf", Required = true, Enabled = true }
                 ],
                 ValidateCommand = "sudo -n apachectl configtest"
             },

@@ -318,7 +318,7 @@ public sealed class ServerRecoverySecurityTests
         {
             Sites =
             [
-                new PowerForgeServerManagedFile
+                new PowerForgeServerApacheFile
                 {
                     Source = "/srv/example/deploy/apache.sudoers",
                     Target = "/etc/sudoers.d/powerforge-apache"
@@ -340,7 +340,7 @@ public sealed class ServerRecoverySecurityTests
 
         var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
 
-        Assert.Contains(errors, error => error.Contains("apache.files[0].target must not manage", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("apache.sites[0].target must not manage", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("systemd.units[0].target must not manage", StringComparison.Ordinal));
     }
 
@@ -423,7 +423,7 @@ public sealed class ServerRecoverySecurityTests
         {
             Sites =
             [
-                new PowerForgeServerManagedFile
+                new PowerForgeServerApacheFile
                 {
                     Source = "/etc/example/secret.env",
                     Target = "/srv"
@@ -445,10 +445,10 @@ public sealed class ServerRecoverySecurityTests
 
         var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
 
-        Assert.Contains(errors, error => error.Contains("apache.files[0].source must be inside a declared repository path", StringComparison.Ordinal));
-        Assert.Contains(errors, error => error.Contains("apache.files[0].target must not overlap declared repository paths", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("apache.sites[0].source must be inside a declared repository path", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("apache.sites[0].target must not overlap declared repository paths", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("systemd.units[0].target must not overlap declared repository paths", StringComparison.Ordinal));
-        Assert.Contains(errors, error => error.Contains("apache.files[0]", StringComparison.Ordinal) && error.Contains("overlaps secret", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("apache.sites[0]", StringComparison.Ordinal) && error.Contains("overlaps secret", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -459,7 +459,7 @@ public sealed class ServerRecoverySecurityTests
         {
             Conf =
             [
-                new PowerForgeServerManagedFile
+                new PowerForgeServerApacheFile
                 {
                     Target = "/etc/apache2/conf-available/platform-managed.conf",
                     Required = true
@@ -534,7 +534,7 @@ public sealed class ServerRecoverySecurityTests
         {
             Sites =
             [
-                new PowerForgeServerManagedFile
+                new PowerForgeServerApacheFile
                 {
                     Source = "/srv/example/deploy/apache.conf/",
                     Target = "/etc/apache2/sites-available/example.conf/"
@@ -548,8 +548,8 @@ public sealed class ServerRecoverySecurityTests
         Assert.Contains(errors, error => error.Contains("Managed path 'managed-directory' target must not end with '/'", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Managed path 'managed-file' source must not end with '/'", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Managed path 'managed-file' target must not end with '/'", StringComparison.Ordinal));
-        Assert.Contains(errors, error => error.Contains("apache.files[0].source must not end with '/'", StringComparison.Ordinal));
-        Assert.Contains(errors, error => error.Contains("apache.files[0].target must not end with '/'", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("apache.sites[0].source must not end with '/'", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("apache.sites[0].target must not end with '/'", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -780,6 +780,140 @@ public sealed class ServerRecoverySecurityTests
     }
 
     [Fact]
+    public void ManifestValidation_RequiresSharedOperationLockForCaptureAndDeploy()
+    {
+        var manifest = CreateManifest();
+        manifest.Deploy = new PowerForgeServerCommandGroup
+        {
+            Commands = [new PowerForgeServerNamedCommand { Id = "deploy", Command = "/usr/local/sbin/deploy-site" }]
+        };
+
+        var missingLockErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(missingLockErrors, error => error.Contains("operationLocks is required", StringComparison.Ordinal));
+
+        manifest.OperationLocks = ["/var/lock/powerforge-site-example.lock"];
+
+        Assert.Empty(WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest));
+
+        manifest.OperationLocks = ["/var/lock/powerforge-site-example.lock", "/tmp/example.lock"];
+        var invalidLockErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(invalidLockErrors, error => error.Contains("directly below /var/lock", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ManifestValidation_RequiresRepositorySecretsToRestoreAfterClone()
+    {
+        var manifest = CreateManifest();
+        manifest.Repositories =
+        [
+            new PowerForgeServerRepository { Role = "application", Path = "/srv/example" }
+        ];
+        manifest.Secrets =
+        [
+            new PowerForgeServerSecret
+            {
+                Id = "repository-key",
+                Path = "/srv/example/.deploy-key",
+                Capture = "encrypted",
+                RestoreMode = "file",
+                Owner = "root",
+                Group = "root",
+                Mode = "600"
+            }
+        ];
+        manifest.Capture!.EncryptedFiles =
+        [
+            new PowerForgeServerManagedFile { Target = "/srv/example/.deploy-key", Required = true, Sensitive = true }
+        ];
+
+        var unsafeErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(unsafeErrors, error => error.Contains("must set restoreAfterRepositories=true", StringComparison.Ordinal));
+
+        manifest.Secrets[0].RestoreAfterRepositories = true;
+
+        Assert.Empty(WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest));
+
+        manifest.Secrets[0].RestoreMode = "directory";
+        var directoryErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(directoryErrors, error => error.Contains("must use restoreMode 'file'", StringComparison.Ordinal));
+
+        manifest.Secrets[0].Path = "/srv/example";
+        manifest.Secrets[0].RestoreMode = "file";
+        manifest.Capture.EncryptedFiles[0].Target = "/srv/example";
+        var repositoryRootErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(repositoryRootErrors, error => error.Contains("must not replace declared repository root", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ManifestValidation_ReportsNestedRepositoriesWithoutThrowingForDeferredSecrets()
+    {
+        var manifest = CreateManifest();
+        manifest.Repositories =
+        [
+            new PowerForgeServerRepository { Role = "application", Path = "/srv/example" },
+            new PowerForgeServerRepository { Role = "nested", Path = "/srv/example/nested" }
+        ];
+        manifest.Secrets =
+        [
+            new PowerForgeServerSecret
+            {
+                Id = "nested-secret",
+                Path = "/srv/example/nested/.secret",
+                Capture = "encrypted",
+                RestoreAfterRepositories = true,
+                RestoreMode = "file",
+                Owner = "root",
+                Group = "root",
+                Mode = "600"
+            }
+        ];
+        manifest.Capture!.EncryptedFiles =
+        [
+            new PowerForgeServerManagedFile { Target = "/srv/example/nested/.secret", Required = true, Sensitive = true }
+        ];
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("must not be duplicate or nested", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("/etc/letsencrypt")]
+    [InlineData("/etc/letsencrypt/accounts")]
+    [InlineData("/etc/letsencrypt/archive")]
+    [InlineData("/etc/letsencrypt/live")]
+    public void ManifestValidation_RejectsEstateWideLetsEncryptCaptureRoots(string path)
+    {
+        var manifest = CreateManifest();
+        manifest.Secrets =
+        [
+            new PowerForgeServerSecret
+            {
+                Id = "acme-state",
+                Path = path,
+                Capture = "encrypted",
+                RestoreMode = "directory",
+                Owner = "root",
+                Group = "root",
+                Mode = "700"
+            }
+        ];
+        manifest.Capture!.EncryptedFiles =
+        [
+            new PowerForgeServerManagedFile { Target = path, Required = true, Sensitive = true }
+        ];
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("too broad", StringComparison.Ordinal) && error.Contains("Let's Encrypt roots", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void RestoreScript_UsesAllowlistAndDeclaredMetadataWithoutHeuristics()
     {
         var script = WebCliCommandHandlers.BuildRestoreSecretsScript(
@@ -817,6 +951,8 @@ public sealed class ServerRecoverySecurityTests
         Assert.Contains("Archive symlink chains are not allowed", script, StringComparison.Ordinal);
         Assert.Contains("Archive member has unsafe special permission bits", script, StringComparison.Ordinal);
         Assert.Contains("normalized = posixpath.normpath(original)", script, StringComparison.Ordinal);
+        Assert.Contains("if original != normalized:", script, StringComparison.Ordinal);
+        Assert.Contains("Non-canonical archive path", script, StringComparison.Ordinal);
         Assert.DoesNotContain("lstrip", script, StringComparison.Ordinal);
         Assert.Contains("tar --no-same-owner --no-same-permissions --no-overwrite-dir --no-acls --no-selinux --no-xattrs", script, StringComparison.Ordinal);
         Assert.DoesNotContain("tar --same-owner", script, StringComparison.Ordinal);
@@ -917,6 +1053,38 @@ public sealed class ServerRecoverySecurityTests
 
         Assert.True(parentIndex >= 0 && parentIndex < childIndex, "Parent directory metadata must be applied before child metadata.");
         Assert.True(childIndex < fileIndex, "Exact child file metadata must be applied after enclosing directory metadata.");
+    }
+
+    [Fact]
+    public void RestoreScript_StagesRepositorySecretsInsteadOfPrecreatingCloneTarget()
+    {
+        const string stagingRoot = "/var/lib/powerforge/restore-secrets/fixture";
+        var script = WebCliCommandHandlers.BuildRestoreSecretsScript(
+            "archive.age",
+            ["/srv/example/.deploy-key"],
+            [
+                new PowerForgeServerRestoreSecretEntry
+                {
+                    Id = "repository-key",
+                    Path = "/srv/example/.deploy-key",
+                    Owner = "root",
+                    Group = "root",
+                    Mode = "600",
+                    RestoreMode = "file",
+                    RestoreAfterRepositories = true,
+                    StagedPath = stagingRoot + "/srv/example/.deploy-key"
+                }
+            ],
+            stagingRoot);
+
+        Assert.Contains("staging_root='/var/lib/powerforge/restore-secrets/fixture'", script, StringComparison.Ordinal);
+        Assert.Contains("if [ ! -e /var/lib/powerforge ]", script, StringComparison.Ordinal);
+        Assert.Contains("Secret staging base is not a root-controlled directory", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("0700 /var/lib/powerforge /var/lib/powerforge/restore-secrets", script, StringComparison.Ordinal);
+        Assert.Contains("--exclude='srv/example/.deploy-key'", script, StringComparison.Ordinal);
+        Assert.Contains("-C \"$staging_root\" -- 'srv/example/.deploy-key'", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("chown -h 'root:root' -- '/srv/example/.deploy-key'", script, StringComparison.Ordinal);
+        Assert.Contains("run the generated bootstrap plan to install them after clone", script, StringComparison.Ordinal);
     }
 
     private static PowerForgeServerRecoveryManifest CreateManifest()
