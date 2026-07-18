@@ -39,22 +39,34 @@ public sealed partial class ModulePipelineRunner
             throw new InvalidOperationException(
                 $"SynchronizeModuleVersion requires a {release.VersionSource} lane marked with UseAsReleaseVersionSource.");
         }
-        if (explicitLanes.Any(lane =>
+
+        var activeExplicitLanes = explicitLanes
+            .Where(lane => IsSynchronizedReleaseLaneActive(gateMode, lane.Enabled))
+            .ToArray();
+        if (activeExplicitLanes.Any(lane =>
                 !ShouldRunPackageBuildBeforeModule(releaseSegment, lane.BuildBeforeModule)))
         {
             throw new InvalidOperationException(
                 "SynchronizeModuleVersion requires every selected release source lane to run before the module build. Set BuildBeforeModule or configure Release BuildOrder accordingly.");
         }
 
-        var gateEnablesLanes = gateMode is ConfigurationGateMode.Build or ConfigurationGateMode.Publish;
-        if (!gateEnablesLanes &&
-            gateMode is not ConfigurationGateMode.Manifest and not ConfigurationGateMode.Documentation &&
-            !explicitLanes.Any(static lane => lane.Enabled))
+        if (ShouldSynchronizeModuleVersionForRun(releaseSegment, gateMode) &&
+            activeExplicitLanes.Length == 0)
         {
             throw new InvalidOperationException(
                 "SynchronizeModuleVersion requires an enabled release source lane when no Build or Publish gate is active.");
         }
     }
+
+    private static bool IsSynchronizedReleaseLaneActive(
+        ConfigurationGateMode? gateMode,
+        bool enabled)
+        => gateMode switch
+        {
+            ConfigurationGateMode.Build or ConfigurationGateMode.Publish => true,
+            ConfigurationGateMode.Manifest or ConfigurationGateMode.Documentation => false,
+            _ => enabled
+        };
 
     private static bool ShouldSynchronizeModuleVersionForRun(
         ConfigurationReleaseSegment? release,
@@ -177,6 +189,15 @@ public sealed partial class ModulePipelineRunner
         var preRelease = PackageVersionUtility.GetPrereleaseVersion(normalizedVersion);
         plan.PreRelease = string.IsNullOrWhiteSpace(preRelease) ? null : preRelease;
         plan.BuildSpec.Version = plan.ResolvedVersion;
+
+        ValidateDeliveryPathConflicts(
+            plan.ProjectRoot,
+            plan.ModuleName,
+            plan.ResolvedVersion,
+            plan.PreRelease,
+            plan.BuildSpec.ExcludeDirectories,
+            plan.Delivery,
+            plan.Artefacts);
 
         _logger.Info(
             $"Module version synchronized to release source '{release.VersionSource}': {normalizedVersion}.");
