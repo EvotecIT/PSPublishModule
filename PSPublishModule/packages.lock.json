@@ -6,7 +6,7 @@
         "type": "Direct",
         "requested": "[0.50.0, )",
         "resolved": "0.50.0",
-        "contentHash": "0oxVDkmyjBe0M8OwehvA6EZ/OIjaFmZbfDSrpG7EhsoyDJh2S6sAB2wv6TK48YhP7KQnthPELvQYooZj4z2gyA==",
+        "contentHash": "5ZsrNDDjEihdAtoMg0lPgW3kDLpbhCTKOr16lb4kxiSW9k4COJdDAVBFzHk3xrWFCl8/LKosLm1GeH3hx7GGAw==",
         "dependencies": {
           "System.ComponentModel.Annotations": "5.0.0",
           "System.Text.Json": "9.0.17"
@@ -282,7 +282,7 @@
         "type": "Direct",
         "requested": "[0.50.0, )",
         "resolved": "0.50.0",
-        "contentHash": "0oxVDkmyjBe0M8OwehvA6EZ/OIjaFmZbfDSrpG7EhsoyDJh2S6sAB2wv6TK48YhP7KQnthPELvQYooZj4z2gyA=="
+        "contentHash": "5ZsrNDDjEihdAtoMg0lPgW3kDLpbhCTKOr16lb4kxiSW9k4COJdDAVBFzHk3xrWFCl8/LKosLm1GeH3hx7GGAw=="
       },
       "HtmlForgeX.Markdown": {
         "type": "Direct",
@@ -967,7 +967,7 @@
         "type": "Direct",
         "requested": "[0.50.0, )",
         "resolved": "0.50.0",
-        "contentHash": "0oxVDkmyjBe0M8OwehvA6EZ/OIjaFmZbfDSrpG7EhsoyDJh2S6sAB2wv6TK48YhP7KQnthPELvQYooZj4z2gyA=="
+        "contentHash": "5ZsrNDDjEihdAtoMg0lPgW3kDLpbhCTKOr16lb4kxiSW9k4COJdDAVBFzHk3xrWFCl8/LKosLm1GeH3hx7GGAw=="
       },
       "HtmlForgeX.Markdown": {
         "type": "Direct",
