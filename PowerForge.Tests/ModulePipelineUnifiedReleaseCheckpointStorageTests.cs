@@ -33,6 +33,47 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     }
 
     [Fact]
+    public void ResolveCheckpointPath_ScopesSameModuleNameByProjectRootInsideRepository()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(repositoryRoot.FullName, ".git"));
+            var firstRoot = Path.Combine(repositoryRoot.FullName, "src", "First");
+            var secondRoot = Path.Combine(repositoryRoot.FullName, "src", "Second");
+            const string moduleName = "TestModule";
+            WriteMinimalModule(firstRoot, moduleName, "2.0.10");
+            WriteMinimalModule(secondRoot, moduleName, "2.0.10");
+            Directory.Delete(Path.Combine(firstRoot, ".git"), recursive: true);
+            Directory.Delete(Path.Combine(secondRoot, ".git"), recursive: true);
+            WriteSynchronizedProjectBuildConfig(firstRoot, "project.build.json", moduleName, publishNuGet: false);
+            WriteSynchronizedProjectBuildConfig(secondRoot, "project.build.json", moduleName, publishNuGet: false);
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var firstPlan = runner.Plan(CreateGalleryReleaseSpec(
+                firstRoot,
+                Path.Combine(repositoryRoot.FullName, "staging", "First"),
+                moduleName));
+            var secondPlan = runner.Plan(CreateGalleryReleaseSpec(
+                secondRoot,
+                Path.Combine(repositoryRoot.FullName, "staging", "Second"),
+                moduleName));
+
+            var firstPath = ModulePipelineRunner.ResolveSynchronizedReleaseCheckpointPath(firstPlan);
+            var secondPath = ModulePipelineRunner.ResolveSynchronizedReleaseCheckpointPath(secondPlan);
+
+            Assert.Equal(Path.GetDirectoryName(firstPath), Path.GetDirectoryName(secondPath));
+            Assert.NotEqual(firstPath, secondPath, ModuleStatePathIdentity.Comparer);
+            Assert.StartsWith($"{moduleName}-", Path.GetFileName(firstPath), StringComparison.OrdinalIgnoreCase);
+            Assert.StartsWith($"{moduleName}-", Path.GetFileName(secondPath), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { repositoryRoot.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task Run_RejectsConcurrentCoordinatedReleaseForSameModuleAsync()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

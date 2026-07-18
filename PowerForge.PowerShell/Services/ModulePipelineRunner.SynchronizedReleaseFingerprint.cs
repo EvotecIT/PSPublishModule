@@ -259,10 +259,12 @@ public sealed partial class ModulePipelineRunner
         return CreateSynchronizedReleaseFingerprint(
             "ModulePublishOperation",
             index.ToString(),
-            CreateModulePublishConfigurationFingerprint(publish.Configuration));
+            CreateModulePublishConfigurationFingerprint(plan, publish.Configuration));
     }
 
-    private static string CreateModulePublishConfigurationFingerprint(PublishConfiguration publish)
+    private static string CreateModulePublishConfigurationFingerprint(
+        ModulePipelinePlan plan,
+        PublishConfiguration publish)
     {
         var repository = publish.Repository;
         return CreateSynchronizedReleaseFingerprint(
@@ -274,9 +276,9 @@ public sealed partial class ModulePipelineRunner
             publish.UserName,
             publish.RepositoryName,
             repository?.Name,
-            repository?.Uri,
-            repository?.SourceUri,
-            repository?.PublishUri,
+            NormalizeModuleRepositoryFingerprintSource(repository?.Uri, plan.ProjectRoot),
+            NormalizeModuleRepositoryFingerprintSource(repository?.SourceUri, plan.ProjectRoot),
+            NormalizeModuleRepositoryFingerprintSource(repository?.PublishUri, plan.ProjectRoot),
             repository?.ApiVersion.ToString(),
             repository?.Trusted.ToString(),
             repository?.Priority?.ToString(),
@@ -291,10 +293,15 @@ public sealed partial class ModulePipelineRunner
             publish.GenerateReleaseNotes.ToString(),
             publish.UseAsDependencyVersionSource.ToString(),
             publish.PublishRequiredModules.ToString(),
-            publish.RequiredModuleSourceRepository,
-            publish.RequiredModuleSourceRepositoryUri,
+            NormalizeModuleRepositoryFingerprintSource(publish.RequiredModuleSourceRepository, plan.ProjectRoot),
+            NormalizeModuleRepositoryFingerprintSource(publish.RequiredModuleSourceRepositoryUri, plan.ProjectRoot),
             publish.Force.ToString());
     }
+
+    private static string? NormalizeModuleRepositoryFingerprintSource(string? source, string projectRoot)
+        => string.IsNullOrWhiteSpace(source)
+            ? null
+            : ManagedModuleRepositoryPathResolver.NormalizeSource(source!, projectRoot);
 
     private string CreateProjectBuildPublishOperationFingerprint(
         ModulePipelinePlan plan,

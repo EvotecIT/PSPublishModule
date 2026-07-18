@@ -37,7 +37,8 @@ internal sealed class ProjectBuildWorkflowService
         string configDir,
         ProjectBuildPreparedContext preparation,
         bool executeBuild,
-        Action? remotePublishAttempted = null)
+        Action? remotePublishAttempted = null,
+        bool coordinatedReleaseCheckpointActive = false)
     {
         if (config is null)
             throw new ArgumentNullException(nameof(config));
@@ -89,7 +90,14 @@ internal sealed class ProjectBuildWorkflowService
             preflightErrors.Add(preflightError!);
 
         var gitHubToken = preparation.PublishGitHub ? preparation.GitHubToken : null;
-        if (preparation.PublishGitHub && string.IsNullOrWhiteSpace(preflightError))
+        if (preparation.PublishGitHub && coordinatedReleaseCheckpointActive)
+        {
+            var retrySafetyError = ProjectBuildGitHubRetrySafety.Validate(config, plan);
+            if (!string.IsNullOrWhiteSpace(retrySafetyError))
+                preflightErrors.Add(retrySafetyError!);
+        }
+
+        if (preparation.PublishGitHub && preflightErrors.Count == 0)
         {
             var gitHubPreflightError = _validateGitHubPreflight(config, plan, gitHubToken!);
             if (!string.IsNullOrWhiteSpace(gitHubPreflightError))

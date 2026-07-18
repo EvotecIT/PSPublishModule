@@ -216,7 +216,7 @@ public sealed partial class ModulePipelineRunner
                 case PublishTool.ManagedModule:
                     break;
                 case PublishTool.Auto:
-                    if (!ModulePublisher.ShouldUseManagedModuleForAuto(cfg))
+                    if (!ModulePublisher.ShouldUseManagedModuleForAuto(cfg, plan.ProjectRoot))
                         AddRepositoryToolDependencyForAuto(dependencies);
                     break;
             }

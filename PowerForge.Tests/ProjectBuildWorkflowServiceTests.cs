@@ -64,7 +64,8 @@ public sealed class ProjectBuildWorkflowServiceTests
                 Spec = new DotNetRepositoryReleaseSpec { RootPath = Directory.GetCurrentDirectory() }
             },
             executeBuild: true,
-            remotePublishAttempted: () => remotePublishAttempts++);
+            remotePublishAttempted: () => remotePublishAttempts++,
+            coordinatedReleaseCheckpointActive: true);
 
         Assert.Equal(1, executeCalls);
         Assert.Equal(0, remotePublishAttempts);
@@ -167,6 +168,200 @@ public sealed class ProjectBuildWorkflowServiceTests
         Assert.Contains(logger.SuccessMessages, message => message.Contains("GitHub publish completed in", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Theory]
+    [InlineData("PerProject", "Reuse", null, null, "GitHubReleaseMode 'Single'")]
+    [InlineData("Single", "AppendUtcTimestamp", null, null, "AppendUtcTimestamp")]
+    [InlineData("Single", "Fail", null, null, "GitHubTagConflictPolicy 'Reuse'")]
+    [InlineData("Single", "Reuse", null, "{Repo}-v{UtcTimestamp}", "stable GitHub tag")]
+    [InlineData("Single", "Reuse", null, "{Repo}-{Date}", "stable GitHub tag")]
+    public void Execute_rejects_nonreplayable_coordinated_github_settings_before_release_execution(
+        string releaseMode,
+        string conflictPolicy,
+        string? tagName,
+        string? tagTemplate,
+        string expectedMessage)
+    {
+        var executeCalls = 0;
+        var publishCalls = 0;
+        var remotePublishAttempts = 0;
+        var service = new ProjectBuildWorkflowService(
+            new NullLogger(),
+            executeRelease: spec =>
+            {
+                executeCalls++;
+                Assert.True(spec.WhatIf);
+                return new DotNetRepositoryReleaseResult { Success = true };
+            },
+            publishGitHub: _ =>
+            {
+                publishCalls++;
+                return new ProjectBuildGitHubPublishSummary { Success = true };
+            },
+            validateGitHubPreflight: (_, _, _) => throw new InvalidOperationException("Unsafe settings must fail before GitHub preflight."));
+
+        var workflow = service.Execute(
+            new ProjectBuildConfiguration
+            {
+                PublishGitHub = true,
+                GitHubAccessToken = "token",
+                GitHubUsername = "EvotecIT",
+                GitHubRepositoryName = "PSPublishModule",
+                GitHubReleaseMode = releaseMode,
+                GitHubTagConflictPolicy = conflictPolicy,
+                GitHubTagName = tagName,
+                GitHubTagTemplate = tagTemplate
+            },
+            Directory.GetCurrentDirectory(),
+            new ProjectBuildPreparedContext
+            {
+                PublishGitHub = true,
+                CreateReleaseZip = true,
+                GitHubToken = "token",
+                RootPath = Directory.GetCurrentDirectory(),
+                Spec = new DotNetRepositoryReleaseSpec { RootPath = Directory.GetCurrentDirectory() }
+            },
+            executeBuild: true,
+            remotePublishAttempted: () => remotePublishAttempts++,
+            coordinatedReleaseCheckpointActive: true);
+
+        Assert.Equal(1, executeCalls);
+        Assert.Equal(0, publishCalls);
+        Assert.Equal(0, remotePublishAttempts);
+        Assert.False(workflow.Result.Success);
+        Assert.Contains(expectedMessage, workflow.Result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Execute_allows_nonreplayable_github_settings_without_coordinated_checkpoint()
+    {
+        var executeCalls = 0;
+        var publishCalls = 0;
+        var remotePublishAttempts = 0;
+        var service = new ProjectBuildWorkflowService(
+            new NullLogger(),
+            executeRelease: spec =>
+            {
+                executeCalls++;
+                if (spec.WhatIf)
+                    return new DotNetRepositoryReleaseResult { Success = true };
+
+                return new DotNetRepositoryReleaseResult
+                {
+                    Success = true,
+                    Projects =
+                    {
+                        new DotNetRepositoryProjectResult
+                        {
+                            ProjectName = "ProjectA",
+                            IsPackable = true,
+                            NewVersion = "1.2.3",
+                            ReleaseZipPath = "ProjectA.1.2.3.zip"
+                        }
+                    }
+                };
+            },
+            publishGitHub: _ =>
+            {
+                publishCalls++;
+                return new ProjectBuildGitHubPublishSummary { Success = true };
+            },
+            validateGitHubPreflight: (_, _, _) => null);
+
+        var workflow = service.Execute(
+            new ProjectBuildConfiguration
+            {
+                PublishGitHub = true,
+                GitHubAccessToken = "token",
+                GitHubUsername = "EvotecIT",
+                GitHubRepositoryName = "PSPublishModule",
+                GitHubReleaseMode = "PerProject",
+                GitHubTagConflictPolicy = "AppendUtcTimestamp"
+            },
+            Directory.GetCurrentDirectory(),
+            new ProjectBuildPreparedContext
+            {
+                PublishGitHub = true,
+                CreateReleaseZip = true,
+                GitHubToken = "token",
+                RootPath = Directory.GetCurrentDirectory(),
+                Spec = new DotNetRepositoryReleaseSpec { RootPath = Directory.GetCurrentDirectory() }
+            },
+            executeBuild: true,
+            remotePublishAttempted: () => remotePublishAttempts++,
+            coordinatedReleaseCheckpointActive: false);
+
+        Assert.Equal(2, executeCalls);
+        Assert.Equal(1, publishCalls);
+        Assert.Equal(1, remotePublishAttempts);
+        Assert.True(workflow.Result.Success);
+    }
+
+    [Fact]
+    public void Coordinated_github_retry_safety_allows_explicit_stable_tag()
+    {
+        var error = ProjectBuildGitHubRetrySafety.Validate(
+            new ProjectBuildConfiguration
+            {
+                GitHubReleaseMode = "Single",
+                GitHubTagConflictPolicy = "Reuse",
+                GitHubTagName = "v1.2.3",
+                GitHubTagTemplate = "{Repo}-v{UtcTimestamp}"
+            },
+            CreateMixedVersionRelease());
+
+        Assert.Null(error);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("{Repo}-v{Version}")]
+    [InlineData("{Repo}-v{PrimaryVersion}")]
+    public void Coordinated_github_retry_safety_rejects_implicit_date_fallback_for_mixed_versions(
+        string? tagTemplate)
+    {
+        var error = ProjectBuildGitHubRetrySafety.Validate(
+            new ProjectBuildConfiguration
+            {
+                GitHubReleaseMode = "Single",
+                GitHubTagConflictPolicy = "Reuse",
+                GitHubTagTemplate = tagTemplate
+            },
+            CreateMixedVersionRelease());
+
+        Assert.Contains("no single base version", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Coordinated_github_retry_safety_allows_stable_template_without_base_version()
+    {
+        var error = ProjectBuildGitHubRetrySafety.Validate(
+            new ProjectBuildConfiguration
+            {
+                GitHubReleaseMode = "Single",
+                GitHubTagConflictPolicy = "Reuse",
+                GitHubTagTemplate = "{Repo}-coordinated"
+            },
+            CreateMixedVersionRelease());
+
+        Assert.Null(error);
+    }
+
+    [Fact]
+    public void Coordinated_github_retry_safety_allows_matching_primary_project_version()
+    {
+        var error = ProjectBuildGitHubRetrySafety.Validate(
+            new ProjectBuildConfiguration
+            {
+                GitHubReleaseMode = "Single",
+                GitHubTagConflictPolicy = "Reuse",
+                GitHubPrimaryProject = "ProjectA",
+                GitHubTagTemplate = "{Repo}-v{PrimaryVersion}"
+            },
+            CreateMixedVersionRelease());
+
+        Assert.Null(error);
+    }
+
     [Fact]
     public void Execute_reports_all_project_failures_and_uses_error_severity()
     {
@@ -213,6 +408,27 @@ public sealed class ProjectBuildWorkflowServiceTests
         Assert.Contains(logger.ErrorMessages, message =>
             message.Contains("Project build release execution failed after", StringComparison.OrdinalIgnoreCase));
     }
+
+    private static DotNetRepositoryReleaseResult CreateMixedVersionRelease()
+        => new()
+        {
+            Success = true,
+            Projects =
+            {
+                new DotNetRepositoryProjectResult
+                {
+                    ProjectName = "ProjectA",
+                    IsPackable = true,
+                    NewVersion = "1.2.3"
+                },
+                new DotNetRepositoryProjectResult
+                {
+                    ProjectName = "ProjectB",
+                    IsPackable = true,
+                    NewVersion = "2.0.0"
+                }
+            }
+        };
 
     private sealed class RecordingLogger : ILogger
     {

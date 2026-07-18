@@ -5,7 +5,7 @@ namespace PowerForge;
 /// </content>
 public sealed partial class ModulePublisher
 {
-    internal static bool ShouldUseManagedModuleForAuto(PublishConfiguration publish)
+    internal static bool ShouldUseManagedModuleForAuto(PublishConfiguration publish, string? baseDirectory = null)
     {
         if (publish is null)
             throw new ArgumentNullException(nameof(publish));
@@ -22,7 +22,7 @@ public sealed partial class ModulePublisher
         try
         {
             var support = ManagedModuleProviderSupportEvaluator.Evaluate(
-                CreateManagedPublishRepository(repositoryName, repository));
+                CreateManagedPublishRepository(repositoryName, repository, baseDirectory));
             return support.Level == ManagedModuleProviderSupportLevel.Supported;
         }
         catch (InvalidOperationException)
@@ -49,8 +49,8 @@ public sealed partial class ModulePublisher
                 new ManagedModulePublishRequest
                 {
                     ModulePath = modulePath,
-                    Repository = CreateManagedReadRepository(repositoryName, repoConfig),
-                    PublishRepository = CreateManagedPublishRepository(repositoryName, repoConfig),
+                    Repository = CreateManagedReadRepository(repositoryName, repoConfig, plan.ProjectRoot),
+                    PublishRepository = CreateManagedPublishRepository(repositoryName, repoConfig, plan.ProjectRoot),
                     OutputDirectory = temporaryPackagePath,
                     Credential = readCredential,
                     PublishCredential = publishCredential,
@@ -70,13 +70,14 @@ public sealed partial class ModulePublisher
 
     private static ManagedModuleRepository CreateManagedPublishRepository(
         string repositoryName,
-        PublishRepositoryConfiguration? repoConfig)
+        PublishRepositoryConfiguration? repoConfig,
+        string? baseDirectory)
     {
         var source = FirstNonEmpty(repoConfig?.PublishUri, repoConfig?.Uri, repoConfig?.SourceUri);
         if (string.IsNullOrWhiteSpace(source))
             source = ResolveDefaultManagedRepositorySource(repositoryName);
         else
-            source = NormalizeManagedRepositorySource(source!);
+            source = NormalizeManagedRepositorySource(source!, baseDirectory);
 
         return new ManagedModuleRepository(
             repositoryName,
@@ -87,13 +88,14 @@ public sealed partial class ModulePublisher
 
     private static ManagedModuleRepository CreateManagedReadRepository(
         string repositoryName,
-        PublishRepositoryConfiguration? repoConfig)
+        PublishRepositoryConfiguration? repoConfig,
+        string? baseDirectory)
     {
         var source = FirstNonEmpty(repoConfig?.Uri, repoConfig?.SourceUri, repoConfig?.PublishUri);
         if (string.IsNullOrWhiteSpace(source))
             source = ResolveDefaultManagedRepositorySource(repositoryName);
         else
-            source = NormalizeManagedRepositorySource(source!);
+            source = NormalizeManagedRepositorySource(source!, baseDirectory);
 
         return new ManagedModuleRepository(
             repositoryName,
@@ -111,12 +113,13 @@ public sealed partial class ModulePublisher
             $"Managed module publishing requires a repository Uri, SourceUri, or PublishUri for repository '{repositoryName}'.");
     }
 
-    internal static string NormalizeManagedRepositorySource(string source)
+    internal static string NormalizeManagedRepositorySource(string source, string? baseDirectory = null)
     {
         var normalized = source.Trim().TrimEnd('/');
-        return normalized.Equals(ManagedModuleCatalogDefaults.PowerShellGalleryV3, StringComparison.OrdinalIgnoreCase)
+        normalized = normalized.Equals(ManagedModuleCatalogDefaults.PowerShellGalleryV3, StringComparison.OrdinalIgnoreCase)
             ? ManagedModuleCatalogDefaults.PowerShellGalleryV2
             : normalized;
+        return ManagedModuleRepositoryPathResolver.NormalizeSource(normalized, baseDirectory);
     }
 
     private static RepositoryCredential? ResolveManagedReadCredential(PublishRepositoryConfiguration? repoConfig)

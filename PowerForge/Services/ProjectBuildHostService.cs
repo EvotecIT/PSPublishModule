@@ -139,7 +139,8 @@ public sealed class ProjectBuildHostService
                 configDirectory,
                 preparation,
                 request.ExecuteBuild,
-                request.RemotePublishAttempted);
+                request.RemotePublishAttempted,
+                request.CoordinatedReleaseCheckpointActive);
 
         return new ProjectBuildHostExecutionResult {
             Success = workflow.Result.Success,

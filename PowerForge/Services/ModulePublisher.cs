@@ -141,12 +141,13 @@ public sealed partial class ModulePublisher
         }
 
         var (repositoryName, repoConfig) = ResolveRepository(publish);
+        repoConfig = NormalizeRepositoryPaths(repoConfig, plan.ProjectRoot);
         var useManagedModule = publish.Tool == PublishTool.ManagedModule ||
-                               publish.Tool == PublishTool.Auto && ShouldUseManagedModuleForAuto(publish);
+                               publish.Tool == PublishTool.Auto && ShouldUseManagedModuleForAuto(publish, plan.ProjectRoot);
         if (useManagedModule)
         {
             var alreadyPublished = EnsureManagedVersionIsGreaterThanRepository(
-                CreateManagedReadRepository(repositoryName, repoConfig),
+                CreateManagedReadRepository(repositoryName, repoConfig, plan.ProjectRoot),
                 plan.ModuleName,
                 plan.ResolvedVersion,
                 plan.PreRelease,
@@ -320,6 +321,7 @@ public sealed partial class ModulePublisher
         Action? remoteSideEffectObserved)
     {
         var (repositoryName, repoConfig) = ResolveRepository(publish);
+        repoConfig = NormalizeRepositoryPaths(repoConfig, plan.ProjectRoot);
         var isPsGallery = string.Equals(repositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase);
 
         var credential = repoConfig?.Credential;
@@ -332,9 +334,9 @@ public sealed partial class ModulePublisher
             throw new InvalidOperationException("Publish API key is required for repository publishing to PSGallery.");
 
         var useManagedModule = publish.Tool == PublishTool.ManagedModule ||
-                               publish.Tool == PublishTool.Auto && ShouldUseManagedModuleForAuto(publish);
+                               publish.Tool == PublishTool.Auto && ShouldUseManagedModuleForAuto(publish, plan.ProjectRoot);
         var managedRepository = useManagedModule
-            ? CreateManagedPublishRepository(repositoryName, repoConfig)
+            ? CreateManagedPublishRepository(repositoryName, repoConfig, plan.ProjectRoot)
             : null;
         var managedLocalFolder = managedRepository?.Kind == ManagedModuleRepositoryKind.LocalFolder;
 
@@ -422,7 +424,7 @@ public sealed partial class ModulePublisher
                 if (tool == PublishTool.ManagedModule)
                 {
                     EnsureManagedVersionIsGreaterThanRepository(
-                        CreateManagedReadRepository(repositoryName, repoConfig),
+                        CreateManagedReadRepository(repositoryName, repoConfig, plan.ProjectRoot),
                         plan.ModuleName,
                         plan.ResolvedVersion,
                         plan.PreRelease,
@@ -442,7 +444,7 @@ public sealed partial class ModulePublisher
             {
                 _managedRequiredModuleRepositoryValidator.Validate(
                     publish,
-                    CreateManagedReadRepository(repositoryName, repoConfig),
+                    CreateManagedReadRepository(repositoryName, repoConfig, plan.ProjectRoot),
                     readCredential,
                     publishCredential,
                     plan,
@@ -871,6 +873,31 @@ public sealed partial class ModulePublisher
             Credential = credential,
             CredentialProvider = credential is null ? CloneCredentialProvider(repo.CredentialProvider) : null
         };
+
+    private static PublishRepositoryConfiguration? NormalizeRepositoryPaths(
+        PublishRepositoryConfiguration? repository,
+        string projectRoot)
+        => repository is null
+            ? null
+            : new PublishRepositoryConfiguration
+            {
+                Name = repository.Name,
+                Uri = NormalizeRepositoryPath(repository.Uri, projectRoot),
+                SourceUri = NormalizeRepositoryPath(repository.SourceUri, projectRoot),
+                PublishUri = NormalizeRepositoryPath(repository.PublishUri, projectRoot),
+                Trusted = repository.Trusted,
+                Priority = repository.Priority,
+                ApiVersion = repository.ApiVersion,
+                EnsureRegistered = repository.EnsureRegistered,
+                UnregisterAfterUse = repository.UnregisterAfterUse,
+                Credential = repository.Credential,
+                CredentialProvider = CloneCredentialProvider(repository.CredentialProvider)
+            };
+
+    private static string? NormalizeRepositoryPath(string? source, string projectRoot)
+        => string.IsNullOrWhiteSpace(source)
+            ? source
+            : ManagedModuleRepositoryPathResolver.NormalizeSource(source!, projectRoot);
 
     private static RepositoryCredentialProviderConfiguration? CloneCredentialProvider(RepositoryCredentialProviderConfiguration? provider)
         => provider is null

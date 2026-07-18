@@ -7,16 +7,17 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
-    private static string ResolveSynchronizedReleaseCheckpointPath(ModulePipelinePlan plan)
+    internal static string ResolveSynchronizedReleaseCheckpointPath(ModulePipelinePlan plan)
     {
         var invalid = Path.GetInvalidFileNameChars();
         var safeModuleName = new string(plan.ModuleName
             .Select(character => invalid.Contains(character) ? '_' : character)
             .ToArray());
+        var projectIdentity = CreateSynchronizedReleaseProjectIdentity(plan.ProjectRoot);
         return Path.Combine(
             ResolveSynchronizedReleaseStateRoot(plan.ProjectRoot),
             "coordinated-release",
-            $"{safeModuleName}.json");
+            $"{safeModuleName}-{projectIdentity}.json");
     }
 
     internal static string ResolveSynchronizedReleaseStateRoot(string projectRoot)
@@ -44,6 +45,19 @@ public sealed partial class ModulePipelineRunner
             current = current.Parent;
         }
 
+        var localStateRoot = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(localStateRoot))
+            localStateRoot = Path.GetTempPath();
+
+        return Path.Combine(
+            localStateRoot,
+            "PowerForge",
+            "coordinated-release-projects",
+            CreateSynchronizedReleaseProjectIdentity(projectRoot));
+    }
+
+    private static string CreateSynchronizedReleaseProjectIdentity(string projectRoot)
+    {
         var canonicalProjectRoot = Path.GetFullPath(projectRoot);
         var filesystemRoot = Path.GetPathRoot(canonicalProjectRoot);
         if (!string.Equals(
@@ -58,15 +72,7 @@ public sealed partial class ModulePipelineRunner
         if (Path.DirectorySeparatorChar == '\\')
             canonicalProjectRoot = canonicalProjectRoot.ToUpperInvariant();
 
-        var localStateRoot = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(localStateRoot))
-            localStateRoot = Path.GetTempPath();
-
-        return Path.Combine(
-            localStateRoot,
-            "PowerForge",
-            "coordinated-release-projects",
-            CreateSynchronizedReleaseFingerprint("ProjectRoot", canonicalProjectRoot));
+        return CreateSynchronizedReleaseFingerprint("ProjectRoot", canonicalProjectRoot);
     }
 
     private void EnterSynchronizedReleaseCheckpointScope(

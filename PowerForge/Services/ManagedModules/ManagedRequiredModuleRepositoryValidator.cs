@@ -54,7 +54,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
 
         var externalModuleDependencies = RequiredModuleRepositoryValidator.GetExternalModulesForPublish(buildResult, plan);
         var source = publish.PublishRequiredModules
-            ? ResolveSourceRepository(publish, targetRepository)
+            ? ResolveSourceRepository(publish, targetRepository, plan.ProjectRoot)
             : null;
         var sourceCredential = ReferenceEquals(source, targetRepository) ? targetCredential : null;
         var mirroredPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -302,14 +302,17 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
 
     private static ManagedModuleRepository ResolveSourceRepository(
         PublishConfiguration publish,
-        ManagedModuleRepository targetRepository)
+        ManagedModuleRepository targetRepository,
+        string projectRoot)
     {
         var source = ResolveSourceRepositoryName(publish);
         if (!string.IsNullOrWhiteSpace(publish.RequiredModuleSourceRepositoryUri))
         {
             return new ManagedModuleRepository(
                 source,
-                publish.RequiredModuleSourceRepositoryUri!.Trim(),
+                ManagedModuleRepositoryPathResolver.NormalizeSource(
+                    publish.RequiredModuleSourceRepositoryUri!,
+                    projectRoot),
                 ManagedModuleRepositoryKind.Auto,
                 trusted: true);
         }
@@ -321,7 +324,11 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
             return targetRepository;
 
         if (LooksLikeRepositorySource(source))
-            return new ManagedModuleRepository(source, source, ManagedModuleRepositoryKind.Auto, trusted: true);
+            return new ManagedModuleRepository(
+                source,
+                ManagedModuleRepositoryPathResolver.NormalizeSource(source, projectRoot),
+                ManagedModuleRepositoryKind.Auto,
+                trusted: true);
 
         throw new InvalidOperationException(
             $"Managed required-module mirroring could not resolve source repository '{source}'. Use PSGallery, a repository URL, a local feed path, or the target repository name.");

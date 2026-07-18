@@ -22,6 +22,7 @@ public sealed partial class ModulePipelineRunner
         var packageGitHubPublished = false;
         var modulePublished = new HashSet<ConfigurationPublishSegment>();
         PreflightSynchronizedModulePublishVersions(plan, state, modulePublished);
+        PreflightSynchronizedPackageGitHubRetrySafety(plan, state);
 
         foreach (var destination in publishOrder)
         {
@@ -57,6 +58,80 @@ public sealed partial class ModulePipelineRunner
 
         ExecuteModulePublishes(plan, session, publishBuildResult, state, modulePublished, PublishDestination.PowerShellGallery);
         ExecuteModulePublishes(plan, session, publishBuildResult, state, modulePublished, PublishDestination.GitHub);
+    }
+
+    private void PreflightSynchronizedPackageGitHubRetrySafety(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state)
+    {
+        if (state.SynchronizedReleaseCheckpoint is null)
+            return;
+
+        foreach (var segment in plan.ProjectBuilds ?? Array.Empty<ConfigurationProjectBuildSegment>())
+        {
+            if (segment?.Configuration is null ||
+                !ShouldExecuteProjectBuildPublish(plan, segment, PackageBuildPublishDestination.GitHub))
+            {
+                continue;
+            }
+
+            var operationKey = CreateProjectBuildPublishOperationFingerprint(
+                plan,
+                segment,
+                PackageBuildPublishDestination.GitHub);
+            if (ShouldSkipSynchronizedReleaseOperation(state, operationKey))
+                continue;
+
+            var configPath = ResolvePackageBuildPath(plan.ProjectRoot, segment.Configuration.ConfigPath);
+            var release = RequireProjectBuildReleaseForCoordinatedGitHubPreflight(state, segment);
+            ValidateCoordinatedProjectBuildGitHubRetrySafety(
+                LoadProjectBuildConfiguration(configPath, segment.Configuration),
+                release);
+        }
+
+        foreach (var segment in plan.PackageBuilds ?? Array.Empty<ConfigurationPackageBuildSegment>())
+        {
+            if (segment?.Configuration is null ||
+                !ShouldExecutePackageBuildPublish(plan, segment, PackageBuildPublishDestination.GitHub))
+            {
+                continue;
+            }
+
+            var operationKey = CreatePackageBuildPublishOperationFingerprint(
+                plan,
+                segment,
+                PackageBuildPublishDestination.GitHub);
+            if (ShouldSkipSynchronizedReleaseOperation(state, operationKey))
+                continue;
+
+            var release = RequireProjectBuildReleaseForCoordinatedGitHubPreflight(state, segment);
+            ValidateCoordinatedProjectBuildGitHubRetrySafety(
+                MapPackageBuildConfiguration(segment.Configuration, plan.ProjectRoot),
+                release);
+        }
+    }
+
+    private static DotNetRepositoryReleaseResult RequireProjectBuildReleaseForCoordinatedGitHubPreflight(
+        ModulePipelineRunState state,
+        object segment)
+    {
+        if (state.PackageBuildResultsBySegment.TryGetValue(segment, out var existing) &&
+            existing.Result.Release is not null)
+        {
+            return existing.Result.Release;
+        }
+
+        throw new InvalidOperationException(
+            "Coordinated GitHub retry preflight requires the planned package release result before any remote publish destination can run.");
+    }
+
+    private static void ValidateCoordinatedProjectBuildGitHubRetrySafety(
+        ProjectBuildConfiguration configuration,
+        DotNetRepositoryReleaseResult release)
+    {
+        var retrySafetyError = ProjectBuildGitHubRetrySafety.Validate(configuration, release);
+        if (!string.IsNullOrWhiteSpace(retrySafetyError))
+            throw new InvalidOperationException(retrySafetyError);
     }
 
     private void PreflightSynchronizedModulePublishVersions(

@@ -6,6 +6,7 @@ namespace PowerForge;
 public sealed class ProjectBuildHostRequest
 {
     internal Action? RemotePublishAttempted { get; set; }
+    internal bool CoordinatedReleaseCheckpointActive { get; set; }
 
     /// <summary>
     /// Path to the <c>project.build.json</c> configuration file.

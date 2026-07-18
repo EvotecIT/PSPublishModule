@@ -9,6 +9,56 @@ namespace PowerForge.Tests;
 public sealed partial class ModulePipelineUnifiedReleaseTests
 {
     [Fact]
+    public void Run_RejectsUnsafePackageGitHubRetrySettingsBeforeEarlierRemoteDestination()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "2.0.10");
+            WriteSynchronizedProjectBuildConfig(
+                root.FullName,
+                "project.build.json",
+                moduleName,
+                publishNuGet: true,
+                publishGitHub: true,
+                gitHubReleaseMode: "PerProject");
+
+            var remotePublishRequests = 0;
+            var runner = CreateRunner(
+                new FakeHostedOperations(new List<string>()),
+                (request, configuration, configPath) =>
+                {
+                    if (request.PublishNuget == true || request.PublishGitHub == true)
+                        remotePublishRequests++;
+
+                    return CreateProjectBuildResult(
+                        root.FullName,
+                        moduleName,
+                        "2.0.11",
+                        Path.Combine(root.FullName, "Artifacts", "NuGet"),
+                        request,
+                        configPath,
+                        includePackage: true);
+                });
+            var spec = CreateNuGetOnlyReleaseSpec(root.FullName, stagingPath, moduleName);
+            var release = Assert.IsType<ConfigurationReleaseSegment>(spec.Segments[^1]);
+            release.Configuration.PublishOrder = new[] { "NuGet", "GitHub" };
+
+            var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("GitHubReleaseMode 'Single'", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(0, remotePublishRequests);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_UsesDuplicateTolerantNuGetRetryForAttemptedPackageLane()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
