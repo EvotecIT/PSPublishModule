@@ -208,6 +208,21 @@ public sealed class ServerScaffoldTests
         sudoersPath.Remove("kind");
         Assert.False(EvaluateSchema(schema, incompleteSudoers));
 
+        var untaggedSudoers = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        var untaggedSudoersPath = untaggedSudoers["paths"]!.AsArray()
+            .First(path => path!["validation"]?.GetValue<string>() == "sudoers")!
+            .AsObject();
+        untaggedSudoersPath.Remove("validation");
+        Assert.False(EvaluateSchema(schema, untaggedSudoers));
+
+        var apacheSudoersTarget = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        apacheSudoersTarget["apache"]!["sites"]![0]!["target"] = "/etc/sudoers.d/powerforge-apache";
+        Assert.False(EvaluateSchema(schema, apacheSudoersTarget));
+
+        var systemdSudoersTarget = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        systemdSudoersTarget["systemd"]!["services"]![0]!["target"] = "/etc/sudoers";
+        Assert.False(EvaluateSchema(schema, systemdSudoersTarget));
+
         var impossibleRuntime = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
         impossibleRuntime["packages"]!["dotnetSdks"] = new JsonArray("8.1");
         Assert.False(EvaluateSchema(schema, impossibleRuntime));

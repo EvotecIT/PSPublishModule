@@ -149,7 +149,12 @@
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string", "minLength": 1 },
-        "path": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+        "path": {
+          "allOf": [
+            { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+            { "not": { "enum": ["/etc/sudoers", "/etc/sudoers.d"] } }
+          ]
+        },
         "source": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
         "owner": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$" },
         "group": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$" },
@@ -185,6 +190,15 @@
               "group": { "enum": ["root"] },
               "mode": { "enum": ["440", "0440"] },
               "path": { "pattern": "^/etc/sudoers\\.d/[A-Za-z0-9_-]+$" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "path": { "pattern": "^/etc/sudoers\\.d/" } }, "required": ["path"] },
+          "then": {
+            "required": ["validation"],
+            "properties": {
+              "validation": { "enum": ["sudoers"] }
             }
           }
         }
@@ -227,7 +241,12 @@
         {
           "properties": {
             "source": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
-            "target": { "$ref": "#/$defs/AbsoluteUnixExactPath" }
+            "target": {
+              "allOf": [
+                { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+                { "not": { "pattern": "^/etc/sudoers(?:$|\\.d(?:$|/))" } }
+              ]
+            }
           }
         }
       ]
@@ -308,7 +327,12 @@
       "properties": {
         "name": { "type": "string", "minLength": 1 },
         "source": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
-        "target": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+        "target": {
+          "allOf": [
+            { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+            { "not": { "pattern": "^/etc/sudoers(?:$|\\.d(?:$|/))" } }
+          ]
+        },
         "enabled": { "type": "boolean" },
         "required": { "type": "boolean" }
       },

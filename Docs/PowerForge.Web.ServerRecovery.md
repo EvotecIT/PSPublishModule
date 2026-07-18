@@ -96,9 +96,10 @@ jobs:
       - uses: EvotecIT/PSPublishModule/.github/actions/powerforge-server-recovery-validate@<exact-commit>
         with:
           manifest-path: deploy/linux/example.serverrecovery.json
+          capture-user: powerforge-example-backup
 ```
 
-Keep `fail-on-warnings` at its default `true` for migration and maintenance pull requests. The protected backup action remains a separate environment-gated workflow because it needs SSH and backup-repository identities; PR validation must not receive those credentials.
+Set `capture-user` to the dedicated non-root Linux account whose strict sudoers policy authorizes encrypted recovery capture. Validation binds that exact principal to the root-run hardened helper from the pinned PowerForge engine, rejects broader command aliases, validates all managed sudoers files both individually and as one combined policy, and accepts privileged capture inspection only from the shared read-only command allowlist. Extend that allowlist in PowerForge with focused security tests when another generally useful inspection command is needed; do not add a caller-controlled bypass. Keep `fail-on-warnings` at its default `true` for migration and maintenance pull requests. The protected backup action remains a separate environment-gated workflow because it needs SSH and backup-repository identities; PR validation must not receive those credentials.
 
 Proposed PowerShell shape:
 

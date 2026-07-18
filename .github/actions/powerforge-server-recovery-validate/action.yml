@@ -1,9 +1,12 @@
 name: PowerForge Server Recovery Validate
-description: Validate a server recovery manifest and its generated shell plans without credentials or host access.
+description: Validate a server recovery manifest and its generated shell plans without credentials or host access. Encrypted capture requires the public age recipient inline in backupTarget.recipient.
 
 inputs:
   manifest-path:
     description: Repository-relative PowerForge server recovery manifest.
+    required: true
+  capture-user:
+    description: Dedicated non-root Linux account authorized to perform encrypted recovery capture.
     required: true
   fail-on-warnings:
     description: Fail when bootstrap or secret-restore plan generation emits warnings.
@@ -15,7 +18,7 @@ outputs:
     description: Number of generated bootstrap plan steps.
     value: ${{ steps.validate.outputs.bootstrap-step-count }}
   managed-source-count:
-    description: Number of repository-backed managed file declarations.
+    description: Number of repository-backed managed files verified in pinned checkouts.
     value: ${{ steps.validate.outputs.managed-source-count }}
   secret-count:
     description: Number of declared recovery secrets.
@@ -30,6 +33,7 @@ runs:
     - name: Checkout caller repository
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
+        fetch-depth: 0
         token: ${{ github.token }}
         ref: ${{ github.sha }}
 
@@ -44,6 +48,7 @@ runs:
       env:
         POWERFORGE_ENGINE_REF: ${{ github.action_ref }}
         POWERFORGE_ENGINE_REPOSITORY: ${{ github.action_repository }}
+        POWERFORGE_CAPTURE_USER: ${{ inputs.capture-user }}
         POWERFORGE_FAIL_ON_WARNINGS: ${{ inputs.fail-on-warnings }}
         POWERFORGE_MANIFEST_PATH: ${{ inputs.manifest-path }}
       run: '& "$env:GITHUB_ACTION_PATH/Invoke-PowerForgeServerRecoveryValidation.ps1"'
