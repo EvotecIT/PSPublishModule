@@ -184,6 +184,66 @@ public sealed class GitHubRepositoryContentServiceTests
         Assert.Equal(original, File.ReadAllText(first));
     }
 
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    public void Sync_RejectsOverlappingBlocksBeforeWritingAnyFile(bool outerFirst, bool appendInner)
+    {
+        var root = CreateTempRoot();
+        var first = Path.Combine(root, "SPONSORS.md");
+        const string firstOriginal = "<!-- POWERFORGE:sponsors:START -->\nold\n<!-- POWERFORGE:sponsors:END -->\n";
+        File.WriteAllText(first, firstOriginal);
+        var readme = Path.Combine(root, "README.md");
+        const string readmeOriginal =
+            "<!-- POWERFORGE:outer:START -->\n" +
+            "before\n" +
+            "<!-- POWERFORGE:inner:START -->\ninner\n<!-- POWERFORGE:inner:END -->\n" +
+            "after\n" +
+            "<!-- POWERFORGE:outer:END -->\n";
+        File.WriteAllText(readme, readmeOriginal);
+        var outer = new GitHubSponsorsOutputSpec { Path = "README.md", BlockId = "outer" };
+        var inner = new GitHubSponsorsOutputSpec
+        {
+            Path = "README.md",
+            BlockId = "inner",
+            MissingBlockBehavior = appendInner
+                ? ManagedMarkdownMissingBlockBehavior.Append
+                : ManagedMarkdownMissingBlockBehavior.Fail
+        };
+        using var httpClient = new HttpClient(new SponsorsHandler(_ => Response(Node("alice", "Alice", 5))));
+        var service = new GitHubRepositoryContentService(sponsorsClient: new GitHubSponsorsClient(httpClient));
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Sync(new GitHubRepositoryContentSpec
+        {
+            Token = "token",
+            Sponsors = new GitHubSponsorsContentSpec
+            {
+                Enabled = true,
+                SponsorableLogin = "owner",
+                IncludeFormer = false,
+                Outputs = outerFirst
+                    ? new[]
+                    {
+                        new GitHubSponsorsOutputSpec { Path = "SPONSORS.md", BlockId = "sponsors" },
+                        outer,
+                        inner
+                    }
+                    : new[]
+                    {
+                        new GitHubSponsorsOutputSpec { Path = "SPONSORS.md", BlockId = "sponsors" },
+                        inner,
+                        outer
+                    }
+            }
+        }, root));
+
+        Assert.Contains("overlap", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(firstOriginal, File.ReadAllText(first));
+        Assert.Equal(readmeOriginal, File.ReadAllText(readme));
+    }
+
     [Fact]
     public void Sync_RejectsMultipleBlocksForSameMissingDocumentBeforeWriting()
     {
@@ -317,6 +377,79 @@ public sealed class GitHubRepositoryContentServiceTests
 
         Assert.Contains("symbolic link or reparse point", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.False(File.Exists(Path.Combine(outsideRoot, "SPONSORS.md")));
+    }
+
+    [Fact]
+    public void Sync_RejectsRestrictedOutputRootThatIsSymlink()
+    {
+        var holder = CreateTempRoot();
+        var outsideRoot = CreateTempRoot();
+        var linkedRoot = Path.Combine(holder, "linked-root");
+        try
+        {
+            Directory.CreateSymbolicLink(linkedRoot, outsideRoot);
+        }
+        catch (Exception linkException) when (linkException is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
+        {
+            return;
+        }
+
+        using var httpClient = new HttpClient(new SponsorsHandler(_ => Response(Node("alice", "Alice", 5))));
+        var service = new GitHubRepositoryContentService(sponsorsClient: new GitHubSponsorsClient(httpClient));
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Sync(new GitHubRepositoryContentSpec
+        {
+            Token = "token",
+            Sponsors = new GitHubSponsorsContentSpec
+            {
+                Enabled = true,
+                SponsorableLogin = "owner",
+                IncludeFormer = false,
+                Outputs = new[]
+                {
+                    new GitHubSponsorsOutputSpec { Path = "SPONSORS.md", BlockId = "sponsors", CreateIfMissing = true }
+                }
+            }
+        }, linkedRoot, restrictedOutputRoot: linkedRoot));
+
+        Assert.Contains("symbolic link or reparse point", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(Path.Combine(outsideRoot, "SPONSORS.md")));
+    }
+
+    [Fact]
+    public void Sync_RejectsRestrictedOutputRootWithSymlinkedAncestor()
+    {
+        var holder = CreateTempRoot();
+        var outsideRoot = CreateTempRoot();
+        var linkedAncestor = Path.Combine(holder, "linked-ancestor");
+        try
+        {
+            Directory.CreateSymbolicLink(linkedAncestor, outsideRoot);
+        }
+        catch (Exception linkException) when (linkException is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
+        {
+            return;
+        }
+
+        var restrictedRoot = Path.Combine(linkedAncestor, "nested");
+        using var httpClient = new HttpClient(new SponsorsHandler(_ => Response(Node("alice", "Alice", 5))));
+        var service = new GitHubRepositoryContentService(sponsorsClient: new GitHubSponsorsClient(httpClient));
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Sync(new GitHubRepositoryContentSpec
+        {
+            Token = "token",
+            Sponsors = new GitHubSponsorsContentSpec
+            {
+                Enabled = true,
+                SponsorableLogin = "owner",
+                IncludeFormer = false,
+                Outputs = new[]
+                {
+                    new GitHubSponsorsOutputSpec { Path = "SPONSORS.md", BlockId = "sponsors", CreateIfMissing = true }
+                }
+            }
+        }, restrictedRoot, restrictedOutputRoot: restrictedRoot));
+
+        Assert.Contains("symbolic link or reparse point", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(Path.Combine(outsideRoot, "nested", "SPONSORS.md")));
     }
 
     [Fact]

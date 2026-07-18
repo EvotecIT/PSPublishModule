@@ -145,6 +145,147 @@ public sealed class ManagedMarkdownDocumentUpdaterTests
     }
 
     [Fact]
+    public void UpdateMany_ProjectsDisjointBlocksBeforeWritingFinalDocument()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "README.md");
+        File.WriteAllText(
+            path,
+            "<!-- POWERFORGE:sponsors:START -->\nold sponsors\n<!-- POWERFORGE:sponsors:END -->\n" +
+            "Between\n" +
+            "<!-- POWERFORGE:stats:START -->\nold stats\n<!-- POWERFORGE:stats:END -->\n");
+
+        var results = new ManagedMarkdownDocumentUpdater().UpdateMany(new[]
+        {
+            new ManagedMarkdownUpdateRequest { Path = path, BlockId = "sponsors", Markdown = "new sponsors" },
+            new ManagedMarkdownUpdateRequest { Path = path, BlockId = "stats", Markdown = "new stats" }
+        });
+
+        Assert.Equal(2, results.Length);
+        Assert.All(results, result => Assert.True(result.Changed));
+        var text = Normalize(File.ReadAllText(path));
+        Assert.Contains("<!-- POWERFORGE:sponsors:START -->\nnew sponsors\n<!-- POWERFORGE:sponsors:END -->", text, StringComparison.Ordinal);
+        Assert.Contains("<!-- POWERFORGE:stats:START -->\nnew stats\n<!-- POWERFORGE:stats:END -->", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("old sponsors", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("old stats", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UpdateMany_RejectsDuplicateLogicalTargetWithoutWriting()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "README.md");
+        const string original = "<!-- POWERFORGE:sponsors:START -->\nold\n<!-- POWERFORGE:sponsors:END -->\n";
+        File.WriteAllText(path, original);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new ManagedMarkdownDocumentUpdater().UpdateMany(new[]
+        {
+            new ManagedMarkdownUpdateRequest { Path = path, BlockId = "sponsors", Markdown = "new" },
+            new ManagedMarkdownUpdateRequest { Path = path, BlockId = "sponsors", Markdown = "old" }
+        }));
+
+        Assert.Contains("targeted more than once", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(original, File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void UpdateMany_KeepsCaseDistinctFilesSeparateOnCaseSensitiveFileSystem()
+    {
+        var root = CreateTempRoot();
+        var upperPath = Path.Combine(root, "A.md");
+        var lowerPath = Path.Combine(root, "a.md");
+        const string upperOriginal = "<!-- POWERFORGE:sponsors:START -->\nupper old\n<!-- POWERFORGE:sponsors:END -->\n";
+        const string lowerOriginal = "<!-- POWERFORGE:sponsors:START -->\nlower old\n<!-- POWERFORGE:sponsors:END -->\n";
+        File.WriteAllText(upperPath, upperOriginal);
+        File.WriteAllText(lowerPath, lowerOriginal);
+        if (string.Equals(File.ReadAllText(upperPath), File.ReadAllText(lowerPath), StringComparison.Ordinal))
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() => new ManagedMarkdownDocumentUpdater().UpdateMany(new[]
+            {
+                new ManagedMarkdownUpdateRequest { Path = upperPath, BlockId = "sponsors", Markdown = "upper new" },
+                new ManagedMarkdownUpdateRequest { Path = lowerPath, BlockId = "sponsors", Markdown = "lower new" }
+            }));
+            Assert.Contains("targeted more than once", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("lower old", File.ReadAllText(upperPath), StringComparison.Ordinal);
+            return;
+        }
+
+        var results = new ManagedMarkdownDocumentUpdater().UpdateMany(new[]
+        {
+            new ManagedMarkdownUpdateRequest { Path = upperPath, BlockId = "sponsors", Markdown = "upper new" },
+            new ManagedMarkdownUpdateRequest { Path = lowerPath, BlockId = "sponsors", Markdown = "lower new" }
+        });
+
+        Assert.Equal(2, results.Length);
+        Assert.Contains("upper new", File.ReadAllText(upperPath), StringComparison.Ordinal);
+        Assert.DoesNotContain("lower new", File.ReadAllText(upperPath), StringComparison.Ordinal);
+        Assert.Contains("lower new", File.ReadAllText(lowerPath), StringComparison.Ordinal);
+        Assert.DoesNotContain("upper new", File.ReadAllText(lowerPath), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UpdateMany_CoalescesWindowsDriveRootCasingAliases()
+    {
+        if (Path.DirectorySeparatorChar != '\\')
+            return;
+
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "README.md");
+        const string original =
+            "<!-- POWERFORGE:sponsors:START -->\nold sponsors\n<!-- POWERFORGE:sponsors:END -->\n" +
+            "<!-- POWERFORGE:stats:START -->\nold stats\n<!-- POWERFORGE:stats:END -->\n";
+        File.WriteAllText(path, original);
+        var alias = char.ToLowerInvariant(path[0]) + path.Substring(1);
+
+        var results = new ManagedMarkdownDocumentUpdater().UpdateMany(new[]
+        {
+            new ManagedMarkdownUpdateRequest { Path = path, BlockId = "sponsors", Markdown = "new sponsors" },
+            new ManagedMarkdownUpdateRequest { Path = alias, BlockId = "stats", Markdown = "new stats" }
+        });
+
+        Assert.Equal(2, results.Length);
+        var text = File.ReadAllText(path);
+        Assert.Contains("new sponsors", text, StringComparison.Ordinal);
+        Assert.Contains("new stats", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("old sponsors", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("old stats", text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void UpdateMany_RejectsReplacementThatIntroducesRequestedNestedBlockWithoutWriting(bool outerFirst)
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "README.md");
+        const string original = "<!-- POWERFORGE:outer:START -->\nold\n<!-- POWERFORGE:outer:END -->\n";
+        File.WriteAllText(path, original);
+        var outer = new ManagedMarkdownUpdateRequest
+        {
+            Path = path,
+            BlockId = "outer",
+            Markdown = "before\n<!-- POWERFORGE:inner:START -->\nintroduced\n<!-- POWERFORGE:inner:END -->\nafter"
+        };
+        var inner = new ManagedMarkdownUpdateRequest
+        {
+            Path = path,
+            BlockId = "inner",
+            Markdown = "inner replacement",
+            MissingBlockBehavior = ManagedMarkdownMissingBlockBehavior.Append
+        };
+        var requests = outerFirst ? new[] { outer, inner } : new[] { inner, outer };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new ManagedMarkdownDocumentUpdater().UpdateMany(requests));
+
+        Assert.True(
+            exception.Message.Contains("overlap", StringComparison.OrdinalIgnoreCase) ||
+            exception.Message.Contains("duplic", StringComparison.OrdinalIgnoreCase),
+            exception.Message);
+        Assert.Equal(original, File.ReadAllText(path));
+    }
+
+    [Fact]
     public void Update_PreservesUtf8BomAndEveryByteOutsideMixedEndingBlock()
     {
         var root = CreateTempRoot();

@@ -86,13 +86,13 @@ public sealed class GitHubRepositoryContentService
         var basePath = ResolveBaseDirectory(baseDirectory);
         var planned = BuildPlans(outputs, recognition, basePath, restrictedOutputRoot);
         ValidatePlanSet(planned);
-        foreach (var plan in planned)
-            _documentUpdater.ValidateUpdate(plan.Request);
+        var updates = _documentUpdater.UpdateMany(planned.Select(plan => plan.Request));
 
         var documentResults = new List<GitHubSponsorsDocumentResult>();
-        foreach (var plan in planned)
+        for (var index = 0; index < planned.Count; index++)
         {
-            var update = _documentUpdater.Update(plan.Request);
+            var plan = planned[index];
+            var update = updates[index];
             documentResults.Add(new GitHubSponsorsDocumentResult
             {
                 Path = update.Path,
@@ -122,7 +122,7 @@ public sealed class GitHubRepositoryContentService
         string? restrictedOutputRoot)
     {
         var plans = new List<OutputPlan>();
-        var destinations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var destinations = new HashSet<string>(StringComparer.Ordinal);
         foreach (var output in outputs)
         {
             if (output is null) throw new InvalidOperationException("Sponsors outputs cannot contain null entries.");
@@ -153,7 +153,7 @@ public sealed class GitHubRepositoryContentService
 
     private static void ValidatePlanSet(List<OutputPlan> plans)
     {
-        var byPath = new Dictionary<string, List<OutputPlan>>(StringComparer.OrdinalIgnoreCase);
+        var byPath = new Dictionary<string, List<OutputPlan>>(StringComparer.Ordinal);
         foreach (var plan in plans)
         {
             if (!byPath.TryGetValue(plan.Request.Path, out var matching))
@@ -221,34 +221,50 @@ public sealed class GitHubRepositoryContentService
         if (!outputPath.Equals(root, comparison) && !outputPath.StartsWith(rootPrefix, comparison))
             throw new InvalidOperationException($"Managed output is outside the restricted output root: {outputPath}");
 
-        if (outputPath.Equals(root, comparison))
-            return;
+        ValidateNoReparsePoints(root);
+        if (!outputPath.Equals(root, comparison))
+            ValidateNoReparsePoints(outputPath);
+    }
 
-        var relative = outputPath.Substring(rootPrefix.Length);
-        var current = root;
-        foreach (var segment in relative.Split(new[] { System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries))
+    private static void ValidateNoReparsePoints(string path)
+    {
+        var fullPath = System.IO.Path.GetFullPath(path);
+        var volumeRoot = System.IO.Path.GetPathRoot(fullPath) ?? string.Empty;
+        var current = volumeRoot;
+        if (!string.IsNullOrWhiteSpace(current))
+            ValidateExistingPathEntry(current);
+
+        var relative = fullPath.Substring(volumeRoot.Length);
+        foreach (var segment in relative.Split(
+                     new[] { System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar },
+                     StringSplitOptions.RemoveEmptyEntries))
         {
             current = System.IO.Path.Combine(current, segment);
-            var existingEntry = FindPathEntryWithoutFollowing(current);
-            if (existingEntry is null)
-                continue;
+            ValidateExistingPathEntry(current);
+        }
+    }
 
-            FileAttributes attributes;
-            try
-            {
-                attributes = File.GetAttributes(existingEntry);
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
-            {
-                throw new InvalidOperationException(
-                    $"Managed output path contains an existing entry that cannot be safely inspected: {existingEntry}",
-                    exception);
-            }
-            if ((attributes & FileAttributes.ReparsePoint) != 0)
-            {
-                throw new InvalidOperationException(
-                    $"Managed output path traverses a symbolic link or reparse point and cannot be safely restricted: {existingEntry}");
-            }
+    private static void ValidateExistingPathEntry(string path)
+    {
+        var existingEntry = FindPathEntryWithoutFollowing(path);
+        if (existingEntry is null)
+            return;
+
+        FileAttributes attributes;
+        try
+        {
+            attributes = File.GetAttributes(existingEntry);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            throw new InvalidOperationException(
+                $"Managed output path contains an existing entry that cannot be safely inspected: {existingEntry}",
+                exception);
+        }
+        if ((attributes & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException(
+                $"Managed output path traverses a symbolic link or reparse point and cannot be safely restricted: {existingEntry}");
         }
     }
 

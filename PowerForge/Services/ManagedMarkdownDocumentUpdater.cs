@@ -14,22 +14,7 @@ public sealed class ManagedMarkdownDocumentUpdater
     public void ValidateUpdate(ManagedMarkdownUpdateRequest request)
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
-        var path = NormalizePath(request.Path);
-        var markerNamespace = NormalizeMarkerNamespace(request.MarkerNamespace);
-        var blockId = NormalizeBlockId(request.BlockId);
-        var markerFormat = NormalizeMarkerFormat(request.MarkerFormat);
-        ValidateDestinationPath(path);
-        if (!File.Exists(path))
-        {
-            if (!request.CreateIfMissing)
-                throw new FileNotFoundException($"Managed Markdown document was not found: {path}", path);
-            return;
-        }
-
-        var document = ReadDocument(path);
-        var location = FindBlock(document.Text, markerNamespace, blockId, markerFormat);
-        if (location is null && request.MissingBlockBehavior != ManagedMarkdownMissingBlockBehavior.Append)
-            throw new InvalidOperationException($"Managed block '{blockId}' was not found in '{path}'.");
+        PrepareUpdates(new[] { request });
     }
 
     /// <summary>
@@ -40,65 +25,261 @@ public sealed class ManagedMarkdownDocumentUpdater
     public ManagedMarkdownUpdateResult Update(ManagedMarkdownUpdateRequest request)
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
+        return UpdateMany(new[] { request })[0];
+    }
 
-        var path = NormalizePath(request.Path);
-        var markerNamespace = NormalizeMarkerNamespace(request.MarkerNamespace);
-        var blockId = NormalizeBlockId(request.BlockId);
-        var markerFormat = NormalizeMarkerFormat(request.MarkerFormat);
-        var replacement = NormalizeMarkdown(request.Markdown);
-        ValidateDestinationPath(path);
-        var exists = File.Exists(path);
-
-        DocumentText document;
-        string updated;
-        var created = false;
-        var appended = false;
-
-        if (!exists)
+    /// <summary>
+    /// Projects a batch of managed-block updates in memory, validates the final documents, and writes only after every update is valid.
+    /// Documents targeted more than once are written once with their final projected content.
+    /// </summary>
+    /// <param name="requests">Managed document update requests.</param>
+    /// <returns>One update result per request, in input order.</returns>
+    public ManagedMarkdownUpdateResult[] UpdateMany(IEnumerable<ManagedMarkdownUpdateRequest> requests)
+    {
+        if (requests is null) throw new ArgumentNullException(nameof(requests));
+        var batch = PrepareUpdates(requests);
+        foreach (var document in batch.Documents)
         {
-            if (!request.CreateIfMissing)
-                throw new FileNotFoundException($"Managed Markdown document was not found: {path}", path);
+            if (!document.Changed)
+                continue;
 
-            document = DocumentText.NewUtf8();
-            updated = CreateDocument(markerNamespace, blockId, replacement, request.NewDocumentTitle, Environment.NewLine, markerFormat);
-            created = true;
+            var directory = System.IO.Path.GetDirectoryName(document.Path);
+            if (!string.IsNullOrWhiteSpace(directory))
+                Directory.CreateDirectory(directory);
+            WriteDocument(document.Path, document.Document, document.Text);
         }
-        else
+        return batch.Results;
+    }
+
+    private static PreparedBatch PrepareUpdates(IEnumerable<ManagedMarkdownUpdateRequest> requests)
+    {
+        var source = requests.ToArray();
+        var documents = new Dictionary<string, PreparedDocument>(GetPathIdentityComparer());
+        var orderedDocuments = new List<PreparedDocument>();
+        var results = new ManagedMarkdownUpdateResult[source.Length];
+
+        for (var index = 0; index < source.Length; index++)
         {
-            document = ReadDocument(path);
-            var location = FindBlock(document.Text, markerNamespace, blockId, markerFormat);
+            var request = source[index] ?? throw new ArgumentException("Managed Markdown update requests cannot contain null entries.", nameof(requests));
+            var normalized = NormalizeRequest(request);
+            ValidateDestinationPath(normalized.Path);
+            var identity = ResolvePathIdentity(normalized.Path);
 
-            if (location is null)
+            if (!documents.TryGetValue(identity.Key, out var document))
             {
-                if (request.MissingBlockBehavior != ManagedMarkdownMissingBlockBehavior.Append)
-                    throw new InvalidOperationException($"Managed block '{blockId}' was not found in '{path}'.");
+                var ambiguousAlias = orderedDocuments.FirstOrDefault(existing =>
+                    string.Equals(existing.Path, normalized.Path, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(existing.IdentityKey, identity.Key, StringComparison.Ordinal) &&
+                    (!existing.IdentityWasResolved || !identity.WasResolved));
+                if (ambiguousAlias is not null)
+                {
+                    throw new InvalidOperationException(
+                        $"Managed Markdown paths '{ambiguousAlias.Path}' and '{normalized.Path}' may refer to the same destination. " +
+                        "Use one canonical path casing for a batch that creates a new document.");
+                }
 
-                updated = AppendBlock(document.Text, markerNamespace, blockId, replacement, DetectPreferredLineEnding(document.Text), markerFormat);
-                appended = true;
+                var exists = File.Exists(normalized.Path);
+                document = new PreparedDocument(
+                    normalized.Path,
+                    identity.Key,
+                    identity.WasResolved,
+                    exists ? ReadDocument(normalized.Path) : DocumentText.NewUtf8(),
+                    exists);
+                documents.Add(identity.Key, document);
+                orderedDocuments.Add(document);
+            }
+
+            normalized.OriginalLocation = document.Exists
+                ? FindBlock(
+                    document.Document.Text,
+                    normalized.MarkerNamespace,
+                    normalized.BlockId,
+                    normalized.MarkerFormat)
+                : null;
+            foreach (var prior in document.Requests)
+            {
+                if (TargetsCanMatchSameMarker(prior, normalized))
+                {
+                    throw new InvalidOperationException(
+                        $"Managed block '{normalized.BlockId}' is targeted more than once in '{document.Path}'.");
+                }
+                if (prior.OriginalLocation is not null && normalized.OriginalLocation is not null &&
+                    BlocksOverlap(prior.OriginalLocation, normalized.OriginalLocation))
+                {
+                    throw new InvalidOperationException(
+                        $"Managed blocks '{prior.BlockId}' and '{normalized.BlockId}' overlap in '{document.Path}'.");
+                }
+            }
+
+            var before = document.Text;
+            string updated;
+            var created = false;
+            var appended = false;
+
+            if (!document.Exists)
+            {
+                if (!normalized.CreateIfMissing)
+                    throw new FileNotFoundException($"Managed Markdown document was not found: {normalized.Path}", normalized.Path);
+
+                updated = CreateDocument(
+                    normalized.MarkerNamespace,
+                    normalized.BlockId,
+                    normalized.Markdown,
+                    normalized.NewDocumentTitle,
+                    Environment.NewLine,
+                    normalized.MarkerFormat);
+                created = true;
             }
             else
             {
-                updated = ReplaceBlock(document.Text, location, replacement);
+                var location = FindBlock(
+                    document.Text,
+                    normalized.MarkerNamespace,
+                    normalized.BlockId,
+                    normalized.MarkerFormat);
+                if (location is null)
+                {
+                    if (normalized.MissingBlockBehavior != ManagedMarkdownMissingBlockBehavior.Append)
+                        throw new InvalidOperationException($"Managed block '{normalized.BlockId}' was not found in '{normalized.Path}'.");
+
+                    updated = AppendBlock(
+                        document.Text,
+                        normalized.MarkerNamespace,
+                        normalized.BlockId,
+                        normalized.Markdown,
+                        DetectPreferredLineEnding(document.Text),
+                        normalized.MarkerFormat);
+                    appended = true;
+                }
+                else
+                {
+                    updated = ReplaceBlock(document.Text, location, normalized.Markdown);
+                }
+            }
+
+            document.Text = updated;
+            document.Exists = true;
+            document.Requests.Add(normalized);
+            results[index] = new ManagedMarkdownUpdateResult
+            {
+                Path = normalized.Path,
+                BlockId = normalized.BlockId,
+                Changed = !string.Equals(before, updated, StringComparison.Ordinal),
+                Created = created,
+                Appended = appended
+            };
+        }
+
+        foreach (var document in orderedDocuments)
+        {
+            var finalLocations = new List<(NormalizedUpdateRequest Request, BlockLocation Location)>();
+            foreach (var request in document.Requests)
+            {
+                var location = FindBlock(document.Text, request.MarkerNamespace, request.BlockId, request.MarkerFormat);
+                if (location is null)
+                {
+                    throw new InvalidOperationException(
+                        $"Managed Markdown batch update did not preserve block '{request.BlockId}' in '{document.Path}'. " +
+                        "Managed blocks in the same document cannot overlap.");
+                }
+                foreach (var prior in finalLocations)
+                {
+                    if (BlocksOverlap(prior.Location, location))
+                    {
+                        throw new InvalidOperationException(
+                            $"Managed Markdown batch update produced overlapping blocks '{prior.Request.BlockId}' and " +
+                            $"'{request.BlockId}' in '{document.Path}'.");
+                    }
+                }
+                finalLocations.Add((request, location));
+            }
+            document.Changed = !string.Equals(document.Document.Text, document.Text, StringComparison.Ordinal);
+        }
+
+        return new PreparedBatch(orderedDocuments.ToArray(), results);
+    }
+
+    private static NormalizedUpdateRequest NormalizeRequest(ManagedMarkdownUpdateRequest request)
+        => new(
+            NormalizePath(request.Path),
+            NormalizeMarkerNamespace(request.MarkerNamespace),
+            NormalizeBlockId(request.BlockId),
+            NormalizeMarkerFormat(request.MarkerFormat),
+            NormalizeMarkdown(request.Markdown),
+            request.CreateIfMissing,
+            request.MissingBlockBehavior,
+            request.NewDocumentTitle);
+
+    private static bool TargetsCanMatchSameMarker(NormalizedUpdateRequest first, NormalizedUpdateRequest second)
+    {
+        if (!string.Equals(first.BlockId, second.BlockId, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var shareLegacy = first.MarkerFormat != ManagedMarkdownMarkerFormat.Namespaced &&
+                          second.MarkerFormat != ManagedMarkdownMarkerFormat.Namespaced;
+        var shareNamespaced = first.MarkerFormat != ManagedMarkdownMarkerFormat.LegacyBlockId &&
+                              second.MarkerFormat != ManagedMarkdownMarkerFormat.LegacyBlockId &&
+                              string.Equals(first.MarkerNamespace, second.MarkerNamespace, StringComparison.OrdinalIgnoreCase);
+        return shareLegacy || shareNamespaced;
+    }
+
+    private static bool BlocksOverlap(BlockLocation first, BlockLocation second)
+        => first.StartLine.Start < second.EndLine.End && second.StartLine.Start < first.EndLine.End;
+
+    private static StringComparer GetPathIdentityComparer()
+        => System.IO.Path.DirectorySeparatorChar == '\\'
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+
+    private static PathIdentity ResolvePathIdentity(string path)
+    {
+        if (!File.Exists(path))
+            return new PathIdentity(path, wasResolved: false);
+
+        var fullPath = System.IO.Path.GetFullPath(path);
+        var root = System.IO.Path.GetPathRoot(fullPath);
+        if (string.IsNullOrWhiteSpace(root))
+            return new PathIdentity(fullPath, wasResolved: false);
+
+        var current = root!;
+        var relative = fullPath.Substring(root!.Length);
+        var separators = System.IO.Path.DirectorySeparatorChar == System.IO.Path.AltDirectorySeparatorChar
+            ? new[] { System.IO.Path.DirectorySeparatorChar }
+            : new[] { System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar };
+        var segments = relative.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+        try
+        {
+            foreach (var segment in segments)
+            {
+                if (!Directory.Exists(current))
+                    return new PathIdentity(fullPath, wasResolved: false);
+
+                string? exact = null;
+                string? caseInsensitive = null;
+                foreach (var entry in Directory.EnumerateFileSystemEntries(current))
+                {
+                    var name = System.IO.Path.GetFileName(entry);
+                    if (string.Equals(name, segment, StringComparison.Ordinal))
+                    {
+                        exact = entry;
+                        break;
+                    }
+                    if (caseInsensitive is null && string.Equals(name, segment, StringComparison.OrdinalIgnoreCase))
+                        caseInsensitive = entry;
+                }
+
+                var match = exact ?? caseInsensitive;
+                if (match is null)
+                    return new PathIdentity(fullPath, wasResolved: false);
+                current = match;
             }
         }
-
-        var changed = !string.Equals(document.Text, updated, StringComparison.Ordinal);
-        if (changed)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            var directory = System.IO.Path.GetDirectoryName(path);
-            if (!string.IsNullOrWhiteSpace(directory))
-                Directory.CreateDirectory(directory);
-            WriteDocument(path, document, updated);
+            return new PathIdentity(fullPath, wasResolved: false);
         }
 
-        return new ManagedMarkdownUpdateResult
-        {
-            Path = path,
-            BlockId = blockId,
-            Changed = changed,
-            Created = created,
-            Appended = appended
-        };
+        return new PathIdentity(System.IO.Path.GetFullPath(current), wasResolved: true);
     }
 
     /// <summary>
@@ -464,6 +645,85 @@ public sealed class ManagedMarkdownDocumentUpdater
 
         internal static DocumentText NewUtf8()
             => new(string.Empty, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), Array.Empty<byte>());
+    }
+
+    private sealed class NormalizedUpdateRequest
+    {
+        internal NormalizedUpdateRequest(
+            string path,
+            string markerNamespace,
+            string blockId,
+            ManagedMarkdownMarkerFormat markerFormat,
+            string markdown,
+            bool createIfMissing,
+            ManagedMarkdownMissingBlockBehavior missingBlockBehavior,
+            string? newDocumentTitle)
+        {
+            Path = path;
+            MarkerNamespace = markerNamespace;
+            BlockId = blockId;
+            MarkerFormat = markerFormat;
+            Markdown = markdown;
+            CreateIfMissing = createIfMissing;
+            MissingBlockBehavior = missingBlockBehavior;
+            NewDocumentTitle = newDocumentTitle;
+        }
+
+        internal string Path { get; }
+        internal string MarkerNamespace { get; }
+        internal string BlockId { get; }
+        internal ManagedMarkdownMarkerFormat MarkerFormat { get; }
+        internal string Markdown { get; }
+        internal bool CreateIfMissing { get; }
+        internal ManagedMarkdownMissingBlockBehavior MissingBlockBehavior { get; }
+        internal string? NewDocumentTitle { get; }
+        internal BlockLocation? OriginalLocation { get; set; }
+    }
+
+    private sealed class PreparedDocument
+    {
+        internal PreparedDocument(string path, string identityKey, bool identityWasResolved, DocumentText document, bool exists)
+        {
+            Path = path;
+            IdentityKey = identityKey;
+            IdentityWasResolved = identityWasResolved;
+            Document = document;
+            Text = document.Text;
+            Exists = exists;
+        }
+
+        internal string Path { get; }
+        internal string IdentityKey { get; }
+        internal bool IdentityWasResolved { get; }
+        internal DocumentText Document { get; }
+        internal List<NormalizedUpdateRequest> Requests { get; } = new();
+        internal string Text { get; set; }
+        internal bool Exists { get; set; }
+        internal bool Changed { get; set; }
+    }
+
+    private readonly struct PathIdentity
+    {
+        internal PathIdentity(string key, bool wasResolved)
+        {
+            Key = key;
+            WasResolved = wasResolved;
+        }
+
+        internal string Key { get; }
+        internal bool WasResolved { get; }
+    }
+
+    private sealed class PreparedBatch
+    {
+        internal PreparedBatch(PreparedDocument[] documents, ManagedMarkdownUpdateResult[] results)
+        {
+            Documents = documents;
+            Results = results;
+        }
+
+        internal PreparedDocument[] Documents { get; }
+        internal ManagedMarkdownUpdateResult[] Results { get; }
     }
 
     private sealed class LineLocation
