@@ -75,14 +75,29 @@ public sealed partial class ModulePipelineRunner
             if (ShouldSkipSynchronizedReleaseOperation(state, operationKey))
                 continue;
 
+            var useDuplicateTolerantNuGetRetry = destination == PackageBuildPublishDestination.NuGet &&
+                state.IsResumingSynchronizedRelease &&
+                WasSynchronizedReleaseOperationAttempted(state, operationKey);
             MarkSynchronizedReleaseOperationAttempted(state, operationKey);
-            if (TryExecuteExistingProjectBuildPublish(plan, session, state, segment, destination))
+            if (TryExecuteExistingProjectBuildPublish(
+                    plan,
+                    session,
+                    state,
+                    segment,
+                    destination,
+                    useDuplicateTolerantNuGetRetry))
             {
                 MarkSynchronizedReleaseOperationCompleted(state, operationKey);
                 continue;
             }
 
-            ExecuteProjectBuildSegment(plan, session, state, segment, mode);
+            ExecuteProjectBuildSegment(
+                plan,
+                session,
+                state,
+                segment,
+                mode,
+                useDuplicateTolerantNuGetRetry);
             MarkSynchronizedReleaseOperationCompleted(state, operationKey);
         }
 
@@ -95,14 +110,29 @@ public sealed partial class ModulePipelineRunner
             if (ShouldSkipSynchronizedReleaseOperation(state, operationKey))
                 continue;
 
+            var useDuplicateTolerantNuGetRetry = destination == PackageBuildPublishDestination.NuGet &&
+                state.IsResumingSynchronizedRelease &&
+                WasSynchronizedReleaseOperationAttempted(state, operationKey);
             MarkSynchronizedReleaseOperationAttempted(state, operationKey);
-            if (TryExecuteExistingPackageBuildPublish(plan, session, state, segment, destination))
+            if (TryExecuteExistingPackageBuildPublish(
+                    plan,
+                    session,
+                    state,
+                    segment,
+                    destination,
+                    useDuplicateTolerantNuGetRetry))
             {
                 MarkSynchronizedReleaseOperationCompleted(state, operationKey);
                 continue;
             }
 
-            ExecutePackageBuildSegment(plan, session, state, segment, mode);
+            ExecutePackageBuildSegment(
+                plan,
+                session,
+                state,
+                segment,
+                mode,
+                useDuplicateTolerantNuGetRetry);
             MarkSynchronizedReleaseOperationCompleted(state, operationKey);
         }
     }
@@ -112,7 +142,8 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineExecutionSession session,
         ModulePipelineRunState state,
         ConfigurationProjectBuildSegment segment,
-        PackageBuildPublishDestination destination)
+        PackageBuildPublishDestination destination,
+        bool useDuplicateTolerantNuGetRetry)
     {
         if (!state.PackageBuildResultsBySegment.TryGetValue(segment, out var existing))
             return false;
@@ -122,6 +153,7 @@ public sealed partial class ModulePipelineRunner
         var cfg = segment.Configuration ?? throw new InvalidOperationException("ProjectBuild configuration is missing.");
         var configPath = ResolvePackageBuildPath(plan.ProjectRoot, cfg.ConfigPath);
         var configuration = LoadProjectBuildConfiguration(configPath, cfg);
+        ApplySynchronizedNuGetRetryPolicy(configuration, useDuplicateTolerantNuGetRetry);
         if (!CanPublishExistingPackageBuildResult(configuration, configPath, destination))
             return false;
         if (!HasReusablePackageBuildArtifacts(existing.Result.Release, destination))
@@ -147,7 +179,8 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineExecutionSession session,
         ModulePipelineRunState state,
         ConfigurationPackageBuildSegment segment,
-        PackageBuildPublishDestination destination)
+        PackageBuildPublishDestination destination,
+        bool useDuplicateTolerantNuGetRetry)
     {
         if (!state.PackageBuildResultsBySegment.TryGetValue(segment, out var existing))
             return false;
@@ -155,6 +188,7 @@ public sealed partial class ModulePipelineRunner
             return false;
 
         var configuration = MapPackageBuildConfiguration(segment.Configuration, plan.ProjectRoot);
+        ApplySynchronizedNuGetRetryPolicy(configuration, useDuplicateTolerantNuGetRetry);
         var configPath = Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
         if (!CanPublishExistingPackageBuildResult(configuration, configPath, destination))
             return false;
@@ -222,6 +256,14 @@ public sealed partial class ModulePipelineRunner
             .ToArray();
 
         return paths.Length > 0 && paths.All(path => File.Exists(path!));
+    }
+
+    private static void ApplySynchronizedNuGetRetryPolicy(
+        ProjectBuildConfiguration configuration,
+        bool useDuplicateTolerantNuGetRetry)
+    {
+        if (useDuplicateTolerantNuGetRetry)
+            configuration.SkipDuplicate = true;
     }
 
     private void PublishExistingPackageBuildResult(
@@ -416,13 +458,19 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineExecutionSession session,
         ModulePipelineRunState state,
         ConfigurationProjectBuildSegment segment,
-        PackageBuildExecutionMode mode)
+        PackageBuildExecutionMode mode,
+        bool useDuplicateTolerantNuGetRetry = false)
     {
         var step = session.GetProjectBuildStep(segment);
         session.Start(step);
         try
         {
-            var result = ExecuteProjectBuildSegment(plan, state, segment, mode);
+            var result = ExecuteProjectBuildSegment(
+                plan,
+                state,
+                segment,
+                mode,
+                useDuplicateTolerantNuGetRetry);
             var laneLabel = segment.Configuration.Name ?? result.ConfigPath;
             var checkpointKey = ResolveSynchronizedReleaseLaneKey(
                 plan,
@@ -456,13 +504,19 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineExecutionSession session,
         ModulePipelineRunState state,
         ConfigurationPackageBuildSegment segment,
-        PackageBuildExecutionMode mode)
+        PackageBuildExecutionMode mode,
+        bool useDuplicateTolerantNuGetRetry = false)
     {
         var step = session.GetPackageBuildStep(segment);
         session.Start(step);
         try
         {
-            var result = ExecutePackageBuildSegment(plan, state, segment, mode);
+            var result = ExecutePackageBuildSegment(
+                plan,
+                state,
+                segment,
+                mode,
+                useDuplicateTolerantNuGetRetry);
             var laneLabel = segment.Configuration.Name ?? result.ConfigPath;
             var checkpointKey = ResolveSynchronizedReleaseLaneKey(
                 plan,
@@ -535,7 +589,8 @@ public sealed partial class ModulePipelineRunner
         ModulePipelinePlan plan,
         ModulePipelineRunState state,
         ConfigurationProjectBuildSegment segment,
-        PackageBuildExecutionMode mode)
+        PackageBuildExecutionMode mode,
+        bool useDuplicateTolerantNuGetRetry = false)
     {
         var cfg = segment.Configuration ?? throw new InvalidOperationException("ProjectBuild configuration is missing.");
         if (string.IsNullOrWhiteSpace(cfg.ConfigPath))
@@ -543,6 +598,7 @@ public sealed partial class ModulePipelineRunner
 
         var configPath = ResolvePackageBuildPath(plan.ProjectRoot, cfg.ConfigPath);
         var configuration = LoadProjectBuildConfiguration(configPath, cfg);
+        ApplySynchronizedNuGetRetryPolicy(configuration, useDuplicateTolerantNuGetRetry);
         var laneLabel = cfg.Name ?? configPath;
         var checkpointKey = ResolveSynchronizedReleaseLaneKey(
             plan,
@@ -579,10 +635,12 @@ public sealed partial class ModulePipelineRunner
         ModulePipelinePlan plan,
         ModulePipelineRunState state,
         ConfigurationPackageBuildSegment segment,
-        PackageBuildExecutionMode mode)
+        PackageBuildExecutionMode mode,
+        bool useDuplicateTolerantNuGetRetry = false)
     {
         var cfg = segment.Configuration ?? throw new InvalidOperationException("PackageBuild configuration is missing.");
         var projectBuildConfig = MapPackageBuildConfiguration(cfg, plan.ProjectRoot);
+        ApplySynchronizedNuGetRetryPolicy(projectBuildConfig, useDuplicateTolerantNuGetRetry);
         var laneLabel = cfg.Name ?? Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
         var checkpointKey = ResolveSynchronizedReleaseLaneKey(
             plan,

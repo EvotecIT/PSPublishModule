@@ -13,7 +13,8 @@ public sealed partial class ModulePipelineRunner
     {
         var path = ResolveSynchronizedReleaseCheckpointPath(plan);
         var checkpointExists = File.Exists(path);
-        if (!ShouldUseSynchronizedReleaseCheckpoint(plan, state))
+        var inspectBuildGateCheckpoint = checkpointExists && plan.GateMode == ConfigurationGateMode.Build;
+        if (!ShouldUseSynchronizedReleaseCheckpoint(plan, state) && !inspectBuildGateCheckpoint)
         {
             if (plan.GateMode is ConfigurationGateMode.Manifest or
                 ConfigurationGateMode.Documentation or
@@ -51,6 +52,21 @@ public sealed partial class ModulePipelineRunner
         {
             throw new InvalidOperationException(
                 $"Coordinated release checkpoint '{path}' has an unsupported schema. Delete it only if the incomplete release should be abandoned.");
+        }
+
+        if (plan.GateMode == ConfigurationGateMode.Build)
+        {
+            if (IsPristineSynchronizedReleaseCheckpoint(checkpoint))
+            {
+                File.Delete(path);
+                DeleteEmptySynchronizedReleaseCheckpointDirectories(path);
+                _logger.Warn(
+                    $"Discarded unused coordinated release checkpoint '{path}' before running the build gate because no package lane or publish operation had started.");
+                return;
+            }
+
+            throw new InvalidOperationException(
+                $"Gate mode Build cannot run while coordinated release checkpoint '{path}' is incomplete because package builds may mutate release-bound source versions. Resume or explicitly abandon the coordinated release before running the build gate.");
         }
 
         try
