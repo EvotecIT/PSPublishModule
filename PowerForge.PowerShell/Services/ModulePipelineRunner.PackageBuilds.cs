@@ -668,6 +668,12 @@ public sealed partial class ModulePipelineRunner
             laneLabel,
             checkpointKey,
             configuration);
+        var releaseVersionFloor = ResolveCoordinatedVersionFloor(
+            plan,
+            state,
+            ReleaseVersionSource.ProjectBuild,
+            checkpointKey,
+            cfg.UseAsReleaseVersionSource);
         if (mode is not PackageBuildExecutionMode.PublishNuGet and not PackageBuildExecutionMode.PublishGitHub)
             MarkSynchronizedReleaseLaneAttempted(state, checkpointKey);
         ApplyProjectBuildGateDefaults(configuration, mode, plan.GateMode);
@@ -681,6 +687,10 @@ public sealed partial class ModulePipelineRunner
             Build = ResolveBuild(actions, mode, plan.GateMode),
             PublishNuget = ResolvePublishNuGet(actions, mode),
             PublishGitHub = ResolvePublishGitHub(actions, mode),
+            ReleaseVersionFloor = releaseVersionFloor,
+            ReleaseVersionFloorProject = releaseVersionFloor is null
+                ? null
+                : plan.Release?.Configuration?.PrimaryProject,
             RemotePublishAttempted = remotePublishAttempted,
             CoordinatedReleaseCheckpointActive = coordinatedReleaseCheckpointActive
         };
@@ -714,6 +724,12 @@ public sealed partial class ModulePipelineRunner
             laneLabel,
             checkpointKey,
             projectBuildConfig);
+        var releaseVersionFloor = ResolveCoordinatedVersionFloor(
+            plan,
+            state,
+            ReleaseVersionSource.PackageBuild,
+            checkpointKey,
+            cfg.UseAsReleaseVersionSource);
         if (mode is not PackageBuildExecutionMode.PublishNuGet and not PackageBuildExecutionMode.PublishGitHub)
             MarkSynchronizedReleaseLaneAttempted(state, checkpointKey);
         ApplyProjectBuildGateDefaults(projectBuildConfig, mode, plan.GateMode);
@@ -728,6 +744,10 @@ public sealed partial class ModulePipelineRunner
             Build = ResolveBuild(actions, mode, plan.GateMode),
             PublishNuget = ResolvePublishNuGet(actions, mode),
             PublishGitHub = ResolvePublishGitHub(actions, mode),
+            ReleaseVersionFloor = releaseVersionFloor,
+            ReleaseVersionFloorProject = releaseVersionFloor is null
+                ? null
+                : plan.Release?.Configuration?.PrimaryProject,
             RemotePublishAttempted = remotePublishAttempted,
             CoordinatedReleaseCheckpointActive = coordinatedReleaseCheckpointActive
         };

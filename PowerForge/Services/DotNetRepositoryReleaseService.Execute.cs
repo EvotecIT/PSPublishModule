@@ -245,6 +245,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 _logger.Info($"Expected version map: {expectedMap.Count} project(s) ({mode}{wildcard}).");
             }
 
+            PrepareReleaseVersionFloor(packable, expectedGlobal, expectedMap, spec);
             var alignedVersions = ResolveAlignedPackageVersions(packable, expectedGlobal, expectedMap, spec);
             foreach (var project in packable)
             {
@@ -273,6 +274,12 @@ public sealed partial class DotNetRepositoryReleaseService
                     {
                         resolvedVersion = ResolveVersion(project, expectedVersion, spec, out resolutionWarning);
                     }
+
+                    resolvedVersion = ApplyReleaseVersionFloor(
+                        project,
+                        expectedVersion,
+                        resolvedVersion,
+                        spec);
                 }
                 catch (Exception ex)
                 {

@@ -320,6 +320,7 @@ Versioning
 - `VersionTracks.<Name>.Projects`: sibling projects that should be stamped to the same resolved version. `AnchorProject` is included automatically.
 - When `AnchorPackageId` is used, also set `AnchorProject` so the anchor project itself is stamped automatically.
 - `AlignPackageVersions`: when true, projects using the same X-pattern are stepped from the highest current package version found for any project in that group. For example, if one `2.0.X` package is at `2.0.5` and another is new, both plan `2.0.6`. Exact-version overrides remain exact.
+- In a module pipeline with `Release.SynchronizeModuleVersion`, the next available module version is also a floor for `Release.PrimaryProject`. If that project belongs to an aligned X-pattern group, the whole group is raised to the floor. A higher numeric NuGet-derived package candidate still wins. At the same numeric version, a stable X-pattern candidate does not erase the configured module prerelease; explicit prerelease versions retain normal semantic-version ordering. The module and primary package patterns must describe the same version line.
 - When no expected version is provided for a project, the existing csproj version is used.
 - When both `VersionTracks` and `ExpectedVersionMap` are present, the explicit map wins for matching projects.
 - `UpdateVersions`: when false, csproj files are not updated.

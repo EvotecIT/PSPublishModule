@@ -73,6 +73,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             var resumedDependencyBuildUsedExactVersion = false;
             var resumedCompanionBuildUsedExactVersion = false;
             var resumedCompanionExtraBuildUsedExactVersion = false;
+            var resumedBuildsSkippedVersionFloor = true;
             var runNumber = 1;
             ProjectBuildHostExecutionResult ExecutePackageBuild(
                 ProjectBuildHostRequest request,
@@ -96,6 +97,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                     packagePublishCount++;
                 if (runNumber == 2 && request.PublishNuget != true)
                 {
+                    resumedBuildsSkippedVersionFloor &= request.ReleaseVersionFloor is null &&
+                        request.ReleaseVersionFloorProject is null;
                     var usedExactVersion =
                         configuration!.ExpectedVersionMap is not null &&
                         configuration.ExpectedVersionMap.TryGetValue(projectName, out var expected) &&
@@ -157,6 +160,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Assert.True(resumedDependencyBuildUsedExactVersion);
             Assert.True(resumedCompanionBuildUsedExactVersion);
             Assert.True(resumedCompanionExtraBuildUsedExactVersion);
+            Assert.True(resumedBuildsSkippedVersionFloor);
             Assert.Equal(synchronizedVersion, result.Plan.ResolvedVersion);
             Assert.Equal(3, packagePublishCount);
             Assert.Equal(new[] { synchronizedVersion }, secondHosted.PublishedModuleVersions);

@@ -39,6 +39,7 @@ public sealed partial class ModulePipelineRunner
         public Dictionary<object, ProjectBuildHostExecutionResult> PackageBuildResultsBySegment { get; } = new();
         public List<ExternalAssetPreparationResult> ExternalAssetResults { get; } = new();
         public List<ReleaseVersionCandidate> ReleaseVersionCandidates { get; } = new();
+        public string? CoordinatedVersionFloor { get; set; }
         public ModuleReleaseCoordinationResult? ReleaseCoordinationResult { get; set; }
         public SynchronizedReleaseCheckpoint? SynchronizedReleaseCheckpoint { get; set; }
         public string? SynchronizedReleaseCheckpointPath { get; set; }

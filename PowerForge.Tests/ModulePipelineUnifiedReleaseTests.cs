@@ -539,6 +539,107 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     }
 
     [Fact]
+    public void Run_PassesModuleVersionFloorToSelectedProjectBuild()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "Mailozaurr";
+            const string coordinatedVersion = "2.1.7";
+            WriteMinimalModule(root.FullName, moduleName, "2.1.6");
+            WriteProjectBuildConfig(root.FullName, Path.Combine("Build", "project.build.json"));
+
+            string? capturedFloor = null;
+            string? capturedProject = null;
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    capturedFloor = request.ReleaseVersionFloor;
+                    capturedProject = request.ReleaseVersionFloorProject;
+                    var release = new DotNetRepositoryReleaseResult
+                    {
+                        Success = true,
+                        ResolvedVersion = coordinatedVersion
+                    };
+                    release.ResolvedVersionsByProject[moduleName] = coordinatedVersion;
+                    release.Projects.Add(new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = moduleName,
+                        PackageId = moduleName,
+                        IsPackable = true,
+                        NewVersion = coordinatedVersion
+                    });
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        Result = new ProjectBuildResult
+                        {
+                            Success = true,
+                            Release = release
+                        }
+                    };
+                });
+
+            var result = runner.Run(new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "2.1.X",
+                    StagingPath = stagingPath
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration { LocalVersion = true }
+                    },
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            Name = moduleName,
+                            ConfigPath = Path.Combine("Build", "project.build.json"),
+                            BuildBeforeModule = true,
+                            UseAsReleaseVersionSource = true
+                        }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            VersionSource = ReleaseVersionSource.ProjectBuild,
+                            PrimaryProject = moduleName,
+                            SynchronizeModuleVersion = true
+                        }
+                    }
+                }
+            });
+
+            Assert.Equal(coordinatedVersion, capturedFloor);
+            Assert.Equal(moduleName, capturedProject);
+            Assert.Equal(coordinatedVersion, result.Plan.ResolvedVersion);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_FailsUnifiedGitHubReleaseWhenNoPayloadAssetsExist()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

@@ -43,11 +43,22 @@ public sealed partial class ModulePipelineRunner
         var activeExplicitLanes = explicitLanes
             .Where(lane => IsSynchronizedReleaseLaneActive(gateMode, lane.Enabled))
             .ToArray();
+        if (activeExplicitLanes.Length > 1)
+        {
+            throw new InvalidOperationException(
+                "SynchronizeModuleVersion requires exactly one active release source lane marked with UseAsReleaseVersionSource.");
+        }
         if (activeExplicitLanes.Any(lane =>
                 !ShouldRunPackageBuildBeforeModule(releaseSegment, lane.BuildBeforeModule)))
         {
             throw new InvalidOperationException(
                 "SynchronizeModuleVersion requires every selected release source lane to run before the module build. Set BuildBeforeModule or configure Release BuildOrder accordingly.");
+        }
+
+        if (string.IsNullOrWhiteSpace(release.PrimaryProject))
+        {
+            throw new InvalidOperationException(
+                "SynchronizeModuleVersion requires Release PrimaryProject so the module version can be coordinated with one explicit package project.");
         }
 
         if (ShouldSynchronizeModuleVersionForRun(releaseSegment, gateMode) &&

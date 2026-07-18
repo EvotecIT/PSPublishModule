@@ -605,7 +605,7 @@ public sealed partial class ModulePipelineRunner
         if (synchronizeModuleVersionForRun)
         {
             resolved = ResolveProvisionalSynchronizedModuleVersion(expectedVersionResolved);
-            _logger.Info("Synchronized release version selected: skipping the independent module repository version lookup.");
+            _logger.Info("Synchronized release version selected: deferring the module repository lookup to the coordinated release-source build.");
         }
         else
         {
@@ -949,7 +949,7 @@ public sealed partial class ModulePipelineRunner
             .Where(p => p is not null && (!string.IsNullOrWhiteSpace(p.Find) || !string.IsNullOrWhiteSpace(p.Replace)))
             .ToArray();
 
-        return new ModulePipelinePlan(
+        var plan = new ModulePipelinePlan(
             moduleName: moduleName,
             projectRoot: projectRoot,
             expectedVersion: expectedVersionResolved,
@@ -1025,6 +1025,8 @@ public sealed partial class ModulePipelineRunner
             stagingWasGenerated: stagingWasGenerated,
             deleteGeneratedStagingAfterRun: deleteAfter,
             embeddedModules: embeddedModules);
+        plan.UseLocalVersioning = localVersioning;
+        return plan;
     }
 
     private void ApplyGateModeToPlanInputs(

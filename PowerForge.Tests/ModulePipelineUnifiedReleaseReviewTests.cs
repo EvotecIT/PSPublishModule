@@ -80,6 +80,107 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     }
 
     [Fact]
+    public void Plan_RequiresPrimaryProjectForModuleVersionSynchronization()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "Packages",
+                            RootPath = "Sources",
+                            BuildBeforeModule = true,
+                            UseAsReleaseVersionSource = true
+                        }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            VersionSource = ReleaseVersionSource.PackageBuild,
+                            SynchronizeModuleVersion = true
+                        }
+                    }
+                }
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() => runner.Plan(spec));
+
+            Assert.Contains("PrimaryProject", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Plan_RejectsMultipleActiveModuleVersionSourceLanes()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var packageLanes = new[] { "Core", "Companion" }
+                .Select(name => (IConfigurationSegment)new ConfigurationPackageBuildSegment
+                {
+                    Configuration = new PackageBuildConfiguration
+                    {
+                        Name = name,
+                        RootPath = $"Sources/{name}",
+                        BuildBeforeModule = true,
+                        UseAsReleaseVersionSource = true
+                    }
+                });
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.X"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = packageLanes.Append(new ConfigurationReleaseSegment
+                {
+                    Configuration = new ReleaseConfiguration
+                    {
+                        VersionSource = ReleaseVersionSource.PackageBuild,
+                        PrimaryProject = "Core",
+                        SynchronizeModuleVersion = true
+                    }
+                }).ToArray()
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() => runner.Plan(spec));
+
+            Assert.Contains("exactly one active release source lane", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_PreflightsSynchronizedModuleVersionBeforePublishingNuGet()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

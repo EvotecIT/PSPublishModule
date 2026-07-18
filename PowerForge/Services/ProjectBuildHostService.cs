@@ -120,6 +120,8 @@ public sealed class ProjectBuildHostService
             configDirectory,
             request.PlanOutputPath,
             new ProjectBuildRequestedActions {
+                ReleaseVersionFloor = request.ReleaseVersionFloor,
+                ReleaseVersionFloorProject = request.ReleaseVersionFloorProject,
                 PlanOnly = request.PlanOnly,
                 UpdateVersions = request.UpdateVersions,
                 Build = request.Build,
