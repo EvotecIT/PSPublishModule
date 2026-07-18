@@ -69,6 +69,8 @@ public sealed class GitHubRepositoryContentService
         }, includeFundingTierData: tierRecognitionEnabled);
 
         var currentGitHubSponsors = source.Where(sponsor => sponsor.Sponsor.Status == GitHubSponsorStatus.Current).ToArray();
+        if (sponsorsSpec.FailOnEmpty && currentGitHubSponsors.Length == 0)
+            throw new InvalidOperationException("GitHub Sponsors returned no public current sponsors. No documents were modified.");
         if (tierRecognitionEnabled && sponsorsSpec.RequireFundingTierData &&
             currentGitHubSponsors.Length > 0 && currentGitHubSponsors.All(sponsor => sponsor.FundingTierMonthlyDollars is null))
         {
@@ -80,8 +82,6 @@ public sealed class GitHubRepositoryContentService
         var recognition = _recognitionService.Prepare(source, sponsorsSpec);
         var current = recognition.Sponsors.Where(sponsor => sponsor.Status == GitHubSponsorStatus.Current).ToArray();
         var former = recognition.Sponsors.Where(sponsor => sponsor.Status == GitHubSponsorStatus.Former).ToArray();
-        if (sponsorsSpec.FailOnEmpty && current.Length == 0)
-            throw new InvalidOperationException("GitHub Sponsors returned no public current sponsors. No documents were modified.");
 
         var basePath = ResolveBaseDirectory(baseDirectory);
         var planned = BuildPlans(outputs, recognition, basePath, restrictedOutputRoot);

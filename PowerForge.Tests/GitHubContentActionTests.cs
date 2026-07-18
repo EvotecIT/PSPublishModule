@@ -58,6 +58,7 @@ public sealed class GitHubContentActionTests
         Assert.Contains("includePrivate", client, StringComparison.Ordinal);
         Assert.Contains("repositoryOwner(login: $login)", client, StringComparison.Ordinal);
         Assert.Contains("Generated document is outside the caller workspace", action, StringComparison.Ordinal);
+        Assert.Contains("--token-env GITHUB_TOKEN", action, StringComparison.Ordinal);
         Assert.Contains("--restrict-output-root $workspace", action, StringComparison.Ordinal);
         Assert.Contains("changed-paths-json", action, StringComparison.Ordinal);
         Assert.Contains("GITHUB_TOKEN: ${{ inputs['github-token'] }}", action, StringComparison.Ordinal);

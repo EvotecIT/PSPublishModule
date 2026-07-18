@@ -55,7 +55,7 @@ runs:
           throw "GitHub content config not found: $configPath"
         }
 
-        $jsonLines = & dotnet run --project $project -c Release --no-build --framework net10.0 -- github content sync --config $configPath --restrict-output-root $workspace --output json
+        $jsonLines = & dotnet run --project $project -c Release --no-build --framework net10.0 -- github content sync --config $configPath --token-env GITHUB_TOKEN --restrict-output-root $workspace --output json
         $exitCode = $LASTEXITCODE
         $json = $jsonLines -join [Environment]::NewLine
         if ([string]::IsNullOrWhiteSpace($json)) {

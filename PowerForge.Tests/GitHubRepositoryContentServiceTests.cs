@@ -78,6 +78,15 @@ public sealed class GitHubRepositoryContentServiceTests
             {
                 Enabled = true,
                 SponsorableLogin = "owner",
+                ManualEntries = new[]
+                {
+                    new GitHubManualSponsorSpec
+                    {
+                        Key = "manual-company",
+                        DisplayName = "Manual Company",
+                        RecognitionTierKey = "Sponsors"
+                    }
+                },
                 Outputs = new[] { new GitHubSponsorsOutputSpec { Path = "README.md", BlockId = "sponsors" } }
             }
         }, root));
