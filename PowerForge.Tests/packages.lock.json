@@ -42,8 +42,8 @@
       },
       "AngleSharp": {
         "type": "Transitive",
-        "resolved": "1.4.1-beta.523",
-        "contentHash": "1HPqvhCAHu2X9umsuoy2RU7Ls6j+JIg5Enu1SgTinXqo/EVdXP5Ey/PA0vuwqVgo1x3xowXrDCgOWt2DM4vZSA=="
+        "resolved": "1.5.2",
+        "contentHash": "LVZ7rrr6GHbhERhTgVDarVygl1e6KwE96pronA90LBOMacDhxR4lB+xYLjn/vlnUu+xbOB2RM9fuCPEx5bdyWA=="
       },
       "AngleSharp.Css": {
         "type": "Transitive",
@@ -427,6 +427,28 @@
         "type": "Transitive",
         "resolved": "13.0.3",
         "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
+      },
+      "NuGet.Common": {
+        "type": "Transitive",
+        "resolved": "7.6.0",
+        "contentHash": "uyXLqkbbZmkMvdHOR23l1EHW2hRmULtzoG3Ocj84VpGptnNfkODVboHGJfDfcn9Gi9oUNDs8/VjL4FZcST6zVg==",
+        "dependencies": {
+          "NuGet.Frameworks": "7.6.0"
+        }
+      },
+      "NuGet.Configuration": {
+        "type": "Transitive",
+        "resolved": "7.6.0",
+        "contentHash": "+bNj+YneC5CNg1vR+WZjLAakscJlsi0KhADZUgIJPn4pwh8/jeCUMC5ik5cpET/i+QOplDy7aJVTGkpdfrlPww==",
+        "dependencies": {
+          "NuGet.Common": "7.6.0",
+          "System.Security.Cryptography.ProtectedData": "8.0.0"
+        }
+      },
+      "NuGet.Frameworks": {
+        "type": "Transitive",
+        "resolved": "7.6.0",
+        "contentHash": "rJ7QtKN45XzLXCrMATve6eFLiUyUGEkA1rFSb6U6Fw6laM4hEAcKOrcdbgWlcFUlCK2158qP1LF00hg/ivF3nw=="
       },
       "NUglify": {
         "type": "Transitive",
@@ -858,27 +880,28 @@
       "powerforge": {
         "type": "Project",
         "dependencies": {
+          "NuGet.Configuration": "[7.6.0, )",
           "System.IO.Packaging": "[10.0.7, )",
           "System.Reflection.MetadataLoadContext": "[8.0.0, )",
-          "System.Security.Cryptography.ProtectedData": "[10.0.7, )",
-          "NuGet.Configuration": "[7.6.0, )"
+          "System.Security.Cryptography.ProtectedData": "[10.0.7, )"
         }
       },
       "powerforge.powershell": {
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.4.1, )",
-          "PowerForge": "[1.0.0, )",
+          "PowerForge": "[1.0.4, )",
           "System.Security.Cryptography.Xml": "[10.0.7, )"
         }
       },
       "powerforge.web": {
         "type": "Project",
         "dependencies": {
+          "AngleSharp": "[1.5.2, )",
           "HtmlTinkerX": "[2.0.19, )",
           "Magick.NET-Q8-AnyCPU": "[14.14.0, )",
           "OfficeIMO.Markdown": "[0.6.13, )",
-          "PowerForge": "[1.0.0, )",
+          "PowerForge": "[1.0.4, )",
           "Scriban": "[7.2.5, )",
           "YamlDotNet": "[15.1.2, )"
         }
@@ -886,7 +909,7 @@
       "PowerForge.Web.Build": {
         "type": "Project",
         "dependencies": {
-          "PowerForge.Web": "[1.0.0, )"
+          "PowerForge.Web": "[1.0.4, )"
         }
       },
       "powerforgestudio.domain": {
@@ -898,36 +921,14 @@
           "HtmlForgeX": "[0.44.0, )",
           "HtmlForgeX.Markdown": "[0.20.12, )",
           "OfficeIMO.Markdown": "[0.6.29, )",
-          "PowerForge": "[1.0.0, )",
-          "PowerForge.PowerShell": "[1.0.0, )",
+          "PowerForge": "[1.0.4, )",
+          "PowerForge.PowerShell": "[1.0.4, )",
           "Spectre.Console": "[0.55.2, )",
           "Spectre.Console.Json": "[0.55.2, )",
           "System.IO.Packaging": "[10.0.7, )",
           "System.Reflection.MetadataLoadContext": "[8.0.0, )",
           "System.Security.Cryptography.ProtectedData": "[10.0.7, )"
         }
-      },
-      "NuGet.Configuration": {
-        "type": "Transitive",
-        "resolved": "7.6.0",
-        "contentHash": "+bNj+YneC5CNg1vR+WZjLAakscJlsi0KhADZUgIJPn4pwh8/jeCUMC5ik5cpET/i+QOplDy7aJVTGkpdfrlPww==",
-        "dependencies": {
-          "NuGet.Common": "7.6.0",
-          "System.Security.Cryptography.ProtectedData": "8.0.0"
-        }
-      },
-      "NuGet.Common": {
-        "type": "Transitive",
-        "resolved": "7.6.0",
-        "contentHash": "uyXLqkbbZmkMvdHOR23l1EHW2hRmULtzoG3Ocj84VpGptnNfkODVboHGJfDfcn9Gi9oUNDs8/VjL4FZcST6zVg==",
-        "dependencies": {
-          "NuGet.Frameworks": "7.6.0"
-        }
-      },
-      "NuGet.Frameworks": {
-        "type": "Transitive",
-        "resolved": "7.6.0",
-        "contentHash": "rJ7QtKN45XzLXCrMATve6eFLiUyUGEkA1rFSb6U6Fw6laM4hEAcKOrcdbgWlcFUlCK2158qP1LF00hg/ivF3nw=="
       }
     }
   }

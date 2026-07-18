@@ -9,8 +9,8 @@
       },
       "AngleSharp": {
         "type": "Transitive",
-        "resolved": "1.4.1-beta.523",
-        "contentHash": "1HPqvhCAHu2X9umsuoy2RU7Ls6j+JIg5Enu1SgTinXqo/EVdXP5Ey/PA0vuwqVgo1x3xowXrDCgOWt2DM4vZSA=="
+        "resolved": "1.5.2",
+        "contentHash": "LVZ7rrr6GHbhERhTgVDarVygl1e6KwE96pronA90LBOMacDhxR4lB+xYLjn/vlnUu+xbOB2RM9fuCPEx5bdyWA=="
       },
       "AngleSharp.Css": {
         "type": "Transitive",
@@ -192,10 +192,11 @@
       "powerforge.web": {
         "type": "Project",
         "dependencies": {
+          "AngleSharp": "[1.5.2, )",
           "HtmlTinkerX": "[2.0.19, )",
           "Magick.NET-Q8-AnyCPU": "[14.14.0, )",
           "OfficeIMO.Markdown": "[0.6.13, )",
-          "PowerForge": "[1.0.1, )",
+          "PowerForge": "[1.0.4, )",
           "Scriban": "[7.2.5, )",
           "YamlDotNet": "[15.1.2, )"
         }
