@@ -84,12 +84,12 @@
       "HtmlForgeX": {
         "type": "Transitive",
         "resolved": "0.50.0",
-        "contentHash": "EbnUkrLW6HErPl5GnLb6Tgk80qNFMN6rgfpO7qTdmOBf59eaG+gzF1JXAo4bvwLRJwJI/I0AUTE9QssYP91sug=="
+        "contentHash": "620a/mmW0wwX5L9kPGxS8aFM+lOxIJNriDA8xt8bLiFiYn2M3AjSxuqhurxd32afvmjklTG+3dNNeOo6IcEvEw=="
       },
       "HtmlForgeX.Markdown": {
         "type": "Transitive",
         "resolved": "0.21.0",
-        "contentHash": "Hdg2+PUKQ7NwoTSQN0cMqbB8qFUNcM4tzuNcBz/1gFMVtMrqcKNRzGIfRWWaFHlo0TCwiEdqZ8j0WO2rNAr9Tw==",
+        "contentHash": "6zT2EM6lf7/R7jQh+iONeVIBX+ImJK1edeLENMXoh/WPFpHECK8wYsMuaj7msvjopY4+2H8Ahqrv2ODMjuamMA==",
         "dependencies": {
           "HtmlForgeX": "0.50.0",
           "OfficeIMO.Markdown": "0.6.42"
