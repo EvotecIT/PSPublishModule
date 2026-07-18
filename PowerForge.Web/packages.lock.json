@@ -4,14 +4,14 @@
     "net10.0": {
       "HtmlTinkerX": {
         "type": "Direct",
-        "requested": "[2.0.19, )",
-        "resolved": "2.0.19",
-        "contentHash": "aN1x0cqwonG/JNSYxCBtqTTCq1nyaEYiX6WdQvvkGpfYlLKuFjKD+4HfXSfBl1KZqC6SdIUZz3oXAib5AyB8vQ==",
+        "requested": "[2.1.0-beta.2, )",
+        "resolved": "2.1.0-beta.2",
+        "contentHash": "LWEFsH5FatgdnEDDSllHaI3y8Gr+hvB2I/0hNFoc5FjR37JNIPZd3lDldzS9/HG0kCocGpXmXT2LM469viPPGw==",
         "dependencies": {
-          "AngleSharp": "1.4.1-beta.523",
-          "AngleSharp.Css": "1.0.0-beta.213",
+          "AngleSharp": "1.5.2",
+          "AngleSharp.Css": "1.0.0-beta.216",
           "AngleSharp.Diffing": "1.1.1",
-          "AngleSharp.Js": "1.0.0-beta.47",
+          "AngleSharp.Js": "1.0.0-beta.49",
           "ChartForgeX": "0.1.6",
           "HtmlAgilityPack": "1.12.4",
           "Jint": "4.8.0",
@@ -55,13 +55,13 @@
       },
       "AngleSharp": {
         "type": "Transitive",
-        "resolved": "1.4.1-beta.523",
-        "contentHash": "1HPqvhCAHu2X9umsuoy2RU7Ls6j+JIg5Enu1SgTinXqo/EVdXP5Ey/PA0vuwqVgo1x3xowXrDCgOWt2DM4vZSA=="
+        "resolved": "1.5.2",
+        "contentHash": "LVZ7rrr6GHbhERhTgVDarVygl1e6KwE96pronA90LBOMacDhxR4lB+xYLjn/vlnUu+xbOB2RM9fuCPEx5bdyWA=="
       },
       "AngleSharp.Css": {
         "type": "Transitive",
-        "resolved": "1.0.0-beta.213",
-        "contentHash": "R6Fn8GnapJi0uqJODCDUM0aYftaomcWhrk1Ty+U8E4zsTd+So4ZyDHS6J9Nni9b8WMCCp+pnMAehmVwbsgYMeQ==",
+        "resolved": "1.0.0-beta.216",
+        "contentHash": "RVt/B1pp7HREgerDw8BVZSDC+Uqh+yeL/OGtu57mLLhBBPIQ1oSYrPKOYgdt0EZEK34l7BNCjx4BaQRNRN/ZIw==",
         "dependencies": {
           "AngleSharp": "[1.0.0, 2.0.0)"
         }
@@ -77,8 +77,8 @@
       },
       "AngleSharp.Js": {
         "type": "Transitive",
-        "resolved": "1.0.0-beta.47",
-        "contentHash": "zSBLEBwoSBwU0JKtHX6DF5X4CDML/Sn92LrAlpy+XbI8wOCkZ8DVqh5mLlHXq8s6cVaOX2PzhPV5m7wv/6MT3A==",
+        "resolved": "1.0.0-beta.49",
+        "contentHash": "K8LNWxFokKzoF6XKVa4fXrWRKJd1VwnhDvMshbpsdv0uMlOErUsK4yBOGiGBWvI/0pwVepJelJ8+O2MfAu0ptw==",
         "dependencies": {
           "AngleSharp": "[1.0.0, 2.0.0)",
           "Jint": "[4.0.0, 5.0.0)"
@@ -198,14 +198,14 @@
     "net8.0": {
       "HtmlTinkerX": {
         "type": "Direct",
-        "requested": "[2.0.19, )",
-        "resolved": "2.0.19",
-        "contentHash": "aN1x0cqwonG/JNSYxCBtqTTCq1nyaEYiX6WdQvvkGpfYlLKuFjKD+4HfXSfBl1KZqC6SdIUZz3oXAib5AyB8vQ==",
+        "requested": "[2.1.0-beta.2, )",
+        "resolved": "2.1.0-beta.2",
+        "contentHash": "LWEFsH5FatgdnEDDSllHaI3y8Gr+hvB2I/0hNFoc5FjR37JNIPZd3lDldzS9/HG0kCocGpXmXT2LM469viPPGw==",
         "dependencies": {
-          "AngleSharp": "1.4.1-beta.523",
-          "AngleSharp.Css": "1.0.0-beta.213",
+          "AngleSharp": "1.5.2",
+          "AngleSharp.Css": "1.0.0-beta.216",
           "AngleSharp.Diffing": "1.1.1",
-          "AngleSharp.Js": "1.0.0-beta.47",
+          "AngleSharp.Js": "1.0.0-beta.49",
           "ChartForgeX": "0.1.6",
           "HtmlAgilityPack": "1.12.4",
           "Jint": "4.8.0",
@@ -249,13 +249,13 @@
       },
       "AngleSharp": {
         "type": "Transitive",
-        "resolved": "1.4.1-beta.523",
-        "contentHash": "1HPqvhCAHu2X9umsuoy2RU7Ls6j+JIg5Enu1SgTinXqo/EVdXP5Ey/PA0vuwqVgo1x3xowXrDCgOWt2DM4vZSA=="
+        "resolved": "1.5.2",
+        "contentHash": "LVZ7rrr6GHbhERhTgVDarVygl1e6KwE96pronA90LBOMacDhxR4lB+xYLjn/vlnUu+xbOB2RM9fuCPEx5bdyWA=="
       },
       "AngleSharp.Css": {
         "type": "Transitive",
-        "resolved": "1.0.0-beta.213",
-        "contentHash": "R6Fn8GnapJi0uqJODCDUM0aYftaomcWhrk1Ty+U8E4zsTd+So4ZyDHS6J9Nni9b8WMCCp+pnMAehmVwbsgYMeQ==",
+        "resolved": "1.0.0-beta.216",
+        "contentHash": "RVt/B1pp7HREgerDw8BVZSDC+Uqh+yeL/OGtu57mLLhBBPIQ1oSYrPKOYgdt0EZEK34l7BNCjx4BaQRNRN/ZIw==",
         "dependencies": {
           "AngleSharp": "[1.0.0, 2.0.0)"
         }
@@ -271,8 +271,8 @@
       },
       "AngleSharp.Js": {
         "type": "Transitive",
-        "resolved": "1.0.0-beta.47",
-        "contentHash": "zSBLEBwoSBwU0JKtHX6DF5X4CDML/Sn92LrAlpy+XbI8wOCkZ8DVqh5mLlHXq8s6cVaOX2PzhPV5m7wv/6MT3A==",
+        "resolved": "1.0.0-beta.49",
+        "contentHash": "K8LNWxFokKzoF6XKVa4fXrWRKJd1VwnhDvMshbpsdv0uMlOErUsK4yBOGiGBWvI/0pwVepJelJ8+O2MfAu0ptw==",
         "dependencies": {
           "AngleSharp": "[1.0.0, 2.0.0)",
           "Jint": "[4.0.0, 5.0.0)"
