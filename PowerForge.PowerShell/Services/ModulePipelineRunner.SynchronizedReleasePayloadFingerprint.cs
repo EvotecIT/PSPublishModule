@@ -246,11 +246,11 @@ public sealed partial class ModulePipelineRunner
         try
         {
             CopySynchronizedReleaseDirectory(buildResult.StagingPath, Path.Combine(temporaryPath, "module"));
-            for (int index = 0; index < state.ArtefactResults.Count; index++)
+            foreach (var artefact in ResolveSynchronizedReleasePayloadArtefacts(state))
             {
                 CopySynchronizedReleasePayloadPath(
-                    state.ArtefactResults[index].OutputPath,
-                    Path.Combine(temporaryPath, "artefact", index.ToString()));
+                    artefact.Result.OutputPath,
+                    ResolveSynchronizedReleaseArtefactCacheEntry(temporaryPath, artefact));
             }
             foreach (var lane in ResolveSynchronizedReleasePayloadLanes(state))
             {
@@ -358,15 +358,15 @@ public sealed partial class ModulePipelineRunner
     {
         var components = new List<string>();
         AddSynchronizedReleaseExactPayloadPath(components, "module", Path.Combine(cachePath, "module"));
-        for (int index = 0; index < state.ArtefactResults.Count; index++)
+        foreach (var artefact in ResolveSynchronizedReleasePayloadArtefacts(state))
         {
-            var artefact = state.ArtefactResults[index];
+            components.Add($"artefact/{artefact.CacheKey}|identity");
             AddSynchronizedReleaseExactPayloadPath(
                 components,
-                $"artefact/{index}",
+                $"artefact/{artefact.CacheKey}/payload",
                 ResolveCachedSynchronizedReleasePayloadPath(
-                    Path.Combine(cachePath, "artefact", index.ToString()),
-                    Directory.Exists(artefact.OutputPath)));
+                    ResolveSynchronizedReleaseArtefactCacheEntry(cachePath, artefact),
+                    artefact.IsDirectory));
         }
         foreach (var lane in ResolveSynchronizedReleasePayloadLanes(state))
         {
@@ -432,13 +432,12 @@ public sealed partial class ModulePipelineRunner
         RestoreSynchronizedReleaseDirectory(
             Path.Combine(cachePath, "module"),
             buildResult.StagingPath);
-        for (int index = 0; index < state.ArtefactResults.Count; index++)
+        foreach (var artefact in ResolveSynchronizedReleasePayloadArtefacts(state))
         {
-            var artefact = state.ArtefactResults[index];
             RestoreCachedSynchronizedReleasePayloadPath(
-                Path.Combine(cachePath, "artefact", index.ToString()),
-                artefact.OutputPath,
-                Directory.Exists(artefact.OutputPath));
+                ResolveSynchronizedReleaseArtefactCacheEntry(cachePath, artefact),
+                artefact.Result.OutputPath,
+                artefact.IsDirectory);
         }
         foreach (var lane in ResolveSynchronizedReleasePayloadLanes(state))
         {

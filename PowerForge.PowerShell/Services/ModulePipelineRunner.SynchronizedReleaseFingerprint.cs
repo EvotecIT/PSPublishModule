@@ -24,6 +24,14 @@ public sealed partial class ModulePipelineRunner
                 string.Join(",", plan.Release?.Configuration?.PublishOrder ?? Array.Empty<string>()))
         };
 
+        foreach (var artefact in plan.Artefacts ?? Array.Empty<ConfigurationArtefactSegment>())
+        {
+            if (artefact?.Configuration is null)
+                continue;
+
+            fingerprints.Add(CreateSynchronizedReleaseArtefactConfigurationFingerprint(artefact));
+        }
+
         foreach (var publish in plan.Publishes ?? Array.Empty<ConfigurationPublishSegment>())
         {
             if (publish?.Configuration is null)
@@ -136,6 +144,50 @@ public sealed partial class ModulePipelineRunner
             .OrderBy(static fingerprint => fingerprint, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
+
+    private static string CreateSynchronizedReleaseArtefactConfigurationFingerprint(
+        ConfigurationArtefactSegment artefact)
+    {
+        var configuration = artefact.Configuration;
+        var requiredModules = configuration.RequiredModules ?? new ArtefactRequiredModulesConfiguration();
+        return CreateSynchronizedReleaseFingerprint(
+            "ModuleArtefact",
+            artefact.ArtefactType.ToString(),
+            configuration.Enabled?.ToString(),
+            configuration.IncludeTagName?.ToString(),
+            configuration.Path,
+            configuration.DestinationDirectoriesRelative?.ToString(),
+            configuration.DestinationFilesRelative?.ToString(),
+            configuration.DoNotClear?.ToString(),
+            configuration.ArtefactName,
+            configuration.ScriptName,
+            configuration.ID,
+            configuration.PreScriptMerge,
+            configuration.PostScriptMerge,
+            SerializeSynchronizedReleaseArtefactMappings(configuration.DirectoryOutput),
+            SerializeSynchronizedReleaseArtefactMappings(configuration.FilesOutput),
+            requiredModules.Enabled?.ToString(),
+            requiredModules.Path,
+            requiredModules.ModulesPath,
+            requiredModules.Tool?.ToString(),
+            requiredModules.Source?.ToString(),
+            requiredModules.Repository,
+            requiredModules.Credential?.UserName,
+            (!string.IsNullOrWhiteSpace(requiredModules.Credential?.Secret)).ToString(),
+            SerializeSynchronizedReleaseValues(requiredModules.ExcludeModuleName));
+    }
+
+    private static string SerializeSynchronizedReleaseArtefactMappings(
+        IEnumerable<ArtefactCopyMapping>? mappings)
+        => string.Join(
+            "\n",
+            (mappings ?? Array.Empty<ArtefactCopyMapping>())
+            .Where(static mapping => mapping is not null)
+            .Select(static (mapping, index) => CreateSynchronizedReleaseFingerprint(
+                "ArtefactCopy",
+                index.ToString(),
+                mapping.Source,
+                mapping.Destination)));
 
     private string[] ResolveSynchronizedReleasePublishOperationKeys(ModulePipelinePlan plan)
     {

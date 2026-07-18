@@ -41,6 +41,53 @@ public sealed partial class ModulePipelineRunner
             .ToArray();
     }
 
+    private static SynchronizedReleasePayloadArtefact[] ResolveSynchronizedReleasePayloadArtefacts(
+        ModulePipelineRunState state)
+    {
+        var artefacts = new List<SynchronizedReleasePayloadArtefact>();
+        var identities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var result in state.ArtefactResults)
+        {
+            var id = result.Id?.Trim();
+            if (state.ArtefactResults.Count > 1 && string.IsNullOrWhiteSpace(id))
+            {
+                throw new InvalidOperationException(
+                    "A coordinated release with multiple module artefacts requires a stable ID on every artefact.");
+            }
+
+            var normalizedOutputPath = result.OutputPath.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar);
+            var outputName = Path.GetFileName(normalizedOutputPath);
+            if (string.IsNullOrWhiteSpace(outputName))
+            {
+                throw new InvalidOperationException(
+                    $"Coordinated release artefact '{result.Type}'/'{id ?? "<default>"}' does not have an exact output filename identity.");
+            }
+
+            var stableId = string.IsNullOrWhiteSpace(id) ? "<default>" : id!;
+            var identity = result.Type + "\n" + stableId + "\n" + outputName;
+            if (!identities.Add(identity))
+            {
+                throw new InvalidOperationException(
+                    $"Coordinated release contains duplicate artefact identity '{result.Type}'/'{stableId}'/'{outputName}'.");
+            }
+
+            artefacts.Add(new SynchronizedReleasePayloadArtefact(
+                result,
+                CreateSynchronizedReleaseFingerprint(
+                    "payload-artefact",
+                    result.Type.ToString(),
+                    stableId.ToUpperInvariant(),
+                    outputName),
+                result.Type is ArtefactType.Unpacked or ArtefactType.Script));
+        }
+
+        return artefacts
+            .OrderBy(static artefact => artefact.CacheKey, StringComparer.Ordinal)
+            .ToArray();
+    }
+
     private static SynchronizedReleasePayloadProject[] ResolveSynchronizedReleasePayloadProjects(
         SynchronizedReleasePayloadLane lane,
         DotNetRepositoryReleaseResult release)
@@ -136,6 +183,11 @@ public sealed partial class ModulePipelineRunner
             file.Kind,
             file.CacheKey);
 
+    private static string ResolveSynchronizedReleaseArtefactCacheEntry(
+        string cachePath,
+        SynchronizedReleasePayloadArtefact artefact)
+        => Path.Combine(cachePath, "artefact", artefact.CacheKey);
+
     private static string ResolveSynchronizedReleasePayloadComponentLabel(
         SynchronizedReleasePayloadLane lane,
         SynchronizedReleasePayloadProject project,
@@ -229,6 +281,23 @@ public sealed partial class ModulePipelineRunner
         public ProjectBuildHostExecutionResult Execution { get; }
         public string CheckpointKey { get; }
         public string CacheKey { get; }
+    }
+
+    private sealed class SynchronizedReleasePayloadArtefact
+    {
+        public SynchronizedReleasePayloadArtefact(
+            ArtefactBuildResult result,
+            string cacheKey,
+            bool isDirectory)
+        {
+            Result = result;
+            CacheKey = cacheKey;
+            IsDirectory = isDirectory;
+        }
+
+        public ArtefactBuildResult Result { get; }
+        public string CacheKey { get; }
+        public bool IsDirectory { get; }
     }
 
     private sealed class SynchronizedReleasePayloadProject
