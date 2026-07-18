@@ -35,11 +35,24 @@ internal static class ExistingFilePathIdentityResolver
 
     private static string ReadWindowsFileIdentity(SafeFileHandle handle)
     {
-        if (!GetFileInformationByHandle(handle, out var information))
+        if (!GetFileInformationByHandleEx(
+                handle,
+                WindowsFileInfoByHandleClass.FileIdInfo,
+                out var information,
+                checked((uint)Marshal.SizeOf<WindowsFileIdInfo>())))
             throw new Win32Exception(Marshal.GetLastWin32Error());
 
-        return $"windows:{information.VolumeSerialNumber:X8}:{information.FileIndexHigh:X8}{information.FileIndexLow:X8}";
+        return FormatWindowsFileIdentity(
+            information.VolumeSerialNumber,
+            information.FileId.Part0,
+            information.FileId.Part1);
     }
+
+    /// <summary>
+    /// Formats the volume-qualified 128-bit Windows file identifier without discarding ReFS identity bits.
+    /// </summary>
+    internal static string FormatWindowsFileIdentity(ulong volumeSerialNumber, ulong identifierPart0, ulong identifierPart1)
+        => $"windows:{volumeSerialNumber:X16}:{identifierPart0:X16}{identifierPart1:X16}";
 
 #if NET8_0_OR_GREATER
     private static string ReadUnixFileIdentity(SafeFileHandle handle)
@@ -52,25 +65,22 @@ internal static class ExistingFilePathIdentityResolver
 #endif
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct WindowsFileTime
+    private struct WindowsFileId128
     {
-        internal uint LowDateTime;
-        internal uint HighDateTime;
+        internal ulong Part0;
+        internal ulong Part1;
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct WindowsFileInformation
+    private struct WindowsFileIdInfo
     {
-        internal uint FileAttributes;
-        internal WindowsFileTime CreationTime;
-        internal WindowsFileTime LastAccessTime;
-        internal WindowsFileTime LastWriteTime;
-        internal uint VolumeSerialNumber;
-        internal uint FileSizeHigh;
-        internal uint FileSizeLow;
-        internal uint NumberOfLinks;
-        internal uint FileIndexHigh;
-        internal uint FileIndexLow;
+        internal ulong VolumeSerialNumber;
+        internal WindowsFileId128 FileId;
+    }
+
+    private enum WindowsFileInfoByHandleClass
+    {
+        FileIdInfo = 18
     }
 
 #if NET8_0_OR_GREATER
@@ -99,11 +109,13 @@ internal static class ExistingFilePathIdentityResolver
     }
 #endif
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetFileInformationByHandle(
+    private static extern bool GetFileInformationByHandleEx(
         SafeFileHandle file,
-        out WindowsFileInformation information);
+        WindowsFileInfoByHandleClass fileInformationClass,
+        out WindowsFileIdInfo information,
+        uint bufferSize);
 
 #if NET8_0_OR_GREATER
     [DllImport("System.Native", EntryPoint = "SystemNative_FStat", SetLastError = true)]

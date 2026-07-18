@@ -168,6 +168,7 @@ public sealed class ManagedMarkdownDocumentUpdater
                 Created = created,
                 Appended = appended
             };
+            document.ResultIndexes.Add(index);
         }
 
         foreach (var document in orderedDocuments)
@@ -194,6 +195,8 @@ public sealed class ManagedMarkdownDocumentUpdater
                 finalLocations.Add((request, location));
             }
             document.Changed = !string.Equals(document.Document.Text, document.Text, StringComparison.Ordinal);
+            foreach (var resultIndex in document.ResultIndexes)
+                results[resultIndex].Changed = document.Changed;
         }
 
         return new PreparedBatch(orderedDocuments.ToArray(), results);
@@ -664,6 +667,7 @@ public sealed class ManagedMarkdownDocumentUpdater
         internal bool IdentityWasResolved { get; }
         internal DocumentText Document { get; }
         internal List<NormalizedUpdateRequest> Requests { get; } = new();
+        internal List<int> ResultIndexes { get; } = new();
         internal string Text { get; set; }
         internal bool Exists { get; set; }
         internal bool Changed { get; set; }

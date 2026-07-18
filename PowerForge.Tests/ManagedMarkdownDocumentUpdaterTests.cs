@@ -218,17 +218,26 @@ public sealed class ManagedMarkdownDocumentUpdaterTests
 
         var results = new ManagedMarkdownDocumentUpdater().UpdateMany(new[]
         {
-            new ManagedMarkdownUpdateRequest { Path = path, BlockId = "sponsors", Markdown = "new sponsors" },
+            new ManagedMarkdownUpdateRequest { Path = path, BlockId = "sponsors", Markdown = "old sponsors" },
             new ManagedMarkdownUpdateRequest { Path = alias, BlockId = "stats", Markdown = "new stats" }
         });
 
         Assert.Equal(2, results.Length);
+        Assert.All(results, result => Assert.True(result.Changed));
         var text = File.ReadAllText(path);
-        Assert.Contains("new sponsors", text, StringComparison.Ordinal);
+        Assert.Contains("old sponsors", text, StringComparison.Ordinal);
         Assert.Contains("new stats", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("old sponsors", text, StringComparison.Ordinal);
         Assert.DoesNotContain("old stats", text, StringComparison.Ordinal);
         Assert.Equal(text, File.ReadAllText(alias));
+    }
+
+    [Fact]
+    public void WindowsFileIdentity_PreservesAll128IdentifierBits()
+    {
+        var first = ExistingFilePathIdentityResolver.FormatWindowsFileIdentity(1, 2, 3);
+        var differentUpperHalf = ExistingFilePathIdentityResolver.FormatWindowsFileIdentity(1, 2, 4);
+
+        Assert.NotEqual(first, differentUpperHalf);
     }
 
     [Fact]
