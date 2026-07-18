@@ -88,12 +88,14 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineRunState state,
         ReleaseVersionSource source,
         string label,
+        string checkpointKey,
         bool explicitSource,
         ProjectBuildHostExecutionResult result)
     {
         state.ReleaseVersionCandidates.Add(new ReleaseVersionCandidate(
             source,
             string.IsNullOrWhiteSpace(label) ? source.ToString() : label.Trim(),
+            checkpointKey,
             explicitSource,
             result));
     }

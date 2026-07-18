@@ -405,12 +405,19 @@ public sealed partial class ModulePipelineRunner
         try
         {
             var result = ExecuteProjectBuildSegment(plan, state, segment, mode);
+            var laneLabel = segment.Configuration.Name ?? result.ConfigPath;
+            var checkpointKey = ResolveSynchronizedReleaseLaneKey(
+                plan,
+                ReleaseVersionSource.ProjectBuild,
+                segment,
+                laneLabel);
             CompletePackageBuildExecution(
                 plan,
                 state,
                 result,
                 ReleaseVersionSource.ProjectBuild,
-                segment.Configuration.Name ?? result.ConfigPath,
+                laneLabel,
+                checkpointKey,
                 segment.Configuration.UseAsReleaseVersionSource,
                 segment.Configuration.ProvideLocalNuGetFeed,
                 segment,
@@ -438,12 +445,19 @@ public sealed partial class ModulePipelineRunner
         try
         {
             var result = ExecutePackageBuildSegment(plan, state, segment, mode);
+            var laneLabel = segment.Configuration.Name ?? result.ConfigPath;
+            var checkpointKey = ResolveSynchronizedReleaseLaneKey(
+                plan,
+                ReleaseVersionSource.PackageBuild,
+                segment,
+                laneLabel);
             CompletePackageBuildExecution(
                 plan,
                 state,
                 result,
                 ReleaseVersionSource.PackageBuild,
-                segment.Configuration.Name ?? result.ConfigPath,
+                laneLabel,
+                checkpointKey,
                 segment.Configuration.UseAsReleaseVersionSource,
                 segment.Configuration.ProvideLocalNuGetFeed,
                 segment,
@@ -465,6 +479,7 @@ public sealed partial class ModulePipelineRunner
         ProjectBuildHostExecutionResult result,
         ReleaseVersionSource source,
         string laneLabel,
+        string checkpointKey,
         bool useAsReleaseVersionSource,
         bool provideLocalNuGetFeed,
         object segment,
@@ -490,9 +505,10 @@ public sealed partial class ModulePipelineRunner
             state,
             source,
             laneLabel,
+            checkpointKey,
             useAsReleaseVersionSource,
             result);
-        RecordSynchronizedReleaseLaneCheckpoint(state, source, laneLabel, result);
+        RecordSynchronizedReleaseLaneCheckpoint(state, source, laneLabel, checkpointKey, result);
     }
 
     private ProjectBuildHostExecutionResult ExecuteProjectBuildSegment(
@@ -507,11 +523,17 @@ public sealed partial class ModulePipelineRunner
 
         var configPath = ResolvePackageBuildPath(plan.ProjectRoot, cfg.ConfigPath);
         var configuration = LoadProjectBuildConfiguration(configPath, cfg);
+        var laneLabel = cfg.Name ?? configPath;
         ApplySynchronizedReleaseCheckpointVersion(
             plan,
             state,
             ReleaseVersionSource.ProjectBuild,
-            cfg.Name ?? configPath,
+            laneLabel,
+            ResolveSynchronizedReleaseLaneKey(
+                plan,
+                ReleaseVersionSource.ProjectBuild,
+                segment,
+                laneLabel),
             cfg.UseAsReleaseVersionSource,
             configuration);
         ApplyProjectBuildGateDefaults(configuration, mode, plan.GateMode);
@@ -539,11 +561,17 @@ public sealed partial class ModulePipelineRunner
     {
         var cfg = segment.Configuration ?? throw new InvalidOperationException("PackageBuild configuration is missing.");
         var projectBuildConfig = MapPackageBuildConfiguration(cfg, plan.ProjectRoot);
+        var laneLabel = cfg.Name ?? Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
         ApplySynchronizedReleaseCheckpointVersion(
             plan,
             state,
             ReleaseVersionSource.PackageBuild,
-            cfg.Name ?? Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json"),
+            laneLabel,
+            ResolveSynchronizedReleaseLaneKey(
+                plan,
+                ReleaseVersionSource.PackageBuild,
+                segment,
+                laneLabel),
             cfg.UseAsReleaseVersionSource,
             projectBuildConfig);
         ApplyProjectBuildGateDefaults(projectBuildConfig, mode, plan.GateMode);

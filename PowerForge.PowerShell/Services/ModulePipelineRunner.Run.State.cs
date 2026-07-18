@@ -65,17 +65,20 @@ public sealed partial class ModulePipelineRunner
         public ReleaseVersionCandidate(
             ReleaseVersionSource source,
             string label,
+            string checkpointKey,
             bool explicitSource,
             ProjectBuildHostExecutionResult result)
         {
             Source = source;
             Label = label;
+            CheckpointKey = checkpointKey;
             ExplicitSource = explicitSource;
             Result = result ?? throw new ArgumentNullException(nameof(result));
         }
 
         public ReleaseVersionSource Source { get; }
         public string Label { get; }
+        public string CheckpointKey { get; }
         public bool ExplicitSource { get; }
         public ProjectBuildHostExecutionResult Result { get; }
     }
