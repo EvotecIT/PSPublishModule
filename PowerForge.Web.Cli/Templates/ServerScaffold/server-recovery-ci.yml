@@ -3,10 +3,7 @@ name: Server Recovery Validation
 on:
   pull_request:
     paths:
-      - "deploy/linux/**"
-      - "__WEBSITE_ROOT__/deploy/**"
-      - ".github/workflows/server-backup.yml"
-      - ".github/workflows/server-recovery-ci.yml"
+__RECOVERY_WATCH_PATHS__
   workflow_dispatch:
 
 permissions:

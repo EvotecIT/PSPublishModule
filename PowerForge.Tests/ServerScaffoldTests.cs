@@ -33,6 +33,8 @@ public sealed class ServerScaffoldTests
         Assert.Contains("capture-user: powerforge-example-backup", recoveryValidationWorkflow, StringComparison.Ordinal);
         Assert.Contains("fail-on-warnings: true", recoveryValidationWorkflow, StringComparison.Ordinal);
         Assert.Contains("- \"Website/deploy/**\"", recoveryValidationWorkflow, StringComparison.Ordinal);
+        Assert.NotNull(new YamlDotNet.Serialization.DeserializerBuilder().Build().Deserialize<object>(recoveryValidationWorkflow));
+        Assert.Equal(1, recoveryValidationWorkflow.Split("uses:", StringSplitOptions.None).Length - 1);
         Assert.DoesNotContain("actions/checkout", recoveryValidationWorkflow, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("run:", recoveryValidationWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("${{ secrets.", recoveryValidationWorkflow, StringComparison.OrdinalIgnoreCase);
@@ -74,6 +76,22 @@ public sealed class ServerScaffoldTests
         Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/etc/powerforge/sites/example.test.env" &&
                                               path["source"]!.GetValue<string>().EndsWith("/example.test.env", StringComparison.Ordinal));
         Assert.Equal(2, managedPaths.Count(path => path!["validation"]?.GetValue<string>() == "sudoers"));
+    }
+
+    [Fact]
+    public void Scaffold_ShouldRenderYamlSafeDeduplicatedRecoveryWatchPaths()
+    {
+        var options = CreateOptions();
+        options.RecoveryWatchPaths = ["src/**", "deploy/linux/**", "src/**", ".github/actions/recovery/**"];
+
+        var workflow = WebCliCommandHandlers.BuildServerScaffoldFiles(options)[".github/workflows/server-recovery-ci.yml"];
+
+        Assert.Equal(1, workflow.Split("      - \"deploy/linux/**\"", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1, workflow.Split("      - \"src/**\"", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1, workflow.Split("      - \".github/actions/recovery/**\"", StringSplitOptions.None).Length - 1);
+        Assert.NotNull(new YamlDotNet.Serialization.DeserializerBuilder().Build().Deserialize<object>(workflow));
+        Assert.DoesNotContain("run:", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("${{ secrets.", workflow, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -306,6 +324,60 @@ public sealed class ServerScaffoldTests
         var duplicateWww = RequiredArguments("www.example.test").Concat(["--www"]).ToArray();
         var wwwException = Assert.Throws<InvalidOperationException>(() => WebCliCommandHandlers.ParseServerScaffoldOptions(duplicateWww));
         Assert.Contains("already starts with www", wwwException.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ScaffoldOptions_ShouldReadRepeatedAndListRecoveryWatchPaths()
+    {
+        var args = RequiredArguments("example.test").Concat(
+        [
+            "--recovery-watch-path", "src/**,Docs/**",
+            "--recovery-watch-path", "src/**",
+            "--recovery-watch-paths", ".github/actions/**;tests/?/fixtures/**"
+        ]).ToArray();
+
+        var options = WebCliCommandHandlers.ParseServerScaffoldOptions(args);
+
+        Assert.Equal(["src/**", "Docs/**", ".github/actions/**", "tests/?/fixtures/**"], options.RecoveryWatchPaths);
+    }
+
+    [Theory]
+    [InlineData("/absolute/**")]
+    [InlineData("../secrets/**")]
+    [InlineData("src/../../secrets/**")]
+    [InlineData("src\\**")]
+    [InlineData("src//**")]
+    [InlineData("src/**\n      run: whoami")]
+    [InlineData("!src/**")]
+    public void ScaffoldOptions_ShouldRejectUnsafeRecoveryWatchPathGlobs(string watchPath)
+    {
+        var args = RequiredArguments("example.test")
+            .Concat(["--recovery-watch-path", watchPath])
+            .ToArray();
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => WebCliCommandHandlers.ParseServerScaffoldOptions(args));
+
+        Assert.Contains("safe repository-relative positive glob", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("--recovery-watch-path")]
+    [InlineData("--recovery-watch-paths")]
+    public void ScaffoldOptions_ShouldRejectRecoveryWatchPathWithoutValue(string optionName)
+    {
+        var trailingOption = RequiredArguments("example.test").Append(optionName).ToArray();
+        var followedByOption = RequiredArguments("example.test")
+            .Concat([optionName, "--private-repository"])
+            .ToArray();
+
+        var trailingException = Assert.Throws<InvalidOperationException>(
+            () => WebCliCommandHandlers.ParseServerScaffoldOptions(trailingOption));
+        var followedException = Assert.Throws<InvalidOperationException>(
+            () => WebCliCommandHandlers.ParseServerScaffoldOptions(followedByOption));
+
+        Assert.Contains("requires a glob value", trailingException.Message, StringComparison.Ordinal);
+        Assert.Contains("requires a glob value", followedException.Message, StringComparison.Ordinal);
     }
 
     [Fact]

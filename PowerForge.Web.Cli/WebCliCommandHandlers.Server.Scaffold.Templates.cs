@@ -275,8 +275,21 @@ internal static partial class WebCliCommandHandlers
         => ServerScaffoldTemplateStore.Render(
             "server-recovery-ci.yml",
             ("__SITE_ID__", options.SiteId),
-            ("__WEBSITE_ROOT__", options.WebsiteRoot),
+            ("__RECOVERY_WATCH_PATHS__", BuildScaffoldRecoveryWatchPaths(options)),
             ("__ENGINE_REF__", options.EngineRef));
+
+    private static string BuildScaffoldRecoveryWatchPaths(PowerForgeServerScaffoldOptions options)
+    {
+        var paths = NormalizeRecoveryWatchPaths(
+        [
+            "deploy/linux/**",
+            $"{options.WebsiteRoot}/deploy/**",
+            ".github/workflows/server-backup.yml",
+            ".github/workflows/server-recovery-ci.yml",
+            .. options.RecoveryWatchPaths
+        ]);
+        return string.Join('\n', paths.Select(static path => $"      - \"{path}\""));
+    }
 
     private static string BuildScaffoldSiteEnvironment(PowerForgeServerScaffoldOptions options)
         => ServerScaffoldTemplateStore.Render(
