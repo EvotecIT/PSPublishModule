@@ -90,6 +90,9 @@ jobs:
           if ($paths.Count -eq 0) {
             throw 'PowerForge reported changes without any changed document paths.'
           }
+          if ([string]::IsNullOrWhiteSpace($env:COMMIT_MESSAGE)) {
+            throw 'A non-empty commit message is required when commit_changes is enabled.'
+          }
           foreach ($path in $paths) {
             git --literal-pathspecs add -- $path
           }
@@ -105,4 +108,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m $env:COMMIT_MESSAGE
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
           git push

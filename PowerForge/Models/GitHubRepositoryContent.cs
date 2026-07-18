@@ -298,6 +298,10 @@ public sealed class GitHubSponsorRecognitionResult
 
     /// <summary>Normalized, overridden, and sorted sponsor records.</summary>
     public GitHubSponsorRecord[] Sponsors { get; set; } = Array.Empty<GitHubSponsorRecord>();
+
+    internal bool HasRenderedCurrentGitHubSponsors { get; set; }
+
+    internal bool HasFundingTierDataForRenderedCurrentGitHubSponsors { get; set; }
 }
 
 /// <summary>

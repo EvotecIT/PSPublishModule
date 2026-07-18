@@ -83,6 +83,14 @@ public sealed class GitHubContentActionTests
         Assert.Contains("cancel-in-progress: false", workflow, StringComparison.Ordinal);
         Assert.Contains("default: \"\"", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("default: \"main\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("[string]::IsNullOrWhiteSpace($env:COMMIT_MESSAGE)", workflow, StringComparison.Ordinal);
+
+        var commitIndex = workflow.IndexOf("git commit -m $env:COMMIT_MESSAGE", StringComparison.Ordinal);
+        Assert.True(commitIndex >= 0, "The reusable workflow must commit the generated changes.");
+        var exitCodeCheckIndex = workflow.IndexOf("if ($LASTEXITCODE -ne 0)", commitIndex, StringComparison.Ordinal);
+        var pushIndex = workflow.IndexOf("git push", commitIndex, StringComparison.Ordinal);
+        Assert.True(exitCodeCheckIndex > commitIndex, "The reusable workflow must inspect the commit exit code.");
+        Assert.True(pushIndex > exitCodeCheckIndex, "The reusable workflow must fail a bad commit before pushing.");
     }
 
     [Fact]
@@ -90,7 +98,7 @@ public sealed class GitHubContentActionTests
     {
         var repoRoot = FindRepoRoot();
         var docs = File.ReadAllText(Path.Combine(repoRoot, "Docs", "PowerForge.GitHubContent.md"));
-        var readme = File.ReadAllText(Path.Combine(repoRoot, "README.md"));
+        var readme = File.ReadAllText(Path.Combine(repoRoot, "README.MD"));
 
         Assert.Contains("tierRecognition.enabled", docs, StringComparison.Ordinal);
         Assert.Contains("includePrivate: false", docs, StringComparison.Ordinal);

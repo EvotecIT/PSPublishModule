@@ -47,10 +47,18 @@ public sealed class GitHubSponsorRecognitionService
         else
             records.ForEach(record => record.Value.RecognitionTierKey = null);
 
+        var renderedCurrentGitHubSponsors = records
+            .Where(record =>
+                record.Value.Status == GitHubSponsorStatus.Current &&
+                record.Value.EntityType != GitHubSponsorEntityType.Manual)
+            .ToArray();
         return new GitHubSponsorRecognitionResult
         {
             TierRecognitionEnabled = recognition.Enabled,
             Tiers = tiers,
+            HasRenderedCurrentGitHubSponsors = renderedCurrentGitHubSponsors.Length > 0,
+            HasFundingTierDataForRenderedCurrentGitHubSponsors =
+                renderedCurrentGitHubSponsors.Any(record => record.FundingTierMonthlyDollars is not null),
             Sponsors = records
                 .Select(record => record.Value)
                 .OrderBy(record => record.Status)

@@ -310,6 +310,37 @@ public sealed class GitHubRepositoryContentServiceTests
     }
 
     [Fact]
+    public void Sync_EvaluatesRequiredFundingDataAfterSponsorExclusions()
+    {
+        var root = CreateTempRoot();
+        var readme = Path.Combine(root, "README.md");
+        const string original = "<!-- POWERFORGE:sponsors:START -->\nkeep\n<!-- POWERFORGE:sponsors:END -->\n";
+        File.WriteAllText(readme, original);
+        using var httpClient = new HttpClient(new SponsorsHandler(_ => Response(
+            Node("tiered", "Tiered", 30) + "," +
+            Node("withheld", "Withheld", null))));
+        var service = new GitHubRepositoryContentService(sponsorsClient: new GitHubSponsorsClient(httpClient));
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Sync(new GitHubRepositoryContentSpec
+        {
+            Token = "token",
+            Sponsors = new GitHubSponsorsContentSpec
+            {
+                Enabled = true,
+                SponsorableLogin = "owner",
+                IncludeFormer = false,
+                RequireFundingTierData = true,
+                TierRecognition = new GitHubSponsorTierRecognitionSpec { Enabled = true },
+                Overrides = new[] { new GitHubSponsorOverrideSpec { Login = "tiered", Exclude = true } },
+                Outputs = new[] { new GitHubSponsorsOutputSpec { Path = "README.md", BlockId = "sponsors" } }
+            }
+        }, root));
+
+        Assert.Contains("withheld funding-tier data", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(original, File.ReadAllText(readme));
+    }
+
+    [Fact]
     public void Sync_RejectsOutsideOutputBeforeWritingAnyRestrictedDocument()
     {
         var root = CreateTempRoot();

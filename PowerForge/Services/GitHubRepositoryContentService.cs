@@ -71,15 +71,16 @@ public sealed class GitHubRepositoryContentService
         var currentGitHubSponsors = source.Where(sponsor => sponsor.Sponsor.Status == GitHubSponsorStatus.Current).ToArray();
         if (sponsorsSpec.FailOnEmpty && currentGitHubSponsors.Length == 0)
             throw new InvalidOperationException("GitHub Sponsors returned no public current sponsors. No documents were modified.");
-        if (tierRecognitionEnabled && sponsorsSpec.RequireFundingTierData &&
-            currentGitHubSponsors.Length > 0 && currentGitHubSponsors.All(sponsor => sponsor.FundingTierMonthlyDollars is null))
-        {
-            throw new InvalidOperationException(
-                "GitHub withheld funding-tier data for every current sponsor. No documents were modified. " +
-                "Use a maintainer-authorized token or disable sponsors.requireFundingTierData.");
-        }
 
         var recognition = _recognitionService.Prepare(source, sponsorsSpec);
+        if (tierRecognitionEnabled && sponsorsSpec.RequireFundingTierData &&
+            recognition.HasRenderedCurrentGitHubSponsors &&
+            !recognition.HasFundingTierDataForRenderedCurrentGitHubSponsors)
+        {
+            throw new InvalidOperationException(
+                "GitHub withheld funding-tier data for every rendered current GitHub sponsor. No documents were modified. " +
+                "Use a maintainer-authorized token, adjust exclusions, or disable sponsors.requireFundingTierData.");
+        }
         var current = recognition.Sponsors.Where(sponsor => sponsor.Status == GitHubSponsorStatus.Current).ToArray();
         var former = recognition.Sponsors.Where(sponsor => sponsor.Status == GitHubSponsorStatus.Former).ToArray();
 

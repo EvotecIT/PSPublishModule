@@ -171,6 +171,40 @@ public sealed class ManagedMarkdownDocumentUpdaterTests
     }
 
     [Fact]
+    public void UpdateMany_CoalescesFileSymlinkAliasBeforeWritingFinalDocument()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "README.md");
+        var alias = Path.Combine(root, "README-alias.md");
+        File.WriteAllText(
+            path,
+            "<!-- POWERFORGE:sponsors:START -->\nold sponsors\n<!-- POWERFORGE:sponsors:END -->\n" +
+            "<!-- POWERFORGE:stats:START -->\nold stats\n<!-- POWERFORGE:stats:END -->\n");
+        try
+        {
+            File.CreateSymbolicLink(alias, path);
+        }
+        catch (Exception exception) when (
+            exception is UnauthorizedAccessException or IOException or NotSupportedException or PlatformNotSupportedException)
+        {
+            return;
+        }
+
+        var results = new ManagedMarkdownDocumentUpdater().UpdateMany(new[]
+        {
+            new ManagedMarkdownUpdateRequest { Path = path, BlockId = "sponsors", Markdown = "new sponsors" },
+            new ManagedMarkdownUpdateRequest { Path = alias, BlockId = "stats", Markdown = "new stats" }
+        });
+
+        Assert.Equal(2, results.Length);
+        var text = File.ReadAllText(path);
+        Assert.Contains("new sponsors", text, StringComparison.Ordinal);
+        Assert.Contains("new stats", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("old sponsors", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("old stats", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void UpdateMany_RejectsDuplicateLogicalTargetWithoutWriting()
     {
         var root = CreateTempRoot();

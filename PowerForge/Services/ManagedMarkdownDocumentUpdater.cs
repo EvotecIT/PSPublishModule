@@ -236,50 +236,17 @@ public sealed class ManagedMarkdownDocumentUpdater
         if (!File.Exists(path))
             return new PathIdentity(path, wasResolved: false);
 
-        var fullPath = System.IO.Path.GetFullPath(path);
-        var root = System.IO.Path.GetPathRoot(fullPath);
-        if (string.IsNullOrWhiteSpace(root))
-            return new PathIdentity(fullPath, wasResolved: false);
-
-        var current = root!;
-        var relative = fullPath.Substring(root!.Length);
-        var separators = System.IO.Path.DirectorySeparatorChar == System.IO.Path.AltDirectorySeparatorChar
-            ? new[] { System.IO.Path.DirectorySeparatorChar }
-            : new[] { System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar };
-        var segments = relative.Split(separators, StringSplitOptions.RemoveEmptyEntries);
         try
         {
-            foreach (var segment in segments)
-            {
-                if (!Directory.Exists(current))
-                    return new PathIdentity(fullPath, wasResolved: false);
-
-                string? exact = null;
-                string? caseInsensitive = null;
-                foreach (var entry in Directory.EnumerateFileSystemEntries(current))
-                {
-                    var name = System.IO.Path.GetFileName(entry);
-                    if (string.Equals(name, segment, StringComparison.Ordinal))
-                    {
-                        exact = entry;
-                        break;
-                    }
-                    if (caseInsensitive is null && string.Equals(name, segment, StringComparison.OrdinalIgnoreCase))
-                        caseInsensitive = entry;
-                }
-
-                var match = exact ?? caseInsensitive;
-                if (match is null)
-                    return new PathIdentity(fullPath, wasResolved: false);
-                current = match;
-            }
+            return new PathIdentity(ExistingFilePathIdentityResolver.Resolve(path), wasResolved: true);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or NotSupportedException or PlatformNotSupportedException)
         {
-            return new PathIdentity(fullPath, wasResolved: false);
+            throw new InvalidOperationException(
+                $"Managed Markdown document identity could not be resolved safely: {path}",
+                exception);
         }
-
-        return new PathIdentity(System.IO.Path.GetFullPath(current), wasResolved: true);
     }
 
     /// <summary>
