@@ -86,7 +86,7 @@ internal static class ExistingFilePathIdentityResolver
         }
         catch (EntryPointNotFoundException)
         {
-            // GetVolumeInformationByHandleW and ReFS both begin with Windows 8 / Server 2012.
+            // An unavailable volume-handle API implies an OS old enough to predate ReFS.
             return IsLegacyWindowsFileIdentitySafe(null, volumeInformationApiUnavailable: true);
         }
     }
