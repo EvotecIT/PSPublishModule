@@ -422,12 +422,42 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
     [InlineData("test -x /usr/sbin/apachectl && sudo -n /usr/sbin/apachectl -S")]
     [InlineData("/usr/bin/sudo -n /usr/sbin/apachectl -S")]
     [InlineData("sudo</dev/null -n /usr/sbin/apachectl -S")]
+    [InlineData("s\\udo -n /usr/sbin/apachectl -S")]
+    [InlineData("su''do -n /usr/sbin/apachectl -S")]
+    [InlineData("su\"\"do -n /usr/sbin/apachectl -S")]
+    [InlineData("s\\\nudo -n /usr/sbin/apachectl -S")]
     public void Validator_ShouldRejectEmbeddedSudoCaptureCommands(string command)
     {
         var result = RunValidator(captureCommand: command);
 
         Assert.NotEqual(0, result.ExitCode);
         Assert.Contains("canonical case-sensitive sudo -n prefix", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("$SUDO -n /usr/sbin/apachectl -S")]
+    [InlineData("s${UNSET}udo -n /usr/sbin/apachectl -S")]
+    [InlineData("$(printf sudo) -n /usr/sbin/apachectl -S")]
+    [InlineData("`printf sudo` -n /usr/sbin/apachectl -S")]
+    public void Validator_ShouldRejectDynamicShellExpansionInCaptureCommands(string command)
+    {
+        var result = RunValidator(captureCommand: command);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("unsupported dynamic shell expansion", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldAllowLiteralExpansionSyntaxInsideSingleQuotedArguments()
+    {
+        var sudoers = $"Cmnd_Alias BACKUP_PLAIN = {ExpectedPlainCaptureCommand}\n" +
+                      $"Cmnd_Alias BACKUP_ENCRYPTED = {ExpectedCaptureCommand}\n" +
+                      $"{CaptureUser} ALL=(root) NOPASSWD: BACKUP_PLAIN, BACKUP_ENCRYPTED\n";
+        var result = RunValidator(
+            sudoers: sudoers,
+            captureCommand: "dpkg-query -W -f='${binary:Package}\\t${Version}\\n'");
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
     }
 
     [Theory]

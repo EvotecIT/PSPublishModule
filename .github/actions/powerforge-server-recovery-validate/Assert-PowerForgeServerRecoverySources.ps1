@@ -199,6 +199,48 @@ function Get-ExpectedEncryptedCaptureCommand {
     $parts -join ' '
 }
 
+function Get-RecoveryShellComparisonText {
+    param([Parameter(Mandatory)][string] $Command)
+
+    $comparison = [Text.StringBuilder]::new($Command.Length)
+    $singleQuoted = $false
+    $doubleQuoted = $false
+    for ($index = 0; $index -lt $Command.Length; $index++) {
+        $character = $Command[$index]
+        if ($character -eq "'" -and -not $doubleQuoted) {
+            $singleQuoted = -not $singleQuoted
+            continue
+        }
+        if ($character -eq '"' -and -not $singleQuoted) {
+            $doubleQuoted = -not $doubleQuoted
+            continue
+        }
+        if ($character -eq '\' -and -not $singleQuoted) {
+            if ($index + 1 -ge $Command.Length) {
+                throw "Recovery capture command ends with an unsupported shell escape: $Command"
+            }
+            $index++
+            if ($Command[$index] -eq "`r" -and $index + 1 -lt $Command.Length -and $Command[$index + 1] -eq "`n") {
+                $index++
+                continue
+            }
+            if ($Command[$index] -eq "`n") {
+                continue
+            }
+            [void] $comparison.Append($Command[$index])
+            continue
+        }
+        if (($character -eq '$' -or $character -eq '`') -and -not $singleQuoted) {
+            throw "Recovery capture command contains unsupported dynamic shell expansion: $Command"
+        }
+        [void] $comparison.Append($character)
+    }
+    if ($singleQuoted -or $doubleQuoted) {
+        throw "Recovery capture command contains an unterminated shell quote: $Command"
+    }
+    $comparison.ToString()
+}
+
 function Get-ExpectedCaptureSudoersCommand {
     param([Parameter(Mandatory)][pscustomobject] $RecoveryManifest)
 
@@ -216,13 +258,15 @@ function Get-ExpectedCaptureSudoersCommand {
     foreach ($captureCommand in $captureCommands.Where({ $_.sensitive -ne $true })) {
         $command = ([string]$captureCommand.command).Trim()
         if ($command -cnotmatch '^sudo -n (?<command>.+)$') {
-            if ($command -match '(?<![A-Za-z0-9_.-])sudo(?![A-Za-z0-9_.-])') {
+            $comparisonCommand = Get-RecoveryShellComparisonText -Command $command
+            if ($comparisonCommand -match '(?<![A-Za-z0-9_.-])sudo(?![A-Za-z0-9_.-])') {
                 throw "Privileged recovery capture command must use the canonical case-sensitive sudo -n prefix: $command"
             }
             continue
         }
         $sudoersCommand = [string]$Matches['command']
-        if ($sudoersCommand -match '(?<![A-Za-z0-9_.-])sudo(?![A-Za-z0-9_.-])') {
+        $comparisonSudoersCommand = Get-RecoveryShellComparisonText -Command $sudoersCommand
+        if ($comparisonSudoersCommand -match '(?<![A-Za-z0-9_.-])sudo(?![A-Za-z0-9_.-])') {
             throw "Privileged recovery capture command must contain exactly one canonical sudo -n prefix: $command"
         }
         if ([string]::Equals($sudoersCommand, 'apachectl -S', [StringComparison]::Ordinal)) {
