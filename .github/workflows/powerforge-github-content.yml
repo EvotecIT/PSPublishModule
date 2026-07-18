@@ -1,0 +1,104 @@
+name: PowerForge GitHub Content
+
+on:
+  workflow_call:
+    inputs:
+      config_path:
+        description: Path to the GitHub content config in the caller repository.
+        required: false
+        default: ".powerforge/github-content.json"
+        type: string
+      powerforge_ref:
+        description: Optional PSPublishModule ref override. By default the exact reusable-workflow commit is used.
+        required: false
+        default: ""
+        type: string
+      commit_changes:
+        description: Commit and push generated document changes to the checked-out branch.
+        required: false
+        default: true
+        type: boolean
+      commit_message:
+        description: Commit message used when generated content changes.
+        required: false
+        default: "docs: update GitHub sponsors"
+        type: string
+    secrets:
+      github_token:
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  content:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout caller repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Resolve shared workflow source
+        id: workflow_source
+        shell: pwsh
+        run: |
+          $repository = [string]'${{ job.workflow_repository }}'
+          $ref = [string]'${{ inputs.powerforge_ref }}'
+          $workflowSha = [string]'${{ job.workflow_sha }}'
+
+          if ([string]::IsNullOrWhiteSpace($repository)) {
+            $repository = 'EvotecIT/PSPublishModule'
+          }
+          if ([string]::IsNullOrWhiteSpace($ref)) {
+            $ref = $workflowSha
+          }
+          if ([string]::IsNullOrWhiteSpace($ref)) {
+            throw 'Unable to resolve the exact shared workflow commit from job.workflow_sha. Pass powerforge_ref explicitly.'
+          }
+
+          Write-Host "Using GitHub content engine $repository@$ref"
+          "repository=$repository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "ref=$ref" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Checkout PowerForge
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: ${{ steps.workflow_source.outputs.repository }}
+          ref: ${{ steps.workflow_source.outputs.ref }}
+          path: .powerforge-runtime/pspublishmodule
+
+      - name: Generate GitHub repository content
+        id: content
+        uses: ./.powerforge-runtime/pspublishmodule/.github/actions/github-content
+        with:
+          config-path: ${{ inputs.config_path }}
+          github-token: ${{ secrets.github_token != '' && secrets.github_token || github.token }}
+
+      - name: Commit generated content
+        if: inputs.commit_changes && steps.content.outputs.changed == 'true'
+        shell: pwsh
+        env:
+          CHANGED_PATHS_JSON: ${{ steps.content.outputs.changed-paths-json }}
+          COMMIT_MESSAGE: ${{ inputs.commit_message }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $paths = @($env:CHANGED_PATHS_JSON | ConvertFrom-Json)
+          if ($paths.Count -eq 0) {
+            throw 'PowerForge reported changes without any changed document paths.'
+          }
+          foreach ($path in $paths) {
+            git add -- $path
+          }
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host 'Generated content is already current.'
+            exit 0
+          }
+          if ($LASTEXITCODE -ne 1) {
+            exit $LASTEXITCODE
+          }
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m $env:COMMIT_MESSAGE
+          git push

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/github.content.schema.json",
+  "tokenEnvName": "GITHUB_TOKEN",
+  "sponsors": {
+    "enabled": true,
+    "sponsorableLogin": "your-github-login",
+    "includeFormer": true,
+    "failOnEmpty": true,
+    "requireFundingTierData": true,
+    "tierRecognition": {
+      "enabled": true,
+      "useDefaultTiers": true,
+      "unmappedTierKey": "Sponsors"
+    },
+    "overrides": [
+      {
+        "login": "account-to-recognize-differently",
+        "recognitionTierKey": "Gold"
+      }
+    ],
+    "manualEntries": [
+      {
+        "key": "example-company",
+        "displayName": "Example Company",
+        "profileUrl": "https://example.com",
+        "avatarUrl": "https://example.com/logo.png",
+        "recognitionTierKey": "Platinum"
+      }
+    ],
+    "outputs": [
+      {
+        "path": "SPONSORS.md",
+        "blockId": "sponsors",
+        "layout": "Full",
+        "title": "Sponsors",
+        "introduction": "Thank you to everyone who supports this project.",
+        "includeFormer": true,
+        "createIfMissing": true
+      },
+      {
+        "path": "README.md",
+        "blockId": "sponsors-readme",
+        "layout": "Compact",
+        "includeFormer": false,
+        "createIfMissing": false,
+        "missingBlockBehavior": "Fail",
+        "avatarSize": 48,
+        "maxEntries": 12,
+        "moreLink": "SPONSORS.md"
+      }
+    ]
+  }
+}

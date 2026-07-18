@@ -57,6 +57,7 @@ The same contracts are available from PowerShell cmdlets, JSON files, and CLI co
 | .NET publish and packaging | Builds publish matrices for apps, services, tools, bundles, plugins, MSI, MSIX, Microsoft Store packages, appinstaller files, signing, checksums, and manifests. | `New-DotNetPublishConfig`, `Invoke-DotNetPublish`, `Invoke-PowerForgeBundlePostProcess`, `Invoke-PowerForgePluginExport`, `Invoke-PowerForgePluginPack` |
 | Unified release | Coordinates module artifacts, NuGet packages, tool binaries, installers, GitHub releases, staging folders, checksums, Winget manifests/submission, and release manifests from one release config. | `New-PowerForgeReleaseConfig`, `Invoke-PowerForgeRelease`, `Invoke-ProjectRelease`, `Invoke-ProjectBuild`, `powerforge release` |
 | GitHub housekeeping | Prunes Actions artifacts and caches, performs runner cleanup, and provides reusable workflows/actions for cross-repo maintenance. | `powerforge github housekeeping`, `.github/workflows/powerforge-github-housekeeping.yml` |
+| GitHub repository content | Generates managed Sponsors rosters from public GitHub data with optional recognition tiers, manual overrides, and reusable automation. | `powerforge github content sync`, `.github/workflows/powerforge-github-content.yml` |
 | Home Assistant and HACS releases | Applies PR-driven semantic version policy, keeps integration/plugin metadata aligned, builds HACS assets, publishes verified GitHub releases, and resumes failed runs. | `powerforge homeassistant release`, `.github/workflows/powerforge-homeassistant-release.yml` |
 | Static websites and API docs | Builds PowerForge.Web sites, docs, blogs, search indexes, API docs, project hubs, SEO assets, sitemaps, quality gates, audits, and deployment artifacts. | `powerforge-web build`, `powerforge-web pipeline`, `powerforge-web verify`, `powerforge-web audit`, `powerforge-web scaffold` |
 | Project hygiene | Checks or fixes line endings/encoding, removes comments or project files, reads versions, and summarizes test failures. | `Get-ProjectConsistency`, `Convert-ProjectConsistency`, `Get-ProjectVersion`, `Set-ProjectVersion`, `Get-ModuleTestFailures` |
@@ -524,6 +525,16 @@ Recommended site contracts include:
 - a theme manifest with feature contracts.
 
 See [Docs/PowerForge.Web.WebsiteStarter.md](Docs/PowerForge.Web.WebsiteStarter.md), [Docs/PowerForge.Web.QualityGates.md](Docs/PowerForge.Web.QualityGates.md), and [Docs/PowerForge.Web.Roadmap.md](Docs/PowerForge.Web.Roadmap.md).
+
+## GitHub Repository Content
+
+Generate a full `SPONSORS.md` and an optional compact README block from public GitHub Sponsors data:
+
+```powershell
+powerforge github content sync --config .\.powerforge\github-content.json
+```
+
+Recognition tiers are opt-in, per-account overrides win over GitHub tier mapping, and manual entries cover companies or support received outside GitHub. See [Generated GitHub Repository Content](Docs/PowerForge.GitHubContent.md) for the config, markers, privacy behavior, and reusable workflow.
 
 ## GitHub Housekeeping
 
