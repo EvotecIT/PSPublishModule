@@ -10,9 +10,9 @@ public sealed class RepairManagedModuleVisibilityTests
     public void Cleanup_UsesAllAnonymousRootsVisibleThroughCurrentPSModulePath()
     {
         using var workspace = new TemporaryDirectory();
-        var globalRoot = Path.Combine(workspace.Path, "global");
-        var dependentRoot = Path.Combine(workspace.Path, "dependent");
-        var alternativeRoot = Path.Combine(workspace.Path, "alternative");
+        var globalRoot = Path.Combine(workspace.Path, "PowerShell", "Modules");
+        var dependentRoot = Path.Combine(workspace.Path, "WindowsPowerShell", "Modules");
+        var alternativeRoot = Path.Combine(workspace.Path, "PowerShell", "AlternativeModules");
         var oldPath = CreateInstalledModule(globalRoot, "Company.Core", "1.0.0");
         var currentPath = CreateInstalledModule(globalRoot, "Company.Core", "2.0.0");
         var dependentPath = CreateInstalledModule(
@@ -39,6 +39,8 @@ public sealed class RepairManagedModuleVisibilityTests
         Assert.All(result.Inventory.ScannedPaths, static path => Assert.Equal(
             ModuleStateInventoryCommandSupport.CurrentProcessModulePathVisibilityGroup,
             path.DependencyVisibilityGroup));
+        Assert.Contains(result.Inventory.ScannedPaths, static path => path.PowerShellEdition == "Core");
+        Assert.Contains(result.Inventory.ScannedPaths, static path => path.PowerShellEdition == "Desktop");
         var execution = Assert.Single(result.Apply.ExecutionResults, static execution => execution.Operation == "Remove");
         Assert.True(execution.Succeeded);
         Assert.False(Directory.Exists(oldPath));

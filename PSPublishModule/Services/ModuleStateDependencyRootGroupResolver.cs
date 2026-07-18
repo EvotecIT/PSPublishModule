@@ -14,7 +14,8 @@ internal static class ModuleStateDependencyRootGroupResolver
         string? targetProfileName,
         string targetModuleRoot)
     {
-        var eligiblePaths = (inventoryPaths ?? Array.Empty<ModuleStateInventoryPathResult>())
+        var paths = (inventoryPaths ?? Array.Empty<ModuleStateInventoryPathResult>()).ToArray();
+        var eligiblePaths = paths
             .Where(path => string.IsNullOrWhiteSpace(targetPowerShellEdition) ||
                            string.IsNullOrWhiteSpace(path.PowerShellEdition) ||
                            string.Equals(path.PowerShellEdition, targetPowerShellEdition, StringComparison.OrdinalIgnoreCase))
@@ -50,8 +51,9 @@ internal static class ModuleStateDependencyRootGroupResolver
             .ToArray();
         if (string.IsNullOrWhiteSpace(targetProfileName))
         {
-            groups.AddRange(anonymousPaths
-                .Where(static path => !string.IsNullOrWhiteSpace(path.DependencyVisibilityGroup))
+            groups.AddRange(paths
+                .Where(static path => string.IsNullOrWhiteSpace(path.ProfileName) &&
+                                      !string.IsNullOrWhiteSpace(path.DependencyVisibilityGroup))
                 .GroupBy(static path => path.DependencyVisibilityGroup!, StringComparer.OrdinalIgnoreCase)
                 .Select(group => (IReadOnlyList<string>)NormalizeRoots(
                     sharedPaths.Concat(group.Select(static path => path.Path)),
