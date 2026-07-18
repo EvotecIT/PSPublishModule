@@ -16,7 +16,7 @@
       "uniqueItems": true,
       "items": {
         "type": "string",
-        "pattern": "^/var/lock/[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\\.lock$"
+        "pattern": "^/var/lock/[A-Za-z0-9][A-Za-z0-9_.-]{0,125}\\.lock$"
       }
     },
     "repositories": {

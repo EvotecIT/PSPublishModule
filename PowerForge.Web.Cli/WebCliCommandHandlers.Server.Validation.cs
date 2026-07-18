@@ -19,8 +19,8 @@ internal static partial class WebCliCommandHandlers
         var encryptedFiles = manifest.Capture?.EncryptedFiles ?? Array.Empty<PowerForgeServerManagedFile>();
         var plainPaths = ValidateCaptureEntries(plainFiles, "capture.plainFiles", sensitive: false, errors);
         var encryptedPaths = ValidateCaptureEntries(encryptedFiles, "capture.encryptedFiles", sensitive: true, errors);
-        foreach (var encryptedPath in encryptedPaths.Where(IsEstateWideLetsEncryptCapturePath))
-            errors.Add($"Encrypted capture path '{encryptedPath}' is too broad; capture exact certificate lineages or ACME account directories instead of shared Let's Encrypt roots.");
+        foreach (var encryptedPath in encryptedPaths.Where(IsOverbroadLetsEncryptCapturePath))
+            errors.Add($"Encrypted capture path '{encryptedPath}' is too broad; capture an exact certificate lineage or one exact ACME account directory.");
         var retention = manifest.BackupTarget?.Retention;
         if (retention?.KeepDays is not null)
             errors.Add("backupTarget.retention.keepDays is not implemented; use keepLatestInTree for current-tree retention.");
@@ -187,6 +187,8 @@ internal static partial class WebCliCommandHandlers
                     errors.Add($"Secret '{secret.Id}' must not replace declared repository root '{repositoryRoot}'.");
                 else if (!secret.RestoreAfterRepositories)
                     errors.Add($"Secret '{secret.Id}' at '{secretPath}' is inside repository '{repositoryRoot}' and must set restoreAfterRepositories=true.");
+                if (!string.Equals(secret.Capture, "encrypted", StringComparison.OrdinalIgnoreCase))
+                    errors.Add($"Repository-overlapping secret '{secret.Id}' must use capture 'encrypted'.");
                 if (!string.Equals(secret.RestoreMode, "file", StringComparison.OrdinalIgnoreCase))
                     errors.Add($"Repository-overlapping secret '{secret.Id}' must use restoreMode 'file'.");
                 if (string.IsNullOrWhiteSpace(secret.Owner) || string.IsNullOrWhiteSpace(secret.Group) || string.IsNullOrWhiteSpace(secret.Mode))
@@ -217,8 +219,28 @@ internal static partial class WebCliCommandHandlers
 
             if (!encryptedPaths.Any(path => PathContains(path, secretPath)))
                 errors.Add($"Encrypted secret '{secret.Id}' at '{secretPath}' is not covered by capture.encryptedFiles.");
+            if (secret.RestoreAfterRepositories && !encryptedPaths.Contains(secretPath, StringComparer.Ordinal))
+                errors.Add($"Deferred repository secret '{secret.Id}' at '{secretPath}' must have one exact capture.encryptedFiles entry.");
             if (plainPaths.Any(path => CapturePathsMayOverlap(secretPath, path)))
                 errors.Add($"Encrypted secret '{secret.Id}' at '{secretPath}' overlaps capture.plainFiles.");
+        }
+
+        var deferredSecretPaths = new HashSet<string>(
+            (manifest.Secrets ?? Array.Empty<PowerForgeServerSecret>())
+                .Where(static secret => secret.RestoreAfterRepositories &&
+                                        string.Equals(secret.Capture, "encrypted", StringComparison.OrdinalIgnoreCase) &&
+                                        !string.IsNullOrWhiteSpace(secret.Path))
+                .Select(static secret => secret.Path!.TrimEnd('/')),
+            StringComparer.Ordinal);
+        foreach (var repositoryRoot in repositoryRoots)
+        {
+            foreach (var plainPath in plainPaths.Where(path => CapturePathsMayOverlap(repositoryRoot, path)))
+                errors.Add($"Plain capture path '{plainPath}' overlaps repository '{repositoryRoot}'; repository content must be restored from its pinned source.");
+            foreach (var encryptedPath in encryptedPaths.Where(path =>
+                         CapturePathsMayOverlap(repositoryRoot, path) && !deferredSecretPaths.Contains(path)))
+            {
+                errors.Add($"Encrypted capture path '{encryptedPath}' overlaps repository '{repositoryRoot}' without an exact deferred secret contract.");
+            }
         }
 
         for (var leftIndex = 0; leftIndex < encryptedPaths.Length; leftIndex++)
@@ -373,13 +395,31 @@ internal static partial class WebCliCommandHandlers
         }
     }
 
-    private static bool IsEstateWideLetsEncryptCapturePath(string path)
-        => new[]
+    private static bool IsOverbroadLetsEncryptCapturePath(string path)
+    {
+        const string accountsRoot = "/etc/letsencrypt/accounts";
+        if (PathContains(path, accountsRoot))
+            return true;
+        if (PathStrictlyContains(accountsRoot, path))
         {
-            "/etc/letsencrypt/accounts",
-            "/etc/letsencrypt/archive",
-            "/etc/letsencrypt/live"
-        }.Any(root => PathContains(path, root));
+            var accountSegments = path[(accountsRoot.Length + 1)..]
+                .Split('/', StringSplitOptions.RemoveEmptyEntries);
+            return accountSegments.Length != 3;
+        }
+
+        foreach (var lineageRoot in new[] { "/etc/letsencrypt/archive", "/etc/letsencrypt/live" })
+        {
+            if (PathContains(path, lineageRoot))
+                return true;
+            if (PathStrictlyContains(lineageRoot, path) &&
+                path[(lineageRoot.Length + 1)..].Contains('/', StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static void ValidateManagedTargetHierarchy(
         IReadOnlyCollection<(string Id, string Path, string Kind)> managedTargets,

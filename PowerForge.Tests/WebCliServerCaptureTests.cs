@@ -165,9 +165,9 @@ public sealed class WebCliServerCaptureTests
     }
 
     [Fact]
-    public void BuildRemoteCaptureLockCommand_HoldsEveryDeclaredLockForSessionLifetime()
+    public void BuildRemoteOperationLockCommand_HoldsEveryDeclaredLockForSessionLifetime()
     {
-        var command = WebCliCommandHandlers.BuildRemoteCaptureLockCommand(
+        var command = WebCliCommandHandlers.BuildRemoteOperationLockCommand(
         [
             "/var/lock/powerforge-site-example.lock",
             "/var/lock/powerforge-contact-example.lock",
@@ -177,9 +177,9 @@ public sealed class WebCliServerCaptureTests
         Assert.Equal(1, command.Split("powerforge-site-example.lock", StringSplitOptions.None).Length - 1);
         Assert.Contains("flock -n '/var/lock/powerforge-site-example.lock'", command, StringComparison.Ordinal);
         Assert.Contains("flock -n '/var/lock/powerforge-contact-example.lock'", command, StringComparison.Ordinal);
-        Assert.Contains("POWERFORGE_CAPTURE_LOCKED", command, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_OPERATION_LOCKED", command, StringComparison.Ordinal);
         Assert.Contains("cat >/dev/null", command, StringComparison.Ordinal);
         Assert.Throws<InvalidOperationException>(() =>
-            WebCliCommandHandlers.BuildRemoteCaptureLockCommand(["/tmp/example.lock"]));
+            WebCliCommandHandlers.BuildRemoteOperationLockCommand(["/tmp/example.lock"]));
     }
 }

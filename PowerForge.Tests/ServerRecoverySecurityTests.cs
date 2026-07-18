@@ -800,6 +800,14 @@ public sealed class ServerRecoverySecurityTests
         var invalidLockErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
 
         Assert.Contains(invalidLockErrors, error => error.Contains("directly below /var/lock", StringComparison.Ordinal));
+
+        manifest.OperationLocks = [$"/var/lock/{new string('a', 126)}.lock"];
+        Assert.Empty(WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest));
+
+        manifest.OperationLocks = [$"/var/lock/{new string('a', 127)}.lock"];
+        var oversizedLockErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(oversizedLockErrors, error => error.Contains("directly below /var/lock", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -835,6 +843,20 @@ public sealed class ServerRecoverySecurityTests
         manifest.Secrets[0].RestoreAfterRepositories = true;
 
         Assert.Empty(WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest));
+
+        manifest.Capture.EncryptedFiles[0].Target = "/srv/example";
+        var ancestorCaptureErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(ancestorCaptureErrors, error => error.Contains("must have one exact capture.encryptedFiles entry", StringComparison.Ordinal));
+        Assert.Contains(ancestorCaptureErrors, error => error.Contains("without an exact deferred secret contract", StringComparison.Ordinal));
+
+        manifest.Capture.EncryptedFiles[0].Target = "/srv/example/.deploy-key";
+        manifest.Secrets[0].Capture = "exclude";
+        var excludedDeferredErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(excludedDeferredErrors, error => error.Contains("must use capture 'encrypted'", StringComparison.Ordinal));
+
+        manifest.Secrets[0].Capture = "encrypted";
 
         manifest.Secrets[0].RestoreMode = "directory";
         var directoryErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
@@ -885,9 +907,13 @@ public sealed class ServerRecoverySecurityTests
     [Theory]
     [InlineData("/etc/letsencrypt")]
     [InlineData("/etc/letsencrypt/accounts")]
+    [InlineData("/etc/letsencrypt/accounts/acme-v02.api.letsencrypt.org/directory")]
+    [InlineData("/etc/letsencrypt/accounts/acme-v02.api.letsencrypt.org/directory/account/private_key.json")]
     [InlineData("/etc/letsencrypt/archive")]
+    [InlineData("/etc/letsencrypt/archive/example.com/privkey1.pem")]
     [InlineData("/etc/letsencrypt/live")]
-    public void ManifestValidation_RejectsEstateWideLetsEncryptCaptureRoots(string path)
+    [InlineData("/etc/letsencrypt/live/example.com/privkey.pem")]
+    public void ManifestValidation_RejectsOverbroadLetsEncryptCapturePaths(string path)
     {
         var manifest = CreateManifest();
         manifest.Secrets =
@@ -910,7 +936,37 @@ public sealed class ServerRecoverySecurityTests
 
         var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
 
-        Assert.Contains(errors, error => error.Contains("too broad", StringComparison.Ordinal) && error.Contains("Let's Encrypt roots", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("too broad", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("/etc/letsencrypt/accounts/acme-v02.api.letsencrypt.org/directory/account")]
+    [InlineData("/etc/letsencrypt/archive/example.com")]
+    [InlineData("/etc/letsencrypt/live/example.com")]
+    public void ManifestValidation_AllowsOneExactLetsEncryptScope(string path)
+    {
+        var manifest = CreateManifest();
+        manifest.Secrets =
+        [
+            new PowerForgeServerSecret
+            {
+                Id = "acme-state",
+                Path = path,
+                Capture = "encrypted",
+                RestoreMode = "directory",
+                Owner = "root",
+                Group = "root",
+                Mode = "700"
+            }
+        ];
+        manifest.Capture!.EncryptedFiles =
+        [
+            new PowerForgeServerManagedFile { Target = path, Required = true, Sensitive = true }
+        ];
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.DoesNotContain(errors, error => error.Contains("too broad", StringComparison.Ordinal));
     }
 
     [Fact]

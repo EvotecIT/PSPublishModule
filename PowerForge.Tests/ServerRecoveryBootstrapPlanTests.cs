@@ -263,8 +263,7 @@ public sealed class ServerRecoveryBootstrapPlanTests
         var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
         var apache = Assert.Single(steps, step => step.Title == "Install Apache file /etc/apache2/sites-available/example.conf");
         var apacheConf = Assert.Single(steps, step => step.Title == "Install Apache file /etc/apache2/conf-available/platform.conf");
-        var enableSite = Assert.Single(steps, step => step.Title == "Enable Apache site example.conf");
-        var disableConf = Assert.Single(steps, step => step.Title == "Disable Apache conf platform.conf");
+        var activateApache = Assert.Single(steps, step => step.Title == "Activate Apache configuration transactionally");
         var systemd = Assert.Single(steps, step => step.Title == "Install systemd unit example.service");
 
         Assert.Contains("test ! -L '/srv/example/deploy/apache.conf'", apache.Command, StringComparison.Ordinal);
@@ -273,8 +272,11 @@ public sealed class ServerRecoveryBootstrapPlanTests
             apache.Command,
             StringComparison.Ordinal);
         Assert.Contains("test ! -L '/srv/example/deploy/platform.conf'", apacheConf.Command, StringComparison.Ordinal);
-        Assert.Equal("a2ensite 'example.conf'", enableSite.Command);
-        Assert.Equal("a2disconf 'platform.conf'", disableConf.Command);
+        Assert.Contains("a2ensite 'example.conf'", activateApache.Command, StringComparison.Ordinal);
+        Assert.Contains("a2disconf 'platform.conf'", activateApache.Command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_restore_apache_activation", activateApache.Command, StringComparison.Ordinal);
+        Assert.Contains("apachectl configtest", activateApache.Command, StringComparison.Ordinal);
+        Assert.Contains("systemctl reload 'apache2'", activateApache.Command, StringComparison.Ordinal);
         Assert.Contains("test ! -L '/srv/example/deploy/example.service'", systemd.Command, StringComparison.Ordinal);
         Assert.EndsWith(
             "install -T -o 'root' -g 'root' -m '0644' '/srv/example/deploy/example.service' '/etc/systemd/system/example.service'",
@@ -440,16 +442,22 @@ public sealed class ServerRecoveryBootstrapPlanTests
         };
 
         var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
-        var operationLock = Assert.Single(steps, step => step.Category == "locking");
+        var prepareOperationLock = Assert.Single(steps, step => step.Title.StartsWith("Prepare shared operation lock", StringComparison.Ordinal));
+        var acquireOperationLocks = Assert.Single(steps, step => step.Title == "Acquire shared operation locks for bootstrap");
         var repository = Assert.Single(steps, step => step.Category == "repositories");
         var secret = Assert.Single(steps, step => step.Title == "Install staged secret repository-key");
         var cleanup = Assert.Single(steps, step => step.Title == "Remove empty secret staging directory");
 
-        Assert.True(operationLock.Order < repository.Order);
+        Assert.True(prepareOperationLock.Order < acquireOperationLocks.Order);
+        Assert.True(acquireOperationLocks.Order < repository.Order);
         Assert.True(repository.Order < secret.Order);
-        Assert.Contains("root:root 644", operationLock.Command, StringComparison.Ordinal);
+        Assert.Contains("root:root 644", prepareOperationLock.Command, StringComparison.Ordinal);
+        Assert.Contains("flock -n \"$powerforge_operation_lock_fd_1\"", acquireOperationLocks.Command, StringComparison.Ordinal);
         Assert.Contains("/var/lib/powerforge/restore-secrets/", secret.Command, StringComparison.Ordinal);
         Assert.Contains("/srv/example/.deploy-key", secret.Command, StringComparison.Ordinal);
+        Assert.Contains("ls-files --error-unmatch -- '.deploy-key'", secret.Command, StringComparison.Ordinal);
+        Assert.Contains("check-ignore -q -- '.deploy-key'", secret.Command, StringComparison.Ordinal);
+        Assert.Contains("test ! -L '/srv/example/.deploy-key'", secret.Command, StringComparison.Ordinal);
         Assert.Contains("install -T -o 'root' -g 'root' -m '0600'", secret.Command, StringComparison.Ordinal);
         Assert.Contains("find '/var/lib/powerforge/restore-secrets/", cleanup.Command, StringComparison.Ordinal);
         Assert.Contains("-depth -mindepth 1 -type d -empty -delete", cleanup.Command, StringComparison.Ordinal);
@@ -643,4 +651,5 @@ public sealed class ServerRecoveryBootstrapPlanTests
         var replacement = Array.IndexOf(lines, "mv -fT -- \"$powerforge_sudoers_temp\" '/etc/sudoers.d/powerforge-example'");
         Assert.True(rollbackArmed >= 0 && rollbackArmed < replacement);
     }
+
 }

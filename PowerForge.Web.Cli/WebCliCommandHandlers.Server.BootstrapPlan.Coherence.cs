@@ -1,0 +1,111 @@
+namespace PowerForge.Web.Cli;
+
+internal static partial class WebCliCommandHandlers
+{
+    internal static string BuildOperationLockInstallCommand(string path)
+    {
+        var quoted = ShellQuote(path);
+        return $"if [ ! -e {quoted} ] && [ ! -L {quoted} ]; then install -T -o root -g root -m 0644 /dev/null {quoted}; fi; " +
+               $"test -f {quoted} && test ! -L {quoted} && " +
+               $"test \"$(stat -c '%U:%G %a' -- {quoted})\" = 'root:root 644' || " +
+               $"{{ echo {ShellQuote($"Operation lock must be a root-owned mode-644 regular file: {path}")} >&2; exit 3; }}";
+    }
+
+    internal static string BuildBootstrapOperationLockAcquireCommand(IEnumerable<string> paths)
+    {
+        var locks = paths
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+        var commands = new List<string>();
+        for (var index = 0; index < locks.Length; index++)
+        {
+            var descriptor = $"powerforge_operation_lock_fd_{index + 1}";
+            commands.Add($"exec {{{descriptor}}}>{ShellQuote(locks[index])}");
+            commands.Add(
+                $"flock -n \"${descriptor}\" || {{ echo {ShellQuote($"Another host operation holds recovery lock: {locks[index]}")} >&2; exit 3; }}");
+        }
+        return string.Join('\n', commands);
+    }
+
+    internal static string BuildDeferredSecretInstallCommand(
+        PowerForgeServerSecret secret,
+        string stagingRoot,
+        string repositoryRoot)
+    {
+        var target = secret.Path?.TrimEnd('/') ?? string.Empty;
+        var staged = stagingRoot.TrimEnd('/') + target;
+        var relativeTarget = target[(repositoryRoot.TrimEnd('/').Length + 1)..];
+        var owner = string.IsNullOrWhiteSpace(secret.Owner) ? "root" : secret.Owner;
+        var group = string.IsNullOrWhiteSpace(secret.Group) ? "root" : secret.Group;
+        var mode = string.IsNullOrWhiteSpace(secret.Mode) ? "0600" : secret.Mode;
+        return string.Join("; ",
+            $"test -f {ShellQuote(staged)} && test ! -L {ShellQuote(staged)} || {{ echo {ShellQuote($"Staged repository secret is missing or unsafe: {secret.Id}")} >&2; exit 3; }}",
+            $"if git -C {ShellQuote(repositoryRoot)} ls-files --error-unmatch -- {ShellQuote(relativeTarget)} >/dev/null 2>&1; then echo {ShellQuote($"Deferred repository secret must not be tracked: {target}")} >&2; exit 3; fi",
+            $"git -C {ShellQuote(repositoryRoot)} check-ignore -q -- {ShellQuote(relativeTarget)} || {{ echo {ShellQuote($"Deferred repository secret must be ignored for rerunnable recovery: {target}")} >&2; exit 3; }}",
+            BuildRootControlledTargetParentSafetyCommand(target),
+            BuildExistingRegularFileTargetGuard(target),
+            $"install -T -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {ShellQuote(staged)} {ShellQuote(target)}",
+            $"rm -f -- {ShellQuote(staged)}");
+    }
+
+    internal static string BuildApacheActivationCommand(PowerForgeServerApache apache)
+    {
+        var service = string.IsNullOrWhiteSpace(apache.Service) ? "apache2" : apache.Service;
+        var validateCommand = string.IsNullOrWhiteSpace(apache.ValidateCommand)
+            ? "apachectl configtest"
+            : apache.ValidateCommand;
+        var entries = new List<(string Name, bool Enabled, string Enable, string Disable, string ActivePath)>();
+        entries.AddRange((apache.Sites ?? Array.Empty<PowerForgeServerApacheFile>())
+            .Where(static file => file.Enabled is not null)
+            .Select(static file =>
+            {
+                var name = Path.GetFileName(file.Target) ?? string.Empty;
+                return (name, file.Enabled == true, "a2ensite", "a2dissite", $"/etc/apache2/sites-enabled/{name}");
+            }));
+        entries.AddRange((apache.Conf ?? Array.Empty<PowerForgeServerApacheFile>())
+            .Where(static file => file.Enabled is not null)
+            .Select(static file =>
+            {
+                var name = Path.GetFileName(file.Target) ?? string.Empty;
+                return (name, file.Enabled == true, "a2enconf", "a2disconf", $"/etc/apache2/conf-enabled/{name}");
+            }));
+
+        var commands = new List<string>
+        {
+            "powerforge_apache_state=$(mktemp -d)",
+            "chmod 0700 \"$powerforge_apache_state\"",
+            "powerforge_restore_apache_activation() {",
+            "  powerforge_apache_status=$?",
+            "  trap - EXIT HUP INT TERM",
+            "  set +e"
+        };
+        for (var index = 0; index < entries.Count; index++)
+        {
+            var entry = entries[index];
+            commands.Add(
+                $"  if [ -f \"$powerforge_apache_state/{index}.enabled\" ]; then {entry.Enable} {ShellQuote(entry.Name)} >/dev/null; else {entry.Disable} {ShellQuote(entry.Name)} >/dev/null; fi");
+        }
+        commands.Add($"  if {validateCommand}; then systemctl reload {ShellQuote(service)} || true; fi");
+        commands.Add("  rm -rf -- \"$powerforge_apache_state\"");
+        commands.Add("  exit \"$powerforge_apache_status\"");
+        commands.Add("}");
+        commands.Add("trap powerforge_restore_apache_activation EXIT");
+        commands.Add("trap 'exit 129' HUP");
+        commands.Add("trap 'exit 130' INT");
+        commands.Add("trap 'exit 143' TERM");
+        for (var index = 0; index < entries.Count; index++)
+        {
+            var entry = entries[index];
+            commands.Add(
+                $"if [ -e {ShellQuote(entry.ActivePath)} ] || [ -L {ShellQuote(entry.ActivePath)} ]; then : >\"$powerforge_apache_state/{index}.enabled\"; fi");
+            commands.Add($"{(entry.Enabled ? entry.Enable : entry.Disable)} {ShellQuote(entry.Name)}");
+        }
+        commands.Add(validateCommand);
+        commands.Add($"systemctl reload {ShellQuote(service)}");
+        commands.Add("trap - EXIT HUP INT TERM");
+        commands.Add("rm -rf -- \"$powerforge_apache_state\"");
+        return string.Join('\n', commands);
+    }
+}

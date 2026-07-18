@@ -77,6 +77,18 @@ public sealed class ServerScaffoldTests
                                               path["source"]!.GetValue<string>().EndsWith("/powerforge-site-deploy.sh", StringComparison.Ordinal));
         Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/etc/powerforge/sites/example.test.env" &&
                                               path["source"]!.GetValue<string>().EndsWith("/example.test.env", StringComparison.Ordinal));
+        Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/var/lib/powerforge-example-backup" &&
+                                              path["owner"]!.GetValue<string>() == "root" &&
+                                              path["group"]!.GetValue<string>() == "root" &&
+                                              path["mode"]!.GetValue<string>() == "755");
+        Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/var/lib/powerforge-example-backup/.ssh" &&
+                                              path["owner"]!.GetValue<string>() == "root" &&
+                                              path["group"]!.GetValue<string>() == "root" &&
+                                              path["mode"]!.GetValue<string>() == "755");
+        Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/var/lib/powerforge-example-backup/.ssh/authorized_keys" &&
+                                              path["owner"]!.GetValue<string>() == "root" &&
+                                              path["group"]!.GetValue<string>() == "root" &&
+                                              path["mode"]!.GetValue<string>() == "600");
         Assert.Equal(2, managedPaths.Count(path => path!["validation"]?.GetValue<string>() == "sudoers"));
     }
 
@@ -343,6 +355,14 @@ public sealed class ServerScaffoldTests
         var invalidOperationLock = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
         invalidOperationLock["operationLocks"] = new JsonArray("/tmp/powerforge-site-example.lock");
         Assert.False(EvaluateSchema(schema, invalidOperationLock));
+
+        var maximumOperationLock = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        maximumOperationLock["operationLocks"] = new JsonArray($"/var/lock/{new string('a', 126)}.lock");
+        Assert.True(EvaluateSchema(schema, maximumOperationLock));
+
+        var oversizedOperationLock = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        oversizedOperationLock["operationLocks"] = new JsonArray($"/var/lock/{new string('a', 127)}.lock");
+        Assert.False(EvaluateSchema(schema, oversizedOperationLock));
 
         var duplicateOperationLock = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
         duplicateOperationLock["operationLocks"] = new JsonArray(

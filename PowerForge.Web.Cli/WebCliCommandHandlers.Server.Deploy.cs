@@ -23,6 +23,12 @@ internal static partial class WebCliCommandHandlers
         if (deployCommands.Length == 0)
             warnings.Add("No deploy commands are defined in the manifest.");
 
+        using var operationLock = dryRun || deployCommands.Length == 0
+            ? null
+            : AcquireRemoteOperationLocks(
+                sshCommand,
+                target,
+                manifest.OperationLocks ?? Array.Empty<string>());
         foreach (var command in deployCommands)
         {
             var commandText = BuildDeployCommand(command);

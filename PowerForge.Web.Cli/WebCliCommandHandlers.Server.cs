@@ -170,7 +170,7 @@ internal static partial class WebCliCommandHandlers
         }
         else
         {
-            using var captureLock = AcquireRemoteCaptureLocks(
+            using var captureLock = AcquireRemoteOperationLocks(
                 sshCommand,
                 target,
                 manifest.OperationLocks ?? Array.Empty<string>());
@@ -523,101 +523,6 @@ internal static partial class WebCliCommandHandlers
     internal static string BuildRemoteEncryptedCaptureSudoersCommand(PowerForgeServerManagedFile[] files, string recipient)
         => BuildRemoteEncryptedCaptureCommand(files, recipient, quoteArguments: false);
 
-    internal static string BuildRemoteCaptureLockCommand(IEnumerable<string> paths)
-    {
-        var locks = GetRemoteOperationLocks(paths);
-        if (locks.Length == 0)
-            throw new InvalidOperationException("At least one operation lock is required.");
-
-        var builder = new StringBuilder("set -e; ");
-        foreach (var path in locks)
-            builder.Append("flock -n ").Append(ShellQuote(path)).Append(' ');
-        builder.Append("sh -c ").Append(ShellQuote("printf 'POWERFORGE_CAPTURE_LOCKED\\n'; cat >/dev/null"));
-        return builder.ToString();
-    }
-
-    private static IDisposable? AcquireRemoteCaptureLocks(
-        string sshCommand,
-        string target,
-        IEnumerable<string> paths)
-    {
-        var locks = GetRemoteOperationLocks(paths);
-        if (locks.Length == 0)
-            return null;
-
-        var process = CreateProcess(sshCommand, BuildSshArguments(target, BuildRemoteCaptureLockCommand(locks)));
-        process.StartInfo.RedirectStandardInput = true;
-        process.StartInfo.RedirectStandardOutput = true;
-        process.StartInfo.RedirectStandardError = true;
-        if (!process.Start())
-            throw new InvalidOperationException("Failed to start the remote capture lock session.");
-
-        var markerTask = process.StandardOutput.ReadLineAsync();
-        bool markerReady;
-        try
-        {
-            markerReady = markerTask.Wait(TimeSpan.FromSeconds(30));
-        }
-        catch (Exception exception)
-        {
-            var stderr = StopFailedCaptureLockProcess(process);
-            throw new InvalidOperationException(
-                string.IsNullOrWhiteSpace(stderr)
-                    ? "Failed while acquiring the remote capture operation lock."
-                    : $"Failed while acquiring the remote capture operation lock: {stderr}",
-                exception);
-        }
-        if (!markerReady)
-        {
-            StopFailedCaptureLockProcess(process);
-            throw new InvalidOperationException("Timed out while acquiring the remote capture operation lock.");
-        }
-        if (!string.Equals(markerTask.Result, "POWERFORGE_CAPTURE_LOCKED", StringComparison.Ordinal))
-        {
-            var stderr = StopFailedCaptureLockProcess(process);
-            throw new InvalidOperationException(string.IsNullOrWhiteSpace(stderr)
-                ? "Another host operation holds the recovery capture lock."
-                : $"Failed to acquire the remote capture operation lock: {stderr}");
-        }
-
-        return new RemoteCaptureLock(process);
-    }
-
-    private static string StopFailedCaptureLockProcess(Process process)
-    {
-        try
-        {
-            try { process.StandardInput.Close(); } catch (InvalidOperationException) { }
-            if (!process.HasExited && !process.WaitForExit(5000))
-            {
-                process.Kill(entireProcessTree: true);
-                process.WaitForExit();
-            }
-            return process.StandardError.ReadToEnd().Trim();
-        }
-        finally
-        {
-            process.Dispose();
-        }
-    }
-
-    private static string[] GetRemoteOperationLocks(IEnumerable<string> paths)
-    {
-        var locks = paths.Where(static path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.Ordinal).ToArray();
-        foreach (var path in locks)
-        {
-            const string prefix = "/var/lock/";
-            if (!path.StartsWith(prefix, StringComparison.Ordinal) ||
-                !path.EndsWith(".lock", StringComparison.Ordinal) ||
-                path[prefix.Length..].Contains('/', StringComparison.Ordinal) ||
-                path.Any(static character => !(IsAsciiLetterOrDigit(character) || character is '/' or '.' or '_' or '-')))
-            {
-                throw new InvalidOperationException($"Operation lock contains unsupported characters or location: {path}");
-            }
-        }
-        return locks;
-    }
-
     private static string BuildRemoteEncryptedCaptureCommand(
         PowerForgeServerManagedFile[] files,
         string recipient,
@@ -720,31 +625,6 @@ internal static partial class WebCliCommandHandlers
         foreach (var arg in args)
             startInfo.ArgumentList.Add(arg);
         return new Process { StartInfo = startInfo };
-    }
-
-    private sealed class RemoteCaptureLock : IDisposable
-    {
-        private readonly Process _process;
-        private bool _disposed;
-
-        internal RemoteCaptureLock(Process process) => _process = process;
-
-        public void Dispose()
-        {
-            if (_disposed)
-                return;
-            _disposed = true;
-            try
-            {
-                _process.StandardInput.Close();
-                if (!_process.WaitForExit(10000))
-                    _process.Kill(entireProcessTree: true);
-            }
-            finally
-            {
-                _process.Dispose();
-            }
-        }
     }
 
     private static void WriteRestoreChecklist(

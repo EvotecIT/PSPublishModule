@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace PowerForge.Tests;
 
-public sealed class GitHubServerRecoveryValidationSecurityTests
+public sealed partial class GitHubServerRecoveryValidationSecurityTests
 {
     private const string CaptureUser = "powerforge-example-backup";
     private const string CallerRepository = "EvotecIT/ExampleSite";
@@ -75,61 +75,6 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
 
         Assert.True(result.ExitCode == 0, result.AllOutput);
         Assert.Equal("3", result.StandardOutput.Trim());
-    }
-
-    [Fact]
-    public void Validator_ShouldRejectCallerControlledEncryptionHelpers()
-    {
-        var result = RunValidator(helperFromCaller: true);
-
-        Assert.NotEqual(0, result.ExitCode);
-        Assert.Contains("exact managed helper from the pinned PowerForge engine", result.AllOutput, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Validator_ShouldRequireManagedCaptureAccount()
-    {
-        var result = RunValidator(includeCaptureAccount: false);
-
-        Assert.NotEqual(0, result.ExitCode);
-        Assert.Contains("exactly one managed capture account", result.AllOutput, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Validator_ShouldRejectUnrestrictedCaptureAuthorizedKey()
-    {
-        var result = RunValidator(
-            authorizedKeyContent: RestrictedCaptureKey.Replace("restrict ", string.Empty, StringComparison.Ordinal));
-
-        Assert.NotEqual(0, result.ExitCode);
-        Assert.Contains("exactly one restrict-prefixed Ed25519 public key", result.AllOutput, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Validator_ShouldRejectMultipleCaptureAuthorizedKeys()
-    {
-        var result = RunValidator(authorizedKeyContent: RestrictedCaptureKey + "\n" + RestrictedCaptureKey);
-
-        Assert.NotEqual(0, result.ExitCode);
-        Assert.Contains("exactly one restrict-prefixed Ed25519 public key", result.AllOutput, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Validator_ShouldRequireCaptureOwnedAuthorizedKeyMetadata()
-    {
-        var result = RunValidator(authorizedKeyOwner: "root");
-
-        Assert.NotEqual(0, result.ExitCode);
-        Assert.Contains("one managed mode-600 authorized_keys file owned by the capture account", result.AllOutput, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Validator_ShouldRejectRepositoryPathsThatShadowTheEngineHelper()
-    {
-        var result = RunValidator(shadowEngineHelper: true);
-
-        Assert.NotEqual(0, result.ExitCode);
-        Assert.Contains("exact managed helper from the pinned PowerForge engine", result.AllOutput, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -707,7 +652,8 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         string engineRepository = EngineRepository,
         bool includeCaptureAccount = true,
         string authorizedKeyContent = RestrictedCaptureKey,
-        string authorizedKeyOwner = CaptureUser)
+        string authorizedKeyOwner = "root",
+        string captureDirectoryOwner = "root")
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-recovery-source-security-" + Guid.NewGuid().ToString("N"));
         var workspace = Path.Combine(root, "caller");
@@ -798,11 +744,27 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
             {
                 managedPaths.Add(new
                 {
+                    path = $"/var/lib/{CaptureUser}",
+                    kind = "directory",
+                    owner = captureDirectoryOwner,
+                    group = captureDirectoryOwner,
+                    mode = "755"
+                });
+                managedPaths.Add(new
+                {
+                    path = $"/var/lib/{CaptureUser}/.ssh",
+                    kind = "directory",
+                    owner = captureDirectoryOwner,
+                    group = captureDirectoryOwner,
+                    mode = "755"
+                });
+                managedPaths.Add(new
+                {
                     path = $"/var/lib/{CaptureUser}/.ssh/authorized_keys",
                     source = "/srv/caller/deploy/linux/backup-authorized_keys",
                     kind = "file",
                     owner = authorizedKeyOwner,
-                    group = CaptureUser,
+                    group = authorizedKeyOwner,
                     mode = "600"
                 });
             }
