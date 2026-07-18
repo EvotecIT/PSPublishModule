@@ -41,6 +41,10 @@ jobs:
     steps:
       - name: Checkout caller repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # Resolve the branch when this serialized job actually starts. The event SHA
+          # may predate a generated-content commit pushed by an earlier queued run.
+          ref: ${{ github.ref }}
 
       - name: Resolve shared workflow source
         id: workflow_source

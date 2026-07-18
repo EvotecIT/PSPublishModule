@@ -205,6 +205,33 @@ public sealed class ManagedMarkdownDocumentUpdaterTests
     }
 
     [Fact]
+    public void UpdateMany_CoalescesHardLinkAliasBeforeWritingFinalDocument()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "README.md");
+        var alias = Path.Combine(root, "README-hardlink.md");
+        File.WriteAllText(
+            path,
+            "<!-- POWERFORGE:sponsors:START -->\nold sponsors\n<!-- POWERFORGE:sponsors:END -->\n" +
+            "<!-- POWERFORGE:stats:START -->\nold stats\n<!-- POWERFORGE:stats:END -->\n");
+        CreateHardLink(alias, path);
+
+        var results = new ManagedMarkdownDocumentUpdater().UpdateMany(new[]
+        {
+            new ManagedMarkdownUpdateRequest { Path = path, BlockId = "sponsors", Markdown = "new sponsors" },
+            new ManagedMarkdownUpdateRequest { Path = alias, BlockId = "stats", Markdown = "new stats" }
+        });
+
+        Assert.Equal(2, results.Length);
+        var text = File.ReadAllText(path);
+        Assert.Contains("new sponsors", text, StringComparison.Ordinal);
+        Assert.Contains("new stats", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("old sponsors", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("old stats", text, StringComparison.Ordinal);
+        Assert.Equal(text, File.ReadAllText(alias));
+    }
+
+    [Fact]
     public void UpdateMany_RejectsDuplicateLogicalTargetWithoutWriting()
     {
         var root = CreateTempRoot();
@@ -355,6 +382,29 @@ public sealed class ManagedMarkdownDocumentUpdaterTests
         Buffer.BlockCopy(content, 0, bytes, 3, content.Length);
         File.WriteAllBytes(path, bytes);
     }
+
+    private static void CreateHardLink(string linkPath, string existingPath)
+    {
+        var succeeded = Path.DirectorySeparatorChar == '\\'
+            ? CreateHardLinkWindows(linkPath, existingPath, IntPtr.Zero)
+            : CreateHardLinkUnix(existingPath, linkPath) == 0;
+        if (!succeeded)
+        {
+            var error = System.Runtime.InteropServices.Marshal.GetLastWin32Error();
+            throw new IOException($"Unable to create hard-link test artifact: {new System.ComponentModel.Win32Exception(error).Message}");
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport(
+        "kernel32.dll",
+        EntryPoint = "CreateHardLinkW",
+        CharSet = System.Runtime.InteropServices.CharSet.Unicode,
+        SetLastError = true)]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool CreateHardLinkWindows(string fileName, string existingFileName, IntPtr securityAttributes);
+
+    [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "link", SetLastError = true)]
+    private static extern int CreateHardLinkUnix(string existingPath, string newPath);
 
     private static string CreateTempRoot()
     {

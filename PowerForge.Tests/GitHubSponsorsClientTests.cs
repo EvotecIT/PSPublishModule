@@ -121,6 +121,28 @@ public sealed class GitHubSponsorsClientTests
         Assert.Contains("Resource not accessible", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void GetSponsors_RejectsRepeatedPaginationCursor()
+    {
+        var handler = new SponsorsHandler((_, cursor) => cursor switch
+        {
+            null => ConnectionResponse(UserNode("first", "First", "User", null, null), true, "cursor-a"),
+            "cursor-a" => ConnectionResponse(UserNode("second", "Second", "User", null, null), true, "cursor-b"),
+            _ => ConnectionResponse(UserNode("third", "Third", "User", null, null), true, "cursor-a")
+        });
+        using var client = new HttpClient(handler);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new GitHubSponsorsClient(client).GetSponsors(new GitHubSponsorsQuery
+        {
+            SponsorableLogin = "owner",
+            Token = "token",
+            IncludeFormer = false
+        }));
+
+        Assert.Contains("repeated an earlier end cursor", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(3, handler.RequestBodies.Count);
+    }
+
     private static string UserNode(string login, string name, string type, string? tierName, int? amount)
     {
         var tier = amount is null

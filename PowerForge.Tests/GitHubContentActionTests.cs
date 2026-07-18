@@ -81,6 +81,11 @@ public sealed class GitHubContentActionTests
         Assert.Contains("job.workflow_sha", workflow, StringComparison.Ordinal);
         Assert.Contains("group: powerforge-github-content-${{ github.repository }}-${{ github.ref }}", workflow, StringComparison.Ordinal);
         Assert.Contains("cancel-in-progress: false", workflow, StringComparison.Ordinal);
+        Assert.Contains(
+            "- name: Checkout caller repository\n        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4\n        with:\n          # Resolve the branch when this serialized job actually starts.",
+            Normalize(workflow),
+            StringComparison.Ordinal);
+        Assert.Contains("ref: ${{ github.ref }}", workflow, StringComparison.Ordinal);
         Assert.Contains("default: \"\"", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("default: \"main\"", workflow, StringComparison.Ordinal);
         Assert.Contains("[string]::IsNullOrWhiteSpace($env:COMMIT_MESSAGE)", workflow, StringComparison.Ordinal);

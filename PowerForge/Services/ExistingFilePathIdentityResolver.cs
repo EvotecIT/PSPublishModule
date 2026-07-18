@@ -1,9 +1,6 @@
-#if NETFRAMEWORK
 using Microsoft.Win32.SafeHandles;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
-using System.Text;
-#endif
 
 namespace PowerForge;
 
@@ -12,108 +9,106 @@ namespace PowerForge;
 /// </summary>
 internal static class ExistingFilePathIdentityResolver
 {
+    /// <summary>
+    /// Returns an operating-system file identity that is shared by every symbolic-link or hard-link alias.
+    /// </summary>
+    /// <param name="path">Existing file whose identity should be resolved.</param>
+    /// <returns>A volume/device-qualified file identifier suitable for in-process equality checks.</returns>
     internal static string Resolve(string path)
     {
         var fullPath = System.IO.Path.GetFullPath(path);
-#if NET8_0_OR_GREATER
-        return ResolveModern(fullPath);
-#else
-        return ResolveWindowsFinalPath(fullPath);
-#endif
-    }
-
-#if NET8_0_OR_GREATER
-    private static string ResolveModern(string fullPath)
-    {
-        var root = System.IO.Path.GetPathRoot(fullPath);
-        if (string.IsNullOrWhiteSpace(root))
-            throw new IOException($"Existing file path has no filesystem root: {fullPath}");
-
-        var current = root!;
-        var relative = fullPath.Substring(root!.Length);
-        var separators = System.IO.Path.DirectorySeparatorChar == System.IO.Path.AltDirectorySeparatorChar
-            ? new[] { System.IO.Path.DirectorySeparatorChar }
-            : new[] { System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar };
-
-        foreach (var segment in relative.Split(separators, StringSplitOptions.RemoveEmptyEntries))
-        {
-            var entry = FindExistingEntry(current, segment);
-            FileSystemInfo info = Directory.Exists(entry)
-                ? new DirectoryInfo(entry)
-                : new FileInfo(entry);
-            var target = info.ResolveLinkTarget(returnFinalTarget: true);
-            current = target is null ? entry : System.IO.Path.GetFullPath(target.FullName);
-        }
-
-        return System.IO.Path.GetFullPath(current);
-    }
-
-    private static string FindExistingEntry(string parent, string segment)
-    {
-        string? exact = null;
-        var aliases = new List<string>();
-        foreach (var entry in Directory.EnumerateFileSystemEntries(parent))
-        {
-            var name = System.IO.Path.GetFileName(entry);
-            if (string.Equals(name, segment, StringComparison.Ordinal))
-            {
-                exact = entry;
-                break;
-            }
-            if (string.Equals(name, segment, StringComparison.OrdinalIgnoreCase))
-                aliases.Add(entry);
-        }
-
-        if (exact is not null)
-            return exact;
-        if (aliases.Count == 1)
-            return aliases[0];
-        if (aliases.Count > 1)
-            throw new IOException($"Existing path has ambiguous case aliases: {System.IO.Path.Combine(parent, segment)}");
-        throw new FileNotFoundException("Existing path entry disappeared while resolving its identity.", System.IO.Path.Combine(parent, segment));
-    }
-#else
-    private static string ResolveWindowsFinalPath(string fullPath)
-    {
         using var stream = new FileStream(
             fullPath,
             FileMode.Open,
             FileAccess.Read,
             FileShare.ReadWrite | FileShare.Delete);
-        return ReadFinalPath(stream.SafeFileHandle);
+
+        if (System.IO.Path.DirectorySeparatorChar == '\\')
+            return ReadWindowsFileIdentity(stream.SafeFileHandle);
+
+#if NET8_0_OR_GREATER
+        return ReadUnixFileIdentity(stream.SafeFileHandle);
+#else
+        throw new PlatformNotSupportedException("Physical file identity is not available for this runtime and operating system.");
+#endif
     }
 
-    private static string ReadFinalPath(SafeFileHandle handle)
+    private static string ReadWindowsFileIdentity(SafeFileHandle handle)
     {
-        var capacity = 512;
-        while (true)
-        {
-            var builder = new StringBuilder(capacity);
-            var length = GetFinalPathNameByHandle(handle, builder, (uint)builder.Capacity, 0);
-            if (length == 0)
-                throw new Win32Exception(Marshal.GetLastWin32Error());
-            if (length < builder.Capacity)
-                return NormalizeWindowsDevicePath(builder.ToString());
-            capacity = checked((int)length + 1);
-        }
+        if (!GetFileInformationByHandle(handle, out var information))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+
+        return $"windows:{information.VolumeSerialNumber:X8}:{information.FileIndexHigh:X8}{information.FileIndexLow:X8}";
     }
 
-    private static string NormalizeWindowsDevicePath(string path)
+#if NET8_0_OR_GREATER
+    private static string ReadUnixFileIdentity(SafeFileHandle handle)
     {
-        const string uncPrefix = @"\\?\UNC\";
-        const string devicePrefix = @"\\?\";
-        if (path.StartsWith(uncPrefix, StringComparison.OrdinalIgnoreCase))
-            return @"\\" + path.Substring(uncPrefix.Length);
-        return path.StartsWith(devicePrefix, StringComparison.OrdinalIgnoreCase)
-            ? path.Substring(devicePrefix.Length)
-            : path;
+        if (SystemNativeFStat(handle, out var status) != 0)
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+
+        return $"unix:{unchecked((ulong)status.Device):X16}:{unchecked((ulong)status.Inode):X16}";
     }
+#endif
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowsFileTime
+    {
+        internal uint LowDateTime;
+        internal uint HighDateTime;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowsFileInformation
+    {
+        internal uint FileAttributes;
+        internal WindowsFileTime CreationTime;
+        internal WindowsFileTime LastAccessTime;
+        internal WindowsFileTime LastWriteTime;
+        internal uint VolumeSerialNumber;
+        internal uint FileSizeHigh;
+        internal uint FileSizeLow;
+        internal uint NumberOfLinks;
+        internal uint FileIndexHigh;
+        internal uint FileIndexLow;
+    }
+
+#if NET8_0_OR_GREATER
+    // System.Native exposes one normalized FileStatus ABI across .NET's supported Unix platforms.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct UnixFileStatus
+    {
+        internal int Flags;
+        internal int Mode;
+        internal uint UserId;
+        internal uint GroupId;
+        internal long Size;
+        internal long AccessTime;
+        internal long AccessTimeNanoseconds;
+        internal long ModificationTime;
+        internal long ModificationTimeNanoseconds;
+        internal long ChangeTime;
+        internal long ChangeTimeNanoseconds;
+        internal long BirthTime;
+        internal long BirthTimeNanoseconds;
+        internal long Device;
+        internal long RawDevice;
+        internal long Inode;
+        internal uint UserFlags;
+        internal int HardLinkCount;
+    }
+#endif
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern uint GetFinalPathNameByHandle(
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetFileInformationByHandle(
         SafeFileHandle file,
-        StringBuilder filePath,
-        uint filePathLength,
-        uint flags);
+        out WindowsFileInformation information);
+
+#if NET8_0_OR_GREATER
+    [DllImport("System.Native", EntryPoint = "SystemNative_FStat", SetLastError = true)]
+    private static extern int SystemNativeFStat(
+        SafeFileHandle file,
+        out UnixFileStatus status);
 #endif
 }

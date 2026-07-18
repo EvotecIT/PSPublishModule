@@ -155,6 +155,7 @@ public sealed class GitHubSponsorsClient
         bool includeFundingTierData)
     {
         var records = new List<GitHubSponsorSourceRecord>();
+        var seenCursors = new HashSet<string>(StringComparer.Ordinal);
         string? cursor = null;
 
         while (true)
@@ -194,14 +195,17 @@ public sealed class GitHubSponsorsClient
                 break;
 
             var hasNextPage = pageInfo.TryGetProperty("hasNextPage", out var hasNext) && hasNext.ValueKind == JsonValueKind.True;
-            cursor = pageInfo.TryGetProperty("endCursor", out var endCursor) && endCursor.ValueKind == JsonValueKind.String
+            var nextCursor = pageInfo.TryGetProperty("endCursor", out var endCursor) && endCursor.ValueKind == JsonValueKind.String
                 ? endCursor.GetString()
                 : null;
 
             if (!hasNextPage)
                 break;
-            if (string.IsNullOrWhiteSpace(cursor))
+            if (string.IsNullOrWhiteSpace(nextCursor))
                 throw new InvalidOperationException("GitHub Sponsors pagination reported another page without an end cursor.");
+            if (!seenCursors.Add(nextCursor!))
+                throw new InvalidOperationException("GitHub Sponsors pagination repeated an earlier end cursor.");
+            cursor = nextCursor;
         }
 
         return records;

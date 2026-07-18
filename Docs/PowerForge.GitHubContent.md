@@ -70,11 +70,11 @@ $env:GITHUB_TOKEN = '<token>'
 powerforge github content sync --config .\.powerforge\github-content.json
 ```
 
-Use `--output json` when another tool needs the changed paths and normalized sponsor records. Automation should also pass `--restrict-output-root <repository-root>`; PowerForge then rejects outside paths and symlink/reparse-point traversal before it writes any configured output. The reusable action supplies this restriction automatically.
+Use `--output json` when another tool needs the changed paths and normalized sponsor records. When multiple configured paths already identify the same physical file, including hard-link or symbolic-link aliases, PowerForge projects their marker updates into one write so no block is lost. Automation should also pass `--restrict-output-root <repository-root>`; PowerForge then rejects outside paths and symlink/reparse-point traversal before it writes any configured output. The reusable action supplies this restriction automatically.
 
 ## Automate updates
 
-The reusable workflow can run on a schedule or on demand. It stages only document paths returned by PowerForge.
+The reusable workflow can run on a schedule or on demand. Runs are serialized per caller branch, and a queued run resolves the branch again when it starts so it does not regenerate content from an older event commit. The workflow stages only document paths returned by PowerForge.
 
 ```yaml
 name: Update sponsors
