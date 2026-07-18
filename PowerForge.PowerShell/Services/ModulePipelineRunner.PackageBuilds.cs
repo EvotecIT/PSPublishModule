@@ -748,11 +748,16 @@ public sealed partial class ModulePipelineRunner
     }
 
     private static bool ShouldRunPackageBuildBeforeModule(ModulePipelinePlan plan, bool buildBeforeModule)
-        => ResolveReleaseBuildOrderOverride(plan) ?? buildBeforeModule;
+        => ShouldRunPackageBuildBeforeModule(plan.Release, buildBeforeModule);
 
-    private static bool? ResolveReleaseBuildOrderOverride(ModulePipelinePlan plan)
+    private static bool ShouldRunPackageBuildBeforeModule(
+        ConfigurationReleaseSegment? release,
+        bool buildBeforeModule)
+        => ResolveReleaseBuildOrderOverride(release) ?? buildBeforeModule;
+
+    private static bool? ResolveReleaseBuildOrderOverride(ConfigurationReleaseSegment? release)
     {
-        var order = plan.Release?.Configuration?.BuildOrder;
+        var order = release?.Configuration?.BuildOrder;
         if (order is null || order.Length == 0)
             return null;
 

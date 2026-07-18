@@ -398,15 +398,17 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     }
 
     [Theory]
-    [InlineData(false, "2.1.6", "2.0.11", "2.1.6", null)]
-    [InlineData(true, "2.0.10", "2.0.11", "2.0.11", null)]
-    [InlineData(true, "2.0.10", "2.0.11-beta.2", "2.0.11", "beta.2")]
+    [InlineData(false, "2.1.6", "2.0.11", "2.1.6", null, false)]
+    [InlineData(true, "2.0.10", "2.0.11", "2.0.11", null, false)]
+    [InlineData(true, "2.0.10", "2.0.11-beta.2", "2.0.11", "beta.2", false)]
+    [InlineData(true, "2.0.10", "2.0.12", "2.0.12", null, true)]
     public void Run_UsesProjectBuildReleaseVersionWithOptInModuleSynchronization(
         bool synchronizeModuleVersion,
         string moduleVersion,
         string projectVersion,
         string expectedModuleVersion,
-        string? expectedPreRelease)
+        string? expectedPreRelease,
+        bool useReleaseBuildOrder)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
@@ -476,7 +478,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                         {
                             Name = moduleName,
                             ConfigPath = Path.Combine("Build", "project.build.json"),
-                            BuildBeforeModule = true,
+                            BuildBeforeModule = !useReleaseBuildOrder,
                             UseAsReleaseVersionSource = true
                         }
                     },
@@ -487,7 +489,10 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                             StageRoot = Path.Combine(root.FullName, "Artifacts", "Unified"),
                             VersionSource = ReleaseVersionSource.ProjectBuild,
                             PrimaryProject = moduleName,
-                            SynchronizeModuleVersion = synchronizeModuleVersion
+                            SynchronizeModuleVersion = synchronizeModuleVersion,
+                            BuildOrder = useReleaseBuildOrder
+                                ? new[] { "ProjectBuild", "Module" }
+                                : null
                         }
                     },
                     new ConfigurationPublishSegment

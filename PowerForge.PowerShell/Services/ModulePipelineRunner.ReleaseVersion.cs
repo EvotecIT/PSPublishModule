@@ -39,10 +39,11 @@ public sealed partial class ModulePipelineRunner
             throw new InvalidOperationException(
                 $"SynchronizeModuleVersion requires a {release.VersionSource} lane marked with UseAsReleaseVersionSource.");
         }
-        if (explicitLanes.Any(static lane => !lane.BuildBeforeModule))
+        if (explicitLanes.Any(lane =>
+                !ShouldRunPackageBuildBeforeModule(releaseSegment, lane.BuildBeforeModule)))
         {
             throw new InvalidOperationException(
-                "SynchronizeModuleVersion requires every selected release source lane to use BuildBeforeModule.");
+                "SynchronizeModuleVersion requires every selected release source lane to run before the module build. Set BuildBeforeModule or configure Release BuildOrder accordingly.");
         }
 
         var gateEnablesLanes = gateMode is ConfigurationGateMode.Build or ConfigurationGateMode.Publish;
