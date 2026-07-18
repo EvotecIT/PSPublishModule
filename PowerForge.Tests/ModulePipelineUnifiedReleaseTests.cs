@@ -1266,6 +1266,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
 
         public List<string> PublishedModuleVersions { get; } = new();
         public Func<PublishConfiguration, ModulePipelinePlan, ModulePublishVersionPreflightResult>? ModulePublishVersionPreflight { get; set; }
+        public Func<PublishConfiguration, ModulePipelinePlan, bool, ModulePublishVersionPreflightResult>? ModulePublishVersionPreflightWithExistingPolicy { get; set; }
         public Action<PublishConfiguration, ModulePipelinePlan>? ModulePublishAction { get; set; }
         public Func<ModulePipelineActionConfiguration, ModulePipelineActionContext, ModulePipelineActionResult>? ModuleAction { get; set; }
 
@@ -1326,7 +1327,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             PublishConfiguration publish,
             ModulePipelinePlan plan,
             bool allowExistingExactVersion)
-            => ModulePublishVersionPreflight?.Invoke(publish, plan) ??
+            => ModulePublishVersionPreflightWithExistingPolicy?.Invoke(publish, plan, allowExistingExactVersion) ??
+               ModulePublishVersionPreflight?.Invoke(publish, plan) ??
                ModulePublishVersionPreflightResult.Available;
 
         public ModulePipelineActionResult RunAction(

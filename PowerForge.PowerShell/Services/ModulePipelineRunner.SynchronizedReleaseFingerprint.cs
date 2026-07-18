@@ -29,7 +29,7 @@ public sealed partial class ModulePipelineRunner
             if (publish?.Configuration is null)
                 continue;
 
-            fingerprints.Add(CreateModulePublishOperationFingerprint(publish.Configuration));
+            fingerprints.Add(CreateModulePublishOperationFingerprint(plan, publish));
         }
 
         foreach (var segment in plan.ProjectBuilds ?? Array.Empty<ConfigurationProjectBuildSegment>())
@@ -137,7 +137,80 @@ public sealed partial class ModulePipelineRunner
             .ToArray();
     }
 
-    private static string CreateModulePublishOperationFingerprint(PublishConfiguration publish)
+    private string[] ResolveSynchronizedReleasePublishOperationKeys(ModulePipelinePlan plan)
+    {
+        var operations = new List<string>();
+        foreach (var publish in plan.Publishes ?? Array.Empty<ConfigurationPublishSegment>())
+        {
+            if (publish?.Configuration is null)
+                continue;
+
+            if (publish.Configuration.Destination is PublishDestination.PowerShellGallery or PublishDestination.GitHub)
+            {
+                operations.Add(CreateModulePublishOperationFingerprint(plan, publish));
+            }
+        }
+
+        foreach (var segment in plan.ProjectBuilds ?? Array.Empty<ConfigurationProjectBuildSegment>())
+        {
+            if (segment?.Configuration is null)
+                continue;
+
+            if (ShouldExecuteProjectBuildPublish(plan, segment, PackageBuildPublishDestination.NuGet))
+            {
+                operations.Add(CreateProjectBuildPublishOperationFingerprint(
+                    plan,
+                    segment,
+                    PackageBuildPublishDestination.NuGet));
+            }
+            if (ShouldExecuteProjectBuildPublish(plan, segment, PackageBuildPublishDestination.GitHub))
+            {
+                operations.Add(CreateProjectBuildPublishOperationFingerprint(
+                    plan,
+                    segment,
+                    PackageBuildPublishDestination.GitHub));
+            }
+        }
+
+        foreach (var segment in plan.PackageBuilds ?? Array.Empty<ConfigurationPackageBuildSegment>())
+        {
+            if (segment?.Configuration is null)
+                continue;
+
+            if (ShouldExecutePackageBuildPublish(plan, segment, PackageBuildPublishDestination.NuGet))
+            {
+                operations.Add(CreatePackageBuildPublishOperationFingerprint(
+                    plan,
+                    segment,
+                    PackageBuildPublishDestination.NuGet));
+            }
+            if (ShouldExecutePackageBuildPublish(plan, segment, PackageBuildPublishDestination.GitHub))
+            {
+                operations.Add(CreatePackageBuildPublishOperationFingerprint(
+                    plan,
+                    segment,
+                    PackageBuildPublishDestination.GitHub));
+            }
+        }
+
+        return operations.ToArray();
+    }
+
+    private static string CreateModulePublishOperationFingerprint(
+        ModulePipelinePlan plan,
+        ConfigurationPublishSegment publish)
+    {
+        var index = Array.IndexOf(plan.Publishes, publish);
+        if (index < 0)
+            throw new InvalidOperationException("Module publish operation is not present in the active module pipeline plan.");
+
+        return CreateSynchronizedReleaseFingerprint(
+            "ModulePublishOperation",
+            index.ToString(),
+            CreateModulePublishConfigurationFingerprint(publish.Configuration));
+    }
+
+    private static string CreateModulePublishConfigurationFingerprint(PublishConfiguration publish)
     {
         var repository = publish.Repository;
         return CreateSynchronizedReleaseFingerprint(
@@ -170,6 +243,60 @@ public sealed partial class ModulePipelineRunner
             publish.RequiredModuleSourceRepositoryUri,
             publish.Force.ToString());
     }
+
+    private string CreateProjectBuildPublishOperationFingerprint(
+        ModulePipelinePlan plan,
+        ConfigurationProjectBuildSegment segment,
+        PackageBuildPublishDestination destination)
+    {
+        var reference = segment.Configuration ?? throw new InvalidOperationException("ProjectBuild configuration is missing.");
+        if (string.IsNullOrWhiteSpace(reference.ConfigPath))
+            throw new InvalidOperationException("ProjectBuild ConfigPath is required.");
+
+        var configPath = ResolvePackageBuildPath(plan.ProjectRoot, reference.ConfigPath);
+        var configuration = LoadProjectBuildConfiguration(configPath, reference);
+        var laneLabel = reference.Name ?? configPath;
+        var checkpointKey = ResolveSynchronizedReleaseLaneKey(
+            plan,
+            ReleaseVersionSource.ProjectBuild,
+            segment,
+            laneLabel);
+        return CreatePackagePublishOperationFingerprint(
+            "ProjectBuild",
+            laneLabel,
+            checkpointKey,
+            configPath,
+            ToReleasePublishDestination(destination),
+            configuration);
+    }
+
+    private static string CreatePackageBuildPublishOperationFingerprint(
+        ModulePipelinePlan plan,
+        ConfigurationPackageBuildSegment segment,
+        PackageBuildPublishDestination destination)
+    {
+        var packageBuild = segment.Configuration ?? throw new InvalidOperationException("PackageBuild configuration is missing.");
+        var configuration = MapPackageBuildConfiguration(packageBuild, plan.ProjectRoot);
+        var configPath = Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
+        var laneLabel = packageBuild.Name ?? configPath;
+        var checkpointKey = ResolveSynchronizedReleaseLaneKey(
+            plan,
+            ReleaseVersionSource.PackageBuild,
+            segment,
+            laneLabel);
+        return CreatePackagePublishOperationFingerprint(
+            "PackageBuild",
+            laneLabel,
+            checkpointKey,
+            configPath,
+            ToReleasePublishDestination(destination),
+            configuration);
+    }
+
+    private static ReleasePublishDestination ToReleasePublishDestination(PackageBuildPublishDestination destination)
+        => destination == PackageBuildPublishDestination.NuGet
+            ? ReleasePublishDestination.NuGet
+            : ReleasePublishDestination.GitHub;
 
     private static string CreatePackagePublishOperationFingerprint(
         string laneType,
@@ -298,4 +425,5 @@ public sealed partial class ModulePipelineRunner
             .Replace("-", string.Empty)
             .ToLowerInvariant();
     }
+
 }

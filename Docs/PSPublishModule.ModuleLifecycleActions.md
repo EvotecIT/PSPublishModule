@@ -93,6 +93,10 @@ PowerForge also passes these environment variables:
 Configured environment variables from `-Environment` are added before those PowerForge variables, so the built-in
 context variables remain authoritative.
 
+When `SynchronizeModuleVersion` is enabled, PowerForge resolves the selected package release source before running any
+lifecycle action, including `BeforeDependencies`. This keeps `ResolvedVersion` and `PreRelease` authoritative for every
+action stage. Files and configuration required to resolve that package version must exist before the pipeline starts.
+
 ## Stages
 
 Actions can run at these lifecycle points:

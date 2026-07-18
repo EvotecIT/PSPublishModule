@@ -11,9 +11,7 @@ public sealed partial class ModulePipelineRunner
         ModulePipelinePlan plan,
         ModulePipelineRunState state)
     {
-        state.PlannedSynchronizedDestinations.Clear();
-        foreach (var destination in ResolvePlannedSynchronizedDestinations(plan))
-            state.PlannedSynchronizedDestinations.Add(destination);
+        state.PlannedSynchronizedOperationCount = ResolvePlannedSynchronizedPublishOperationKeys(plan).Length;
 
         var path = ResolveSynchronizedReleaseCheckpointPath(plan);
         var checkpointExists = File.Exists(path);
@@ -51,17 +49,32 @@ public sealed partial class ModulePipelineRunner
                 ex);
         }
 
-        if (checkpoint is null || checkpoint.SchemaVersion != 1)
+        if (checkpoint is null || checkpoint.SchemaVersion != 2)
         {
             throw new InvalidOperationException(
                 $"Coordinated release checkpoint '{path}' has an unsupported schema. Delete it only if the incomplete release should be abandoned.");
         }
 
-        ValidateSynchronizedReleaseCheckpoint(plan, state, checkpoint, path);
+        try
+        {
+            ValidateSynchronizedReleaseCheckpoint(plan, state, checkpoint, path);
+        }
+        catch (InvalidOperationException) when (IsPristineSynchronizedReleaseCheckpoint(checkpoint))
+        {
+            File.Delete(path);
+            DeleteEmptySynchronizedReleaseCheckpointDirectories(path);
+            _logger.Warn(
+                $"Discarded unused coordinated release checkpoint '{path}' because release configuration changed before any package lane or publish operation started.");
+            return;
+        }
+
         state.SynchronizedReleaseCheckpoint = checkpoint;
         state.IsResumingSynchronizedRelease = true;
+        var versionDescription = string.IsNullOrWhiteSpace(checkpoint.Version)
+            ? "pending version resolution"
+            : checkpoint.Version;
         _logger.Warn(
-            $"Resuming incomplete coordinated release {checkpoint.Version} from '{path}'. Completed destinations: {DescribeCompletedDestinations(checkpoint)}.");
+            $"Resuming incomplete coordinated release ({versionDescription}) from '{path}'. Completed publish operations: {DescribeCompletedOperations(checkpoint)}.");
     }
 
     private void InitializeSynchronizedReleaseCheckpoint(
@@ -80,39 +93,58 @@ public sealed partial class ModulePipelineRunner
                 $"Coordinated release version '{synchronizedVersion}' is not a valid exact package version.");
         }
 
-        if (state.SynchronizedReleaseCheckpoint is not null)
+        PrepareSynchronizedReleaseCheckpoint(plan, state);
+        var checkpoint = state.SynchronizedReleaseCheckpoint ?? throw new InvalidOperationException(
+            "Coordinated release checkpoint was not prepared before version synchronization.");
+        if (!string.IsNullOrWhiteSpace(checkpoint.Version) &&
+            !string.Equals(checkpoint.Version, normalizedVersion, StringComparison.OrdinalIgnoreCase))
         {
-            if (!string.Equals(state.SynchronizedReleaseCheckpoint.Version, normalizedVersion, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    $"The resumed package build resolved version '{normalizedVersion}', but the coordinated release checkpoint requires '{state.SynchronizedReleaseCheckpoint.Version}'.");
-            }
+            throw new InvalidOperationException(
+                $"The resumed package build resolved version '{normalizedVersion}', but the coordinated release checkpoint requires '{checkpoint.Version}'.");
+        }
+
+        checkpoint.Version = normalizedVersion;
+        foreach (var candidate in state.ReleaseVersionCandidates)
+        {
+            RecordSynchronizedReleaseLaneCheckpoint(
+                state,
+                candidate.Source,
+                candidate.Label,
+                candidate.CheckpointKey,
+                candidate.Result);
+        }
+
+        if (checkpoint.Lanes.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "A coordinated release checkpoint could not be finalized because no release-source version result was available.");
+        }
+
+        SaveSynchronizedReleaseCheckpoint(state);
+    }
+
+    private void PrepareSynchronizedReleaseCheckpoint(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state)
+    {
+        if (!ShouldUseSynchronizedReleaseCheckpoint(plan, state) ||
+            state.SynchronizedReleaseCheckpoint is not null)
+        {
             return;
         }
 
         var release = plan.Release!.Configuration;
-        var lanes = state.ReleaseVersionCandidates
-            .Where(static candidate => HasCheckpointableReleaseVersions(candidate.Result))
-            .Select(CreateSynchronizedReleaseLaneCheckpoint)
-            .ToArray();
-        if (lanes.Length == 0)
-        {
-            throw new InvalidOperationException(
-                "A coordinated release checkpoint could not be created because no selected release-source result was available.");
-        }
-
+        var plannedOperations = ResolvePlannedSynchronizedPublishOperationKeys(plan);
         var checkpoint = new SynchronizedReleaseCheckpoint
         {
             ModuleName = plan.ModuleName,
             ReleaseSource = release.VersionSource,
             PrimaryProject = NormalizeCheckpointValue(release.PrimaryProject),
-            Version = normalizedVersion,
-            PlannedDestinations = state.PlannedSynchronizedDestinations
-                .Select(static destination => destination.ToString())
-                .OrderBy(static destination => destination, StringComparer.OrdinalIgnoreCase)
+            PlannedOperations = plannedOperations
+                .OrderBy(static operation => operation, StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
+            PlannedLanes = ResolveSynchronizedReleaseLaneKeys(plan),
             OperationFingerprints = ResolveSynchronizedReleaseOperationFingerprints(plan),
-            Lanes = lanes,
             CreatedUtc = DateTimeOffset.UtcNow
         };
 
@@ -122,13 +154,48 @@ public sealed partial class ModulePipelineRunner
         _logger.Info($"Coordinated release checkpoint created at '{state.SynchronizedReleaseCheckpointPath}'.");
     }
 
+    private static string[] ResolveSynchronizedReleaseLaneKeys(ModulePipelinePlan plan)
+    {
+        var keys = new List<string>();
+        foreach (var segment in plan.ProjectBuilds ?? Array.Empty<ConfigurationProjectBuildSegment>())
+        {
+            if (segment?.Configuration is null)
+                continue;
+
+            var reference = segment.Configuration;
+            var laneLabel = reference.Name ?? ResolvePackageBuildPath(plan.ProjectRoot, reference.ConfigPath);
+            keys.Add(ResolveSynchronizedReleaseLaneKey(
+                plan,
+                ReleaseVersionSource.ProjectBuild,
+                segment,
+                laneLabel));
+        }
+
+        foreach (var segment in plan.PackageBuilds ?? Array.Empty<ConfigurationPackageBuildSegment>())
+        {
+            if (segment?.Configuration is null)
+                continue;
+
+            var packageBuild = segment.Configuration;
+            var laneLabel = packageBuild.Name ?? Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
+            keys.Add(ResolveSynchronizedReleaseLaneKey(
+                plan,
+                ReleaseVersionSource.PackageBuild,
+                segment,
+                laneLabel));
+        }
+
+        return keys
+            .OrderBy(static key => key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     private static void ApplySynchronizedReleaseCheckpointVersion(
         ModulePipelinePlan plan,
         ModulePipelineRunState state,
         ReleaseVersionSource source,
         string laneLabel,
         string checkpointKey,
-        bool useAsReleaseVersionSource,
         ProjectBuildConfiguration configuration)
     {
         var checkpoint = state.SynchronizedReleaseCheckpoint;
@@ -142,12 +209,11 @@ public sealed partial class ModulePipelineRunner
             string.Equals(candidate.CheckpointKey, checkpointKey, StringComparison.OrdinalIgnoreCase));
         if (lane is null)
         {
-            if (useAsReleaseVersionSource &&
-                checkpoint.ReleaseSource == source &&
-                plan.Release?.Configuration?.VersionSource == source)
+            if (state.IsResumingSynchronizedRelease &&
+                checkpoint.AttemptedLanes.Contains(checkpointKey, StringComparer.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
-                    $"The incomplete coordinated release does not contain version state for selected {source} lane '{laneLabel}'. Delete the checkpoint only if that release should be abandoned.");
+                    $"The incomplete coordinated release records an interrupted {source} lane '{laneLabel}' without exact version state. Delete the checkpoint only if that release should be abandoned.");
             }
             return;
         }
@@ -194,6 +260,15 @@ public sealed partial class ModulePipelineRunner
         if (checkpoint is null || !HasCheckpointableReleaseVersions(result))
             return;
 
+        EnsureSynchronizedReleaseLaneIsPlanned(checkpoint, checkpointKey);
+        if (!checkpoint.AttemptedLanes.Contains(checkpointKey, StringComparer.OrdinalIgnoreCase))
+        {
+            checkpoint.AttemptedLanes = checkpoint.AttemptedLanes
+                .Append(checkpointKey)
+                .OrderBy(static key => key, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
         var updatedLane = CreateSynchronizedReleaseLaneCheckpoint(
             source,
             laneLabel,
@@ -222,76 +297,126 @@ public sealed partial class ModulePipelineRunner
         SaveSynchronizedReleaseCheckpoint(state);
     }
 
-    private ReleasePublishDestination[] ResolvePlannedSynchronizedDestinations(ModulePipelinePlan plan)
+    private void MarkSynchronizedReleaseLaneAttempted(
+        ModulePipelineRunState state,
+        string checkpointKey)
+    {
+        var checkpoint = state.SynchronizedReleaseCheckpoint;
+        if (checkpoint is null)
+            return;
+
+        EnsureSynchronizedReleaseLaneIsPlanned(checkpoint, checkpointKey);
+        if (checkpoint.AttemptedLanes.Contains(checkpointKey, StringComparer.OrdinalIgnoreCase))
+            return;
+
+        checkpoint.AttemptedLanes = checkpoint.AttemptedLanes
+            .Append(checkpointKey)
+            .OrderBy(static key => key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        SaveSynchronizedReleaseCheckpoint(state);
+    }
+
+    private static void EnsureSynchronizedReleaseLaneIsPlanned(
+        SynchronizedReleaseCheckpoint checkpoint,
+        string checkpointKey)
+    {
+        if (!checkpoint.PlannedLanes.Contains(checkpointKey, StringComparer.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "A coordinated release package lane does not match the initialized checkpoint.");
+        }
+    }
+
+    private string[] ResolvePlannedSynchronizedPublishOperationKeys(ModulePipelinePlan plan)
     {
         if (plan.Release?.Configuration?.SynchronizeModuleVersion != true ||
             plan.GateMode is ConfigurationGateMode.Manifest or ConfigurationGateMode.Documentation or ConfigurationGateMode.Build)
         {
-            return Array.Empty<ReleasePublishDestination>();
+            return Array.Empty<string>();
         }
 
-        var planned = new HashSet<ReleasePublishDestination>();
-        if ((plan.Publishes ?? Array.Empty<ConfigurationPublishSegment>())
-            .Any(static publish => publish.Configuration.Destination == PublishDestination.PowerShellGallery))
-        {
-            planned.Add(ReleasePublishDestination.PowerShellGallery);
-        }
-        if ((plan.Publishes ?? Array.Empty<ConfigurationPublishSegment>())
-            .Any(static publish => publish.Configuration.Destination == PublishDestination.GitHub))
-        {
-            planned.Add(ReleasePublishDestination.GitHub);
-        }
-
-        foreach (var segment in plan.ProjectBuilds ?? Array.Empty<ConfigurationProjectBuildSegment>())
-        {
-            if (ShouldExecuteProjectBuildPublish(plan, segment, PackageBuildPublishDestination.NuGet))
-                planned.Add(ReleasePublishDestination.NuGet);
-            if (ShouldExecuteProjectBuildPublish(plan, segment, PackageBuildPublishDestination.GitHub))
-                planned.Add(ReleasePublishDestination.GitHub);
-        }
-
-        foreach (var segment in plan.PackageBuilds ?? Array.Empty<ConfigurationPackageBuildSegment>())
-        {
-            if (ShouldExecutePackageBuildPublish(plan, segment, PackageBuildPublishDestination.NuGet))
-                planned.Add(ReleasePublishDestination.NuGet);
-            if (ShouldExecutePackageBuildPublish(plan, segment, PackageBuildPublishDestination.GitHub))
-                planned.Add(ReleasePublishDestination.GitHub);
-        }
-
-        return planned.ToArray();
+        return ResolveSynchronizedReleasePublishOperationKeys(plan);
     }
 
     private static bool ShouldUseSynchronizedReleaseCheckpoint(
         ModulePipelinePlan plan,
         ModulePipelineRunState state)
         => plan.Release?.Configuration?.SynchronizeModuleVersion == true &&
-           state.PlannedSynchronizedDestinations.Count > 0;
+           state.PlannedSynchronizedOperationCount > 0;
 
-    private static bool ShouldSkipSynchronizedReleaseDestination(
+    private static bool ShouldSkipSynchronizedReleaseOperation(
         ModulePipelineRunState state,
-        ReleasePublishDestination destination)
+        string operationKey)
         => state.SynchronizedReleaseCheckpoint is not null &&
-           state.SynchronizedReleaseCheckpoint.CompletedDestinations.Contains(
-               destination.ToString(),
+           state.SynchronizedReleaseCheckpoint.CompletedOperations.Contains(
+               operationKey,
                StringComparer.OrdinalIgnoreCase);
 
-    private void MarkSynchronizedReleaseDestinationCompleted(
+    private static bool WasSynchronizedReleaseOperationAttempted(
         ModulePipelineRunState state,
-        ReleasePublishDestination destination)
+        string operationKey)
+        => state.SynchronizedReleaseCheckpoint is not null &&
+           (state.SynchronizedReleaseCheckpoint.AttemptedOperations.Contains(
+                operationKey,
+                StringComparer.OrdinalIgnoreCase) ||
+            state.SynchronizedReleaseCheckpoint.CompletedOperations.Contains(
+                operationKey,
+                StringComparer.OrdinalIgnoreCase));
+
+    private void MarkSynchronizedReleaseOperationAttempted(
+        ModulePipelineRunState state,
+        string operationKey)
     {
         var checkpoint = state.SynchronizedReleaseCheckpoint;
-        if (checkpoint is null || !state.PlannedSynchronizedDestinations.Contains(destination))
+        if (checkpoint is null)
             return;
 
-        var destinationName = destination.ToString();
-        if (checkpoint.CompletedDestinations.Contains(destinationName, StringComparer.OrdinalIgnoreCase))
+        EnsureSynchronizedReleaseOperationIsPlanned(checkpoint, operationKey);
+        if (checkpoint.AttemptedOperations.Contains(operationKey, StringComparer.OrdinalIgnoreCase))
             return;
 
-        checkpoint.CompletedDestinations = checkpoint.CompletedDestinations
-            .Append(destinationName)
+        checkpoint.AttemptedOperations = checkpoint.AttemptedOperations
+            .Append(operationKey)
             .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         SaveSynchronizedReleaseCheckpoint(state);
+    }
+
+    private void MarkSynchronizedReleaseOperationCompleted(
+        ModulePipelineRunState state,
+        string operationKey)
+    {
+        var checkpoint = state.SynchronizedReleaseCheckpoint;
+        if (checkpoint is null)
+            return;
+
+        EnsureSynchronizedReleaseOperationIsPlanned(checkpoint, operationKey);
+        if (!checkpoint.AttemptedOperations.Contains(operationKey, StringComparer.OrdinalIgnoreCase))
+        {
+            checkpoint.AttemptedOperations = checkpoint.AttemptedOperations
+                .Append(operationKey)
+                .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+        if (checkpoint.CompletedOperations.Contains(operationKey, StringComparer.OrdinalIgnoreCase))
+            return;
+
+        checkpoint.CompletedOperations = checkpoint.CompletedOperations
+            .Append(operationKey)
+            .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        SaveSynchronizedReleaseCheckpoint(state);
+    }
+
+    private static void EnsureSynchronizedReleaseOperationIsPlanned(
+        SynchronizedReleaseCheckpoint checkpoint,
+        string operationKey)
+    {
+        if (!checkpoint.PlannedOperations.Contains(operationKey, StringComparer.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "A coordinated release publish operation does not match the initialized checkpoint.");
+        }
     }
 
     private void CompleteSynchronizedReleaseCheckpoint(ModulePipelineRunState state)
@@ -301,8 +426,8 @@ public sealed partial class ModulePipelineRunner
         if (checkpoint is null || string.IsNullOrWhiteSpace(path))
             return;
 
-        var complete = checkpoint.PlannedDestinations.All(destination =>
-            checkpoint.CompletedDestinations.Contains(destination, StringComparer.OrdinalIgnoreCase));
+        var complete = checkpoint.PlannedOperations.All(operation =>
+            checkpoint.CompletedOperations.Contains(operation, StringComparer.OrdinalIgnoreCase));
         if (!complete)
             return;
 
@@ -398,12 +523,16 @@ public sealed partial class ModulePipelineRunner
         string path)
     {
         var release = plan.Release!.Configuration;
-        if (checkpoint.PlannedDestinations is null ||
-            checkpoint.CompletedDestinations is null ||
+        if (checkpoint.PlannedOperations is null ||
+            checkpoint.PlannedOperations.Length == 0 ||
+            checkpoint.AttemptedOperations is null ||
+            checkpoint.CompletedOperations is null ||
             checkpoint.OperationFingerprints is null ||
             checkpoint.OperationFingerprints.Length == 0 ||
+            checkpoint.PlannedLanes is null ||
+            checkpoint.PlannedLanes.Length == 0 ||
+            checkpoint.AttemptedLanes is null ||
             checkpoint.Lanes is null ||
-            checkpoint.Lanes.Length == 0 ||
             checkpoint.Lanes.Any(static lane =>
                 lane is null ||
                 string.IsNullOrWhiteSpace(lane.Label) ||
@@ -418,25 +547,39 @@ public sealed partial class ModulePipelineRunner
                 $"Coordinated release checkpoint '{path}' is incomplete or invalid. Delete it only if the incomplete release should be abandoned.");
         }
 
-        var planned = state.PlannedSynchronizedDestinations
-            .Select(static destination => destination.ToString())
-            .OrderBy(static destination => destination, StringComparer.OrdinalIgnoreCase)
+        var planned = ResolvePlannedSynchronizedPublishOperationKeys(plan)
+            .OrderBy(static operation => operation, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var storedPlanned = checkpoint.PlannedDestinations
-            .OrderBy(static destination => destination, StringComparer.OrdinalIgnoreCase)
+        var storedPlanned = checkpoint.PlannedOperations
+            .OrderBy(static operation => operation, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var currentOperations = ResolveSynchronizedReleaseOperationFingerprints(plan);
         var storedOperations = checkpoint.OperationFingerprints
             .OrderBy(static fingerprint => fingerprint, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var currentLanes = ResolveSynchronizedReleaseLaneKeys(plan);
+        var storedLanes = checkpoint.PlannedLanes
+            .OrderBy(static key => key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var hasExactVersion = PackageVersionUtility.TryNormalizeExact(checkpoint.Version, out _);
         var valid = string.Equals(checkpoint.ModuleName, plan.ModuleName, StringComparison.OrdinalIgnoreCase) &&
                     checkpoint.ReleaseSource == release.VersionSource &&
                     string.Equals(checkpoint.PrimaryProject, NormalizeCheckpointValue(release.PrimaryProject), StringComparison.OrdinalIgnoreCase) &&
                     planned.SequenceEqual(storedPlanned, StringComparer.OrdinalIgnoreCase) &&
+                    currentLanes.SequenceEqual(storedLanes, StringComparer.OrdinalIgnoreCase) &&
                     currentOperations.SequenceEqual(storedOperations, StringComparer.OrdinalIgnoreCase) &&
-                    checkpoint.CompletedDestinations.All(destination =>
-                        storedPlanned.Contains(destination, StringComparer.OrdinalIgnoreCase)) &&
-                    PackageVersionUtility.TryNormalizeExact(checkpoint.Version, out _);
+                    checkpoint.AttemptedLanes.All(lane =>
+                        storedLanes.Contains(lane, StringComparer.OrdinalIgnoreCase)) &&
+                    checkpoint.Lanes.All(lane =>
+                        checkpoint.AttemptedLanes.Contains(lane.CheckpointKey, StringComparer.OrdinalIgnoreCase)) &&
+                    checkpoint.AttemptedOperations.All(operation =>
+                        storedPlanned.Contains(operation, StringComparer.OrdinalIgnoreCase)) &&
+                    checkpoint.CompletedOperations.All(operation =>
+                        checkpoint.AttemptedOperations.Contains(operation, StringComparer.OrdinalIgnoreCase)) &&
+                    (hasExactVersion ||
+                     (string.IsNullOrWhiteSpace(checkpoint.Version) &&
+                      checkpoint.AttemptedOperations.Length == 0 &&
+                      checkpoint.CompletedOperations.Length == 0));
         if (!valid)
         {
             throw new InvalidOperationException(
@@ -444,97 +587,22 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
-    private static string ResolveSynchronizedReleaseCheckpointPath(ModulePipelinePlan plan)
-    {
-        var invalid = Path.GetInvalidFileNameChars();
-        var safeModuleName = new string(plan.ModuleName
-            .Select(character => invalid.Contains(character) ? '_' : character)
-            .ToArray());
-        return Path.Combine(
-            plan.ProjectRoot,
-            "Artefacts",
-            ".powerforge",
-            "coordinated-release",
-            $"{safeModuleName}.json");
-    }
-
-    private static void SaveSynchronizedReleaseCheckpoint(ModulePipelineRunState state)
-    {
-        var checkpoint = state.SynchronizedReleaseCheckpoint ?? throw new InvalidOperationException(
-            "Coordinated release checkpoint is not initialized.");
-        var path = state.SynchronizedReleaseCheckpointPath ?? throw new InvalidOperationException(
-            "Coordinated release checkpoint path is not initialized.");
-        var directory = Path.GetDirectoryName(path) ?? throw new InvalidOperationException(
-            $"Coordinated release checkpoint path '{path}' has no parent directory.");
-        Directory.CreateDirectory(directory);
-        var temporaryPath = path + ".tmp";
-        File.WriteAllText(
-            temporaryPath,
-            JsonSerializer.Serialize(checkpoint, new JsonSerializerOptions { WriteIndented = true }));
-        if (File.Exists(path))
-            File.Replace(temporaryPath, path, destinationBackupFileName: null);
-        else
-            File.Move(temporaryPath, path);
-    }
-
-    private static void DeleteEmptySynchronizedReleaseCheckpointDirectories(string checkpointPath)
-    {
-        var releaseDirectory = Path.GetDirectoryName(checkpointPath);
-        var powerForgeDirectory = string.IsNullOrWhiteSpace(releaseDirectory)
-            ? null
-            : Path.GetDirectoryName(releaseDirectory);
-        DeleteDirectoryIfEmpty(releaseDirectory);
-        DeleteDirectoryIfEmpty(powerForgeDirectory);
-    }
-
-    private static void DeleteDirectoryIfEmpty(string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
-            return;
-
-        try
-        {
-            if (!Directory.EnumerateFileSystemEntries(path!).Any())
-                Directory.Delete(path!);
-        }
-        catch (IOException)
-        {
-            // The checkpoint itself is already removed; directory cleanup is best effort.
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // The checkpoint itself is already removed; directory cleanup is best effort.
-        }
-    }
-
-    private static string DescribeCompletedDestinations(SynchronizedReleaseCheckpoint checkpoint)
-        => checkpoint.CompletedDestinations.Length == 0
+    private static string DescribeCompletedOperations(SynchronizedReleaseCheckpoint checkpoint)
+        => checkpoint.CompletedOperations.Length == 0
             ? "none"
-            : string.Join(", ", checkpoint.CompletedDestinations);
+            : $"{checkpoint.CompletedOperations.Length} of {checkpoint.PlannedOperations.Length}";
+
+    private static bool IsPristineSynchronizedReleaseCheckpoint(SynchronizedReleaseCheckpoint checkpoint)
+        => (checkpoint.PlannedOperations?.Length ?? 0) > 0 &&
+           (checkpoint.PlannedLanes?.Length ?? 0) > 0 &&
+           (checkpoint.OperationFingerprints?.Length ?? 0) > 0 &&
+           string.IsNullOrWhiteSpace(checkpoint.Version) &&
+           (checkpoint.AttemptedLanes?.Length ?? 0) == 0 &&
+           (checkpoint.Lanes?.Length ?? 0) == 0 &&
+           (checkpoint.AttemptedOperations?.Length ?? 0) == 0 &&
+           (checkpoint.CompletedOperations?.Length ?? 0) == 0;
 
     private static string? NormalizeCheckpointValue(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
 
-    private sealed class SynchronizedReleaseCheckpoint
-    {
-        public int SchemaVersion { get; set; } = 1;
-        public string ModuleName { get; set; } = string.Empty;
-        public ReleaseVersionSource ReleaseSource { get; set; }
-        public string? PrimaryProject { get; set; }
-        public string Version { get; set; } = string.Empty;
-        public string[] PlannedDestinations { get; set; } = Array.Empty<string>();
-        public string[] CompletedDestinations { get; set; } = Array.Empty<string>();
-        public string[] OperationFingerprints { get; set; } = Array.Empty<string>();
-        public SynchronizedReleaseLaneCheckpoint[] Lanes { get; set; } = Array.Empty<SynchronizedReleaseLaneCheckpoint>();
-        public DateTimeOffset CreatedUtc { get; set; }
-    }
-
-    private sealed class SynchronizedReleaseLaneCheckpoint
-    {
-        public ReleaseVersionSource Source { get; set; }
-        public string Label { get; set; } = string.Empty;
-        public string CheckpointKey { get; set; } = string.Empty;
-        public string DefaultVersion { get; set; } = string.Empty;
-        public Dictionary<string, string> VersionsByProject { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-    }
 }

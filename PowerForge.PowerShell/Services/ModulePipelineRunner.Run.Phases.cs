@@ -13,14 +13,15 @@ public sealed partial class ModulePipelineRunner
         ModuleBuildPipeline pipeline,
         ModulePipelineRunState state)
     {
-        ExecuteActions(ModulePipelineActionStage.BeforeDependencies, plan, session, state);
-        state.DependencyInstallResults = EnsureBuildDependenciesInstalledIfNeeded(plan);
-        ExecuteActions(ModulePipelineActionStage.AfterDependencies, plan, session, state);
-
         RestoreSynchronizedReleaseCheckpoint(plan, state);
+        PrepareSynchronizedReleaseCheckpoint(plan, state);
         ExecutePackageBuildsBeforeModule(plan, session, state);
         SynchronizeModuleVersionFromReleaseSource(plan, state);
         InitializeSynchronizedReleaseCheckpoint(plan, state);
+
+        ExecuteActions(ModulePipelineActionStage.BeforeDependencies, plan, session, state);
+        state.DependencyInstallResults = EnsureBuildDependenciesInstalledIfNeeded(plan);
+        ExecuteActions(ModulePipelineActionStage.AfterDependencies, plan, session, state);
 
         ExecuteActions(ModulePipelineActionStage.BeforeVersioning, plan, session, state);
         SyncSourceProjectVersionIfRequested(plan);

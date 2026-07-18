@@ -43,7 +43,7 @@ public sealed partial class ModulePipelineRunner
         public SynchronizedReleaseCheckpoint? SynchronizedReleaseCheckpoint { get; set; }
         public string? SynchronizedReleaseCheckpointPath { get; set; }
         public bool IsResumingSynchronizedRelease { get; set; }
-        public HashSet<ReleasePublishDestination> PlannedSynchronizedDestinations { get; } = new();
+        public int PlannedSynchronizedOperationCount { get; set; }
         public List<ModulePipelineActionResult> ActionResults { get; } = new();
         public List<XcodeProjectVersionUpdateResult> XcodeProjectVersionResults { get; } = new();
         public List<AppleAppReleasePreparationResult> AppleAppResults { get; } = new();

@@ -24,15 +24,6 @@ public sealed partial class ModulePipelineRunner
 
         foreach (var destination in publishOrder)
         {
-            if (ShouldSkipSynchronizedReleaseDestination(state, destination))
-            {
-                if (destination == ReleasePublishDestination.NuGet)
-                    packageNuGetPublished = true;
-                if (destination == ReleasePublishDestination.GitHub)
-                    packageGitHubPublished = true;
-                continue;
-            }
-
             switch (destination)
             {
                 case ReleasePublishDestination.NuGet:
@@ -56,7 +47,6 @@ public sealed partial class ModulePipelineRunner
                     break;
             }
 
-            MarkSynchronizedReleaseDestinationCompleted(state, destination);
         }
 
         if (!packageNuGetPublished)
@@ -86,13 +76,6 @@ public sealed partial class ModulePipelineRunner
             return;
         }
 
-        if (ShouldSkipSynchronizedReleaseDestination(state, ReleasePublishDestination.PowerShellGallery))
-        {
-            foreach (var publish in modulePublishes)
-                completed.Add(publish);
-            return;
-        }
-
         if (_hostedOperations is not IModulePipelinePublishPreflightOperations preflight)
         {
             throw new InvalidOperationException(
@@ -101,18 +84,30 @@ public sealed partial class ModulePipelineRunner
 
         foreach (var publish in modulePublishes)
         {
+            var operationKey = CreateModulePublishOperationFingerprint(plan, publish);
+            if (ShouldSkipSynchronizedReleaseOperation(state, operationKey))
+            {
+                completed.Add(publish);
+                continue;
+            }
+
+            var allowExistingExactVersion = WasSynchronizedReleaseOperationAttempted(state, operationKey);
             if (preflight.ValidateModulePublishVersion(
                     publish.Configuration,
                     plan,
-                    state.IsResumingSynchronizedRelease) ==
+                    allowExistingExactVersion) ==
                 ModulePublishVersionPreflightResult.AlreadyPublished)
             {
+                if (!allowExistingExactVersion)
+                {
+                    throw new InvalidOperationException(
+                        "The synchronized module version already exists, but the coordinated release checkpoint does not record an earlier attempt for this publish operation.");
+                }
+
                 completed.Add(publish);
+                MarkSynchronizedReleaseOperationCompleted(state, operationKey);
             }
         }
-
-        if (modulePublishes.All(completed.Contains))
-            MarkSynchronizedReleaseDestinationCompleted(state, ReleasePublishDestination.PowerShellGallery);
     }
 
     private void ExecuteModulePublishes(
@@ -132,8 +127,17 @@ public sealed partial class ModulePipelineRunner
                 continue;
             }
 
+            var operationKey = CreateModulePublishOperationFingerprint(plan, publish);
+            if (ShouldSkipSynchronizedReleaseOperation(state, operationKey))
+            {
+                completed.Add(publish);
+                continue;
+            }
+
+            MarkSynchronizedReleaseOperationAttempted(state, operationKey);
             ExecuteModulePublish(plan, session, buildResult, state, publish);
             completed.Add(publish);
+            MarkSynchronizedReleaseOperationCompleted(state, operationKey);
         }
     }
 

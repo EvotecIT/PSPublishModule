@@ -137,7 +137,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
 
             Assert.Contains("gallery outage", firstException.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(3, packagePublishCount);
-            var checkpointRoot = Path.Combine(root.FullName, "Artefacts", ".powerforge", "coordinated-release");
+            var checkpointRoot = Path.Combine(root.FullName, ".powerforge", "coordinated-release");
             Assert.Single(Directory.GetFiles(checkpointRoot, "*.json"));
 
             runNumber = 2;
@@ -243,7 +243,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Assert.Contains("post-publish failure", firstException.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(1, packagePublishCount);
             Assert.Single(firstHosted.PublishedModuleVersions);
-            var checkpointRoot = Path.Combine(root.FullName, "Artefacts", ".powerforge", "coordinated-release");
+            var checkpointRoot = Path.Combine(root.FullName, ".powerforge", "coordinated-release");
             Assert.Single(Directory.GetFiles(checkpointRoot, "*.json"));
 
             var disabledSynchronizationHosted = new FakeHostedOperations(new List<string>());

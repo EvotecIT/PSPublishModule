@@ -71,10 +71,19 @@ public sealed partial class ModulePipelineRunner
             if (segment?.Configuration is null || !ShouldExecuteProjectBuildPublish(plan, segment, destination))
                 continue;
 
-            if (TryExecuteExistingProjectBuildPublish(plan, session, state, segment, destination))
+            var operationKey = CreateProjectBuildPublishOperationFingerprint(plan, segment, destination);
+            if (ShouldSkipSynchronizedReleaseOperation(state, operationKey))
                 continue;
 
+            MarkSynchronizedReleaseOperationAttempted(state, operationKey);
+            if (TryExecuteExistingProjectBuildPublish(plan, session, state, segment, destination))
+            {
+                MarkSynchronizedReleaseOperationCompleted(state, operationKey);
+                continue;
+            }
+
             ExecuteProjectBuildSegment(plan, session, state, segment, mode);
+            MarkSynchronizedReleaseOperationCompleted(state, operationKey);
         }
 
         foreach (var segment in plan.PackageBuilds ?? Array.Empty<ConfigurationPackageBuildSegment>())
@@ -82,10 +91,19 @@ public sealed partial class ModulePipelineRunner
             if (segment?.Configuration is null || !ShouldExecutePackageBuildPublish(plan, segment, destination))
                 continue;
 
-            if (TryExecuteExistingPackageBuildPublish(plan, session, state, segment, destination))
+            var operationKey = CreatePackageBuildPublishOperationFingerprint(plan, segment, destination);
+            if (ShouldSkipSynchronizedReleaseOperation(state, operationKey))
                 continue;
 
+            MarkSynchronizedReleaseOperationAttempted(state, operationKey);
+            if (TryExecuteExistingPackageBuildPublish(plan, session, state, segment, destination))
+            {
+                MarkSynchronizedReleaseOperationCompleted(state, operationKey);
+                continue;
+            }
+
             ExecutePackageBuildSegment(plan, session, state, segment, mode);
+            MarkSynchronizedReleaseOperationCompleted(state, operationKey);
         }
     }
 
@@ -486,6 +504,9 @@ public sealed partial class ModulePipelineRunner
         PackageBuildExecutionMode mode,
         string failurePrefix)
     {
+        if (mode is not PackageBuildExecutionMode.PublishNuGet and not PackageBuildExecutionMode.PublishGitHub)
+            RecordSynchronizedReleaseLaneCheckpoint(state, source, laneLabel, checkpointKey, result);
+
         if (!result.Success)
             throw new InvalidOperationException(result.ErrorMessage ?? $"{failurePrefix} failed for '{result.ConfigPath}'.");
 
@@ -508,7 +529,6 @@ public sealed partial class ModulePipelineRunner
             checkpointKey,
             useAsReleaseVersionSource,
             result);
-        RecordSynchronizedReleaseLaneCheckpoint(state, source, laneLabel, checkpointKey, result);
     }
 
     private ProjectBuildHostExecutionResult ExecuteProjectBuildSegment(
@@ -524,18 +544,20 @@ public sealed partial class ModulePipelineRunner
         var configPath = ResolvePackageBuildPath(plan.ProjectRoot, cfg.ConfigPath);
         var configuration = LoadProjectBuildConfiguration(configPath, cfg);
         var laneLabel = cfg.Name ?? configPath;
+        var checkpointKey = ResolveSynchronizedReleaseLaneKey(
+            plan,
+            ReleaseVersionSource.ProjectBuild,
+            segment,
+            laneLabel);
         ApplySynchronizedReleaseCheckpointVersion(
             plan,
             state,
             ReleaseVersionSource.ProjectBuild,
             laneLabel,
-            ResolveSynchronizedReleaseLaneKey(
-                plan,
-                ReleaseVersionSource.ProjectBuild,
-                segment,
-                laneLabel),
-            cfg.UseAsReleaseVersionSource,
+            checkpointKey,
             configuration);
+        if (mode is not PackageBuildExecutionMode.PublishNuGet and not PackageBuildExecutionMode.PublishGitHub)
+            MarkSynchronizedReleaseLaneAttempted(state, checkpointKey);
         ApplyProjectBuildGateDefaults(configuration, mode, plan.GateMode);
         var actions = ResolveEffectiveActions(configuration);
         var request = new ProjectBuildHostRequest
@@ -562,18 +584,20 @@ public sealed partial class ModulePipelineRunner
         var cfg = segment.Configuration ?? throw new InvalidOperationException("PackageBuild configuration is missing.");
         var projectBuildConfig = MapPackageBuildConfiguration(cfg, plan.ProjectRoot);
         var laneLabel = cfg.Name ?? Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
+        var checkpointKey = ResolveSynchronizedReleaseLaneKey(
+            plan,
+            ReleaseVersionSource.PackageBuild,
+            segment,
+            laneLabel);
         ApplySynchronizedReleaseCheckpointVersion(
             plan,
             state,
             ReleaseVersionSource.PackageBuild,
             laneLabel,
-            ResolveSynchronizedReleaseLaneKey(
-                plan,
-                ReleaseVersionSource.PackageBuild,
-                segment,
-                laneLabel),
-            cfg.UseAsReleaseVersionSource,
+            checkpointKey,
             projectBuildConfig);
+        if (mode is not PackageBuildExecutionMode.PublishNuGet and not PackageBuildExecutionMode.PublishGitHub)
+            MarkSynchronizedReleaseLaneAttempted(state, checkpointKey);
         ApplyProjectBuildGateDefaults(projectBuildConfig, mode, plan.GateMode);
         var actions = ResolveEffectiveActions(projectBuildConfig);
         var configPath = Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
