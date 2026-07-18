@@ -246,6 +246,12 @@ internal static partial class WebCliCommandHandlers
                 continue;
             if (index + 1 >= args.Length || args[index + 1].StartsWith("--", StringComparison.Ordinal))
                 throw new InvalidOperationException($"Option {args[index]} requires a glob value.");
+            if (!args[index + 1]
+                    .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries)
+                    .Any(static value => !string.IsNullOrWhiteSpace(value)))
+            {
+                throw new InvalidOperationException($"Option {args[index]} requires at least one glob value.");
+            }
         }
 
         return NormalizeRecoveryWatchPaths(ReadOptionList(args, optionNames));

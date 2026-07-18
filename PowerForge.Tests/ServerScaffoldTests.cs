@@ -82,13 +82,24 @@ public sealed class ServerScaffoldTests
     public void Scaffold_ShouldRenderYamlSafeDeduplicatedRecoveryWatchPaths()
     {
         var options = CreateOptions();
-        options.RecoveryWatchPaths = ["src/**", "deploy/linux/**", "src/**", ".github/actions/recovery/**"];
+        options.RecoveryWatchPaths =
+        [
+            "src/**",
+            "deploy/linux/**",
+            "src/**",
+            ".github/actions/recovery/**",
+            "config/__ENGINE_REF__/**",
+            "config/__CUSTOM_TOKEN__/**"
+        ];
 
         var workflow = WebCliCommandHandlers.BuildServerScaffoldFiles(options)[".github/workflows/server-recovery-ci.yml"];
 
         Assert.Equal(1, workflow.Split("      - \"deploy/linux/**\"", StringSplitOptions.None).Length - 1);
         Assert.Equal(1, workflow.Split("      - \"src/**\"", StringSplitOptions.None).Length - 1);
         Assert.Equal(1, workflow.Split("      - \".github/actions/recovery/**\"", StringSplitOptions.None).Length - 1);
+        Assert.Contains("      - \"config/__ENGINE_REF__/**\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("      - \"config/__CUSTOM_TOKEN__/**\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("powerforge-server-recovery-validate@" + EngineRef, workflow, StringComparison.Ordinal);
         Assert.NotNull(new YamlDotNet.Serialization.DeserializerBuilder().Build().Deserialize<object>(workflow));
         Assert.DoesNotContain("run:", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("${{ secrets.", workflow, StringComparison.OrdinalIgnoreCase);
@@ -378,6 +389,23 @@ public sealed class ServerScaffoldTests
 
         Assert.Contains("requires a glob value", trailingException.Message, StringComparison.Ordinal);
         Assert.Contains("requires a glob value", followedException.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(",")]
+    [InlineData(" ; , ")]
+    public void ScaffoldOptions_ShouldRejectEmptyRecoveryWatchPathList(string watchPaths)
+    {
+        var args = RequiredArguments("example.test")
+            .Concat(["--recovery-watch-path", watchPaths])
+            .ToArray();
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => WebCliCommandHandlers.ParseServerScaffoldOptions(args));
+
+        Assert.Contains("requires at least one glob value", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

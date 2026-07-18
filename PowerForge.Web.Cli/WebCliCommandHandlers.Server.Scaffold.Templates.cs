@@ -272,11 +272,18 @@ internal static partial class WebCliCommandHandlers
             ("__ENGINE_REF__", options.EngineRef));
 
     private static string BuildScaffoldRecoveryValidationWorkflow(PowerForgeServerScaffoldOptions options)
-        => ServerScaffoldTemplateStore.Render(
+    {
+        const string watchPathsMarker = "<<POWERFORGE_RECOVERY_WATCH_PATHS>>";
+        var rendered = ServerScaffoldTemplateStore.Render(
             "server-recovery-ci.yml",
             ("__SITE_ID__", options.SiteId),
-            ("__RECOVERY_WATCH_PATHS__", BuildScaffoldRecoveryWatchPaths(options)),
+            ("__RECOVERY_WATCH_PATHS__", watchPathsMarker),
             ("__ENGINE_REF__", options.EngineRef));
+        return rendered.Replace(
+            watchPathsMarker,
+            BuildScaffoldRecoveryWatchPaths(options),
+            StringComparison.Ordinal);
+    }
 
     private static string BuildScaffoldRecoveryWatchPaths(PowerForgeServerScaffoldOptions options)
     {
