@@ -159,6 +159,46 @@ public sealed class ModuleStateRepairPlannerTests
     }
 
     [Fact]
+    public void CreateRepairActions_DoesNotReplacePlacedDesiredActionWithAmbiguousReceiptRepair()
+    {
+        var firstRoot = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "receipt-first");
+        var secondRoot = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "receipt-second");
+        var inventory = new ModuleStateInventory(
+            Array.Empty<ModuleStateInstalledModule>(),
+            new[]
+            {
+                new ModuleStateModulePath(firstRoot, "Core", "CurrentUser", "Alice", wasAvailable: true),
+                new ModuleStateModulePath(secondRoot, "Core", "CurrentUser", "Bob", wasAvailable: true)
+            },
+            Array.Empty<ModuleStateInventoryDiagnostic>());
+        var receipts = new[]
+        {
+            new ModuleStateMaintenanceReceipt(
+                "Company baseline",
+                new[] { new ModuleStateMaintenanceReceiptModule("Company.Tools", "1.2.0", scope: "CurrentUser") })
+        };
+        var desiredAction = new ModuleStatePlanAction(
+            ModuleStatePlanActionKind.Install,
+            "Company.Tools",
+            installedVersion: null,
+            "=1.2.0",
+            "explicit desired placement",
+            targetScope: "CurrentUser",
+            targetModuleRoot: firstRoot,
+            targetPowerShellEdition: "Core",
+            targetProfileName: "Alice");
+
+        var actions = new ModuleStateRepairPlanner().CreateRepairActions(
+            inventory,
+            receipts,
+            new[] { desiredAction });
+
+        Assert.Equal(2, actions.Length);
+        Assert.Contains(actions, action => !action.IsRepair && ModuleStatePathIdentity.Equals(action.TargetModuleRoot, firstRoot));
+        Assert.Contains(actions, static action => action.IsRepair && action.TargetModuleRoot is null);
+    }
+
+    [Fact]
     public void CreateRepairActions_RepairsOnlyTheReceiptPhysicalRoot()
     {
         var selectedRoot = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "receipt-selected");

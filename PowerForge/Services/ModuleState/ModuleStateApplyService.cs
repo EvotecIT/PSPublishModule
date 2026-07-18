@@ -35,7 +35,7 @@ internal sealed class ModuleStateApplyService
             deliveryOptions.Transport,
             commands);
 
-        return new ModuleStateApplyResult(receipt, plan);
+        return new ModuleStateApplyResult(receipt, plan, deliveryOptions);
     }
 
     internal void WriteReceipt(ModuleStateApplyResult result, string path)
@@ -93,7 +93,11 @@ internal sealed class ModuleStateApplyService
                 StringComparer.OrdinalIgnoreCase);
         var modules = result.Plan.Actions
             .Where(static action => action.Kind is ModuleStatePlanActionKind.NoAction or ModuleStatePlanActionKind.Install or ModuleStatePlanActionKind.Update or ModuleStatePlanActionKind.Save)
-            .Select(action => CreateMaintenanceReceiptModule(action, sourceRepository, observedByName))
+            .Select(action => CreateMaintenanceReceiptModule(
+                action,
+                sourceRepository,
+                result.DeliveryOptions.ModuleRoot,
+                observedByName))
             .Where(static module => module is not null)
             .Cast<ModuleStateMaintenanceReceiptModule>()
             .GroupBy(
@@ -214,6 +218,7 @@ internal sealed class ModuleStateApplyService
     {
         var commandName = ResolveCommandName(action.Kind, deliveryOptions.Transport);
         var actionRepository = ResolveActionDeliveryRepository(action);
+        var actionDeliveryPath = ModuleStateActionPlacement.ResolveDeliveryRoot(action);
         var arguments = new List<string>
         {
             "-Name",
@@ -244,15 +249,15 @@ internal sealed class ModuleStateApplyService
             arguments.Add(action.TargetScope!);
         }
 
-        if (!string.IsNullOrWhiteSpace(action.TargetPath) && action.Kind == ModuleStatePlanActionKind.Save)
+        if (!string.IsNullOrWhiteSpace(actionDeliveryPath) && action.Kind == ModuleStatePlanActionKind.Save)
         {
             arguments.Add("-Path");
-            arguments.Add(action.TargetPath!);
+            arguments.Add(actionDeliveryPath!);
         }
-        else if (!string.IsNullOrWhiteSpace(action.TargetPath))
+        else if (!string.IsNullOrWhiteSpace(actionDeliveryPath))
         {
             arguments.Add("-ModuleRoot");
-            arguments.Add(action.TargetPath!);
+            arguments.Add(actionDeliveryPath!);
         }
         else if (!string.IsNullOrWhiteSpace(deliveryOptions.ModuleRoot))
         {
@@ -366,6 +371,7 @@ internal sealed class ModuleStateApplyService
     private static ModuleStateMaintenanceReceiptModule? CreateMaintenanceReceiptModule(
         ModuleStatePlanAction action,
         string? sourceRepository,
+        string? fallbackModuleRoot,
         IReadOnlyDictionary<string, ModuleStateInstalledModule[]> observedByName)
     {
         var version = GetExactVersionPolicyValue(action.VersionPolicy);
@@ -374,7 +380,7 @@ internal sealed class ModuleStateApplyService
             : Array.Empty<ModuleStateInstalledModule>();
         if (string.IsNullOrWhiteSpace(version) && action.Kind == ModuleStatePlanActionKind.NoAction)
             version = action.InstalledVersion;
-        var observedModule = SelectObservedModule(action, sourceRepository, observedModules, version);
+        var observedModule = SelectObservedModule(action, sourceRepository, fallbackModuleRoot, observedModules, version);
         if (string.IsNullOrWhiteSpace(version) && observedModule is not null)
             version = observedModule.Version;
 
@@ -386,7 +392,7 @@ internal sealed class ModuleStateApplyService
             version!,
             observedModule?.SourceRepository,
             observedModule?.Scope ?? action.TargetScope,
-            observedModule?.ModuleRoot ?? action.TargetModuleRoot,
+            observedModule?.ModuleRoot ?? ModuleStateActionPlacement.ResolveDeliveryRoot(action, fallbackModuleRoot),
             observedModule?.PowerShellEdition ?? action.TargetPowerShellEdition,
             observedModule?.ProfileName ?? action.TargetProfileName);
     }
@@ -418,6 +424,7 @@ internal sealed class ModuleStateApplyService
     private static ModuleStateInstalledModule? SelectObservedModule(
         ModuleStatePlanAction action,
         string? sourceRepository,
+        string? fallbackModuleRoot,
         IEnumerable<ModuleStateInstalledModule> modules,
         string? version)
     {
@@ -433,8 +440,9 @@ internal sealed class ModuleStateApplyService
                     string.Equals(module.Scope, action.TargetScope, StringComparison.OrdinalIgnoreCase));
         }
 
-        if (!string.IsNullOrWhiteSpace(action.TargetModuleRoot))
-            candidates = candidates.Where(module => ModuleStatePathIdentity.Equals(module.ModuleRoot, action.TargetModuleRoot));
+        var targetModuleRoot = ModuleStateActionPlacement.ResolveDeliveryRoot(action, fallbackModuleRoot);
+        if (!string.IsNullOrWhiteSpace(targetModuleRoot))
+            candidates = candidates.Where(module => ModuleStatePathIdentity.Equals(ModuleStatePathIdentity.ResolveModuleRoot(module), targetModuleRoot));
         if (!string.IsNullOrWhiteSpace(action.TargetPowerShellEdition))
             candidates = candidates.Where(module => string.Equals(module.PowerShellEdition, action.TargetPowerShellEdition, StringComparison.OrdinalIgnoreCase));
         if (!string.IsNullOrWhiteSpace(action.TargetProfileName))

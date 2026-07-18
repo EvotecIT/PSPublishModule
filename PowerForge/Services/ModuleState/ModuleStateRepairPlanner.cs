@@ -87,7 +87,7 @@ internal sealed class ModuleStateRepairPlanner
             .Where(pair =>
                 !pair.Value.IsRepair &&
                 string.Equals(pair.Value.ModuleName, repairAction.ModuleName, StringComparison.OrdinalIgnoreCase) &&
-                IsSameActionPlacement(pair.Value, repairAction))
+                IsSameReceiptActionPlacement(pair.Value, repairAction))
             .Select(static pair => pair.Key)
             .ToArray();
 
@@ -288,6 +288,25 @@ internal sealed class ModuleStateRepairPlanner
                 string.Equals(left.TargetPowerShellEdition, right.TargetPowerShellEdition, StringComparison.OrdinalIgnoreCase)) &&
                (string.IsNullOrWhiteSpace(left.TargetProfileName) || string.IsNullOrWhiteSpace(right.TargetProfileName) ||
                 string.Equals(left.TargetProfileName, right.TargetProfileName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsSameReceiptActionPlacement(
+        ModuleStatePlanAction existingAction,
+        ModuleStatePlanAction receiptRepairAction)
+    {
+        var existingRoot = existingAction.TargetModuleRoot ?? existingAction.TargetPath;
+        var repairRoot = receiptRepairAction.TargetModuleRoot ?? receiptRepairAction.TargetPath;
+        if (string.IsNullOrWhiteSpace(existingRoot) != string.IsNullOrWhiteSpace(repairRoot))
+            return false;
+
+        if (string.IsNullOrWhiteSpace(existingRoot))
+        {
+            return string.Equals(existingAction.TargetScope ?? string.Empty, receiptRepairAction.TargetScope ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
+                   string.Equals(existingAction.TargetPowerShellEdition ?? string.Empty, receiptRepairAction.TargetPowerShellEdition ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
+                   string.Equals(existingAction.TargetProfileName ?? string.Empty, receiptRepairAction.TargetProfileName ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return IsSameActionPlacement(existingAction, receiptRepairAction);
     }
 
     private static bool IsActionForModulePlacement(

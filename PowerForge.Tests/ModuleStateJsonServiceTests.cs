@@ -63,6 +63,28 @@ public sealed class ModuleStateJsonServiceTests
         Assert.Equal("CompanyModules", module.SourceRepository);
         Assert.True(module.IsLoaded);
         Assert.True(module.IsEffectiveImportCandidate);
+        Assert.True(Assert.Single(inventory.ModulePaths).WasAvailable);
+    }
+
+    [Fact]
+    public void ReadInventory_MarksDiagnosedLegacyPathUnavailable()
+    {
+        var inventory = new ModuleStateJsonService().ReadInventory("""
+{
+  "ModulePaths": [ "C:/AvailableModules", "C:/MissingModules" ],
+  "Diagnostics": [
+    {
+      "Severity": "Error",
+      "Code": "ModuleState.InventoryPathMissing",
+      "Message": "The path was unavailable during collection.",
+      "Path": "C:/MissingModules"
+    }
+  ]
+}
+""");
+
+        Assert.True(Assert.Single(inventory.ModulePaths, static path => path.Path == "C:/AvailableModules").WasAvailable);
+        Assert.False(Assert.Single(inventory.ModulePaths, static path => path.Path == "C:/MissingModules").WasAvailable);
     }
 
     [Fact]

@@ -147,7 +147,11 @@ internal sealed class ModuleStateCleanupPlanner
                     (string.IsNullOrWhiteSpace(desiredModule.Scope) ||
                      string.Equals(module.Scope, desiredModule.Scope, StringComparison.OrdinalIgnoreCase)) &&
                     (string.IsNullOrWhiteSpace(desiredModule.TargetPath ?? desiredModule.ModuleRoot) ||
-                     ModuleStatePathIdentity.IsSameOrChild(module.Path, desiredModule.TargetPath ?? desiredModule.ModuleRoot)))
+                     ModuleStatePathIdentity.IsSameOrChild(module.Path, desiredModule.TargetPath ?? desiredModule.ModuleRoot)) &&
+                    (string.IsNullOrWhiteSpace(desiredModule.PowerShellEdition) ||
+                     string.Equals(module.PowerShellEdition, desiredModule.PowerShellEdition, StringComparison.OrdinalIgnoreCase)) &&
+                    (string.IsNullOrWhiteSpace(desiredModule.ProfileName) ||
+                     string.Equals(module.ProfileName, desiredModule.ProfileName, StringComparison.OrdinalIgnoreCase)))
                 .ToArray();
             if (candidates.Length == 0)
                 continue;

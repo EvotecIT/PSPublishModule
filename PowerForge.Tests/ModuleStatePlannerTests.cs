@@ -520,6 +520,60 @@ public sealed class ModuleStatePlannerTests
     }
 
     [Fact]
+    public void CreatePlan_WithCleanup_KeepsSelectedVersionsPerPowerShellEdition()
+    {
+        const string moduleRoot = @"C:\SharedModules";
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[]
+            {
+                new ModuleStateInstalledModule("Company.Tools", "1.0.0", powerShellEdition: "Core", scope: "CurrentUser", path: @"C:\SharedModules\Core\Company.Tools\1.0.0", moduleRoot: moduleRoot),
+                new ModuleStateInstalledModule("Company.Tools", "2.0.0", powerShellEdition: "Core", scope: "CurrentUser", path: @"C:\SharedModules\Core\Company.Tools\2.0.0", moduleRoot: moduleRoot),
+                new ModuleStateInstalledModule("Company.Tools", "1.0.0", powerShellEdition: "Desktop", scope: "CurrentUser", path: @"C:\SharedModules\Desktop\Company.Tools\1.0.0", moduleRoot: moduleRoot),
+                new ModuleStateInstalledModule("Company.Tools", "2.0.0", powerShellEdition: "Desktop", scope: "CurrentUser", path: @"C:\SharedModules\Desktop\Company.Tools\2.0.0", moduleRoot: moduleRoot)
+            }),
+            new[]
+            {
+                new ModuleStateDesiredModule("Company.Tools", "=2.0.0", scope: "CurrentUser", powerShellEdition: "Core"),
+                new ModuleStateDesiredModule("Company.Tools", "=1.0.0", scope: "CurrentUser", powerShellEdition: "Desktop")
+            },
+            cleanupMode: ModuleStateCleanupMode.OldVersions);
+
+        var plan = new ModuleStatePlanner().CreatePlan(request);
+        var cleanupActions = plan.Actions.Where(static action => action.Kind == ModuleStatePlanActionKind.Remove).ToArray();
+
+        Assert.Equal(2, cleanupActions.Length);
+        Assert.Contains(cleanupActions, static action => action.TargetPowerShellEdition == "Core" && action.InstalledVersion == "1.0.0");
+        Assert.Contains(cleanupActions, static action => action.TargetPowerShellEdition == "Desktop" && action.InstalledVersion == "2.0.0");
+    }
+
+    [Fact]
+    public void CreatePlan_WithCleanup_KeepsSelectedVersionsPerProfile()
+    {
+        const string moduleRoot = @"C:\SharedModules";
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[]
+            {
+                new ModuleStateInstalledModule("Company.Tools", "1.0.0", scope: "CurrentUser", path: @"C:\SharedModules\Alice\Company.Tools\1.0.0", moduleRoot: moduleRoot, profileName: "Alice"),
+                new ModuleStateInstalledModule("Company.Tools", "2.0.0", scope: "CurrentUser", path: @"C:\SharedModules\Alice\Company.Tools\2.0.0", moduleRoot: moduleRoot, profileName: "Alice"),
+                new ModuleStateInstalledModule("Company.Tools", "1.0.0", scope: "CurrentUser", path: @"C:\SharedModules\Bob\Company.Tools\1.0.0", moduleRoot: moduleRoot, profileName: "Bob"),
+                new ModuleStateInstalledModule("Company.Tools", "2.0.0", scope: "CurrentUser", path: @"C:\SharedModules\Bob\Company.Tools\2.0.0", moduleRoot: moduleRoot, profileName: "Bob")
+            }),
+            new[]
+            {
+                new ModuleStateDesiredModule("Company.Tools", "=2.0.0", scope: "CurrentUser", profileName: "Alice"),
+                new ModuleStateDesiredModule("Company.Tools", "=1.0.0", scope: "CurrentUser", profileName: "Bob")
+            },
+            cleanupMode: ModuleStateCleanupMode.OldVersions);
+
+        var plan = new ModuleStatePlanner().CreatePlan(request);
+        var cleanupActions = plan.Actions.Where(static action => action.Kind == ModuleStatePlanActionKind.Remove).ToArray();
+
+        Assert.Equal(2, cleanupActions.Length);
+        Assert.Contains(cleanupActions, static action => action.TargetProfileName == "Alice" && action.InstalledVersion == "1.0.0");
+        Assert.Contains(cleanupActions, static action => action.TargetProfileName == "Bob" && action.InstalledVersion == "2.0.0");
+    }
+
+    [Fact]
     public void CreatePlan_WithCleanupAndLatestPolicy_KeepsCurrentHighestVersion()
     {
         var request = new ModuleStatePlanRequest(

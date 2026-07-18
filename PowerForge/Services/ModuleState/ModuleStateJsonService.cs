@@ -62,14 +62,6 @@ internal sealed class ModuleStateJsonService
                 module.ProfileName));
         }
 
-        var modulePaths = (dto.ScannedPaths ?? dto.ModulePaths?.Select(static path => new InventoryPathDto { Path = path }).ToArray() ?? Array.Empty<InventoryPathDto>())
-            .Select(static path => new ModuleStateModulePath(
-                path.Path ?? string.Empty,
-                path.PowerShellEdition,
-                path.Scope,
-                path.ProfileName,
-                path.IsRequired,
-                path.WasAvailable));
         var diagnostics = (dto.Diagnostics ?? Array.Empty<InventoryDiagnosticDto>())
             .Select(static diagnostic => new ModuleStateInventoryDiagnostic(
                 ParseSeverity(diagnostic.Severity),
@@ -78,7 +70,19 @@ internal sealed class ModuleStateJsonService
                 diagnostic.Path ?? string.Empty,
                 diagnostic.PowerShellEdition,
                 diagnostic.Scope,
-                diagnostic.ProfileName));
+                diagnostic.ProfileName))
+            .ToArray();
+        var modulePaths = dto.ScannedPaths is { Length: > 0 }
+            ? dto.ScannedPaths.Select(static path => new ModuleStateModulePath(
+                path.Path ?? string.Empty,
+                path.PowerShellEdition,
+                path.Scope,
+                path.ProfileName,
+                path.IsRequired,
+                path.WasAvailable))
+            : (dto.ModulePaths ?? Array.Empty<string>()).Select(path => new ModuleStateModulePath(
+                path,
+                wasAvailable: ModuleStateInventoryPathAvailability.WasAvailable(path, diagnostics)));
         return new ModuleStateInventory(modules, modulePaths, diagnostics);
     }
 

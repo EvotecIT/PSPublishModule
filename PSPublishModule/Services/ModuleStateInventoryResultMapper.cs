@@ -72,6 +72,17 @@ internal static class ModuleStateInventoryResultMapper
         if (result is null)
             throw new ArgumentNullException(nameof(result));
 
+        var diagnosticResults = result.Diagnostics ?? Array.Empty<ModuleStateInventoryDiagnosticResult>();
+        var diagnostics = diagnosticResults
+            .Select(static diagnostic => new ModuleStateInventoryDiagnostic(
+                ParseSeverity(diagnostic.Severity),
+                diagnostic.Code,
+                diagnostic.Message,
+                diagnostic.Path,
+                diagnostic.PowerShellEdition,
+                diagnostic.Scope,
+                diagnostic.ProfileName))
+            .ToArray();
         var modulePaths = result.ScannedPaths is { Length: > 0 }
             ? result.ScannedPaths.Select(static path => new ModuleStateModulePath(
                 path.Path,
@@ -80,16 +91,9 @@ internal static class ModuleStateInventoryResultMapper
                 path.ProfileName,
                 path.IsRequired,
                 path.WasAvailable))
-            : (result.ModulePaths ?? Array.Empty<string>()).Select(static path => new ModuleStateModulePath(path));
-        var diagnostics = (result.Diagnostics ?? Array.Empty<ModuleStateInventoryDiagnosticResult>())
-            .Select(static diagnostic => new ModuleStateInventoryDiagnostic(
-                ParseSeverity(diagnostic.Severity),
-                diagnostic.Code,
-                diagnostic.Message,
-                diagnostic.Path,
-                diagnostic.PowerShellEdition,
-                diagnostic.Scope,
-                diagnostic.ProfileName));
+            : (result.ModulePaths ?? Array.Empty<string>()).Select(path => new ModuleStateModulePath(
+                path,
+                wasAvailable: ModuleStateInventoryPathAvailability.WasAvailable(path, diagnostics)));
         return new ModuleStateInventory((result.InstalledModules ?? Array.Empty<ModuleStateInstalledModuleResult>())
             .Select(static module => new ModuleStateInstalledModule(
                 module.Name,

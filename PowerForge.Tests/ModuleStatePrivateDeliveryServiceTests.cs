@@ -150,7 +150,7 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
         Assert.Equal(@"C:\ManagedRoot", request.ManagedModuleRoot);
         Assert.True(request.ManagedAllowClobber);
         Assert.True(request.ManagedAcceptLicense);
-        Assert.Equal(ManagedModuleInstallScope.AllUsers, request.ManagedScope);
+        Assert.Equal(ManagedModuleInstallScope.Custom, request.ManagedScope);
     }
 
     [Fact]
@@ -318,6 +318,25 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
     }
 
     [Fact]
+    public void ManagedCreateUpdateRequest_TreatsActionModuleRootAsCustomScope()
+    {
+        const string selectedRoot = @"C:\SelectedRoot";
+        var action = new ModuleStatePlanAction(
+            ModuleStatePlanActionKind.Update,
+            "Company.Tools",
+            "1.0.0",
+            "=2.0.0",
+            "stale version",
+            targetScope: "CurrentUser",
+            targetModuleRoot: selectedRoot);
+
+        var request = InvokeManagedCreateUpdateRequest(action, new ModuleStateManagedDeliveryOptions());
+
+        Assert.Equal(ManagedModuleInstallScope.Custom, request.Scope);
+        Assert.Equal(selectedRoot, request.ModuleRoot);
+    }
+
+    [Fact]
     public void ManagedResolveRepository_PreservesActionTargetOverGlobalRepository()
     {
         var action = new ModuleStatePlanAction(
@@ -376,6 +395,19 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
     }
 
     [Fact]
+    public void MapExecutionResult_PreservesEffectiveManagedModuleRoot()
+    {
+        const string selectedRoot = @"C:\SelectedRoot";
+
+        var result = ModuleStatePrivateDeliveryService.MapExecutionResult(
+            ModuleStatePlanActionKind.Install,
+            new PrivateModuleWorkflowResult(),
+            selectedRoot);
+
+        Assert.Equal(selectedRoot, result.TargetPath);
+    }
+
+    [Fact]
     public void ManagedSkippedResult_PreservesDeliberateSkipState()
     {
         var method = typeof(ModuleStateManagedDeliveryService).GetMethod(
@@ -391,11 +423,34 @@ public sealed class ModuleStatePrivateDeliveryServiceTests
 
         var result = Assert.IsType<ModuleStateDeliveryExecutionResult>(method!.Invoke(
             null,
-            new object[] { "Update", "Company", action }));
+            new object?[] { "Update", "Company", action, @"C:\FallbackRoot" }));
 
         Assert.True(result.Succeeded);
         Assert.True(result.Skipped);
         Assert.False(result.OperationPerformed);
+        Assert.Equal(@"C:\FallbackRoot", result.TargetPath);
+    }
+
+    [Fact]
+    public void ManagedFailedResult_PreservesFallbackModuleRoot()
+    {
+        var method = typeof(ModuleStateManagedDeliveryService).GetMethod(
+            "CreateFailedResult",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        var action = new ModuleStatePlanAction(
+            ModuleStatePlanActionKind.Install,
+            "Company.Tools",
+            installedVersion: null,
+            "*",
+            "missing");
+
+        var result = Assert.IsType<ModuleStateDeliveryExecutionResult>(method!.Invoke(
+            null,
+            new object?[] { action, new InvalidOperationException("failed"), @"C:\FallbackRoot" }));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(@"C:\FallbackRoot", result.TargetPath);
     }
 
     private static PrivateModuleWorkflowRequest InvokeCreateRequest(

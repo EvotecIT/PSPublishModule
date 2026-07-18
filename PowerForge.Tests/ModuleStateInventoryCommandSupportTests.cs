@@ -168,6 +168,33 @@ public sealed class ModuleStateInventoryCommandSupportTests
     }
 
     [Fact]
+    public void ToCoreInventory_TreatsLegacyModulePathsAsAvailableUnlessDiagnosticsProveOtherwise()
+    {
+        const string availableRoot = @"C:\AvailableModules";
+        const string missingRoot = @"C:\MissingModules";
+        var result = new ModuleStateInventoryResult
+        {
+            Source = "LegacyArtifact",
+            ModulePaths = new[] { availableRoot, missingRoot },
+            Diagnostics = new[]
+            {
+                new ModuleStateInventoryDiagnosticResult
+                {
+                    Severity = "Error",
+                    Code = "ModuleState.InventoryPathMissing",
+                    Message = "The path was unavailable during collection.",
+                    Path = missingRoot
+                }
+            }
+        };
+
+        var inventory = ModuleStateInventoryResultMapper.ToCoreInventory(result);
+
+        Assert.True(Assert.Single(inventory.ModulePaths, path => ModuleStatePathIdentity.Equals(path.Path, availableRoot)).WasAvailable);
+        Assert.False(Assert.Single(inventory.ModulePaths, path => ModuleStatePathIdentity.Equals(path.Path, missingRoot)).WasAvailable);
+    }
+
+    [Fact]
     public void ResolveLoadedModuleVersion_AppendsPrereleaseLabel()
     {
         var item = new PSObject();

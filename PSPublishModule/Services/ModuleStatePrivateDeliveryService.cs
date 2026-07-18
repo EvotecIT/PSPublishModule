@@ -33,7 +33,7 @@ internal sealed class ModuleStatePrivateDeliveryService
                 ResolveManagedSkipDependencyCheck(action, options),
                 action.ModuleName,
                 action.TargetScope,
-                action.TargetPath),
+                ModuleStateActionPlacement.ResolveDeliveryRoot(action)),
                 DeliveryGroupKeyComparer.Instance)
             .OrderBy(static group => group.Key.Kind == ModuleStatePlanActionKind.Update ? 0 : 1)
             .ToArray();
@@ -58,7 +58,7 @@ internal sealed class ModuleStatePrivateDeliveryService
                 groupActions,
                 options);
             var workflowResult = service.Execute(request, ShouldProcess);
-            results.Add(MapExecutionResult(group.Key.Kind, workflowResult));
+            results.Add(MapExecutionResult(group.Key.Kind, workflowResult, request.ManagedModuleRoot));
         }
 
         return results.ToArray();
@@ -66,12 +66,14 @@ internal sealed class ModuleStatePrivateDeliveryService
 
     internal static ModuleStateDeliveryExecutionResult MapExecutionResult(
         ModuleStatePlanActionKind actionKind,
-        PrivateModuleWorkflowResult workflowResult)
+        PrivateModuleWorkflowResult workflowResult,
+        string? targetPath = null)
         => new()
         {
             Skipped = workflowResult.OperationSkipped,
             Operation = actionKind.ToString(),
             OperationPerformed = workflowResult.OperationPerformed,
+            TargetPath = targetPath,
             RepositoryName = workflowResult.RepositoryName,
             RequestedTransport = workflowResult.RequestedTransport,
             EffectiveTransport = workflowResult.EffectiveTransport,
@@ -179,8 +181,9 @@ internal sealed class ModuleStatePrivateDeliveryService
         request.ManagedAllowClobber = managedAllowClobber;
         request.ManagedAcceptLicense = managedAcceptLicense;
         request.ManagedSkipDependencyCheck = managedSkipDependencyCheck;
-        request.ManagedModuleRoot = ResolveManagedModuleRoot(actions, options);
-        request.ManagedScope = ResolveManagedScope(actions);
+        var moduleRoot = ResolveManagedModuleRoot(actions, options);
+        request.ManagedModuleRoot = moduleRoot;
+        request.ManagedScope = ResolveManagedScope(actions, moduleRoot);
         request.ManagedLoadedModules = options.LoadedModules;
     }
 
@@ -188,12 +191,17 @@ internal sealed class ModuleStatePrivateDeliveryService
         IReadOnlyList<ModuleStatePlanAction> actions,
         ModuleStatePrivateDeliveryOptions options)
         => actions
-            .Select(static action => action.TargetModuleRoot ?? action.TargetPath)
+            .Select(static action => ModuleStateActionPlacement.ResolveDeliveryRoot(action))
             .FirstOrDefault(static path => !string.IsNullOrWhiteSpace(path))
            ?? options.ManagedModuleRoot;
 
-    private static ManagedModuleInstallScope ResolveManagedScope(IReadOnlyList<ModuleStatePlanAction> actions)
+    private static ManagedModuleInstallScope ResolveManagedScope(
+        IReadOnlyList<ModuleStatePlanAction> actions,
+        string? moduleRoot)
     {
+        if (!string.IsNullOrWhiteSpace(moduleRoot))
+            return ManagedModuleInstallScope.Custom;
+
         var scope = actions
             .Select(static action => action.TargetScope)
             .FirstOrDefault(static scope => !string.IsNullOrWhiteSpace(scope));

@@ -68,7 +68,7 @@ internal sealed class ModuleStateManagedDeliveryService
             }
             catch (Exception ex) when (captureFailures && ex is not OperationCanceledException)
             {
-                results.Add(CreateFailedResult(action, ex));
+                results.Add(CreateFailedResult(action, ex, options.ModuleRoot));
                 break;
             }
         }
@@ -85,7 +85,7 @@ internal sealed class ModuleStateManagedDeliveryService
     {
         var request = CreateInstallRequest(repository, action, options);
         if (!ShouldProcess(action.ModuleName, $"Install managed module from repository '{repository.Name}'"))
-            return CreateSkippedResult("Install", repository.Name, action);
+            return CreateSkippedResult("Install", repository.Name, action, options.ModuleRoot);
 
         var result = await service.InstallAsync(request, cancellationToken).ConfigureAwait(false);
         return new ModuleStateDeliveryExecutionResult
@@ -122,7 +122,7 @@ internal sealed class ModuleStateManagedDeliveryService
     {
         var request = CreateUpdateRequest(repository, action, options);
         if (!ShouldProcess(action.ModuleName, $"Update managed module from repository '{repository.Name}'"))
-            return CreateSkippedResult("Update", repository.Name, action);
+            return CreateSkippedResult("Update", repository.Name, action, options.ModuleRoot);
 
         var result = await service.UpdateAsync(request, cancellationToken).ConfigureAwait(false);
         return new ModuleStateDeliveryExecutionResult
@@ -159,7 +159,7 @@ internal sealed class ModuleStateManagedDeliveryService
     {
         var request = CreateSaveRequest(repository, action, options);
         if (!ShouldProcess(action.ModuleName, $"Save managed module from repository '{repository.Name}'"))
-            return CreateSkippedResult("Save", repository.Name, action);
+            return CreateSkippedResult("Save", repository.Name, action, options.ModuleRoot);
 
         var result = await service.InstallAsync(request, cancellationToken).ConfigureAwait(false);
         return new ModuleStateDeliveryExecutionResult
@@ -203,6 +203,7 @@ internal sealed class ModuleStateManagedDeliveryService
         var effectiveAllowClobber = options.AllowClobber || action.AllowClobber;
         var effectiveAcceptLicense = options.AcceptLicense || action.AcceptLicense;
         var effectiveSkipDependencyCheck = options.SkipDependencyCheck || action.SkipDependencyCheck;
+        var moduleRoot = ModuleStateActionPlacement.ResolveDeliveryRoot(action, options.ModuleRoot);
         return new ManagedModuleInstallRequest
         {
             Repository = repository,
@@ -210,8 +211,8 @@ internal sealed class ModuleStateManagedDeliveryService
             Version = versionPolicy.ExactVersion,
             VersionPolicy = versionPolicy.RangePolicy,
             IncludePrerelease = effectivePrerelease,
-            Scope = ResolveScope(action.TargetScope, action.TargetPath, options.ModuleRoot),
-            ModuleRoot = ResolveModuleRoot(action, options),
+            Scope = ResolveScope(action.TargetScope, moduleRoot),
+            ModuleRoot = moduleRoot,
             ExpectedPackageSha256 = action.ExpectedPackageSha256,
             Credential = options.Credential,
             Force = effectiveForce,
@@ -232,6 +233,7 @@ internal sealed class ModuleStateManagedDeliveryService
         var effectiveAllowClobber = options.AllowClobber || action.AllowClobber;
         var effectiveAcceptLicense = options.AcceptLicense || action.AcceptLicense;
         var effectiveSkipDependencyCheck = options.SkipDependencyCheck || action.SkipDependencyCheck;
+        var moduleRoot = ModuleStateActionPlacement.ResolveDeliveryRoot(action, options.ModuleRoot);
         return new ManagedModuleUpdateRequest
         {
             Repository = repository,
@@ -239,8 +241,8 @@ internal sealed class ModuleStateManagedDeliveryService
             Version = versionPolicy.ExactVersion,
             VersionPolicy = versionPolicy.RangePolicy,
             IncludePrerelease = effectivePrerelease,
-            Scope = ResolveScope(action.TargetScope, action.TargetPath, options.ModuleRoot),
-            ModuleRoot = ResolveModuleRoot(action, options),
+            Scope = ResolveScope(action.TargetScope, moduleRoot),
+            ModuleRoot = moduleRoot,
             ExpectedPackageSha256 = action.ExpectedPackageSha256,
             Credential = options.Credential,
             Force = effectiveForce,
@@ -263,7 +265,7 @@ internal sealed class ModuleStateManagedDeliveryService
         var effectiveAllowClobber = options.AllowClobber || action.AllowClobber;
         var effectiveAcceptLicense = options.AcceptLicense || action.AcceptLicense;
         var effectiveSkipDependencyCheck = options.SkipDependencyCheck || action.SkipDependencyCheck;
-        var moduleRoot = ResolveModuleRoot(action, options)
+        var moduleRoot = ModuleStateActionPlacement.ResolveDeliveryRoot(action, options.ModuleRoot)
             ?? throw new InvalidOperationException("Managed module save delivery requires an action target path.");
         return new ManagedModuleInstallRequest
         {
@@ -297,11 +299,8 @@ internal sealed class ModuleStateManagedDeliveryService
             ? action.TargetRepository
             : action.TargetRepositorySource;
 
-    private static string? ResolveModuleRoot(ModuleStatePlanAction action, ModuleStateManagedDeliveryOptions options)
-        => FirstNonEmpty(action.TargetModuleRoot, action.TargetPath, options.ModuleRoot);
-
-    private static ManagedModuleInstallScope ResolveScope(string? scope, string? targetPath, string? moduleRoot)
-        => !string.IsNullOrWhiteSpace(targetPath) || !string.IsNullOrWhiteSpace(moduleRoot)
+    private static ManagedModuleInstallScope ResolveScope(string? scope, string? moduleRoot)
+        => !string.IsNullOrWhiteSpace(moduleRoot)
             ? ManagedModuleInstallScope.Custom
             : string.Equals(scope, "AllUsers", StringComparison.OrdinalIgnoreCase)
             ? ManagedModuleInstallScope.AllUsers
@@ -326,13 +325,14 @@ internal sealed class ModuleStateManagedDeliveryService
     private static ModuleStateDeliveryExecutionResult CreateSkippedResult(
         string operation,
         string repositoryName,
-        ModuleStatePlanAction action)
+        ModuleStatePlanAction action,
+        string? fallbackModuleRoot)
         => new()
         {
             Skipped = true,
             Operation = operation,
             OperationPerformed = false,
-            TargetPath = action.TargetPath,
+            TargetPath = ModuleStateActionPlacement.ResolveDeliveryRoot(action, fallbackModuleRoot),
             RepositoryName = repositoryName,
             RequestedTransport = ModuleStateDeliveryTransport.ManagedModule,
             EffectiveTransport = ModuleStateDeliveryTransport.ManagedModule,
@@ -353,14 +353,15 @@ internal sealed class ModuleStateManagedDeliveryService
 
     private static ModuleStateDeliveryExecutionResult CreateFailedResult(
         ModuleStatePlanAction action,
-        Exception exception)
+        Exception exception,
+        string? fallbackModuleRoot)
         => new()
         {
             Succeeded = false,
             ErrorMessage = exception.Message,
             Operation = action.Kind.ToString(),
             OperationPerformed = false,
-            TargetPath = action.TargetPath,
+            TargetPath = ModuleStateActionPlacement.ResolveDeliveryRoot(action, fallbackModuleRoot),
             RequestedTransport = ModuleStateDeliveryTransport.ManagedModule,
             EffectiveTransport = ModuleStateDeliveryTransport.ManagedModule,
             DeliveryTransportReason = "Managed module repair delivery stopped after an operational failure.",
@@ -382,8 +383,6 @@ internal sealed class ModuleStateManagedDeliveryService
         => result.Status == ManagedModuleInstallStatus.Installed ||
            result.DependencyResults.Any(InstallWroteFiles);
 
-    private static string? FirstNonEmpty(params string?[] values)
-        => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
 }
 
 internal sealed class ModuleStateManagedDeliveryOptions
