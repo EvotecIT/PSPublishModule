@@ -21,7 +21,9 @@ internal static class ModuleStatePathIdentity
                          string.Equals(fullPath, pathRoot, Comparison)
             ? fullPath
             : fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return normalized.Replace('\\', '/');
+        return FrameworkCompatibility.IsWindows()
+            ? normalized.Replace('\\', '/')
+            : normalized;
     }
 
     internal static bool Equals(string? left, string? right)

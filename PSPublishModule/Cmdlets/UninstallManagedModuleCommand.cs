@@ -232,15 +232,18 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
     protected override void EndProcessing()
     {
         var service = new ManagedModuleUninstallService();
-        var selectedPlans = new List<ManagedModuleUninstallPlan>();
-        foreach (var plan in MergePlans(_plans))
+        var plans = MergePlans(_plans);
+        if (Plan.IsPresent)
         {
-            if (Plan.IsPresent)
-            {
+            ValidatePlansAsBatch(service, plans);
+            foreach (var plan in plans)
                 WriteObject(plan, enumerateCollection: false);
-                continue;
-            }
+            return;
+        }
 
+        var selectedPlans = new List<ManagedModuleUninstallPlan>();
+        foreach (var plan in plans)
+        {
             if (plan.Targets.Count == 0)
             {
                 WriteObject(service.Uninstall(plan), enumerateCollection: true);
@@ -272,14 +275,7 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
         if (selectedPlans.Count == 0)
             return;
 
-        var selectedTargets = selectedPlans
-            .SelectMany(static plan => plan.Targets)
-            .ToArray();
-        foreach (var plan in selectedPlans)
-        {
-            plan.DependencyRemovalTargets = selectedTargets;
-            service.ValidateUninstallPlan(plan);
-        }
+        var selectedTargets = ValidatePlansAsBatch(service, selectedPlans);
 
         var orderedTargets = ManagedModuleUninstallService.OrderTargetsForRemoval(selectedTargets);
         foreach (var target in orderedTargets)
@@ -289,6 +285,33 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             singleTargetPlan.DependencyRemovalTargets = selectedTargets;
             WriteObject(service.Uninstall(singleTargetPlan), enumerateCollection: true);
         }
+    }
+
+    private static ManagedModuleUninstallTarget[] ValidatePlansAsBatch(
+        ManagedModuleUninstallService service,
+        IReadOnlyList<ManagedModuleUninstallPlan> plans)
+    {
+        var targets = plans
+            .SelectMany(static plan => plan.Targets)
+            .ToArray();
+        foreach (var plan in plans)
+        {
+            if (plan.Targets.Count == 0)
+                continue;
+
+            var previousRemovalTargets = plan.DependencyRemovalTargets;
+            try
+            {
+                plan.DependencyRemovalTargets = targets;
+                service.ValidateUninstallPlan(plan);
+            }
+            finally
+            {
+                plan.DependencyRemovalTargets = previousRemovalTargets;
+            }
+        }
+
+        return targets;
     }
 
     private static ManagedModuleUninstallPlan CreateSelectedPlan(

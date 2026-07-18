@@ -18,6 +18,22 @@ public sealed class ModuleStateEstateSafetyTests
     }
 
     [Fact]
+    public void PathIdentity_UsesPlatformNativeBackslashSemantics()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "estate");
+        var literalBackslashPath = Path.Combine(root, "Modules\\Prod");
+        var directoryPath = Path.Combine(root, "Modules", "Prod");
+
+        Assert.Equal(
+            FrameworkCompatibility.IsWindows(),
+            ModuleStatePathIdentity.Equals(literalBackslashPath, directoryPath));
+        if (FrameworkCompatibility.IsWindows())
+            Assert.DoesNotContain("\\", ModuleStatePathIdentity.Normalize(literalBackslashPath));
+        else
+            Assert.Contains("\\", ModuleStatePathIdentity.Normalize(literalBackslashPath));
+    }
+
+    [Fact]
     public void InventoryPathDiagnostic_UsesRequirednessForSeverity()
     {
         using var workspace = new TemporaryDirectory();

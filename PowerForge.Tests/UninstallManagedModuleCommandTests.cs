@@ -4,7 +4,7 @@ using PSPublishModule;
 
 namespace PowerForge.Tests;
 
-public sealed class UninstallManagedModuleCommandTests
+public sealed partial class UninstallManagedModuleCommandTests
 {
     [Fact]
     public void UninstallManagedModule_removes_selected_version_from_custom_root()
@@ -47,25 +47,6 @@ public sealed class UninstallManagedModuleCommandTests
         Assert.Equal(ManagedModuleUninstallStatus.Uninstalled, result.Status);
         Assert.False(Directory.Exists(Path.Combine(moduleRoot, "Company.Tools", "1.0.0")));
         Assert.True(Directory.Exists(moduleRoot));
-    }
-
-    [Fact]
-    public void UninstallManagedModule_plan_reports_targets_without_removing_files()
-    {
-        using var moduleRoot = new TemporaryDirectory();
-        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
-
-        using var ps = CreatePowerShellWithModuleImported();
-        ps.AddCommand("Uninstall-ManagedModule")
-            .AddParameter("Name", "Company.Tools")
-            .AddParameter("Path", moduleRoot.Path)
-            .AddParameter("Plan");
-        var results = ps.Invoke();
-
-        AssertNoPowerShellErrors(ps);
-        var plan = Assert.IsType<ManagedModuleUninstallPlan>(Assert.Single(results).BaseObject);
-        Assert.Equal("Company.Tools", Assert.Single(plan.Targets).Name);
-        Assert.True(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0")));
     }
 
     [Fact]

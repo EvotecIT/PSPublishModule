@@ -207,7 +207,7 @@ internal static class ManagedModuleRequiredResourceSupport
             return;
         }
 
-        if (TryConvertWildcardVersionPolicy(trimmed, out var wildcardVersionPolicy))
+        if (ManagedModuleVersionSelector.TryConvertWildcardExpression(trimmed, out var wildcardVersionPolicy))
         {
             versionPolicy = wildcardVersionPolicy;
             return;
@@ -228,39 +228,6 @@ internal static class ManagedModuleRequiredResourceSupport
         }
 
         exactVersion = trimmed;
-    }
-
-    private static bool TryConvertWildcardVersionPolicy(string value, out string? versionPolicy)
-    {
-        versionPolicy = null;
-        if (string.Equals(value, "*", StringComparison.Ordinal))
-        {
-            versionPolicy = "*";
-            return true;
-        }
-
-        var parts = value.Split('.');
-        if (parts.Length is < 2 or > 4 ||
-            !string.Equals(parts[parts.Length - 1], "*", StringComparison.Ordinal))
-            return false;
-
-        var specified = new int[parts.Length - 1];
-        for (var i = 0; i < specified.Length; i++)
-        {
-            if (!int.TryParse(parts[i], out var part) || part < 0)
-                return false;
-
-            specified[i] = part;
-        }
-
-        var segmentCount = Math.Max(3, specified.Length + 1);
-        var lower = new int[segmentCount];
-        var upper = new int[segmentCount];
-        Array.Copy(specified, lower, specified.Length);
-        Array.Copy(specified, upper, specified.Length);
-        upper[specified.Length - 1]++;
-        versionPolicy = "[" + string.Join(".", lower) + "," + string.Join(".", upper) + ")";
-        return true;
     }
 
     private static object? ConvertJsonElement(JsonElement element)

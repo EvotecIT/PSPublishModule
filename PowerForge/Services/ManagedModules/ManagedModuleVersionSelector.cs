@@ -91,7 +91,7 @@ public static class ManagedModuleVersionSelector
            value.EndsWith(")", StringComparison.Ordinal) ||
            value.IndexOf(",", StringComparison.Ordinal) >= 0;
 
-    private static bool TryConvertWildcardExpression(string value, out string? range)
+    internal static bool TryConvertWildcardExpression(string value, out string? range)
     {
         range = null;
         var parts = value.Split('.');
