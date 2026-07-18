@@ -11,6 +11,10 @@ internal static partial class WebCliCommandHandlers
         var repositoryPath = $"/srv/powerforge/sources/{options.SiteId}";
         var enginePath = "/srv/powerforge/engine";
         var siteRoot = $"/var/www/{options.SiteId}/site";
+        var websiteRoot = NormalizeScaffoldWebsiteRoot(options.WebsiteRoot);
+        var websiteRepositoryRoot = websiteRoot == "."
+            ? repositoryPath
+            : $"{repositoryPath}/{websiteRoot}";
         var domainFile = options.Domain.Replace('.', '-');
         var siteEnvironment = $"/etc/powerforge/sites/{options.Domain}.env";
         var repositoryKey = $"/etc/powerforge/repository-ssh/{options.SiteId}_ed25519";
@@ -164,8 +168,8 @@ internal static partial class WebCliCommandHandlers
                 Modules = ["headers", "rewrite", "ssl"],
                 Sites =
                 [
-                    new PowerForgeServerManagedFile { Source = $"{repositoryPath}/{options.WebsiteRoot}/deploy/apache.conf", Target = $"/etc/apache2/sites-available/{domainFile}.conf", Required = true },
-                    new PowerForgeServerManagedFile { Source = $"{repositoryPath}/{options.WebsiteRoot}/deploy/apache-ssl.conf", Target = $"/etc/apache2/sites-available/{domainFile}-le-ssl.conf", Required = true }
+                    new PowerForgeServerManagedFile { Source = $"{websiteRepositoryRoot}/deploy/apache.conf", Target = $"/etc/apache2/sites-available/{domainFile}.conf", Required = true },
+                    new PowerForgeServerManagedFile { Source = $"{websiteRepositoryRoot}/deploy/apache-ssl.conf", Target = $"/etc/apache2/sites-available/{domainFile}-le-ssl.conf", Required = true }
                 ],
                 ValidateCommand = "sudo -n apachectl configtest"
             },
@@ -200,7 +204,7 @@ internal static partial class WebCliCommandHandlers
                     Command("release-link", $"readlink -f {siteRoot}/current", required: true),
                     Command("static-source-ref", $"jq -er '.sourceSha | select(type == \"string\" and test(\"^([0-9a-fA-F]{{40}}|[0-9a-fA-F]{{64}})$\"))' {siteRoot}/current/_powerforge/deployment.json", required: true)
                 ],
-                Exclude = [$"{siteRoot}/releases", $"{repositoryPath}/{options.WebsiteRoot}/_site", $"{repositoryPath}/{options.WebsiteRoot}/_reports", $"{repositoryPath}/{options.WebsiteRoot}/_temp"]
+                Exclude = [$"{siteRoot}/releases", $"{websiteRepositoryRoot}/_site", $"{websiteRepositoryRoot}/_reports", $"{websiteRepositoryRoot}/_temp"]
             },
             Deploy = new PowerForgeServerCommandGroup
             {
@@ -255,21 +259,45 @@ internal static partial class WebCliCommandHandlers
         => new() { Id = id, Command = command, Required = required };
 
     private static string BuildScaffoldWebsiteWorkflow(PowerForgeServerScaffoldOptions options)
-        => ServerScaffoldTemplateStore.Render(
+    {
+        var websiteRoot = NormalizeScaffoldWebsiteRoot(options.WebsiteRoot);
+        return ServerScaffoldTemplateStore.Render(
             "website-deploy.yml",
             ("__BRANCH__", options.Branch),
-            ("__WEBSITE_ROOT__", options.WebsiteRoot),
+            ("__WEBSITE_ROOT__", websiteRoot),
+            ("__WEBSITE_WATCH_PATH__", BuildScaffoldWebsitePath(options, "**")),
             ("__ENGINE_REF__", options.EngineRef),
             ("__DOMAIN__", options.Domain),
             ("__SMOKE_PATHS__", options.SmokePaths),
             ("__CLOUDFLARE_INPUT__", options.CloudflareEnabled ? $"      deployment_cloudflare_zone: {options.Domain}" : string.Empty),
             ("__CLOUDFLARE_SECRET__", options.CloudflareEnabled ? "      deployment_cloudflare_api_token: ${{ secrets.DEPLOYMENT_CLOUDFLARE_API_TOKEN }}" : string.Empty));
+    }
 
     private static string BuildScaffoldBackupWorkflow(PowerForgeServerScaffoldOptions options)
         => ServerScaffoldTemplateStore.Render(
             "server-backup.yml",
             ("__SITE_ID__", options.SiteId),
             ("__ENGINE_REF__", options.EngineRef));
+
+    private static string BuildScaffoldRecoveryValidationWorkflow(PowerForgeServerScaffoldOptions options)
+        => ServerScaffoldTemplateStore.Render(
+            "server-recovery-ci.yml",
+            ("__SITE_ID__", options.SiteId),
+            ("__RECOVERY_WATCH_PATHS__", BuildScaffoldRecoveryWatchPaths(options)),
+            ("__ENGINE_REF__", options.EngineRef));
+
+    private static string BuildScaffoldRecoveryWatchPaths(PowerForgeServerScaffoldOptions options)
+    {
+        var paths = NormalizeRecoveryWatchPaths(
+        [
+            "deploy/linux/**",
+            BuildScaffoldWebsitePath(options, "deploy/**"),
+            ".github/workflows/server-backup.yml",
+            ".github/workflows/server-recovery-ci.yml",
+            .. options.RecoveryWatchPaths
+        ]);
+        return string.Join('\n', paths.Select(static path => $"      - \"{path}\""));
+    }
 
     private static string BuildScaffoldSiteEnvironment(PowerForgeServerScaffoldOptions options)
         => ServerScaffoldTemplateStore.Render(
