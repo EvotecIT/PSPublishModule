@@ -97,7 +97,7 @@ jobs:
 
 The reusable workflow resolves its engine checkout from the exact commit that contains the called workflow. An explicit `powerforge_ref` override is available for controlled testing, but the default never follows a mutable branch.
 
-Set `commit_changes: false` to generate and validate content without pushing a commit. A caller may also pass a maintainer-authorized user token when accurate GitHub tier mapping is required:
+With the default `commit_changes: true`, the caller must run on a branch ref because the workflow commits back to that branch. Set `commit_changes: false` to generate and validate content from a tag, pull request ref, or another non-branch ref without pushing a commit. A caller may also pass a maintainer-authorized user token when accurate GitHub tier mapping is required:
 
 ```yaml
     secrets:
@@ -106,7 +106,7 @@ Set `commit_changes: false` to generate and validate content without pushing a c
 
 GitHub does not expose a public sponsorship's selected tier to every viewer. The repository `GITHUB_TOKEN` is sufficient for the public roster, but it may return no tier for every sponsor. In that case all accounts use `unmappedTierKey`; no amount is guessed. Store a suitable user token as `SPONSORS_TOKEN` (or another repository or organization secret) when tier grouping must reflect the selected GitHub tier.
 
-Set `requireFundingTierData` to `true` for that case. If GitHub withholds every current sponsor's tier, PowerForge then fails before writing instead of silently moving the whole roster into the fallback tier. Individual custom sponsorships can still use the fallback while other sponsors retain their mapped tiers.
+The starter config leaves `requireFundingTierData` set to `false`, so it works with the normal workflow token and uses the fallback tier when GitHub withholds tier metadata. Set it to `true` only when the workflow receives a suitable token and accurate GitHub tier mapping is required. If GitHub then withholds every current sponsor's tier, PowerForge fails before writing instead of silently moving the whole roster into the fallback tier. Individual custom sponsorships can still use the fallback while other sponsors retain their mapped tiers.
 
 ## Public data and former sponsors
 

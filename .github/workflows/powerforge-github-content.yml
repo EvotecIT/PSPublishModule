@@ -39,6 +39,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Validate caller ref
+        if: inputs.commit_changes
+        shell: pwsh
+        env:
+          CALLER_REF: ${{ github.ref }}
+        run: |
+          if (-not $env:CALLER_REF.StartsWith('refs/heads/', [System.StringComparison]::Ordinal)) {
+            throw "commit_changes requires a branch ref, but the caller ref is '$env:CALLER_REF'. Set commit_changes to false for tag or pull request refs."
+          }
+
       - name: Checkout caller repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -49,10 +59,14 @@ jobs:
       - name: Resolve shared workflow source
         id: workflow_source
         shell: pwsh
+        env:
+          POWERFORGE_REF: ${{ inputs.powerforge_ref }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
         run: |
-          $repository = [string]'${{ job.workflow_repository }}'
-          $ref = [string]'${{ inputs.powerforge_ref }}'
-          $workflowSha = [string]'${{ job.workflow_sha }}'
+          $repository = [string]$env:WORKFLOW_REPOSITORY
+          $ref = [string]$env:POWERFORGE_REF
+          $workflowSha = [string]$env:WORKFLOW_SHA
 
           if ([string]::IsNullOrWhiteSpace($repository)) {
             $repository = 'EvotecIT/PSPublishModule'
@@ -62,6 +76,9 @@ jobs:
           }
           if ([string]::IsNullOrWhiteSpace($ref)) {
             throw 'Unable to resolve the exact shared workflow commit from job.workflow_sha. Pass powerforge_ref explicitly.'
+          }
+          if ($ref.IndexOfAny([char[]]"`r`n") -ge 0) {
+            throw 'powerforge_ref must be a single-line Git ref or commit SHA.'
           }
 
           Write-Host "Using GitHub content engine $repository@$ref"

@@ -23,9 +23,34 @@ public sealed class GitHubContentActionTests
         Assert.NotNull(spec);
         Assert.True(spec.Sponsors.Enabled);
         Assert.True(spec.Sponsors.TierRecognition.Enabled);
+        Assert.False(spec.Sponsors.RequireFundingTierData);
         Assert.Equal(2, spec.Sponsors.Outputs.Length);
         Assert.Contains(spec.Sponsors.Outputs, output => output.Layout == GitHubSponsorsMarkdownLayout.Full && output.CreateIfMissing);
         Assert.Contains(spec.Sponsors.Outputs, output => output.Layout == GitHubSponsorsMarkdownLayout.Compact && !output.CreateIfMissing);
+    }
+
+    [Fact]
+    public void ReusableWorkflow_RejectsCommitFromNonBranchRef()
+    {
+        var repoRoot = FindRepoRoot();
+        var workflow = File.ReadAllText(Path.Combine(repoRoot, ".github", "workflows", "powerforge-github-content.yml"));
+
+        Assert.Contains("if: inputs.commit_changes", workflow, StringComparison.Ordinal);
+        Assert.Contains("CALLER_REF: ${{ github.ref }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("$env:CALLER_REF.StartsWith('refs/heads/'", workflow, StringComparison.Ordinal);
+        Assert.Contains("Set commit_changes to false for tag or pull request refs", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReusableWorkflow_PassesCustomEngineRefAsData()
+    {
+        var repoRoot = FindRepoRoot();
+        var workflow = File.ReadAllText(Path.Combine(repoRoot, ".github", "workflows", "powerforge-github-content.yml"));
+
+        Assert.Contains("POWERFORGE_REF: ${{ inputs.powerforge_ref }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("$ref = [string]$env:POWERFORGE_REF", workflow, StringComparison.Ordinal);
+        Assert.Contains("powerforge_ref must be a single-line Git ref or commit SHA", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("'${{ inputs.powerforge_ref }}'", workflow, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -69,7 +94,9 @@ public sealed class GitHubContentActionTests
     {
         var repoRoot = FindRepoRoot();
         var workflow = File.ReadAllText(Path.Combine(repoRoot, ".github", "workflows", "powerforge-github-content.yml"));
+        var parsedWorkflow = new YamlDotNet.Serialization.DeserializerBuilder().Build().Deserialize<object>(workflow);
 
+        Assert.NotNull(parsedWorkflow);
         Assert.Contains("permissions:\n  contents: write", Normalize(workflow), StringComparison.Ordinal);
         Assert.Contains("if: inputs.commit_changes && steps.content.outputs.changed == 'true'", workflow, StringComparison.Ordinal);
         Assert.Contains("git --literal-pathspecs add -- $path", workflow, StringComparison.Ordinal);

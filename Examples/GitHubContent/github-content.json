@@ -6,7 +6,7 @@
     "sponsorableLogin": "your-github-login",
     "includeFormer": true,
     "failOnEmpty": true,
-    "requireFundingTierData": true,
+    "requireFundingTierData": false,
     "tierRecognition": {
       "enabled": true,
       "useDefaultTiers": true,
