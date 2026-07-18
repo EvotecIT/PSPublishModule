@@ -91,7 +91,7 @@ Accept wildcard characters: True
 ```
 
 ### -AllowLoadedModuleUpdate
-Allow updating even when matching loaded module evidence is supplied.
+Allow updating even when a matching module is loaded in the current session or supplied as evidence.
 
 ```yaml
 Type: SwitchParameter
@@ -299,7 +299,7 @@ Accept wildcard characters: True
 ```
 
 ### -LoadedModule
-Loaded module evidence used to block risky in-session updates.
+Additional loaded module evidence used with modules detected automatically in the current PowerShell session.
 
 ```yaml
 Type: ManagedModuleLoadedModule[]

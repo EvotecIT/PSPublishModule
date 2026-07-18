@@ -14,7 +14,7 @@ public static class ManagedModuleVersionSelector
     public static bool IsMatch(string version, string? expression)
     {
         var normalizedVersion = NormalizeVersion(version, nameof(version));
-        return ParseSearchExpression(expression).IsSatisfiedBy(normalizedVersion);
+        return ParseExpression(expression).IsSatisfiedBy(normalizedVersion);
     }
 
     /// <summary>
@@ -29,7 +29,7 @@ public static class ManagedModuleVersionSelector
         if (version is null)
             throw new ArgumentNullException(nameof(version));
 
-        return IsSelectable(version, ParseSearchExpression(expression));
+        return IsSelectable(version, ParseExpression(expression));
     }
 
     /// <summary>
@@ -51,9 +51,13 @@ public static class ManagedModuleVersionSelector
     /// <param name="expression">Exact version, wildcard version, or NuGet version range.</param>
     /// <returns><see langword="true"/> when the expression contains a prerelease boundary.</returns>
     public static bool IncludesPrerelease(string? expression)
-        => ParseSearchExpression(expression).AllowsPrerelease;
+        => ParseExpression(expression).AllowsPrerelease;
 
-    private static ManagedModuleVersionRange ParseSearchExpression(string? expression)
+    /// <summary>
+    /// Parses and validates a PSResourceGet-style version expression for shared managed-module consumers.
+    /// Plain versions are treated as exact pins, while repeated comparator bounds are intersected.
+    /// </summary>
+    internal static ManagedModuleVersionRange ParseExpression(string? expression)
     {
         if (string.IsNullOrWhiteSpace(expression))
             return ManagedModuleVersionRange.Any;

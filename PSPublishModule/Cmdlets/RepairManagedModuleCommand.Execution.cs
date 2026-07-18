@@ -421,29 +421,6 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
                 Path = module.Path,
                 ModuleBase = module.Path
             });
-        var sessionLoaded = ModuleStateInventoryCommandSupport.GetLoadedModules(this)
-            .Select(static module => new ManagedModuleLoadedModule
-            {
-                Name = module.Name ?? string.Empty,
-                Version = module.Version,
-                Path = module.Path,
-                ModuleBase = module.Path
-            });
-        return inventoryLoaded
-            .Concat(sessionLoaded)
-            .Where(static module => !string.IsNullOrWhiteSpace(module.Name))
-            .GroupBy(CreateLoadedModuleIdentity, ModuleStatePathIdentity.Comparer)
-            .Select(static group => group.First())
-            .ToArray();
-    }
-
-    private static string CreateLoadedModuleIdentity(ManagedModuleLoadedModule module)
-    {
-        var path = module.Path ?? module.ModuleBase;
-        return string.Join(
-            "|",
-            module.Name.ToUpperInvariant(),
-            (module.Version ?? string.Empty).ToUpperInvariant(),
-            string.IsNullOrWhiteSpace(path) ? string.Empty : ModuleStatePathIdentity.Normalize(path!));
+        return ModuleStateInventoryCommandSupport.ResolveManagedLoadedModules(this, inventoryLoaded);
     }
 }

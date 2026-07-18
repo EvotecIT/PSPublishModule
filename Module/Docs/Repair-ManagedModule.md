@@ -386,7 +386,7 @@ Accept wildcard characters: True
 ```
 
 ### -ModulePath
-Explicit required module roots to inventory. Missing or inaccessible roots block apply. When omitted, optional PSModulePath entries are used.
+Explicit required module roots to inventory. Missing or inaccessible roots block apply. When omitted, optional roots inherited together from the current process's PSModulePath are treated as one dependency-visibility context.
 
 ```yaml
 Type: String[]

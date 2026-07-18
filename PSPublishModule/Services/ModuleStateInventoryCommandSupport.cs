@@ -263,6 +263,39 @@ internal static class ModuleStateInventoryCommandSupport
             .ToArray();
     }
 
+    /// <summary>
+    /// Merges caller-supplied loaded-module evidence with modules loaded in the current PowerShell runspace.
+    /// </summary>
+    internal static ManagedModuleLoadedModule[] ResolveManagedLoadedModules(
+        PSCmdlet cmdlet,
+        IEnumerable<ManagedModuleLoadedModule>? suppliedModules = null)
+    {
+        var sessionLoaded = GetLoadedModules(cmdlet)
+            .Select(static module => new ManagedModuleLoadedModule
+            {
+                Name = module.Name ?? string.Empty,
+                Version = module.Version,
+                Path = module.Path
+            });
+
+        return (suppliedModules ?? Array.Empty<ManagedModuleLoadedModule>())
+            .Concat(sessionLoaded)
+            .Where(static module => !string.IsNullOrWhiteSpace(module.Name))
+            .GroupBy(CreateManagedLoadedModuleIdentity, ModuleStatePathIdentity.Comparer)
+            .Select(static group => group.First())
+            .ToArray();
+    }
+
+    private static string CreateManagedLoadedModuleIdentity(ManagedModuleLoadedModule module)
+    {
+        var path = module.Path ?? module.ModuleBase;
+        return string.Join(
+            "|",
+            module.Name.ToUpperInvariant(),
+            (module.Version ?? string.Empty).ToUpperInvariant(),
+            string.IsNullOrWhiteSpace(path) ? string.Empty : ModuleStatePathIdentity.Normalize(path!));
+    }
+
     internal static string? ResolveLoadedModuleVersion(PSObject item)
     {
         if (item is null)

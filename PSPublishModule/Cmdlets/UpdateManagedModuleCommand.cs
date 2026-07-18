@@ -179,7 +179,7 @@ public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
     [Alias("SkipDependenciesCheck")]
     public SwitchParameter SkipDependencyCheck { get; set; }
 
-    /// <summary>Loaded module evidence used to block risky in-session updates.</summary>
+    /// <summary>Additional loaded module evidence used with modules detected automatically in the current PowerShell session.</summary>
     [Parameter]
     public ManagedModuleLoadedModule[] LoadedModule { get; set; } = Array.Empty<ManagedModuleLoadedModule>();
 
@@ -210,7 +210,7 @@ public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
     [Parameter]
     public SwitchParameter RequireSourceMatch { get; set; }
 
-    /// <summary>Allow updating even when matching loaded module evidence is supplied.</summary>
+    /// <summary>Allow updating even when a matching module is loaded in the current session or supplied as evidence.</summary>
     [Parameter]
     public SwitchParameter AllowLoadedModuleUpdate { get; set; }
 
@@ -265,6 +265,7 @@ public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
             .ToArray();
         var moduleNames = ResolveModuleNames(targetModuleRoot, normalizedRequestedNames).ToArray();
         var updateAllInstalled = normalizedRequestedNames.Length == 0;
+        var loadedModules = ModuleStateInventoryCommandSupport.ResolveManagedLoadedModules(this, LoadedModule);
         var writeSummary = ManagedModuleCommandSupport.ShouldWriteSummary(ShowSummary.IsPresent, Quiet.IsPresent);
         if (moduleNames.Length == 0)
         {
@@ -299,7 +300,7 @@ public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
                     AcceptLicense = AcceptLicense.IsPresent,
                     AuthenticodeCheck = AuthenticodeCheck.IsPresent,
                     SkipDependencyCheck = SkipDependencyCheck.IsPresent,
-                    LoadedModules = LoadedModule,
+                    LoadedModules = loadedModules,
                     FamilyPolicy = ResolveFamilyPolicy(),
                     SourcePolicy = ResolveSourcePolicy(),
                     AllowLoadedModuleUpdate = AllowLoadedModuleUpdate.IsPresent

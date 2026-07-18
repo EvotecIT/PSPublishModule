@@ -35,6 +35,19 @@ public sealed class ModuleStatePlannerTests
     }
 
     [Fact]
+    public void CreatePlan_IntersectsRepeatedBoundsWhenEvaluatingInstalledVersion()
+    {
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[] { new ModuleStateInstalledModule("Company.Tools", "1.5.0") }),
+            new[] { new ModuleStateDesiredModule("Company.Tools", ">=2.0.0 >=1.0.0") });
+
+        var action = Assert.Single(new ModuleStatePlanner().CreatePlan(request).Actions);
+
+        Assert.Equal(ModuleStatePlanActionKind.Update, action.Kind);
+        Assert.Equal("1.5.0", action.InstalledVersion);
+    }
+
+    [Fact]
     public void CreatePlan_LeavesSatisfiedModuleAlone()
     {
         var request = new ModuleStatePlanRequest(

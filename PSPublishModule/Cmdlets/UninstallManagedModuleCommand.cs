@@ -332,20 +332,7 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
         };
 
     private ManagedModuleLoadedModule[] ResolveLoadedModules()
-    {
-        var loaded = LoadedModule ?? Array.Empty<ManagedModuleLoadedModule>();
-        var sessionLoaded = ModuleStateInventoryCommandSupport.GetLoadedModules(this)
-            .Select(static module => new ManagedModuleLoadedModule
-            {
-                Name = module.Name ?? string.Empty,
-                Version = module.Version,
-                Path = module.Path
-            });
-        return loaded
-            .Concat(sessionLoaded)
-            .Where(static module => !string.IsNullOrWhiteSpace(module.Name))
-            .ToArray();
-    }
+        => ModuleStateInventoryCommandSupport.ResolveManagedLoadedModules(this, LoadedModule);
 
     private string? ResolveModuleRoot(string? modulePath, string[] names)
     {
