@@ -1,3 +1,4 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'GitHub Actions workflow commands require host output.')]
 [CmdletBinding()]
 param()
 
@@ -19,6 +20,30 @@ function Write-ActionOutput {
     )
 
     "$Name=$Value" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+}
+
+function Write-CaptureFailureDiagnostic {
+    param([Parameter(Mandatory)][string] $CaptureRoot)
+
+    foreach ($name in @('plain-files.stderr.txt', 'encrypted-secrets.stderr.txt')) {
+        $path = Join-Path $CaptureRoot $name
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -eq 0) {
+            continue
+        }
+
+        # Only tar/encryption stderr is surfaced. Command captures may contain sensitive service output.
+        $diagnostic = ((Get-Content -LiteralPath $path -TotalCount 40) -join [Environment]::NewLine)
+        $diagnostic = $diagnostic -replace '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '?'
+        if ($diagnostic.Length -gt 4096) {
+            $diagnostic = $diagnostic.Substring(0, 4096) + [Environment]::NewLine + '[truncated]'
+        }
+        $stopToken = [Guid]::NewGuid().ToString('N')
+        Write-Host "::group::PowerForge capture diagnostic: $name"
+        Write-Host "::stop-commands::$stopToken"
+        Write-Host $diagnostic
+        Write-Host "::$stopToken::"
+        Write-Host '::endgroup::'
+    }
 }
 
 if ($env:RUNNER_OS -ne 'Linux') {
@@ -62,12 +87,16 @@ $captureAlias = if ([string]::IsNullOrWhiteSpace([string]$manifest.target.sshAli
 } else {
     [string]$manifest.target.sshAlias
 }
-$captureHost = [string]$manifest.target.host
+$captureHost = if ([string]::IsNullOrWhiteSpace($env:POWERFORGE_SERVER_HOST)) {
+    [string]$manifest.target.host
+} else {
+    $env:POWERFORGE_SERVER_HOST.Trim()
+}
 if ($captureAlias -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$') {
     throw 'target.sshAlias must be a safe SSH alias when specified.'
 }
 if ($captureHost -notmatch '^[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$') {
-    throw 'target.host is not a valid hostname or IP address.'
+    throw 'server-host or target.host must be a valid hostname or IP address.'
 }
 $capturePort = 0
 $capturePortText = if ([string]::IsNullOrWhiteSpace([string]$manifest.target.sshPort)) {
@@ -202,7 +231,11 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
     }
 
     dotnet $cli server capture --manifest $captureManifestPath --out $captureRoot --ssh $serverSshCommand --encrypt-remote --fail-on-failure
-    Assert-LastExitCode 'Capturing and encrypting server recovery state'
+    $captureExitCode = $LASTEXITCODE
+    if ($captureExitCode -ne 0) {
+        Write-CaptureFailureDiagnostic -CaptureRoot $captureRoot
+        throw "Capturing and encrypting server recovery state failed with exit code $captureExitCode."
+    }
 
     foreach ($relativePath in @(
         'capture-summary.json',

@@ -32,15 +32,7 @@ internal static partial class WebCliCommandHandlers
             File.WriteAllText(resolvedPath, NormalizeGeneratedText(file.Value), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         }
 
-        var nextSteps = new[]
-        {
-            "Review deploy/linux/ONBOARDING.md and replace only the public-key example files.",
-            "Create and branch-restrict the production GitHub environment before storing secrets.",
-            "Run server plan, bootstrap-plan, inspect, and verify before the first protected deployment.",
-            options.CloudflareEnabled
-                ? "Provision a per-site Cloudflare token and zone id before enabling the generated workflow."
-                : "Cloudflare remains disabled; add --cloudflare only after per-site credentials are ready."
-        };
+        var nextSteps = BuildServerScaffoldNextSteps(options);
         var result = new PowerForgeServerScaffoldResult
         {
             OutputRoot = outputRoot,
@@ -74,6 +66,19 @@ internal static partial class WebCliCommandHandlers
         return 0;
     }
 
+    internal static string[] BuildServerScaffoldNextSteps(PowerForgeServerScaffoldOptions options)
+        =>
+        [
+            options.PrivateRepository
+                ? "Review deploy/linux/ONBOARDING.md and replace the authorized-key and reviewed host-key example files."
+                : "Review deploy/linux/ONBOARDING.md and replace the authorized-key example files.",
+            "Create and branch-restrict the production GitHub environment, then store DEPLOYMENT_HOST and the separate deployment/backup identities there.",
+            "Run server plan, bootstrap-plan, inspect, and verify before the first protected deployment.",
+            options.CloudflareEnabled
+                ? "Provision a per-site Cloudflare token and zone id before enabling the generated workflow."
+                : "Cloudflare remains disabled; add --cloudflare only after per-site credentials are ready."
+        ];
+
     internal static IReadOnlyDictionary<string, string> BuildServerScaffoldFiles(PowerForgeServerScaffoldOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -91,6 +96,7 @@ internal static partial class WebCliCommandHandlers
         {
             [".github/workflows/website-deploy.yml"] = BuildScaffoldWebsiteWorkflow(options),
             [".github/workflows/server-backup.yml"] = BuildScaffoldBackupWorkflow(options),
+            [".github/workflows/server-recovery-ci.yml"] = BuildScaffoldRecoveryValidationWorkflow(options),
             [$"{deployRoot}/{options.Domain}.env"] = BuildScaffoldSiteEnvironment(options),
             [$"{deployRoot}/{options.SiteId}.serverrecovery.json"] = manifestJson,
             [$"{deployRoot}/powerforge-{options.SiteId}.sudoers"] = BuildScaffoldDeploymentSudoers(options),
@@ -98,8 +104,8 @@ internal static partial class WebCliCommandHandlers
             [$"{deployRoot}/powerforge-{options.SiteId}-authorized_keys.example"] = $"restrict ssh-ed25519 REPLACE_WITH_DEPLOYMENT_PUBLIC_KEY powerforge-{options.SiteId}-deploy\n",
             [$"{deployRoot}/powerforge-{options.SiteId}-backup-authorized_keys.example"] = $"restrict ssh-ed25519 REPLACE_WITH_BACKUP_PUBLIC_KEY powerforge-{options.SiteId}-backup\n",
             [$"{deployRoot}/ONBOARDING.md"] = BuildScaffoldOnboarding(options),
-            [$"{options.WebsiteRoot}/deploy/apache.conf"] = BuildScaffoldApacheHttp(options),
-            [$"{options.WebsiteRoot}/deploy/apache-ssl.conf"] = BuildScaffoldApacheHttps(options)
+            [BuildScaffoldWebsitePath(options, "deploy/apache.conf")] = BuildScaffoldApacheHttp(options),
+            [BuildScaffoldWebsitePath(options, "deploy/apache-ssl.conf")] = BuildScaffoldApacheHttps(options)
         };
 
         if (options.PrivateRepository)
@@ -120,9 +126,10 @@ internal static partial class WebCliCommandHandlers
         var backupRepository = RequireScaffoldOption(subArgs, "--backup-repository").Trim();
         var backupRecipient = RequireScaffoldOption(subArgs, "--backup-recipient").Trim();
         var branch = (TryGetOptionValue(subArgs, "--branch") ?? "main").Trim();
-        var websiteRoot = (TryGetOptionValue(subArgs, "--website-root") ?? "Website").Trim().Trim('/', '\\');
+        var websiteRoot = NormalizeScaffoldWebsiteRoot(TryGetOptionValue(subArgs, "--website-root") ?? "Website");
         var siteId = (TryGetOptionValue(subArgs, "--site-id") ?? BuildScaffoldSiteId(domain)).Trim().ToLowerInvariant();
         var smokePaths = (TryGetOptionValue(subArgs, "--smoke-paths") ?? "/ /sitemap.xml").Trim();
+        var recoveryWatchPaths = ReadRecoveryWatchPaths(subArgs);
         var outputRoot = TryGetOptionValue(subArgs, "--out") ?? TryGetOptionValue(subArgs, "--output-dir") ?? Directory.GetCurrentDirectory();
         var portText = TryGetOptionValue(subArgs, "--ssh-port") ?? "22";
         var includeWwwAlias = HasOption(subArgs, "--www");
@@ -143,8 +150,6 @@ internal static partial class WebCliCommandHandlers
             throw new InvalidOperationException("--branch contains unsupported characters.");
         if (!Regex.IsMatch(siteId, "^[a-z][a-z0-9-]{0,13}$", RegexOptions.CultureInvariant))
             throw new InvalidOperationException("--site-id must be 1-14 lowercase letters, digits, or hyphens and start with a letter.");
-        if (!Regex.IsMatch(websiteRoot, "^[A-Za-z0-9._/-]+$", RegexOptions.CultureInvariant) || websiteRoot.Contains("..", StringComparison.Ordinal))
-            throw new InvalidOperationException("--website-root must be a safe repository-relative path.");
         if (!int.TryParse(portText, out var port) || port is < 1 or > 65535)
             throw new InvalidOperationException("--ssh-port must be from 1 through 65535.");
         if (!backupRecipient.StartsWith("age1", StringComparison.Ordinal) || backupRecipient.Any(char.IsWhiteSpace))
@@ -172,6 +177,7 @@ internal static partial class WebCliCommandHandlers
             WebsiteRoot = websiteRoot.Replace('\\', '/'),
             SiteId = siteId,
             SmokePaths = string.Join(' ', smokePathValues),
+            RecoveryWatchPaths = recoveryWatchPaths,
             SshPort = port,
             OutputRoot = outputRoot,
             PrivateRepository = HasOption(subArgs, "--private-repository"),
@@ -199,6 +205,76 @@ internal static partial class WebCliCommandHandlers
 
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(domain))).ToLowerInvariant();
         return readable + "-" + hash[..4];
+    }
+
+    private static string NormalizeScaffoldWebsiteRoot(string value)
+    {
+        var candidate = value.Trim().Replace('\\', '/').Trim('/');
+        if (!Regex.IsMatch(candidate, "^[A-Za-z0-9._/-]+$", RegexOptions.CultureInvariant) ||
+            candidate.Contains("..", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("--website-root must be a safe repository-relative path.");
+        }
+
+        var segments = candidate.Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Where(static segment => segment != ".")
+            .ToArray();
+        return segments.Length == 0 ? "." : string.Join('/', segments);
+    }
+
+    private static string BuildScaffoldWebsitePath(PowerForgeServerScaffoldOptions options, string relativePath)
+    {
+        var websiteRoot = NormalizeScaffoldWebsiteRoot(options.WebsiteRoot);
+        var suffix = relativePath.TrimStart('/');
+        return websiteRoot == "." ? suffix : $"{websiteRoot}/{suffix}";
+    }
+
+    private static string[] NormalizeRecoveryWatchPaths(IEnumerable<string> paths)
+    {
+        var unique = new HashSet<string>(StringComparer.Ordinal);
+        var normalized = new List<string>();
+        foreach (var rawPath in paths)
+        {
+            var path = rawPath.Trim();
+            var segments = path.Split('/');
+            if (path.Length is 0 or > 512 ||
+                path.StartsWith("/", StringComparison.Ordinal) ||
+                path.EndsWith("/", StringComparison.Ordinal) ||
+                path.Contains('\\') ||
+                path.Contains("//", StringComparison.Ordinal) ||
+                path.Contains("***", StringComparison.Ordinal) ||
+                segments.Any(static segment => segment is "" or "." or "..") ||
+                !Regex.IsMatch(path, "^[A-Za-z0-9._@/*?-]+$", RegexOptions.CultureInvariant))
+            {
+                throw new InvalidOperationException(
+                    "--recovery-watch-path must be a safe repository-relative positive glob using letters, digits, dots, slashes, hyphens, underscores, @, *, **, or ?. Traversal, absolute paths, backslashes, YAML syntax, and control characters are not supported.");
+            }
+
+            if (unique.Add(path))
+                normalized.Add(path);
+        }
+
+        return normalized.ToArray();
+    }
+
+    private static string[] ReadRecoveryWatchPaths(string[] args)
+    {
+        var optionNames = new[] { "--recovery-watch-path", "--recovery-watch-paths" };
+        for (var index = 0; index < args.Length; index++)
+        {
+            if (!optionNames.Contains(args[index], StringComparer.OrdinalIgnoreCase))
+                continue;
+            if (index + 1 >= args.Length || args[index + 1].StartsWith("--", StringComparison.Ordinal))
+                throw new InvalidOperationException($"Option {args[index]} requires a glob value.");
+            if (!args[index + 1]
+                    .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries)
+                    .Any(static value => !string.IsNullOrWhiteSpace(value)))
+            {
+                throw new InvalidOperationException($"Option {args[index]} requires at least one glob value.");
+            }
+        }
+
+        return NormalizeRecoveryWatchPaths(ReadOptionList(args, optionNames));
     }
 
     private static string ResolveScaffoldPath(string outputRoot, string relativePath)
@@ -230,6 +306,7 @@ internal sealed class PowerForgeServerScaffoldOptions
     public string BackupRepository { get; set; } = string.Empty;
     public string BackupRecipient { get; set; } = string.Empty;
     public string SmokePaths { get; set; } = "/ /sitemap.xml";
+    public string[] RecoveryWatchPaths { get; set; } = [];
     public string OutputRoot { get; set; } = string.Empty;
     public bool PrivateRepository { get; set; }
     public bool CloudflareEnabled { get; set; }

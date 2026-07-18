@@ -8,9 +8,12 @@ public sealed class GitHubProtectedEnvironmentDeployActionTests
         var action = ReadRepoFile(".github", "actions", "powerforge-linux-site-deploy", "action.yml");
         var script = ReadRepoFile(".github", "actions", "powerforge-linux-site-deploy", "Invoke-PowerForgeLinuxSiteDeploy.ps1");
         var publicVerification = ReadRepoFile(".github", "actions", "powerforge-linux-site-deploy", "Test-PowerForgePublicSite.ps1");
+        var workflow = ReadRepoFile(".github", "workflows", "powerforge-website-deploy.yml");
 
         Assert.Contains("using: composite", action, StringComparison.Ordinal);
         Assert.Contains("deployment-ssh-private-key", action, StringComparison.Ordinal);
+        Assert.Contains("deployment_host:", workflow, StringComparison.Ordinal);
+        Assert.Contains("secrets.deployment_host || inputs.deployment_host || vars.POWERFORGE_WEBSITE_DEPLOY_HOST", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment-public-url", action, StringComparison.Ordinal);
         Assert.Contains("deployment-smoke-paths", action, StringComparison.Ordinal);
         Assert.Contains("Reject pull request deployments", action, StringComparison.Ordinal);
@@ -105,6 +108,8 @@ public sealed class GitHubProtectedEnvironmentDeployActionTests
 
         Assert.Contains("using: composite", action, StringComparison.Ordinal);
         Assert.Contains("server-ssh-private-key", action, StringComparison.Ordinal);
+        Assert.Contains("server-host", action, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_SERVER_HOST", action, StringComparison.Ordinal);
         Assert.Contains("backup-repository-ssh-private-key", action, StringComparison.Ordinal);
         Assert.Contains("github.action_ref", action, StringComparison.Ordinal);
         Assert.Contains("Reject pull request backups", action, StringComparison.Ordinal);

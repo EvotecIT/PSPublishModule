@@ -4,7 +4,7 @@ on:
   push:
     branches: [__BRANCH__]
     paths:
-      - "__WEBSITE_ROOT__/**"
+      - "__WEBSITE_WATCH_PATH__"
       - "deploy/linux/**"
       - ".github/workflows/website-deploy.yml"
   workflow_dispatch:
@@ -33,6 +33,7 @@ jobs:
 __CLOUDFLARE_INPUT__
     secrets:
       indexnow_key: ${{ secrets.INDEXNOW_KEY }}
+      deployment_host: ${{ secrets.DEPLOYMENT_HOST }}
       deployment_ssh_private_key: ${{ secrets.DEPLOYMENT_SSH_PRIVATE_KEY }}
       deployment_ssh_known_hosts: ${{ secrets.DEPLOYMENT_SSH_KNOWN_HOSTS }}
 __CLOUDFLARE_SECRET__

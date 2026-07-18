@@ -49,8 +49,8 @@ internal static partial class WebCliCommandHandlers
         var manifest = loaded.Manifest;
 
         var warnings = new List<string>();
-        if (manifest.SchemaVersion <= 0)
-            warnings.Add("schemaVersion should be greater than zero.");
+        if (manifest.SchemaVersion != 2)
+            warnings.Add("schemaVersion should be 2 for this recovery engine revision.");
         if (string.IsNullOrWhiteSpace(manifest.Name))
             warnings.Add("name is missing.");
         if (manifest.Target is null)
@@ -80,7 +80,7 @@ internal static partial class WebCliCommandHandlers
             SshPort = manifest.Target?.SshPort,
             RepositoryCount = manifest.Repositories?.Length ?? 0,
             AccountCount = manifest.Accounts?.Length ?? 0,
-            PackageCount = manifest.Packages?.Apt?.Length ?? 0,
+            PackageCount = GetDeclaredPackageNames(manifest.Packages).Length,
             ApacheModuleCount = manifest.Packages?.ApacheModules?.Length ?? manifest.Apache?.Modules?.Length ?? 0,
             SystemdServiceCount = manifest.Systemd?.Services?.Length ?? 0,
             SystemdTimerCount = manifest.Systemd?.Timers?.Length ?? 0,
@@ -681,12 +681,12 @@ internal static partial class WebCliCommandHandlers
         return builder.ToString();
     }
 
-    private static string[] BuildServerRecoveryStages(PowerForgeServerRecoveryManifest manifest)
+    internal static string[] BuildServerRecoveryStages(PowerForgeServerRecoveryManifest manifest)
     {
         var stages = new List<string> { "inspect" };
         if (manifest.Capture is not null)
             stages.Add("capture");
-        if (manifest.Bootstrap?.Commands?.Length > 0)
+        if (HasServerRecoveryBootstrapWork(manifest))
             stages.Add("bootstrap");
         if (manifest.Secrets?.Length > 0)
             stages.Add("restore-secrets");
@@ -696,5 +696,29 @@ internal static partial class WebCliCommandHandlers
             stages.Add("verify");
 
         return stages.ToArray();
+    }
+
+    private static bool HasServerRecoveryBootstrapWork(PowerForgeServerRecoveryManifest manifest)
+    {
+        var packages = manifest.Packages;
+        var apache = manifest.Apache;
+        var systemd = manifest.Systemd;
+        return manifest.Bootstrap?.Commands?.Length > 0 ||
+               manifest.Repositories?.Length > 0 ||
+               manifest.Accounts?.Length > 0 ||
+               manifest.Paths?.Any(static path =>
+                   path.Kind?.Equals("directory", StringComparison.OrdinalIgnoreCase) == true ||
+                   !string.IsNullOrWhiteSpace(path.Source)) == true ||
+               packages?.Apt?.Length > 0 ||
+               packages?.ApacheModules?.Length > 0 ||
+               packages?.DotnetSdks?.Length > 0 ||
+               packages?.Powershell == true ||
+               apache?.Modules?.Length > 0 ||
+               apache?.Sites?.Length > 0 ||
+               apache?.Conf?.Length > 0 ||
+               systemd?.Services?.Length > 0 ||
+               systemd?.Timers?.Length > 0 ||
+               manifest.Firewall is not null ||
+               manifest.Secrets?.Any(static secret => secret.RequiredDuringBootstrap != false) == true;
     }
 }

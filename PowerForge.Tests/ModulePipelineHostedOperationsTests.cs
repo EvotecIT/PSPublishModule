@@ -2090,6 +2090,15 @@ public sealed class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
+    public void SigningScript_AllowsTheFirstFailedFileToBeRecorded()
+    {
+        var script = EmbeddedScripts.Load("Scripts/Signing/Sign-Module.ps1");
+
+        Assert.Contains("[AllowEmptyCollection()]", script, StringComparison.Ordinal);
+        Assert.Contains("Add-FailedFile -List $failedFiles", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RunTestsAfterMerge_IncludesFailedTestNamesAndMessages()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

@@ -12,7 +12,7 @@ __REPOSITORY_STEP__
 ## GitHub
 
 [ ] Create the `production` environment and restrict it to `__BRANCH__`.
-[ ] Add variables `POWERFORGE_WEBSITE_DEPLOY_HOST=__HOST__`, `POWERFORGE_WEBSITE_DEPLOY_PORT=__SSH_PORT__`, and `POWERFORGE_WEBSITE_DEPLOY_USER=powerforge-__SITE_ID__`.
+[ ] Add protected environment secret `DEPLOYMENT_HOST`, plus variables `POWERFORGE_WEBSITE_DEPLOY_PORT=__SSH_PORT__` and `POWERFORGE_WEBSITE_DEPLOY_USER=powerforge-__SITE_ID__`.
 [ ] Add deployment secrets `DEPLOYMENT_SSH_PRIVATE_KEY` and `DEPLOYMENT_SSH_KNOWN_HOSTS`.
 [ ] Add recovery secrets `SERVER_SSH_PRIVATE_KEY`, `SERVER_SSH_KNOWN_HOSTS`, `BACKUP_REPOSITORY_SSH_PRIVATE_KEY`, and `BACKUP_REPOSITORY_SSH_KNOWN_HOSTS`.
 [ ] Keep deployment, server-capture, backup-repository, and private-source identities separate.

@@ -10,7 +10,6 @@ using System.Text.RegularExpressions;
 namespace PowerForge;
 
 internal sealed class HomeAssistantRepositoryService {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
     private readonly IProcessRunner _processRunner;
 
@@ -223,19 +222,15 @@ internal sealed class HomeAssistantRepositoryService {
     }
 
     private static void UpdateJsonVersion(string path, string version) {
-        var value = ReadJsonObject(path);
-        value["version"] = version;
-        WriteJson(path, value);
+        UpdateJsonStringValues(path, version, new[] { "version" });
     }
 
     private static void UpdatePackageLockVersion(string path, string version) {
-        var value = ReadJsonObject(path);
-        value["version"] = version;
-        if (value["packages"] is JsonObject packages && packages[""] is JsonObject rootPackage)
-            rootPackage["version"] = version;
-        else
-            throw new InvalidOperationException($"'{path}' does not contain packages[''] metadata.");
-        WriteJson(path, value);
+        UpdateJsonStringValues(
+            path,
+            version,
+            new[] { "version" },
+            new[] { "packages", string.Empty, "version" });
     }
 
     private static void ValidatePackageLockVersion(string path, string expectedVersion) {
@@ -251,8 +246,95 @@ internal sealed class HomeAssistantRepositoryService {
         }
     }
 
-    private static void WriteJson(string path, JsonObject value)
-        => File.WriteAllText(path, value.ToJsonString(JsonOptions) + Environment.NewLine, Utf8NoBom);
+    private static void UpdateJsonStringValues(string path, string value, params string[][] targetPaths) {
+        var bytes = File.ReadAllBytes(path);
+        var bomLength = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF ? 3 : 0;
+        var reader = new Utf8JsonReader(new ReadOnlySpan<byte>(bytes, bomLength, bytes.Length - bomLength));
+        var containerPath = new List<string>();
+        var containerSegments = new Stack<bool>();
+        var replacements = new List<(int Start, int End)>();
+        var updatedPaths = new bool[targetPaths.Length];
+        string? pendingProperty = null;
+
+        while (reader.Read()) {
+            switch (reader.TokenType) {
+                case JsonTokenType.PropertyName:
+                    pendingProperty = reader.GetString()
+                                      ?? throw new InvalidOperationException($"'{path}' contains a null JSON property name.");
+                    break;
+                case JsonTokenType.StartObject:
+                case JsonTokenType.StartArray:
+                    var pushedSegment = pendingProperty is not null;
+                    if (pushedSegment) containerPath.Add(pendingProperty!);
+                    containerSegments.Push(pushedSegment);
+                    pendingProperty = null;
+                    break;
+                case JsonTokenType.EndObject:
+                case JsonTokenType.EndArray:
+                    if (containerSegments.Count == 0)
+                        throw new InvalidOperationException($"'{path}' contains unbalanced JSON containers.");
+                    if (containerSegments.Pop()) containerPath.RemoveAt(containerPath.Count - 1);
+                    pendingProperty = null;
+                    break;
+                case JsonTokenType.String:
+                    if (pendingProperty is not null) {
+                        var targetIndex = FindTargetPath(containerPath, pendingProperty, targetPaths);
+                        if (targetIndex >= 0) {
+                            if (updatedPaths[targetIndex])
+                                throw new InvalidOperationException($"'{path}' contains duplicate JSON metadata at '{string.Join("/", targetPaths[targetIndex])}'.");
+                            updatedPaths[targetIndex] = true;
+                            replacements.Add((
+                                checked(bomLength + (int)reader.TokenStartIndex),
+                                checked(bomLength + (int)reader.BytesConsumed)));
+                        }
+                    }
+                    pendingProperty = null;
+                    break;
+                case JsonTokenType.Number:
+                case JsonTokenType.True:
+                case JsonTokenType.False:
+                case JsonTokenType.Null:
+                    pendingProperty = null;
+                    break;
+            }
+        }
+
+        for (var i = 0; i < updatedPaths.Length; i++) {
+            if (!updatedPaths[i])
+                throw new InvalidOperationException($"'{path}' does not contain string JSON metadata at '{string.Join("/", targetPaths[i])}'.");
+        }
+
+        var replacement = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value));
+        using var output = new MemoryStream(bytes.Length + replacements.Count * replacement.Length);
+        var cursor = 0;
+        foreach (var range in replacements) {
+            output.Write(bytes, cursor, range.Start - cursor);
+            output.Write(replacement, 0, replacement.Length);
+            cursor = range.End;
+        }
+        output.Write(bytes, cursor, bytes.Length - cursor);
+        File.WriteAllBytes(path, output.ToArray());
+    }
+
+    private static int FindTargetPath(IReadOnlyList<string> containerPath, string propertyName, IReadOnlyList<string[]> targetPaths) {
+        for (var targetIndex = 0; targetIndex < targetPaths.Count; targetIndex++) {
+            var targetPath = targetPaths[targetIndex];
+            if (targetPath.Length != containerPath.Count + 1 ||
+                !string.Equals(targetPath[targetPath.Length - 1], propertyName, StringComparison.Ordinal)) {
+                continue;
+            }
+
+            var matches = true;
+            for (var segmentIndex = 0; segmentIndex < containerPath.Count; segmentIndex++) {
+                if (string.Equals(targetPath[segmentIndex], containerPath[segmentIndex], StringComparison.Ordinal)) continue;
+                matches = false;
+                break;
+            }
+            if (matches) return targetIndex;
+        }
+
+        return -1;
+    }
 
     private static string ReadPyProjectVersion(string path) {
         var text = File.ReadAllText(path);
