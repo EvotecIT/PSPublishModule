@@ -19,6 +19,7 @@ public sealed partial class ModulePipelineRunner
         var sourceComponents = CreateSynchronizedReleaseSourceComponents(plan, state);
         var sourceFingerprint = CreateSynchronizedReleaseFingerprint(sourceComponents);
         var cachePath = ResolveSynchronizedReleasePayloadCachePath(state);
+        DeleteStaleSynchronizedReleasePayloadCaches(cachePath);
         if (string.IsNullOrWhiteSpace(checkpoint.PayloadFingerprint))
         {
             CreateSynchronizedReleasePayloadCache(cachePath, buildResult, state);
@@ -57,14 +58,9 @@ public sealed partial class ModulePipelineRunner
                 "The exact signed payload cache for the incomplete coordinated release is missing or corrupt. Restore that cache or abandon the incomplete release checkpoint explicitly.");
         }
 
-        RestoreCachedSynchronizedReleasePayloadPaths(cachePath, state);
+        RestoreCachedSynchronizedReleasePayloadPaths(cachePath, buildResult, state);
         _logger.Info($"Using exact cached payload for the resumed coordinated release from '{cachePath}'.");
-        var cachedModulePath = Path.Combine(cachePath, "module");
-        return new ModuleBuildResult(
-            cachedModulePath,
-            Path.Combine(cachedModulePath, Path.GetFileName(buildResult.ManifestPath)),
-            buildResult.Exports,
-            buildResult.BuildNotes);
+        return buildResult;
     }
 
     private static string ResolveSynchronizedReleasePayloadCachePath(ModulePipelineRunState state)
@@ -256,34 +252,43 @@ public sealed partial class ModulePipelineRunner
                     state.ArtefactResults[index].OutputPath,
                     Path.Combine(temporaryPath, "artefact", index.ToString()));
             }
-            for (int laneIndex = 0; laneIndex < state.ProjectBuildResults.Count; laneIndex++)
+            foreach (var lane in ResolveSynchronizedReleasePayloadLanes(state))
             {
-                var release = state.ProjectBuildResults[laneIndex].Result.Release;
+                var release = lane.Execution.Result.Release;
                 if (release is null)
                     continue;
-                for (int projectIndex = 0; projectIndex < release.Projects.Count; projectIndex++)
+                foreach (var project in ResolveSynchronizedReleasePayloadProjects(lane, release))
                 {
-                    var project = release.Projects[projectIndex];
-                    for (int packageIndex = 0; packageIndex < project.Packages.Count; packageIndex++)
+                    foreach (var package in ResolveSynchronizedReleasePayloadFiles(
+                                 project,
+                                 project.Project.Packages,
+                                 "package"))
                     {
                         CopySynchronizedReleasePayloadPath(
-                            project.Packages[packageIndex],
+                            package.SourcePath,
                             ResolveSynchronizedReleasePackageCacheEntry(
-                                temporaryPath, laneIndex, projectIndex, "package", packageIndex));
+                                temporaryPath, lane, project, package));
                     }
-                    for (int packageIndex = 0; packageIndex < project.SymbolPackages.Count; packageIndex++)
+                    foreach (var package in ResolveSynchronizedReleasePayloadFiles(
+                                 project,
+                                 project.Project.SymbolPackages,
+                                 "symbols"))
                     {
                         CopySynchronizedReleasePayloadPath(
-                            project.SymbolPackages[packageIndex],
+                            package.SourcePath,
                             ResolveSynchronizedReleasePackageCacheEntry(
-                                temporaryPath, laneIndex, projectIndex, "symbols", packageIndex));
+                                temporaryPath, lane, project, package));
                     }
-                    if (!string.IsNullOrWhiteSpace(project.ReleaseZipPath))
+                    if (!string.IsNullOrWhiteSpace(project.Project.ReleaseZipPath))
                     {
+                        var releaseZip = ResolveSynchronizedReleasePayloadFiles(
+                            project,
+                            new[] { project.Project.ReleaseZipPath! },
+                            "release-zip")[0];
                         CopySynchronizedReleasePayloadPath(
-                            project.ReleaseZipPath!,
+                            releaseZip.SourcePath,
                             ResolveSynchronizedReleasePackageCacheEntry(
-                                temporaryPath, laneIndex, projectIndex, "release-zip", 0));
+                                temporaryPath, lane, project, releaseZip));
                     }
                 }
             }
@@ -363,42 +368,53 @@ public sealed partial class ModulePipelineRunner
                     Path.Combine(cachePath, "artefact", index.ToString()),
                     Directory.Exists(artefact.OutputPath)));
         }
-        for (int laneIndex = 0; laneIndex < state.ProjectBuildResults.Count; laneIndex++)
+        foreach (var lane in ResolveSynchronizedReleasePayloadLanes(state))
         {
-            var release = state.ProjectBuildResults[laneIndex].Result.Release;
+            var release = lane.Execution.Result.Release;
             if (release is null)
                 continue;
-            for (int projectIndex = 0; projectIndex < release.Projects.Count; projectIndex++)
+            components.Add($"package-lane/{lane.CacheKey}|identity");
+            foreach (var project in ResolveSynchronizedReleasePayloadProjects(lane, release))
             {
-                var project = release.Projects[projectIndex];
-                for (int packageIndex = 0; packageIndex < project.Packages.Count; packageIndex++)
+                components.Add($"package-lane/{lane.CacheKey}/project/{project.CacheKey}|identity");
+                foreach (var package in ResolveSynchronizedReleasePayloadFiles(
+                             project,
+                             project.Project.Packages,
+                             "package"))
                 {
                     AddSynchronizedReleaseExactPayloadPath(
                         components,
-                        $"package-lane/{laneIndex}/project/{projectIndex}/package/{packageIndex}",
+                        ResolveSynchronizedReleasePayloadComponentLabel(lane, project, package),
                         ResolveCachedSynchronizedReleasePayloadPath(
                             ResolveSynchronizedReleasePackageCacheEntry(
-                                cachePath, laneIndex, projectIndex, "package", packageIndex),
+                                cachePath, lane, project, package),
                             directory: false));
                 }
-                for (int packageIndex = 0; packageIndex < project.SymbolPackages.Count; packageIndex++)
+                foreach (var package in ResolveSynchronizedReleasePayloadFiles(
+                             project,
+                             project.Project.SymbolPackages,
+                             "symbols"))
                 {
                     AddSynchronizedReleaseExactPayloadPath(
                         components,
-                        $"package-lane/{laneIndex}/project/{projectIndex}/symbols/{packageIndex}",
+                        ResolveSynchronizedReleasePayloadComponentLabel(lane, project, package),
                         ResolveCachedSynchronizedReleasePayloadPath(
                             ResolveSynchronizedReleasePackageCacheEntry(
-                                cachePath, laneIndex, projectIndex, "symbols", packageIndex),
+                                cachePath, lane, project, package),
                             directory: false));
                 }
-                if (!string.IsNullOrWhiteSpace(project.ReleaseZipPath))
+                if (!string.IsNullOrWhiteSpace(project.Project.ReleaseZipPath))
                 {
+                    var releaseZip = ResolveSynchronizedReleasePayloadFiles(
+                        project,
+                        new[] { project.Project.ReleaseZipPath! },
+                        "release-zip")[0];
                     AddSynchronizedReleaseExactPayloadPath(
                         components,
-                        $"package-lane/{laneIndex}/project/{projectIndex}/release-zip",
+                        ResolveSynchronizedReleasePayloadComponentLabel(lane, project, releaseZip),
                         ResolveCachedSynchronizedReleasePayloadPath(
                             ResolveSynchronizedReleasePackageCacheEntry(
-                                cachePath, laneIndex, projectIndex, "release-zip", 0),
+                                cachePath, lane, project, releaseZip),
                             directory: false));
                 }
             }
@@ -410,47 +426,59 @@ public sealed partial class ModulePipelineRunner
 
     private static void RestoreCachedSynchronizedReleasePayloadPaths(
         string cachePath,
+        ModuleBuildResult buildResult,
         ModulePipelineRunState state)
     {
+        RestoreSynchronizedReleaseDirectory(
+            Path.Combine(cachePath, "module"),
+            buildResult.StagingPath);
         for (int index = 0; index < state.ArtefactResults.Count; index++)
         {
             var artefact = state.ArtefactResults[index];
-            state.ArtefactResults[index] = new ArtefactBuildResult(
-                artefact.Type,
-                artefact.Id,
-                ResolveCachedSynchronizedReleasePayloadPath(
-                    Path.Combine(cachePath, "artefact", index.ToString()),
-                    Directory.Exists(artefact.OutputPath)),
-                artefact.Modules,
-                artefact.CopiedItems);
+            RestoreCachedSynchronizedReleasePayloadPath(
+                Path.Combine(cachePath, "artefact", index.ToString()),
+                artefact.OutputPath,
+                Directory.Exists(artefact.OutputPath));
         }
-        for (int laneIndex = 0; laneIndex < state.ProjectBuildResults.Count; laneIndex++)
+        foreach (var lane in ResolveSynchronizedReleasePayloadLanes(state))
         {
-            var release = state.ProjectBuildResults[laneIndex].Result.Release;
+            var release = lane.Execution.Result.Release;
             if (release is null)
                 continue;
-            for (int projectIndex = 0; projectIndex < release.Projects.Count; projectIndex++)
+            foreach (var project in ResolveSynchronizedReleasePayloadProjects(lane, release))
             {
-                var project = release.Projects[projectIndex];
-                for (int packageIndex = 0; packageIndex < project.Packages.Count; packageIndex++)
+                foreach (var package in ResolveSynchronizedReleasePayloadFiles(
+                             project,
+                             project.Project.Packages,
+                             "package"))
                 {
-                    project.Packages[packageIndex] = ResolveCachedSynchronizedReleasePayloadPath(
+                    RestoreCachedSynchronizedReleasePayloadPath(
                         ResolveSynchronizedReleasePackageCacheEntry(
-                            cachePath, laneIndex, projectIndex, "package", packageIndex),
+                            cachePath, lane, project, package),
+                        project.Project.Packages[package.ItemIndex],
                         directory: false);
                 }
-                for (int packageIndex = 0; packageIndex < project.SymbolPackages.Count; packageIndex++)
+                foreach (var package in ResolveSynchronizedReleasePayloadFiles(
+                             project,
+                             project.Project.SymbolPackages,
+                             "symbols"))
                 {
-                    project.SymbolPackages[packageIndex] = ResolveCachedSynchronizedReleasePayloadPath(
+                    RestoreCachedSynchronizedReleasePayloadPath(
                         ResolveSynchronizedReleasePackageCacheEntry(
-                            cachePath, laneIndex, projectIndex, "symbols", packageIndex),
+                            cachePath, lane, project, package),
+                        project.Project.SymbolPackages[package.ItemIndex],
                         directory: false);
                 }
-                if (!string.IsNullOrWhiteSpace(project.ReleaseZipPath))
+                if (!string.IsNullOrWhiteSpace(project.Project.ReleaseZipPath))
                 {
-                    project.ReleaseZipPath = ResolveCachedSynchronizedReleasePayloadPath(
+                    var releaseZip = ResolveSynchronizedReleasePayloadFiles(
+                        project,
+                        new[] { project.Project.ReleaseZipPath! },
+                        "release-zip")[0];
+                    RestoreCachedSynchronizedReleasePayloadPath(
                         ResolveSynchronizedReleasePackageCacheEntry(
-                            cachePath, laneIndex, projectIndex, "release-zip", 0),
+                            cachePath, lane, project, releaseZip),
+                        project.Project.ReleaseZipPath!,
                         directory: false);
                 }
             }
@@ -458,20 +486,61 @@ public sealed partial class ModulePipelineRunner
         state.ReleaseCoordinationResult = null;
     }
 
-    private static string ResolveSynchronizedReleasePackageCacheEntry(
-        string cachePath,
-        int laneIndex,
-        int projectIndex,
-        string kind,
-        int itemIndex)
-        => Path.Combine(
-            cachePath,
-            "package-lane",
-            laneIndex.ToString(),
-            "project",
-            projectIndex.ToString(),
-            kind,
-            itemIndex.ToString());
+    private static void RestoreCachedSynchronizedReleasePayloadPath(
+        string cacheEntryPath,
+        string destinationPath,
+        bool directory)
+    {
+        var cachedPath = ResolveCachedSynchronizedReleasePayloadPath(cacheEntryPath, directory);
+        if (directory)
+            RestoreSynchronizedReleaseDirectory(cachedPath, destinationPath);
+        else
+            RestoreSynchronizedReleaseFile(cachedPath, destinationPath);
+    }
+
+    private static void RestoreSynchronizedReleaseDirectory(string sourcePath, string destinationPath)
+    {
+        DeleteStaleSynchronizedReleaseRestorePaths(destinationPath);
+        var temporaryPath = destinationPath + ".restore-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            CopySynchronizedReleaseDirectory(sourcePath, temporaryPath);
+            if (Directory.Exists(destinationPath))
+                DeleteDirectoryWithRetries(destinationPath);
+            Directory.Move(temporaryPath, destinationPath);
+        }
+        finally
+        {
+            if (Directory.Exists(temporaryPath))
+                DeleteDirectoryWithRetries(temporaryPath);
+        }
+    }
+
+    private static void RestoreSynchronizedReleaseFile(string sourcePath, string destinationPath)
+    {
+        var destinationDirectory = Path.GetDirectoryName(destinationPath);
+        if (string.IsNullOrWhiteSpace(destinationDirectory))
+        {
+            throw new InvalidOperationException(
+                $"Coordinated release payload destination '{destinationPath}' has no parent directory.");
+        }
+
+        Directory.CreateDirectory(destinationDirectory);
+        DeleteStaleSynchronizedReleaseRestorePaths(destinationPath);
+        var temporaryPath = destinationPath + ".restore-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            File.Copy(sourcePath, temporaryPath, overwrite: true);
+            if (File.Exists(destinationPath))
+                File.Delete(destinationPath);
+            File.Move(temporaryPath, destinationPath);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+                File.Delete(temporaryPath);
+        }
+    }
 
     private static string ResolveCachedSynchronizedReleasePayloadPath(
         string cacheEntryPath,
