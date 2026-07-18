@@ -351,6 +351,15 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
     }
 
     [Fact]
+    public void Validator_ShouldRequireInlineRecipientForCredentialFreeValidation()
+    {
+        var result = RunValidator(recipient: "", recipientEnv: "POWERFORGE_AGE_RECIPIENT");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("does not resolve backupTarget.recipientEnv", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Validator_ShouldNormalizePrivilegedCaptureCommandWhitespace()
     {
         var result = RunValidator(captureCommand: "  sudo -n apachectl -S  ");
@@ -385,6 +394,28 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
 
         Assert.NotEqual(0, result.ExitCode);
         Assert.Contains("canonical case-sensitive sudo -n prefix", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("test -x /usr/sbin/apachectl && sudo -n /usr/sbin/apachectl -S")]
+    [InlineData("/usr/bin/sudo -n /usr/sbin/apachectl -S")]
+    public void Validator_ShouldRejectEmbeddedSudoCaptureCommands(string command)
+    {
+        var result = RunValidator(captureCommand: command);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("canonical case-sensitive sudo -n prefix", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectSudoersThatFailVisudo()
+    {
+        var result = RunValidator(
+            additionalSudoers: "this is not valid sudoers\n",
+            expectVisudoFailure: true);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("failed visudo syntax validation", result.AllOutput, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -452,8 +483,10 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         bool tagSudoers = true,
         string? alternateManagedSudoersTarget = null,
         string? additionalSudoers = null,
+        bool expectVisudoFailure = false,
         bool includeCapture = true,
         string recipient = Recipient,
+        string? recipientEnv = null,
         string captureCommand = "sudo -n apachectl -S")
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-recovery-source-security-" + Guid.NewGuid().ToString("N"));
@@ -560,7 +593,11 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
                     commands = new[] { new { id = "apache-vhosts", command = captureCommand, required = true } }
                 }
                 : null;
-            object? backupTarget = includeCapture ? new { recipient } : null;
+            object? backupTarget = includeCapture
+                ? recipientEnv is null
+                    ? new { recipient }
+                    : new { recipientEnv }
+                : null;
             object? apache = alternateManagedSudoersTarget is not null
                 ? new
                 {
@@ -594,7 +631,8 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
                     [Parameter(Mandatory)][string] $EngineRef,
                     [Parameter(Mandatory)][string] $CallerRepository,
                     [Parameter(Mandatory)][string] $EngineRepository,
-                    [Parameter(Mandatory)][string] $CaptureUser
+                    [Parameter(Mandatory)][string] $CaptureUser,
+                    [Parameter(Mandatory)][string] $VisudoPath
                 )
                 $ErrorActionPreference = 'Stop'
                 $env:POWERFORGE_ENGINE_REF = $EngineRef
@@ -606,7 +644,8 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
                         -EngineRoot $EngineRoot `
                         -CallerRepository $CallerRepository `
                         -EngineRepository $EngineRepository `
-                        -CaptureUser $CaptureUser
+                        -CaptureUser $CaptureUser `
+                        -VisudoPath $VisudoPath
                 } catch {
                     [Console]::Error.WriteLine($_.Exception.Message)
                     exit 1
@@ -615,6 +654,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
 
             var validatorPath = GetRepoPath(
                 ".github", "actions", "powerforge-server-recovery-validate", "Assert-PowerForgeServerRecoverySources.ps1");
+            var visudoPath = ResolveVisudoPath(root, expectVisudoFailure);
             return RunProcess(
                 "pwsh",
                 root,
@@ -626,7 +666,8 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
                 "-EngineRef", EngineRef,
                 "-CallerRepository", CallerRepository,
                 "-EngineRepository", EngineRepository,
-                "-CaptureUser", CaptureUser);
+                "-CaptureUser", CaptureUser,
+                "-VisudoPath", visudoPath);
         }
         finally
         {
@@ -642,6 +683,24 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
     private static string BuildExpectedSudoers(string principal, string runAs)
         => BuildExpectedAliases() +
            $"{principal} ALL=({runAs}) NOPASSWD: BACKUP_PLAIN, BACKUP_ENCRYPTED, BACKUP_INSPECT\n";
+
+    private static string ResolveVisudoPath(string root, bool expectFailure)
+    {
+        if (OperatingSystem.IsLinux() && File.Exists("/usr/sbin/visudo"))
+            return "/usr/sbin/visudo";
+
+        if (OperatingSystem.IsWindows())
+        {
+            var path = Path.Combine(root, "visudo.cmd");
+            File.WriteAllText(path, $"@exit /b {(expectFailure ? 1 : 0)}\r\n");
+            return path;
+        }
+
+        var stub = Path.Combine(root, "visudo-stub.sh");
+        File.WriteAllText(stub, $"#!/usr/bin/env sh\nexit {(expectFailure ? 1 : 0)}\n");
+        File.SetUnixFileMode(stub, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        return stub;
+    }
 
     private static void InitializeGitRepository(string path)
     {

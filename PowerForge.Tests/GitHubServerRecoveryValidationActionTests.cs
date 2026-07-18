@@ -19,6 +19,7 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.Contains("POWERFORGE_ENGINE_REF: ${{ github.action_ref }}", action, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_ENGINE_REPOSITORY: ${{ github.action_repository }}", action, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_CAPTURE_USER: ${{ inputs.capture-user }}", action, StringComparison.Ordinal);
+        Assert.Contains("public age recipient inline in backupTarget.recipient", action, StringComparison.Ordinal);
         Assert.DoesNotContain("run: |", action, StringComparison.Ordinal);
     }
 
@@ -50,6 +51,8 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.Contains("Assert-PowerForgeServerRecoverySources.ps1", entrypoint, StringComparison.Ordinal);
         Assert.Contains("-CallerRepository $env:GITHUB_REPOSITORY", entrypoint, StringComparison.Ordinal);
         Assert.Contains("-CaptureUser $env:POWERFORGE_CAPTURE_USER", entrypoint, StringComparison.Ordinal);
+        Assert.Contains("-VisudoPath $visudoPath", entrypoint, StringComparison.Ordinal);
+        Assert.Contains("$visudoPath = '/usr/sbin/visudo'", entrypoint, StringComparison.Ordinal);
         Assert.Contains("Resolve-ManagedSourcePath", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("git -C $root ls-tree $repositoryRef -- $relativePath", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("$Matches['mode'] -notin @('100644', '100755')", sourceValidation, StringComparison.Ordinal);
@@ -60,6 +63,7 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.Contains("Cmnd_Alias", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("NOPASSWD:", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("exact hardened encrypted-capture command", sourceValidation, StringComparison.Ordinal);
+        Assert.Contains("failed visudo syntax validation", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("$commands.Count -ne 1", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("$CaptureUser", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("$expectedHelperSource", sourceValidation, StringComparison.Ordinal);

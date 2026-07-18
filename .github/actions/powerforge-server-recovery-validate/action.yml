@@ -1,5 +1,5 @@
 name: PowerForge Server Recovery Validate
-description: Validate a server recovery manifest and its generated shell plans without credentials or host access.
+description: Validate a server recovery manifest and its generated shell plans without credentials or host access. Encrypted capture requires the public age recipient inline in backupTarget.recipient.
 
 inputs:
   manifest-path:

@@ -105,6 +105,10 @@ function Write-ActionWarning {
 if ($env:RUNNER_OS -ne 'Linux') {
     throw 'PowerForge server recovery validation requires a Linux runner so generated scripts can be checked with Bash and ShellCheck.'
 }
+$visudoPath = '/usr/sbin/visudo'
+if (-not (Test-Path -LiteralPath $visudoPath -PathType Leaf)) {
+    throw "PowerForge server recovery validation requires visudo at $visudoPath."
+}
 if ($env:POWERFORGE_FAIL_ON_WARNINGS -notin @('true', 'false')) {
     throw 'fail-on-warnings must be true or false.'
 }
@@ -165,7 +169,8 @@ try {
         -EngineRoot $engineRoot `
         -CallerRepository $env:GITHUB_REPOSITORY `
         -EngineRepository $env:POWERFORGE_ENGINE_REPOSITORY `
-        -CaptureUser $env:POWERFORGE_CAPTURE_USER
+        -CaptureUser $env:POWERFORGE_CAPTURE_USER `
+        -VisudoPath $visudoPath
 
     $project = Join-Path $engineRoot 'PowerForge.Web.Cli/PowerForge.Web.Cli.csproj'
     $build = Invoke-ProcessCapture -FileName 'dotnet' -Arguments @(

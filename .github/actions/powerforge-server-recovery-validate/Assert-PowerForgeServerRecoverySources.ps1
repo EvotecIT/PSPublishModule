@@ -5,10 +5,12 @@ param(
     [Parameter(Mandatory)][string] $EngineRoot,
     [Parameter(Mandatory)][string] $CallerRepository,
     [Parameter(Mandatory)][string] $EngineRepository,
-    [Parameter(Mandatory)][string] $CaptureUser
+    [Parameter(Mandatory)][string] $CaptureUser,
+    [Parameter(Mandatory)][string] $VisudoPath
 )
 
 $ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $false
 
 function Get-GitHubRepositorySlug {
     param(
@@ -180,7 +182,7 @@ function Get-ExpectedEncryptedCaptureCommand {
 
     $recipient = [string]$RecoveryManifest.backupTarget.recipient
     if ($recipient -cnotmatch '^age1[a-z0-9]+$') {
-        throw 'Credential-free validation requires a stable age public recipient in backupTarget.recipient.'
+        throw 'Credential-free validation does not resolve backupTarget.recipientEnv; encrypted capture requires a stable age public recipient in backupTarget.recipient.'
     }
 
     $targets = Get-ValidatedCaptureTarget -Files $files -Label 'Encrypted'
@@ -214,7 +216,7 @@ function Get-ExpectedCaptureSudoersCommand {
     foreach ($captureCommand in $captureCommands.Where({ $_.sensitive -ne $true })) {
         $command = ([string]$captureCommand.command).Trim()
         if ($command -cnotmatch '^sudo -n (?<command>.+)$') {
-            if ($command -match '^sudo\s') {
+            if ($command -match '(?<![A-Za-z0-9_.-])sudo(?:\s|$)') {
                 throw "Privileged recovery capture command must use the canonical case-sensitive sudo -n prefix: $command"
             }
             continue
@@ -288,6 +290,21 @@ if ($misplacedSudoersSources.Count -gt 0) {
     throw 'Managed sudoers validation is supported only for files below /etc/sudoers.d.'
 }
 
+$sudoersDocuments = [Collections.Generic.List[object]]::new()
+foreach ($sudoersSource in $sudoersSources) {
+    if (-not [string]::Equals([string]$sudoersSource.Entry.kind, 'file', [StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::Equals([string]$sudoersSource.Entry.owner, 'root', [StringComparison]::Ordinal) -or
+        -not [string]::Equals([string]$sudoersSource.Entry.group, 'root', [StringComparison]::Ordinal) -or
+        ([string]$sudoersSource.Entry.mode) -notin @('440', '0440')) {
+        throw 'Managed sudoers sources must be root-owned files with mode 440 or 0440.'
+    }
+    $sudoersDocuments.Add([pscustomobject]@{
+        Path   = $sudoersSource.Path
+        Target = $sudoersSource.Target
+        Lines  = @(Get-Content -LiteralPath $sudoersSource.Path)
+    })
+}
+
 $expectedEncryptedCommand = Get-ExpectedEncryptedCaptureCommand -RecoveryManifest $Manifest
 if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
     $engineRepositories = @(
@@ -332,21 +349,9 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
     $expectedSudoersCommands = @(Get-ExpectedCaptureSudoersCommand -RecoveryManifest $Manifest)
     $commandAliases = [Collections.Generic.Dictionary[string, string[]]]::new([StringComparer]::Ordinal)
     $grantedAliases = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    $sudoersDocuments = [Collections.Generic.List[object]]::new()
     $captureGrantCount = 0
-    foreach ($sudoersSource in $sudoersSources) {
-        if (-not [string]::Equals([string]$sudoersSource.Entry.kind, 'file', [StringComparison]::OrdinalIgnoreCase) -or
-            -not [string]::Equals([string]$sudoersSource.Entry.owner, 'root', [StringComparison]::Ordinal) -or
-            -not [string]::Equals([string]$sudoersSource.Entry.group, 'root', [StringComparison]::Ordinal) -or
-            ([string]$sudoersSource.Entry.mode) -notin @('440', '0440')) {
-            throw 'Managed sudoers sources must be root-owned files with mode 440 or 0440.'
-        }
-        $lines = @(Get-Content -LiteralPath $sudoersSource.Path)
-        $sudoersDocuments.Add([pscustomobject]@{
-            Path  = $sudoersSource.Path
-            Lines = $lines
-        })
-        foreach ($line in $lines) {
+    foreach ($sudoersDocument in $sudoersDocuments) {
+        foreach ($line in $sudoersDocument.Lines) {
             $trimmedLine = $line.Trim()
             if ($trimmedLine -match '^(?:#|@)include(?:dir)?\b') {
                 throw 'Managed sudoers sources must not include additional policy files.'
@@ -460,6 +465,13 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
     if ($captureGrantCount -eq 0 -or $grantedAliases.Count -ne $grantedCommands.Count -or
         $grantedCommands.Count -ne $expectedCommands.Count -or -not $expectedCommands.SetEquals($grantedCommands)) {
         throw 'Managed sudoers sources do not authorize the exact hardened encrypted-capture command.'
+    }
+}
+
+foreach ($sudoersDocument in $sudoersDocuments) {
+    & $VisudoPath '-c' '-f' $sudoersDocument.Path *> $null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Managed sudoers source failed visudo syntax validation: $($sudoersDocument.Target)"
     }
 }
 
