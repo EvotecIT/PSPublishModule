@@ -466,7 +466,7 @@ Removes a saved managed module repository profile.
 Removes specific files and folders from a project directory with safety features.
 
 ### [Repair-ManagedModule](Repair-ManagedModule.md)
-Repairs installed PowerShell modules through the managed module-state engine.
+Repairs and verifies installed PowerShell modules through the managed module-state engine.
 
 ### [Reset-ManagedModuleRepository](Reset-ManagedModuleRepository.md)
 Resets managed module repository profiles to PSPublishModule defaults.

@@ -149,6 +149,78 @@ public sealed class ManagedModuleUninstallServiceTests
     }
 
     [Fact]
+    public void PlanUninstall_blocks_removal_when_module_in_another_visible_root_requires_target()
+    {
+        using var targetRoot = new TemporaryDirectory();
+        using var dependentRoot = new TemporaryDirectory();
+        var targetPath = CreateInstalledModule(targetRoot.Path, "Company.Core", "1.0.0");
+        var dependentPath = CreateInstalledModule(
+            dependentRoot.Path,
+            "Company.Tools",
+            "1.0.0",
+            requiredModules: "    RequiredModules = @(@{ ModuleName = 'Company.Core'; RequiredVersion = '1.0.0' })");
+        var request = CreateRequest(targetRoot.Path, "Company.Core");
+        request.DependencyModuleRoots = new[] { targetRoot.Path, dependentRoot.Path };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new ManagedModuleUninstallService().PlanUninstall(request));
+
+        Assert.Contains("Company.Core 1.0.0 is required by Company.Tools 1.0.0", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(targetPath));
+        Assert.True(Directory.Exists(dependentPath));
+    }
+
+    [Fact]
+    public void Uninstall_fails_closed_when_preflight_dependency_root_disappears()
+    {
+        using var targetRoot = new TemporaryDirectory();
+        using var workspace = new TemporaryDirectory();
+        var dependencyRoot = Path.Combine(workspace.Path, "visible-dependencies");
+        Directory.CreateDirectory(dependencyRoot);
+        var targetPath = CreateInstalledModule(targetRoot.Path, "Company.Core", "1.0.0");
+        var request = CreateRequest(targetRoot.Path, "Company.Core");
+        request.DependencyModuleRoots = new[] { targetRoot.Path, dependencyRoot };
+        request.DeferDependencyCheck = true;
+        var service = new ManagedModuleUninstallService();
+        var plan = service.PlanUninstall(request);
+        Directory.Delete(dependencyRoot);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Uninstall(plan));
+
+        Assert.Contains("no longer available", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(targetPath));
+    }
+
+    [Fact]
+    public void Uninstall_validates_dependency_alternatives_within_each_visible_root_group()
+    {
+        using var globalRoot = new TemporaryDirectory();
+        using var profileARoot = new TemporaryDirectory();
+        using var profileBRoot = new TemporaryDirectory();
+        var targetPath = CreateInstalledModule(globalRoot.Path, "Company.Core", "1.0.0");
+        CreateInstalledModule(
+            profileARoot.Path,
+            "Company.ProfileTools",
+            "1.0.0",
+            requiredModules: "    RequiredModules = @(@{ ModuleName = 'Company.Core'; RequiredVersion = '1.0.0' })");
+        CreateInstalledModule(profileBRoot.Path, "Company.Core", "1.0.0");
+        var request = CreateRequest(globalRoot.Path, "Company.Core");
+        request.Version = "1.0.0";
+        request.DependencyModuleRoots = new[] { globalRoot.Path, profileARoot.Path, profileBRoot.Path };
+        request.DependencyModuleRootGroups = new IReadOnlyList<string>[]
+        {
+            new[] { globalRoot.Path, profileARoot.Path },
+            new[] { globalRoot.Path, profileBRoot.Path }
+        };
+        var service = new ManagedModuleUninstallService();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.PlanUninstall(request));
+
+        Assert.Contains("required by Company.ProfileTools", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Directory.Exists(targetPath));
+    }
+
+    [Fact]
     public void Uninstall_skip_dependency_check_permits_required_module_removal()
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -277,6 +349,34 @@ public sealed class ManagedModuleUninstallServiceTests
         var target = Assert.Single(service.PlanUninstall(request).Targets);
 
         Assert.True(target.IsLoaded);
+    }
+
+    [Fact]
+    public void RefreshLoadedState_recomputes_stale_uninstall_targets()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var modulePath = CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var service = new ManagedModuleUninstallService();
+        var request = CreateRequest(moduleRoot.Path, "Company.Tools");
+        request.DeferLoadedModuleCheck = true;
+        var plan = service.PlanUninstall(request);
+        var target = Assert.Single(plan.Targets);
+        Assert.False(target.IsLoaded);
+
+        ManagedModuleUninstallService.RefreshLoadedState(plan.Targets, new[]
+        {
+            new ManagedModuleLoadedModule
+            {
+                Name = "Company.Tools",
+                Version = "1.0.0",
+                ModuleBase = modulePath
+            }
+        });
+
+        Assert.True(target.IsLoaded);
+        var exception = Assert.Throws<InvalidOperationException>(() => service.ValidateUninstallPlan(plan));
+        Assert.Contains("AllowLoadedModuleUninstall", exception.Message, StringComparison.Ordinal);
+        Assert.True(Directory.Exists(modulePath));
     }
 
     [Fact]

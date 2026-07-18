@@ -63,6 +63,48 @@ public sealed class ModuleStateJsonServiceTests
         Assert.Equal("CompanyModules", module.SourceRepository);
         Assert.True(module.IsLoaded);
         Assert.True(module.IsEffectiveImportCandidate);
+        Assert.True(Assert.Single(inventory.ModulePaths).WasAvailable);
+    }
+
+    [Fact]
+    public void ReadInventory_MarksDiagnosedLegacyPathUnavailable()
+    {
+        var inventory = new ModuleStateJsonService().ReadInventory("""
+{
+  "ModulePaths": [ "C:/AvailableModules", "C:/MissingModules" ],
+  "Diagnostics": [
+    {
+      "Severity": "Error",
+      "Code": "ModuleState.InventoryPathMissing",
+      "Message": "The path was unavailable during collection.",
+      "Path": "C:/MissingModules"
+    }
+  ]
+}
+""");
+
+        Assert.True(Assert.Single(inventory.ModulePaths, static path => path.Path == "C:/AvailableModules").WasAvailable);
+        Assert.False(Assert.Single(inventory.ModulePaths, static path => path.Path == "C:/MissingModules").WasAvailable);
+    }
+
+    [Fact]
+    public void ReadInventory_PreservesDependencyVisibilityGroup()
+    {
+        var inventory = new ModuleStateJsonService().ReadInventory("""
+{
+  "ScannedPaths": [
+    {
+      "Path": "C:/VisibleModules",
+      "WasAvailable": true,
+      "DependencyVisibilityGroup": "CurrentProcessPSModulePath"
+    }
+  ]
+}
+""");
+
+        var path = Assert.Single(inventory.ModulePaths);
+        Assert.True(path.WasAvailable);
+        Assert.Equal("CurrentProcessPSModulePath", path.DependencyVisibilityGroup);
     }
 
     [Fact]
@@ -138,7 +180,10 @@ public sealed class ModuleStateJsonServiceTests
       "name": "Company.Tools",
       "version": "1.2.0",
       "sourceRepository": "CompanyModules",
-      "scope": "AllUsers"
+      "scope": "AllUsers",
+      "moduleRoot": "C:\\Program Files\\PowerShell\\Modules",
+      "powerShellEdition": "Core",
+      "profileName": "ServerAdmin"
     }
   ]
 }
@@ -152,6 +197,9 @@ public sealed class ModuleStateJsonServiceTests
         Assert.Equal("1.2.0", module.Version);
         Assert.Equal("CompanyModules", module.SourceRepository);
         Assert.Equal("AllUsers", module.Scope);
+        Assert.Equal("C:\\Program Files\\PowerShell\\Modules", module.ModuleRoot);
+        Assert.Equal("Core", module.PowerShellEdition);
+        Assert.Equal("ServerAdmin", module.ProfileName);
     }
 
     [Fact]

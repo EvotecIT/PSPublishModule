@@ -12,8 +12,13 @@ namespace PSPublishModule;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This command is the first managed install surface. It uses PowerForge repository lookup, package download, and
-/// safe archive extraction directly instead of invoking PowerShellGet or PSResourceGet.
+/// This command provides the module-install functionality of <c>Install-PSResource</c> through the PowerForge
+/// repository, dependency, integrity, and promotion services. It accepts names, required-resource maps, required
+/// resource files, and typed output from <c>Find-ManagedModule</c> without invoking PowerShellGet or PSResourceGet.
+/// </para>
+/// <para>
+/// Managed installs always return a typed result or plan. Repository trust is explicit through managed profiles and
+/// trust policies instead of a one-invocation prompt-suppression switch.
 /// </para>
 /// </remarks>
 /// <example>
@@ -24,19 +29,31 @@ namespace PSPublishModule;
 /// <summary>Install an exact module version from a local feed into an explicit root</summary>
 /// <code>Install-ManagedModule -Name Company.Tools -Version 1.2.0 -Repository C:\Packages -Scope Custom -ModuleRoot C:\Modules</code>
 /// </example>
+/// <example>
+/// <summary>Install the exact typed result returned by Find-ManagedModule</summary>
+/// <code>Find-ManagedModule -Name Company.Tools -Version 1.2.0 -ProfileName CompanyModules | Install-ManagedModule -Scope CurrentUser</code>
+/// </example>
 [Cmdlet(VerbsLifecycle.Install, "ManagedModule", SupportsShouldProcess = true, DefaultParameterSetName = NameParameterSet)]
 [OutputType(typeof(ManagedModuleInstallResult), typeof(ManagedModuleInstallPlan))]
 public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
 {
     private const string NameParameterSet = "NameParameterSet";
+    private const string InputObjectParameterSet = "InputObjectParameterSet";
     private const string RequiredResourceParameterSet = "RequiredResourceParameterSet";
     private const string RequiredResourceFileParameterSet = "RequiredResourceFileParameterSet";
+    private readonly List<ManagedModuleRequiredResourceTarget> _expectedHashTargets = new();
 
     /// <summary>Module names to install.</summary>
-    [Parameter(Mandatory = true, Position = 0, ValueFromPipelineByPropertyName = true, ParameterSetName = NameParameterSet)]
+    [Parameter(Mandatory = true, Position = 0, ValueFromPipeline = true, ValueFromPipelineByPropertyName = true, ParameterSetName = NameParameterSet)]
     [Alias("ModuleName")]
     [ValidateNotNullOrEmpty]
     public string[] Name { get; set; } = Array.Empty<string>();
+
+    /// <summary>Module versions returned by Find-ManagedModule to install.</summary>
+    [Parameter(Mandatory = true, Position = 0, ValueFromPipeline = true, ValueFromPipelineByPropertyName = true, ParameterSetName = InputObjectParameterSet)]
+    [Alias("ParentResource")]
+    [ValidateNotNullOrEmpty]
+    public ManagedModuleVersionInfo[] InputObject { get; set; } = Array.Empty<ManagedModuleVersionInfo>();
 
     /// <summary>PSResourceGet-style required resource map to install.</summary>
     [Parameter(Mandatory = true, ParameterSetName = RequiredResourceParameterSet)]
@@ -50,6 +67,7 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
 
     /// <summary>Repository URL, NuGet v3 service index, flat-container URL, or local folder feed.</summary>
     [Parameter(Position = 1, ParameterSetName = NameParameterSet)]
+    [Parameter(ParameterSetName = InputObjectParameterSet)]
     [Alias("Source", "RepositoryUri")]
     [ValidateNotNullOrEmpty]
     public string Repository { get; set; } = ManagedModuleCommandSupport.DefaultRepositorySource;
@@ -204,7 +222,19 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
     public SwitchParameter Quiet { get; set; }
 
     /// <summary>Installs the requested modules.</summary>
-    protected override async Task ProcessRecordAsync()
+    protected override Task ProcessRecordAsync()
+    {
+        var targets = ResolveTargets().ToArray();
+        if (!string.IsNullOrWhiteSpace(ExpectedPackageSha256))
+        {
+            _expectedHashTargets.AddRange(targets);
+            return Task.CompletedTask;
+        }
+
+        return ProcessTargetsAsync(targets);
+    }
+
+    private async Task ProcessTargetsAsync(IReadOnlyCollection<ManagedModuleRequiredResourceTarget> targets)
     {
         var moduleRoot = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot);
         var packageCacheDirectory = ManagedModuleCommandSupport.ResolveProviderPath(this, PackageCacheDirectory);
@@ -215,8 +245,6 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
         var service = new ManagedModuleInstallService(logger, repositoryClient);
         ManagedModuleCommandSupport.ValidateClobberSwitches(AllowClobber.IsPresent, NoClobber.IsPresent);
         var writeSummary = ManagedModuleCommandSupport.ShouldWriteSummary(ShowSummary.IsPresent, Quiet.IsPresent);
-        var targets = ResolveTargets().ToArray();
-        ManagedModuleCommandSupport.ValidateSinglePackageHashTarget(ExpectedPackageSha256, targets.Select(static target => target.Name).ToArray());
         var defaultRepository = ManagedModuleCommandSupport.CreateRepository(
             this,
             RepositoryName,
@@ -226,9 +254,9 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
 
         foreach (var target in targets)
         {
-            var repository = string.IsNullOrWhiteSpace(target.Repository)
+            var repository = target.ResolvedRepository ?? (string.IsNullOrWhiteSpace(target.Repository)
                 ? defaultRepository
-                : ManagedModuleCommandSupport.CreateRepository(this, target.Repository!, target.Repository!);
+                : ManagedModuleCommandSupport.CreateRepository(this, target.Repository!, target.Repository!));
             var request = new ManagedModuleInstallRequest
             {
                 Repository = repository,
@@ -273,6 +301,18 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
         }
     }
 
+    /// <summary>Validates and executes hash-constrained pipeline input after every target is known.</summary>
+    protected override async Task EndProcessingAsync()
+    {
+        if (_expectedHashTargets.Count == 0)
+            return;
+
+        ManagedModuleCommandSupport.ValidateSinglePackageHashTarget(
+            ExpectedPackageSha256,
+            _expectedHashTargets.Select(static target => target.Name).ToArray());
+        await ProcessTargetsAsync(_expectedHashTargets).ConfigureAwait(false);
+    }
+
     private IEnumerable<ManagedModuleRequiredResourceTarget> ResolveTargets()
     {
         var defaults = new ManagedModuleRequiredResourceDefaults(
@@ -290,6 +330,29 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
             return ManagedModuleRequiredResourceSupport.Parse(
                 ManagedModuleRequiredResourceSupport.ImportRequiredResourceFile(this, RequiredResourceFile),
                 defaults);
+
+        if (ParameterSetName == InputObjectParameterSet)
+        {
+            var repositoryWasBound = MyInvocation.BoundParameters.ContainsKey(nameof(Repository));
+            var profileWasBound = MyInvocation.BoundParameters.ContainsKey(nameof(ProfileName));
+            return InputObject.Select(resource => new ManagedModuleRequiredResourceTarget(
+                resource.Name,
+                resource.Version,
+                minimumVersion: null,
+                maximumVersion: null,
+                versionPolicy: null,
+                resource.IsPrerelease,
+                Scope,
+                MyInvocation.BoundParameters.ContainsKey(nameof(Scope)),
+                repository: null,
+                defaults.Reinstall,
+                defaults.AllowClobber,
+                AcceptLicense.IsPresent,
+                SkipDependencyCheck.IsPresent,
+                resolvedRepository: repositoryWasBound || profileWasBound
+                    ? null
+                    : ManagedModuleCommandSupport.CreateRepository(this, resource)));
+        }
 
         return Name.Select(moduleName => new ManagedModuleRequiredResourceTarget(
             moduleName,

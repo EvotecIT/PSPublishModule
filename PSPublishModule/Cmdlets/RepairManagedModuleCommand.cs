@@ -10,7 +10,7 @@ using PowerForge;
 namespace PSPublishModule;
 
 /// <summary>
-/// Repairs installed PowerShell modules through the managed module-state engine.
+/// Repairs and verifies installed PowerShell modules through the managed module-state engine.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -18,6 +18,35 @@ namespace PSPublishModule;
 /// inventories installed modules, plans stale-version, receipt-drift, source,
 /// scope, family, and cleanup actions, and can apply the plan through the
 /// managed delivery engine.
+/// </para>
+/// <para>
+/// PSResourceGet has no equivalent estate-repair command. Use the lifecycle cmdlets for one requested operation and
+/// this command when the desired outcome spans installed-state discovery, drift analysis, repair, and cleanup.
+/// </para>
+/// <para>
+/// Repair keeps module copies in separate physical roots, PowerShell editions, scopes, and local user profiles
+/// independent. Missing modules require an explicit ModuleRoot or exactly one eligible scanned root; ambiguous
+/// destinations are reported and blocked. A single explicit UserProfilePath supplies the current PowerShell
+/// edition's standard CurrentUser root even when that root does not exist yet; it never overrides an AllUsers
+/// request. Explicit ModuleRoot and profile destinations are merged into supplied Inventory or InventoryPath
+/// artifacts and remain part of convergence scans. Module roots declared by maintenance receipts are merged the
+/// same way, including roots that do not exist until repair delivery creates them. A successfully enumerated
+/// explicit root replaces stale artifact rows and diagnostics for that root, even when the live root is empty.
+/// </para>
+/// <para>
+/// Live apply performs delivery, inventories the same estate again, replans exact-path old-version cleanup from
+/// current state. Cleanup requires that refreshed plan to be error-free, preflights the complete exact-path removal
+/// set, validates loaded-module and dependency safety across relevant global/profile roots, and removes selected
+/// dependents before their selected dependencies. Current-runspace loaded modules are protected even when
+/// IncludeLoaded is not used for inventory output. A declined delivery or cleanup action is reported as skipped and
+/// cannot be reported as successful convergence. Repair performs a final live inventory and returns post-apply plan
+/// and convergence evidence after execution or a no-action apply. Operational failures remain visible in the typed
+/// result and are also written as nonterminating errors.
+/// </para>
+/// <para>
+/// This is local-machine estate management suitable for workstations and servers, including service-account and
+/// multi-profile roots. It does not connect to or orchestrate remote computers; invoke it in each target session or
+/// through the operator's existing remoting/configuration system.
 /// </para>
 /// </remarks>
 /// <example>
@@ -40,9 +69,21 @@ namespace PSPublishModule;
 /// <summary>Apply receipt-drift repair through a managed repository profile</summary>
 /// <code>Repair-ManagedModule -MaintenanceReceiptPath .\module-maintenance.json -ProfileName CompanyModules -AcceptLicense</code>
 /// </example>
+/// <example>
+/// <summary>Preview repair across Windows PowerShell and PowerShell 7 roots</summary>
+/// <code>Repair-ManagedModule -ModulePath $ps5Root,$ps7Root -Latest -Cleanup OldVersions -Repository PSGallery -Plan -ShowSummary</code>
+/// </example>
+/// <example>
+/// <summary>Preview modules installed for multiple local user profiles</summary>
+/// <code>Repair-ManagedModule -UserProfilePath C:\Users\Alice,C:\Users\Service.PowerShell -Name Company.* -Latest -Repository CompanyModules -Plan -ShowSummary</code>
+/// </example>
+/// <example>
+/// <summary>Apply safe old-version cleanup and verify convergence</summary>
+/// <code>Repair-ManagedModule -IncludeAllUserProfiles -Latest -Cleanup OldVersions -Repository CompanyModules -Confirm:$false -ShowSummary</code>
+/// </example>
 [Cmdlet(VerbsDiagnostic.Repair, "ManagedModule", SupportsShouldProcess = true)]
 [OutputType(typeof(ModuleStateWorkflowResult))]
-public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
+public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
 {
     /// <summary>Optional module names to repair. When omitted, all installed modules in scope are considered.</summary>
     [Parameter(Position = 0, ValueFromPipelineByPropertyName = true)]
@@ -64,7 +105,7 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
     [ValidateNotNullOrEmpty]
     public string? RequiredResourceFile { get; set; }
 
-    /// <summary>Existing inventory object. When omitted, local module paths are inventoried.</summary>
+    /// <summary>Existing inventory object. Explicit ModuleRoot and UserProfilePath destinations are merged into it and included in post-apply convergence scans.</summary>
     [Parameter(ValueFromPipeline = true)]
     [ValidateNotNull]
     public ModuleStateInventoryResult? Inventory { get; set; }
@@ -74,16 +115,25 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
     [ValidateNotNullOrEmpty]
     public string? InventoryPath { get; set; }
 
-    /// <summary>Explicit module roots to inventory. When omitted, PSModulePath is used.</summary>
+    /// <summary>Explicit required module roots to inventory. Missing or inaccessible roots block apply. When omitted, optional roots inherited together from the current process's PSModulePath are treated as one dependency-visibility context.</summary>
     [Parameter]
     [ValidateNotNullOrEmpty]
     public string[]? ModulePath { get; set; }
 
-    /// <summary>Include modules loaded in the current runspace as inventory evidence.</summary>
+    /// <summary>Explicit user profile home directories whose platform-standard module roots are inventoried. Existing roots are required and block repair when inaccessible; a missing current-edition root remains a creatable destination. One explicit profile provides that CurrentUser destination for missing modules, but never overrides AllUsers scope.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string[]? UserProfilePath { get; set; }
+
+    /// <summary>Discover existing standard PowerShell module roots below the local profile container. Unix root sessions scan /home and retain /root; inaccessible optional profiles or roots are reported as warnings. Use UserProfilePath or ModulePath for redirected and custom layouts.</summary>
+    [Parameter]
+    public SwitchParameter IncludeAllUserProfiles { get; set; }
+
+    /// <summary>Include modules loaded in the current runspace as inventory and plan evidence. Cleanup protects current-runspace modules regardless of this reporting option.</summary>
     [Parameter]
     public SwitchParameter IncludeLoaded { get; set; }
 
-    /// <summary>Optional module-state maintenance receipt artifacts used for drift checks.</summary>
+    /// <summary>Optional module-state maintenance receipt artifacts used for drift checks. Receipt-declared module roots are inventoried and retained for post-apply convergence.</summary>
     [Parameter]
     [ValidateNotNullOrEmpty]
     public string[]? MaintenanceReceiptPath { get; set; }
@@ -108,7 +158,7 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
     [ValidateNotNullOrEmpty]
     public string? VersionPolicy { get; set; }
 
-    /// <summary>Optional cleanup planning for managed modules.</summary>
+    /// <summary>Optional old-version cleanup. Live apply replans after delivery, requires an error-free refreshed estate, batch-preflights exact paths, and removes selected dependents before dependencies.</summary>
     [Parameter]
     [ValidateSet("None", "OldVersions")]
     public string Cleanup { get; set; } = "None";
@@ -138,7 +188,7 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
     [Parameter]
     public ModuleStateDeliveryTransport Transport { get; set; } = ModuleStateDeliveryTransport.ManagedModule;
 
-    /// <summary>Custom module root for managed delivery.</summary>
+    /// <summary>Explicit physical module root used to narrow inventory selection and managed delivery. It also resolves missing-module destination ambiguity.</summary>
     [Parameter]
     [Alias("Path")]
     [ValidateNotNullOrEmpty]
@@ -170,7 +220,7 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
     [Parameter]
     public SwitchParameter AllowConflict { get; set; }
 
-    /// <summary>Return the repair plan without applying install/update actions.</summary>
+    /// <summary>Return the full repair and cleanup plan without applying any actions.</summary>
     [Parameter]
     public SwitchParameter Plan { get; set; }
 
@@ -215,17 +265,18 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             var credentialSecretFilePath = ResolveCredentialSecretFilePath();
             var requiredResourceInputSupplied = RequiredResource is not null || !string.IsNullOrWhiteSpace(RequiredResourceFile);
             var requiredResourceTargets = ResolveRequiredResourceTargets().ToArray();
+            var maintenanceReceiptPaths = ResolveOptionalFilePaths(MaintenanceReceiptPath, nameof(MaintenanceReceiptPath));
 
-            var inventory = ResolveInventory();
+            var inventory = ResolveInventory(maintenanceReceiptPaths);
             var selectedModules = SelectBaselineModules(inventory).ToArray();
+            var desiredState = CreateDesiredState(selectedModules, requiredResourceTargets, requiredResourceInputSupplied);
             var plan = ModuleStatePlanCommandSupport.CreatePlanResult(
                 inventory,
-                CreateDesiredState(selectedModules, requiredResourceTargets, requiredResourceInputSupplied),
-                ResolveOptionalFilePaths(MaintenanceReceiptPath, nameof(MaintenanceReceiptPath)),
+                desiredState,
+                maintenanceReceiptPaths,
                 repair: true,
                 ParseCleanupMode(Cleanup),
                 Family);
-            ApplySelectedInventoryTargets(plan, selectedModules);
             ApplyLatestUpdateIntent(plan);
             ApplyForceRepairIntent(plan, inheritGlobalForce: !requiredResourceInputSupplied);
             var managedDeliveryOptions = CreateManagedDeliveryOptions(
@@ -248,7 +299,9 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
                 deliveryModuleRoot,
                 credentialSecretFilePath,
                 managedDeliveryOptions,
-                requiredResourceInputSupplied).ConfigureAwait(false);
+                requiredResourceInputSupplied,
+                desiredState,
+                maintenanceReceiptPaths).ConfigureAwait(false);
             var workflow = new ModuleStateWorkflowResult
             {
                 Inventory = inventory,
@@ -266,669 +319,19 @@ public sealed class RepairManagedModuleCommand : AsyncPSCmdlet
             }
 
             WriteObject(workflow, enumerateCollection: false);
+            foreach (var failedExecution in applyResult.ExecutionResults.Where(static execution => !execution.Succeeded))
+            {
+                WriteError(new ErrorRecord(
+                    new InvalidOperationException(failedExecution.ErrorMessage ?? $"Module repair operation '{failedExecution.Operation}' failed."),
+                    "RepairManagedModuleExecutionFailed",
+                    ErrorCategory.InvalidOperation,
+                    failedExecution.TargetPath));
+            }
         }
         catch (Exception ex)
         {
             WriteError(new ErrorRecord(ex, "RepairManagedModuleFailed", ErrorCategory.NotSpecified, null));
             throw;
         }
-    }
-
-    private ModuleStateInventoryResult ResolveInventory()
-    {
-        var loadedModules = IncludeLoaded.IsPresent
-            ? ModuleStateInventoryCommandSupport.GetLoadedModules(this)
-            : null;
-
-        if (Inventory is not null)
-            return ModuleStateInventoryCommandSupport.IncludeLoadedModules(Inventory, loadedModules);
-        if (!string.IsNullOrWhiteSpace(InventoryPath))
-            return ModuleStateInventoryCommandSupport.CreateInventoryResultFromFile(
-                ResolveFilePath(InventoryPath!, nameof(InventoryPath)),
-                loadedModules);
-
-        return ModuleStateInventoryCommandSupport.CreateInventoryResultFromModulePaths(
-            ModulePath is { Length: > 0 }
-                ? ModulePath
-                : ModuleStateInventoryCommandSupport.ResolveEnvironmentModulePaths(),
-            loadedModules);
-    }
-
-    private object CreateDesiredState(
-        ModuleStateInstalledModuleResult[] selectedModules,
-        ManagedModuleRequiredResourceTarget[] requiredResourceTargets,
-        bool requiredResourceInputSupplied)
-    {
-        var desiredRepository = ResolveRepositoryName();
-        var desiredRepositorySource = ResolveRepositorySource();
-        var modules = new ArrayList();
-
-        if (requiredResourceInputSupplied)
-        {
-            foreach (var target in FilterRequiredResourceTargets(requiredResourceTargets))
-            {
-                var module = new Hashtable(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["Name"] = target.Name,
-                    ["VersionPolicy"] = ResolveVersionPolicy(target)
-                };
-                var targetRepository = string.IsNullOrWhiteSpace(target.Repository)
-                    ? desiredRepository
-                    : ResolveRepositoryName(target.Repository);
-                var targetRepositorySource = string.IsNullOrWhiteSpace(target.Repository)
-                    ? desiredRepositorySource
-                    : ResolveRepositorySource(target.Repository);
-                if (!string.IsNullOrWhiteSpace(targetRepository))
-                    module["Repository"] = targetRepository!;
-                if (!string.IsNullOrWhiteSpace(targetRepositorySource))
-                    module["RepositorySource"] = targetRepositorySource!;
-                if (target.ScopeSpecified || !string.IsNullOrWhiteSpace(Scope))
-                    module["Scope"] = target.Scope.ToString();
-                if (target.IncludePrerelease)
-                    module["Prerelease"] = true;
-                if (target.Reinstall)
-                    module["Reinstall"] = true;
-                if (target.AllowClobber)
-                    module["AllowClobber"] = true;
-                if (target.AcceptLicense)
-                    module["AcceptLicense"] = true;
-                if (target.SkipDependencyCheck)
-                    module["SkipDependencyCheck"] = true;
-
-                modules.Add(module);
-            }
-
-            return new Hashtable(StringComparer.OrdinalIgnoreCase)
-            {
-                ["Modules"] = modules
-            };
-        }
-
-        foreach (var selected in selectedModules)
-        {
-            var module = new Hashtable(StringComparer.OrdinalIgnoreCase)
-            {
-                ["Name"] = selected.Name,
-                ["VersionPolicy"] = ResolveVersionPolicy(selected)
-            };
-            if (!string.IsNullOrWhiteSpace(desiredRepository))
-                module["Repository"] = desiredRepository!;
-            if (!string.IsNullOrWhiteSpace(desiredRepositorySource))
-                module["RepositorySource"] = desiredRepositorySource!;
-            if (!string.IsNullOrWhiteSpace(Scope))
-                module["Scope"] = Scope!;
-            else if (!string.IsNullOrWhiteSpace(selected.Scope))
-                module["Scope"] = selected.Scope!;
-
-            modules.Add(module);
-        }
-
-        foreach (var missingName in ResolveMissingRequestedNames(selectedModules))
-        {
-            var module = new Hashtable(StringComparer.OrdinalIgnoreCase)
-            {
-                ["Name"] = missingName,
-                ["VersionPolicy"] = ResolveMissingVersionPolicy()
-            };
-            if (!string.IsNullOrWhiteSpace(desiredRepository))
-                module["Repository"] = desiredRepository!;
-            if (!string.IsNullOrWhiteSpace(desiredRepositorySource))
-                module["RepositorySource"] = desiredRepositorySource!;
-            if (!string.IsNullOrWhiteSpace(Scope))
-                module["Scope"] = Scope!;
-            if (Prerelease.IsPresent)
-                module["Prerelease"] = true;
-            if (Force.IsPresent)
-                module["Reinstall"] = true;
-            if (AllowClobber.IsPresent)
-                module["AllowClobber"] = true;
-            if (AcceptLicense.IsPresent)
-                module["AcceptLicense"] = true;
-            if (SkipDependencyCheck.IsPresent)
-                module["SkipDependencyCheck"] = true;
-
-            modules.Add(module);
-        }
-
-        return new Hashtable(StringComparer.OrdinalIgnoreCase)
-        {
-            ["Modules"] = modules
-        };
-    }
-
-    private IEnumerable<ManagedModuleRequiredResourceTarget> ResolveRequiredResourceTargets()
-    {
-        var resource = RequiredResource;
-        if (resource is null && !string.IsNullOrWhiteSpace(RequiredResourceFile))
-            resource = ManagedModuleRequiredResourceSupport.ImportRequiredResourceFile(this, RequiredResourceFile);
-        if (resource is null)
-            return Array.Empty<ManagedModuleRequiredResourceTarget>();
-
-        var defaults = new ManagedModuleRequiredResourceDefaults(
-            Prerelease.IsPresent,
-            ParseInstallScope(Scope),
-            Force.IsPresent,
-            AllowClobber.IsPresent,
-            AcceptLicense.IsPresent,
-            SkipDependencyCheck.IsPresent);
-        return ManagedModuleRequiredResourceSupport.Parse(resource, defaults);
-    }
-
-    private string[] ResolveMissingRequestedNames(IReadOnlyList<ModuleStateInstalledModuleResult> selectedModules)
-    {
-        if (!InstallMissing.IsPresent || Name.Length == 0)
-            return Array.Empty<string>();
-
-        var installed = selectedModules
-            .Select(static module => module.Name)
-            .Where(static name => !string.IsNullOrWhiteSpace(name))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        return Name
-            .Where(static name => !string.IsNullOrWhiteSpace(name))
-            .Select(static name => name.Trim())
-            .Where(static name => !ManagedModuleCommandSupport.HasWildcard(name))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Where(name => !installed.Contains(name))
-            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
-    private void ApplySelectedInventoryTargets(
-        ModuleStatePlanResult plan,
-        IReadOnlyList<ModuleStateInstalledModuleResult> selectedModules)
-    {
-        if (!string.IsNullOrWhiteSpace(ModuleRoot) || ModulePath is { Length: 1 } || plan.Actions is null)
-            return;
-
-        var selectedByActionKey = selectedModules
-            .GroupBy(static module => CreateSelectedActionKey(module.Name, module.Scope), StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
-        var selectedByName = selectedModules
-            .GroupBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
-            .Where(static group => group.Count() == 1)
-            .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
-        foreach (var action in plan.Actions)
-        {
-            if (!string.IsNullOrWhiteSpace(action.TargetPath))
-                continue;
-
-            var actionKey = CreateSelectedActionKey(action.ModuleName, action.TargetScope);
-            if (!selectedByActionKey.TryGetValue(actionKey, out var selected))
-            {
-                if (!string.IsNullOrWhiteSpace(action.TargetScope) ||
-                    !selectedByName.TryGetValue(action.ModuleName, out selected))
-                    continue;
-            }
-
-            var moduleRoot = ResolveSelectedModuleRoot(selected);
-            if (!string.IsNullOrWhiteSpace(moduleRoot))
-                action.TargetPath = moduleRoot;
-        }
-    }
-
-    private ManagedModuleRequiredResourceTarget[] FilterRequiredResourceTargets(
-        ManagedModuleRequiredResourceTarget[] requiredResourceTargets)
-    {
-        var filters = CreateNameFilters();
-        if (filters.Length == 0)
-            return requiredResourceTargets;
-
-        return requiredResourceTargets
-            .Where(target => filters.Any(filter => filter.IsMatch(target.Name)))
-            .ToArray();
-    }
-
-    private WildcardPattern[] CreateNameFilters()
-        => Name
-            .Where(static name => !string.IsNullOrWhiteSpace(name))
-            .Select(static name => new WildcardPattern(name.Trim(), WildcardOptions.IgnoreCase))
-            .ToArray();
-
-    private static string CreateSelectedActionKey(string moduleName, string? scope)
-        => string.Join("|", moduleName, scope ?? string.Empty);
-
-    private static string? ResolveSelectedModuleRoot(ModuleStateInstalledModuleResult selected)
-    {
-        if (string.IsNullOrWhiteSpace(selected.Path))
-            return null;
-
-        var selectedDirectory = new DirectoryInfo(selected.Path!);
-        if (string.Equals(selectedDirectory.Name, selected.Name, StringComparison.OrdinalIgnoreCase))
-            return selectedDirectory.Parent?.FullName;
-
-        var moduleDirectory = selectedDirectory.Parent;
-        if (moduleDirectory is null)
-            return null;
-
-        return string.Equals(moduleDirectory.Name, selected.Name, StringComparison.OrdinalIgnoreCase)
-            ? moduleDirectory.Parent?.FullName
-            : null;
-    }
-
-    private ModuleStateInstalledModuleResult[] SelectBaselineModules(ModuleStateInventoryResult inventory)
-    {
-        var modules = inventory.InstalledModules ?? Array.Empty<ModuleStateInstalledModuleResult>();
-        var filters = CreateNameFilters();
-
-        if (filters.Length > 0)
-            modules = modules.Where(module => filters.Any(filter => filter.IsMatch(module.Name))).ToArray();
-        if (!string.IsNullOrWhiteSpace(Scope))
-            modules = modules.Where(module => string.Equals(module.Scope, Scope, StringComparison.OrdinalIgnoreCase)).ToArray();
-
-        return modules
-            .GroupBy(module => string.Join("|", module.Name, string.IsNullOrWhiteSpace(Scope) ? module.Scope ?? string.Empty : Scope), StringComparer.OrdinalIgnoreCase)
-            .Select(group => SelectInventoryModule(group, Scope))
-            .Where(static module => module is not null)
-            .Cast<ModuleStateInstalledModuleResult>()
-            .OrderBy(static module => module.Name, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static module => module.Scope, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
-    private static ModuleStateInstalledModuleResult? SelectInventoryModule(
-        IEnumerable<ModuleStateInstalledModuleResult> modules,
-        string? scope)
-    {
-        var candidates = modules
-            .Where(module => string.IsNullOrWhiteSpace(scope) ||
-                             string.Equals(module.Scope, scope, StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-
-        return candidates
-            .Where(static module => module.IsEffectiveImportCandidate)
-            .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
-            .FirstOrDefault()
-            ?? candidates
-                .OrderByDescending(static module => ModuleStateVersion.TryParse(module.Version, out var version) ? version : default)
-                .FirstOrDefault();
-    }
-
-    private string ResolveVersionPolicy(ModuleStateInstalledModuleResult selected)
-    {
-        if (Latest.IsPresent)
-            return "*";
-        if (!string.IsNullOrWhiteSpace(Version))
-            return "=" + Version!.Trim();
-        if (!string.IsNullOrWhiteSpace(MinimumVersion))
-            return ">=" + MinimumVersion!.Trim();
-        if (!string.IsNullOrWhiteSpace(VersionPolicy))
-            return VersionPolicy!.Trim();
-
-        return string.IsNullOrWhiteSpace(selected.Version)
-            ? "*"
-            : "=" + selected.Version.Trim();
-    }
-
-    private string ResolveMissingVersionPolicy()
-    {
-        if (Latest.IsPresent)
-            return "*";
-        if (!string.IsNullOrWhiteSpace(Version))
-            return "=" + Version!.Trim();
-        if (!string.IsNullOrWhiteSpace(MinimumVersion))
-            return ">=" + MinimumVersion!.Trim();
-        if (!string.IsNullOrWhiteSpace(VersionPolicy))
-            return VersionPolicy!.Trim();
-
-        return "*";
-    }
-
-    private string ResolveVersionPolicy(ManagedModuleRequiredResourceTarget target)
-    {
-        if (!string.IsNullOrWhiteSpace(target.Version))
-            return "=" + target.Version!.Trim();
-        if (!string.IsNullOrWhiteSpace(target.VersionPolicy))
-            return target.VersionPolicy!.Trim();
-        if (!string.IsNullOrWhiteSpace(Version))
-            return "=" + Version!.Trim();
-        if (!string.IsNullOrWhiteSpace(MinimumVersion))
-            return ">=" + MinimumVersion!.Trim();
-        if (!string.IsNullOrWhiteSpace(VersionPolicy))
-            return VersionPolicy!.Trim();
-
-        return "*";
-    }
-
-    private async Task<ModuleStateApplyResult> PrepareApplyAsync(
-        ModuleStatePlanResult plan,
-        ModuleStateInventoryResult inventory,
-        string? deliveryModuleRoot,
-        string? credentialSecretFilePath,
-        ModuleStateManagedDeliveryOptions managedDeliveryOptions,
-        bool requiredResourceInputSupplied)
-    {
-        var deliveryOptions = new ModuleStateDeliveryOptions(
-            ProfileName,
-            Repository,
-            installPrerequisites: false,
-            prerelease: !requiredResourceInputSupplied && Prerelease.IsPresent,
-            force: !requiredResourceInputSupplied && Force.IsPresent,
-            acceptLicense: !requiredResourceInputSupplied && AcceptLicense.IsPresent,
-            allowErrorFindings: AllowConflict.IsPresent,
-            allowClobber: !requiredResourceInputSupplied && AllowClobber.IsPresent,
-            skipDependencyCheck: !requiredResourceInputSupplied && SkipDependencyCheck.IsPresent,
-            moduleRoot: deliveryModuleRoot,
-            transport: Transport,
-            profileRepository: ResolveProfileRepositoryName());
-        var service = new ModuleStateApplyService();
-        var corePlan = ModuleStatePlanResultMapper.ToCorePlan(plan);
-        var result = service.Prepare(corePlan, deliveryOptions);
-        var executionResults = Array.Empty<ModuleStateDeliveryExecutionResult>();
-
-        if (!Plan.IsPresent && result.Receipt.CanApply && ShouldProcess("managed module estate", "Repair managed modules"))
-            executionResults = await ExecuteDeliveryAsync(
-                result,
-                inventory,
-                deliveryModuleRoot,
-                credentialSecretFilePath,
-                managedDeliveryOptions,
-                requiredResourceInputSupplied).ConfigureAwait(false);
-
-        return ModuleStateApplyResultMapper.ToCmdletResult(
-            result,
-            receiptPath: null,
-            maintenanceReceiptOutputPath: null,
-            executionRequested: executionResults.Length > 0,
-            executionResults,
-            postApplyInventory: null);
-    }
-
-    private async Task<ModuleStateDeliveryExecutionResult[]> ExecuteDeliveryAsync(
-        PowerForge.ModuleStateApplyResult result,
-        ModuleStateInventoryResult inventory,
-        string? deliveryModuleRoot,
-        string? credentialSecretFilePath,
-        ModuleStateManagedDeliveryOptions managedDeliveryOptions,
-        bool requiredResourceInputSupplied)
-    {
-        if (Transport == ModuleStateDeliveryTransport.ManagedModule)
-        {
-            return await new ModuleStateManagedDeliveryService(this).ExecuteAsync(
-                result,
-                managedDeliveryOptions,
-                CancelToken).ConfigureAwait(false);
-        }
-
-        return new ModuleStatePrivateDeliveryService(this).Execute(
-            result,
-            new ModuleStatePrivateDeliveryOptions
-            {
-                ProfileName = ProfileName,
-                Repository = Repository,
-                InstallPrerequisites = false,
-                Prerelease = !requiredResourceInputSupplied && Prerelease.IsPresent,
-                Force = !requiredResourceInputSupplied && Force.IsPresent,
-                DeliveryTransport = Transport,
-                CredentialUserName = Credential?.UserName ?? CredentialUserName,
-                CredentialSecret = Credential?.GetNetworkCredential().Password ?? CredentialSecret,
-                CredentialSecretFilePath = credentialSecretFilePath,
-                PromptForCredential = false,
-                ManagedModuleRoot = deliveryModuleRoot,
-                ManagedAllowClobber = !requiredResourceInputSupplied && AllowClobber.IsPresent,
-                ManagedAcceptLicense = !requiredResourceInputSupplied && AcceptLicense.IsPresent,
-                ManagedSkipDependencyCheck = !requiredResourceInputSupplied && SkipDependencyCheck.IsPresent,
-                LoadedModules = ResolveLoadedModules(inventory)
-            });
-    }
-
-    private async Task EnrichManagedLicenseMetadataAsync(
-        ModuleStatePlanResult plan,
-        ModuleStateManagedDeliveryOptions managedDeliveryOptions)
-    {
-        if (Transport != ModuleStateDeliveryTransport.ManagedModule)
-            return;
-
-        try
-        {
-            await new ModuleStateManagedPlanLicenseEnricher(this)
-                .EnrichAsync(plan, managedDeliveryOptions, CancelToken)
-                .ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or NotSupportedException or UriFormatException)
-        {
-            WriteVerbose("Managed module license preflight skipped: " + ex.Message);
-        }
-    }
-
-    private bool PreResolveManagedDeliveryRepositories(
-        ModuleStatePlanResult plan,
-        ModuleStateManagedDeliveryOptions options,
-        bool required)
-    {
-        if (Transport != ModuleStateDeliveryTransport.ManagedModule)
-            return true;
-
-        var actions = (plan.Actions ?? Array.Empty<ModuleStatePlanActionResult>())
-            .Where(static action => action.Kind is "Install" or "Update" or "Save")
-            .ToArray();
-        if (actions.Length == 0)
-            return true;
-
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        try
-        {
-            foreach (var action in actions)
-            {
-                var actionRepository = ResolveActionDeliveryRepository(action);
-                var key = ModuleStateManagedRepositoryResolver.CreateRepositoryKey(actionRepository);
-                if (!seen.Add(key))
-                    continue;
-                if (key.Length == 0 &&
-                    string.IsNullOrWhiteSpace(options.Repository) &&
-                    string.IsNullOrWhiteSpace(options.ProfileName))
-                {
-                    continue;
-                }
-
-                options.ResolvedRepositories[key] = ModuleStateManagedRepositoryResolver.ResolveRepositoryForAction(
-                    this,
-                    actionRepository,
-                    options,
-                    "Managed module delivery requires Repository, ProfileName, or action target repository.");
-            }
-
-            return true;
-        }
-        catch (Exception ex) when (!required &&
-                                   (ex is InvalidOperationException or ArgumentException or NotSupportedException or UriFormatException))
-        {
-            WriteVerbose("Managed module license preflight skipped: " + ex.Message);
-            return false;
-        }
-    }
-
-    private ModuleStateManagedDeliveryOptions CreateManagedDeliveryOptions(
-        ModuleStateInventoryResult? inventory = null,
-        string? moduleRoot = null,
-        RepositoryCredential? credential = null,
-        bool inheritResourceDefaults = true)
-        => new()
-        {
-            ProfileName = ProfileName,
-            Repository = Repository,
-            Prerelease = inheritResourceDefaults && Prerelease.IsPresent,
-            Force = inheritResourceDefaults && Force.IsPresent,
-            AllowClobber = inheritResourceDefaults && AllowClobber.IsPresent,
-            AcceptLicense = inheritResourceDefaults && AcceptLicense.IsPresent,
-            SkipDependencyCheck = inheritResourceDefaults && SkipDependencyCheck.IsPresent,
-            ModuleRoot = moduleRoot,
-            Credential = credential,
-            LoadedModules = ResolveLoadedModules(inventory)
-        };
-
-    private RepositoryCredential? ResolveRepositoryCredential(string? credentialSecretFilePath)
-        => ManagedModuleCommandSupport.ResolveCredential(
-            this,
-            Credential,
-            CredentialUserName,
-            CredentialSecret,
-            credentialSecretFilePath);
-
-    private bool ShouldResolveManagedCredential(ModuleStatePlanResult plan)
-        => Transport == ModuleStateDeliveryTransport.ManagedModule &&
-           HasDeliveryActions(plan);
-
-    private static bool HasDeliveryActions(ModuleStatePlanResult plan)
-        => (plan.Actions ?? Array.Empty<ModuleStatePlanActionResult>())
-            .Any(static action => action.Kind is "Install" or "Update" or "Save");
-
-    private string? ResolveCredentialSecretFilePath()
-        => ManagedModuleCommandSupport.ResolveProviderPath(this, CredentialSecretFilePath);
-
-    private string? ResolveManagedDeliveryModuleRoot()
-    {
-        if (!string.IsNullOrWhiteSpace(ModuleRoot))
-            return ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot);
-
-        return ModulePath is { Length: 1 }
-            ? ManagedModuleCommandSupport.ResolveProviderPath(this, ModulePath[0])
-            : null;
-    }
-
-    private static ManagedModuleLoadedModule[] ResolveLoadedModules(ModuleStateInventoryResult? inventory)
-        => (inventory?.InstalledModules ?? Array.Empty<ModuleStateInstalledModuleResult>())
-            .Where(static module => module.IsLoaded)
-            .Select(static module => new ManagedModuleLoadedModule
-            {
-                Name = module.Name,
-                Version = module.Version,
-                ModuleBase = module.Path
-            })
-            .ToArray();
-
-    private void ValidateVersionPolicy()
-    {
-        if (Latest.IsPresent &&
-            (!string.IsNullOrWhiteSpace(Version) ||
-             !string.IsNullOrWhiteSpace(MinimumVersion) ||
-             !string.IsNullOrWhiteSpace(VersionPolicy)))
-        {
-            throw new InvalidOperationException("Latest cannot be combined with Version, MinimumVersion, or VersionPolicy.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(Version) &&
-            (!string.IsNullOrWhiteSpace(MinimumVersion) || !string.IsNullOrWhiteSpace(VersionPolicy)))
-        {
-            throw new InvalidOperationException("Version cannot be combined with MinimumVersion or VersionPolicy.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(MinimumVersion) && !string.IsNullOrWhiteSpace(VersionPolicy))
-            throw new InvalidOperationException("MinimumVersion cannot be combined with VersionPolicy.");
-    }
-
-    private void ApplyLatestUpdateIntent(ModuleStatePlanResult plan)
-    {
-        if (!Latest.IsPresent || plan.Actions is null)
-            return;
-
-        foreach (var action in plan.Actions)
-        {
-            if (!string.Equals(action.Kind, ModuleStatePlanActionKind.NoAction.ToString(), StringComparison.OrdinalIgnoreCase))
-                continue;
-            if (IsExactVersionPolicy(action.VersionPolicy))
-                continue;
-
-            action.Kind = ModuleStatePlanActionKind.Update.ToString();
-            action.Reason = "Latest requested; update delivery will keep the module unchanged when the repository has no newer version.";
-        }
-    }
-
-    private static bool IsExactVersionPolicy(string? versionPolicy)
-        => !string.IsNullOrWhiteSpace(versionPolicy) &&
-           versionPolicy!.Trim().StartsWith("=", StringComparison.Ordinal);
-
-    private static string? ResolveActionDeliveryRepository(ModuleStatePlanActionResult action)
-        => string.IsNullOrWhiteSpace(action.TargetRepositorySource)
-            ? action.TargetRepository
-            : action.TargetRepositorySource;
-
-    private void ApplyForceRepairIntent(ModuleStatePlanResult plan, bool inheritGlobalForce = true)
-    {
-        if (!inheritGlobalForce || !Force.IsPresent || Latest.IsPresent || plan.Actions is null)
-            return;
-        if (plan.Actions.Any(static action => string.Equals(action.Kind, ModuleStatePlanActionKind.Remove.ToString(), StringComparison.OrdinalIgnoreCase)))
-            return;
-
-        foreach (var action in plan.Actions)
-        {
-            if (!string.Equals(action.Kind, ModuleStatePlanActionKind.NoAction.ToString(), StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            action.Kind = ModuleStatePlanActionKind.Update.ToString();
-            action.IsRepair = true;
-            action.Force = true;
-            action.Reason = "Force requested; repair delivery will reinstall the selected module version.";
-        }
-    }
-
-    private string ResolveFilePath(string path, string parameterName)
-    {
-        var resolved = SessionState.Path.GetUnresolvedProviderPathFromPSPath(path);
-        if (!File.Exists(resolved))
-            throw new FileNotFoundException($"The {parameterName} file was not found.", resolved);
-
-        return resolved;
-    }
-
-    private string[] ResolveOptionalFilePaths(string[]? paths, string parameterName)
-        => (paths ?? Array.Empty<string>())
-            .Select(path => ResolveFilePath(path, parameterName))
-            .ToArray();
-
-    private string? ResolveRepositoryName()
-    {
-        if (!string.IsNullOrWhiteSpace(Repository))
-            return ResolveRepositoryName(Repository);
-        if (!string.IsNullOrWhiteSpace(ProfileName))
-            return ModuleRepositoryProfileCommandSupport.TryResolve(ProfileName)?.RepositoryName;
-        return null;
-    }
-
-    private string? ResolveRepositorySource()
-        => ResolveRepositorySource(Repository);
-
-    private string? ResolveRepositorySource(string? repository)
-    {
-        if (string.IsNullOrWhiteSpace(repository))
-            return null;
-
-        var trimmed = repository!.Trim();
-        if (ModuleStateManagedRepositoryResolver.IsRepositorySource(trimmed))
-            return trimmed;
-
-        var providerPath = ManagedModuleCommandSupport.ResolveProviderPath(this, trimmed);
-        return !string.IsNullOrWhiteSpace(providerPath) && Directory.Exists(providerPath)
-            ? providerPath
-            : null;
-    }
-
-    private string? ResolveRepositoryName(string? repository)
-    {
-        if (string.IsNullOrWhiteSpace(repository))
-            return null;
-
-        var source = ResolveRepositorySource(repository);
-        return ModuleStateManagedRepositoryResolver.ResolveRepositoryIdentity(this, source ?? repository!);
-    }
-
-    private string? ResolveProfileRepositoryName()
-        => string.IsNullOrWhiteSpace(ProfileName)
-            ? null
-            : ModuleRepositoryProfileCommandSupport.TryResolve(ProfileName)?.RepositoryName;
-
-    private static ModuleStateCleanupMode ParseCleanupMode(string? cleanup)
-        => string.Equals(cleanup, "OldVersions", StringComparison.OrdinalIgnoreCase)
-            ? ModuleStateCleanupMode.OldVersions
-            : ModuleStateCleanupMode.None;
-
-    private static ManagedModuleInstallScope ParseInstallScope(string? scope)
-    {
-        if (string.IsNullOrWhiteSpace(scope))
-            return ManagedModuleInstallScope.CurrentUser;
-        if (Enum.TryParse<ManagedModuleInstallScope>(scope, ignoreCase: true, out var parsed))
-            return parsed;
-
-        throw new InvalidOperationException($"Unsupported scope '{scope}'.");
     }
 }

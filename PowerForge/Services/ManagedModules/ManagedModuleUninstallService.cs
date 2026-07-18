@@ -7,7 +7,7 @@ namespace PowerForge;
 /// <summary>
 /// Removes installed module versions from managed module roots.
 /// </summary>
-public sealed class ManagedModuleUninstallService
+public sealed partial class ManagedModuleUninstallService
 {
     /// <summary>
     /// Builds an uninstall plan without removing files.
@@ -20,12 +20,28 @@ public sealed class ManagedModuleUninstallService
         var moduleRoot = ManagedModuleInstallRootResolver.Resolve(request.Scope, request.ShellEdition, request.ModuleRoot);
         var names = NormalizeNames(request.Name);
         var candidates = EnumerateInstalledModules(moduleRoot);
+        var dependencyModuleRootGroups = NormalizeDependencyModuleRootGroups(moduleRoot, request.DependencyModuleRootGroups);
+        var rootsRequiredByInventory = (request.DependencyModuleRootsRequiringAvailability ?? Array.Empty<string>())
+            .Where(static root => !string.IsNullOrWhiteSpace(root))
+            .Select(static root => ModuleStatePathIdentity.Normalize(root))
+            .Distinct(ModuleStatePathIdentity.Comparer)
+            .ToArray();
+        var dependencyModuleRoots = NormalizeDependencyModuleRoots(
+            moduleRoot,
+            request.DependencyModuleRoots
+                .Concat(dependencyModuleRootGroups.SelectMany(static group => group))
+                .Concat(rootsRequiredByInventory));
         var matchingCandidates = candidates
             .Where(module => names.Any(pattern => pattern.IsMatch(module.Name)))
+            .Where(module => string.IsNullOrWhiteSpace(request.InstalledLocation) ||
+                             PathsEqual(module.ModulePath, request.InstalledLocation!))
             .ToArray();
         var targets = SelectTargets(matchingCandidates, request)
             .Select(candidate => ToTarget(candidate, moduleRoot, request))
             .ToArray();
+        var dependencyModuleRootsRequiringAvailability = request.SkipDependencyCheck || targets.Length == 0
+            ? Array.Empty<string>()
+            : SnapshotAvailableDependencyModuleRoots(dependencyModuleRoots, rootsRequiredByInventory);
         var missingNames = names
             .Where(static pattern => !pattern.IsWildcard)
             .Where(pattern => !targets.Any(target => pattern.IsMatch(target.Name)))
@@ -36,13 +52,21 @@ public sealed class ManagedModuleUninstallService
             ThrowIfLoaded(targets);
 
         if (!request.SkipDependencyCheck && !request.DeferDependencyCheck)
-            ThrowIfDependencyBlocked(candidates, targets);
+            ThrowIfDependencyBlockedAcrossRootGroups(
+                dependencyModuleRoots,
+                dependencyModuleRootGroups,
+                dependencyModuleRootsRequiringAvailability,
+                targets,
+                targets);
 
         return new ManagedModuleUninstallPlan
         {
             Name = names.Select(static pattern => pattern.Original).ToArray(),
             Version = request.Version,
             ModuleRoot = moduleRoot,
+            DependencyModuleRoots = dependencyModuleRoots,
+            DependencyModuleRootGroups = dependencyModuleRootGroups,
+            DependencyModuleRootsRequiringAvailability = dependencyModuleRootsRequiringAvailability,
             SkipDependencyCheck = request.SkipDependencyCheck,
             AllowLoadedModuleUninstall = request.AllowLoadedModuleUninstall,
             Targets = targets,
@@ -100,7 +124,31 @@ public sealed class ManagedModuleUninstallService
             ThrowIfLoaded(plan.Targets);
 
         if (!plan.SkipDependencyCheck)
-            ThrowIfDependencyBlocked(EnumerateInstalledModules(plan.ModuleRoot), plan.Targets);
+            ThrowIfDependencyBlockedAcrossRootGroups(
+                NormalizeDependencyModuleRoots(plan.ModuleRoot, plan.DependencyModuleRoots),
+                NormalizeDependencyModuleRootGroups(plan.ModuleRoot, plan.DependencyModuleRootGroups),
+                plan.DependencyModuleRootsRequiringAvailability,
+                plan.Targets,
+                plan.DependencyRemovalTargets.Count > 0 ? plan.DependencyRemovalTargets : plan.Targets);
+    }
+
+    private static void ThrowIfDependencyBlockedAcrossRootGroups(
+        IReadOnlyList<string> dependencyModuleRoots,
+        IReadOnlyList<IReadOnlyList<string>> dependencyModuleRootGroups,
+        IReadOnlyList<string> rootsRequiringAvailability,
+        IReadOnlyList<ManagedModuleUninstallTarget> targets,
+        IReadOnlyList<ManagedModuleUninstallTarget> removalTargets)
+    {
+        var groups = dependencyModuleRootGroups.Count == 0
+            ? new[] { dependencyModuleRoots }
+            : dependencyModuleRootGroups;
+        foreach (var group in groups)
+        {
+            ThrowIfDependencyBlocked(
+                EnumerateInstalledModulesForDependencyValidation(group, rootsRequiringAvailability),
+                targets,
+                removalTargets);
+        }
     }
 
     private static ManagedModuleUninstallResult UninstallTarget(
@@ -134,7 +182,7 @@ public sealed class ManagedModuleUninstallService
         };
     }
 
-    private static IReadOnlyList<ManagedModuleUninstallTarget> OrderTargetsForRemoval(
+    internal static IReadOnlyList<ManagedModuleUninstallTarget> OrderTargetsForRemoval(
         IReadOnlyList<ManagedModuleUninstallTarget> targets)
     {
         if (targets.Count < 2)
@@ -230,6 +278,26 @@ public sealed class ManagedModuleUninstallService
             IsLoaded = IsLoaded(candidate, request.LoadedModules)
         };
 
+    /// <summary>
+    /// Recomputes target loaded-state flags from the host's latest module evidence.
+    /// </summary>
+    internal static void RefreshLoadedState(
+        IEnumerable<ManagedModuleUninstallTarget> targets,
+        IReadOnlyList<ManagedModuleLoadedModule>? loadedModules)
+    {
+        if (targets is null)
+            throw new ArgumentNullException(nameof(targets));
+
+        foreach (var target in targets)
+        {
+            target.IsLoaded = IsLoaded(
+                target.Name,
+                target.Version,
+                target.ModulePath,
+                loadedModules);
+        }
+    }
+
     private static void ThrowIfLoaded(IReadOnlyList<ManagedModuleUninstallTarget> targets)
     {
         var loaded = targets.Where(static target => target.IsLoaded).ToArray();
@@ -244,12 +312,13 @@ public sealed class ManagedModuleUninstallService
 
     private static void ThrowIfDependencyBlocked(
         IReadOnlyList<InstalledModuleCandidate> candidates,
-        IReadOnlyList<ManagedModuleUninstallTarget> targets)
+        IReadOnlyList<ManagedModuleUninstallTarget> targets,
+        IReadOnlyList<ManagedModuleUninstallTarget> removalTargets)
     {
         if (targets.Count == 0)
             return;
 
-        var targetKeys = targets
+        var targetKeys = removalTargets
             .Select(static target => ModuleKey.Create(target.Name, target.Version, target.ModulePath))
             .ToHashSet();
         var blockers = new List<(ManagedModuleUninstallTarget Target, ManagedModuleUninstallDependency Blocker)>();
@@ -318,101 +387,6 @@ public sealed class ManagedModuleUninstallService
         => string.IsNullOrWhiteSpace(requiredGuid) ||
            string.Equals(requiredGuid!.Trim(), installedGuid?.Trim(), StringComparison.OrdinalIgnoreCase);
 
-    private static RequiredModuleReference[] ReadRequiredModules(InstalledModuleCandidate candidate)
-        => string.IsNullOrWhiteSpace(candidate.ManifestPath)
-            ? Array.Empty<RequiredModuleReference>()
-            : ModuleManifestValueReader.ReadRequiredModules(candidate.ManifestPath!);
-
-    private static RequiredModuleReference[] ReadRequiredModules(ManagedModuleUninstallTarget target)
-    {
-        var manifestPath = FindModuleManifest(target.ModulePath, target.Name);
-        return string.IsNullOrWhiteSpace(manifestPath)
-            ? Array.Empty<RequiredModuleReference>()
-            : ModuleManifestValueReader.ReadRequiredModules(manifestPath!);
-    }
-
-    private static IReadOnlyList<InstalledModuleCandidate> EnumerateInstalledModules(string moduleRoot)
-    {
-        if (string.IsNullOrWhiteSpace(moduleRoot) || !Directory.Exists(moduleRoot))
-            return Array.Empty<InstalledModuleCandidate>();
-
-        var modules = new List<InstalledModuleCandidate>();
-        foreach (var moduleDirectory in EnumerateDirectories(moduleRoot))
-        {
-            var moduleName = Path.GetFileName(moduleDirectory);
-            if (ManagedModuleInstallContext.IsManagedStageDirectory(moduleName))
-                continue;
-
-            var flatManifest = FindModuleManifest(moduleDirectory, moduleName);
-            if (flatManifest is not null && TryReadManifestVersion(flatManifest, out var flatVersion))
-                modules.Add(new InstalledModuleCandidate(moduleName, flatVersion, moduleDirectory, flatManifest, ReadManifestGuid(flatManifest), isFlatLayout: true));
-
-            foreach (var versionDirectory in EnumerateDirectories(moduleDirectory))
-            {
-                var versionName = Path.GetFileName(versionDirectory);
-                if (ManagedModuleInstallContext.IsManagedStageDirectory(versionName))
-                    continue;
-
-                var manifest = FindModuleManifest(versionDirectory, moduleName);
-                if (manifest is not null && TryReadManifestVersion(manifest, out var manifestVersion))
-                    modules.Add(new InstalledModuleCandidate(moduleName, manifestVersion, versionDirectory, manifest, ReadManifestGuid(manifest), isFlatLayout: false));
-                else if (ModuleStateVersion.TryParse(versionName, out _) &&
-                         HasModulePayload(versionDirectory, moduleName))
-                {
-                    modules.Add(new InstalledModuleCandidate(moduleName, versionName, versionDirectory, manifest, guid: null, isFlatLayout: false));
-                }
-            }
-        }
-
-        return modules;
-    }
-
-    private static bool HasModulePayload(string modulePath, string moduleName)
-        => File.Exists(Path.Combine(modulePath, moduleName + ".psm1")) ||
-           File.Exists(Path.Combine(modulePath, moduleName + ".dll"));
-
-    private static bool TryReadManifestVersion(string manifestPath, out string version)
-    {
-        version = string.Empty;
-        if (!ModuleManifestValueReader.TryGetTopLevelString(manifestPath, "ModuleVersion", out var manifestVersion) ||
-            string.IsNullOrWhiteSpace(manifestVersion))
-        {
-            return false;
-        }
-
-        var prerelease = ModuleManifestValueReader.ReadPsDataStringOrArray(manifestPath, "Prerelease")
-            .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
-        version = string.IsNullOrWhiteSpace(prerelease)
-            ? manifestVersion!.Trim()
-            : manifestVersion!.Trim() + "-" + prerelease!.Trim().TrimStart('-');
-        return true;
-    }
-
-    private static string? ReadManifestGuid(string manifestPath)
-        => ModuleManifestValueReader.ReadTopLevelString(manifestPath, "GUID");
-
-    private static string? FindModuleManifest(string modulePath, string moduleName)
-    {
-        var expected = Path.Combine(modulePath, moduleName + ".psd1");
-        if (File.Exists(expected))
-            return expected;
-
-        try
-        {
-            return Directory.GetFiles(modulePath, "*.psd1", SearchOption.TopDirectoryOnly)
-                .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
-        }
-        catch (IOException)
-        {
-            return null;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return null;
-        }
-    }
-
     private static IReadOnlyList<NamePattern> NormalizeNames(IEnumerable<string>? names)
     {
         var values = (names ?? Array.Empty<string>())
@@ -427,12 +401,19 @@ public sealed class ManagedModuleUninstallService
     }
 
     private static bool IsLoaded(InstalledModuleCandidate candidate, IReadOnlyList<ManagedModuleLoadedModule>? loadedModules)
+        => IsLoaded(candidate.Name, candidate.Version, candidate.ModulePath, loadedModules);
+
+    private static bool IsLoaded(
+        string name,
+        string version,
+        string modulePath,
+        IReadOnlyList<ManagedModuleLoadedModule>? loadedModules)
         => (loadedModules ?? Array.Empty<ManagedModuleLoadedModule>()).Any(loaded =>
-            string.Equals(loaded.Name, candidate.Name, StringComparison.OrdinalIgnoreCase) &&
-            (string.IsNullOrWhiteSpace(loaded.Version) || VersionsEqual(candidate.Version, loaded.Version!)) &&
+            string.Equals(loaded.Name, name, StringComparison.OrdinalIgnoreCase) &&
+            (string.IsNullOrWhiteSpace(loaded.Version) || VersionsEqual(version, loaded.Version!)) &&
             (string.IsNullOrWhiteSpace(loaded.ModuleBase) && string.IsNullOrWhiteSpace(loaded.Path) ||
-             PathMatches(candidate.ModulePath, loaded.ModuleBase) ||
-             PathMatches(candidate.ModulePath, loaded.Path)));
+             PathMatches(modulePath, loaded.ModuleBase) ||
+             PathMatches(modulePath, loaded.Path)));
 
     private static bool VersionsEqual(string left, string right)
     {
@@ -558,6 +539,9 @@ public sealed class ManagedModuleUninstallService
                normalizedLoadedPath.StartsWith(normalizedModulePath + Path.AltDirectorySeparatorChar, PathStringComparison);
     }
 
+    private static bool PathsEqual(string left, string right)
+        => string.Equals(NormalizePath(left), NormalizePath(right), PathStringComparison);
+
     private static void EnsureTargetUnderRoot(string moduleRoot, string modulePath)
     {
         EnsureModuleRootSpecified(moduleRoot);
@@ -618,20 +602,35 @@ public sealed class ManagedModuleUninstallService
         }
     }
 
-    private static IReadOnlyList<string> EnumerateDirectories(string path)
+    private static IReadOnlyList<string> EnumerateDirectories(string path, bool failIfUnavailable = false)
     {
         try
         {
-            return Directory.Exists(path)
-                ? Directory.GetDirectories(path)
-                : Array.Empty<string>();
+            if (!Directory.Exists(path))
+            {
+                if (failIfUnavailable)
+                    throw new InvalidOperationException($"Dependency module path '{path}' is no longer available; uninstall was blocked before mutation.");
+                return Array.Empty<string>();
+            }
+
+            return Directory.GetDirectories(path);
         }
         catch (IOException)
         {
+            if (failIfUnavailable)
+                throw new InvalidOperationException($"Dependency module path '{path}' could not be enumerated; uninstall was blocked before mutation.");
             return Array.Empty<string>();
         }
         catch (UnauthorizedAccessException)
         {
+            if (failIfUnavailable)
+                throw new InvalidOperationException($"Dependency module path '{path}' could not be enumerated; uninstall was blocked before mutation.");
+            return Array.Empty<string>();
+        }
+        catch (System.Security.SecurityException)
+        {
+            if (failIfUnavailable)
+                throw new InvalidOperationException($"Dependency module path '{path}' could not be enumerated; uninstall was blocked before mutation.");
             return Array.Empty<string>();
         }
     }

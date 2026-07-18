@@ -33,7 +33,7 @@ internal sealed class ModuleStatePrivateDeliveryService
                 ResolveManagedSkipDependencyCheck(action, options),
                 action.ModuleName,
                 action.TargetScope,
-                action.TargetPath),
+                ModuleStateActionPlacement.ResolveDeliveryRoot(action)),
                 DeliveryGroupKeyComparer.Instance)
             .OrderBy(static group => group.Key.Kind == ModuleStatePlanActionKind.Update ? 0 : 1)
             .ToArray();
@@ -58,29 +58,37 @@ internal sealed class ModuleStatePrivateDeliveryService
                 groupActions,
                 options);
             var workflowResult = service.Execute(request, ShouldProcess);
-            results.Add(new ModuleStateDeliveryExecutionResult
-            {
-                Operation = group.Key.Kind.ToString(),
-                OperationPerformed = workflowResult.OperationPerformed,
-                RepositoryName = workflowResult.RepositoryName,
-                RequestedTransport = workflowResult.RequestedTransport,
-                EffectiveTransport = workflowResult.EffectiveTransport,
-                DeliveryTransportReason = workflowResult.DeliveryTransportReason,
-                DependencyResults = workflowResult.DependencyResults.Select(static dependency => new ModuleStateDependencyResult
-                {
-                    Name = dependency.Name,
-                    InstalledVersion = dependency.InstalledVersion,
-                    ResolvedVersion = dependency.ResolvedVersion,
-                    RequestedVersion = dependency.RequestedVersion,
-                    Status = dependency.Status.ToString(),
-                    Installer = dependency.Installer,
-                    Message = dependency.Message
-                }).ToArray()
-            });
+            results.Add(MapExecutionResult(group.Key.Kind, workflowResult, request.ManagedModuleRoot));
         }
 
         return results.ToArray();
     }
+
+    internal static ModuleStateDeliveryExecutionResult MapExecutionResult(
+        ModuleStatePlanActionKind actionKind,
+        PrivateModuleWorkflowResult workflowResult,
+        string? targetPath = null)
+        => new()
+        {
+            Skipped = workflowResult.OperationSkipped,
+            Operation = actionKind.ToString(),
+            OperationPerformed = workflowResult.OperationPerformed,
+            TargetPath = targetPath,
+            RepositoryName = workflowResult.RepositoryName,
+            RequestedTransport = workflowResult.RequestedTransport,
+            EffectiveTransport = workflowResult.EffectiveTransport,
+            DeliveryTransportReason = workflowResult.DeliveryTransportReason,
+            DependencyResults = workflowResult.DependencyResults.Select(static dependency => new ModuleStateDependencyResult
+            {
+                Name = dependency.Name,
+                InstalledVersion = dependency.InstalledVersion,
+                ResolvedVersion = dependency.ResolvedVersion,
+                RequestedVersion = dependency.RequestedVersion,
+                Status = dependency.Status.ToString(),
+                Installer = dependency.Installer,
+                Message = dependency.Message
+            }).ToArray()
+        };
 
     private bool ShouldProcess(string target, string action)
         => _cmdlet is AsyncPSCmdlet asyncCmdlet
@@ -173,8 +181,9 @@ internal sealed class ModuleStatePrivateDeliveryService
         request.ManagedAllowClobber = managedAllowClobber;
         request.ManagedAcceptLicense = managedAcceptLicense;
         request.ManagedSkipDependencyCheck = managedSkipDependencyCheck;
-        request.ManagedModuleRoot = ResolveManagedModuleRoot(actions, options);
-        request.ManagedScope = ResolveManagedScope(actions);
+        var moduleRoot = ResolveManagedModuleRoot(actions, options);
+        request.ManagedModuleRoot = moduleRoot;
+        request.ManagedScope = ResolveManagedScope(actions, moduleRoot);
         request.ManagedLoadedModules = options.LoadedModules;
     }
 
@@ -182,12 +191,17 @@ internal sealed class ModuleStatePrivateDeliveryService
         IReadOnlyList<ModuleStatePlanAction> actions,
         ModuleStatePrivateDeliveryOptions options)
         => actions
-            .Select(static action => action.TargetPath)
+            .Select(static action => ModuleStateActionPlacement.ResolveDeliveryRoot(action))
             .FirstOrDefault(static path => !string.IsNullOrWhiteSpace(path))
            ?? options.ManagedModuleRoot;
 
-    private static ManagedModuleInstallScope ResolveManagedScope(IReadOnlyList<ModuleStatePlanAction> actions)
+    private static ManagedModuleInstallScope ResolveManagedScope(
+        IReadOnlyList<ModuleStatePlanAction> actions,
+        string? moduleRoot)
     {
+        if (!string.IsNullOrWhiteSpace(moduleRoot))
+            return ManagedModuleInstallScope.Custom;
+
         var scope = actions
             .Select(static action => action.TargetScope)
             .FirstOrDefault(static scope => !string.IsNullOrWhiteSpace(scope));
@@ -305,16 +319,9 @@ internal sealed class ModuleStatePrivateDeliveryService
 
     private static ModuleStateVersionConstraint ParseVersionConstraint(string moduleName, string? versionPolicy)
     {
-        if (string.IsNullOrWhiteSpace(versionPolicy))
-            return ModuleStateVersionConstraint.Empty;
-
-        var trimmed = versionPolicy!.Trim();
-        if (trimmed.Length == 0 || string.Equals(trimmed, "*", StringComparison.Ordinal))
-            return ModuleStateVersionConstraint.Empty;
-
-        if (HasNuGetRangeDelimiters(trimmed))
+        try
         {
-            var range = ManagedModuleVersionRange.Parse(trimmed);
+            var range = ManagedModuleVersionSelector.ParseExpression(versionPolicy);
             return range.IsUnbounded
                 ? ModuleStateVersionConstraint.Empty
                 : new ModuleStateVersionConstraint(
@@ -324,58 +331,13 @@ internal sealed class ModuleStatePrivateDeliveryService
                     range.MaximumVersion,
                     range.IncludeMaximum);
         }
-
-        string? requiredVersion = null;
-        string? minimumVersion = null;
-        var minimumVersionInclusive = true;
-        string? maximumVersion = null;
-        var maximumVersionInclusive = true;
-        foreach (var token in trimmed.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries))
+        catch (ArgumentException exception)
         {
-            if (token.StartsWith(">=", StringComparison.Ordinal))
-            {
-                minimumVersion = token.Substring(2).Trim();
-                minimumVersionInclusive = true;
-            }
-            else if (token.StartsWith(">", StringComparison.Ordinal))
-            {
-                minimumVersion = token.Substring(1).Trim();
-                minimumVersionInclusive = false;
-            }
-            else if (token.StartsWith("<=", StringComparison.Ordinal))
-            {
-                maximumVersion = token.Substring(2).Trim();
-                maximumVersionInclusive = true;
-            }
-            else if (token.StartsWith("<", StringComparison.Ordinal))
-            {
-                maximumVersion = token.Substring(1).Trim();
-                maximumVersionInclusive = false;
-            }
-            else if (token.StartsWith("=", StringComparison.Ordinal))
-            {
-                requiredVersion = token.Substring(1).Trim();
-            }
-            else
-            {
-                requiredVersion = token.Trim();
-            }
+            throw new InvalidOperationException(
+                $"Module '{moduleName}' has invalid version policy '{versionPolicy}'.",
+                exception);
         }
-
-        if (!string.IsNullOrWhiteSpace(requiredVersion) &&
-            (!string.IsNullOrWhiteSpace(minimumVersion) || !string.IsNullOrWhiteSpace(maximumVersion)))
-        {
-            throw new InvalidOperationException($"Module '{moduleName}' combines exact and range version policies. Private module delivery requires one version policy shape per module.");
-        }
-
-        return new ModuleStateVersionConstraint(requiredVersion, minimumVersion, minimumVersionInclusive, maximumVersion, maximumVersionInclusive);
     }
-
-    private static bool HasNuGetRangeDelimiters(string value)
-        => value.StartsWith("[", StringComparison.Ordinal) ||
-           value.StartsWith("(", StringComparison.Ordinal) ||
-           value.EndsWith("]", StringComparison.Ordinal) ||
-           value.EndsWith(")", StringComparison.Ordinal);
 }
 
 internal readonly struct ModuleStateVersionConstraint
@@ -463,7 +425,7 @@ internal sealed class DeliveryGroupKeyComparer : IEqualityComparer<DeliveryGroup
             string.Equals(x.Repository, y.Repository, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(x.ModuleName, y.ModuleName, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(x.TargetScope, y.TargetScope, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(x.TargetPath, y.TargetPath, StringComparison.OrdinalIgnoreCase);
+            ModuleStatePathIdentity.Equals(x.TargetPath, y.TargetPath);
 
     public int GetHashCode(DeliveryGroupKey obj)
     {
@@ -476,8 +438,16 @@ internal sealed class DeliveryGroupKeyComparer : IEqualityComparer<DeliveryGroup
             hash = (hash * 397) ^ obj.ManagedSkipDependencyCheck.GetHashCode();
             hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.ModuleName ?? string.Empty);
             hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.TargetScope ?? string.Empty);
-            return (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.TargetPath ?? string.Empty);
+            return (hash * 397) ^ GetPathHashCode(obj.TargetPath);
         }
+    }
+
+    private static int GetPathHashCode(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return 0;
+
+        return ModuleStatePathIdentity.Comparer.GetHashCode(ModuleStatePathIdentity.Normalize(path!));
     }
 }
 

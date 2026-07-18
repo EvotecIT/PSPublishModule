@@ -15,34 +15,63 @@ internal static class ModuleStateConsoleRenderer
         var summary = SummaryTable();
         summary.AddRow("Source", Esc(inventory.Source));
         summary.AddRow("Module paths", inventory.ModulePaths.Length.ToString());
+        summary.AddRow("Inventory diagnostics", inventory.Diagnostics.Length.ToString());
+        summary.AddRow("Inventory errors", inventory.Diagnostics.Count(static diagnostic => string.Equals(diagnostic.Severity, "Error", StringComparison.OrdinalIgnoreCase)).ToString());
         summary.AddRow("Installed modules", inventory.InstalledModules.Length.ToString());
         summary.AddRow("Loaded modules", inventory.InstalledModules.Count(static module => module.IsLoaded).ToString());
         summary.AddRow("Effective import candidates", inventory.InstalledModules.Count(static module => module.IsEffectiveImportCandidate).ToString());
         AnsiConsole.Write(summary);
 
-        if (inventory.InstalledModules.Length == 0)
-            return;
-
-        var modules = new Table().Border(Border());
-        modules.AddColumn(new TableColumn("Module").NoWrap());
-        modules.AddColumn(new TableColumn("Version").NoWrap());
-        modules.AddColumn(new TableColumn("Scope").NoWrap());
-        modules.AddColumn(new TableColumn("Source").NoWrap());
-        modules.AddColumn(new TableColumn("Import").NoWrap());
-        modules.AddColumn(new TableColumn("Loaded").NoWrap());
-        foreach (var module in inventory.InstalledModules.Take(20))
+        if (inventory.Diagnostics.Length > 0)
         {
-            modules.AddRow(
-                Esc(module.Name),
-                Esc(module.Version),
-                Esc(module.Scope),
-                Esc(module.SourceRepository),
-                module.IsEffectiveImportCandidate ? "[green]yes[/]" : "[dim]no[/]",
-                module.IsLoaded ? "[yellow]yes[/]" : "[dim]no[/]");
+            var diagnostics = new Table().Border(Border());
+            diagnostics.AddColumn(new TableColumn("Severity").NoWrap());
+            diagnostics.AddColumn(new TableColumn("Code").NoWrap());
+            diagnostics.AddColumn(new TableColumn("Profile").NoWrap());
+            diagnostics.AddColumn(new TableColumn("Path"));
+            diagnostics.AddColumn(new TableColumn("Message"));
+            foreach (var diagnostic in inventory.Diagnostics.Take(20))
+            {
+                var color = string.Equals(diagnostic.Severity, "Error", StringComparison.OrdinalIgnoreCase) ? "red" : "yellow";
+                diagnostics.AddRow(
+                    $"[{color}]{Esc(diagnostic.Severity)}[/]",
+                    Esc(diagnostic.Code),
+                    Esc(diagnostic.ProfileName),
+                    Esc(diagnostic.Path),
+                    Esc(diagnostic.Message));
+            }
+
+            AnsiConsole.Write(diagnostics);
+            WriteOverflow(inventory.Diagnostics.Length, 20, "inventory diagnostics");
         }
 
-        AnsiConsole.Write(modules);
-        WriteOverflow(inventory.InstalledModules.Length, 20, "modules");
+        if (inventory.InstalledModules.Length > 0)
+        {
+            var modules = new Table().Border(Border());
+            modules.AddColumn(new TableColumn("Module").NoWrap());
+            modules.AddColumn(new TableColumn("Version").NoWrap());
+            modules.AddColumn(new TableColumn("Edition").NoWrap());
+            modules.AddColumn(new TableColumn("Scope").NoWrap());
+            modules.AddColumn(new TableColumn("Profile").NoWrap());
+            modules.AddColumn(new TableColumn("Module root"));
+            modules.AddColumn(new TableColumn("Import").NoWrap());
+            modules.AddColumn(new TableColumn("Loaded").NoWrap());
+            foreach (var module in inventory.InstalledModules.Take(20))
+            {
+                modules.AddRow(
+                    Esc(module.Name),
+                    Esc(module.Version),
+                    Esc(module.PowerShellEdition),
+                    Esc(module.Scope),
+                    Esc(module.ProfileName),
+                    Esc(module.ModuleRoot),
+                    module.IsEffectiveImportCandidate ? "[green]yes[/]" : "[dim]no[/]",
+                    module.IsLoaded ? "[yellow]yes[/]" : "[dim]no[/]");
+            }
+
+            AnsiConsole.Write(modules);
+            WriteOverflow(inventory.InstalledModules.Length, 20, "modules");
+        }
     }
 
     internal static void WritePlan(ModuleStatePlanResult plan)
@@ -89,6 +118,13 @@ internal static class ModuleStateConsoleRenderer
         summary.AddRow("Actions", result.ActionCount.ToString());
         summary.AddRow("Findings", result.FindingCount.ToString());
         summary.AddRow("Execution requested", result.ExecutionRequested ? "yes" : "no");
+        if (result.ExecutionRequested)
+        {
+            summary.AddRow("Execution succeeded", result.ExecutionSucceeded ? "[green]yes[/]" : "[red]no[/]");
+            summary.AddRow("Converged", result.Converged ? "[green]yes[/]" : "[red]no[/]");
+            if (result.PostApplyTest is not null)
+                summary.AddRow("Post-apply compliant", result.PostApplyTest.IsCompliant ? "[green]yes[/]" : "[red]no[/]");
+        }
         if (!string.IsNullOrWhiteSpace(result.BlockedReason))
             summary.AddRow("Blocked reason", Esc(result.BlockedReason));
         if (!string.IsNullOrWhiteSpace(result.ReceiptPath))
@@ -123,6 +159,7 @@ internal static class ModuleStateConsoleRenderer
         {
             var executions = new Table().Border(Border());
             executions.AddColumn(new TableColumn("Operation").NoWrap());
+            executions.AddColumn(new TableColumn("Target"));
             executions.AddColumn(new TableColumn("Repository").NoWrap());
             executions.AddColumn(new TableColumn("Transport").NoWrap());
             executions.AddColumn(new TableColumn("Performed").NoWrap());
@@ -133,6 +170,7 @@ internal static class ModuleStateConsoleRenderer
             {
                 executions.AddRow(
                     Esc(execution.Operation),
+                    Esc(execution.TargetPath),
                     Esc(execution.RepositoryName),
                     Esc(FormatExecutionTransport(execution)),
                     execution.OperationPerformed ? "[green]yes[/]" : "[dim]no[/]",
@@ -183,6 +221,7 @@ internal static class ModuleStateConsoleRenderer
         table.AddColumn(new TableColumn("Severity").NoWrap());
         table.AddColumn(new TableColumn("Code").NoWrap());
         table.AddColumn(new TableColumn("Modules").NoWrap());
+        table.AddColumn(new TableColumn("Placement"));
         table.AddColumn(new TableColumn("Message"));
         foreach (var finding in findings.Take(20))
         {
@@ -191,6 +230,7 @@ internal static class ModuleStateConsoleRenderer
                 $"[{severityColor}]{Esc(finding.Severity)}[/]",
                 Esc(finding.Code),
                 Esc(string.Join(", ", finding.ModuleNames ?? Array.Empty<string>())),
+                Esc(FormatFindingPlacement(finding)),
                 Esc(finding.Message));
         }
 
@@ -202,13 +242,22 @@ internal static class ModuleStateConsoleRenderer
     {
         var parts = new[]
         {
+            action.TargetPowerShellEdition,
             action.TargetScope,
+            action.TargetProfileName,
             action.TargetRepository,
+            action.TargetModuleRoot,
             action.TargetPath
         }.Where(static part => !string.IsNullOrWhiteSpace(part));
 
         return string.Join(" / ", parts);
     }
+
+    private static string FormatFindingPlacement(ModuleStateConflictFindingResult finding)
+        => string.Join(
+            " / ",
+            new[] { finding.PowerShellEdition, finding.Scope, finding.ProfileName, finding.Path }
+                .Where(static part => !string.IsNullOrWhiteSpace(part)));
 
     private static string FormatLicense(ModuleStatePlanActionResult action)
     {
@@ -235,6 +284,8 @@ internal static class ModuleStateConsoleRenderer
     {
         if (execution is null)
             return string.Empty;
+        if (!execution.Succeeded && !string.IsNullOrWhiteSpace(execution.ErrorMessage))
+            return execution.ErrorMessage!;
 
         var details = execution.DependencyResults
             .Select(static dependency => dependency.Message)

@@ -36,6 +36,9 @@ internal static class ModuleStatePlanResultMapper
                 SkipDependencyCheck = action.SkipDependencyCheck,
                 TargetScope = action.TargetScope,
                 TargetPath = action.TargetPath,
+                TargetModuleRoot = action.TargetModuleRoot,
+                TargetPowerShellEdition = action.TargetPowerShellEdition,
+                TargetProfileName = action.TargetProfileName,
                 TargetRepository = action.TargetRepository,
                 TargetRepositorySource = action.TargetRepositorySource,
                 ExpectedPackageSha256 = action.ExpectedPackageSha256,
@@ -50,7 +53,12 @@ internal static class ModuleStatePlanResultMapper
                 Message = finding.Message,
                 FamilyName = finding.FamilyName,
                 ModuleNames = finding.ModuleNames,
-                Versions = finding.Versions
+                Versions = finding.Versions,
+                Scope = finding.Scope,
+                SourceRepository = finding.SourceRepository,
+                Path = finding.Path,
+                PowerShellEdition = finding.PowerShellEdition,
+                ProfileName = finding.ProfileName
             }).ToArray()
         };
     }
@@ -80,14 +88,22 @@ internal static class ModuleStatePlanResultMapper
                 acceptLicense: action.AcceptLicense,
                 allowClobber: action.AllowClobber,
                 skipDependencyCheck: action.SkipDependencyCheck,
-                targetRepositorySource: action.TargetRepositorySource)).ToArray(),
+                targetRepositorySource: action.TargetRepositorySource,
+                targetModuleRoot: action.TargetModuleRoot,
+                targetPowerShellEdition: action.TargetPowerShellEdition,
+                targetProfileName: action.TargetProfileName)).ToArray(),
             (result.Findings ?? Array.Empty<ModuleStateConflictFindingResult>()).Select(static finding => new ModuleStateConflictFinding(
                 ParseEnum<ModuleStateConflictSeverity>(finding.Severity, nameof(finding.Severity)),
                 finding.Code,
                 finding.Message,
                 finding.FamilyName,
                 finding.ModuleNames ?? Array.Empty<string>(),
-                finding.Versions ?? Array.Empty<string>())).ToArray());
+                finding.Versions ?? Array.Empty<string>(),
+                finding.Scope,
+                finding.SourceRepository,
+                finding.Path,
+                finding.PowerShellEdition,
+                finding.ProfileName)).ToArray());
     }
 
     private static TEnum ParseEnum<TEnum>(string value, string propertyName)

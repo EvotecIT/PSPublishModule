@@ -253,9 +253,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
             cancellationToken);
 
     internal static bool IsSelectableDependencyVersion(ManagedModuleVersionInfo version, ManagedModuleVersionRange range)
-        => version is not null &&
-           range.IsSatisfiedBy(version.Version) &&
-           (range.ExactVersion is not null || version.Listed);
+        => ManagedModuleVersionSelector.IsSelectable(version, range);
 
     private static bool IsMissingLocalRepository(Exception exception)
         => exception is ManagedModuleRepositoryException

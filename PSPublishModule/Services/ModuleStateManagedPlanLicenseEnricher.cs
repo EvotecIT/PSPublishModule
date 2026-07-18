@@ -82,6 +82,7 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
         var effectiveAllowClobber = options.AllowClobber || action.AllowClobber;
         var effectiveAcceptLicense = options.AcceptLicense || action.AcceptLicense;
         var effectiveSkipDependencyCheck = options.SkipDependencyCheck || action.SkipDependencyCheck;
+        var moduleRoot = ResolveModuleRoot(action, options);
         return new ManagedModuleInstallRequest
         {
             Repository = repository,
@@ -89,8 +90,8 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
             Version = versionPolicy.ExactVersion,
             VersionPolicy = versionPolicy.RangePolicy,
             IncludePrerelease = effectivePrerelease,
-            Scope = ResolveScope(action.TargetScope, action.TargetPath, options.ModuleRoot),
-            ModuleRoot = ResolveModuleRoot(action, options),
+            Scope = ResolveScope(action.TargetScope, moduleRoot),
+            ModuleRoot = moduleRoot,
             ExpectedPackageSha256 = action.ExpectedPackageSha256,
             Credential = options.Credential,
             Force = effectiveForce,
@@ -111,6 +112,7 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
         var effectiveAllowClobber = options.AllowClobber || action.AllowClobber;
         var effectiveAcceptLicense = options.AcceptLicense || action.AcceptLicense;
         var effectiveSkipDependencyCheck = options.SkipDependencyCheck || action.SkipDependencyCheck;
+        var moduleRoot = ResolveModuleRoot(action, options);
         return new ManagedModuleUpdateRequest
         {
             Repository = repository,
@@ -118,8 +120,8 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
             Version = versionPolicy.ExactVersion,
             VersionPolicy = versionPolicy.RangePolicy,
             IncludePrerelease = effectivePrerelease,
-            Scope = ResolveScope(action.TargetScope, action.TargetPath, options.ModuleRoot),
-            ModuleRoot = ResolveModuleRoot(action, options),
+            Scope = ResolveScope(action.TargetScope, moduleRoot),
+            ModuleRoot = moduleRoot,
             ExpectedPackageSha256 = action.ExpectedPackageSha256,
             Credential = options.Credential,
             Force = effectiveForce,
@@ -145,10 +147,21 @@ internal sealed class ModuleStateManagedPlanLicenseEnricher
             : action.TargetRepositorySource;
 
     private static string? ResolveModuleRoot(ModuleStatePlanActionResult action, ModuleStateManagedDeliveryOptions options)
-        => string.IsNullOrWhiteSpace(action.TargetPath) ? options.ModuleRoot : action.TargetPath;
+    {
+        var actionKind = string.Equals(action.Kind, "Save", StringComparison.OrdinalIgnoreCase)
+            ? ModuleStatePlanActionKind.Save
+            : string.Equals(action.Kind, "Update", StringComparison.OrdinalIgnoreCase)
+                ? ModuleStatePlanActionKind.Update
+                : ModuleStatePlanActionKind.Install;
+        return ModuleStateActionPlacement.ResolveDeliveryRoot(
+            actionKind,
+            action.TargetPath,
+            action.TargetModuleRoot,
+            options.ModuleRoot);
+    }
 
-    private static ManagedModuleInstallScope ResolveScope(string? scope, string? targetPath, string? moduleRoot)
-        => !string.IsNullOrWhiteSpace(targetPath) || !string.IsNullOrWhiteSpace(moduleRoot)
+    private static ManagedModuleInstallScope ResolveScope(string? scope, string? moduleRoot)
+        => !string.IsNullOrWhiteSpace(moduleRoot)
             ? ManagedModuleInstallScope.Custom
             : string.Equals(scope, "AllUsers", StringComparison.OrdinalIgnoreCase)
                 ? ManagedModuleInstallScope.AllUsers

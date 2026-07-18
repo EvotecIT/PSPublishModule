@@ -14,7 +14,11 @@ namespace PSPublishModule;
 /// <para>
 /// This command removes modules from the selected managed module root without invoking PowerShellGet or
 /// PSResourceGet. It follows PSResourceGet-shaped uninstall selection semantics while adding managed
-/// dependency and loaded-module safety checks.
+/// dependency and loaded-module safety checks. InstalledLocation always selects the exact installed directory,
+/// whether it is bound directly or received from Get-ManagedModule pipeline output. Typed Get-ManagedModule rows
+/// retain structured scanned-root provenance, so dependency checks preserve edition/profile visibility and require
+/// roots that were available during inventory to remain available. Multiple piped rows are preflighted as one batch
+/// across physical roots and selected dependents are removed before their selected dependencies.
 /// </para>
 /// </remarks>
 /// <example>
@@ -25,42 +29,58 @@ namespace PSPublishModule;
 /// <summary>Preview every installed module version that matches a version range</summary>
 /// <code>Uninstall-ManagedModule -Name Company.Tools -Version '[1.0.0,2.0.0)' -Plan</code>
 /// </example>
-[Cmdlet(VerbsLifecycle.Uninstall, "ManagedModule", SupportsShouldProcess = true)]
+/// <example>
+/// <summary>Uninstall the exact installed module returned by Get-ManagedModule</summary>
+/// <code>Get-ManagedModule -Name Company.Tools -Version 1.2.0 | Uninstall-ManagedModule</code>
+/// </example>
+[Cmdlet(VerbsLifecycle.Uninstall, "ManagedModule", SupportsShouldProcess = true, DefaultParameterSetName = InputObjectParameterSet)]
 [OutputType(typeof(ManagedModuleUninstallResult), typeof(ManagedModuleUninstallPlan))]
 public sealed class UninstallManagedModuleCommand : PSCmdlet
 {
+    private const string NameParameterSet = "NameParameterSet";
+    private const string InputObjectParameterSet = "InputObjectParameterSet";
     private readonly List<ManagedModuleUninstallPlan> _plans = [];
 
     /// <summary>Module names or wildcard patterns to uninstall.</summary>
-    [Parameter(Mandatory = true, Position = 0, ValueFromPipelineByPropertyName = true)]
+    [Parameter(Mandatory = true, Position = 0, ValueFromPipeline = true, ValueFromPipelineByPropertyName = true, ParameterSetName = NameParameterSet)]
     [Alias("ModuleName")]
     [ValidateNotNullOrEmpty]
     public string[] Name { get; set; } = Array.Empty<string>();
 
+    /// <summary>Installed module rows returned by Get-ManagedModule to uninstall.</summary>
+    [Parameter(Mandatory = true, Position = 0, ValueFromPipeline = true, ParameterSetName = InputObjectParameterSet)]
+    [ValidateNotNullOrEmpty]
+    public ModuleStateInstalledModuleResult[] InputObject { get; set; } = Array.Empty<ModuleStateInstalledModuleResult>();
+
     /// <summary>Exact version or NuGet-style version range to uninstall. When omitted, the latest matching version is selected.</summary>
-    [Parameter(ValueFromPipelineByPropertyName = true)]
+    [Parameter(ValueFromPipelineByPropertyName = true, ParameterSetName = NameParameterSet)]
     [Alias("RequiredVersion")]
     [ValidateNotNullOrEmpty]
     public string? Version { get; set; }
 
     /// <summary>Restrict matching to prerelease module versions.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = NameParameterSet)]
     [Alias("AllowPrerelease")]
     public SwitchParameter Prerelease { get; set; }
 
     /// <summary>Install scope used when ModuleRoot is not supplied.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = NameParameterSet)]
     public ManagedModuleInstallScope Scope { get; set; } = ManagedModuleInstallScope.CurrentUser;
 
     /// <summary>PowerShell path family used when resolving default CurrentUser or AllUsers module roots.</summary>
-    [Parameter]
+    [Parameter(ParameterSetName = NameParameterSet)]
     public ManagedModuleShellEdition ShellEdition { get; set; } = ManagedModuleShellEdition.Auto;
 
     /// <summary>Explicit module root. Use with Scope Custom.</summary>
-    [Parameter(ValueFromPipelineByPropertyName = true)]
+    [Parameter(ValueFromPipelineByPropertyName = true, ParameterSetName = NameParameterSet)]
     [Alias("Path")]
     [ValidateNotNullOrEmpty]
     public string? ModuleRoot { get; set; }
+
+    /// <summary>Exact installed location supplied by Get-ManagedModule pipeline rows. It takes precedence over ModuleRoot.</summary>
+    [Parameter(ValueFromPipelineByPropertyName = true, ParameterSetName = NameParameterSet)]
+    [ValidateNotNullOrEmpty]
+    public string? InstalledLocation { get; set; }
 
     /// <summary>Skip checking whether removed modules are still required by other installed modules.</summary>
     [Parameter]
@@ -82,16 +102,89 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
     /// <summary>Uninstalls requested modules.</summary>
     protected override void ProcessRecord()
     {
-        var moduleRoot = ResolveModuleRoot();
+        if (ParameterSetName == InputObjectParameterSet)
+        {
+            foreach (var resource in InputObject)
+            {
+                if (resource is null ||
+                    string.IsNullOrWhiteSpace(resource.Name) ||
+                    string.IsNullOrWhiteSpace(resource.Version) ||
+                    string.IsNullOrWhiteSpace(resource.InstalledLocation))
+                {
+                    throw new InvalidOperationException(
+                        "Each InputObject entry must include Name, Version, and InstalledLocation from Get-ManagedModule.");
+                }
+
+                AddPlan(
+                    new[] { resource.Name },
+                    resource.Version,
+                    resource.InstalledLocation,
+                    ManagedModuleVersionComparer.IsPrerelease(resource.Version),
+                    resource.InstalledLocation,
+                    resource.InventoryModuleRoots,
+                    resource);
+            }
+
+            return;
+        }
+
+        var selectedInstalledLocation = MyInvocation.BoundParameters.ContainsKey(nameof(InstalledLocation))
+            ? InstalledLocation
+            : ResolvePipelineInstalledLocation(ModuleRoot, Name);
+        AddPlan(
+            Name,
+            Version,
+            ModuleRoot,
+            Prerelease.IsPresent,
+            selectedInstalledLocation,
+            dependencyModuleRoots: null);
+    }
+
+    private void AddPlan(
+        string[] names,
+        string? version,
+        string? modulePath,
+        bool prerelease,
+        string? installedLocation = null,
+        IEnumerable<string>? dependencyModuleRoots = null,
+        ModuleStateInstalledModuleResult? inventoryResource = null)
+    {
+        var selectedLocation = ResolveInstalledLocation(installedLocation);
+        var moduleRoot = ResolveModuleRoot(selectedLocation ?? modulePath, names);
+        var inventoryPaths = inventoryResource?.InventoryPaths ?? Array.Empty<ModuleStateInventoryPathResult>();
+        var dependencyModuleRootGroups = inventoryPaths.Length == 0 || string.IsNullOrWhiteSpace(moduleRoot)
+            ? Array.Empty<IReadOnlyList<string>>()
+            : ModuleStateDependencyRootGroupResolver.Resolve(
+                inventoryPaths,
+                inventoryResource!.PowerShellEdition,
+                inventoryResource.Scope,
+                inventoryResource.ProfileName,
+                moduleRoot!);
+        var resolvedDependencyModuleRoots = dependencyModuleRootGroups.Count == 0
+            ? ResolveDependencyModuleRoots(dependencyModuleRoots)
+            : dependencyModuleRootGroups
+                .SelectMany(static group => group)
+                .Distinct(PathStringComparer)
+                .ToArray();
+        var rootsRequiringAvailability = inventoryPaths
+            .Where(static path => path.WasAvailable)
+            .Select(static path => Path.GetFullPath(path.Path.Trim()))
+            .Where(path => resolvedDependencyModuleRoots.Contains(path, PathStringComparer))
+            .Distinct(PathStringComparer)
+            .ToArray();
         var service = new ManagedModuleUninstallService();
         var request = new ManagedModuleUninstallRequest
         {
-            Name = Name,
-            Version = Version,
-            Prerelease = Prerelease.IsPresent,
+            Name = names,
+            Version = version,
+            Prerelease = prerelease,
             Scope = string.IsNullOrWhiteSpace(moduleRoot) ? Scope : ManagedModuleInstallScope.Custom,
             ShellEdition = ShellEdition,
             ModuleRoot = moduleRoot,
+            InstalledLocation = selectedLocation,
+            DependencyModuleRoots = resolvedDependencyModuleRoots,
+            DependencyModuleRootGroups = dependencyModuleRootGroups,
+            DependencyModuleRootsRequiringAvailability = rootsRequiringAvailability,
             SkipDependencyCheck = SkipDependencyCheck.IsPresent,
             AllowLoadedModuleUninstall = AllowLoadedModuleUninstall.IsPresent,
             DeferLoadedModuleCheck = true,
@@ -103,22 +196,69 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
         _plans.Add(plan);
     }
 
+    private static string[] ResolveDependencyModuleRoots(IEnumerable<string>? inventoryModuleRoots)
+        => (inventoryModuleRoots ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(static path => Path.GetFullPath(path.Trim()))
+            .Distinct(PathStringComparer)
+            .ToArray();
+
+    private string? ResolveInstalledLocation(string? installedLocation)
+    {
+        var resolved = ManagedModuleCommandSupport.ResolveProviderPath(this, installedLocation);
+        return !string.IsNullOrWhiteSpace(resolved) && File.Exists(resolved)
+            ? Path.GetDirectoryName(resolved)
+            : resolved;
+    }
+
+    private string? ResolvePipelineInstalledLocation(string? modulePath, string[] names)
+    {
+        if (!MyInvocation.ExpectingInput ||
+            names.Length != 1 ||
+            string.IsNullOrWhiteSpace(names[0]))
+        {
+            return null;
+        }
+
+        var selectedLocation = ResolveInstalledLocation(modulePath);
+        return !string.IsNullOrWhiteSpace(selectedLocation) &&
+               Directory.Exists(selectedLocation) &&
+               HasInstalledModulePayload(selectedLocation!, names[0])
+            ? selectedLocation
+            : null;
+    }
+
     /// <summary>Runs planned uninstall operations after all pipeline input has been collected.</summary>
     protected override void EndProcessing()
     {
         var service = new ManagedModuleUninstallService();
-        foreach (var plan in MergePlans(_plans))
+        var plans = MergePlans(_plans);
+        if (Plan.IsPresent)
         {
-            if (Plan.IsPresent)
-            {
+            RefreshAndValidatePlansAsBatch(service, plans, ResolveLoadedModules());
+            foreach (var plan in plans)
                 WriteObject(plan, enumerateCollection: false);
-                continue;
-            }
+            return;
+        }
 
+        var selectedPlans = new List<ManagedModuleUninstallPlan>();
+        foreach (var plan in plans)
+        {
             if (plan.Targets.Count == 0)
             {
                 WriteObject(service.Uninstall(plan), enumerateCollection: true);
                 continue;
+            }
+            if (plan.MissingNames.Count > 0)
+            {
+                WriteObject(service.Uninstall(new ManagedModuleUninstallPlan
+                {
+                    Name = plan.MissingNames.ToArray(),
+                    Version = plan.Version,
+                    ModuleRoot = plan.ModuleRoot,
+                    SkipDependencyCheck = plan.SkipDependencyCheck,
+                    MissingNames = plan.MissingNames
+                }), enumerateCollection: true);
             }
 
             var targets = plan.Targets
@@ -129,47 +269,126 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             if (targets.Length == 0)
                 continue;
 
-            var selectedPlan = new ManagedModuleUninstallPlan
-            {
-                Name = plan.Name,
-                Version = plan.Version,
-                ModuleRoot = plan.ModuleRoot,
-                SkipDependencyCheck = plan.SkipDependencyCheck,
-                AllowLoadedModuleUninstall = plan.AllowLoadedModuleUninstall,
-                Targets = targets,
-                MissingNames = plan.MissingNames
-            };
-            WriteObject(service.Uninstall(selectedPlan), enumerateCollection: true);
+            selectedPlans.Add(CreateSelectedPlan(plan, targets));
+        }
+
+        if (selectedPlans.Count == 0)
+            return;
+
+        ExecuteSelectedPlans(
+            service,
+            selectedPlans,
+            ResolveLoadedModules,
+            results => WriteObject(results, enumerateCollection: true));
+    }
+
+    /// <summary>
+    /// Revalidates and executes selected plans with fresh loaded-module evidence before the batch and each mutation.
+    /// </summary>
+    internal static void ExecuteSelectedPlans(
+        ManagedModuleUninstallService service,
+        IReadOnlyList<ManagedModuleUninstallPlan> selectedPlans,
+        Func<IReadOnlyList<ManagedModuleLoadedModule>> resolveLoadedModules,
+        Action<IReadOnlyList<ManagedModuleUninstallResult>> writeResults)
+    {
+        if (service is null)
+            throw new ArgumentNullException(nameof(service));
+        if (selectedPlans is null)
+            throw new ArgumentNullException(nameof(selectedPlans));
+        if (resolveLoadedModules is null)
+            throw new ArgumentNullException(nameof(resolveLoadedModules));
+        if (writeResults is null)
+            throw new ArgumentNullException(nameof(writeResults));
+
+        var selectedTargets = RefreshAndValidatePlansAsBatch(
+            service,
+            selectedPlans,
+            resolveLoadedModules());
+        var orderedTargets = ManagedModuleUninstallService.OrderTargetsForRemoval(selectedTargets);
+        foreach (var target in orderedTargets)
+        {
+            var owner = selectedPlans.Single(plan => plan.Targets.Any(candidate => ReferenceEquals(candidate, target)));
+            var singleTargetPlan = CreateSelectedPlan(owner, new[] { target });
+            singleTargetPlan.DependencyRemovalTargets = selectedTargets;
+            ManagedModuleUninstallService.RefreshLoadedState(
+                singleTargetPlan.Targets,
+                resolveLoadedModules());
+            writeResults(service.Uninstall(singleTargetPlan));
         }
     }
 
-    private ManagedModuleLoadedModule[] ResolveLoadedModules()
+    /// <summary>
+    /// Refreshes loaded-state flags and validates the complete selected dependency-removal batch.
+    /// </summary>
+    internal static ManagedModuleUninstallTarget[] RefreshAndValidatePlansAsBatch(
+        ManagedModuleUninstallService service,
+        IReadOnlyList<ManagedModuleUninstallPlan> plans,
+        IReadOnlyList<ManagedModuleLoadedModule> loadedModules)
     {
-        var loaded = LoadedModule ?? Array.Empty<ManagedModuleLoadedModule>();
-        var sessionLoaded = ModuleStateInventoryCommandSupport.GetLoadedModules(this)
-            .Select(static module => new ManagedModuleLoadedModule
-            {
-                Name = module.Name ?? string.Empty,
-                Version = module.Version,
-                Path = module.Path
-            });
-        return loaded
-            .Concat(sessionLoaded)
-            .Where(static module => !string.IsNullOrWhiteSpace(module.Name))
-            .ToArray();
+        ManagedModuleUninstallService.RefreshLoadedState(
+            plans.SelectMany(static plan => plan.Targets),
+            loadedModules);
+        return ValidatePlansAsBatch(service, plans);
     }
 
-    private string? ResolveModuleRoot()
+    private static ManagedModuleUninstallTarget[] ValidatePlansAsBatch(
+        ManagedModuleUninstallService service,
+        IReadOnlyList<ManagedModuleUninstallPlan> plans)
     {
-        var resolved = ManagedModuleCommandSupport.ResolveProviderPath(this, ModuleRoot);
+        var targets = plans
+            .SelectMany(static plan => plan.Targets)
+            .ToArray();
+        foreach (var plan in plans)
+        {
+            if (plan.Targets.Count == 0)
+                continue;
+
+            var previousRemovalTargets = plan.DependencyRemovalTargets;
+            try
+            {
+                plan.DependencyRemovalTargets = targets;
+                service.ValidateUninstallPlan(plan);
+            }
+            finally
+            {
+                plan.DependencyRemovalTargets = previousRemovalTargets;
+            }
+        }
+
+        return targets;
+    }
+
+    private static ManagedModuleUninstallPlan CreateSelectedPlan(
+        ManagedModuleUninstallPlan plan,
+        IReadOnlyList<ManagedModuleUninstallTarget> targets)
+        => new()
+        {
+            Name = plan.Name,
+            Version = plan.Version,
+            ModuleRoot = plan.ModuleRoot,
+            DependencyModuleRoots = plan.DependencyModuleRoots,
+            DependencyModuleRootGroups = plan.DependencyModuleRootGroups,
+            DependencyModuleRootsRequiringAvailability = plan.DependencyModuleRootsRequiringAvailability,
+            SkipDependencyCheck = plan.SkipDependencyCheck,
+            AllowLoadedModuleUninstall = plan.AllowLoadedModuleUninstall,
+            Targets = targets,
+            MissingNames = Array.Empty<string>()
+        };
+
+    private ManagedModuleLoadedModule[] ResolveLoadedModules()
+        => ModuleStateInventoryCommandSupport.ResolveManagedLoadedModules(this, LoadedModule);
+
+    private string? ResolveModuleRoot(string? modulePath, string[] names)
+    {
+        var resolved = ManagedModuleCommandSupport.ResolveProviderPath(this, modulePath);
         if (string.IsNullOrWhiteSpace(resolved) ||
-            Name.Length != 1 ||
-            string.IsNullOrWhiteSpace(Name[0]))
+            names.Length != 1 ||
+            string.IsNullOrWhiteSpace(names[0]))
         {
             return resolved;
         }
 
-        return TryResolveModuleRootFromInstalledPath(resolved!, Name[0]) ?? resolved;
+        return TryResolveModuleRootFromInstalledPath(resolved!, names[0]) ?? resolved;
     }
 
     private static string? TryResolveModuleRootFromInstalledPath(string path, string moduleName)
@@ -243,6 +462,16 @@ public sealed class UninstallManagedModuleCommand : PSCmdlet
             Name = group.SelectMany(static plan => plan.Name).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
             Version = versions.Length == 1 ? versions[0] : null,
             ModuleRoot = group[0].ModuleRoot,
+            DependencyModuleRoots = group.SelectMany(static plan => plan.DependencyModuleRoots)
+                .Distinct(PathStringComparer)
+                .ToArray(),
+            DependencyModuleRootGroups = group
+                .SelectMany(static plan => plan.DependencyModuleRootGroups)
+                .ToArray(),
+            DependencyModuleRootsRequiringAvailability = group
+                .SelectMany(static plan => plan.DependencyModuleRootsRequiringAvailability)
+                .Distinct(PathStringComparer)
+                .ToArray(),
             SkipDependencyCheck = group[0].SkipDependencyCheck,
             AllowLoadedModuleUninstall = group[0].AllowLoadedModuleUninstall,
             Targets = group

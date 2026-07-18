@@ -29,7 +29,7 @@ internal static class ModuleStateInventoryFilter
         if (!string.IsNullOrWhiteSpace(request.Scope))
             modules = modules.Where(module => string.Equals(module.Scope, request.Scope, StringComparison.OrdinalIgnoreCase));
 
-        return new ModuleStateInventory(modules);
+        return new ModuleStateInventory(modules, inventory.ModulePaths, inventory.Diagnostics);
     }
 
     private static bool VersionMatches(string installedVersion, string requestedVersion)
