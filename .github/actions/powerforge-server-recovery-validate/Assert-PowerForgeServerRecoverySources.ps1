@@ -216,13 +216,13 @@ function Get-ExpectedCaptureSudoersCommand {
     foreach ($captureCommand in $captureCommands.Where({ $_.sensitive -ne $true })) {
         $command = ([string]$captureCommand.command).Trim()
         if ($command -cnotmatch '^sudo -n (?<command>.+)$') {
-            if ($command -match '(?<![A-Za-z0-9_.-])sudo(?:\s|$)') {
+            if ($command -match '(?<![A-Za-z0-9_.-])sudo(?![A-Za-z0-9_.-])') {
                 throw "Privileged recovery capture command must use the canonical case-sensitive sudo -n prefix: $command"
             }
             continue
         }
         $sudoersCommand = [string]$Matches['command']
-        if ($sudoersCommand -match '(?<![A-Za-z0-9_.-])sudo(?:\s|$)') {
+        if ($sudoersCommand -match '(?<![A-Za-z0-9_.-])sudo(?![A-Za-z0-9_.-])') {
             throw "Privileged recovery capture command must contain exactly one canonical sudo -n prefix: $command"
         }
         if ([string]::Equals($sudoersCommand, 'apachectl -S', [StringComparison]::Ordinal)) {
@@ -312,6 +312,109 @@ foreach ($sudoersSource in $sudoersSources) {
 }
 
 $expectedEncryptedCommand = Get-ExpectedEncryptedCaptureCommand -RecoveryManifest $Manifest
+$commandAliases = [Collections.Generic.Dictionary[string, string[]]]::new([StringComparer]::Ordinal)
+$grantedAliases = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+$captureGrantCount = 0
+foreach ($sudoersDocument in $sudoersDocuments) {
+    foreach ($line in $sudoersDocument.Lines) {
+        $trimmedLine = $line.Trim()
+        if ($trimmedLine -match '^(?:#|@)include(?:dir)?\b') {
+            throw 'Managed sudoers sources must not include additional policy files.'
+        }
+        $isNumericPrincipal = $trimmedLine -match '^#\d+(?:\s|,)'
+        if ([string]::IsNullOrWhiteSpace($trimmedLine) -or
+            ($trimmedLine.StartsWith('#', [StringComparison]::Ordinal) -and -not $isNumericPrincipal)) {
+            continue
+        }
+        $noPasswordTags = [regex]::Matches(
+            $trimmedLine,
+            '\b(?<tag>NOPASSWD)\s*:',
+            [Text.RegularExpressions.RegexOptions]::IgnoreCase -bor
+                [Text.RegularExpressions.RegexOptions]::CultureInvariant
+        )
+        foreach ($noPasswordTag in $noPasswordTags) {
+            if (-not [string]::Equals(
+                $noPasswordTag.Groups['tag'].Value,
+                'NOPASSWD',
+                [StringComparison]::Ordinal
+            )) {
+                throw 'Managed sudoers sources must use the canonical case-sensitive NOPASSWD: tag.'
+            }
+        }
+        if ($isNumericPrincipal -and $noPasswordTags.Count -gt 0) {
+            throw 'Managed sudoers sources must not use numeric user principals for NOPASSWD grants.'
+        }
+        if ($trimmedLine.EndsWith('\', [StringComparison]::Ordinal)) {
+            throw 'Managed sudoers sources must not use line continuations.'
+        }
+        if ($trimmedLine -match '^User_Alias\b') {
+            throw 'Managed sudoers sources must not use User_Alias entries.'
+        }
+        $isDefaultsLine = $trimmedLine -cmatch '^Defaults(?:\s|[:@>!])'
+        if ($isDefaultsLine -and
+            ($trimmedLine -cmatch '(?:^|[,\s])!authenticate(?:$|[,\s])' -or
+             $trimmedLine -cmatch '(?:^|[,\s])exempt_group\s*=')) {
+            throw 'Managed sudoers sources must not disable authentication with Defaults !authenticate or exempt_group.'
+        }
+        if ($line -cnotmatch '^\s*Cmnd_Alias\b') {
+            continue
+        }
+        if ($line -cnotmatch '^\s*Cmnd_Alias\s+(?<alias>\S+)\s*=\s*(?<commands>.+?)\s*$') {
+            throw 'Managed sudoers source contains a malformed command alias.'
+        }
+        $commandAlias = [string]$Matches['alias']
+        $commandText = [string]$Matches['commands']
+        if ($commandAlias -cnotmatch '^[A-Z][A-Z0-9_]*$') {
+            throw "Managed sudoers source contains an invalid command alias: $commandAlias"
+        }
+        if ($commandAliases.ContainsKey($commandAlias)) {
+            throw "Managed sudoers source contains a duplicate command alias: $commandAlias"
+        }
+        $commands = [string[]]@($commandText -split '\s*,\s*')
+        $commandAliases.Add($commandAlias, $commands)
+    }
+}
+
+foreach ($sudoersDocument in $sudoersDocuments) {
+    foreach ($line in $sudoersDocument.Lines) {
+        $trimmedLine = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmedLine) -or $trimmedLine.StartsWith('#', [StringComparison]::Ordinal) -or
+            $line -cnotmatch '\bNOPASSWD\s*:') {
+            continue
+        }
+        if ($line -notmatch '^\s*(?<principal>\S+)\s+') {
+            throw 'Managed sudoers source contains a malformed NOPASSWD grant.'
+        }
+        $principal = [string]$Matches['principal']
+        if (-not [string]::Equals($principal, $CaptureUser, [StringComparison]::Ordinal)) {
+            if ($principal -cnotmatch '^[a-z_][a-z0-9_-]{0,31}$') {
+                throw "Managed sudoers NOPASSWD grant uses an unsupported broad or aliased principal: $principal"
+            }
+            continue
+        }
+        if ([string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
+            throw 'Managed sudoers sources must not grant NOPASSWD to the recovery capture account when encrypted capture is not configured.'
+        }
+        if ($line -cnotmatch '^\s*\S+\s+ALL\s*=\s*\(\s*(?<runas>[^)]+?)\s*\)\s+NOPASSWD:\s*(?<commands>.+?)\s*$') {
+            throw 'The recovery capture account NOPASSWD grant must use the exact ALL=(root) form.'
+        }
+        $runAs = [string]$Matches['runas']
+        $grantText = [string]$Matches['commands']
+        if (-not [string]::Equals($runAs, 'root', [StringComparison]::Ordinal)) {
+            throw 'The recovery capture account must run its approved commands only as root.'
+        }
+        foreach ($commandAlias in @($grantText -split '\s*,\s*')) {
+            if ($commandAlias -cnotmatch '^[A-Z][A-Z0-9_]*$' -or -not $commandAliases.ContainsKey($commandAlias)) {
+                throw "The recovery capture account grant references an invalid or undefined command alias: $commandAlias"
+            }
+            if (-not $grantedAliases.Add($commandAlias)) {
+                throw "The recovery capture account grant repeats command alias: $commandAlias"
+            }
+        }
+        $captureGrantCount++
+    }
+}
+
 if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
     $engineRepositories = @(
         foreach ($repository in @($Manifest.repositories)) {
@@ -353,105 +456,6 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
     }
 
     $expectedSudoersCommands = @(Get-ExpectedCaptureSudoersCommand -RecoveryManifest $Manifest)
-    $commandAliases = [Collections.Generic.Dictionary[string, string[]]]::new([StringComparer]::Ordinal)
-    $grantedAliases = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    $captureGrantCount = 0
-    foreach ($sudoersDocument in $sudoersDocuments) {
-        foreach ($line in $sudoersDocument.Lines) {
-            $trimmedLine = $line.Trim()
-            if ($trimmedLine -match '^(?:#|@)include(?:dir)?\b') {
-                throw 'Managed sudoers sources must not include additional policy files.'
-            }
-            $isNumericPrincipal = $trimmedLine -match '^#\d+(?:\s|,)'
-            if ([string]::IsNullOrWhiteSpace($trimmedLine) -or
-                ($trimmedLine.StartsWith('#', [StringComparison]::Ordinal) -and -not $isNumericPrincipal)) {
-                continue
-            }
-            $noPasswordTags = [regex]::Matches(
-                $trimmedLine,
-                '\b(?<tag>NOPASSWD)\s*:',
-                [Text.RegularExpressions.RegexOptions]::IgnoreCase -bor
-                    [Text.RegularExpressions.RegexOptions]::CultureInvariant
-            )
-            foreach ($noPasswordTag in $noPasswordTags) {
-                if (-not [string]::Equals(
-                    $noPasswordTag.Groups['tag'].Value,
-                    'NOPASSWD',
-                    [StringComparison]::Ordinal
-                )) {
-                    throw 'Managed sudoers sources must use the canonical case-sensitive NOPASSWD: tag.'
-                }
-            }
-            if ($isNumericPrincipal -and $noPasswordTags.Count -gt 0) {
-                throw 'Managed sudoers sources must not use numeric user principals for NOPASSWD grants.'
-            }
-            if ($trimmedLine.EndsWith('\', [StringComparison]::Ordinal)) {
-                throw 'Managed sudoers sources must not use line continuations.'
-            }
-            if ($trimmedLine -match '^User_Alias\b') {
-                throw 'Managed sudoers sources must not use User_Alias entries.'
-            }
-            $isDefaultsLine = $trimmedLine -cmatch '^Defaults(?:\s|[:@>!])'
-            if ($isDefaultsLine -and
-                ($trimmedLine -cmatch '(?:^|[,\s])!authenticate(?:$|[,\s])' -or
-                 $trimmedLine -cmatch '(?:^|[,\s])exempt_group\s*=')) {
-                throw 'Managed sudoers sources must not disable authentication with Defaults !authenticate or exempt_group.'
-            }
-            if ($line -cnotmatch '^\s*Cmnd_Alias\b') {
-                continue
-            }
-            if ($line -cnotmatch '^\s*Cmnd_Alias\s+(?<alias>\S+)\s*=\s*(?<commands>.+?)\s*$') {
-                throw 'Managed sudoers source contains a malformed command alias.'
-            }
-            $commandAlias = [string]$Matches['alias']
-            $commandText = [string]$Matches['commands']
-            if ($commandAlias -cnotmatch '^[A-Z][A-Z0-9_]*$') {
-                throw "Managed sudoers source contains an invalid command alias: $commandAlias"
-            }
-            if ($commandAliases.ContainsKey($commandAlias)) {
-                throw "Managed sudoers source contains a duplicate command alias: $commandAlias"
-            }
-            $commands = [string[]]@($commandText -split '\s*,\s*')
-            $commandAliases.Add($commandAlias, $commands)
-        }
-    }
-
-    foreach ($sudoersDocument in $sudoersDocuments) {
-        foreach ($line in $sudoersDocument.Lines) {
-            $trimmedLine = $line.Trim()
-            if ([string]::IsNullOrWhiteSpace($trimmedLine) -or $trimmedLine.StartsWith('#', [StringComparison]::Ordinal) -or
-                $line -cnotmatch '\bNOPASSWD\s*:') {
-                continue
-            }
-            if ($line -notmatch '^\s*(?<principal>\S+)\s+') {
-                throw 'Managed sudoers source contains a malformed NOPASSWD grant.'
-            }
-            $principal = [string]$Matches['principal']
-            if (-not [string]::Equals($principal, $CaptureUser, [StringComparison]::Ordinal)) {
-                if ($principal -cnotmatch '^[a-z_][a-z0-9_-]{0,31}$') {
-                    throw "Managed sudoers NOPASSWD grant uses an unsupported broad or aliased principal: $principal"
-                }
-                continue
-            }
-            if ($line -cnotmatch '^\s*\S+\s+ALL\s*=\s*\(\s*(?<runas>[^)]+?)\s*\)\s+NOPASSWD:\s*(?<commands>.+?)\s*$') {
-                throw 'The recovery capture account NOPASSWD grant must use the exact ALL=(root) form.'
-            }
-            $runAs = [string]$Matches['runas']
-            $grantText = [string]$Matches['commands']
-            if (-not [string]::Equals($runAs, 'root', [StringComparison]::Ordinal)) {
-                throw 'The recovery capture account must run its approved commands only as root.'
-            }
-            foreach ($commandAlias in @($grantText -split '\s*,\s*')) {
-                if ($commandAlias -cnotmatch '^[A-Z][A-Z0-9_]*$' -or -not $commandAliases.ContainsKey($commandAlias)) {
-                    throw "The recovery capture account grant references an invalid or undefined command alias: $commandAlias"
-                }
-                if (-not $grantedAliases.Add($commandAlias)) {
-                    throw "The recovery capture account grant repeats command alias: $commandAlias"
-                }
-            }
-            $captureGrantCount++
-        }
-    }
 
     $grantedCommands = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($commandAlias in $grantedAliases) {

@@ -303,6 +303,28 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
     }
 
     [Fact]
+    public void Validator_ShouldRejectSudoersIncludesWithoutEncryptedCapture()
+    {
+        var result = RunValidator(
+            sudoers: "@includedir /etc/sudoers.d\n",
+            includeCapture: false);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("must not include additional policy files", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectCaptureGrantsWithoutEncryptedCapture()
+    {
+        var result = RunValidator(
+            sudoers: BuildExpectedSudoers(CaptureUser, "root"),
+            includeCapture: false);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("when encrypted capture is not configured", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Validator_ShouldRejectUserAliasesInManagedSudoers()
     {
         var extraSudoers = $"User_Alias PF_BACKUP = {CaptureUser}\n" +
@@ -399,6 +421,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
     [Theory]
     [InlineData("test -x /usr/sbin/apachectl && sudo -n /usr/sbin/apachectl -S")]
     [InlineData("/usr/bin/sudo -n /usr/sbin/apachectl -S")]
+    [InlineData("sudo</dev/null -n /usr/sbin/apachectl -S")]
     public void Validator_ShouldRejectEmbeddedSudoCaptureCommands(string command)
     {
         var result = RunValidator(captureCommand: command);
@@ -410,6 +433,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
     [Theory]
     [InlineData("sudo -n /usr/bin/sudo -n /usr/sbin/apachectl -S")]
     [InlineData("sudo -n /bin/sh -c sudo")]
+    [InlineData("sudo -n /bin/sh -c sudo</dev/null")]
     public void Validator_ShouldRejectNestedSudoCaptureCommands(string command)
     {
         var result = RunValidator(captureCommand: command);
@@ -557,7 +581,7 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
                 "#!/usr/bin/env bash\nset -euo pipefail\n");
             File.WriteAllText(
                 Path.Combine(workspace, "deploy", "linux", "backup.sudoers"),
-                sudoers ?? BuildExpectedSudoers(CaptureUser, "root"));
+                sudoers ?? (includeCapture ? BuildExpectedSudoers(CaptureUser, "root") : "# no privileged capture grants\n"));
             if (additionalSudoers is not null)
                 File.WriteAllText(Path.Combine(workspace, "deploy", "linux", "extra.sudoers"), additionalSudoers);
             if (alternateManagedSudoersTarget is not null)
