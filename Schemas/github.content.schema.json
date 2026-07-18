@@ -15,7 +15,7 @@
     "sponsors": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled", "sponsorableLogin", "outputs"],
+      "required": ["enabled", "outputs"],
       "properties": {
         "enabled": { "type": "boolean", "default": false },
         "sponsorableLogin": { "type": "string", "minLength": 1 },

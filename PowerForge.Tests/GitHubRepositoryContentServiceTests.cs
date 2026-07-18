@@ -117,6 +117,34 @@ public sealed class GitHubRepositoryContentServiceTests
     }
 
     [Fact]
+    public void Sync_RejectsMultipleBlocksForSameMissingDocumentBeforeWriting()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "SPONSORS.md");
+        using var httpClient = new HttpClient(new SponsorsHandler(_ => Response(Node("alice", "Alice", 5))));
+        var service = new GitHubRepositoryContentService(sponsorsClient: new GitHubSponsorsClient(httpClient));
+
+        var exception = Assert.Throws<InvalidOperationException>(() => service.Sync(new GitHubRepositoryContentSpec
+        {
+            Token = "token",
+            Sponsors = new GitHubSponsorsContentSpec
+            {
+                Enabled = true,
+                SponsorableLogin = "owner",
+                IncludeFormer = false,
+                Outputs = new[]
+                {
+                    new GitHubSponsorsOutputSpec { Path = "SPONSORS.md", BlockId = "full", CreateIfMissing = true },
+                    new GitHubSponsorsOutputSpec { Path = "SPONSORS.md", BlockId = "compact", CreateIfMissing = true }
+                }
+            }
+        }, root));
+
+        Assert.Contains("Multiple managed blocks target missing document", exception.Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(path));
+    }
+
+    [Fact]
     public void Sync_RefusesToCollapseTieredRosterWhenAllFundingTiersAreWithheld()
     {
         var root = CreateTempRoot();

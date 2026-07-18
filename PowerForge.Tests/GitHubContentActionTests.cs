@@ -29,6 +29,25 @@ public sealed class GitHubContentActionTests
     }
 
     [Fact]
+    public void Schema_AllowsEnvironmentBasedSponsorableLoginFallback()
+    {
+        var repoRoot = FindRepoRoot();
+        var schemaPath = Path.Combine(repoRoot, "Schemas", "github.content.schema.json");
+        using var schema = JsonDocument.Parse(File.ReadAllText(schemaPath));
+        var required = schema.RootElement
+            .GetProperty("definitions")
+            .GetProperty("sponsors")
+            .GetProperty("required")
+            .EnumerateArray()
+            .Select(value => value.GetString())
+            .ToArray();
+
+        Assert.DoesNotContain("sponsorableLogin", required);
+        Assert.Contains("enabled", required);
+        Assert.Contains("outputs", required);
+    }
+
+    [Fact]
     public void CompositeAction_ReportsOnlyChangedDocumentsInsideCallerWorkspace()
     {
         var repoRoot = FindRepoRoot();

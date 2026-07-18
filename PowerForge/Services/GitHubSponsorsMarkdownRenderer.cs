@@ -42,7 +42,12 @@ public sealed class GitHubSponsorsMarkdownRenderer
         var builder = new StringBuilder();
         AppendOptionalMarkdown(builder, output.Introduction);
 
-        if (recognition.TierRecognitionEnabled)
+        if (current.Length == 0)
+        {
+            builder.AppendLine("No public sponsors are currently listed.");
+            builder.AppendLine();
+        }
+        else if (recognition.TierRecognitionEnabled)
         {
             foreach (var tier in recognition.Tiers ?? Array.Empty<GitHubSponsorRecognitionTierSpec>())
             {
@@ -56,15 +61,10 @@ public sealed class GitHubSponsorsMarkdownRenderer
                 AppendSponsorRow(builder, members, tier.AvatarSize);
             }
         }
-        else if (current.Length > 0)
+        else
         {
             AppendSectionHeading(builder, "Current Sponsors");
             AppendSponsorRow(builder, current, output.AvatarSize);
-        }
-        else
-        {
-            builder.AppendLine("No public sponsors are currently listed.");
-            builder.AppendLine();
         }
 
         if (output.IncludeFormer && former.Length > 0)

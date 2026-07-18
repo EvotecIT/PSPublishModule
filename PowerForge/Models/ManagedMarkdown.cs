@@ -17,6 +17,9 @@ public enum ManagedMarkdownMissingBlockBehavior
 /// </summary>
 public sealed class ManagedMarkdownUpdateRequest
 {
+    /// <summary>Marker namespace used before the block identifier.</summary>
+    public string MarkerNamespace { get; set; } = "POWERFORGE";
+
     /// <summary>Markdown document path.</summary>
     public string Path { get; set; } = string.Empty;
 

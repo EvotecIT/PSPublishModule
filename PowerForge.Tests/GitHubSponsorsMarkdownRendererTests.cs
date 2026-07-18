@@ -73,6 +73,18 @@ public sealed class GitHubSponsorsMarkdownRendererTests
     }
 
     [Fact]
+    public void RenderFull_ShowsEmptyStateWhenTierRecognitionIsEnabled()
+    {
+        var markdown = new GitHubSponsorsMarkdownRenderer().Render(new GitHubSponsorRecognitionResult
+        {
+            TierRecognitionEnabled = true,
+            Tiers = new[] { new GitHubSponsorRecognitionTierSpec { Key = "Sponsors", Heading = "Sponsors" } }
+        }, new GitHubSponsorsOutputSpec());
+
+        Assert.Equal("No public sponsors are currently listed.", markdown);
+    }
+
+    [Fact]
     public void RenderFull_EncodesFormerSponsorNamesInsideSafeHtmlList()
     {
         var recognition = new GitHubSponsorRecognitionResult

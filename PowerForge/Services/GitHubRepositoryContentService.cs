@@ -85,6 +85,7 @@ public sealed class GitHubRepositoryContentService
 
         var basePath = ResolveBaseDirectory(baseDirectory);
         var planned = BuildPlans(outputs, recognition, basePath, restrictedOutputRoot);
+        ValidatePlanSet(planned);
         foreach (var plan in planned)
             _documentUpdater.ValidateUpdate(plan.Request);
 
@@ -148,6 +149,29 @@ public sealed class GitHubRepositoryContentService
             }));
         }
         return plans;
+    }
+
+    private static void ValidatePlanSet(List<OutputPlan> plans)
+    {
+        var byPath = new Dictionary<string, List<OutputPlan>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var plan in plans)
+        {
+            if (!byPath.TryGetValue(plan.Request.Path, out var matching))
+            {
+                matching = new List<OutputPlan>();
+                byPath.Add(plan.Request.Path, matching);
+            }
+            matching.Add(plan);
+        }
+
+        foreach (var pair in byPath)
+        {
+            if (pair.Value.Count > 1 && !File.Exists(pair.Key))
+            {
+                throw new InvalidOperationException(
+                    $"Multiple managed blocks target missing document '{pair.Key}'. Create the document with all markers first or configure one output per new file. No documents were modified.");
+            }
+        }
     }
 
     private static string ResolveSponsorableLogin(string? configured)

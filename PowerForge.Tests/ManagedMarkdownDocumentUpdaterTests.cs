@@ -3,6 +3,16 @@ namespace PowerForge.Tests;
 public sealed class ManagedMarkdownDocumentUpdaterTests
 {
     [Fact]
+    public void ValidateBlock_PreservesTwoArgumentPublicSignature()
+    {
+        var method = typeof(ManagedMarkdownDocumentUpdater).GetMethod(
+            nameof(ManagedMarkdownDocumentUpdater.ValidateBlock),
+            new[] { typeof(string), typeof(string) });
+
+        Assert.NotNull(method);
+    }
+
+    [Fact]
     public void Update_CreatesManagedDocumentWhenExplicitlyAllowed()
     {
         var root = CreateTempRoot();
@@ -60,6 +70,25 @@ public sealed class ManagedMarkdownDocumentUpdaterTests
         }));
 
         Assert.Contains("duplicate", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(original, File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void Update_DoesNotMatchDifferentMarkerNamespaceWithSameBlockId()
+    {
+        var root = CreateTempRoot();
+        var path = Path.Combine(root, "README.md");
+        const string original = "<!-- BENCHMARK:sponsors:START -->\nbenchmark data\n<!-- BENCHMARK:sponsors:END -->\n";
+        File.WriteAllText(path, original);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new ManagedMarkdownDocumentUpdater().Update(new ManagedMarkdownUpdateRequest
+        {
+            Path = path,
+            BlockId = "sponsors",
+            Markdown = "replacement"
+        }));
+
+        Assert.Contains("was not found", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(original, File.ReadAllText(path));
     }
 
