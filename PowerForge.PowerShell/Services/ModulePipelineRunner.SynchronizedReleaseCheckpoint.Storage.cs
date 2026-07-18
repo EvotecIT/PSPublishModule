@@ -45,6 +45,16 @@ public sealed partial class ModulePipelineRunner
         }
 
         var canonicalProjectRoot = Path.GetFullPath(projectRoot);
+        var filesystemRoot = Path.GetPathRoot(canonicalProjectRoot);
+        if (!string.Equals(
+                canonicalProjectRoot,
+                filesystemRoot,
+                FrameworkCompatibility.PathStringComparison()))
+        {
+            canonicalProjectRoot = canonicalProjectRoot.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar);
+        }
         if (Path.DirectorySeparatorChar == '\\')
             canonicalProjectRoot = canonicalProjectRoot.ToUpperInvariant();
 
@@ -141,7 +151,7 @@ public sealed partial class ModulePipelineRunner
 
     private sealed class SynchronizedReleaseCheckpoint
     {
-        public int SchemaVersion { get; set; } = 3;
+        public int SchemaVersion { get; set; } = 4;
         public string ModuleName { get; set; } = string.Empty;
         public ReleaseVersionSource ReleaseSource { get; set; }
         public string? PrimaryProject { get; set; }
@@ -150,6 +160,8 @@ public sealed partial class ModulePipelineRunner
         public string[] AttemptedOperations { get; set; } = Array.Empty<string>();
         public string[] CompletedOperations { get; set; } = Array.Empty<string>();
         public string[] OperationFingerprints { get; set; } = Array.Empty<string>();
+        public string SourceFingerprint { get; set; } = string.Empty;
+        public string[] SourceComponents { get; set; } = Array.Empty<string>();
         public string PayloadFingerprint { get; set; } = string.Empty;
         public string[] PayloadComponents { get; set; } = Array.Empty<string>();
         public string[] PlannedLanes { get; set; } = Array.Empty<string>();

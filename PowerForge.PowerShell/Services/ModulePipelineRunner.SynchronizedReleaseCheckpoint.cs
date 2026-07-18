@@ -47,7 +47,7 @@ public sealed partial class ModulePipelineRunner
                 ex);
         }
 
-        if (checkpoint is null || checkpoint.SchemaVersion != 3)
+        if (checkpoint is null || checkpoint.SchemaVersion != 4)
         {
             throw new InvalidOperationException(
                 $"Coordinated release checkpoint '{path}' has an unsupported schema. Delete it only if the incomplete release should be abandoned.");
@@ -431,6 +431,18 @@ public sealed partial class ModulePipelineRunner
 
         if (File.Exists(path))
             File.Delete(path);
+        var payloadCachePath = ResolveSynchronizedReleasePayloadCachePath(path!);
+        if (Directory.Exists(payloadCachePath))
+        {
+            try
+            {
+                DeleteDirectoryWithRetries(payloadCachePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn($"Failed to delete completed coordinated release payload cache '{payloadCachePath}': {ex.Message}");
+            }
+        }
         DeleteEmptySynchronizedReleaseCheckpointDirectories(path!);
         state.SynchronizedReleaseCheckpoint = null;
         _logger.Success($"Coordinated release {checkpoint.Version} completed; checkpoint removed.");
@@ -592,6 +604,8 @@ public sealed partial class ModulePipelineRunner
             checkpoint.CompletedOperations is null ||
             checkpoint.OperationFingerprints is null ||
             checkpoint.OperationFingerprints.Length == 0 ||
+            checkpoint.SourceFingerprint is null ||
+            checkpoint.SourceComponents is null ||
             checkpoint.PayloadFingerprint is null ||
             checkpoint.PayloadComponents is null ||
             checkpoint.PlannedLanes is null ||
@@ -627,6 +641,16 @@ public sealed partial class ModulePipelineRunner
             .OrderBy(static key => key, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var hasExactVersion = PackageVersionUtility.TryNormalizeExact(checkpoint.Version, out _);
+        var hasBoundPayload = IsValidSynchronizedReleaseFingerprintState(
+                                  checkpoint.SourceFingerprint,
+                                  checkpoint.SourceComponents) &&
+                              IsValidSynchronizedReleaseFingerprintState(
+                                  checkpoint.PayloadFingerprint,
+                                  checkpoint.PayloadComponents);
+        var hasNoBoundPayload = string.IsNullOrWhiteSpace(checkpoint.SourceFingerprint) &&
+                                checkpoint.SourceComponents.Length == 0 &&
+                                string.IsNullOrWhiteSpace(checkpoint.PayloadFingerprint) &&
+                                checkpoint.PayloadComponents.Length == 0;
         var valid = string.Equals(checkpoint.ModuleName, plan.ModuleName, StringComparison.OrdinalIgnoreCase) &&
                     checkpoint.ReleaseSource == release.VersionSource &&
                     string.Equals(checkpoint.PrimaryProject, NormalizeCheckpointValue(release.PrimaryProject), StringComparison.OrdinalIgnoreCase) &&
@@ -641,14 +665,8 @@ public sealed partial class ModulePipelineRunner
                         storedPlanned.Contains(operation, StringComparer.OrdinalIgnoreCase)) &&
                     checkpoint.CompletedOperations.All(operation =>
                         checkpoint.AttemptedOperations.Contains(operation, StringComparer.OrdinalIgnoreCase)) &&
-                    (checkpoint.AttemptedOperations.Length == 0 ||
-                     (IsSynchronizedReleaseFingerprint(checkpoint.PayloadFingerprint) &&
-                      checkpoint.PayloadComponents.Length > 0 &&
-                      checkpoint.PayloadComponents.All(static component => !string.IsNullOrWhiteSpace(component)) &&
-                      string.Equals(
-                          checkpoint.PayloadFingerprint,
-                          CreateSynchronizedReleaseFingerprint(checkpoint.PayloadComponents),
-                          StringComparison.OrdinalIgnoreCase))) &&
+                    (hasBoundPayload ||
+                     (hasNoBoundPayload && checkpoint.AttemptedOperations.Length == 0)) &&
                     (hasExactVersion ||
                      (string.IsNullOrWhiteSpace(checkpoint.Version) &&
                       checkpoint.AttemptedOperations.Length == 0 &&
@@ -669,6 +687,10 @@ public sealed partial class ModulePipelineRunner
         => (checkpoint.PlannedOperations?.Length ?? 0) > 0 &&
            (checkpoint.PlannedLanes?.Length ?? 0) > 0 &&
            (checkpoint.OperationFingerprints?.Length ?? 0) > 0 &&
+           string.IsNullOrWhiteSpace(checkpoint.SourceFingerprint) &&
+           (checkpoint.SourceComponents?.Length ?? 0) == 0 &&
+           string.IsNullOrWhiteSpace(checkpoint.PayloadFingerprint) &&
+           (checkpoint.PayloadComponents?.Length ?? 0) == 0 &&
            string.IsNullOrWhiteSpace(checkpoint.Version) &&
            (checkpoint.AttemptedLanes?.Length ?? 0) == 0 &&
            (checkpoint.Lanes?.Length ?? 0) == 0 &&
@@ -681,5 +703,16 @@ public sealed partial class ModulePipelineRunner
     private static bool IsSynchronizedReleaseFingerprint(string? value)
         => value?.Length == 64 && value.All(static character =>
             character is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F');
+
+    private static bool IsValidSynchronizedReleaseFingerprintState(
+        string? fingerprint,
+        string[] components)
+        => IsSynchronizedReleaseFingerprint(fingerprint) &&
+           components.Length > 0 &&
+           components.All(static component => !string.IsNullOrWhiteSpace(component)) &&
+           string.Equals(
+               fingerprint,
+               CreateSynchronizedReleaseFingerprint(components),
+               StringComparison.OrdinalIgnoreCase);
 
 }

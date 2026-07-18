@@ -16,12 +16,15 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         try
         {
             var stateRoot = ModulePipelineRunner.ResolveSynchronizedReleaseStateRoot(root.FullName);
+            var aliasStateRoot = ModulePipelineRunner.ResolveSynchronizedReleaseStateRoot(
+                root.FullName + Path.DirectorySeparatorChar);
             var projectPrefix = Path.GetFullPath(root.FullName)
                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
 
             Assert.False(stateRoot.StartsWith(projectPrefix, StringComparison.OrdinalIgnoreCase));
             Assert.Contains("PowerForge", stateRoot, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("coordinated-release-projects", stateRoot, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(stateRoot, aliasStateRoot);
         }
         finally
         {

@@ -16,7 +16,7 @@ public sealed partial class ModulePipelineRunner
             return;
         }
 
-        BindSynchronizedReleasePayloadFingerprint(buildResult, state);
+        var publishBuildResult = BindSynchronizedReleasePayload(plan, buildResult, state);
         var publishOrder = ResolvePublishOrder(plan);
         var packageNuGetPublished = false;
         var packageGitHubPublished = false;
@@ -35,7 +35,7 @@ public sealed partial class ModulePipelineRunner
                     }
                     break;
                 case ReleasePublishDestination.PowerShellGallery:
-                    ExecuteModulePublishes(plan, session, buildResult, state, modulePublished, PublishDestination.PowerShellGallery);
+                    ExecuteModulePublishes(plan, session, publishBuildResult, state, modulePublished, PublishDestination.PowerShellGallery);
                     break;
                 case ReleasePublishDestination.GitHub:
                     if (!packageGitHubPublished)
@@ -44,7 +44,7 @@ public sealed partial class ModulePipelineRunner
                         packageGitHubPublished = true;
                     }
 
-                    ExecuteModulePublishes(plan, session, buildResult, state, modulePublished, PublishDestination.GitHub);
+                    ExecuteModulePublishes(plan, session, publishBuildResult, state, modulePublished, PublishDestination.GitHub);
                     break;
             }
 
@@ -55,8 +55,8 @@ public sealed partial class ModulePipelineRunner
         if (!packageGitHubPublished)
             ExecutePackageBuildPublishes(plan, session, state, PackageBuildPublishDestination.GitHub);
 
-        ExecuteModulePublishes(plan, session, buildResult, state, modulePublished, PublishDestination.PowerShellGallery);
-        ExecuteModulePublishes(plan, session, buildResult, state, modulePublished, PublishDestination.GitHub);
+        ExecuteModulePublishes(plan, session, publishBuildResult, state, modulePublished, PublishDestination.PowerShellGallery);
+        ExecuteModulePublishes(plan, session, publishBuildResult, state, modulePublished, PublishDestination.GitHub);
     }
 
     private void PreflightSynchronizedModulePublishVersions(

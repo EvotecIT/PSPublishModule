@@ -527,8 +527,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             var secondException = Assert.Throws<InvalidOperationException>(() => secondRunner.Run(
                 CreateGitHubPostPublishSpec(root.FullName, secondStagingPath, moduleName)));
 
-            Assert.Contains("payload differs", secondException.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains($"module/{moduleName}.psm1", secondException.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("source differs", secondException.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains($"source/{moduleName}.psm1", secondException.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(1, gitHubPublishCount);
         }
         finally
