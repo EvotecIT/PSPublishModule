@@ -4,7 +4,7 @@
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <VersionPrefix>1.0.3</VersionPrefix>
+    <VersionPrefix>1.0.4</VersionPrefix>
     <PackageId>PowerForge.Web</PackageId>
     <RootNamespace>PowerForge.Web</RootNamespace>
     <Description>PowerForge.Web static-site engine and reusable website build components.</Description>
@@ -26,7 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="HtmlTinkerX" Version="2.1.0-beta.2" />
+    <PackageReference Include="HtmlTinkerX" Version="2.2.0" />
     <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="14.14.0" />
     <PackageReference Include="OfficeIMO.Markdown" Version="0.6.13" />
     <PackageReference Include="Scriban" Version="7.2.5" />

@@ -50,8 +50,8 @@
       },
       "HtmlTinkerX": {
         "type": "Transitive",
-        "resolved": "2.1.0-beta.2",
-        "contentHash": "LWEFsH5FatgdnEDDSllHaI3y8Gr+hvB2I/0hNFoc5FjR37JNIPZd3lDldzS9/HG0kCocGpXmXT2LM469viPPGw==",
+        "resolved": "2.2.0",
+        "contentHash": "qB7S0sMrR/nnVwu0qpq0uKE4IrWOj2GCgSrUHYi7zrCCNmVaewDGtqly3JxMRGNsJA/iIUzXM9h8fgsUGWxVZQ==",
         "dependencies": {
           "AngleSharp": "1.5.2",
           "AngleSharp.Css": "1.0.0-beta.216",
@@ -192,10 +192,10 @@
       "powerforge.web": {
         "type": "Project",
         "dependencies": {
-          "HtmlTinkerX": "[2.1.0-beta.2, )",
+          "HtmlTinkerX": "[2.2.0, )",
           "Magick.NET-Q8-AnyCPU": "[14.14.0, )",
           "OfficeIMO.Markdown": "[0.6.13, )",
-          "PowerForge": "[1.0.1, )",
+          "PowerForge": "[1.0.4, )",
           "Scriban": "[7.2.5, )",
           "YamlDotNet": "[15.1.2, )"
         }

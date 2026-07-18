@@ -7,10 +7,12 @@ internal static partial class WebCliCommandHandlers
         ArgumentNullException.ThrowIfNull(manifest);
 
         var errors = new List<string>();
-        if (manifest.SchemaVersion <= 0)
-            errors.Add("schemaVersion must be a positive integer.");
+        if (manifest.SchemaVersion != 2)
+            errors.Add("schemaVersion must be 2; regenerate or migrate the recovery manifest before using this engine revision.");
         if (string.IsNullOrWhiteSpace(manifest.Target?.SshAlias) && string.IsNullOrWhiteSpace(manifest.Target?.Host))
             errors.Add("target must declare sshAlias or host.");
+
+        ValidateHostAndPackages(manifest, errors);
 
         var plainFiles = manifest.Capture?.PlainFiles ?? Array.Empty<PowerForgeServerManagedFile>();
         var encryptedFiles = manifest.Capture?.EncryptedFiles ?? Array.Empty<PowerForgeServerManagedFile>();
@@ -26,6 +28,15 @@ internal static partial class WebCliCommandHandlers
 
         var managedPathIds = new HashSet<string>(StringComparer.Ordinal);
         var managedPaths = new HashSet<string>(StringComparer.Ordinal);
+        var managedTargets = new List<(string Id, string Path, string Kind)>();
+        var sourceManagedPaths = new List<(string Id, string Source, string Target)>();
+        var repositoryRoots = (manifest.Repositories ?? Array.Empty<PowerForgeServerRepository>())
+            .Select(static repository => repository.Path?.TrimEnd('/'))
+            .Where(static path => !string.IsNullOrWhiteSpace(path) &&
+                                  path.StartsWith("/", StringComparison.Ordinal) &&
+                                  path.IndexOfAny(['*', '?', '[']) < 0)
+            .Cast<string>()
+            .ToArray();
         foreach (var path in manifest.Paths ?? Array.Empty<PowerForgeServerPath>())
         {
             if (string.IsNullOrWhiteSpace(path.Id) || !managedPathIds.Add(path.Id))
@@ -33,10 +44,13 @@ internal static partial class WebCliCommandHandlers
             var normalizedPath = NormalizeCapturePath(path.Path, $"paths[{path.Id}].path", errors);
             if (normalizedPath is not null)
             {
+                if (!string.Equals(normalizedPath, "/", StringComparison.Ordinal) && HasTrailingPathSeparator(path.Path))
+                    errors.Add($"Managed path '{path.Id}' target must not end with '/'.");
                 if (normalizedPath.IndexOfAny(['*', '?', '[']) >= 0)
                     errors.Add($"Managed path '{path.Id}' must use an exact path.");
                 if (!managedPaths.Add(normalizedPath))
                     errors.Add($"Managed path '{normalizedPath}' is duplicated.");
+                managedTargets.Add((path.Id ?? normalizedPath, normalizedPath, path.Kind ?? string.Empty));
             }
             if (!IsValidUnixIdentity(path.Owner))
                 errors.Add($"Managed path '{path.Id}' has an invalid owner.");
@@ -44,7 +58,73 @@ internal static partial class WebCliCommandHandlers
                 errors.Add($"Managed path '{path.Id}' has an invalid group.");
             if (!IsValidMode(path.Mode))
                 errors.Add($"Managed path '{path.Id}' has an invalid mode.");
+            if (!string.IsNullOrWhiteSpace(path.Kind) &&
+                !string.Equals(path.Kind, "directory", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(path.Kind, "file", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(path.Kind, "symlink", StringComparison.OrdinalIgnoreCase))
+                errors.Add($"Managed path '{path.Id}' has unsupported kind '{path.Kind}'.");
+
+            if (!string.IsNullOrWhiteSpace(path.Source))
+            {
+                var normalizedSource = NormalizeCapturePath(path.Source, $"paths[{path.Id}].source", errors);
+                if (normalizedSource is not null)
+                {
+                    if (HasTrailingPathSeparator(path.Source))
+                        errors.Add($"Managed path '{path.Id}' source must not end with '/'.");
+                    if (normalizedSource.IndexOfAny(['*', '?', '[']) >= 0)
+                        errors.Add($"Managed path '{path.Id}' source must use an exact path.");
+                    if (!string.Equals(path.Kind, "file", StringComparison.OrdinalIgnoreCase))
+                        errors.Add($"Source-managed path '{path.Id}' must use kind 'file'.");
+                    if (string.IsNullOrWhiteSpace(path.Owner) || string.IsNullOrWhiteSpace(path.Group) || string.IsNullOrWhiteSpace(path.Mode))
+                        errors.Add($"Source-managed path '{path.Id}' must declare owner, group, and mode.");
+                    if (normalizedPath is not null && string.Equals(normalizedSource, normalizedPath, StringComparison.Ordinal))
+                        errors.Add($"Source-managed path '{path.Id}' source and target must differ.");
+                    if (!repositoryRoots.Any(root => PathStrictlyContains(root, normalizedSource)))
+                        errors.Add($"Source-managed path '{path.Id}' source must be inside a declared repository path.");
+                    if (normalizedPath is not null && repositoryRoots.Any(root =>
+                            PathContains(root, normalizedPath) || PathContains(normalizedPath, root)))
+                        errors.Add($"Source-managed path '{path.Id}' target must not overlap declared repository paths.");
+                    if (normalizedPath is not null)
+                        sourceManagedPaths.Add((path.Id ?? normalizedPath, normalizedSource, normalizedPath));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(path.Validation) &&
+                !string.Equals(path.Validation, "sudoers", StringComparison.OrdinalIgnoreCase))
+                errors.Add($"Managed path '{path.Id}' has unsupported validation '{path.Validation}'.");
+            if (string.Equals(path.Validation, "sudoers", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(path.Source))
+                    errors.Add($"Sudoers-managed path '{path.Id}' must declare a source.");
+                if (!string.Equals(path.Kind, "file", StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(path.Owner, "root", StringComparison.Ordinal) ||
+                    !string.Equals(path.Group, "root", StringComparison.Ordinal) ||
+                    path.Mode is not ("440" or "0440") ||
+                    !IsSafeSudoersTarget(normalizedPath))
+                    errors.Add($"Sudoers-managed path '{path.Id}' must be a root-owned 0440 file with a dot-free name directly below /etc/sudoers.d.");
+            }
         }
+
+        ValidateRepositoryManagedFiles(
+            (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerManagedFile>())
+                .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>()),
+            "apache.files",
+            repositoryRoots,
+            managedPaths,
+            managedTargets,
+            sourceManagedPaths,
+            errors);
+        ValidateRepositoryManagedFiles(
+            (manifest.Systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>())
+                .Concat(manifest.Systemd?.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
+                .Select(static unit => new PowerForgeServerManagedFile { Source = unit.Source, Target = unit.Target }),
+            "systemd.units",
+            repositoryRoots,
+            managedPaths,
+            managedTargets,
+            sourceManagedPaths,
+            errors);
+        ValidateManagedTargetHierarchy(managedTargets, errors);
 
         foreach (var plainPath in plainPaths)
         {
@@ -53,6 +133,7 @@ internal static partial class WebCliCommandHandlers
         }
 
         var secretIds = new HashSet<string>(StringComparer.Ordinal);
+        var secretPaths = new List<(string Id, string Path)>();
         foreach (var secret in manifest.Secrets ?? Array.Empty<PowerForgeServerSecret>())
         {
             if (string.IsNullOrWhiteSpace(secret.Id) || !secretIds.Add(secret.Id))
@@ -74,6 +155,8 @@ internal static partial class WebCliCommandHandlers
             string? secretPath = null;
             if (!string.IsNullOrWhiteSpace(secret.Path))
                 secretPath = NormalizeCapturePath(secret.Path, $"secrets[{secret.Id}].path", errors);
+            if (secretPath is not null)
+                secretPaths.Add((secret.Id, secretPath));
 
             if (string.Equals(secret.Capture, "exclude", StringComparison.OrdinalIgnoreCase))
             {
@@ -108,7 +191,152 @@ internal static partial class WebCliCommandHandlers
             }
         }
 
+        foreach (var managed in sourceManagedPaths)
+        {
+            foreach (var encryptedPath in encryptedPaths.Where(path => CapturePathsMayOverlap(managed.Source, path)))
+                errors.Add($"Source-managed path '{managed.Id}' source '{managed.Source}' overlaps encrypted capture path '{encryptedPath}'.");
+            foreach (var encryptedPath in encryptedPaths.Where(path => CapturePathsMayOverlap(managed.Target, path)))
+                errors.Add($"Source-managed path '{managed.Id}' target '{managed.Target}' overlaps encrypted capture path '{encryptedPath}'.");
+            foreach (var secret in secretPaths.Where(secret => CapturePathsMayOverlap(managed.Source, secret.Path)))
+                errors.Add($"Source-managed path '{managed.Id}' source '{managed.Source}' overlaps secret '{secret.Id}' at '{secret.Path}'.");
+            foreach (var secret in secretPaths.Where(secret => CapturePathsMayOverlap(managed.Target, secret.Path)))
+                errors.Add($"Source-managed path '{managed.Id}' target '{managed.Target}' overlaps secret '{secret.Id}' at '{secret.Path}'.");
+        }
+
         return errors.Distinct(StringComparer.Ordinal).ToArray();
+    }
+
+    private static void ValidateRepositoryManagedFiles(
+        IEnumerable<PowerForgeServerManagedFile> files,
+        string section,
+        IReadOnlyCollection<string> repositoryRoots,
+        ISet<string> managedPaths,
+        ICollection<(string Id, string Path, string Kind)> managedTargets,
+        ICollection<(string Id, string Source, string Target)> sourceManagedPaths,
+        ICollection<string> errors)
+    {
+        var index = 0;
+        foreach (var file in files)
+        {
+            var id = $"{section}[{index}]";
+            if (string.IsNullOrWhiteSpace(file.Source))
+            {
+                if (!string.IsNullOrWhiteSpace(file.Target))
+                {
+                    var observedTarget = NormalizeCapturePath(file.Target, $"{id}.target", errors);
+                    if (observedTarget is not null && HasTrailingPathSeparator(file.Target))
+                        errors.Add($"{id}.target must not end with '/'.");
+                    if (observedTarget is not null && observedTarget.IndexOfAny(['*', '?', '[']) >= 0)
+                        errors.Add($"{id}.target must use an exact path.");
+                    if (observedTarget is not null && !managedPaths.Add(observedTarget))
+                        errors.Add($"Managed path '{observedTarget}' is duplicated.");
+                    if (observedTarget is not null)
+                        managedTargets.Add((id, observedTarget, "file"));
+                }
+                index++;
+                continue;
+            }
+            var source = NormalizeCapturePath(file.Source, $"{id}.source", errors);
+            var target = NormalizeCapturePath(file.Target, $"{id}.target", errors);
+            if (source is not null && HasTrailingPathSeparator(file.Source))
+                errors.Add($"{id}.source must not end with '/'.");
+            if (target is not null && HasTrailingPathSeparator(file.Target))
+                errors.Add($"{id}.target must not end with '/'.");
+            if (source is not null && source.IndexOfAny(['*', '?', '[']) >= 0)
+                errors.Add($"{id}.source must use an exact path.");
+            if (target is not null && target.IndexOfAny(['*', '?', '[']) >= 0)
+                errors.Add($"{id}.target must use an exact path.");
+            if (source is not null && target is not null)
+            {
+                if (string.Equals(source, target, StringComparison.Ordinal))
+                    errors.Add($"{id} source and target must differ.");
+                if (!repositoryRoots.Any(root => PathStrictlyContains(root, source)))
+                    errors.Add($"{id}.source must be inside a declared repository path.");
+                if (repositoryRoots.Any(root => PathContains(root, target) || PathContains(target, root)))
+                    errors.Add($"{id}.target must not overlap declared repository paths.");
+                if (!managedPaths.Add(target))
+                    errors.Add($"Managed path '{target}' is duplicated.");
+                managedTargets.Add((id, target, "file"));
+                sourceManagedPaths.Add((id, source, target));
+            }
+            index++;
+        }
+    }
+
+    private static void ValidateManagedTargetHierarchy(
+        IReadOnlyCollection<(string Id, string Path, string Kind)> managedTargets,
+        ICollection<string> errors)
+    {
+        foreach (var file in managedTargets.Where(static target =>
+                     string.Equals(target.Kind, "file", StringComparison.OrdinalIgnoreCase)))
+        {
+            foreach (var descendant in managedTargets.Where(target => PathStrictlyContains(file.Path, target.Path)))
+                errors.Add($"Managed file target '{file.Path}' must not contain managed target '{descendant.Path}'.");
+        }
+    }
+
+    private static void ValidateHostAndPackages(
+        PowerForgeServerRecoveryManifest manifest,
+        ICollection<string> errors)
+    {
+        if (!IsSupportedUbuntuTarget(manifest.Target?.Os))
+            errors.Add("target.os must be 'ubuntu' or an Ubuntu release such as 'ubuntu-24.04'.");
+
+        var architecture = NormalizeLinuxArchitecture(manifest.Target?.Architecture);
+        if (architecture is not null and not ("x86_64" or "aarch64"))
+            errors.Add("target.architecture must be x64 or arm64.");
+
+        var packages = manifest.Packages;
+        var aptIndex = 0;
+        foreach (var package in packages?.Apt ?? Array.Empty<string>())
+        {
+            if (!IsSafeAptPackageName(package))
+                errors.Add($"packages.apt[{aptIndex}] must be a safe Debian package name.");
+            aptIndex++;
+        }
+
+        var sdkIndex = 0;
+        foreach (var version in packages?.DotnetSdks ?? Array.Empty<string>())
+        {
+            if (!TryNormalizeDotnetSdkVersion(version, out _))
+                errors.Add($"packages.dotnetSdks[{sdkIndex}] must be a supported Ubuntu 24.04 LTS SDK band: 8/8.0 or 10/10.0.");
+            sdkIndex++;
+        }
+        if (packages?.DotnetSdks?.Length > 0 &&
+            !string.Equals(manifest.Target?.Os, "ubuntu-24.04", StringComparison.OrdinalIgnoreCase))
+            errors.Add("packages.dotnetSdks currently requires target.os ubuntu-24.04.");
+
+        var moduleIndex = 0;
+        foreach (var module in (packages?.ApacheModules ?? Array.Empty<string>())
+                 .Concat(manifest.Apache?.Modules ?? Array.Empty<string>()))
+        {
+            if (!IsSafeApacheModuleName(module))
+                errors.Add($"Apache module at index {moduleIndex} contains unsupported characters.");
+            moduleIndex++;
+        }
+
+        if (packages?.Powershell == true)
+        {
+            if (!string.Equals(manifest.Target?.Os, "ubuntu-24.04", StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add("packages.powershell currently requires target.os ubuntu-24.04.");
+            }
+            if (architecture != "x86_64")
+                errors.Add("packages.powershell currently requires target.architecture x64.");
+        }
+    }
+
+    private static bool IsSupportedUbuntuTarget(string? os)
+    {
+        if (string.IsNullOrWhiteSpace(os) || string.Equals(os, "ubuntu", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (!os.StartsWith("ubuntu-", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var version = os["ubuntu-".Length..];
+        var parts = version.Split('.');
+        return parts.Length == 2 &&
+               parts.All(static part => part.Length == 2 && part.All(static character => character is >= '0' and <= '9'));
     }
 
     private static void ValidateRepositories(
@@ -120,11 +348,16 @@ internal static partial class WebCliCommandHandlers
             .Where(static command => !string.IsNullOrWhiteSpace(command.Id))
             .GroupBy(static command => command.Id!, StringComparer.Ordinal)
             .ToDictionary(static group => group.Key, static group => group.ToArray(), StringComparer.Ordinal);
+        var repositoryPaths = new List<(int Index, string Path)>();
         var index = 0;
         foreach (var repository in repositories ?? Array.Empty<PowerForgeServerRepository>())
         {
             var field = $"repositories[{index}]";
-            NormalizeCapturePath(repository.Path, $"{field}.path", errors);
+            var repositoryPath = NormalizeCapturePath(repository.Path, $"{field}.path", errors);
+            if (repositoryPath is not null && HasTrailingPathSeparator(repository.Path))
+                errors.Add($"{field}.path must not end with '/'.");
+            if (repositoryPath is not null)
+                repositoryPaths.Add((index, repositoryPath));
 
             var prerequisites = new HashSet<string>(StringComparer.Ordinal);
             var prerequisiteIndex = 0;
@@ -173,6 +406,17 @@ internal static partial class WebCliCommandHandlers
             }
 
             index++;
+        }
+
+        for (var leftIndex = 0; leftIndex < repositoryPaths.Count; leftIndex++)
+        {
+            for (var rightIndex = leftIndex + 1; rightIndex < repositoryPaths.Count; rightIndex++)
+            {
+                var left = repositoryPaths[leftIndex];
+                var right = repositoryPaths[rightIndex];
+                if (PathContains(left.Path, right.Path) || PathContains(right.Path, left.Path))
+                    errors.Add($"repositories[{left.Index}].path and repositories[{right.Index}].path must not be duplicate or nested.");
+            }
         }
     }
 
@@ -308,6 +552,9 @@ internal static partial class WebCliCommandHandlers
         return normalized;
     }
 
+    private static bool HasTrailingPathSeparator(string? value)
+        => !string.IsNullOrEmpty(value) && value.EndsWith("/", StringComparison.Ordinal);
+
     private static bool CapturePathsMayOverlap(string left, string right)
     {
         var leftPrefix = GetCaptureStaticPrefix(left);
@@ -329,11 +576,44 @@ internal static partial class WebCliCommandHandlers
         => candidate.Equals(parent, StringComparison.Ordinal) ||
            candidate.StartsWith(parent.EndsWith("/", StringComparison.Ordinal) ? parent : parent + "/", StringComparison.Ordinal);
 
+    private static bool PathStrictlyContains(string parent, string candidate)
+        => !candidate.Equals(parent, StringComparison.Ordinal) && PathContains(parent, candidate);
+
+    private static bool IsSafeSudoersTarget(string? path)
+    {
+        const string prefix = "/etc/sudoers.d/";
+        if (string.IsNullOrWhiteSpace(path) || !path.StartsWith(prefix, StringComparison.Ordinal))
+            return false;
+
+        var name = path[prefix.Length..];
+        return name.Length > 0 &&
+               !name.Contains('/', StringComparison.Ordinal) &&
+               name.All(static character => IsAsciiLetterOrDigit(character) || character is '_' or '-');
+    }
+
     private static bool IsValidUnixIdentity(string? value)
-        => string.IsNullOrWhiteSpace(value) ||
-           (value.Length <= 32 &&
-            (IsAsciiLetterOrDigit(value[0]) || value[0] == '_') &&
-            value.All(static character => IsAsciiLetterOrDigit(character) || character is '_' or '-'));
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return true;
+        if (IsNumericUnixIdentity(value))
+        {
+            return value.Length <= 10 &&
+                   (value.Length == 1 || value[0] != '0') &&
+                   uint.TryParse(value, out var id) &&
+                   id != uint.MaxValue;
+        }
+
+        return value.Length <= 32 &&
+               (IsAsciiLetterOrDigit(value[0]) || value[0] == '_') &&
+               value.All(static character => IsAsciiLetterOrDigit(character) || character is '_' or '-');
+    }
+
+    private static bool IsNumericUnixIdentity(string value)
+        => value.Length > 0 && value.All(static character => character is >= '0' and <= '9');
+
+    private static bool IsRootUnixIdentity(string value)
+        => string.Equals(value, "root", StringComparison.Ordinal) ||
+           string.Equals(value, "0", StringComparison.Ordinal);
 
     private static bool IsValidMode(string? value)
         => string.IsNullOrWhiteSpace(value) ||
