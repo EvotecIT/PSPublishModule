@@ -227,7 +227,10 @@ function Get-ExpectedCaptureSudoersCommand {
         }
         if ([string]::Equals($sudoersCommand, 'apachectl -S', [StringComparison]::Ordinal)) {
             $sudoersCommand = '/usr/sbin/apachectl -S'
-        } elseif ($sudoersCommand -notmatch '^/[A-Za-z0-9._/-]+(?: [A-Za-z0-9._~:@%+=/-]+)*$') {
+        } elseif ($sudoersCommand -notmatch '^/[A-Za-z0-9._/-]+ [A-Za-z0-9._~:@%+=/-]+(?: [A-Za-z0-9._~:@%+=/-]+)*$') {
+            if ($sudoersCommand -match '^/[A-Za-z0-9._/-]+$') {
+                throw "Privileged recovery capture command must include fixed arguments: $command"
+            }
             throw "Privileged recovery capture command is not supported by credential-free validation: $command"
         }
         $commands.Add($sudoersCommand)

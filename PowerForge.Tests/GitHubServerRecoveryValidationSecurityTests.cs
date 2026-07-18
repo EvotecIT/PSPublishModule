@@ -418,6 +418,17 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         Assert.Contains("exactly one canonical sudo -n prefix", result.AllOutput, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("sudo -n /bin/sh")]
+    [InlineData("sudo -n /usr/bin/true")]
+    public void Validator_ShouldRejectPrivilegedCommandsWithoutFixedArguments(string command)
+    {
+        var result = RunValidator(captureCommand: command);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("must include fixed arguments", result.AllOutput, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Validator_ShouldRejectSudoersThatFailVisudo()
     {

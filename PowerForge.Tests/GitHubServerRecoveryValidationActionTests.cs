@@ -82,7 +82,7 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.Contains("Test-Json -SchemaFile $schemaPath -ErrorAction Stop", script, StringComparison.Ordinal);
         Assert.Contains("$manifest.'$schema'", script, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_ENGINE_REPOSITORY)/$($env:POWERFORGE_ENGINE_REF)", script, StringComparison.Ordinal);
-        Assert.Contains("POWERFORGE_CAPTURE_USER -notmatch '^[a-z_][a-z0-9_-]{0,31}$'", script, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_CAPTURE_USER -cnotmatch '^[a-z_][a-z0-9_-]{0,31}$'", script, StringComparison.Ordinal);
         Assert.Contains("IsPathRooted($env:POWERFORGE_MANIFEST_PATH)", script, StringComparison.Ordinal);
         Assert.Contains("manifestPath.StartsWith($workspacePrefix", script, StringComparison.Ordinal);
         Assert.Contains("[IO.Path]::GetRelativePath($Root, $Path)", script, StringComparison.Ordinal);
