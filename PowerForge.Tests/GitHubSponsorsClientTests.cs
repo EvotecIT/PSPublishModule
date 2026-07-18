@@ -64,6 +64,30 @@ public sealed class GitHubSponsorsClientTests
     }
 
     [Fact]
+    public void GetSponsorSources_DoesNotRequestFundingTiersForFormerConnection()
+    {
+        var handler = new SponsorsHandler((activeOnly, _) => activeOnly
+            ? ConnectionResponse(UserNode("alice", "Alice", "User", "Gold", 30), false, null)
+            : ConnectionResponse(string.Join(',',
+                UserNode("alice", "Alice", "User", "Gold", 30),
+                UserNode("former", "Former Friend", "User", "Bronze", 5)), false, null));
+        using var client = new HttpClient(handler);
+
+        var records = new GitHubSponsorsClient(client).GetSponsorSources(new GitHubSponsorsQuery
+        {
+            SponsorableLogin = "owner",
+            Token = "token",
+            IncludeFormer = true
+        }, includeFundingTierData: true);
+
+        Assert.Equal(2, handler.RequestBodies.Count);
+        Assert.Contains("monthlyPriceInDollars", handler.RequestBodies[0], StringComparison.Ordinal);
+        Assert.DoesNotContain("monthlyPriceInDollars", handler.RequestBodies[1], StringComparison.Ordinal);
+        Assert.Equal(30, Assert.Single(records, record => record.Sponsor.Status == GitHubSponsorStatus.Current).FundingTierMonthlyDollars);
+        Assert.Null(Assert.Single(records, record => record.Sponsor.Status == GitHubSponsorStatus.Former).FundingTierMonthlyDollars);
+    }
+
+    [Fact]
     public void GetSponsors_RejectsHttpEndpointBeforeSendingBearerToken()
     {
         var handler = new SponsorsHandler((_, _) => throw new InvalidOperationException("HTTP handler must not be reached."));

@@ -91,7 +91,7 @@ jobs:
             throw 'PowerForge reported changes without any changed document paths.'
           }
           foreach ($path in $paths) {
-            git add -- $path
+            git --literal-pathspecs add -- $path
           }
           git diff --cached --quiet
           if ($LASTEXITCODE -eq 0) {

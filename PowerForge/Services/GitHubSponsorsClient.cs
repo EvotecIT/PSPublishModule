@@ -124,7 +124,10 @@ public sealed class GitHubSponsorsClient
 
         if (query.IncludeFormer)
         {
-            var allPublic = GetConnection(endpoint, token, login, activeOnly: false, pageSize, includeFundingTierData);
+            // Historical tier prices are not needed: current sponsors already carry the
+            // optional tier data from the active-only query, while former sponsors are
+            // deliberately recognized without a historical tier classification.
+            var allPublic = GetConnection(endpoint, token, login, activeOnly: false, pageSize, includeFundingTierData: false);
             records.AddRange(allPublic
                 .Where(item => !currentKeys.Contains(item.Sponsor.Key))
                 .GroupBy(item => item.Sponsor.Key, StringComparer.OrdinalIgnoreCase)

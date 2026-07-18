@@ -72,7 +72,8 @@ public sealed class GitHubContentActionTests
 
         Assert.Contains("permissions:\n  contents: write", Normalize(workflow), StringComparison.Ordinal);
         Assert.Contains("if: inputs.commit_changes && steps.content.outputs.changed == 'true'", workflow, StringComparison.Ordinal);
-        Assert.Contains("git add -- $path", workflow, StringComparison.Ordinal);
+        Assert.Contains("git --literal-pathspecs add -- $path", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("git add -- $path", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("git add --all", workflow, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("git add .", workflow, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(".powerforge-runtime/pspublishmodule", workflow, StringComparison.Ordinal);
