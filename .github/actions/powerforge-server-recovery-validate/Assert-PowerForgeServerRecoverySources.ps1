@@ -233,6 +233,10 @@ function Get-RecoveryShellComparisonText {
         if (($character -eq '$' -or $character -eq '`') -and -not $singleQuoted) {
             throw "Recovery capture command contains unsupported dynamic shell expansion: $Command"
         }
+        if (($character -eq '*' -or $character -eq '?' -or $character -eq '[' -or $character -eq '{') -and
+            -not $singleQuoted -and -not $doubleQuoted) {
+            throw "Recovery capture command contains unsupported pathname or brace shell expansion: $Command"
+        }
         [void] $comparison.Append($character)
     }
     if ($singleQuoted -or $doubleQuoted) {

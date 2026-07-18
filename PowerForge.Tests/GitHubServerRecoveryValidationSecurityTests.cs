@@ -447,17 +447,33 @@ public sealed class GitHubServerRecoveryValidationSecurityTests
         Assert.Contains("unsupported dynamic shell expansion", result.AllOutput, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void Validator_ShouldAllowLiteralExpansionSyntaxInsideSingleQuotedArguments()
+    [Theory]
+    [InlineData("dpkg-query -W -f='${binary:Package}\\t${Version}\\n'")]
+    [InlineData("systemctl list-units 'evotec-*' --all --no-pager")]
+    [InlineData("systemctl list-units \"evotec-*\" --all --no-pager")]
+    public void Validator_ShouldAllowExpansionSyntaxInsideQuotedArguments(string command)
     {
         var sudoers = $"Cmnd_Alias BACKUP_PLAIN = {ExpectedPlainCaptureCommand}\n" +
                       $"Cmnd_Alias BACKUP_ENCRYPTED = {ExpectedCaptureCommand}\n" +
                       $"{CaptureUser} ALL=(root) NOPASSWD: BACKUP_PLAIN, BACKUP_ENCRYPTED\n";
         var result = RunValidator(
             sudoers: sudoers,
-            captureCommand: "dpkg-query -W -f='${binary:Package}\\t${Version}\\n'");
+            captureCommand: command);
 
         Assert.True(result.ExitCode == 0, result.AllOutput);
+    }
+
+    [Theory]
+    [InlineData("/usr/bin/s[u]do -n /usr/sbin/apachectl -S")]
+    [InlineData("/usr/bin/s?do -n /usr/sbin/apachectl -S")]
+    [InlineData("/usr/bin/s*do -n /usr/sbin/apachectl -S")]
+    [InlineData("/usr/bin/s{u,}do -n /usr/sbin/apachectl -S")]
+    public void Validator_ShouldRejectUnquotedShellExpansionInCaptureCommands(string command)
+    {
+        var result = RunValidator(captureCommand: command);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("unsupported pathname or brace shell expansion", result.AllOutput, StringComparison.Ordinal);
     }
 
     [Theory]
