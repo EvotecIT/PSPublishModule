@@ -66,7 +66,6 @@ public sealed partial class ModulePipelineRunner
 
         ExecuteModulePublishes(plan, session, buildResult, state, modulePublished, PublishDestination.PowerShellGallery);
         ExecuteModulePublishes(plan, session, buildResult, state, modulePublished, PublishDestination.GitHub);
-        CompleteSynchronizedReleaseCheckpoint(state);
     }
 
     private void PreflightSynchronizedModulePublishVersions(

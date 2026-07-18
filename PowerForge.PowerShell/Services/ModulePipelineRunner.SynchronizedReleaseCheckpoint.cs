@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace PowerForge;
@@ -78,7 +80,7 @@ public sealed partial class ModulePipelineRunner
 
         var release = plan.Release!.Configuration;
         var lanes = state.ReleaseVersionCandidates
-            .Where(candidate => candidate.Source == release.VersionSource && candidate.ExplicitSource)
+            .Where(static candidate => HasCheckpointableReleaseVersions(candidate.Result))
             .Select(CreateSynchronizedReleaseLaneCheckpoint)
             .ToArray();
         if (lanes.Length == 0)
@@ -97,6 +99,7 @@ public sealed partial class ModulePipelineRunner
                 .Select(static destination => destination.ToString())
                 .OrderBy(static destination => destination, StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
+            OperationFingerprints = ResolveSynchronizedReleaseOperationFingerprints(plan),
             Lanes = lanes,
             CreatedUtc = DateTimeOffset.UtcNow
         };
@@ -116,10 +119,7 @@ public sealed partial class ModulePipelineRunner
         ProjectBuildConfiguration configuration)
     {
         var checkpoint = state.SynchronizedReleaseCheckpoint;
-        if (checkpoint is null ||
-            !useAsReleaseVersionSource ||
-            checkpoint.ReleaseSource != source ||
-            plan.Release?.Configuration?.VersionSource != source)
+        if (checkpoint is null)
         {
             return;
         }
@@ -128,14 +128,54 @@ public sealed partial class ModulePipelineRunner
             string.Equals(candidate.Label, laneLabel, StringComparison.OrdinalIgnoreCase));
         if (lane is null)
         {
-            throw new InvalidOperationException(
-                $"The incomplete coordinated release does not contain version state for selected {source} lane '{laneLabel}'. Delete the checkpoint only if that release should be abandoned.");
+            if (useAsReleaseVersionSource &&
+                checkpoint.ReleaseSource == source &&
+                plan.Release?.Configuration?.VersionSource == source)
+            {
+                throw new InvalidOperationException(
+                    $"The incomplete coordinated release does not contain version state for selected {source} lane '{laneLabel}'. Delete the checkpoint only if that release should be abandoned.");
+            }
+            return;
         }
 
         configuration.ExpectedVersion = lane.DefaultVersion;
         configuration.ExpectedVersionMap ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in lane.VersionsByProject)
             configuration.ExpectedVersionMap[entry.Key] = entry.Value;
+    }
+
+    private void RecordSynchronizedReleaseLaneCheckpoint(
+        ModulePipelineRunState state,
+        ReleaseVersionSource source,
+        string laneLabel,
+        ProjectBuildHostExecutionResult result)
+    {
+        var checkpoint = state.SynchronizedReleaseCheckpoint;
+        if (checkpoint is null || !HasCheckpointableReleaseVersions(result))
+            return;
+
+        var updatedLane = CreateSynchronizedReleaseLaneCheckpoint(source, laneLabel, result);
+        var existingIndex = Array.FindIndex(
+            checkpoint.Lanes,
+            lane => lane.Source == source &&
+                    string.Equals(lane.Label, laneLabel, StringComparison.OrdinalIgnoreCase));
+        if (existingIndex >= 0)
+        {
+            var existingLane = checkpoint.Lanes[existingIndex];
+            if (!SynchronizedReleaseLaneVersionsEqual(existingLane, updatedLane))
+            {
+                throw new InvalidOperationException(
+                    $"Package lane '{laneLabel}' resolved versions that do not match incomplete coordinated release {checkpoint.Version}.");
+            }
+            return;
+        }
+
+        checkpoint.Lanes = checkpoint.Lanes
+            .Append(updatedLane)
+            .OrderBy(static lane => lane.Source)
+            .ThenBy(static lane => lane.Label, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        SaveSynchronizedReleaseCheckpoint(state);
     }
 
     private ReleasePublishDestination[] ResolvePlannedSynchronizedDestinations(ModulePipelinePlan plan)
@@ -175,6 +215,146 @@ public sealed partial class ModulePipelineRunner
         }
 
         return planned.ToArray();
+    }
+
+    private string[] ResolveSynchronizedReleaseOperationFingerprints(ModulePipelinePlan plan)
+    {
+        var fingerprints = new List<string>
+        {
+            CreateSynchronizedReleaseFingerprint(
+                "Release",
+                plan.Release?.Configuration?.VersionSource.ToString(),
+                plan.Release?.Configuration?.PrimaryProject,
+                string.Join(",", plan.Release?.Configuration?.BuildOrder ?? Array.Empty<string>()),
+                string.Join(",", plan.Release?.Configuration?.PublishOrder ?? Array.Empty<string>()))
+        };
+
+        foreach (var publish in plan.Publishes ?? Array.Empty<ConfigurationPublishSegment>())
+        {
+            if (publish?.Configuration is null)
+                continue;
+
+            fingerprints.Add(CreateModulePublishOperationFingerprint(publish.Configuration));
+        }
+
+        foreach (var segment in plan.ProjectBuilds ?? Array.Empty<ConfigurationProjectBuildSegment>())
+        {
+            var reference = segment?.Configuration;
+            if (reference is null || string.IsNullOrWhiteSpace(reference.ConfigPath))
+                continue;
+
+            var configPath = ResolvePackageBuildPath(plan.ProjectRoot, reference.ConfigPath);
+            var configuration = LoadProjectBuildConfiguration(configPath, reference);
+            var actions = ResolveEffectiveActions(configuration);
+            var laneLabel = reference.Name ?? configPath;
+            if (actions.PublishNuGet)
+            {
+                fingerprints.Add(CreatePackagePublishOperationFingerprint(
+                    "ProjectBuild",
+                    laneLabel,
+                    configPath,
+                    ReleasePublishDestination.NuGet,
+                    configuration));
+            }
+            if (actions.PublishGitHub)
+            {
+                fingerprints.Add(CreatePackagePublishOperationFingerprint(
+                    "ProjectBuild",
+                    laneLabel,
+                    configPath,
+                    ReleasePublishDestination.GitHub,
+                    configuration));
+            }
+        }
+
+        foreach (var segment in plan.PackageBuilds ?? Array.Empty<ConfigurationPackageBuildSegment>())
+        {
+            var packageBuild = segment?.Configuration;
+            if (packageBuild is null)
+                continue;
+
+            var configuration = MapPackageBuildConfiguration(packageBuild, plan.ProjectRoot);
+            var actions = ResolveEffectiveActions(configuration);
+            var inlineConfigPath = Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
+            var laneLabel = packageBuild.Name ?? inlineConfigPath;
+            if (actions.PublishNuGet)
+            {
+                fingerprints.Add(CreatePackagePublishOperationFingerprint(
+                    "PackageBuild",
+                    laneLabel,
+                    inlineConfigPath,
+                    ReleasePublishDestination.NuGet,
+                    configuration));
+            }
+            if (actions.PublishGitHub)
+            {
+                fingerprints.Add(CreatePackagePublishOperationFingerprint(
+                    "PackageBuild",
+                    laneLabel,
+                    inlineConfigPath,
+                    ReleasePublishDestination.GitHub,
+                    configuration));
+            }
+        }
+
+        return fingerprints
+            .OrderBy(static fingerprint => fingerprint, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string CreateModulePublishOperationFingerprint(PublishConfiguration publish)
+    {
+        var repository = publish.Repository;
+        return CreateSynchronizedReleaseFingerprint(
+            "Module",
+            publish.Destination.ToString(),
+            publish.Tool.ToString(),
+            publish.ID,
+            publish.UserName,
+            publish.RepositoryName,
+            repository?.Name,
+            repository?.Uri,
+            repository?.SourceUri,
+            repository?.PublishUri,
+            repository?.ApiVersion.ToString(),
+            publish.OverwriteTagName,
+            publish.PublishRequiredModules.ToString(),
+            publish.RequiredModuleSourceRepository,
+            publish.RequiredModuleSourceRepositoryUri,
+            publish.Force.ToString());
+    }
+
+    private static string CreatePackagePublishOperationFingerprint(
+        string laneType,
+        string laneLabel,
+        string configurationPath,
+        ReleasePublishDestination destination,
+        ProjectBuildConfiguration configuration)
+        => CreateSynchronizedReleaseFingerprint(
+            laneType,
+            laneLabel,
+            configurationPath,
+            destination.ToString(),
+            configuration.RootPath,
+            configuration.PublishSource,
+            configuration.UseGitHubPackages.ToString(),
+            configuration.GitHubPackagesOwner,
+            configuration.GitHubUsername,
+            configuration.GitHubRepositoryName,
+            configuration.GitHubReleaseMode,
+            configuration.GitHubPrimaryProject,
+            configuration.GitHubTagName,
+            configuration.GitHubTagTemplate,
+            configuration.GitHubTagConflictPolicy);
+
+    private static string CreateSynchronizedReleaseFingerprint(params string?[] values)
+    {
+        var serialized = JsonSerializer.Serialize(
+            values.Select(static value => value?.Trim() ?? string.Empty).ToArray());
+        using var sha256 = SHA256.Create();
+        return BitConverter.ToString(sha256.ComputeHash(Encoding.UTF8.GetBytes(serialized)))
+            .Replace("-", string.Empty)
+            .ToLowerInvariant();
     }
 
     private static bool ShouldUseSynchronizedReleaseCheckpoint(
@@ -231,9 +411,18 @@ public sealed partial class ModulePipelineRunner
 
     private static SynchronizedReleaseLaneCheckpoint CreateSynchronizedReleaseLaneCheckpoint(
         ReleaseVersionCandidate candidate)
+        => CreateSynchronizedReleaseLaneCheckpoint(
+            candidate.Source,
+            candidate.Label,
+            candidate.Result);
+
+    private static SynchronizedReleaseLaneCheckpoint CreateSynchronizedReleaseLaneCheckpoint(
+        ReleaseVersionSource source,
+        string laneLabel,
+        ProjectBuildHostExecutionResult result)
     {
-        var release = candidate.Result.Result.Release ?? throw new InvalidOperationException(
-            $"Selected release-source lane '{candidate.Label}' did not return release version details.");
+        var release = result.Result.Release ?? throw new InvalidOperationException(
+            $"Package lane '{laneLabel}' did not return release version details.");
         var versions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in release.ResolvedVersionsByProject)
         {
@@ -252,19 +441,50 @@ public sealed partial class ModulePipelineRunner
         if (string.IsNullOrWhiteSpace(defaultVersion))
         {
             throw new InvalidOperationException(
-                $"Selected release-source lane '{candidate.Label}' did not return an exact release version.");
+                $"Package lane '{laneLabel}' did not return an exact release version.");
         }
 
         return new SynchronizedReleaseLaneCheckpoint
         {
-            Source = candidate.Source,
-            Label = candidate.Label,
+            Source = source,
+            Label = laneLabel,
             DefaultVersion = defaultVersion!.Trim(),
             VersionsByProject = versions
         };
     }
 
-    private static void ValidateSynchronizedReleaseCheckpoint(
+    private static bool HasCheckpointableReleaseVersions(ProjectBuildHostExecutionResult result)
+    {
+        var release = result.Result.Release;
+        return release is not null &&
+               (!string.IsNullOrWhiteSpace(release.ResolvedVersion) ||
+                release.ResolvedVersionsByProject.Count > 0 ||
+                release.Projects.Any(static project => !string.IsNullOrWhiteSpace(project.NewVersion)));
+    }
+
+    private static bool SynchronizedReleaseLaneVersionsEqual(
+        SynchronizedReleaseLaneCheckpoint first,
+        SynchronizedReleaseLaneCheckpoint second)
+    {
+        if (!string.Equals(first.DefaultVersion, second.DefaultVersion, StringComparison.OrdinalIgnoreCase) ||
+            first.VersionsByProject.Count != second.VersionsByProject.Count)
+        {
+            return false;
+        }
+
+        foreach (var entry in first.VersionsByProject)
+        {
+            if (!second.VersionsByProject.TryGetValue(entry.Key, out var otherVersion) ||
+                !string.Equals(entry.Value, otherVersion, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void ValidateSynchronizedReleaseCheckpoint(
         ModulePipelinePlan plan,
         ModulePipelineRunState state,
         SynchronizedReleaseCheckpoint checkpoint,
@@ -273,6 +493,8 @@ public sealed partial class ModulePipelineRunner
         var release = plan.Release!.Configuration;
         if (checkpoint.PlannedDestinations is null ||
             checkpoint.CompletedDestinations is null ||
+            checkpoint.OperationFingerprints is null ||
+            checkpoint.OperationFingerprints.Length == 0 ||
             checkpoint.Lanes is null ||
             checkpoint.Lanes.Length == 0 ||
             checkpoint.Lanes.Any(static lane =>
@@ -295,10 +517,15 @@ public sealed partial class ModulePipelineRunner
         var storedPlanned = checkpoint.PlannedDestinations
             .OrderBy(static destination => destination, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var currentOperations = ResolveSynchronizedReleaseOperationFingerprints(plan);
+        var storedOperations = checkpoint.OperationFingerprints
+            .OrderBy(static fingerprint => fingerprint, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         var valid = string.Equals(checkpoint.ModuleName, plan.ModuleName, StringComparison.OrdinalIgnoreCase) &&
                     checkpoint.ReleaseSource == release.VersionSource &&
                     string.Equals(checkpoint.PrimaryProject, NormalizeCheckpointValue(release.PrimaryProject), StringComparison.OrdinalIgnoreCase) &&
                     planned.SequenceEqual(storedPlanned, StringComparer.OrdinalIgnoreCase) &&
+                    currentOperations.SequenceEqual(storedOperations, StringComparer.OrdinalIgnoreCase) &&
                     checkpoint.CompletedDestinations.All(destination =>
                         storedPlanned.Contains(destination, StringComparer.OrdinalIgnoreCase)) &&
                     PackageVersionUtility.TryNormalizeExact(checkpoint.Version, out _);
@@ -389,6 +616,7 @@ public sealed partial class ModulePipelineRunner
         public string Version { get; set; } = string.Empty;
         public string[] PlannedDestinations { get; set; } = Array.Empty<string>();
         public string[] CompletedDestinations { get; set; } = Array.Empty<string>();
+        public string[] OperationFingerprints { get; set; } = Array.Empty<string>();
         public SynchronizedReleaseLaneCheckpoint[] Lanes { get; set; } = Array.Empty<SynchronizedReleaseLaneCheckpoint>();
         public DateTimeOffset CreatedUtc { get; set; }
     }

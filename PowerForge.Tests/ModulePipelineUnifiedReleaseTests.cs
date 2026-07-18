@@ -1267,6 +1267,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         public List<string> PublishedModuleVersions { get; } = new();
         public Func<PublishConfiguration, ModulePipelinePlan, ModulePublishVersionPreflightResult>? ModulePublishVersionPreflight { get; set; }
         public Action<PublishConfiguration, ModulePipelinePlan>? ModulePublishAction { get; set; }
+        public Func<ModulePipelineActionConfiguration, ModulePipelineActionContext, ModulePipelineActionResult>? ModuleAction { get; set; }
 
         public IReadOnlyList<ModuleDependencyInstallResult> EnsureDependenciesInstalled(
             ModuleDependency[] dependencies,
@@ -1333,7 +1334,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             ModulePipelineActionContext context,
             string contextPath,
             string projectRoot)
-            => throw new InvalidOperationException("Actions are not used in this test.");
+            => ModuleAction?.Invoke(action, context) ??
+               throw new InvalidOperationException("Actions are not used in this test.");
 
         public void ValidateModuleImports(
             string manifestPath,

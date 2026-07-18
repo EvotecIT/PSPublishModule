@@ -17,8 +17,11 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         {
             const string moduleName = "TestModule";
             const string synchronizedVersion = "2.0.11";
+            const string companionName = "Companion";
+            const string companionVersion = "5.0.7";
             WriteMinimalModule(root.FullName, moduleName, "2.0.10");
             var configPath = Path.Combine(root.FullName, "Build", "project.build.json");
+            var companionConfigPath = Path.Combine(root.FullName, "Build", "companion.build.json");
             Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
             File.WriteAllText(
                 configPath,
@@ -34,9 +37,24 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                     "  \"PublishGitHub\": false",
                     "}"
                 }));
+            File.WriteAllText(
+                companionConfigPath,
+                string.Join(Environment.NewLine, new[]
+                {
+                    "{",
+                    "  \"RootPath\": \"CompanionSources\",",
+                    "  \"ExpectedVersionMap\": { \"Companion\": \"5.0.X\" },",
+                    "  \"ExpectedVersionMapAsInclude\": true,",
+                    "  \"UpdateVersions\": true,",
+                    "  \"Build\": true,",
+                    "  \"PublishNuget\": true,",
+                    "  \"PublishGitHub\": false",
+                    "}"
+                }));
 
             var packagePublishCount = 0;
             var resumedDependencyBuildUsedExactVersion = false;
+            var resumedCompanionBuildUsedExactVersion = false;
             var runNumber = 1;
             ProjectBuildHostExecutionResult ExecutePackageBuild(
                 ProjectBuildHostRequest request,
@@ -44,20 +62,29 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                 string? loadedConfigPath)
             {
                 Assert.NotNull(configuration);
+                var isCompanion = loadedConfigPath?.EndsWith(
+                    "companion.build.json",
+                    StringComparison.OrdinalIgnoreCase) == true;
+                var projectName = isCompanion ? companionName : moduleName;
+                var projectVersion = isCompanion ? companionVersion : synchronizedVersion;
                 if (request.PublishNuget == true)
                     packagePublishCount++;
                 if (runNumber == 2 && request.PublishNuget != true)
                 {
-                    resumedDependencyBuildUsedExactVersion =
+                    var usedExactVersion =
                         configuration!.ExpectedVersionMap is not null &&
-                        configuration.ExpectedVersionMap.TryGetValue(moduleName, out var expected) &&
-                        string.Equals(expected, synchronizedVersion, StringComparison.OrdinalIgnoreCase);
+                        configuration.ExpectedVersionMap.TryGetValue(projectName, out var expected) &&
+                        string.Equals(expected, projectVersion, StringComparison.OrdinalIgnoreCase);
+                    if (isCompanion)
+                        resumedCompanionBuildUsedExactVersion = usedExactVersion;
+                    else
+                        resumedDependencyBuildUsedExactVersion = usedExactVersion;
                 }
 
                 return CreateProjectBuildResult(
                     root.FullName,
-                    moduleName,
-                    synchronizedVersion,
+                    projectName,
+                    projectVersion,
                     Path.Combine(root.FullName, "Artifacts", "NuGet"),
                     request,
                     loadedConfigPath,
@@ -82,7 +109,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                 firstRunner.Run(CreateResumableReleaseSpec(root.FullName, firstStagingPath, moduleName)));
 
             Assert.Contains("gallery outage", firstException.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.Equal(1, packagePublishCount);
+            Assert.Equal(2, packagePublishCount);
             var checkpointRoot = Path.Combine(root.FullName, "Artefacts", ".powerforge", "coordinated-release");
             Assert.Single(Directory.GetFiles(checkpointRoot, "*.json"));
 
@@ -101,8 +128,9 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             var result = secondRunner.Run(CreateResumableReleaseSpec(root.FullName, secondStagingPath, moduleName));
 
             Assert.True(resumedDependencyBuildUsedExactVersion);
+            Assert.True(resumedCompanionBuildUsedExactVersion);
             Assert.Equal(synchronizedVersion, result.Plan.ResolvedVersion);
-            Assert.Equal(1, packagePublishCount);
+            Assert.Equal(2, packagePublishCount);
             Assert.Equal(new[] { synchronizedVersion }, secondHosted.PublishedModuleVersions);
             Assert.False(Directory.Exists(checkpointRoot));
         }
@@ -111,6 +139,134 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             try { root.Delete(recursive: true); } catch { }
             try { if (Directory.Exists(firstStagingPath)) Directory.Delete(firstStagingPath, recursive: true); } catch { }
             try { if (Directory.Exists(secondStagingPath)) Directory.Delete(secondStagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_RetainsCompletedPublishCheckpointUntilPostPublishPhasesSucceed()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var firstStagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        var secondStagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        var thirdStagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string synchronizedVersion = "2.0.11";
+            WriteMinimalModule(root.FullName, moduleName, "2.0.10");
+            var configPath = Path.Combine(root.FullName, "Build", "project.build.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+            File.WriteAllText(
+                configPath,
+                "{\"RootPath\":\"Sources\",\"ExpectedVersion\":\"2.0.X\",\"Build\":true,\"PublishNuget\":true,\"PublishGitHub\":false}");
+
+            var packagePublishCount = 0;
+            ProjectBuildHostExecutionResult ExecutePackageBuild(
+                ProjectBuildHostRequest request,
+                ProjectBuildConfiguration? configuration,
+                string? loadedConfigPath)
+            {
+                if (request.PublishNuget == true)
+                    packagePublishCount++;
+                return CreateProjectBuildResult(
+                    root.FullName,
+                    moduleName,
+                    synchronizedVersion,
+                    Path.Combine(root.FullName, "Artifacts", "NuGet"),
+                    request,
+                    loadedConfigPath,
+                    includePackage: false);
+            }
+
+            static ModulePipelineActionResult ActionResult(
+                ModulePipelineActionConfiguration action,
+                ModulePipelineActionContext context,
+                bool succeeded)
+                => new()
+                {
+                    Name = action.Name ?? context.Stage.ToString(),
+                    Stage = context.Stage,
+                    Succeeded = succeeded,
+                    ExitCode = succeeded ? 0 : 1,
+                    Executable = "fake-pwsh",
+                    Inline = true,
+                    WorkingDirectory = context.ProjectRoot,
+                    ContextPath = context.ContextPath,
+                    StdErr = succeeded ? string.Empty : "Simulated post-publish failure."
+                };
+
+            var firstHosted = new FakeHostedOperations(new List<string>())
+            {
+                ModuleAction = (action, context) => ActionResult(action, context, succeeded: false)
+            };
+            var firstRunner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: firstHosted,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: ExecutePackageBuild);
+
+            var firstException = Assert.Throws<InvalidOperationException>(() => firstRunner.Run(
+                CreatePostPublishFailureSpec(root.FullName, firstStagingPath, moduleName, "TestRepository")));
+
+            Assert.Contains("post-publish failure", firstException.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(1, packagePublishCount);
+            Assert.Single(firstHosted.PublishedModuleVersions);
+            var checkpointRoot = Path.Combine(root.FullName, "Artefacts", ".powerforge", "coordinated-release");
+            Assert.Single(Directory.GetFiles(checkpointRoot, "*.json"));
+
+            var changedTargetHosted = new FakeHostedOperations(new List<string>())
+            {
+                ModuleAction = (action, context) => ActionResult(action, context, succeeded: true)
+            };
+            var changedTargetRunner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: changedTargetHosted,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: ExecutePackageBuild);
+
+            var changedTargetException = Assert.Throws<InvalidOperationException>(() => changedTargetRunner.Run(
+                CreatePostPublishFailureSpec(root.FullName, secondStagingPath, moduleName, "OtherRepository")));
+
+            Assert.Contains("configuration no longer matches", changedTargetException.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(1, packagePublishCount);
+            Assert.Empty(changedTargetHosted.PublishedModuleVersions);
+
+            var finalHosted = new FakeHostedOperations(new List<string>())
+            {
+                ModuleAction = (action, context) => ActionResult(action, context, succeeded: true)
+            };
+            var finalRunner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: finalHosted,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: ExecutePackageBuild);
+
+            var result = finalRunner.Run(
+                CreatePostPublishFailureSpec(root.FullName, thirdStagingPath, moduleName, "TestRepository"));
+
+            Assert.Equal(synchronizedVersion, result.Plan.ResolvedVersion);
+            Assert.Equal(1, packagePublishCount);
+            Assert.Empty(finalHosted.PublishedModuleVersions);
+            Assert.False(Directory.Exists(checkpointRoot));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(firstStagingPath)) Directory.Delete(firstStagingPath, recursive: true); } catch { }
+            try { if (Directory.Exists(secondStagingPath)) Directory.Delete(secondStagingPath, recursive: true); } catch { }
+            try { if (Directory.Exists(thirdStagingPath)) Directory.Delete(thirdStagingPath, recursive: true); } catch { }
         }
     }
 
@@ -307,16 +463,18 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     private static ConfigurationProjectBuildSegment CreateProjectBuildSegment(
         string name,
         bool enabled,
-        bool buildBeforeModule)
+        bool buildBeforeModule,
+        string? configPath = null,
+        bool useAsReleaseVersionSource = true)
         => new()
         {
             Configuration = new ProjectBuildConfigurationReference
             {
                 Enabled = enabled,
                 Name = name,
-                ConfigPath = Path.Combine("Build", "project.build.json"),
+                ConfigPath = configPath ?? Path.Combine("Build", "project.build.json"),
                 BuildBeforeModule = buildBeforeModule,
-                UseAsReleaseVersionSource = true
+                UseAsReleaseVersionSource = useAsReleaseVersionSource
             }
         };
 
@@ -337,6 +495,12 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Segments = new IConfigurationSegment[]
             {
                 CreateProjectBuildSegment(moduleName, enabled: true, buildBeforeModule: true),
+                CreateProjectBuildSegment(
+                    "Companion",
+                    enabled: true,
+                    buildBeforeModule: false,
+                    configPath: Path.Combine("Build", "companion.build.json"),
+                    useAsReleaseVersionSource: false),
                 new ConfigurationPublishSegment
                 {
                     Configuration = new PublishConfiguration
@@ -344,6 +508,56 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                         Enabled = true,
                         Destination = PublishDestination.PowerShellGallery,
                         RepositoryName = "TestRepository"
+                    }
+                },
+                new ConfigurationReleaseSegment
+                {
+                    Configuration = new ReleaseConfiguration
+                    {
+                        VersionSource = ReleaseVersionSource.ProjectBuild,
+                        PrimaryProject = moduleName,
+                        SynchronizeModuleVersion = true,
+                        PublishOrder = new[] { "NuGet", "PowerShellGallery" }
+                    }
+                }
+            }
+        };
+
+    private static ModulePipelineSpec CreatePostPublishFailureSpec(
+        string rootPath,
+        string stagingPath,
+        string moduleName,
+        string repositoryName)
+        => new()
+        {
+            Build = new ModuleBuildSpec
+            {
+                Name = moduleName,
+                SourcePath = rootPath,
+                Version = "2.0.10",
+                StagingPath = stagingPath
+            },
+            Install = new ModulePipelineInstallOptions { Enabled = false },
+            Segments = new IConfigurationSegment[]
+            {
+                CreateProjectBuildSegment(moduleName, enabled: true, buildBeforeModule: true),
+                new ConfigurationPublishSegment
+                {
+                    Configuration = new PublishConfiguration
+                    {
+                        Enabled = true,
+                        Destination = PublishDestination.PowerShellGallery,
+                        RepositoryName = repositoryName
+                    }
+                },
+                new ConfigurationActionSegment
+                {
+                    Configuration = new ModulePipelineActionConfiguration
+                    {
+                        Enabled = true,
+                        Name = "PostPublish",
+                        At = ModulePipelineActionStage.AfterPublish,
+                        InlineScript = "Write-Output ignored"
                     }
                 },
                 new ConfigurationReleaseSegment

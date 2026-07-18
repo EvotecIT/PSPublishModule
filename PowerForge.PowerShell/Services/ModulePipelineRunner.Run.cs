@@ -68,7 +68,9 @@ public sealed partial class ModulePipelineRunner
             ExecuteTestPhases(plan, session, state);
             ExecutePackagingPublishAndInstallPhases(spec, plan, session, packagingRequiredModules, pipeline, state);
 
-            return BuildPipelineResult(spec, plan, state);
+            var result = BuildPipelineResult(spec, plan, state);
+            CompleteSynchronizedReleaseCheckpoint(state);
+            return result;
         }
         catch (Exception ex)
         {

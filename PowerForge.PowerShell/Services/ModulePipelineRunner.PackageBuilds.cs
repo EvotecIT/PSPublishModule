@@ -492,6 +492,7 @@ public sealed partial class ModulePipelineRunner
             laneLabel,
             useAsReleaseVersionSource,
             result);
+        RecordSynchronizedReleaseLaneCheckpoint(state, source, laneLabel, result);
     }
 
     private ProjectBuildHostExecutionResult ExecuteProjectBuildSegment(
