@@ -132,15 +132,20 @@ public sealed class GetManagedModuleCommand : PSCmdlet
             return ModuleStateInventoryCommandSupport.CreateInventoryResultFromModulePaths(new[] { resolvedPath }, loadedModules, Name, Version, Scope);
         }
 
-        return ModuleStateInventoryCommandSupport.CreateInventoryResultFromModulePaths(
-            ModulePath is { Length: > 0 }
-                ? ModulePath
-                : ModuleStateInventoryCommandSupport.ResolveEnvironmentModulePaths(),
-            loadedModules,
-            Name,
-            Version,
-            Scope,
-            pathsRequired: ModulePath is { Length: > 0 });
+        return ModulePath is { Length: > 0 }
+            ? ModuleStateInventoryCommandSupport.CreateInventoryResultFromModulePaths(
+                ModulePath,
+                loadedModules,
+                Name,
+                Version,
+                Scope,
+                pathsRequired: true)
+            : ModuleStateInventoryCommandSupport.CreateInventoryResultFromModulePathEntries(
+                ModuleStateInventoryCommandSupport.CreateEnvironmentModulePathEntries(),
+                loadedModules,
+                Name,
+                Version,
+                Scope);
     }
 
     private string ResolveExistingPath(string path, string parameterName)

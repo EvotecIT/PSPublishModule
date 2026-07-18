@@ -44,15 +44,23 @@ internal static class ModuleStateDependencyRootGroupResolver
                 targetModuleRoot))
             .Cast<IReadOnlyList<string>>()
             .ToList();
-        var anonymousProfilePaths = eligiblePaths
+        var anonymousPaths = eligiblePaths
             .Where(static path => string.IsNullOrWhiteSpace(path.ProfileName) &&
                                   !string.Equals(path.Scope, "AllUsers", StringComparison.OrdinalIgnoreCase))
-            .Select(static path => path.Path)
             .ToArray();
         if (string.IsNullOrWhiteSpace(targetProfileName))
         {
-            groups.AddRange(anonymousProfilePaths.Select(path =>
-                (IReadOnlyList<string>)NormalizeRoots(sharedPaths.Append(path), targetModuleRoot)));
+            groups.AddRange(anonymousPaths
+                .Where(static path => !string.IsNullOrWhiteSpace(path.DependencyVisibilityGroup))
+                .GroupBy(static path => path.DependencyVisibilityGroup!, StringComparer.OrdinalIgnoreCase)
+                .Select(group => (IReadOnlyList<string>)NormalizeRoots(
+                    sharedPaths.Concat(group.Select(static path => path.Path)),
+                    targetModuleRoot)));
+            groups.AddRange(anonymousPaths
+                .Where(static path => string.IsNullOrWhiteSpace(path.DependencyVisibilityGroup))
+                .Select(path => (IReadOnlyList<string>)NormalizeRoots(
+                    sharedPaths.Append(path.Path),
+                    targetModuleRoot)));
         }
         if (groups.Count == 0)
             groups.Add(NormalizeRoots(sharedPaths, targetModuleRoot));

@@ -140,6 +140,9 @@ public sealed class ModuleStateInventoryPathResult
 
     /// <summary>Gets or sets whether inventory successfully enumerated this root.</summary>
     public bool WasAvailable { get; set; }
+
+    /// <summary>Gets or sets the identity of roots that participate in the same dependency-visibility context.</summary>
+    public string? DependencyVisibilityGroup { get; set; }
 }
 
 /// <summary>

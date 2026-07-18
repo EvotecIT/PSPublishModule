@@ -10,7 +10,8 @@ internal sealed class ModuleStateModulePath
         string? scope = null,
         string? profileName = null,
         bool isRequired = false,
-        bool wasAvailable = false)
+        bool wasAvailable = false,
+        string? dependencyVisibilityGroup = null)
     {
         Path = string.IsNullOrWhiteSpace(path)
             ? throw new ArgumentException("Module path is required.", nameof(path))
@@ -20,6 +21,7 @@ internal sealed class ModuleStateModulePath
         ProfileName = NormalizeOptional(profileName);
         IsRequired = isRequired;
         WasAvailable = wasAvailable;
+        DependencyVisibilityGroup = NormalizeOptional(dependencyVisibilityGroup);
     }
 
     internal string Path { get; }
@@ -33,6 +35,8 @@ internal sealed class ModuleStateModulePath
     internal bool IsRequired { get; }
 
     internal bool WasAvailable { get; }
+
+    internal string? DependencyVisibilityGroup { get; }
 
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();

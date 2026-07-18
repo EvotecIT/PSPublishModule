@@ -142,7 +142,8 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
                 path.PowerShellEdition,
                 path.Scope,
                 path.ProfileName,
-                path.IsRequired)).ToArray()
+                path.IsRequired,
+                dependencyVisibilityGroup: path.DependencyVisibilityGroup)).ToArray()
             : (inventory.ModulePaths ?? Array.Empty<string>())
                 .Select(static path => new ModuleStateModulePath(path, isRequired: true))
                 .ToArray();

@@ -79,7 +79,8 @@ internal sealed class ModuleStateJsonService
                 path.Scope,
                 path.ProfileName,
                 path.IsRequired,
-                path.WasAvailable))
+                path.WasAvailable,
+                path.DependencyVisibilityGroup))
             : (dto.ModulePaths ?? Array.Empty<string>()).Select(path => new ModuleStateModulePath(
                 path,
                 wasAvailable: ModuleStateInventoryPathAvailability.WasAvailable(path, diagnostics)));
@@ -266,6 +267,8 @@ internal sealed class ModuleStateJsonService
         public bool IsRequired { get; set; }
 
         public bool WasAvailable { get; set; }
+
+        public string? DependencyVisibilityGroup { get; set; }
     }
 
     private sealed class InventoryDiagnosticDto

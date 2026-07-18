@@ -120,7 +120,8 @@ internal sealed class ModuleStateInventoryService
             path.Scope,
             path.ProfileName,
             path.IsRequired,
-            wasAvailable);
+            wasAvailable,
+            path.DependencyVisibilityGroup);
 
     internal static ModuleStateInstalledModule[] RecomputeEffectiveImportCandidates(
         IEnumerable<ModuleStateInstalledModule> installedModules,

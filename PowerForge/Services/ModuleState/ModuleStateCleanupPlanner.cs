@@ -89,7 +89,7 @@ internal sealed class ModuleStateCleanupPlanner
                     (string.IsNullOrWhiteSpace(receiptModule.Scope) ||
                      string.Equals(module.Scope, receiptModule.Scope, StringComparison.OrdinalIgnoreCase)) &&
                     (string.IsNullOrWhiteSpace(receiptModule.ModuleRoot) ||
-                     ModuleStatePathIdentity.Equals(module.ModuleRoot, receiptModule.ModuleRoot)) &&
+                     ModuleStatePathIdentity.Equals(ModuleStatePathIdentity.ResolveModuleRoot(module), receiptModule.ModuleRoot)) &&
                     (string.IsNullOrWhiteSpace(receiptModule.PowerShellEdition) ||
                      string.Equals(module.PowerShellEdition, receiptModule.PowerShellEdition, StringComparison.OrdinalIgnoreCase)) &&
                     (string.IsNullOrWhiteSpace(receiptModule.ProfileName) ||
@@ -126,7 +126,7 @@ internal sealed class ModuleStateCleanupPlanner
                          (string.IsNullOrWhiteSpace(receiptModule.Scope) ||
                           string.Equals(module.Scope, receiptModule.Scope, StringComparison.OrdinalIgnoreCase)) &&
                          (string.IsNullOrWhiteSpace(receiptModule.ModuleRoot) ||
-                          ModuleStatePathIdentity.Equals(module.ModuleRoot, receiptModule.ModuleRoot)) &&
+                          ModuleStatePathIdentity.Equals(ModuleStatePathIdentity.ResolveModuleRoot(module), receiptModule.ModuleRoot)) &&
                          (string.IsNullOrWhiteSpace(receiptModule.PowerShellEdition) ||
                           string.Equals(module.PowerShellEdition, receiptModule.PowerShellEdition, StringComparison.OrdinalIgnoreCase)) &&
                          (string.IsNullOrWhiteSpace(receiptModule.ProfileName) ||

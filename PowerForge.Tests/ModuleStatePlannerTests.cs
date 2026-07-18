@@ -351,6 +351,80 @@ public sealed class ModuleStatePlannerTests
     }
 
     [Fact]
+    public void CreatePlan_MatchesReceiptRootAgainstLegacyInventoryPath()
+    {
+        var moduleRoot = Path.Combine(Path.GetTempPath(), "LegacyModules");
+        var installedPath = Path.Combine(moduleRoot, "Company.Tools", "1.2.0");
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[]
+            {
+                new ModuleStateInstalledModule(
+                    "Company.Tools",
+                    "1.2.0",
+                    path: installedPath,
+                    sourceRepository: "CompanyModules")
+            }),
+            new[] { new ModuleStateDesiredModule("Company.Tools", "=1.2.0") },
+            maintenanceReceipts: new[]
+            {
+                new ModuleStateMaintenanceReceipt(
+                    "Company baseline",
+                    new[]
+                    {
+                        new ModuleStateMaintenanceReceiptModule(
+                            "Company.Tools",
+                            "1.2.0",
+                            sourceRepository: "CompanyModules",
+                            moduleRoot: moduleRoot)
+                    })
+            });
+
+        var plan = new ModuleStatePlanner().CreatePlan(request);
+
+        Assert.Equal(ModuleStatePlanActionKind.NoAction, Assert.Single(plan.Actions).Kind);
+        Assert.Empty(plan.Findings);
+    }
+
+    [Fact]
+    public void CreatePlan_WithRepair_UpdatesLegacyInventoryPlacementFromReceipt()
+    {
+        var moduleRoot = Path.Combine(Path.GetTempPath(), "LegacyModules");
+        var installedPath = Path.Combine(moduleRoot, "Company.Tools", "1.3.0");
+        var request = new ModuleStatePlanRequest(
+            new ModuleStateInventory(new[]
+            {
+                new ModuleStateInstalledModule(
+                    "Company.Tools",
+                    "1.3.0",
+                    path: installedPath,
+                    sourceRepository: "CompanyModules")
+            }),
+            new[] { new ModuleStateDesiredModule("Company.Tools", ">=1.0.0") },
+            maintenanceReceipts: new[]
+            {
+                new ModuleStateMaintenanceReceipt(
+                    "Company baseline",
+                    new[]
+                    {
+                        new ModuleStateMaintenanceReceiptModule(
+                            "Company.Tools",
+                            "1.2.0",
+                            sourceRepository: "CompanyModules",
+                            moduleRoot: moduleRoot)
+                    })
+            },
+            repair: true);
+
+        var plan = new ModuleStatePlanner().CreatePlan(request);
+        var action = Assert.Single(plan.Actions);
+
+        Assert.Equal(ModuleStatePlanActionKind.Update, action.Kind);
+        Assert.Equal("=1.2.0", action.VersionPolicy);
+        Assert.Equal(moduleRoot, action.TargetModuleRoot);
+        Assert.True(action.IsRepair);
+    }
+
+    [Fact]
     public void CreatePlan_WithRepair_PlansReceiptVersionRepairAction()
     {
         var request = new ModuleStatePlanRequest(
@@ -433,18 +507,19 @@ public sealed class ModuleStatePlannerTests
     [Fact]
     public void CreatePlan_WithCleanup_NormalizesMaintenanceReceiptVersionBeforeMatching()
     {
+        var moduleRoot = Path.Combine(Path.GetTempPath(), "LegacyModules");
         var request = new ModuleStatePlanRequest(
             new ModuleStateInventory(new[]
             {
-                new ModuleStateInstalledModule("Company.Tools", "1.0.0", scope: "CurrentUser", path: @"C:\Modules\Company.Tools\1.0.0"),
-                new ModuleStateInstalledModule("Company.Tools", "1.2.0", scope: "CurrentUser", path: @"C:\Modules\Company.Tools\1.2.0")
+                new ModuleStateInstalledModule("Company.Tools", "1.0.0", scope: "CurrentUser", path: Path.Combine(moduleRoot, "Company.Tools", "1.0.0")),
+                new ModuleStateInstalledModule("Company.Tools", "1.2.0", scope: "CurrentUser", path: Path.Combine(moduleRoot, "Company.Tools", "1.2.0"))
             }),
             Array.Empty<ModuleStateDesiredModule>(),
             maintenanceReceipts: new[]
             {
                 new ModuleStateMaintenanceReceipt(
                     "ModuleState",
-                    new[] { new ModuleStateMaintenanceReceiptModule("Company.Tools", "1.2") })
+                    new[] { new ModuleStateMaintenanceReceiptModule("Company.Tools", "1.2", moduleRoot: moduleRoot) })
             },
             cleanupMode: ModuleStateCleanupMode.OldVersions);
 

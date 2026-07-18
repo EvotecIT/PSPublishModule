@@ -462,7 +462,7 @@ internal sealed class ModuleStateRepairPlanner
         => (string.IsNullOrWhiteSpace(receiptModule.Scope) ||
             string.Equals(installedModule.Scope, receiptModule.Scope, StringComparison.OrdinalIgnoreCase)) &&
            (string.IsNullOrWhiteSpace(receiptModule.ModuleRoot) ||
-            ModuleStatePathIdentity.Equals(installedModule.ModuleRoot, receiptModule.ModuleRoot)) &&
+            ModuleStatePathIdentity.Equals(ModuleStatePathIdentity.ResolveModuleRoot(installedModule), receiptModule.ModuleRoot)) &&
            (string.IsNullOrWhiteSpace(receiptModule.PowerShellEdition) ||
             string.Equals(installedModule.PowerShellEdition, receiptModule.PowerShellEdition, StringComparison.OrdinalIgnoreCase)) &&
            (string.IsNullOrWhiteSpace(receiptModule.ProfileName) ||

@@ -515,7 +515,7 @@ public sealed class RepairManagedModuleCommandTests
             .AddParameter("ModulePath", new[] { moduleRoot.Path })
             .AddParameter("Name", new[] { "Company.Tools" })
             .AddParameter("Cleanup", "OldVersions")
-            .AddParameter("Force");
+            .AddParameter("Confirm", false);
 
         var result = Assert.IsType<ModuleStateWorkflowResult>(Assert.Single(ps.Invoke()).BaseObject);
 

@@ -195,6 +195,32 @@ public sealed class ModuleStateInventoryCommandSupportTests
     }
 
     [Fact]
+    public void InventoryMapping_PreservesDependencyVisibilityGroup()
+    {
+        const string moduleRoot = @"C:\VisibleModules";
+        var coreInventory = new ModuleStateInventory(
+            Array.Empty<ModuleStateInstalledModule>(),
+            new[]
+            {
+                new ModuleStateModulePath(
+                    moduleRoot,
+                    wasAvailable: true,
+                    dependencyVisibilityGroup: ModuleStateInventoryCommandSupport.CurrentProcessModulePathVisibilityGroup)
+            },
+            Array.Empty<ModuleStateInventoryDiagnostic>());
+
+        var result = ModuleStateInventoryResultMapper.ToCmdletResult(coreInventory, "ModulePath", new[] { moduleRoot });
+        var roundTripped = ModuleStateInventoryResultMapper.ToCoreInventory(result);
+
+        Assert.Equal(
+            ModuleStateInventoryCommandSupport.CurrentProcessModulePathVisibilityGroup,
+            Assert.Single(result.ScannedPaths).DependencyVisibilityGroup);
+        Assert.Equal(
+            ModuleStateInventoryCommandSupport.CurrentProcessModulePathVisibilityGroup,
+            Assert.Single(roundTripped.ModulePaths).DependencyVisibilityGroup);
+    }
+
+    [Fact]
     public void ResolveLoadedModuleVersion_AppendsPrereleaseLabel()
     {
         var item = new PSObject();

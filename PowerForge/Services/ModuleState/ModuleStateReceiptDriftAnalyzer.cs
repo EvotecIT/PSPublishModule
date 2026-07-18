@@ -153,7 +153,7 @@ internal sealed class ModuleStateReceiptDriftAnalyzer
         ModuleStateInstalledModule installedModule,
         ModuleStateMaintenanceReceiptModule receiptModule)
         => (string.IsNullOrWhiteSpace(receiptModule.ModuleRoot) ||
-            ModuleStatePathIdentity.Equals(installedModule.ModuleRoot, receiptModule.ModuleRoot)) &&
+            ModuleStatePathIdentity.Equals(ModuleStatePathIdentity.ResolveModuleRoot(installedModule), receiptModule.ModuleRoot)) &&
            (string.IsNullOrWhiteSpace(receiptModule.PowerShellEdition) ||
             string.Equals(installedModule.PowerShellEdition, receiptModule.PowerShellEdition, StringComparison.OrdinalIgnoreCase)) &&
            (string.IsNullOrWhiteSpace(receiptModule.ProfileName) ||

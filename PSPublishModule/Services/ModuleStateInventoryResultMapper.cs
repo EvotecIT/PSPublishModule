@@ -28,7 +28,8 @@ internal static class ModuleStateInventoryResultMapper
             Scope = path.Scope,
             ProfileName = path.ProfileName,
             IsRequired = path.IsRequired,
-            WasAvailable = path.WasAvailable
+            WasAvailable = path.WasAvailable,
+            DependencyVisibilityGroup = path.DependencyVisibilityGroup
         }).ToArray();
 
         return new ModuleStateInventoryResult
@@ -90,7 +91,8 @@ internal static class ModuleStateInventoryResultMapper
                 path.Scope,
                 path.ProfileName,
                 path.IsRequired,
-                path.WasAvailable))
+                path.WasAvailable,
+                path.DependencyVisibilityGroup))
             : (result.ModulePaths ?? Array.Empty<string>()).Select(path => new ModuleStateModulePath(
                 path,
                 wasAvailable: ModuleStateInventoryPathAvailability.WasAvailable(path, diagnostics)));

@@ -61,8 +61,6 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
     {
         if (!inheritGlobalForce || !Force.IsPresent || Latest.IsPresent || plan.Actions is null)
             return;
-        if (plan.Actions.Any(static action => string.Equals(action.Kind, ModuleStatePlanActionKind.Remove.ToString(), StringComparison.OrdinalIgnoreCase)))
-            return;
 
         foreach (var action in plan.Actions)
         {

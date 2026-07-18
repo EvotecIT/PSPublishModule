@@ -10,6 +10,8 @@ namespace PSPublishModule;
 
 internal static class ModuleStateInventoryCommandSupport
 {
+    internal const string CurrentProcessModulePathVisibilityGroup = "CurrentProcessPSModulePath";
+
     internal static ModuleStateInventoryResult CreateInventoryResultFromFile(
         string inventoryPath,
         IEnumerable<ModuleStateLoadedModuleEvidence>? loadedModules = null,
@@ -53,14 +55,22 @@ internal static class ModuleStateInventoryCommandSupport
 
     internal static ModuleStateModulePath[] CreateModulePathEntries(
         IEnumerable<string> modulePaths,
-        bool pathsRequired)
+        bool pathsRequired,
+        string? dependencyVisibilityGroup = null)
         => NormalizeModulePaths(modulePaths)
             .Select(path => new ModuleStateModulePath(
                 path,
                 InferPowerShellEdition(path),
                 InferScope(path),
-                isRequired: pathsRequired))
+                isRequired: pathsRequired,
+                dependencyVisibilityGroup: dependencyVisibilityGroup))
             .ToArray();
+
+    internal static ModuleStateModulePath[] CreateEnvironmentModulePathEntries()
+        => CreateModulePathEntries(
+            ResolveEnvironmentModulePaths(),
+            pathsRequired: false,
+            dependencyVisibilityGroup: CurrentProcessModulePathVisibilityGroup);
 
     internal static ModuleStateInventoryResult CreateInventoryResultFromModulePathEntries(
         IEnumerable<ModuleStateModulePath> modulePaths,
@@ -120,7 +130,8 @@ internal static class ModuleStateInventoryCommandSupport
                     path.Scope ?? existing.Scope,
                     path.ProfileName ?? existing.ProfileName,
                     path.IsRequired || existing.IsRequired,
-                    path.WasAvailable || existing.WasAvailable);
+                    path.WasAvailable || existing.WasAvailable,
+                    path.DependencyVisibilityGroup ?? existing.DependencyVisibilityGroup);
                 continue;
             }
 
@@ -130,7 +141,8 @@ internal static class ModuleStateInventoryCommandSupport
                 path.Scope,
                 path.ProfileName,
                 path.IsRequired,
-                path.WasAvailable));
+                path.WasAvailable,
+                path.DependencyVisibilityGroup));
         }
 
         return normalized.ToArray();
@@ -219,7 +231,8 @@ internal static class ModuleStateInventoryCommandSupport
                         current.Scope ?? path.Scope,
                         current.ProfileName ?? path.ProfileName,
                         path.IsRequired || current.IsRequired,
-                        current.WasAvailable);
+                        current.WasAvailable,
+                        current.DependencyVisibilityGroup ?? path.DependencyVisibilityGroup);
             })
             .ToArray();
     }

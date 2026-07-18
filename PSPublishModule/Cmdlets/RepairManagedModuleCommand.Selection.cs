@@ -19,11 +19,9 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
             ? ModuleStateInventoryCommandSupport.GetLoadedModules(this)
             : null;
 
-        var basePaths = ModuleStateInventoryCommandSupport.CreateModulePathEntries(
-            ModulePath is { Length: > 0 }
-                ? ModulePath
-                : ModuleStateInventoryCommandSupport.ResolveEnvironmentModulePaths(),
-            pathsRequired: ModulePath is { Length: > 0 });
+        var basePaths = ModulePath is { Length: > 0 }
+            ? ModuleStateInventoryCommandSupport.CreateModulePathEntries(ModulePath, pathsRequired: true)
+            : ModuleStateInventoryCommandSupport.CreateEnvironmentModulePathEntries();
         var explicitTargetRoot = ResolveManagedDeliveryModuleRoot();
         var targetPaths = string.IsNullOrWhiteSpace(explicitTargetRoot)
             ? Array.Empty<ModuleStateModulePath>()

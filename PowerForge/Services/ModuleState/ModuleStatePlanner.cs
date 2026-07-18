@@ -96,7 +96,7 @@ internal sealed class ModuleStatePlanner
                     allowClobber: desiredModule.AllowClobber,
                     skipDependencyCheck: desiredModule.SkipDependencyCheck,
                     targetRepositorySource: targetRepositorySource,
-                    targetModuleRoot: targetModuleRoot ?? installedModule.ModuleRoot,
+                    targetModuleRoot: targetModuleRoot ?? ModuleStatePathIdentity.ResolveModuleRoot(installedModule),
                     targetPowerShellEdition: desiredModule.PowerShellEdition ?? installedModule.PowerShellEdition,
                     targetProfileName: desiredModule.ProfileName ?? installedModule.ProfileName));
                 continue;
@@ -120,7 +120,7 @@ internal sealed class ModuleStatePlanner
                     allowClobber: desiredModule.AllowClobber,
                     skipDependencyCheck: desiredModule.SkipDependencyCheck,
                     targetRepositorySource: targetRepositorySource,
-                    targetModuleRoot: targetModuleRoot ?? installedModule.ModuleRoot,
+                    targetModuleRoot: targetModuleRoot ?? ModuleStatePathIdentity.ResolveModuleRoot(installedModule),
                     targetPowerShellEdition: desiredModule.PowerShellEdition ?? installedModule.PowerShellEdition,
                     targetProfileName: desiredModule.ProfileName ?? installedModule.ProfileName));
                 continue;
@@ -144,7 +144,7 @@ internal sealed class ModuleStatePlanner
                     allowClobber: desiredModule.AllowClobber,
                     skipDependencyCheck: desiredModule.SkipDependencyCheck,
                     targetRepositorySource: targetRepositorySource,
-                    targetModuleRoot: targetModuleRoot ?? installedModule.ModuleRoot,
+                    targetModuleRoot: targetModuleRoot ?? ModuleStatePathIdentity.ResolveModuleRoot(installedModule),
                     targetPowerShellEdition: desiredModule.PowerShellEdition ?? installedModule.PowerShellEdition,
                     targetProfileName: desiredModule.ProfileName ?? installedModule.ProfileName));
                 continue;
@@ -168,7 +168,7 @@ internal sealed class ModuleStatePlanner
                     allowClobber: desiredModule.AllowClobber,
                     skipDependencyCheck: desiredModule.SkipDependencyCheck,
                     targetRepositorySource: targetRepositorySource,
-                    targetModuleRoot: targetModuleRoot ?? installedModule.ModuleRoot,
+                    targetModuleRoot: targetModuleRoot ?? ModuleStatePathIdentity.ResolveModuleRoot(installedModule),
                     targetPowerShellEdition: desiredModule.PowerShellEdition ?? installedModule.PowerShellEdition,
                     targetProfileName: desiredModule.ProfileName ?? installedModule.ProfileName));
                 continue;
@@ -189,7 +189,7 @@ internal sealed class ModuleStatePlanner
                 allowClobber: desiredModule.AllowClobber,
                 skipDependencyCheck: desiredModule.SkipDependencyCheck,
                 targetRepositorySource: targetRepositorySource,
-                targetModuleRoot: targetModuleRoot ?? installedModule.ModuleRoot,
+                targetModuleRoot: targetModuleRoot ?? ModuleStatePathIdentity.ResolveModuleRoot(installedModule),
                 targetPowerShellEdition: desiredModule.PowerShellEdition ?? installedModule.PowerShellEdition,
                 targetProfileName: desiredModule.ProfileName ?? installedModule.ProfileName));
         }

@@ -88,6 +88,26 @@ public sealed class ModuleStateJsonServiceTests
     }
 
     [Fact]
+    public void ReadInventory_PreservesDependencyVisibilityGroup()
+    {
+        var inventory = new ModuleStateJsonService().ReadInventory("""
+{
+  "ScannedPaths": [
+    {
+      "Path": "C:/VisibleModules",
+      "WasAvailable": true,
+      "DependencyVisibilityGroup": "CurrentProcessPSModulePath"
+    }
+  ]
+}
+""");
+
+        var path = Assert.Single(inventory.ModulePaths);
+        Assert.True(path.WasAvailable);
+        Assert.Equal("CurrentProcessPSModulePath", path.DependencyVisibilityGroup);
+    }
+
+    [Fact]
     public void ReadDesiredState_LoadsModulesAndFamilyPoliciesFromJson()
     {
         var desiredState = new ModuleStateJsonService().ReadDesiredState("""
