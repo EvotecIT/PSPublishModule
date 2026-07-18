@@ -16,6 +16,8 @@ public sealed partial class ModulePipelineRunner
             return;
         }
 
+        PreflightSynchronizedModulePublishVersions(plan);
+
         var publishOrder = ResolvePublishOrder(plan);
         var packageNuGetPublished = false;
         var packageGitHubPublished = false;
@@ -54,6 +56,33 @@ public sealed partial class ModulePipelineRunner
 
         ExecuteModulePublishes(plan, session, buildResult, state, modulePublished, PublishDestination.PowerShellGallery);
         ExecuteModulePublishes(plan, session, buildResult, state, modulePublished, PublishDestination.GitHub);
+    }
+
+    private void PreflightSynchronizedModulePublishVersions(ModulePipelinePlan plan)
+    {
+        if (plan.Release?.Configuration?.SynchronizeModuleVersion != true)
+        {
+            return;
+        }
+
+        var modulePublishes = (plan.Publishes ?? Array.Empty<ConfigurationPublishSegment>())
+            .Where(static publish => publish?.Configuration?.Destination == PublishDestination.PowerShellGallery)
+            .ToArray();
+        if (modulePublishes.Length == 0)
+        {
+            return;
+        }
+
+        if (_hostedOperations is not IModulePipelinePublishPreflightOperations preflight)
+        {
+            throw new InvalidOperationException(
+                "Synchronized module publishing requires module version preflight support.");
+        }
+
+        foreach (var publish in modulePublishes)
+        {
+            preflight.ValidateModulePublishVersion(publish.Configuration, plan);
+        }
     }
 
     private void ExecuteModulePublishes(

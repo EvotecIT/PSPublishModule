@@ -398,11 +398,12 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     }
 
     [Theory]
-    [InlineData(false, "2.0.11", "2.1.6", null)]
-    [InlineData(true, "2.0.11", "2.0.11", null)]
-    [InlineData(true, "2.0.11-beta.2", "2.0.11", "beta.2")]
+    [InlineData(false, "2.1.6", "2.0.11", "2.1.6", null)]
+    [InlineData(true, "2.0.10", "2.0.11", "2.0.11", null)]
+    [InlineData(true, "2.0.10", "2.0.11-beta.2", "2.0.11", "beta.2")]
     public void Run_UsesProjectBuildReleaseVersionWithOptInModuleSynchronization(
         bool synchronizeModuleVersion,
+        string moduleVersion,
         string projectVersion,
         string expectedModuleVersion,
         string? expectedPreRelease)
@@ -412,7 +413,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         try
         {
             const string moduleName = "Mailozaurr";
-            WriteMinimalModule(root.FullName, moduleName, "2.1.6");
+            WriteMinimalModule(root.FullName, moduleName, moduleVersion);
             WriteProjectBuildConfig(root.FullName, Path.Combine("Build", "project.build.json"));
 
             var packageOutput = Path.Combine(root.FullName, "Artifacts", "NuGet");
@@ -463,7 +464,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                 {
                     Name = moduleName,
                     SourcePath = root.FullName,
-                    Version = "2.1.6",
+                    Version = moduleVersion,
                     StagingPath = stagingPath
                 },
                 Install = new ModulePipelineInstallOptions { Enabled = false },
@@ -1247,7 +1248,9 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             }));
     }
 
-    private sealed class FakeHostedOperations : IModulePipelineHostedOperations
+    private sealed class FakeHostedOperations :
+        IModulePipelineHostedOperations,
+        IModulePipelinePublishPreflightOperations
     {
         private readonly List<string> _events;
 
@@ -1257,6 +1260,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         }
 
         public List<string> PublishedModuleVersions { get; } = new();
+        public Action<PublishConfiguration, ModulePipelinePlan>? ModulePublishVersionPreflight { get; set; }
 
         public IReadOnlyList<ModuleDependencyInstallResult> EnsureDependenciesInstalled(
             ModuleDependency[] dependencies,
@@ -1309,6 +1313,11 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                 succeeded: true,
                 errorMessage: null);
         }
+
+        public void ValidateModulePublishVersion(
+            PublishConfiguration publish,
+            ModulePipelinePlan plan)
+            => ModulePublishVersionPreflight?.Invoke(publish, plan);
 
         public ModulePipelineActionResult RunAction(
             ModulePipelineActionConfiguration action,

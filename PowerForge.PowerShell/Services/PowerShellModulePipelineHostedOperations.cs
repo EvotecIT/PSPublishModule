@@ -6,7 +6,9 @@ using System.Text.Json;
 
 namespace PowerForge;
 
-internal sealed class PowerShellModulePipelineHostedOperations : IModulePipelineHostedOperations
+internal sealed class PowerShellModulePipelineHostedOperations :
+    IModulePipelineHostedOperations,
+    IModulePipelinePublishPreflightOperations
 {
     private readonly IPowerShellRunner _runner;
     private readonly ILogger _logger;
@@ -92,6 +94,11 @@ internal sealed class PowerShellModulePipelineHostedOperations : IModulePipeline
         IReadOnlyList<ArtefactBuildResult> artefactResults,
         bool includeScriptFolders)
         => new ModulePublisher(_logger, _runner).Publish(publish, plan, buildResult, artefactResults, includeScriptFolders);
+
+    public void ValidateModulePublishVersion(
+        PublishConfiguration publish,
+        ModulePipelinePlan plan)
+        => new ModulePublisher(_logger, _runner).ValidateVersionForPublish(publish, plan);
 
     public ModulePipelineActionResult RunAction(
         ModulePipelineActionConfiguration action,

@@ -57,3 +57,10 @@ internal interface IModulePipelineHostedOperations
         string[] excludeSubstrings,
         SigningOptionsConfiguration signing);
 }
+
+internal interface IModulePipelinePublishPreflightOperations
+{
+    void ValidateModulePublishVersion(
+        PublishConfiguration publish,
+        ModulePipelinePlan plan);
+}

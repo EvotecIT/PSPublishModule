@@ -548,6 +548,12 @@ public sealed partial class ModulePipelineRunner
             }
         }
 
+        ValidateSynchronizedModuleVersionConfiguration(
+            release,
+            projectBuilds,
+            packageBuilds,
+            gateMode);
+
         expectedVersion ??= spec.Build.Version;
         var psd1 = Path.Combine(projectRoot, $"{moduleName}.psd1");
         if (gateMode == ConfigurationGateMode.Documentation &&
@@ -585,9 +591,18 @@ public sealed partial class ModulePipelineRunner
 
         var expectedVersionResolved = string.IsNullOrWhiteSpace(expectedVersion) ? "1.0.0" : expectedVersion!;
 
-        var localPsd1 = localVersioning ? Path.Combine(projectRoot, $"{moduleName}.psd1") : null;
-        var stepper = new ModuleVersionStepper(_logger);
-        var resolved = stepper.Step(expectedVersionResolved, moduleName, localPsd1Path: localPsd1).Version;
+        string resolved;
+        if (ShouldSynchronizeModuleVersionForRun(release, gateMode))
+        {
+            resolved = ResolveProvisionalSynchronizedModuleVersion(expectedVersionResolved);
+            _logger.Info("Synchronized release version selected: skipping the independent module repository version lookup.");
+        }
+        else
+        {
+            var localPsd1 = localVersioning ? Path.Combine(projectRoot, $"{moduleName}.psd1") : null;
+            var stepper = new ModuleVersionStepper(_logger);
+            resolved = stepper.Step(expectedVersionResolved, moduleName, localPsd1Path: localPsd1).Version;
+        }
 
         // Resolve .csproj path: explicit build setting wins, otherwise derive from BuildLibraries NETProjectPath/ProjectName.
         var csproj = !string.IsNullOrWhiteSpace(spec.Build.CsprojPath)

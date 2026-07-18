@@ -7,6 +7,267 @@ namespace PowerForge.Tests;
 
 public sealed partial class ModulePipelineUnifiedReleaseTests
 {
+    [Theory]
+    [InlineData(ReleaseVersionSource.Module, true, true, "VersionSource ProjectBuild or PackageBuild")]
+    [InlineData(ReleaseVersionSource.PackageBuild, false, true, "UseAsReleaseVersionSource")]
+    [InlineData(ReleaseVersionSource.PackageBuild, true, false, "BuildBeforeModule")]
+    public void Plan_RejectsInvalidModuleVersionSynchronizationBeforePackageExecution(
+        ReleaseVersionSource versionSource,
+        bool useAsReleaseVersionSource,
+        bool buildBeforeModule,
+        string expectedMessage)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var packageExecutorCalled = false;
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    packageExecutorCalled = true;
+                    return new ProjectBuildHostExecutionResult { Success = true };
+                });
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "Packages",
+                            RootPath = "Sources",
+                            BuildBeforeModule = buildBeforeModule,
+                            UseAsReleaseVersionSource = useAsReleaseVersionSource
+                        }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            VersionSource = versionSource,
+                            SynchronizeModuleVersion = true
+                        }
+                    }
+                }
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains(expectedMessage, exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(packageExecutorCalled);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_PreflightsSynchronizedModuleVersionBeforePublishingNuGet()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "Mailozaurr";
+            const string packageVersion = "2.0.11";
+            WriteMinimalModule(root.FullName, moduleName, "2.1.6");
+            var packageOutput = Path.Combine(root.FullName, "Artifacts", "NuGet");
+            var packagePath = Path.Combine(packageOutput, $"{moduleName}.{packageVersion}.nupkg");
+            var dependencyBuildCalls = 0;
+            var nugetPublishCalls = 0;
+            var hostedOperations = new FakeHostedOperations(new List<string>())
+            {
+                ModulePublishVersionPreflight = (_, plan) => throw new InvalidOperationException(
+                    $"Module version '{plan.ResolvedVersion}' is not greater than repository version '2.1.6'.")
+            };
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: hostedOperations,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    if (request.PublishNuget == true)
+                    {
+                        nugetPublishCalls++;
+                    }
+                    else
+                    {
+                        dependencyBuildCalls++;
+                    }
+
+                    Directory.CreateDirectory(packageOutput);
+                    File.WriteAllText(packagePath, "package");
+                    var release = new DotNetRepositoryReleaseResult { Success = true, ResolvedVersion = packageVersion };
+                    release.ResolvedVersionsByProject[moduleName] = packageVersion;
+                    var project = new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = moduleName,
+                        PackageId = moduleName,
+                        IsPackable = true,
+                        NewVersion = packageVersion
+                    };
+                    project.Packages.Add(packagePath);
+                    release.Projects.Add(project);
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        OutputPath = packageOutput,
+                        Result = new ProjectBuildResult { Success = true, Release = release }
+                    };
+                });
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "2.1.X",
+                    StagingPath = stagingPath
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "Packages",
+                            RootPath = "Sources",
+                            BuildBeforeModule = true,
+                            UseAsReleaseVersionSource = true,
+                            PublishNuget = true
+                        }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            VersionSource = ReleaseVersionSource.PackageBuild,
+                            PrimaryProject = moduleName,
+                            SynchronizeModuleVersion = true,
+                            PublishOrder = new[] { "NuGet", "PowerShellGallery" }
+                        }
+                    },
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            Enabled = true,
+                            Destination = PublishDestination.PowerShellGallery,
+                            RepositoryName = "PSGallery",
+                            ApiKey = "gallery-token"
+                        }
+                    }
+                }
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("not greater than repository version", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(1, dependencyBuildCalls);
+            Assert.Equal(0, nugetPublishCalls);
+            Assert.Empty(hostedOperations.PublishedModuleVersions);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_ManifestGateSkipsRuntimeModuleVersionSynchronization()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var packageExecutorCalled = false;
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    packageExecutorCalled = true;
+                    return new ProjectBuildHostExecutionResult { Success = true };
+                });
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "Packages",
+                            RootPath = "Sources",
+                            BuildBeforeModule = true,
+                            UseAsReleaseVersionSource = true
+                        }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            VersionSource = ReleaseVersionSource.PackageBuild,
+                            SynchronizeModuleVersion = true
+                        }
+                    },
+                    new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration { Mode = ConfigurationGateMode.Manifest }
+                    }
+                }
+            };
+
+            var result = runner.Run(spec);
+
+            Assert.Equal("1.0.0", result.Plan.ResolvedVersion);
+            Assert.False(packageExecutorCalled);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Fact]
     public void Run_RejectsConflictingPrimaryPackageReleaseVersions()
     {

@@ -5,6 +5,72 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
+    private static void ValidateSynchronizedModuleVersionConfiguration(
+        ConfigurationReleaseSegment? releaseSegment,
+        IReadOnlyList<ConfigurationProjectBuildSegment> projectBuilds,
+        IReadOnlyList<ConfigurationPackageBuildSegment> packageBuilds,
+        ConfigurationGateMode? gateMode)
+    {
+        var release = releaseSegment?.Configuration;
+        if (release?.SynchronizeModuleVersion != true)
+        {
+            return;
+        }
+
+        if (release.VersionSource != ReleaseVersionSource.ProjectBuild &&
+            release.VersionSource != ReleaseVersionSource.PackageBuild)
+        {
+            throw new InvalidOperationException(
+                "SynchronizeModuleVersion requires Release VersionSource ProjectBuild or PackageBuild.");
+        }
+
+        var sourceLanes = release.VersionSource == ReleaseVersionSource.ProjectBuild
+            ? projectBuilds.Select(static segment => new SynchronizedReleaseLane(
+                segment.Configuration.Enabled,
+                segment.Configuration.BuildBeforeModule,
+                segment.Configuration.UseAsReleaseVersionSource)).ToArray()
+            : packageBuilds.Select(static segment => new SynchronizedReleaseLane(
+                segment.Configuration.Enabled,
+                segment.Configuration.BuildBeforeModule,
+                segment.Configuration.UseAsReleaseVersionSource)).ToArray();
+        var explicitLanes = sourceLanes.Where(static lane => lane.UseAsReleaseVersionSource).ToArray();
+        if (explicitLanes.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"SynchronizeModuleVersion requires a {release.VersionSource} lane marked with UseAsReleaseVersionSource.");
+        }
+        if (explicitLanes.Any(static lane => !lane.BuildBeforeModule))
+        {
+            throw new InvalidOperationException(
+                "SynchronizeModuleVersion requires every selected release source lane to use BuildBeforeModule.");
+        }
+
+        var gateEnablesLanes = gateMode is ConfigurationGateMode.Build or ConfigurationGateMode.Publish;
+        if (!gateEnablesLanes &&
+            gateMode is not ConfigurationGateMode.Manifest and not ConfigurationGateMode.Documentation &&
+            !explicitLanes.Any(static lane => lane.Enabled))
+        {
+            throw new InvalidOperationException(
+                "SynchronizeModuleVersion requires an enabled release source lane when no Build or Publish gate is active.");
+        }
+    }
+
+    private static bool ShouldSynchronizeModuleVersionForRun(
+        ConfigurationReleaseSegment? release,
+        ConfigurationGateMode? gateMode)
+        => release?.Configuration?.SynchronizeModuleVersion == true &&
+           gateMode is not ConfigurationGateMode.Manifest and not ConfigurationGateMode.Documentation;
+
+    private static string ResolveProvisionalSynchronizedModuleVersion(string expectedVersion)
+    {
+        if (Version.TryParse(expectedVersion, out _))
+        {
+            return expectedVersion;
+        }
+
+        return VersionPatternStepper.Step(expectedVersion, currentVersion: null);
+    }
+
     private void RegisterReleaseVersionCandidate(
         ModulePipelineRunState state,
         ReleaseVersionSource source,
@@ -73,11 +139,12 @@ public sealed partial class ModulePipelineRunner
         ModulePipelinePlan plan,
         ModulePipelineRunState state)
     {
-        var release = plan.Release?.Configuration;
-        if (release?.SynchronizeModuleVersion != true)
+        var releaseSegment = plan.Release;
+        if (!ShouldSynchronizeModuleVersionForRun(releaseSegment, plan.GateMode))
         {
             return;
         }
+        var release = releaseSegment!.Configuration;
 
         if (release.VersionSource != ReleaseVersionSource.ProjectBuild &&
             release.VersionSource != ReleaseVersionSource.PackageBuild)
@@ -229,6 +296,23 @@ public sealed partial class ModulePipelineRunner
         var explicitText = explicitOnly ? " marked with UseAsReleaseVersionSource" : string.Empty;
 
         return $"Release version source '{sourceText}'{primaryText}{explicitText} did not produce a resolved version.";
+    }
+
+    private readonly struct SynchronizedReleaseLane
+    {
+        public SynchronizedReleaseLane(
+            bool enabled,
+            bool buildBeforeModule,
+            bool useAsReleaseVersionSource)
+        {
+            Enabled = enabled;
+            BuildBeforeModule = buildBeforeModule;
+            UseAsReleaseVersionSource = useAsReleaseVersionSource;
+        }
+
+        public bool Enabled { get; }
+        public bool BuildBeforeModule { get; }
+        public bool UseAsReleaseVersionSource { get; }
     }
 
 }

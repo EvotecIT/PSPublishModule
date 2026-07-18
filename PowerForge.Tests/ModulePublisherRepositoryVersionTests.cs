@@ -148,6 +148,28 @@ public sealed class ModulePublisherRepositoryVersionTests
     }
 
     [Fact]
+    public void ValidateVersionForPublish_RejectsSynchronizedVersionAlreadyInRepository()
+    {
+        using var client = new HttpClient(new FakePowerShellGalleryFeedHandler());
+        var publisher = new ModulePublisher(
+            new NullLogger(),
+            new StubPowerShellRunner(new PowerShellRunResult(0, VisibleRepositoryItem("PSPublishModule", "3.0.0"), string.Empty, "pwsh.exe")),
+            client);
+        var publish = new PublishConfiguration
+        {
+            Enabled = true,
+            Destination = PublishDestination.PowerShellGallery,
+            RepositoryName = "PSGallery",
+            Tool = PublishTool.PSResourceGet
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            publisher.ValidateVersionForPublish(publish, CreatePlan(resolvedVersion: "3.0.0")));
+
+        Assert.Contains("not greater than repository version '3.0.0'", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void EnsureVersionIsGreaterThanRepository_TreatsMissingRepositoryPackageAsFirstPublish()
     {
         var error = "Find-PSResource failed (exit 1). Package with name 'EntraIDConfig' could not be found in repository 'CompanyGallery'.";
@@ -845,20 +867,20 @@ public sealed class ModulePublisherRepositoryVersionTests
             Encode(version)
         });
 
-    private static ModulePipelinePlan CreatePlan()
+    private static ModulePipelinePlan CreatePlan(string resolvedVersion = "3.0.13")
     {
         return new ModulePipelinePlan(
             moduleName: "PSPublishModule",
             projectRoot: @"C:\repo\PSPublishModule",
-            expectedVersion: "3.0.13",
-            resolvedVersion: "3.0.13",
+            expectedVersion: resolvedVersion,
+            resolvedVersion: resolvedVersion,
             preRelease: null,
             manifest: null,
             buildSpec: new ModuleBuildSpec
             {
                 Name = "PSPublishModule",
                 SourcePath = @"C:\repo\PSPublishModule",
-                Version = "3.0.13"
+                Version = resolvedVersion
             },
             resolvedCsprojPath: null,
             syncNETProjectVersion: false,

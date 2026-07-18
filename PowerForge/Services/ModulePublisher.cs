@@ -93,6 +93,104 @@ public sealed partial class ModulePublisher
         };
     }
 
+    internal void ValidateVersionForPublish(
+        PublishConfiguration publish,
+        ModulePipelinePlan plan)
+    {
+        if (publish is null)
+        {
+            throw new ArgumentNullException(nameof(publish));
+        }
+        if (plan is null)
+        {
+            throw new ArgumentNullException(nameof(plan));
+        }
+        if (!publish.Enabled || publish.Force || publish.Destination != PublishDestination.PowerShellGallery)
+        {
+            return;
+        }
+
+        var (repositoryName, repoConfig) = ResolveRepository(publish);
+        var useManagedModule = publish.Tool == PublishTool.ManagedModule ||
+                               publish.Tool == PublishTool.Auto && ShouldUseManagedModuleForAuto(publish);
+        if (useManagedModule)
+        {
+            EnsureManagedVersionIsGreaterThanRepository(
+                CreateManagedReadRepository(repositoryName, repoConfig),
+                plan.ModuleName,
+                plan.ResolvedVersion,
+                plan.PreRelease,
+                ResolveManagedReadCredential(repoConfig));
+            return;
+        }
+
+        if (publish.Tool == PublishTool.Auto)
+        {
+            try
+            {
+                ValidateVersionForPublishWithTool(
+                    PublishTool.PSResourceGet,
+                    plan,
+                    repositoryName,
+                    repoConfig);
+            }
+            catch (PowerShellToolNotAvailableException)
+            {
+                ValidateVersionForPublishWithTool(
+                    PublishTool.PowerShellGet,
+                    plan,
+                    repositoryName,
+                    repoConfig);
+            }
+            return;
+        }
+
+        ValidateVersionForPublishWithTool(
+            publish.Tool,
+            plan,
+            repositoryName,
+            repoConfig);
+    }
+
+    private void ValidateVersionForPublishWithTool(
+        PublishTool tool,
+        ModulePipelinePlan plan,
+        string repositoryName,
+        PublishRepositoryConfiguration? repoConfig)
+    {
+        var repositoryCreated = false;
+        var readCredential = _repositoryPublisher.ResolveCredentialForRepository(repoConfig);
+        try
+        {
+            if (repoConfig is not null && repoConfig.EnsureRegistered && HasRepositoryUris(repoConfig))
+            {
+                repositoryCreated = EnsureRepositoryRegistered(tool, repositoryName, repoConfig);
+            }
+
+            EnsureVersionIsGreaterThanRepository(
+                tool,
+                plan.ModuleName,
+                plan.ResolvedVersion,
+                plan.PreRelease,
+                repositoryName,
+                readCredential);
+        }
+        finally
+        {
+            if (repositoryCreated && repoConfig is { UnregisterAfterUse: true })
+            {
+                try
+                {
+                    UnregisterRepository(tool, repositoryName);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn($"Failed to unregister repository '{repositoryName}' after version preflight: {ex.Message}");
+                }
+            }
+        }
+    }
+
     /// <summary>
     /// Resolves an inline or file-backed publish API key immediately before a publish operation.
     /// </summary>
