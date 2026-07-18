@@ -28,9 +28,9 @@ public sealed class ManagedModuleRepositorySourceComparerTests
     }
 
     [Fact]
-    public void Relative_local_sources_accept_portable_directory_separators()
+    public void Relative_local_sources_follow_platform_directory_separator_semantics()
     {
-        Assert.True(ManagedModuleRepositorySourceComparer.Equals(
+        Assert.Equal(FrameworkCompatibility.IsWindows(), ManagedModuleRepositorySourceComparer.Equals(
             "packages/feed",
             @"packages\feed"));
     }

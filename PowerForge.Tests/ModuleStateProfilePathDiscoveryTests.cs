@@ -68,6 +68,63 @@ public sealed class ModuleStateProfilePathDiscoveryTests
     }
 
     [Fact]
+    public void ProfileDiscovery_PreservesLiteralBackslashesInUnixProfilePaths()
+    {
+        var container = ModuleStateProfilePathDiscoveryService.ResolveLocalProfileContainer(
+            localProfilesRoot: null,
+            currentUserProfilePath: @"/srv/profiles/alice\ops",
+            isWindows: false);
+
+        Assert.Equal("/srv/profiles", container);
+    }
+
+    [Fact]
+    public void ProfileDiscovery_ResolvesExplicitPlacementByFullPathWhenLeafNamesCollide()
+    {
+        using var workspace = new TemporaryDirectory();
+        var explicitProfile = Path.Combine(workspace.Path, "redirected", "alice");
+        var localProfilesRoot = Path.Combine(workspace.Path, "home");
+        var discoveredProfile = Path.Combine(localProfilesRoot, "alice");
+        Directory.CreateDirectory(explicitProfile);
+        Directory.CreateDirectory(StandardCoreProfileModuleRoot(discoveredProfile));
+        var discovery = new ModuleStateProfilePathDiscoveryService().Discover(
+            profilePaths: new[] { explicitProfile },
+            includeAllLocalProfiles: true,
+            localProfilesRoot: localProfilesRoot);
+
+        var placement = ModuleStateProfilePathDiscoveryService.ResolveExplicitProfilePlacement(
+            explicitProfile,
+            "Core",
+            discovery.ModulePaths);
+
+        Assert.NotNull(placement);
+        Assert.True(PathsEqual(StandardCoreProfileModuleRoot(explicitProfile), placement!.Path));
+    }
+
+    [Fact]
+    public void ProfileDiscovery_ResolvesExplicitPlacementWhenAnotherProfileIsNestedBelowIt()
+    {
+        using var workspace = new TemporaryDirectory();
+        var explicitProfile = workspace.Path;
+        var nestedProfile = Path.Combine(explicitProfile, "alice");
+        var explicitRoot = StandardCoreProfileModuleRoot(explicitProfile);
+        var nestedRoot = StandardCoreProfileModuleRoot(nestedProfile);
+        var discoveredModulePaths = new[]
+        {
+            new ModuleStateModulePath(explicitRoot, "Core", "CurrentUser"),
+            new ModuleStateModulePath(nestedRoot, "Core", "CurrentUser")
+        };
+
+        var placement = ModuleStateProfilePathDiscoveryService.ResolveExplicitProfilePlacement(
+            explicitProfile,
+            "Core",
+            discoveredModulePaths);
+
+        Assert.NotNull(placement);
+        Assert.True(PathsEqual(explicitRoot, placement!.Path));
+    }
+
+    [Fact]
     public void ProfileDiscovery_MarksExistingExplicitProfileRootsRequired()
     {
         using var workspace = new TemporaryDirectory();

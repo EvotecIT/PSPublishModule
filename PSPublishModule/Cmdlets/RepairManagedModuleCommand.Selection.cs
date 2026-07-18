@@ -115,10 +115,10 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
         var edition = SessionState.PSVariable.GetValue("PSEdition")?.ToString();
         if (string.IsNullOrWhiteSpace(edition))
             edition = "Desktop";
-        var profileName = new DirectoryInfo(profilePaths[0]).Name;
-        return discoveredModulePaths.SingleOrDefault(path =>
-            string.Equals(path.ProfileName, profileName, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(path.PowerShellEdition, edition, StringComparison.OrdinalIgnoreCase));
+        return ModuleStateProfilePathDiscoveryService.ResolveExplicitProfilePlacement(
+            profilePaths[0],
+            edition!,
+            discoveredModulePaths);
     }
 
     private object CreateDesiredState(

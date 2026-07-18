@@ -197,6 +197,33 @@ internal sealed class ModuleStateProfilePathDiscoveryService
         }
     }
 
+    internal static ModuleStateModulePath? ResolveExplicitProfilePlacement(
+        string profilePath,
+        string powerShellEdition,
+        IReadOnlyList<ModuleStateModulePath> discoveredModulePaths)
+    {
+        if (string.IsNullOrWhiteSpace(profilePath))
+            throw new ArgumentException("Profile path is required.", nameof(profilePath));
+        if (string.IsNullOrWhiteSpace(powerShellEdition))
+            throw new ArgumentException("PowerShell edition is required.", nameof(powerShellEdition));
+        if (discoveredModulePaths is null)
+            throw new ArgumentNullException(nameof(discoveredModulePaths));
+
+        var normalizedProfilePath = Path.GetFullPath(profilePath.Trim());
+        var profileName = new DirectoryInfo(normalizedProfilePath).Name;
+        var expectedRoot = EnumerateStandardModuleRoots(normalizedProfilePath, profileName)
+            .SingleOrDefault(path => string.Equals(
+                path.PowerShellEdition,
+                powerShellEdition,
+                StringComparison.OrdinalIgnoreCase));
+        if (expectedRoot is null)
+            return null;
+
+        return discoveredModulePaths.SingleOrDefault(path =>
+            ModuleStatePathIdentity.Equals(path.Path, expectedRoot.Path) &&
+            string.Equals(path.PowerShellEdition, powerShellEdition, StringComparison.OrdinalIgnoreCase));
+    }
+
     internal static string? ResolveLocalProfileContainer(
         string? localProfilesRoot,
         string? currentUserProfilePath,
@@ -210,7 +237,7 @@ internal sealed class ModuleStateProfilePathDiscoveryService
         if (isWindows)
             return Directory.GetParent(currentUserProfilePath!)?.FullName;
 
-        var normalized = currentUserProfilePath!.Trim().Replace('\\', '/').TrimEnd('/');
+        var normalized = currentUserProfilePath!.Trim().TrimEnd('/');
         if (string.Equals(normalized, "/root", StringComparison.Ordinal))
             return "/home";
         var separator = normalized.LastIndexOf('/');

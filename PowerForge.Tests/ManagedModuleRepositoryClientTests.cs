@@ -19,19 +19,6 @@ public sealed class ManagedModuleRepositoryClientTests
     }
 
     [Theory]
-    [InlineData("packages/feed")]
-    [InlineData(@"packages\feed")]
-    public void ManagedModuleRepositoryPathResolver_normalizes_portable_relative_folder_feeds(string source)
-    {
-        var resolved = ManagedModuleRepositoryPathResolver.ResolveLocalFolder(source);
-
-        Assert.Equal(
-            Path.GetFullPath(Path.Combine("packages", "feed")),
-            resolved,
-            ModuleStatePathIdentity.Comparer);
-    }
-
-    [Theory]
     [InlineData("https://example.test/api/v2")]
     [InlineData("https://example.test/api/v2/items/psscript")]
     [InlineData("https://pkgs.dev.azure.com/org/_packaging/feed/nuget/v2")]

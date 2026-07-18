@@ -14,9 +14,8 @@ internal static class ManagedModuleRepositoryPathResolver
             return uri.LocalPath;
 
         var path = source.Trim().Trim('"');
-        path = Path.DirectorySeparatorChar == '/'
-            ? path.Replace('\\', '/')
-            : path.Replace('/', '\\');
+        if (Path.DirectorySeparatorChar == '\\')
+            path = path.Replace('/', '\\');
         return Path.GetFullPath(path);
     }
 }
