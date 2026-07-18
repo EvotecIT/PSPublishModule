@@ -39,15 +39,15 @@ feature roadmap.
 ## Release Closure
 
 - [x] Stable PSResourceGet 1.2.0 `-AuthenticodeCheck` behavior is covered by
-  unsigned-package rejection tests and an exact-candidate install of the
+  unsigned module-file and `.mof` no-promotion tests plus an exact-candidate install of the
   upstream `PackageManagement` 1.4.3 fixture. WinTrust accepted 26 signed files,
   including `PackageManagement.cat`, before promotion. The managed command
   fails closed on unsupported non-Windows hosts instead of continuing unchecked.
 - [x] Repeated exact-candidate benchmark runs completed on PowerShell 7.6.3 and
   Windows PowerShell 5.1.26100.8875 with one warmup, three measured iterations,
   grouped rotation, correctness validation, and zero failures. Runs
-  `20260718-102954-b3d1926c` and `20260718-103142-3dc02445` pinned runtime
-  candidate `23c41a4ec29c0c345f19a5cffd7e8669cd839b5d`; native provider install lanes were
+  `20260718-104931-72cb50bd` and `20260718-105032-37d8daf2` pinned runtime
+  candidate `3dbb6e3af4c34df2d3bb267eae941ec1c53fb842`; native provider install lanes were
   skipped because the current-profile benchmark intentionally does not mutate
   the maintainer's module roots.
 - [x] The public README keeps the representative multi-scenario matrix rather
@@ -66,17 +66,17 @@ requires the isolated `TemporaryLocalUser` profile.
 
 | Host | Operation | Managed | PSResourceGet | PowerShellGet |
 | --- | --- | ---: | ---: | ---: |
-| PowerShell 7.6.3 | Find | 390 ms | 389 ms | 1.12 s |
-| PowerShell 7.6.3 | Install | 614 ms | Skipped | Skipped |
-| PowerShell 7.6.3 | Save | 774 ms | 1.65 s | 3.82 s |
-| Windows PowerShell 5.1 | Find | 339 ms | Unsupported | 661 ms |
-| Windows PowerShell 5.1 | Install | 968 ms | Unsupported | Skipped |
-| Windows PowerShell 5.1 | Save | 965 ms | Unsupported | 2.88 s |
+| PowerShell 7.6.3 | Find | 285 ms | 321 ms | 478 ms |
+| PowerShell 7.6.3 | Install | 592 ms | Skipped | Skipped |
+| PowerShell 7.6.3 | Save | 1.22 s | 1.92 s | 4.06 s |
+| Windows PowerShell 5.1 | Find | 349 ms | Unsupported | 671 ms |
+| Windows PowerShell 5.1 | Install | 912 ms | Unsupported | Skipped |
+| Windows PowerShell 5.1 | Save | 1.34 s | Unsupported | 3.57 s |
 
 The pinned net10.0 assembly SHA-256 was
-`A8A95D233EA6B71BAE656FE7F8AB9E1287F5481764EA9B972DCF6541511A7F1A`; the
+`F97858DE917D422A5D8FCCE388CD225B5B6F6D9400839DA03D532EB4E8459581`; the
 net472 assembly SHA-256 was
-`B1022F2C405A94C7EA74D0474E83A6FFD27D9BA073496F036D33FE66F04EA5EB`.
+`79666E6C9C891F8CEEF0411435929DA6E29191F943846F8AAE3E8B864C203C32`.
 The final documentation-only commit does not change this measured runtime
 source or either pinned assembly.
 
