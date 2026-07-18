@@ -548,11 +548,21 @@ public sealed partial class ModulePipelineRunner
             }
         }
 
-        ValidateSynchronizedModuleVersionConfiguration(
-            release,
-            projectBuilds,
-            packageBuilds,
-            gateMode);
+        ApplyGateModeToPlanInputs(
+            gateMode,
+            ref refreshPsd1Only);
+
+        var synchronizeModuleVersionForRun =
+            !refreshPsd1Only &&
+            ShouldSynchronizeModuleVersionForRun(release, gateMode);
+        if (synchronizeModuleVersionForRun)
+        {
+            ValidateSynchronizedModuleVersionConfiguration(
+                release,
+                projectBuilds,
+                packageBuilds,
+                gateMode);
+        }
 
         expectedVersion ??= spec.Build.Version;
         var psd1 = Path.Combine(projectRoot, $"{moduleName}.psd1");
@@ -592,7 +602,7 @@ public sealed partial class ModulePipelineRunner
         var expectedVersionResolved = string.IsNullOrWhiteSpace(expectedVersion) ? "1.0.0" : expectedVersion!;
 
         string resolved;
-        if (ShouldSynchronizeModuleVersionForRun(release, gateMode))
+        if (synchronizeModuleVersionForRun)
         {
             resolved = ResolveProvisionalSynchronizedModuleVersion(expectedVersionResolved);
             _logger.Info("Synchronized release version selected: skipping the independent module repository version lookup.");
@@ -652,10 +662,6 @@ public sealed partial class ModulePipelineRunner
             developmentBinariesModeFromSegments,
             spec.Build.DevelopmentBinariesMode);
         var developmentBinariesPath = developmentBinariesPathFromSegments ?? spec.Build.DevelopmentBinariesPath;
-
-        ApplyGateModeToPlanInputs(
-            gateMode,
-            ref refreshPsd1Only);
 
         if (gateMode == ConfigurationGateMode.Documentation && syncNETProjectVersion)
         {

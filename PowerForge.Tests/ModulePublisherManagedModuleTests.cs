@@ -5,7 +5,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class ModulePublisherManagedModuleTests
+public sealed partial class ModulePublisherManagedModuleTests
 {
     [Fact]
     public void Publish_ManagedModule_UsesManagedEngineWithoutPowerShellRunner()

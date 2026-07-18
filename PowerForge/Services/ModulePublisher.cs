@@ -106,7 +106,9 @@ public sealed partial class ModulePublisher
         {
             throw new ArgumentNullException(nameof(plan));
         }
-        if (!publish.Enabled || publish.Force || publish.Destination != PublishDestination.PowerShellGallery)
+        if (!publish.Enabled ||
+            publish.Destination != PublishDestination.PowerShellGallery ||
+            publish.Force && !allowExistingExactVersion)
         {
             return ModulePublishVersionPreflightResult.Available;
         }
@@ -673,10 +675,21 @@ public sealed partial class ModulePublisher
         if (!TryParseSemVer(publishVersionText, out var publishVersion))
             throw new InvalidOperationException($"Could not parse module version for publish: '{publishVersionText}'.");
 
-        SemVer? current = null;
+        RepositoryVersionState state;
         try
         {
-            current = TryGetLatestRepositoryVersion(tool, moduleName, repositoryName, credential);
+            state = GetRepositoryVersionState(
+                tool,
+                moduleName,
+                repositoryName,
+                credential,
+                publishVersion,
+                publishVersionText,
+                checkExactVersion: allowExistingExactVersion);
+        }
+        catch (PowerShellToolNotAvailableException)
+        {
+            throw;
         }
         catch (Exception ex) when (IsRepositoryPackageNotFound(moduleName, ex))
         {
@@ -688,14 +701,17 @@ public sealed partial class ModulePublisher
             throw new InvalidOperationException($"Failed to query repository version for {moduleName} on '{repositoryName}'. Use -Force to publish without version check. {ex.Message}");
         }
 
-        if (current is null)
+        if (state.Latest is null)
             return false;
 
-        var comparison = publishVersion.CompareTo(current.Value);
-        if (comparison < 0 || (comparison == 0 && !allowExistingExactVersion))
-            throw new InvalidOperationException($"Module version '{publishVersionText}' is not greater than repository version '{FormatSemVer(current.Value.Version.ToString(), current.Value.PreRelease)}' for '{moduleName}'. Use -Force to publish anyway.");
+        if (allowExistingExactVersion && state.ExactVersionExists)
+            return true;
 
-        return comparison == 0;
+        var comparison = publishVersion.CompareTo(state.Latest.Value);
+        if (comparison <= 0)
+            throw new InvalidOperationException($"Module version '{publishVersionText}' is not greater than repository version '{FormatSemVer(state.Latest.Value.Version.ToString(), state.Latest.Value.PreRelease)}' for '{moduleName}'. Use -Force to publish anyway.");
+
+        return false;
     }
 
     internal static bool IsRepositoryPackageNotFound(string moduleName, Exception exception)
@@ -724,61 +740,6 @@ public sealed partial class ModulePublisher
                 message.IndexOf("no match was found", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 message.IndexOf("no packages found", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 message.IndexOf("no results", StringComparison.OrdinalIgnoreCase) >= 0);
-    }
-
-    private SemVer? TryGetLatestRepositoryVersion(PublishTool tool, string moduleName, string repositoryName, RepositoryCredential? credential)
-    {
-        SemVer? latest = null;
-
-        if (string.Equals(repositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase))
-        {
-            try
-            {
-                foreach (var version in _powerShellGalleryFeed.GetVersions(moduleName, includePrerelease: true, timeout: TimeSpan.FromMinutes(2)))
-                {
-                    if (!TryParseSemVer(version.VersionText, out var parsed))
-                        continue;
-
-                    if (latest is null || parsed.CompareTo(latest.Value) > 0)
-                        latest = parsed;
-                }
-
-                if (latest is not null)
-                    return latest;
-            }
-            catch (Exception ex)
-            {
-                _logger.Warn($"Failed to query the raw PowerShell Gallery feed for '{moduleName}'. Falling back to {tool}. {ex.Message}");
-            }
-        }
-
-        var versions = tool == PublishTool.PowerShellGet
-            ? _powerShellGet.Find(
-                    new PowerShellGetFindOptions(
-                        names: new[] { moduleName },
-                        prerelease: true,
-                        repositories: new[] { repositoryName },
-                        credential: credential),
-                    timeout: TimeSpan.FromMinutes(2))
-                .Where(r => string.Equals(r.Name, moduleName, StringComparison.OrdinalIgnoreCase))
-                .Select(GetRepositoryVersionText)
-            : _psResourceGet.Find(
-                    new PSResourceFindOptions(
-                        names: new[] { moduleName },
-                        version: null,
-                        prerelease: true,
-                        repositories: new[] { repositoryName },
-                        credential: credential),
-                    timeout: TimeSpan.FromMinutes(2))
-                .Where(r => string.Equals(r.Name, moduleName, StringComparison.OrdinalIgnoreCase))
-                .Select(GetRepositoryVersionText);
-
-        foreach (var v in versions)
-        {
-            if (!TryParseSemVer(v, out var parsed)) continue;
-            if (latest is null || parsed.CompareTo(latest.Value) > 0) latest = parsed;
-        }
-        return latest;
     }
 
     internal static string GetRepositoryVersionText(PSResourceInfo resource)

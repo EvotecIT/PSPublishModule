@@ -156,6 +156,7 @@ public sealed partial class ModulePublisher
             throw new InvalidOperationException($"Could not parse module version for publish: '{publishVersionText}'.");
 
         SemVer? current = null;
+        var exactVersionExists = false;
         try
         {
             var versions = new ManagedModuleRepositoryClient(_logger)
@@ -168,6 +169,8 @@ public sealed partial class ModulePublisher
                 if (!TryParseSemVer(version.Version, out var parsed))
                     continue;
 
+                if (parsed.CompareTo(publishVersion) == 0)
+                    exactVersionExists = true;
                 if (current is null || parsed.CompareTo(current.Value) > 0)
                     current = parsed;
             }
@@ -185,10 +188,13 @@ public sealed partial class ModulePublisher
         if (current is null)
             return false;
 
+        if (allowExistingExactVersion && exactVersionExists)
+            return true;
+
         var comparison = publishVersion.CompareTo(current.Value);
-        if (comparison < 0 || (comparison == 0 && !allowExistingExactVersion))
+        if (comparison <= 0)
             throw new InvalidOperationException($"Module version '{publishVersionText}' is not greater than repository version '{FormatSemVer(current.Value.Version.ToString(), current.Value.PreRelease)}' for '{moduleName}'. Use -Force to publish anyway.");
 
-        return comparison == 0;
+        return false;
     }
 }
