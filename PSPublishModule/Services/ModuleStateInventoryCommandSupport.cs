@@ -253,7 +253,7 @@ internal static class ModuleStateInventoryCommandSupport
             throw new ArgumentNullException(nameof(cmdlet));
 
         return cmdlet.InvokeCommand
-            .InvokeScript("Get-Module | Select-Object -Property Name, Version, Path, @{ Name = 'Prerelease'; Expression = { if ($_.PrivateData -and $_.PrivateData.PSData) { $_.PrivateData.PSData.Prerelease } } }")
+            .InvokeScript(@"Microsoft.PowerShell.Core\Get-Module -All | Select-Object -Property Name, Version, Path, @{ Name = 'Prerelease'; Expression = { if ($_.PrivateData -and $_.PrivateData.PSData) { $_.PrivateData.PSData.Prerelease } } }")
             .OfType<PSObject>()
             .Select(static item => new ModuleStateLoadedModuleEvidence(
                 item.Properties["Name"]?.Value as string,

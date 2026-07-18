@@ -319,16 +319,9 @@ internal sealed class ModuleStatePrivateDeliveryService
 
     private static ModuleStateVersionConstraint ParseVersionConstraint(string moduleName, string? versionPolicy)
     {
-        if (string.IsNullOrWhiteSpace(versionPolicy))
-            return ModuleStateVersionConstraint.Empty;
-
-        var trimmed = versionPolicy!.Trim();
-        if (trimmed.Length == 0 || string.Equals(trimmed, "*", StringComparison.Ordinal))
-            return ModuleStateVersionConstraint.Empty;
-
-        if (HasNuGetRangeDelimiters(trimmed))
+        try
         {
-            var range = ManagedModuleVersionRange.Parse(trimmed);
+            var range = ManagedModuleVersionSelector.ParseExpression(versionPolicy);
             return range.IsUnbounded
                 ? ModuleStateVersionConstraint.Empty
                 : new ModuleStateVersionConstraint(
@@ -338,58 +331,13 @@ internal sealed class ModuleStatePrivateDeliveryService
                     range.MaximumVersion,
                     range.IncludeMaximum);
         }
-
-        string? requiredVersion = null;
-        string? minimumVersion = null;
-        var minimumVersionInclusive = true;
-        string? maximumVersion = null;
-        var maximumVersionInclusive = true;
-        foreach (var token in trimmed.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries))
+        catch (ArgumentException exception)
         {
-            if (token.StartsWith(">=", StringComparison.Ordinal))
-            {
-                minimumVersion = token.Substring(2).Trim();
-                minimumVersionInclusive = true;
-            }
-            else if (token.StartsWith(">", StringComparison.Ordinal))
-            {
-                minimumVersion = token.Substring(1).Trim();
-                minimumVersionInclusive = false;
-            }
-            else if (token.StartsWith("<=", StringComparison.Ordinal))
-            {
-                maximumVersion = token.Substring(2).Trim();
-                maximumVersionInclusive = true;
-            }
-            else if (token.StartsWith("<", StringComparison.Ordinal))
-            {
-                maximumVersion = token.Substring(1).Trim();
-                maximumVersionInclusive = false;
-            }
-            else if (token.StartsWith("=", StringComparison.Ordinal))
-            {
-                requiredVersion = token.Substring(1).Trim();
-            }
-            else
-            {
-                requiredVersion = token.Trim();
-            }
+            throw new InvalidOperationException(
+                $"Module '{moduleName}' has invalid version policy '{versionPolicy}'.",
+                exception);
         }
-
-        if (!string.IsNullOrWhiteSpace(requiredVersion) &&
-            (!string.IsNullOrWhiteSpace(minimumVersion) || !string.IsNullOrWhiteSpace(maximumVersion)))
-        {
-            throw new InvalidOperationException($"Module '{moduleName}' combines exact and range version policies. Private module delivery requires one version policy shape per module.");
-        }
-
-        return new ModuleStateVersionConstraint(requiredVersion, minimumVersion, minimumVersionInclusive, maximumVersion, maximumVersionInclusive);
     }
-
-    private static bool HasNuGetRangeDelimiters(string value)
-        => value.StartsWith("[", StringComparison.Ordinal) ||
-           value.StartsWith("(", StringComparison.Ordinal) ||
-           value.EndsWith("]", StringComparison.Ordinal) ||
-           value.EndsWith(")", StringComparison.Ordinal);
 }
 
 internal readonly struct ModuleStateVersionConstraint

@@ -154,6 +154,64 @@ public sealed class UpdateManagedModuleCommandTests
     }
 
     [Fact]
+    public void UpdateManagedModule_WithoutNameBlocksNestedModulesLoadedInCurrentRunspace()
+    {
+        using var feed = new TemporaryDirectory();
+        using var moduleRoot = new TemporaryDirectory();
+        using var wrapperRoot = new TemporaryDirectory();
+        TestPackageFactory.Create(
+            Path.Combine(feed.Path, "Company.Tools.1.1.0.nupkg"),
+            "Company.Tools",
+            "1.1.0",
+            files: CreateModuleFiles("1.1.0"));
+        var loadedPath = Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0");
+        Directory.CreateDirectory(loadedPath);
+        var loadedManifest = Path.Combine(loadedPath, "Company.Tools.psd1");
+        File.WriteAllText(
+            loadedManifest,
+            "@{ ModuleVersion = '1.0.0'; FunctionsToExport = @() }");
+        var wrapperManifest = Path.Combine(wrapperRoot.Path, "Company.Wrapper.psd1");
+        File.WriteAllText(
+            wrapperManifest,
+            "@{ ModuleVersion = '1.0.0'; NestedModules = @('" +
+            loadedManifest.Replace("'", "''") +
+            "'); FunctionsToExport = @() }");
+
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("Import-Module")
+            .AddParameter("Name", wrapperManifest)
+            .AddParameter("Force");
+        _ = ps.Invoke();
+        AssertNoPowerShellErrors(ps);
+        ps.Commands.Clear();
+
+        ps.AddScript("Microsoft.PowerShell.Core\\Get-Module -Name Company.Tools");
+        Assert.Empty(ps.Invoke());
+        AssertNoPowerShellErrors(ps);
+        ps.Commands.Clear();
+
+        ps.AddScript("Microsoft.PowerShell.Core\\Get-Module -Name Company.Tools -All");
+        Assert.Single(ps.Invoke());
+        AssertNoPowerShellErrors(ps);
+        ps.Commands.Clear();
+
+        ps.AddCommand("Update-ManagedModule")
+            .AddParameter("Repository", feed.Path)
+            .AddParameter("RepositoryName", "Local")
+            .AddParameter("Path", moduleRoot.Path)
+            .AddParameter("Force")
+            .AddParameter("AllowClobber");
+        var results = ps.Invoke();
+
+        Assert.Empty(results);
+        Assert.True(ps.HadErrors);
+        Assert.Contains(ps.Streams.Error, error =>
+            error.ToString().Contains("already loaded", StringComparison.OrdinalIgnoreCase) &&
+            error.ToString().Contains("AllowLoadedModuleUpdate", StringComparison.Ordinal));
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.1.0")));
+    }
+
+    [Fact]
     public void UpdateManagedModule_repairs_installed_family_member_version_mismatch()
     {
         using var feed = new TemporaryDirectory();
