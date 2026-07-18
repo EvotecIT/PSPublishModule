@@ -106,6 +106,41 @@ public sealed class ServerScaffoldTests
     }
 
     [Fact]
+    public void Scaffold_ShouldSupportRepositoryRootWebsite()
+    {
+        var options = CreateOptions();
+        options.WebsiteRoot = ".";
+
+        var files = WebCliCommandHandlers.BuildServerScaffoldFiles(options);
+        var websiteWorkflow = files[".github/workflows/website-deploy.yml"];
+        var recoveryWorkflow = files[".github/workflows/server-recovery-ci.yml"];
+        var manifest = files["deploy/linux/example.serverrecovery.json"];
+
+        Assert.Contains("deploy/apache.conf", files.Keys);
+        Assert.Contains("deploy/apache-ssl.conf", files.Keys);
+        Assert.DoesNotContain("./deploy/apache.conf", files.Keys);
+        Assert.Contains("      - \"**\"", websiteWorkflow, StringComparison.Ordinal);
+        Assert.Contains("      website_root: .", websiteWorkflow, StringComparison.Ordinal);
+        Assert.Contains("      pipeline_config: ./pipeline.json", websiteWorkflow, StringComparison.Ordinal);
+        Assert.Contains("      - \"deploy/**\"", recoveryWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("./deploy/**", recoveryWorkflow, StringComparison.Ordinal);
+        Assert.Contains("/srv/powerforge/sources/example/deploy/apache.conf", manifest, StringComparison.Ordinal);
+        Assert.DoesNotContain("/./", manifest, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ScaffoldOptions_ShouldNormalizeWebsiteRootSegments()
+    {
+        var rootOptions = WebCliCommandHandlers.ParseServerScaffoldOptions(
+            RequiredArguments("example.test").Concat(["--website-root", "./"]).ToArray());
+        var nestedOptions = WebCliCommandHandlers.ParseServerScaffoldOptions(
+            RequiredArguments("example.test").Concat(["--website-root", "./Website//./Site/"]).ToArray());
+
+        Assert.Equal(".", rootOptions.WebsiteRoot);
+        Assert.Equal("Website/Site", nestedOptions.WebsiteRoot);
+    }
+
+    [Fact]
     public void Scaffold_ShouldDeriveBackupSudoersAndRestrictedKeyExamplesFromManifest()
     {
         var options = CreateOptions();

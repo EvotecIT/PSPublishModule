@@ -104,8 +104,8 @@ internal static partial class WebCliCommandHandlers
             [$"{deployRoot}/powerforge-{options.SiteId}-authorized_keys.example"] = $"restrict ssh-ed25519 REPLACE_WITH_DEPLOYMENT_PUBLIC_KEY powerforge-{options.SiteId}-deploy\n",
             [$"{deployRoot}/powerforge-{options.SiteId}-backup-authorized_keys.example"] = $"restrict ssh-ed25519 REPLACE_WITH_BACKUP_PUBLIC_KEY powerforge-{options.SiteId}-backup\n",
             [$"{deployRoot}/ONBOARDING.md"] = BuildScaffoldOnboarding(options),
-            [$"{options.WebsiteRoot}/deploy/apache.conf"] = BuildScaffoldApacheHttp(options),
-            [$"{options.WebsiteRoot}/deploy/apache-ssl.conf"] = BuildScaffoldApacheHttps(options)
+            [BuildScaffoldWebsitePath(options, "deploy/apache.conf")] = BuildScaffoldApacheHttp(options),
+            [BuildScaffoldWebsitePath(options, "deploy/apache-ssl.conf")] = BuildScaffoldApacheHttps(options)
         };
 
         if (options.PrivateRepository)
@@ -126,7 +126,7 @@ internal static partial class WebCliCommandHandlers
         var backupRepository = RequireScaffoldOption(subArgs, "--backup-repository").Trim();
         var backupRecipient = RequireScaffoldOption(subArgs, "--backup-recipient").Trim();
         var branch = (TryGetOptionValue(subArgs, "--branch") ?? "main").Trim();
-        var websiteRoot = (TryGetOptionValue(subArgs, "--website-root") ?? "Website").Trim().Trim('/', '\\');
+        var websiteRoot = NormalizeScaffoldWebsiteRoot(TryGetOptionValue(subArgs, "--website-root") ?? "Website");
         var siteId = (TryGetOptionValue(subArgs, "--site-id") ?? BuildScaffoldSiteId(domain)).Trim().ToLowerInvariant();
         var smokePaths = (TryGetOptionValue(subArgs, "--smoke-paths") ?? "/ /sitemap.xml").Trim();
         var recoveryWatchPaths = ReadRecoveryWatchPaths(subArgs);
@@ -150,8 +150,6 @@ internal static partial class WebCliCommandHandlers
             throw new InvalidOperationException("--branch contains unsupported characters.");
         if (!Regex.IsMatch(siteId, "^[a-z][a-z0-9-]{0,13}$", RegexOptions.CultureInvariant))
             throw new InvalidOperationException("--site-id must be 1-14 lowercase letters, digits, or hyphens and start with a letter.");
-        if (!Regex.IsMatch(websiteRoot, "^[A-Za-z0-9._/-]+$", RegexOptions.CultureInvariant) || websiteRoot.Contains("..", StringComparison.Ordinal))
-            throw new InvalidOperationException("--website-root must be a safe repository-relative path.");
         if (!int.TryParse(portText, out var port) || port is < 1 or > 65535)
             throw new InvalidOperationException("--ssh-port must be from 1 through 65535.");
         if (!backupRecipient.StartsWith("age1", StringComparison.Ordinal) || backupRecipient.Any(char.IsWhiteSpace))
@@ -207,6 +205,28 @@ internal static partial class WebCliCommandHandlers
 
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(domain))).ToLowerInvariant();
         return readable + "-" + hash[..4];
+    }
+
+    private static string NormalizeScaffoldWebsiteRoot(string value)
+    {
+        var candidate = value.Trim().Replace('\\', '/').Trim('/');
+        if (!Regex.IsMatch(candidate, "^[A-Za-z0-9._/-]+$", RegexOptions.CultureInvariant) ||
+            candidate.Contains("..", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("--website-root must be a safe repository-relative path.");
+        }
+
+        var segments = candidate.Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Where(static segment => segment != ".")
+            .ToArray();
+        return segments.Length == 0 ? "." : string.Join('/', segments);
+    }
+
+    private static string BuildScaffoldWebsitePath(PowerForgeServerScaffoldOptions options, string relativePath)
+    {
+        var websiteRoot = NormalizeScaffoldWebsiteRoot(options.WebsiteRoot);
+        var suffix = relativePath.TrimStart('/');
+        return websiteRoot == "." ? suffix : $"{websiteRoot}/{suffix}";
     }
 
     private static string[] NormalizeRecoveryWatchPaths(IEnumerable<string> paths)
