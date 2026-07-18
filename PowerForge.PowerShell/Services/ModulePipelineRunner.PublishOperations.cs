@@ -16,15 +16,23 @@ public sealed partial class ModulePipelineRunner
             return;
         }
 
-        PreflightSynchronizedModulePublishVersions(plan);
-
         var publishOrder = ResolvePublishOrder(plan);
         var packageNuGetPublished = false;
         var packageGitHubPublished = false;
         var modulePublished = new HashSet<ConfigurationPublishSegment>();
+        PreflightSynchronizedModulePublishVersions(plan, state, modulePublished);
 
         foreach (var destination in publishOrder)
         {
+            if (ShouldSkipSynchronizedReleaseDestination(state, destination))
+            {
+                if (destination == ReleasePublishDestination.NuGet)
+                    packageNuGetPublished = true;
+                if (destination == ReleasePublishDestination.GitHub)
+                    packageGitHubPublished = true;
+                continue;
+            }
+
             switch (destination)
             {
                 case ReleasePublishDestination.NuGet:
@@ -47,6 +55,8 @@ public sealed partial class ModulePipelineRunner
                     ExecuteModulePublishes(plan, session, buildResult, state, modulePublished, PublishDestination.GitHub);
                     break;
             }
+
+            MarkSynchronizedReleaseDestinationCompleted(state, destination);
         }
 
         if (!packageNuGetPublished)
@@ -56,9 +66,13 @@ public sealed partial class ModulePipelineRunner
 
         ExecuteModulePublishes(plan, session, buildResult, state, modulePublished, PublishDestination.PowerShellGallery);
         ExecuteModulePublishes(plan, session, buildResult, state, modulePublished, PublishDestination.GitHub);
+        CompleteSynchronizedReleaseCheckpoint(state);
     }
 
-    private void PreflightSynchronizedModulePublishVersions(ModulePipelinePlan plan)
+    private void PreflightSynchronizedModulePublishVersions(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state,
+        HashSet<ConfigurationPublishSegment> completed)
     {
         if (plan.Release?.Configuration?.SynchronizeModuleVersion != true)
         {
@@ -73,6 +87,13 @@ public sealed partial class ModulePipelineRunner
             return;
         }
 
+        if (ShouldSkipSynchronizedReleaseDestination(state, ReleasePublishDestination.PowerShellGallery))
+        {
+            foreach (var publish in modulePublishes)
+                completed.Add(publish);
+            return;
+        }
+
         if (_hostedOperations is not IModulePipelinePublishPreflightOperations preflight)
         {
             throw new InvalidOperationException(
@@ -81,8 +102,18 @@ public sealed partial class ModulePipelineRunner
 
         foreach (var publish in modulePublishes)
         {
-            preflight.ValidateModulePublishVersion(publish.Configuration, plan);
+            if (preflight.ValidateModulePublishVersion(
+                    publish.Configuration,
+                    plan,
+                    state.IsResumingSynchronizedRelease) ==
+                ModulePublishVersionPreflightResult.AlreadyPublished)
+            {
+                completed.Add(publish);
+            }
         }
+
+        if (modulePublishes.All(completed.Contains))
+            MarkSynchronizedReleaseDestinationCompleted(state, ReleasePublishDestination.PowerShellGallery);
     }
 
     private void ExecuteModulePublishes(

@@ -40,6 +40,10 @@ public sealed partial class ModulePipelineRunner
         public List<ExternalAssetPreparationResult> ExternalAssetResults { get; } = new();
         public List<ReleaseVersionCandidate> ReleaseVersionCandidates { get; } = new();
         public ModuleReleaseCoordinationResult? ReleaseCoordinationResult { get; set; }
+        public SynchronizedReleaseCheckpoint? SynchronizedReleaseCheckpoint { get; set; }
+        public string? SynchronizedReleaseCheckpointPath { get; set; }
+        public bool IsResumingSynchronizedRelease { get; set; }
+        public HashSet<ReleasePublishDestination> PlannedSynchronizedDestinations { get; } = new();
         public List<ModulePipelineActionResult> ActionResults { get; } = new();
         public List<XcodeProjectVersionUpdateResult> XcodeProjectVersionResults { get; } = new();
         public List<AppleAppReleasePreparationResult> AppleAppResults { get; } = new();

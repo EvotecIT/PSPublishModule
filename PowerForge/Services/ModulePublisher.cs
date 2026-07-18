@@ -93,9 +93,10 @@ public sealed partial class ModulePublisher
         };
     }
 
-    internal void ValidateVersionForPublish(
+    internal ModulePublishVersionPreflightResult ValidateVersionForPublish(
         PublishConfiguration publish,
-        ModulePipelinePlan plan)
+        ModulePipelinePlan plan,
+        bool allowExistingExactVersion = false)
     {
         if (publish is null)
         {
@@ -107,7 +108,7 @@ public sealed partial class ModulePublisher
         }
         if (!publish.Enabled || publish.Force || publish.Destination != PublishDestination.PowerShellGallery)
         {
-            return;
+            return ModulePublishVersionPreflightResult.Available;
         }
 
         var (repositoryName, repoConfig) = ResolveRepository(publish);
@@ -115,48 +116,54 @@ public sealed partial class ModulePublisher
                                publish.Tool == PublishTool.Auto && ShouldUseManagedModuleForAuto(publish);
         if (useManagedModule)
         {
-            EnsureManagedVersionIsGreaterThanRepository(
+            var alreadyPublished = EnsureManagedVersionIsGreaterThanRepository(
                 CreateManagedReadRepository(repositoryName, repoConfig),
                 plan.ModuleName,
                 plan.ResolvedVersion,
                 plan.PreRelease,
-                ResolveManagedReadCredential(repoConfig));
-            return;
+                ResolveManagedReadCredential(repoConfig),
+                allowExistingExactVersion);
+            return alreadyPublished
+                ? ModulePublishVersionPreflightResult.AlreadyPublished
+                : ModulePublishVersionPreflightResult.Available;
         }
 
         if (publish.Tool == PublishTool.Auto)
         {
             try
             {
-                ValidateVersionForPublishWithTool(
+                return ValidateVersionForPublishWithTool(
                     PublishTool.PSResourceGet,
                     plan,
                     repositoryName,
-                    repoConfig);
+                    repoConfig,
+                    allowExistingExactVersion);
             }
             catch (PowerShellToolNotAvailableException)
             {
-                ValidateVersionForPublishWithTool(
+                return ValidateVersionForPublishWithTool(
                     PublishTool.PowerShellGet,
                     plan,
                     repositoryName,
-                    repoConfig);
+                    repoConfig,
+                    allowExistingExactVersion);
             }
-            return;
         }
 
-        ValidateVersionForPublishWithTool(
+        return ValidateVersionForPublishWithTool(
             publish.Tool,
             plan,
             repositoryName,
-            repoConfig);
+            repoConfig,
+            allowExistingExactVersion);
     }
 
-    private void ValidateVersionForPublishWithTool(
+    private ModulePublishVersionPreflightResult ValidateVersionForPublishWithTool(
         PublishTool tool,
         ModulePipelinePlan plan,
         string repositoryName,
-        PublishRepositoryConfiguration? repoConfig)
+        PublishRepositoryConfiguration? repoConfig,
+        bool allowExistingExactVersion)
     {
         var repositoryCreated = false;
         var readCredential = _repositoryPublisher.ResolveCredentialForRepository(repoConfig);
@@ -167,13 +174,17 @@ public sealed partial class ModulePublisher
                 repositoryCreated = EnsureRepositoryRegistered(tool, repositoryName, repoConfig);
             }
 
-            EnsureVersionIsGreaterThanRepository(
+            var alreadyPublished = EnsureVersionIsGreaterThanRepository(
                 tool,
                 plan.ModuleName,
                 plan.ResolvedVersion,
                 plan.PreRelease,
                 repositoryName,
-                readCredential);
+                readCredential,
+                allowExistingExactVersion);
+            return alreadyPublished
+                ? ModulePublishVersionPreflightResult.AlreadyPublished
+                : ModulePublishVersionPreflightResult.Available;
         }
         finally
         {
@@ -649,13 +660,14 @@ public sealed partial class ModulePublisher
         return "Any version";
     }
 
-    internal void EnsureVersionIsGreaterThanRepository(
+    internal bool EnsureVersionIsGreaterThanRepository(
         PublishTool tool,
         string moduleName,
         string moduleVersion,
         string? preRelease,
         string repositoryName,
-        RepositoryCredential? credential)
+        RepositoryCredential? credential,
+        bool allowExistingExactVersion = false)
     {
         var publishVersionText = FormatSemVer(moduleVersion, preRelease);
         if (!TryParseSemVer(publishVersionText, out var publishVersion))
@@ -669,17 +681,21 @@ public sealed partial class ModulePublisher
         catch (Exception ex) when (IsRepositoryPackageNotFound(moduleName, ex))
         {
             _logger.Verbose($"No existing repository version was found for {moduleName} on '{repositoryName}'. Treating this as a first publish.");
-            return;
+            return false;
         }
         catch (Exception ex)
         {
             throw new InvalidOperationException($"Failed to query repository version for {moduleName} on '{repositoryName}'. Use -Force to publish without version check. {ex.Message}");
         }
 
-        if (current is null) return;
+        if (current is null)
+            return false;
 
-        if (publishVersion.CompareTo(current.Value) <= 0)
+        var comparison = publishVersion.CompareTo(current.Value);
+        if (comparison < 0 || (comparison == 0 && !allowExistingExactVersion))
             throw new InvalidOperationException($"Module version '{publishVersionText}' is not greater than repository version '{FormatSemVer(current.Value.Version.ToString(), current.Value.PreRelease)}' for '{moduleName}'. Use -Force to publish anyway.");
+
+        return comparison == 0;
     }
 
     internal static bool IsRepositoryPackageNotFound(string moduleName, Exception exception)

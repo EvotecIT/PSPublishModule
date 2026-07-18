@@ -404,7 +404,7 @@ public sealed partial class ModulePipelineRunner
         session.Start(step);
         try
         {
-            var result = ExecuteProjectBuildSegment(plan, segment, mode);
+            var result = ExecuteProjectBuildSegment(plan, state, segment, mode);
             CompletePackageBuildExecution(
                 plan,
                 state,
@@ -437,7 +437,7 @@ public sealed partial class ModulePipelineRunner
         session.Start(step);
         try
         {
-            var result = ExecutePackageBuildSegment(plan, segment, mode);
+            var result = ExecutePackageBuildSegment(plan, state, segment, mode);
             CompletePackageBuildExecution(
                 plan,
                 state,
@@ -496,6 +496,7 @@ public sealed partial class ModulePipelineRunner
 
     private ProjectBuildHostExecutionResult ExecuteProjectBuildSegment(
         ModulePipelinePlan plan,
+        ModulePipelineRunState state,
         ConfigurationProjectBuildSegment segment,
         PackageBuildExecutionMode mode)
     {
@@ -505,6 +506,13 @@ public sealed partial class ModulePipelineRunner
 
         var configPath = ResolvePackageBuildPath(plan.ProjectRoot, cfg.ConfigPath);
         var configuration = LoadProjectBuildConfiguration(configPath, cfg);
+        ApplySynchronizedReleaseCheckpointVersion(
+            plan,
+            state,
+            ReleaseVersionSource.ProjectBuild,
+            cfg.Name ?? configPath,
+            cfg.UseAsReleaseVersionSource,
+            configuration);
         ApplyProjectBuildGateDefaults(configuration, mode, plan.GateMode);
         var actions = ResolveEffectiveActions(configuration);
         var request = new ProjectBuildHostRequest
@@ -524,11 +532,19 @@ public sealed partial class ModulePipelineRunner
 
     private ProjectBuildHostExecutionResult ExecutePackageBuildSegment(
         ModulePipelinePlan plan,
+        ModulePipelineRunState state,
         ConfigurationPackageBuildSegment segment,
         PackageBuildExecutionMode mode)
     {
         var cfg = segment.Configuration ?? throw new InvalidOperationException("PackageBuild configuration is missing.");
         var projectBuildConfig = MapPackageBuildConfiguration(cfg, plan.ProjectRoot);
+        ApplySynchronizedReleaseCheckpointVersion(
+            plan,
+            state,
+            ReleaseVersionSource.PackageBuild,
+            cfg.Name ?? Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json"),
+            cfg.UseAsReleaseVersionSource,
+            projectBuildConfig);
         ApplyProjectBuildGateDefaults(projectBuildConfig, mode, plan.GateMode);
         var actions = ResolveEffectiveActions(projectBuildConfig);
         var configPath = Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");

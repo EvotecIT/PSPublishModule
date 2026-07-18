@@ -95,10 +95,14 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         bool includeScriptFolders)
         => new ModulePublisher(_logger, _runner).Publish(publish, plan, buildResult, artefactResults, includeScriptFolders);
 
-    public void ValidateModulePublishVersion(
+    public ModulePublishVersionPreflightResult ValidateModulePublishVersion(
         PublishConfiguration publish,
-        ModulePipelinePlan plan)
-        => new ModulePublisher(_logger, _runner).ValidateVersionForPublish(publish, plan);
+        ModulePipelinePlan plan,
+        bool allowExistingExactVersion)
+        => new ModulePublisher(_logger, _runner).ValidateVersionForPublish(
+            publish,
+            plan,
+            allowExistingExactVersion);
 
     public ModulePipelineActionResult RunAction(
         ModulePipelineActionConfiguration action,

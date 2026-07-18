@@ -462,6 +462,8 @@ public sealed class ReleaseConfiguration
     /// <summary>
     /// When enabled, uses the selected package/project release version for the module build as well.
     /// The selected lane must run before the module and be marked with <c>UseAsReleaseVersionSource</c>.
+    /// Publish runs persist a credential-free checkpoint so a partial release resumes the exact versions
+    /// and skips destinations that already completed.
     /// </summary>
     public bool SynchronizeModuleVersion { get; set; }
 

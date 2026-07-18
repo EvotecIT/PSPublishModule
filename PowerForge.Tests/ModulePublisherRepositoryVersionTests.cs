@@ -170,6 +170,30 @@ public sealed class ModulePublisherRepositoryVersionTests
     }
 
     [Fact]
+    public void ValidateVersionForPublish_AllowsExactRepositoryVersionWhenResumingRelease()
+    {
+        using var client = new HttpClient(new FakePowerShellGalleryFeedHandler());
+        var publisher = new ModulePublisher(
+            new NullLogger(),
+            new StubPowerShellRunner(new PowerShellRunResult(0, VisibleRepositoryItem("PSPublishModule", "3.0.0"), string.Empty, "pwsh.exe")),
+            client);
+        var publish = new PublishConfiguration
+        {
+            Enabled = true,
+            Destination = PublishDestination.PowerShellGallery,
+            RepositoryName = "PSGallery",
+            Tool = PublishTool.PSResourceGet
+        };
+
+        var result = publisher.ValidateVersionForPublish(
+            publish,
+            CreatePlan(resolvedVersion: "3.0.0"),
+            allowExistingExactVersion: true);
+
+        Assert.Equal(ModulePublishVersionPreflightResult.AlreadyPublished, result);
+    }
+
+    [Fact]
     public void EnsureVersionIsGreaterThanRepository_TreatsMissingRepositoryPackageAsFirstPublish()
     {
         var error = "Find-PSResource failed (exit 1). Package with name 'EntraIDConfig' could not be found in repository 'CompanyGallery'.";

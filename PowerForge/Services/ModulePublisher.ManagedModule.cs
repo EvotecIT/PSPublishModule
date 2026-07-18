@@ -143,12 +143,13 @@ public sealed partial class ModulePublisher
     private static string? FirstNonEmpty(params string?[] values)
         => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))?.Trim();
 
-    private void EnsureManagedVersionIsGreaterThanRepository(
+    private bool EnsureManagedVersionIsGreaterThanRepository(
         ManagedModuleRepository repository,
         string moduleName,
         string moduleVersion,
         string? preRelease,
-        RepositoryCredential? credential)
+        RepositoryCredential? credential,
+        bool allowExistingExactVersion = false)
     {
         var publishVersionText = FormatSemVer(moduleVersion, preRelease);
         if (!TryParseSemVer(publishVersionText, out var publishVersion))
@@ -174,7 +175,7 @@ public sealed partial class ModulePublisher
         catch (Exception ex) when (IsRepositoryPackageNotFound(moduleName, ex))
         {
             _logger.Verbose($"No existing repository version was found for {moduleName} on '{repository.Name}'. Treating this as a first publish.");
-            return;
+            return false;
         }
         catch (Exception ex)
         {
@@ -182,9 +183,12 @@ public sealed partial class ModulePublisher
         }
 
         if (current is null)
-            return;
+            return false;
 
-        if (publishVersion.CompareTo(current.Value) <= 0)
+        var comparison = publishVersion.CompareTo(current.Value);
+        if (comparison < 0 || (comparison == 0 && !allowExistingExactVersion))
             throw new InvalidOperationException($"Module version '{publishVersionText}' is not greater than repository version '{FormatSemVer(current.Value.Version.ToString(), current.Value.PreRelease)}' for '{moduleName}'. Use -Force to publish anyway.");
+
+        return comparison == 0;
     }
 }

@@ -432,6 +432,8 @@ public sealed class NewConfigurationReleaseCommand : PSCmdlet
     /// <summary>
     /// Uses the selected package/project release version for the module build as well.
     /// The selected lane must run before the module and use <c>UseAsReleaseVersionSource</c>.
+    /// Publish runs persist a credential-free checkpoint so a partial release resumes the exact versions
+    /// and skips destinations that already completed.
     /// </summary>
     [Parameter] public SwitchParameter SynchronizeModuleVersion { get; set; }
 

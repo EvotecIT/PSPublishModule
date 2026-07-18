@@ -1265,7 +1265,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         }
 
         public List<string> PublishedModuleVersions { get; } = new();
-        public Action<PublishConfiguration, ModulePipelinePlan>? ModulePublishVersionPreflight { get; set; }
+        public Func<PublishConfiguration, ModulePipelinePlan, ModulePublishVersionPreflightResult>? ModulePublishVersionPreflight { get; set; }
+        public Action<PublishConfiguration, ModulePipelinePlan>? ModulePublishAction { get; set; }
 
         public IReadOnlyList<ModuleDependencyInstallResult> EnsureDependenciesInstalled(
             ModuleDependency[] dependencies,
@@ -1304,6 +1305,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             IReadOnlyList<ArtefactBuildResult> artefactResults,
             bool includeScriptFolders)
         {
+            ModulePublishAction?.Invoke(publish, plan);
             _events.Add($"module:{publish.Destination}");
             PublishedModuleVersions.Add(plan.ResolvedVersion);
             return new ModulePublishResult(
@@ -1319,10 +1321,12 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                 errorMessage: null);
         }
 
-        public void ValidateModulePublishVersion(
+        public ModulePublishVersionPreflightResult ValidateModulePublishVersion(
             PublishConfiguration publish,
-            ModulePipelinePlan plan)
-            => ModulePublishVersionPreflight?.Invoke(publish, plan);
+            ModulePipelinePlan plan,
+            bool allowExistingExactVersion)
+            => ModulePublishVersionPreflight?.Invoke(publish, plan) ??
+               ModulePublishVersionPreflightResult.Available;
 
         public ModulePipelineActionResult RunAction(
             ModulePipelineActionConfiguration action,

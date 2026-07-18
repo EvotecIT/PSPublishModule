@@ -60,7 +60,14 @@ internal interface IModulePipelineHostedOperations
 
 internal interface IModulePipelinePublishPreflightOperations
 {
-    void ValidateModulePublishVersion(
+    ModulePublishVersionPreflightResult ValidateModulePublishVersion(
         PublishConfiguration publish,
-        ModulePipelinePlan plan);
+        ModulePipelinePlan plan,
+        bool allowExistingExactVersion);
+}
+
+internal enum ModulePublishVersionPreflightResult
+{
+    Available,
+    AlreadyPublished
 }
