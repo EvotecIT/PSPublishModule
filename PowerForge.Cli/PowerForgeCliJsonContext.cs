@@ -74,6 +74,8 @@ namespace PowerForge.Cli;
 [JsonSerializable(typeof(WorkspaceValidationResult))]
 [JsonSerializable(typeof(GitHubHousekeepingSpec))]
 [JsonSerializable(typeof(GitHubHousekeepingResult))]
+[JsonSerializable(typeof(GitHubRepositoryContentSpec))]
+[JsonSerializable(typeof(GitHubRepositoryContentResult))]
 [JsonSerializable(typeof(GitHubArtifactCleanupResult))]
 [JsonSerializable(typeof(GitHubActionsCacheCleanupResult))]
 [JsonSerializable(typeof(RunnerHousekeepingResult))]
