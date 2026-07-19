@@ -43,11 +43,12 @@ public static partial class WebApiDocsGenerator
 
             foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
             {
-                if (method.IsSpecialName) continue;
+                if (!ShouldIncludeReflectedMethod(method)) continue;
                 model.Methods.Add(new ApiMemberModel
                 {
                     Name = method.Name,
                     DisplayName = method.Name,
+                    DocumentationSignature = BuildDocumentationMethodSignature(method),
                     Parameters = method.GetParameters().Select(p => new ApiParameterModel
                     {
                         Name = p.Name ?? string.Empty,
@@ -140,7 +141,7 @@ public static partial class WebApiDocsGenerator
 
             foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
             {
-                if (method.IsSpecialName) continue;
+                if (!ShouldIncludeReflectedMethod(method)) continue;
                 var member = FindMethodModel(model.Methods, method);
                 if (member is null)
                 {
@@ -199,7 +200,7 @@ public static partial class WebApiDocsGenerator
 
             foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
             {
-                var member = FindNamedMember(model.Properties, property.Name);
+                var member = FindPropertyModel(model.Properties, property);
                 if (member is null)
                 {
                     member = new ApiMemberModel
@@ -267,6 +268,34 @@ public static partial class WebApiDocsGenerator
         }
     }
 
+    private static void RestrictToPublicAssemblySurface(ApiDocModel doc, Assembly assembly)
+    {
+        var exportedTypes = GetExportedTypesSafe(assembly)
+            .Where(static type => type is not null)
+            .Select(static type => (type!.FullName ?? type.Name).Replace('+', '.'))
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var typeName in doc.Types.Keys.Where(typeName => !exportedTypes.Contains(typeName)).ToArray())
+            doc.Types.Remove(typeName);
+
+        foreach (var type in doc.Types.Values)
+        {
+            type.Methods.RemoveAll(static member => !IsPublicAssemblyMember(member));
+            type.Constructors.RemoveAll(static member => !IsPublicAssemblyMember(member));
+            type.Properties.RemoveAll(static member => !IsPublicAssemblyMember(member));
+            type.Fields.RemoveAll(static member => !IsPublicAssemblyMember(member));
+            type.Events.RemoveAll(static member => !IsPublicAssemblyMember(member));
+            type.ExtensionMethods.RemoveAll(static member => !IsPublicAssemblyMember(member));
+        }
+    }
+
+    private static bool IsPublicAssemblyMember(ApiMemberModel member) =>
+        string.Equals(member.Access, "public", StringComparison.Ordinal);
+
+    private static bool ShouldIncludeReflectedMethod(MethodInfo method) =>
+        !method.IsSpecialName ||
+        method.Name.StartsWith("op_", StringComparison.Ordinal);
+
     private static ApiMemberModel? FindNamedMember(List<ApiMemberModel> members, string name)
     {
         return members.FirstOrDefault(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -274,19 +303,9 @@ public static partial class WebApiDocsGenerator
 
     private static ApiMemberModel? FindMethodModel(List<ApiMemberModel> members, MethodInfo method)
     {
-        var candidates = members
-            .Where(m => string.Equals(m.Name, method.Name, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        if (candidates.Count == 0) return null;
-
-        var parameters = method.GetParameters();
-        foreach (var candidate in candidates)
-        {
-            if (candidate.Parameters.Count != parameters.Length) continue;
-            if (ParamsMatch(candidate.Parameters, parameters)) return candidate;
-        }
-
-        return candidates.FirstOrDefault(c => c.Parameters.Count == parameters.Length) ?? candidates.First();
+        var signature = BuildDocumentationMethodSignature(method);
+        return members.FirstOrDefault(candidate =>
+            string.Equals(candidate.DocumentationSignature, signature, StringComparison.Ordinal));
     }
 
     private static ApiMemberModel? FindConstructorModel(List<ApiMemberModel> members, ConstructorInfo ctor)
@@ -303,7 +322,25 @@ public static partial class WebApiDocsGenerator
             if (ParamsMatch(candidate.Parameters, parameters)) return candidate;
         }
 
-        return candidates.FirstOrDefault(c => c.Parameters.Count == parameters.Length) ?? candidates.First();
+        return null;
+    }
+
+    private static ApiMemberModel? FindPropertyModel(List<ApiMemberModel> members, PropertyInfo property)
+    {
+        var candidates = members
+            .Where(member => string.Equals(member.Name, property.Name, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (candidates.Count == 0)
+            return null;
+
+        var parameters = property.GetIndexParameters();
+        foreach (var candidate in candidates)
+        {
+            if (candidate.Parameters.Count != parameters.Length) continue;
+            if (ParamsMatch(candidate.Parameters, parameters)) return candidate;
+        }
+
+        return null;
     }
 
     private static bool ParamsMatch(List<ApiParameterModel> parameters, ParameterInfo[] infos)
@@ -312,11 +349,92 @@ public static partial class WebApiDocsGenerator
         for (var i = 0; i < parameters.Count; i++)
         {
             var left = NormalizeTypeName(parameters[i].Type);
-            var right = NormalizeTypeName(GetReadableTypeName(infos[i].ParameterType));
+            var right = NormalizeTypeName(GetDocumentationTypeName(infos[i].ParameterType));
             if (!string.Equals(left, right, StringComparison.OrdinalIgnoreCase))
                 return false;
         }
         return true;
+    }
+
+    private static string GetDocumentationTypeName(Type type)
+    {
+        if (type.IsByRef)
+            return GetDocumentationTypeName(type.GetElementType() ?? type) + "@";
+        if (type.IsPointer)
+            return GetDocumentationTypeName(type.GetElementType() ?? type) + "*";
+        if (type.IsArray)
+        {
+            var elementType = GetDocumentationTypeName(type.GetElementType() ?? typeof(object));
+            if (type.GetArrayRank() == 1)
+                return elementType + "[]";
+
+            return elementType + "[" + string.Join(",", Enumerable.Repeat("0:", type.GetArrayRank())) + "]";
+        }
+        if (type.IsGenericParameter)
+        {
+            var prefix = type.DeclaringMethod is null ? "`" : "``";
+            return prefix + type.GenericParameterPosition;
+        }
+        if (type.IsGenericType)
+        {
+            var definition = type.GetGenericTypeDefinition();
+            var definitionName = GenericArityRegex
+                .Replace(definition.FullName ?? definition.Name, string.Empty)
+                .Replace('+', '.');
+            var arguments = type.GetGenericArguments().Select(GetDocumentationTypeName);
+            return definitionName + "{" + string.Join(",", arguments) + "}";
+        }
+
+        return (type.FullName ?? type.Name).Replace('+', '.');
+    }
+
+    private static string BuildDocumentationMethodSignature(MethodInfo method)
+    {
+        var name = method.Name;
+        if (method.IsGenericMethod)
+            name += "``" + method.GetGenericArguments().Length;
+
+        var conversionReturnType =
+            IsConversionOperator(method.Name)
+                ? GetDocumentationTypeName(method.ReturnType)
+                : null;
+        return BuildDocumentationMethodSignature(
+            name,
+            method.GetParameters().Select(parameter => GetDocumentationTypeName(parameter.ParameterType)).ToArray(),
+            conversionReturnType);
+    }
+
+    private static string BuildDocumentationMethodSignature(
+        string name,
+        IReadOnlyList<string> parameterTypes,
+        string? conversionReturnType)
+    {
+        var signature = parameterTypes.Count == 0
+            ? name
+            : name + "(" + string.Join(",", parameterTypes) + ")";
+        return string.IsNullOrWhiteSpace(conversionReturnType)
+            ? signature
+            : signature + "~" + conversionReturnType;
+    }
+
+    private static bool IsConversionOperator(string name) =>
+        name is "op_Implicit" or
+            "op_Explicit" or
+            "op_CheckedImplicit" or
+            "op_CheckedExplicit";
+
+    private static string? ParseDocumentationConversionReturnType(string fullName)
+    {
+        var parametersEnd = fullName.LastIndexOf(')');
+        if (parametersEnd < 0 ||
+            parametersEnd + 1 >= fullName.Length ||
+            fullName[parametersEnd + 1] != '~')
+        {
+            return null;
+        }
+
+        var returnType = fullName.Substring(parametersEnd + 2).Trim();
+        return returnType.Length == 0 ? null : returnType;
     }
 
     private static string NormalizeTypeName(string? value)
@@ -430,6 +548,7 @@ public static partial class WebApiDocsGenerator
     private static void FillMethodMember(ApiMemberModel member, MethodInfo method, Type declaring)
     {
         member.Kind = "Method";
+        member.DocumentationSignature = BuildDocumentationMethodSignature(method);
         member.ReturnType = GetReadableTypeName(method.ReturnType);
         member.Signature = BuildMethodSignature(method);
         member.IsStatic = method.IsStatic;
