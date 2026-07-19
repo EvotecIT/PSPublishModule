@@ -188,6 +188,7 @@ Depending on config, the run can emit:
 - Shortcut components can use `TargetFileId` for an explicitly authored file component, or `Target` such as `[INSTALLFOLDER]MyApp.exe` when the executable comes from harvested payload.
 - WiX still does the compile. The generated project includes `WixToolset.UI.wixext` and `WixToolset.Util.wixext` only when the authoring model needs those extensions.
 - `Installers[].Versioning.Pattern` defaults to `FixedMajorMinorDatePatch`. Use `UtcShortYearMonthDayMinute` when an MSI line must keep a calendar-based `yy.month.dayMinute` product-version sequence for major-upgrade compatibility with older installer scripts.
+- Monotonic version state and version-bearing output names are immutable by default. Set `Installers[].Versioning.AllowOutputOverwrite: true` only for an intentional non-release rebuild: PowerForge reuses the latest completed version when the configured line and floor still match, serializes competing rebuilds, and releases the state reservation when the run finishes. A newer date floor or major/minor line still advances to a new version. If an installer publishes multiple target/framework/runtime/style combinations, include the relevant combination tokens in `Versioning.StatePath`; PowerForge rejects a shared overwrite-state path because it cannot authoritatively identify every completed output version.
 
 ## Microsoft Store / MSIX Packaging
 

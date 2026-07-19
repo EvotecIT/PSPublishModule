@@ -185,13 +185,14 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "ServiceComponent.SetBackupCommand" &&
             (string?)e.Attribute("Property") == "WixQuietExecCmdLine" &&
-            ((string?)e.Attribute("Value"))?.Contains("powershell.exe -NoLogo -NoProfile", StringComparison.Ordinal) == true &&
-            ((string?)e.Attribute("Value"))?.Contains("PF_SERVICE=TestimoX.Monitoring", StringComparison.Ordinal) == true &&
-            ((string?)e.Attribute("Value"))?.Contains("PF_BACKUP=[TempFolder]tmx-svc.txt", StringComparison.Ordinal) == true &&
-            ((string?)e.Attribute("Value"))?.Contains(@"Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services", StringComparison.Ordinal) == true &&
-            ((string?)e.Attribute("Value"))?.Contains("ImagePath", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains("powershell.exe -nop -c", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains("Name -eq 'TestimoX.Monitoring'", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains("$b='[TempFolder]tmx-svc.txt'", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains("gwmi win32_service", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains("PathName", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("WriteAllText", StringComparison.Ordinal) == true &&
-            ((string?)e.Attribute("Value"))?.Contains("WriteAllText($backup", StringComparison.Ordinal) == true));
+            ((string?)e.Attribute("Value"))?.Contains("WriteAllText($b", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Length <= 255));
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "ServiceComponent.SetStopService" &&
             ((string?)e.Attribute("Value"))?.Contains("exit /b 0", StringComparison.Ordinal) == true));
@@ -512,8 +513,14 @@ public sealed class PowerForgeInstallerAuthoringTests
     {
         var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
         definition.Components.Clear();
-        AddScriptService(definition, "ServiceComponentWithVeryLongSharedPrefixForTenantAlpha");
-        AddScriptService(definition, "ServiceComponentWithVeryLongSharedPrefixForTenantBeta");
+        AddScriptService(
+            definition,
+            "ServiceComponentWithVeryLongSharedPrefixForTenantAlpha",
+            "[TempFolder]alpha-service.txt");
+        AddScriptService(
+            definition,
+            "ServiceComponentWithVeryLongSharedPrefixForTenantBeta",
+            "[TempFolder]beta-service.txt");
 
         var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
         var doc = XDocument.Parse(xml);
@@ -581,7 +588,7 @@ public sealed class PowerForgeInstallerAuthoringTests
         string[] backupCommands = doc.Descendants(Wix + "CustomAction")
             .Where(e => (string?)e.Attribute("Property") == "WixQuietExecCmdLine")
             .Select(e => (string?)e.Attribute("Value"))
-            .Where(value => value?.Contains("ImagePath", StringComparison.Ordinal) == true)
+            .Where(value => value?.Contains("gwmi win32_service", StringComparison.Ordinal) == true)
             .Select(value => value!)
             .ToArray();
         Assert.Contains(backupCommands, command =>
@@ -617,9 +624,38 @@ public sealed class PowerForgeInstallerAuthoringTests
             .Where(e => (string?)e.Attribute("Id") == "ServiceComponent.SetBackupCommand")
             .Select(e => (string?)e.Attribute("Value"))
             .Single(value => !string.IsNullOrWhiteSpace(value))!;
-        Assert.Contains("set \"PF_BACKUP=[TempFolder]O'Connor\\service.txt\"", command, StringComparison.Ordinal);
-        Assert.Contains("[System.IO.File]::WriteAllText($backup", command, StringComparison.Ordinal);
+        Assert.Contains("$b='[TempFolder]O''Connor\\service.txt'", command, StringComparison.Ordinal);
+        Assert.Contains("[IO.File]::WriteAllText($b", command, StringComparison.Ordinal);
+        Assert.Contains("[IO.File]::Delete($b)", command, StringComparison.Ordinal);
         Assert.DoesNotContain("WriteAllText('[TempFolder]O''Connor", command, StringComparison.Ordinal);
+        Assert.True(command.Length <= 255, $"Backup custom action target is {command.Length} characters.");
+    }
+
+    [Fact]
+    public void EmitSource_RejectsBackupCommandThatExceedsMsiTargetLimit()
+    {
+        var definition = CreateSimpleFileInstaller(Path.Combine(Path.GetTempPath(), "payload.txt"));
+        definition.Components.Clear();
+        definition.Components.Add(new PowerForgeInstallerServiceComponent
+        {
+            Id = "LongService",
+            DirectoryRefId = "INSTALLFOLDER",
+            FileId = "LongServiceExe",
+            Source = "$(var.PayloadDir)\\service.exe",
+            DisplayName = "Long service",
+            ServiceName = new string('S', 72),
+            ScriptInstall = new PowerForgeInstallerServiceScriptInstall
+            {
+                Command = "powershell.exe -File install.ps1",
+                BackupExistingImagePath = true,
+                BackupPath = "[TempFolder]" + new string('B', 72) + ".txt"
+            }
+        });
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeWixInstallerSourceEmitter().EmitSource(definition));
+
+        Assert.Contains("CustomAction.Target supports at most 255", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2345,7 +2381,10 @@ public sealed class PowerForgeInstallerAuthoringTests
         return definition;
     }
 
-    private static void AddScriptService(PowerForgeInstallerDefinition definition, string componentId)
+    private static void AddScriptService(
+        PowerForgeInstallerDefinition definition,
+        string componentId,
+        string? backupPath = null)
     {
         definition.Components.Add(new PowerForgeInstallerServiceComponent
         {
@@ -2358,6 +2397,7 @@ public sealed class PowerForgeInstallerAuthoringTests
             {
                 Command = "\"powershell.exe\" -NoP -EP Bypass -File \"[INSTALLFOLDER]Install-Service.ps1\"",
                 BackupExistingImagePath = true,
+                BackupPath = backupPath ?? "[TempFolder]powerforge-{serviceId}-service-binpath.txt",
                 StopServiceForUpgrade = true
             }
         });

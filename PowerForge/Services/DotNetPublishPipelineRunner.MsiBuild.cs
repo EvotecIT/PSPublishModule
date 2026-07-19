@@ -12,7 +12,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private DotNetPublishMsiBuildResult BuildMsiPackage(
         DotNetPublishPlan plan,
         IReadOnlyList<DotNetPublishMsiPrepareResult> prepares,
-        DotNetPublishStep step)
+        DotNetPublishStep step,
+        string reservationOwner)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (prepares is null) throw new ArgumentNullException(nameof(prepares));
@@ -48,7 +49,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var installerConfig = (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
             .FirstOrDefault(i => string.Equals(i.Id, installerId, StringComparison.OrdinalIgnoreCase));
-        var versionResolution = ResolveMsiVersionForStep(plan, installerConfig, step);
+        var versionResolution = ResolveMsiVersionForStep(plan, installerConfig, step, reservationOwner);
         var licenseResolution = ResolveInstallerClientLicense(plan, installerConfig, step);
         var isGeneratedInstallerProject = IsGeneratedInstallerProject(step, installerConfig);
 
@@ -89,6 +90,13 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         var configuredOutputName = ResolveInstallerOutputName(plan, installerConfig, step, versionResolution.Version);
+        using var outputReservation = ReserveVersionedOutput(
+            configuredOutputDir,
+            configuredOutputName,
+            versionResolution.Version,
+            installerConfig?.Versioning?.AllowOutputOverwrite == true,
+            installerId,
+            reservationOwner);
         var installerMsBuildProperties = BuildInstallerMsBuildProperties(
             plan.MsBuildProperties,
             installerConfig?.MsBuildProperties,
@@ -132,9 +140,6 @@ public sealed partial class DotNetPublishPipelineRunner
             _logger.Info($"MSI output name for '{installerId}' -> {configuredOutputName}.msi");
         RunDotnet(plan.ProjectRoot, args, plan.EnvironmentVariables);
 
-        if (versionResolution.Patch.HasValue && !string.IsNullOrWhiteSpace(versionResolution.StatePath))
-            WriteMsiVersionState(versionResolution.StatePath!, versionResolution.Patch.Value, versionResolution.Version!);
-
         var outputs = FindChangedMsiOutputs(outputSearchDir, before, skipBinDirectoryFilter: skipOutputBinDirectoryFilter);
         if (outputs.Length == 0)
             _logger.Warn($"MSI build for '{installerId}' completed, but no changed *.msi outputs were detected under '{outputSearchDir}'.");
@@ -154,6 +159,7 @@ public sealed partial class DotNetPublishPipelineRunner
             Runtime = runtime,
             Style = style.Value,
             ProjectPath = installerProjectPath,
+            GeneratedProject = isGeneratedInstallerProject,
             OutputFiles = outputs,
             PackageMetadata = packageMetadata,
             Version = versionResolution.Version,
@@ -330,19 +336,75 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishStep step,
         string? version)
     {
-        if (installer is null || string.IsNullOrWhiteSpace(installer.OutputName))
+        if (installer is null)
+            return null;
+
+        var hasVersion = !string.IsNullOrWhiteSpace(version);
+        string? configuredName = installer.OutputName;
+        if (string.IsNullOrWhiteSpace(configuredName) && hasVersion)
+        {
+            configuredName = string.Join(
+                "-",
+                new[]
+                {
+                    step.TargetName,
+                    installer.Id,
+                    step.Runtime,
+                    step.Framework,
+                    step.Style?.ToString(),
+                    version
+                }
+                    .Where(static value => !string.IsNullOrWhiteSpace(value)));
+        }
+
+        if (string.IsNullOrWhiteSpace(configuredName))
             return null;
 
         var tokens = BuildInstallerOutputTokens(plan, installer.Id, step, version);
-        var name = ApplyTemplate(installer.OutputName!, tokens).Trim();
+        var name = ApplyTemplate(configuredName!, tokens).Trim();
         if (string.IsNullOrWhiteSpace(name))
             return null;
 
         name = ToSafeFileName(name, "installer");
-        return name.EndsWith(".msi", StringComparison.OrdinalIgnoreCase)
+        name = name.EndsWith(".msi", StringComparison.OrdinalIgnoreCase)
             ? Path.GetFileNameWithoutExtension(name)
             : name;
+
+        if (hasVersion && !ContainsCompleteVersionToken(name, version!))
+            name = ToSafeFileName($"{name}-{version}", "installer");
+
+        return name;
     }
+
+    private static bool ContainsCompleteVersionToken(string name, string version)
+    {
+        var searchIndex = 0;
+        while (searchIndex <= name.Length - version.Length)
+        {
+            var matchIndex = name.IndexOf(version, searchIndex, StringComparison.OrdinalIgnoreCase);
+            if (matchIndex < 0)
+                return false;
+
+            var beforeIsBoundary = matchIndex == 0
+                || IsVersionTokenDelimiter(name[matchIndex - 1])
+                || (IsVersionPrefix(name[matchIndex - 1])
+                    && (matchIndex == 1 || IsVersionTokenDelimiter(name[matchIndex - 2])));
+            var afterIndex = matchIndex + version.Length;
+            var afterIsBoundary = afterIndex == name.Length
+                || IsVersionTokenDelimiter(name[afterIndex]);
+            if (beforeIsBoundary && afterIsBoundary)
+                return true;
+
+            searchIndex = matchIndex + 1;
+        }
+
+        return false;
+    }
+
+    private static bool IsVersionPrefix(char value) => value is 'v' or 'V';
+
+    private static bool IsVersionTokenDelimiter(char value) =>
+        !char.IsLetterOrDigit(value) && value != '.';
 
     private static Dictionary<string, string> BuildInstallerOutputTokens(
         DotNetPublishPlan plan,
@@ -560,10 +622,17 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!plan.AllowOutputOutsideProjectRoot)
                 EnsurePathWithinRoot(plan.ProjectRoot, statePath, $"Installer '{installer.Id}' version state path");
 
-            var previous = stateOverrides is not null && stateOverrides.TryGetValue(statePath, out var plannedState)
-                ? plannedState
-                : ReadMsiVersionState(statePath);
-            if (ShouldBumpMsiPatch(previous, major, minor, patch))
+            MsiVersionState? plannedState = null;
+            var hasPlannedState = stateOverrides is not null
+                                  && stateOverrides.TryGetValue(statePath, out plannedState);
+            var previous = hasPlannedState ? plannedState : ReadMsiVersionState(statePath);
+            if (!hasPlannedState
+                && v.AllowOutputOverwrite
+                && TryResolveReusableMsiPatch(previous, major, minor, patch, patchCap, out var reusablePatch))
+            {
+                patch = reusablePatch;
+            }
+            else if (ShouldBumpMsiPatch(previous, major, minor, patch))
                 patch = Math.Min(patchCap, previous!.LastPatch + 1);
         }
 
@@ -581,19 +650,49 @@ public sealed partial class DotNetPublishPipelineRunner
     private MsiVersionResolution ResolveMsiVersionForStep(
         DotNetPublishPlan plan,
         DotNetPublishInstallerPlan? installer,
-        DotNetPublishStep step)
+        DotNetPublishStep step,
+        string reservationOwner)
     {
         if (installer is not null)
         {
             var cached = FindResolvedMsiVersion(plan, installer.Id, step.TargetName, step.Framework, step.Runtime, step.Style);
             if (cached is not null)
             {
-                ReserveMsiVersionState(cached, $"MSI build for installer '{installer.Id}'");
+                ReserveMsiVersionState(
+                    cached,
+                    $"MSI build for installer '{installer.Id}'",
+                    reservationOwner,
+                    cached.AllowOutputOverwrite);
                 return new MsiVersionResolution(cached.Version, cached.VersionPropertyName, cached.Patch, cached.StatePath);
             }
         }
 
-        return ResolveMsiVersion(plan, installer, step);
+        var resolved = ResolveMsiVersion(plan, installer, step);
+        var versionPlan = new DotNetPublishMsiVersionPlan
+        {
+            Version = resolved.Version ?? string.Empty,
+            VersionPropertyName = resolved.PropertyName,
+            AssemblyVersion = BuildFourPartVersion(resolved.Version ?? string.Empty),
+            Patch = resolved.Patch,
+            StatePath = resolved.StatePath,
+            AllowOutputOverwrite = installer?.Versioning?.AllowOutputOverwrite == true
+        };
+        ReserveMsiVersionState(
+            versionPlan,
+            $"MSI build for installer '{installer?.Id ?? step.InstallerId}'",
+            reservationOwner,
+            versionPlan.AllowOutputOverwrite);
+        if (installer is not null && step.Style.HasValue)
+        {
+            var key = BuildMsiVersionKey(
+                installer.Id,
+                step.TargetName,
+                step.Framework,
+                step.Runtime,
+                step.Style.Value);
+            plan.MsiVersions[key] = versionPlan;
+        }
+        return resolved;
     }
 
     private static DotNetPublishMsiVersionPlan? FindResolvedMsiVersion(
@@ -641,7 +740,11 @@ public sealed partial class DotNetPublishPipelineRunner
         return string.Join(".", parts);
     }
 
-    private static void ReserveMsiVersionState(DotNetPublishMsiVersionPlan version, string context)
+    internal static void ReserveMsiVersionState(
+        DotNetPublishMsiVersionPlan version,
+        string context,
+        string reservationOwner,
+        bool allowOutputOverwrite = false)
     {
         if (version is null || string.IsNullOrWhiteSpace(version.StatePath) || !version.Patch.HasValue)
             return;
@@ -649,24 +752,95 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!TryParseMsiVersion(version.Version, out var major, out var minor, out var patch))
             return;
 
-        var previous = ReadMsiVersionState(version.StatePath!);
-        if (previous is not null
-            && previous.LastPatch == patch
-            && string.Equals(previous.Version, version.Version, StringComparison.OrdinalIgnoreCase))
+        Directory.CreateDirectory(Path.GetDirectoryName(version.StatePath!)!);
+        FileStream stateStream;
+        try
         {
-            return;
+            stateStream = new FileStream(
+                version.StatePath!,
+                FileMode.OpenOrCreate,
+                FileAccess.ReadWrite,
+                FileShare.None);
         }
-
-        if (ShouldBumpMsiPatch(previous, major, minor, patch))
+        catch (IOException ex)
         {
-            var previousVersion = string.IsNullOrWhiteSpace(previous?.Version)
-                ? previous?.LastPatch.ToString(CultureInfo.InvariantCulture)
-                : previous!.Version;
             throw new InvalidOperationException(
-                $"MSI version state '{version.StatePath}' advanced to '{previousVersion}' before {context} could reserve '{version.Version}'. Re-plan or rerun the publish to avoid duplicate MSI versions.");
+                $"MSI version state '{version.StatePath}' is being reserved by another publish.",
+                ex);
         }
 
-        WriteMsiVersionState(version.StatePath!, patch, version.Version);
+        using (stateStream)
+        {
+            var previous = ReadMsiVersionState(stateStream);
+            if (previous is not null
+                && previous.LastPatch == patch
+                && string.Equals(previous.Version, version.Version, StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.Equals(previous.ReservationOwner, reservationOwner, StringComparison.Ordinal))
+                    return;
+
+                if (allowOutputOverwrite && string.IsNullOrWhiteSpace(previous.ReservationOwner))
+                {
+                    WriteMsiVersionState(stateStream, patch, version.Version, reservationOwner);
+                    return;
+                }
+
+                throw new InvalidOperationException(
+                    $"MSI version '{version.Version}' in state '{version.StatePath}' is already reserved " +
+                    "by another publish. Re-plan or rerun to allocate the next version.");
+            }
+
+            if (ShouldBumpMsiPatch(previous, major, minor, patch))
+            {
+                var previousVersion = string.IsNullOrWhiteSpace(previous?.Version)
+                    ? previous?.LastPatch.ToString(CultureInfo.InvariantCulture)
+                    : previous!.Version;
+                throw new InvalidOperationException(
+                    $"MSI version state '{version.StatePath}' advanced to '{previousVersion}' before {context} could reserve '{version.Version}'. Re-plan or rerun the publish to avoid duplicate MSI versions.");
+            }
+
+            WriteMsiVersionState(stateStream, patch, version.Version, reservationOwner);
+        }
+    }
+
+    internal static bool ReleaseMsiVersionStateReservation(
+        DotNetPublishMsiVersionPlan version,
+        string reservationOwner)
+    {
+        if (version is null || string.IsNullOrWhiteSpace(version.StatePath) || !version.Patch.HasValue)
+            return true;
+
+        try
+        {
+            using var stateStream = new FileStream(
+                version.StatePath!,
+                FileMode.Open,
+                FileAccess.ReadWrite,
+                FileShare.None);
+            var current = ReadMsiVersionState(stateStream);
+            if (current is null
+                || current.LastPatch != version.Patch.Value
+                || !string.Equals(current.Version, version.Version, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(current.ReservationOwner, reservationOwner, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            WriteMsiVersionState(stateStream, version.Patch.Value, version.Version, reservationOwner: null);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static int ResolveMsiVersionSegments(DotNetPublishMsiVersionOptions options, ref int major, ref int minor)
@@ -760,6 +934,17 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
+    private static MsiVersionState? ReadMsiVersionState(Stream stream)
+    {
+        if (stream.Length == 0)
+            return null;
+
+        stream.Position = 0;
+        return JsonSerializer.Deserialize<MsiVersionState>(
+            stream,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+    }
+
     private static bool ShouldBumpMsiPatch(MsiVersionState? previous, int major, int minor, int patch)
     {
         if (previous is null || previous.LastPatch < patch)
@@ -771,6 +956,30 @@ public sealed partial class DotNetPublishPipelineRunner
             return false;
         }
 
+        return true;
+    }
+
+    private static bool TryResolveReusableMsiPatch(
+        MsiVersionState? previous,
+        int major,
+        int minor,
+        int candidatePatch,
+        int patchCap,
+        out int patch)
+    {
+        patch = candidatePatch;
+        if (previous is null
+            || !TryParseMsiVersion(previous.Version, out var previousMajor, out var previousMinor, out var previousPatch)
+            || previousMajor != major
+            || previousMinor != minor
+            || previous.LastPatch != previousPatch
+            || previousPatch < candidatePatch
+            || previousPatch > patchCap)
+        {
+            return false;
+        }
+
+        patch = previousPatch;
         return true;
     }
 
@@ -789,18 +998,32 @@ public sealed partial class DotNetPublishPipelineRunner
             && int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out patch);
     }
 
-    private static void WriteMsiVersionState(string statePath, int patch, string version)
+    private static void WriteMsiVersionState(
+        Stream stream,
+        int patch,
+        string version,
+        string? reservationOwner)
     {
         var state = new MsiVersionState
         {
             LastPatch = patch,
             Version = version,
-            UpdatedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture)
+            UpdatedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
+            ReservationOwner = reservationOwner
         };
 
-        Directory.CreateDirectory(Path.GetDirectoryName(statePath)!);
         var json = JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(statePath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        stream.SetLength(0);
+        stream.Position = 0;
+        using var writer = new StreamWriter(
+            stream,
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            bufferSize: 1024,
+            leaveOpen: true);
+        writer.Write(json);
+        writer.Flush();
+        if (stream is FileStream fileStream)
+            fileStream.Flush(flushToDisk: true);
     }
 
     private static DateTime ParseUtcDate(string value)
@@ -838,6 +1061,7 @@ public sealed partial class DotNetPublishPipelineRunner
         public int LastPatch { get; set; }
         public string? Version { get; set; }
         public string? UpdatedUtc { get; set; }
+        public string? ReservationOwner { get; set; }
     }
 
     private sealed class MsiVersionResolution

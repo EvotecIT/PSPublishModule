@@ -202,6 +202,9 @@ public sealed class DotNetPublishMsiVersionPlan
 
     /// <summary>Resolved monotonic state path when configured.</summary>
     public string? StatePath { get; set; }
+
+    /// <summary>Whether this resolved version may be reused for an explicit non-release overwrite.</summary>
+    public bool AllowOutputOverwrite { get; set; }
 }
 
 /// <summary>
