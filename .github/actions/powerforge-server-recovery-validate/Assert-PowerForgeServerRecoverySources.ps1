@@ -483,10 +483,10 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
         [string]::Equals([string]$_.Entry.kind, 'file', [StringComparison]::OrdinalIgnoreCase) -and
         [string]::Equals([string]$_.Entry.owner, 'root', [StringComparison]::Ordinal) -and
         [string]::Equals([string]$_.Entry.group, 'root', [StringComparison]::Ordinal) -and
-        ([string]$_.Entry.mode) -in @('600', '0600')
+        ([string]$_.Entry.mode) -in @('644', '0644')
     })
     if ($authorizedKeysSources.Count -ne 1) {
-        throw 'Encrypted recovery capture requires one managed root-owned mode-600 authorized_keys file.'
+        throw 'Encrypted recovery capture requires one managed root-owned mode-644 authorized_keys file so sshd can read it after privilege drop.'
     }
     $authorizedKeyLines = @(
         (Get-Content -LiteralPath $authorizedKeysSources[0].Path -Raw) -split "`r?`n" |
