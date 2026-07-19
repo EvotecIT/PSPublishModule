@@ -15,7 +15,7 @@ internal sealed partial class HtmlExporter
 
     private static void ConfigureMarkdownTheme(Document document)
     {
-        document.Head.AddCssInline("""
+        document.Head.AddCssInline(TrustedCss.FromTrustedSource("""
         /* hfx-module-docs-markdown */
         .hfx-md {
             color: var(--tblr-body-color, #1f2937);
@@ -175,7 +175,7 @@ internal sealed partial class HtmlExporter
             background: rgba(var(--tblr-info-rgb, 66, 153, 225), .12);
             border-left-color: rgba(var(--tblr-info-rgb, 66, 153, 225), .7);
         }
-        """);
+        """));
     }
 
     private static void ConfigureNestedTabs(TablerTabs tabs, string navWidth = "18rem", string navMaxHeight = "70vh")

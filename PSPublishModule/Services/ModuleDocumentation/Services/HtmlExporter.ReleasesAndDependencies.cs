@@ -16,7 +16,7 @@ internal sealed partial class HtmlExporter
 
         if (releaseList.Count == 0)
         {
-            panel.Markdown("No releases available.", new MarkdownOptions { HeadingsBaseLevel = 2, Sanitize = true });
+            panel.Markdown("No releases available.", new MarkdownOptions { HeadingsBaseLevel = 2 });
             return;
         }
 
@@ -125,18 +125,12 @@ internal sealed partial class HtmlExporter
                                 {
                                     HeadingsBaseLevel = 2,
                                     AutolinkBareUrls = true,
-                                    Sanitize = true,
-                                    AllowRawHtmlInline = true,
-                                    AllowRawHtmlBlocks = true
                                 });
                                 body.Markdown(release.Body.Trim(), new MarkdownOptions
                                 {
                                     HeadingsBaseLevel = 3,
                                     AutolinkBareUrls = true,
                                     OpenLinksInNewTab = false,
-                                    Sanitize = true,
-                                    AllowRawHtmlInline = true,
-                                    AllowRawHtmlBlocks = true,
                                     AllowRelativeLinks = true,
                                     TableMode = MarkdownTableMode.DataTables,
                                     DataTables = new MarkdownDataTablesOptions
@@ -154,7 +148,6 @@ internal sealed partial class HtmlExporter
                                 body.Markdown("### Assets", new MarkdownOptions
                                 {
                                     HeadingsBaseLevel = 2,
-                                    Sanitize = true
                                 });
 
                                 var assetRows = release.Assets.Select(asset => new
