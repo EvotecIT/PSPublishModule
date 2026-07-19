@@ -217,7 +217,11 @@ public static partial class WebApiDocsGenerator
         if (property.GetMethod is not null) accessors.Add("get;");
         if (property.SetMethod is not null) accessors.Add("set;");
         var prefix = BuildPropertyPrefix(property);
-        return $"{prefix}{GetReadableTypeName(property.PropertyType)} {property.Name} {{ {string.Join(" ", accessors)} }}".Trim();
+        var parameters = property.GetIndexParameters();
+        var displayName = parameters.Length == 0
+            ? property.Name
+            : $"this[{string.Join(", ", parameters.Select(BuildParameterSignature))}]";
+        return $"{prefix}{GetReadableTypeName(property.PropertyType)} {displayName} {{ {string.Join(" ", accessors)} }}".Trim();
     }
 
     private static string BuildFieldSignature(FieldInfo field)
@@ -882,6 +886,10 @@ public static partial class WebApiDocsGenerator
             Name = name,
             Summary = GetSummary(member, memberKey, memberLookup),
             Kind = "Property",
+            DocumentationSignature = BuildDocumentationMethodSignature(
+                name,
+                parameterTypes,
+                conversionReturnType: null),
             ValueSummary = GetElement(member, "value", memberKey, memberLookup),
             Parameters = ParseParameters(member, parameterTypes, null, memberKey, memberLookup)
         };
