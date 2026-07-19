@@ -136,6 +136,21 @@ public sealed class WebCliServerCaptureTests
     }
 
     [Fact]
+    public void BuildCaptureCommandOutputStem_SeparatesFilenameAliases()
+    {
+        var stems = new[]
+        {
+            WebCliCommandHandlers.BuildCaptureCommandOutputStem(0, "xyz-source-ref"),
+            WebCliCommandHandlers.BuildCaptureCommandOutputStem(1, "xyz/source/ref"),
+            WebCliCommandHandlers.BuildCaptureCommandOutputStem(2, "XYZ-SOURCE-REF"),
+            WebCliCommandHandlers.BuildCaptureCommandOutputStem(3, new string('x', 300))
+        };
+
+        Assert.Equal(stems.Length, stems.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.All(stems, stem => Assert.True(stem.Length <= 85));
+    }
+
+    [Fact]
     public void BuildRemoteTarScript_EnforcesRequiredExactPaths()
     {
         var script = WebCliCommandHandlers.BuildRemoteTarScript(

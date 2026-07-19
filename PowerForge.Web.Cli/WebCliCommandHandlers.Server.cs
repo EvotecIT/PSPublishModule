@@ -172,14 +172,18 @@ internal static partial class WebCliCommandHandlers
                 sshCommand,
                 target,
                 manifest.OperationLocks ?? Array.Empty<string>());
-            foreach (var command in commandList.Where(static command => !command.Sensitive))
+            for (var commandIndex = 0; commandIndex < commandList.Length; commandIndex++)
             {
+                var command = commandList[commandIndex];
+                if (command.Sensitive)
+                    continue;
                 captureLock?.EnsureHeld($"before capture command '{command.Id}'");
                 var result = CaptureRemoteCommand(
                     sshCommand,
                     target,
                     command,
-                    Path.Combine(outputRoot, "commands"));
+                    Path.Combine(outputRoot, "commands"),
+                    commandIndex);
                 captureLock?.EnsureHeld($"after capture command '{command.Id}'");
                 commandResults.Add(result);
                 if (!result.Success && command.Required)
@@ -423,9 +427,10 @@ internal static partial class WebCliCommandHandlers
         string sshCommand,
         string target,
         PowerForgeServerNamedCommand command,
-        string commandOutputDirectory)
+        string commandOutputDirectory,
+        int commandIndex)
     {
-        var id = SanitizeFileName(string.IsNullOrWhiteSpace(command.Id) ? "command" : command.Id);
+        var id = BuildCaptureCommandOutputStem(commandIndex, command.Id);
         var stdoutPath = Path.Combine(commandOutputDirectory, $"{id}.out.txt");
         var stderrPath = Path.Combine(commandOutputDirectory, $"{id}.err.txt");
         var execution = RunProcessCaptureText(sshCommand, BuildSshArguments(target, command.Command ?? string.Empty));
@@ -442,6 +447,16 @@ internal static partial class WebCliCommandHandlers
             StdoutPath = stdoutPath,
             StderrPath = stderrPath
         };
+    }
+
+    internal static string BuildCaptureCommandOutputStem(int commandIndex, string? commandId)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(commandIndex);
+        var id = SanitizeFileName(string.IsNullOrWhiteSpace(commandId) ? "command" : commandId);
+        const int maximumReadableIdLength = 80;
+        if (id.Length > maximumReadableIdLength)
+            id = id[..maximumReadableIdLength];
+        return $"{commandIndex:D4}-{id}";
     }
 
     private static ProcessResult CaptureRemoteTarArchive(
