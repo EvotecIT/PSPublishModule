@@ -395,7 +395,7 @@ public static partial class WebApiDocsGenerator
             name += "``" + method.GetGenericArguments().Length;
 
         var conversionReturnType =
-            method.Name is "op_Implicit" or "op_Explicit"
+            IsConversionOperator(method.Name)
                 ? GetDocumentationTypeName(method.ReturnType)
                 : null;
         return BuildDocumentationMethodSignature(
@@ -416,6 +416,12 @@ public static partial class WebApiDocsGenerator
             ? signature
             : signature + "~" + conversionReturnType;
     }
+
+    private static bool IsConversionOperator(string name) =>
+        name is "op_Implicit" or
+            "op_Explicit" or
+            "op_CheckedImplicit" or
+            "op_CheckedExplicit";
 
     private static string? ParseDocumentationConversionReturnType(string fullName)
     {

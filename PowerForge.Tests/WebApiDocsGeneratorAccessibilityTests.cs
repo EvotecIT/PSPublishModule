@@ -29,6 +29,8 @@ public sealed class WebApiDocsGeneratorAccessibilityTests
                     <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.op_Addition(PowerForge.Tests.WebApiDocsPublicAccessibilityFixture,PowerForge.Tests.WebApiDocsPublicAccessibilityFixture)"><summary>Public operator.</summary></member>
                     <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.op_Implicit(PowerForge.Tests.WebApiDocsPublicAccessibilityFixture)~System.String"><summary>String conversion.</summary></member>
                     <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.op_Implicit(PowerForge.Tests.WebApiDocsPublicAccessibilityFixture)~System.Int32"><summary>Integer conversion.</summary></member>
+                    <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.op_CheckedExplicit(PowerForge.Tests.WebApiDocsPublicAccessibilityFixture)~System.Int64"><summary>Checked long conversion.</summary></member>
+                    <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.op_CheckedExplicit(PowerForge.Tests.WebApiDocsPublicAccessibilityFixture)~System.Int16"><summary>Checked short conversion.</summary></member>
                     <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.Generic``1(System.String)"><summary>Single generic parameter.</summary></member>
                     <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.Generic``2(System.String)"><summary>Two generic parameters.</summary></member>
                     <member name="P:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.PublicProperty"><summary>Public property.</summary></member>
@@ -88,6 +90,8 @@ public sealed class WebApiDocsGeneratorAccessibilityTests
             Assert.Contains("Public operator.", publicTypeJson, StringComparison.Ordinal);
             Assert.Contains("String conversion.", publicTypeJson, StringComparison.Ordinal);
             Assert.Contains("Integer conversion.", publicTypeJson, StringComparison.Ordinal);
+            Assert.Contains("Checked long conversion.", publicTypeJson, StringComparison.Ordinal);
+            Assert.Contains("Checked short conversion.", publicTypeJson, StringComparison.Ordinal);
             Assert.Contains("Single generic parameter.", publicTypeJson, StringComparison.Ordinal);
             Assert.Contains("Two generic parameters.", publicTypeJson, StringComparison.Ordinal);
             Assert.Contains("Public indexer.", publicTypeJson, StringComparison.Ordinal);
@@ -227,6 +231,18 @@ public sealed class WebApiDocsPublicAccessibilityFixture
 
     /// <summary>Visible conversion used by API documentation visibility tests.</summary>
     public static implicit operator int(WebApiDocsPublicAccessibilityFixture value) => 0;
+
+    /// <summary>Visible conversion required by the checked conversion pair.</summary>
+    public static explicit operator long(WebApiDocsPublicAccessibilityFixture value) => 0L;
+
+    /// <summary>Visible checked conversion used by API documentation visibility tests.</summary>
+    public static explicit operator checked long(WebApiDocsPublicAccessibilityFixture value) => 0L;
+
+    /// <summary>Visible conversion required by the checked conversion pair.</summary>
+    public static explicit operator short(WebApiDocsPublicAccessibilityFixture value) => 0;
+
+    /// <summary>Visible checked conversion used by API documentation visibility tests.</summary>
+    public static explicit operator checked short(WebApiDocsPublicAccessibilityFixture value) => 0;
 
     /// <summary>Visible generic overload used by API documentation visibility tests.</summary>
     public string Generic<T>(string value) => value;
