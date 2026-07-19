@@ -59,7 +59,13 @@ public sealed class DotNetPublishMsiGitAuthorityTests
             RunGit(cloneA, "config", "user.email", "powerforge-tests@invalid.local");
             RunGit(cloneA, "add", "local-only-secret.txt");
             RunGit(cloneA, "commit", "-m", "local only source commit");
-            var localOnlySourceCommit = RunGit(cloneA, "rev-parse", "HEAD");
+            var localOnlySourceCommitA = RunGit(cloneA, "rev-parse", "HEAD");
+            File.WriteAllText(Path.Combine(cloneB, "other-local-only-secret.txt"), "must not reach the remote either");
+            RunGit(cloneB, "config", "user.name", "PowerForge Tests");
+            RunGit(cloneB, "config", "user.email", "powerforge-tests@invalid.local");
+            RunGit(cloneB, "add", "other-local-only-secret.txt");
+            RunGit(cloneB, "commit", "-m", "other local only source commit");
+            var localOnlySourceCommitB = RunGit(cloneB, "rev-parse", "HEAD");
 
             using var start = new ManualResetEventSlim(initialState: false);
             Exception? failureA = null;
@@ -109,7 +115,8 @@ public sealed class DotNetPublishMsiGitAuthorityTests
             var tags = RunGit(root, "ls-remote", "--refs", "--tags", remote, "refs/tags/powerforge-msi/syncse/*");
             Assert.Single(tags.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
             Assert.Contains("refs/tags/powerforge-msi/syncse/26.6.9677", tags, StringComparison.Ordinal);
-            Assert.NotEqual(0, RunGitExitCode(remote, "cat-file", "-e", localOnlySourceCommit + "^{commit}"));
+            Assert.NotEqual(0, RunGitExitCode(remote, "cat-file", "-e", localOnlySourceCommitA + "^{commit}"));
+            Assert.NotEqual(0, RunGitExitCode(remote, "cat-file", "-e", localOnlySourceCommitB + "^{commit}"));
         }
         finally
         {
@@ -226,6 +233,25 @@ public sealed class DotNetPublishMsiGitAuthorityTests
         {
             TryDelete(root);
         }
+    }
+
+    [Fact]
+    public void Authority_AllowsCredentialFreeSshTransportUsername()
+    {
+        const string remote = "ssh://git@github.com/EvotecIT/PSPublishModule.git";
+
+        Assert.Equal(remote, DotNetPublishPipelineRunner.NormalizeMsiGitRemote(remote));
+    }
+
+    [Fact]
+    public void Authority_RejectsSshRemoteWithEmbeddedPassword()
+    {
+        const string secret = "super-secret-value";
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            DotNetPublishPipelineRunner.NormalizeMsiGitRemote($"ssh://git:{secret}@github.com/EvotecIT/PSPublishModule.git"));
+
+        Assert.Contains("embedded credentials", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(secret, exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

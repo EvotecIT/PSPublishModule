@@ -5,7 +5,7 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    private static string NormalizeMsiGitRemote(string? value)
+    internal static string NormalizeMsiGitRemote(string? value)
     {
         var remote = string.IsNullOrWhiteSpace(value) ? "origin" : value!.Trim();
         if (remote.StartsWith("-", StringComparison.Ordinal)
@@ -17,7 +17,10 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         if (Uri.TryCreate(remote, UriKind.Absolute, out var uri)
-            && !string.IsNullOrWhiteSpace(uri.UserInfo))
+            && !string.IsNullOrWhiteSpace(uri.UserInfo)
+            && (uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                || uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+                || uri.UserInfo.Contains(':')))
         {
             throw new InvalidOperationException(
                 "The MSI version Git remote must not contain embedded credentials. " +
