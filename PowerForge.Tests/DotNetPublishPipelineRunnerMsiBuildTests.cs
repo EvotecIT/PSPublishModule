@@ -50,6 +50,150 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void VersionedMsiOutput_RejectsSilentOverwriteByDefault()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var output = Path.Combine(root, "SyncSE-26.6.9677-win-x64.msi");
+            File.WriteAllText(output, "signed-release-a");
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                DotNetPublishPipelineRunner.EnsureVersionedOutputDoesNotExist(
+                    root,
+                    "SyncSE-26.6.9677-win-x64",
+                    "26.6.9677",
+                    allowOutputOverwrite: false,
+                    "SyncSE.MSI"));
+
+            Assert.Contains("immutable version 26.6.9677", exception.Message, StringComparison.Ordinal);
+            Assert.Equal("signed-release-a", File.ReadAllText(output));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void VersionedMsiOutput_AllowsExplicitNonReleaseOverwrite()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "app-1.0.1.msi"), "existing");
+
+            DotNetPublishPipelineRunner.EnsureVersionedOutputDoesNotExist(
+                root,
+                "app-1.0.1",
+                "1.0.1",
+                allowOutputOverwrite: true,
+                "app.msi");
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void VersionedMsiOutput_ReservationRejectsOverlappingPublisher()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            using var first = DotNetPublishPipelineRunner.ReserveVersionedOutput(
+                root,
+                "app-1.0.1",
+                "1.0.1",
+                allowOutputOverwrite: false,
+                "app.msi",
+                "publisher-a");
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                DotNetPublishPipelineRunner.ReserveVersionedOutput(
+                    root,
+                    "app-1.0.1",
+                    "1.0.1",
+                    allowOutputOverwrite: false,
+                    "app.msi",
+                    "publisher-b"));
+
+            Assert.Contains("already reserved by another publish", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public async Task MsiVersionState_AtomicallyAllowsOnlyOnePublisherToReserveVersion()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var statePath = Path.Combine(root, "state", "version.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(statePath)!);
+            File.WriteAllText(statePath, "{ \"lastPatch\": 100, \"version\": \"1.0.100\" }");
+            var version = new DotNetPublishMsiVersionPlan
+            {
+                Version = "1.0.101",
+                Patch = 101,
+                StatePath = statePath
+            };
+            using var start = new ManualResetEventSlim(false);
+            Task<bool>[] reservations = new[] { "publisher-a", "publisher-b" }
+                .Select(owner => Task.Run(() =>
+                {
+                    start.Wait();
+                    try
+                    {
+                        DotNetPublishPipelineRunner.ReserveMsiVersionState(
+                            version,
+                            "concurrency test",
+                            owner);
+                        return true;
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        return false;
+                    }
+                }))
+                .ToArray();
+
+            start.Set();
+            bool[] results = await Task.WhenAll(reservations);
+
+            Assert.Single(results, static reserved => reserved);
+            Assert.Single(results, static reserved => !reserved);
+            string state = File.ReadAllText(statePath);
+            Assert.Contains("\"LastPatch\": 101", state, StringComparison.Ordinal);
+            Assert.Contains("\"ReservationOwner\": \"publisher-", state, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(null, "app-1.0.1")]
+    [InlineData("output", null)]
+    public void VersionedMsiOutput_RequiresUnambiguousTarget(string? outputDirectory, string? outputName)
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            DotNetPublishPipelineRunner.EnsureVersionedOutputDoesNotExist(
+                outputDirectory,
+                outputName,
+                "1.0.1",
+                allowOutputOverwrite: false,
+                "app.msi"));
+
+        Assert.Contains("requires explicit OutputPath and OutputName", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PrepareGeneratedInstallerBuildWorkspace_CopiesProjectToShortTempWorkspace()
     {
         var root = CreateTempRoot();

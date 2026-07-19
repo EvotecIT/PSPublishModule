@@ -747,6 +747,12 @@ public sealed class DotNetPublishMsiVersionOptions
     /// Maximum allowed patch segment. Default: 65535.
     /// </summary>
     public int PatchCap { get; set; } = 65535;
+
+    /// <summary>
+    /// When true, permits an MSI build to overwrite an existing configured output file.
+    /// The secure default is false so an immutable version cannot silently acquire different bytes.
+    /// </summary>
+    public bool AllowOutputOverwrite { get; set; }
 }
 
 /// <summary>

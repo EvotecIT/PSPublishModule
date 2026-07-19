@@ -188,6 +188,8 @@ public sealed class DotNetPublishInstallerPlan
 /// </summary>
 public sealed class DotNetPublishMsiVersionPlan
 {
+    internal string ReservationOwner { get; set; } = string.Empty;
+
     /// <summary>MSI product version value, for example <c>26.6.9661</c>.</summary>
     public string Version { get; set; } = string.Empty;
 

@@ -16,6 +16,7 @@ public sealed partial class DotNetPublishPipelineRunner
         progress ??= NullDotNetPublishProgressReporter.Instance;
 
         var runStartedUtc = DateTimeOffset.UtcNow;
+        var sourceProvenance = ReadSourceProvenance(plan.ProjectRoot);
         var runStopwatch = Stopwatch.StartNew();
         var artefacts = new List<DotNetPublishArtefactResult>();
         var msiPrepares = new List<DotNetPublishMsiPrepareResult>();
@@ -83,7 +84,12 @@ public sealed partial class DotNetPublishPipelineRunner
                             benchmarkGates.Add(RunBenchmarkGateStep(plan, benchmarkExtracts, step));
                             break;
                         case DotNetPublishStepKind.Manifest:
-                            (manifestJson, manifestText, checksumsPath) = WriteManifests(plan, artefacts, storePackages, msiBuilds);
+                            (manifestJson, manifestText, checksumsPath) = WriteManifestsWithProvenance(
+                                plan,
+                                artefacts,
+                                storePackages,
+                                msiBuilds,
+                                sourceProvenance);
                             break;
                     }
 

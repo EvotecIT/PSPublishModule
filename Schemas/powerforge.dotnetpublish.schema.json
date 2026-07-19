@@ -134,7 +134,8 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
         },
-        "PatchCap": { "type": "integer", "minimum": 1, "maximum": 65535 }
+        "PatchCap": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "AllowOutputOverwrite": { "type": "boolean", "default": false }
       }
     },
     "DotNetPublishMsiClientLicenseOptions": {

@@ -1379,7 +1379,8 @@ public sealed partial class DotNetPublishPipelineRunner
             PropertyName = versioning.PropertyName,
             ApplyToPublish = versioning.ApplyToPublish,
             PublishProperties = versioning.PublishProperties?.ToArray() ?? Array.Empty<string>(),
-            PatchCap = versioning.PatchCap
+            PatchCap = versioning.PatchCap,
+            AllowOutputOverwrite = versioning.AllowOutputOverwrite
         };
     }
 
@@ -2021,7 +2022,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         VersionPropertyName = resolved.PropertyName,
                         AssemblyVersion = BuildFourPartVersion(resolved.Version!),
                         Patch = resolved.Patch,
-                        StatePath = resolved.StatePath
+                        StatePath = resolved.StatePath,
+                        ReservationOwner = _msiReservationOwner
                     };
 
                     if (!string.IsNullOrWhiteSpace(resolved.StatePath) && resolved.Patch.HasValue)

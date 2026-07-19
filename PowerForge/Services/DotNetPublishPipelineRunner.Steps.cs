@@ -526,7 +526,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
 
             if (reserveMonotonicVersions)
-                ReserveMsiVersionState(resolved, $"publish for installer '{installer.Id}'");
+                ReserveMsiVersionState(
+                    resolved,
+                    $"publish for installer '{installer.Id}'",
+                    resolved.ReservationOwner);
 
             foreach (var propertyName in ResolvePublishVersionProperties(versioning))
             {
