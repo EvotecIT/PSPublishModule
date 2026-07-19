@@ -144,7 +144,7 @@ internal static partial class WebCliCommandHandlers
         var verifyCommands = new List<PowerForgeServerNamedCommand>
         {
             Command("apache-config", "sudo -n apachectl configtest", required: true),
-            Command("static-deployment-reconciler", "test -x /usr/local/sbin/powerforge-site-reconcile && systemctl is-enabled --quiet powerforge-site-reconcile.timer && systemctl is-active --quiet powerforge-site-reconcile.timer", required: true),
+            Command("static-deployment-reconciler", "test -x /usr/local/sbin/powerforge-site-reconcile && systemctl is-enabled --quiet -- powerforge-site-reconcile.timer && systemctl is-active --quiet -- powerforge-site-reconcile.timer", required: true),
             Command("deployment-account", $"id -u {deploymentUser} >/dev/null && sudo -n grep -q '^restrict ' /home/{deploymentUser}/.ssh/authorized_keys && sudo -n visudo -cf /etc/sudoers.d/{deploymentUser}", required: true),
             Command("backup-account", $"id -u {backupUser} >/dev/null && sudo -n grep -q '^restrict ' /var/lib/{backupUser}/.ssh/authorized_keys && sudo -n visudo -cf /etc/sudoers.d/{backupUser}", required: true),
             Command("repository-identity", repositoryVerification, required: true),
@@ -219,7 +219,7 @@ internal static partial class WebCliCommandHandlers
             Systemd = new PowerForgeServerSystemd
             {
                 Services = [new PowerForgeServerSystemdUnit { Name = "powerforge-site-reconcile.service", Source = $"{enginePath}/Deployment/Linux/systemd/powerforge-site-reconcile.service", Target = "/etc/systemd/system/powerforge-site-reconcile.service", Required = true }],
-                Timers = [new PowerForgeServerSystemdUnit { Name = "powerforge-site-reconcile.timer", Source = $"{enginePath}/Deployment/Linux/systemd/powerforge-site-reconcile.timer", Target = "/etc/systemd/system/powerforge-site-reconcile.timer", Enabled = true, Required = true }]
+                Timers = [new PowerForgeServerSystemdUnit { Name = "powerforge-site-reconcile.timer", Source = $"{enginePath}/Deployment/Linux/systemd/powerforge-site-reconcile.timer", Target = "/etc/systemd/system/powerforge-site-reconcile.timer", Enabled = true, Activation = PowerForgeServerSystemdActivation.BeforeDeploy, ExpectedState = PowerForgeServerSystemdState.Active, Required = true }]
             },
             Secrets = secrets.ToArray(),
             Capture = new PowerForgeServerCapture
@@ -240,8 +240,6 @@ internal static partial class WebCliCommandHandlers
             {
                 Commands =
                 [
-                    Command("reload-systemd", "sudo -n systemctl daemon-reload", required: true),
-                    Command("enable-static-deployment-reconciler", "sudo -n systemctl enable --now powerforge-site-reconcile.timer", required: true),
                     Command("enable-apache-sites", $"sudo -n /usr/local/sbin/powerforge-apache-site-enable --http-site {domainFile}.conf --https-site {domainFile}-le-ssl.conf --certificate-name {options.Domain}", required: true)
                 ]
             },

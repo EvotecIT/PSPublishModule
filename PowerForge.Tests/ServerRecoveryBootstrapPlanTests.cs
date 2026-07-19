@@ -300,7 +300,7 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Contains("a2disconf 'platform.conf'", activateApache.Command, StringComparison.Ordinal);
         Assert.Contains("powerforge_restore_apache_activation", activateApache.Command, StringComparison.Ordinal);
         Assert.Contains("apachectl configtest", activateApache.Command, StringComparison.Ordinal);
-        Assert.Contains("systemctl reload 'apache2'", activateApache.Command, StringComparison.Ordinal);
+        Assert.Contains("systemctl reload -- 'apache2'", activateApache.Command, StringComparison.Ordinal);
         var apacheCommands = Assert.IsType<string>(activateApache.Command).Split('\n');
         var siteSnapshot = Array.FindIndex(apacheCommands, static command =>
             command.StartsWith("if [ -e '/etc/apache2/sites-enabled/example.conf'", StringComparison.Ordinal));

@@ -437,7 +437,7 @@ internal static partial class WebCliCommandHandlers
         foreach (var unit in units ?? Array.Empty<PowerForgeServerSystemdUnit>())
         {
             if (string.IsNullOrWhiteSpace(unit.Name)) continue;
-            var exists = ExecuteRemote(sshCommand, target, $"systemctl cat {ShellQuote(unit.Name)} >/dev/null");
+            var exists = ExecuteRemote(sshCommand, target, $"systemctl cat -- {ShellQuote(unit.Name)} >/dev/null");
             AddBooleanCheck(checks, $"systemd.{kind}.{unit.Name}.exists", "systemd", $"systemd {kind} exists: {unit.Name}",
                 exists.Success,
                 "unit exists",
@@ -453,11 +453,17 @@ internal static partial class WebCliCommandHandlers
             }
 
             if (!unit.Enabled) continue;
-            var enabled = ExecuteRemote(sshCommand, target, $"systemctl is-enabled {ShellQuote(unit.Name)}");
+            var enabled = ExecuteRemote(sshCommand, target, $"systemctl is-enabled -- {ShellQuote(unit.Name)}");
             AddBooleanCheck(checks, $"systemd.{kind}.{unit.Name}.enabled", "systemd", $"systemd {kind} is enabled: {unit.Name}",
                 enabled.Stdout.Trim().Equals("enabled", StringComparison.OrdinalIgnoreCase),
                 "enabled",
                 enabled.Stdout.Trim());
+            if (string.IsNullOrWhiteSpace(unit.ExpectedState)) continue;
+            var active = ExecuteRemote(sshCommand, target, $"systemctl is-active -- {ShellQuote(unit.Name)}");
+            AddBooleanCheck(checks, $"systemd.{kind}.{unit.Name}.state", "systemd", $"systemd {kind} state matches: {unit.Name}",
+                active.Stdout.Trim().Equals(unit.ExpectedState, StringComparison.OrdinalIgnoreCase),
+                unit.ExpectedState,
+                active.Stdout.Trim());
         }
     }
 
