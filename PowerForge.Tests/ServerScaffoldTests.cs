@@ -97,7 +97,7 @@ public sealed class ServerScaffoldTests
         Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/var/lib/powerforge-example-backup/.ssh/authorized_keys" &&
                                               path["owner"]!.GetValue<string>() == "root" &&
                                               path["group"]!.GetValue<string>() == "root" &&
-                                              path["mode"]!.GetValue<string>() == "600");
+                                              path["mode"]!.GetValue<string>() == "644");
         Assert.Equal(2, managedPaths.Count(path => path!["validation"]?.GetValue<string>() == "sudoers"));
     }
 

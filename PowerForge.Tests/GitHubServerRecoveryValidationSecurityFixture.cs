@@ -31,6 +31,7 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
         bool includeCaptureAccount = true,
         string authorizedKeyContent = RestrictedCaptureKey,
         string authorizedKeyOwner = "root",
+        string authorizedKeyMode = "644",
         string captureDirectoryOwner = "root",
         bool includeOptionalEncryptedCapture = false,
         bool allEncryptedCaptureOptional = false)
@@ -152,7 +153,7 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
                     kind = "file",
                     owner = authorizedKeyOwner,
                     group = authorizedKeyOwner,
-                    mode = "600"
+                    mode = authorizedKeyMode
                 });
             }
             if (additionalSudoers is not null)

@@ -54,7 +54,16 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
         var result = RunValidator(authorizedKeyOwner: CaptureUser);
 
         Assert.NotEqual(0, result.ExitCode);
-        Assert.Contains("one managed root-owned mode-600 authorized_keys file", result.AllOutput, StringComparison.Ordinal);
+        Assert.Contains("one managed root-owned mode-644 authorized_keys file", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validator_ShouldRejectRootOwnedAuthorizedKeyThatSshdCannotReadAfterPrivilegeDrop()
+    {
+        var result = RunValidator(authorizedKeyMode: "600");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("so sshd can read it after privilege drop", result.AllOutput, StringComparison.Ordinal);
     }
 
     [Fact]
