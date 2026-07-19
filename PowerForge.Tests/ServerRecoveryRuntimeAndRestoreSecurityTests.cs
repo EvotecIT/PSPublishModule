@@ -243,6 +243,7 @@ public sealed partial class ServerRecoverySecurityTests
         Assert.DoesNotContain("0700 /var/lib/powerforge /var/lib/powerforge/restore-secrets", script, StringComparison.Ordinal);
         Assert.Contains("--exclude='srv/example/.deploy-key'", script, StringComparison.Ordinal);
         Assert.Contains("-C \"$staging_root\" -- 'srv/example/.deploy-key'", script, StringComparison.Ordinal);
+        Assert.Contains("--no-recursion -xzf \"$tmp_dir/secrets.tar.gz\" -C \"$staging_root\" -- 'srv/example/.deploy-key'", script, StringComparison.Ordinal);
         Assert.DoesNotContain("chown -h 'root:root' -- '/srv/example/.deploy-key'", script, StringComparison.Ordinal);
         Assert.Contains("run the generated bootstrap plan to install them after clone", script, StringComparison.Ordinal);
     }
@@ -269,10 +270,17 @@ public sealed partial class ServerRecoverySecurityTests
 
         Assert.Contains("optional-deferred-paths", script, StringComparison.Ordinal);
         Assert.Contains("present-optional-deferred-paths", script, StringComparison.Ordinal);
-        Assert.Contains("if normalized in optional_deferred:", script, StringComparison.Ordinal);
+        Assert.Contains("if normalized in deferred:", script, StringComparison.Ordinal);
+        Assert.Contains("Deferred secret archive member must be a regular file", script, StringComparison.Ordinal);
+        Assert.Contains("Deferred secret exact file path must not contain descendants", script, StringComparison.Ordinal);
+        Assert.Contains("missing_required = sorted(required_deferred - present_deferred)", script, StringComparison.Ordinal);
         Assert.Contains("stream.write(path.encode('utf-8') + b'\\0')", script, StringComparison.Ordinal);
         Assert.Contains("if [ -s \"$tmp_dir/present-optional-deferred-paths\" ]", script, StringComparison.Ordinal);
-        Assert.Contains("--null --verbatim-files-from", script, StringComparison.Ordinal);
+        Assert.Contains("--no-recursion --null --verbatim-files-from", script, StringComparison.Ordinal);
         Assert.DoesNotContain("-C \"$staging_root\" -- 'srv/example/runtime/optional.env'", script, StringComparison.Ordinal);
+        Assert.True(
+            script.IndexOf("missing_required = sorted(required_deferred - present_deferred)", StringComparison.Ordinal) <
+            script.IndexOf(" -xzf \"$tmp_dir/secrets.tar.gz\" -C /", StringComparison.Ordinal),
+            "Required deferred archive members must be validated before any live extraction.");
     }
 }

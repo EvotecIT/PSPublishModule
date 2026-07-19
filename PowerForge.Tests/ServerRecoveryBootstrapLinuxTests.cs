@@ -345,9 +345,6 @@ public sealed class ServerRecoveryBootstrapLinuxTests
         {
             File.WriteAllText(present, "present");
             RunProcess("tar", root, "-czf", Path.Combine(root, "secrets.tar.gz"), "-C", source, "srv/example/present.env").EnsureSuccess();
-            File.WriteAllBytes(
-                Path.Combine(root, "present-optional-deferred-paths"),
-                [.. Encoding.UTF8.GetBytes("srv/example/present.env"), 0]);
             var generated = PowerForge.Web.Cli.WebCliCommandHandlers.BuildRestoreSecretsScript(
                 "archive.age",
                 ["/srv/example/present.env", "/srv/example/absent.env"],
@@ -368,6 +365,18 @@ public sealed class ServerRecoveryBootstrapLinuxTests
                     }
                 ],
                 staging.Replace('\\', '/'));
+            var validation = RunRestoreArchiveValidator(
+                root,
+                generated,
+                Path.Combine(root, "secrets.tar.gz"),
+                ["srv/example/present.env", "srv/example/absent.env"],
+                ["srv/example/present.env", "srv/example/absent.env"],
+                [],
+                ["srv/example/present.env", "srv/example/absent.env"]);
+            validation.Result.EnsureSuccess();
+            Assert.Equal(
+                [.. Encoding.UTF8.GetBytes("srv/example/present.env"), 0],
+                File.ReadAllBytes(validation.PresentOptionalPaths));
             var extract = Assert.Single(generated.Split('\n'), static line =>
                 line.StartsWith("if [ -s \"$tmp_dir/present-optional-deferred-paths\" ]", StringComparison.Ordinal));
             var normalizedRoot = root.Replace('\\', '/');
@@ -378,6 +387,99 @@ public sealed class ServerRecoveryBootstrapLinuxTests
                 $"test ! -e {BashQuote(normalizedStaging + "/srv/example/absent.env")}\n");
 
             Assert.Equal(0, result.ExitCode);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RestoreArchiveValidation_RejectsMissingRequiredDeferredSecretOnLinux()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-required-deferred-" + Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "source");
+        var direct = Path.Combine(source, "etc", "example", "direct.env");
+        Directory.CreateDirectory(Path.GetDirectoryName(direct)!);
+        try
+        {
+            File.WriteAllText(direct, "direct");
+            var archive = Path.Combine(root, "secrets.tar.gz");
+            RunProcess("tar", root, "-czf", archive, "-C", source, "etc/example/direct.env").EnsureSuccess();
+            var generated = PowerForge.Web.Cli.WebCliCommandHandlers.BuildRestoreSecretsScript(
+                "archive.age",
+                ["/etc/example/direct.env", "/srv/example/required.env"],
+                [
+                    new PowerForge.Web.Cli.PowerForgeServerRestoreSecretEntry
+                    {
+                        Id = "required",
+                        Path = "/srv/example/required.env",
+                        RestoreAfterRepositories = true
+                    }
+                ],
+                "/var/lib/powerforge/restore-secrets/fixture");
+
+            var validation = RunRestoreArchiveValidator(
+                root,
+                generated,
+                archive,
+                ["etc/example/direct.env", "srv/example/required.env"],
+                ["srv/example/required.env"],
+                ["srv/example/required.env"],
+                []);
+
+            Assert.NotEqual(0, validation.Result.ExitCode);
+            Assert.Contains("Required deferred secret is missing from the archive", validation.Result.Stderr, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RestoreArchiveValidation_RejectsDescendantsOfAnExactDeferredFileOnLinux()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-deferred-descendant-" + Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "source");
+        var child = Path.Combine(source, "srv", "example", "secret.env", "child");
+        Directory.CreateDirectory(Path.GetDirectoryName(child)!);
+        try
+        {
+            File.WriteAllText(child, "child");
+            var archive = Path.Combine(root, "secrets.tar.gz");
+            RunProcess("tar", root, "-czf", archive, "-C", source, "srv/example/secret.env/child").EnsureSuccess();
+            var generated = PowerForge.Web.Cli.WebCliCommandHandlers.BuildRestoreSecretsScript(
+                "archive.age",
+                ["/srv/example/secret.env"],
+                [
+                    new PowerForge.Web.Cli.PowerForgeServerRestoreSecretEntry
+                    {
+                        Id = "optional",
+                        Path = "/srv/example/secret.env",
+                        RequiredDuringBootstrap = false,
+                        RestoreAfterRepositories = true
+                    }
+                ],
+                "/var/lib/powerforge/restore-secrets/fixture");
+
+            var validation = RunRestoreArchiveValidator(
+                root,
+                generated,
+                archive,
+                ["srv/example/secret.env"],
+                ["srv/example/secret.env"],
+                [],
+                ["srv/example/secret.env"]);
+
+            Assert.NotEqual(0, validation.Result.ExitCode);
+            Assert.Contains("Deferred secret exact file path must not contain descendants", validation.Result.Stderr, StringComparison.Ordinal);
         }
         finally
         {
@@ -478,6 +580,45 @@ public sealed class ServerRecoveryBootstrapLinuxTests
         var stderr = process.StandardError.ReadToEnd();
         process.WaitForExit();
         return new ProcessResult(process.ExitCode, stdout, stderr);
+    }
+
+    private static (ProcessResult Result, string PresentOptionalPaths) RunRestoreArchiveValidator(
+        string root,
+        string generatedScript,
+        string archive,
+        IReadOnlyCollection<string> allowed,
+        IReadOnlyCollection<string> deferred,
+        IReadOnlyCollection<string> requiredDeferred,
+        IReadOnlyCollection<string> optionalDeferred)
+    {
+        var lines = generatedScript.Split('\n');
+        var start = Array.FindIndex(lines, static line => line.EndsWith("<<'POWERFORGE_VALIDATE_ARCHIVE'", StringComparison.Ordinal));
+        var end = start < 0 ? -1 : Array.IndexOf(lines, "POWERFORGE_VALIDATE_ARCHIVE", start + 1);
+        Assert.True(start >= 0 && end > start, "Generated archive validator here-document was not found.");
+
+        var validator = Path.Combine(root, "validate-archive.py");
+        var allowedPath = Path.Combine(root, "allowed-paths");
+        var deferredPath = Path.Combine(root, "deferred-paths");
+        var requiredPath = Path.Combine(root, "required-deferred-paths");
+        var optionalPath = Path.Combine(root, "optional-deferred-paths");
+        var presentPath = Path.Combine(root, "present-optional-deferred-paths");
+        File.WriteAllLines(validator, lines[(start + 1)..end]);
+        File.WriteAllLines(allowedPath, allowed);
+        File.WriteAllLines(deferredPath, deferred);
+        File.WriteAllLines(requiredPath, requiredDeferred);
+        File.WriteAllLines(optionalPath, optionalDeferred);
+
+        var result = RunProcess(
+            "python3",
+            root,
+            validator,
+            archive,
+            allowedPath,
+            deferredPath,
+            requiredPath,
+            optionalPath,
+            presentPath);
+        return (result, presentPath);
     }
 
     private static string BashQuote(string value)
