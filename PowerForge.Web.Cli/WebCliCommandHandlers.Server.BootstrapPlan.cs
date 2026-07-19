@@ -308,7 +308,7 @@ internal static partial class WebCliCommandHandlers
                          string.IsNullOrWhiteSpace(unit.Activation) &&
                          !string.IsNullOrWhiteSpace(unit.Name)))
             {
-                AddStep(steps, ref order, "systemd", $"Enable {unit.Name}", $"systemctl enable {ShellQuote(unit.Name!)}", plannedCommands: plannedCommands);
+                AddStep(steps, ref order, "systemd", $"Enable {unit.Name}", $"systemctl enable -- {ShellQuote(unit.Name!)}", plannedCommands: plannedCommands);
             }
         }
 
@@ -364,7 +364,8 @@ internal static partial class WebCliCommandHandlers
 
         foreach (var command in deployCommands)
         {
-            if (string.IsNullOrWhiteSpace(command.Command)) continue;
+            if (string.IsNullOrWhiteSpace(command.Command))
+                throw new InvalidOperationException($"Deploy command '{command.Id}' must contain a non-whitespace command.");
             var shell = string.IsNullOrWhiteSpace(command.WorkingDirectory)
                 ? command.Command
                 : $"cd {ShellQuote(command.WorkingDirectory)} && {command.Command}";
@@ -679,7 +680,8 @@ internal static partial class WebCliCommandHandlers
         bool manual = false,
         ISet<string>? plannedCommands = null)
     {
-        if (!string.IsNullOrWhiteSpace(command) &&
+        if (!manual &&
+            !string.IsNullOrWhiteSpace(command) &&
             plannedCommands is not null &&
             !command.TrimStart().StartsWith("#", StringComparison.Ordinal) &&
             !plannedCommands.Add(command))

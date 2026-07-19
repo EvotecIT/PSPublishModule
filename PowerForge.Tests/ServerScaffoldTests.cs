@@ -75,6 +75,7 @@ public sealed class ServerScaffoldTests
         Assert.True(manifestNode["apache"]!["sites"]![0]!["enabled"]!.GetValue<bool>());
         Assert.Null(manifestNode["apache"]!["sites"]![1]!["enabled"]);
         Assert.Equal("beforeDeploy", manifestNode["systemd"]!["timers"]![0]!["activation"]!.GetValue<string>());
+        Assert.Equal("active", manifestNode["systemd"]!["timers"]![0]!["expectedState"]!.GetValue<string>());
         Assert.DoesNotContain(manifestNode["deploy"]!["commands"]!.AsArray(), command =>
             command!["command"]!.GetValue<string>().Contains("systemctl", StringComparison.Ordinal));
         Assert.Null(manifestNode["certificates"]![0]!["dryRunCommand"]);
@@ -406,6 +407,24 @@ public sealed class ServerScaffoldTests
         Assert.True(EvaluateSchema(schema, apacheActivation));
         apacheActivation["apache"]!["sites"]![0]!["enabled"] = "yes";
         Assert.False(EvaluateSchema(schema, apacheActivation));
+
+        var systemdActivation = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        var systemdTimer = systemdActivation["systemd"]!["timers"]![0]!;
+        systemdTimer["enabled"] = false;
+        Assert.False(EvaluateSchema(schema, systemdActivation));
+
+        var systemdExpectedState = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        var stateTimer = systemdExpectedState["systemd"]!["timers"]![0]!;
+        stateTimer.AsObject().Remove("activation");
+        Assert.False(EvaluateSchema(schema, systemdExpectedState));
+
+        var invalidSystemdName = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        invalidSystemdName["systemd"]!["timers"]![0]!["name"] = "--help.timer";
+        Assert.False(EvaluateSchema(schema, invalidSystemdName));
+
+        var whitespaceCommand = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        whitespaceCommand["deploy"]!["commands"]![0]!["command"] = "   ";
+        Assert.False(EvaluateSchema(schema, whitespaceCommand));
 
         var oversizedApacheName = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
         oversizedApacheName["apache"]!["sites"]![0]!["target"] =

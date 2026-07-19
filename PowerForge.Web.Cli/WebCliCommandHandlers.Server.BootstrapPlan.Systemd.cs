@@ -16,8 +16,8 @@ internal static partial class WebCliCommandHandlers
                      string.Equals(unit.Activation, activation, StringComparison.Ordinal) &&
                      !string.IsNullOrWhiteSpace(unit.Name)))
         {
-            AddStep(steps, ref order, "systemd", $"Enable {unit.Name}", $"systemctl enable {ShellQuote(unit.Name!)}", plannedCommands: plannedCommands);
-            AddStep(steps, ref order, "systemd", $"Start {unit.Name}", $"systemctl start {ShellQuote(unit.Name!)}", plannedCommands: plannedCommands);
+            AddStep(steps, ref order, "systemd", $"Enable {unit.Name}", $"systemctl enable -- {ShellQuote(unit.Name!)}", plannedCommands: plannedCommands);
+            AddStep(steps, ref order, "systemd", $"Start {unit.Name}", $"systemctl start -- {ShellQuote(unit.Name!)}", plannedCommands: plannedCommands);
         }
     }
 }

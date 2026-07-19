@@ -122,6 +122,7 @@ internal sealed class PowerForgeServerSystemdUnit
     public string? Target { get; set; }
     public bool Enabled { get; set; }
     public string? Activation { get; set; }
+    public string? ExpectedState { get; set; }
     public bool Required { get; set; }
 }
 
@@ -129,6 +130,12 @@ internal static class PowerForgeServerSystemdActivation
 {
     public const string BeforeDeploy = "beforeDeploy";
     public const string AfterDeploy = "afterDeploy";
+}
+
+internal static class PowerForgeServerSystemdState
+{
+    public const string Active = "active";
+    public const string Inactive = "inactive";
 }
 
 internal sealed class PowerForgeServerCertificate

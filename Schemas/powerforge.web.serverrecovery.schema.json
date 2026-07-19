@@ -373,7 +373,10 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string", "minLength": 1 },
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:_.@-]{0,246}\\.(service|timer)$"
+        },
         "source": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
         "target": {
           "allOf": [
@@ -387,9 +390,27 @@
           "enum": ["beforeDeploy", "afterDeploy"],
           "description": "Optionally start an enabled unit before or after declared deploy commands. Omit for legacy enable-only behavior."
         },
+        "expectedState": {
+          "type": "string",
+          "enum": ["active", "inactive"],
+          "description": "Optionally require the activated unit to settle in this systemctl is-active state during inspection. Omit for transient oneshot units whose steady state is not asserted."
+        },
         "required": { "type": "boolean" }
       },
-      "required": ["name"]
+      "required": ["name"],
+      "allOf": [
+        {
+          "if": { "required": ["activation"] },
+          "then": {
+            "required": ["enabled"],
+            "properties": { "enabled": { "enum": [true] } }
+          }
+        },
+        {
+          "if": { "required": ["expectedState"] },
+          "then": { "required": ["activation"] }
+        }
+      ]
     },
     "Secret": {
       "type": "object",
@@ -473,7 +494,7 @@
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string", "minLength": 1 },
-        "command": { "type": "string", "minLength": 1 },
+        "command": { "type": "string", "minLength": 1, "pattern": "\\S" },
         "workingDirectory": { "type": "string" },
         "sensitive": { "type": "boolean" },
         "required": { "type": "boolean" }

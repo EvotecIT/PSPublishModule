@@ -143,7 +143,7 @@ internal static partial class WebCliCommandHandlers
             commands.Add(
                 $"  if [ -f \"$powerforge_apache_state/{index}.enabled\" ]; then {entry.Enable} {ShellQuote(entry.Name)} >/dev/null; else {entry.Disable} {ShellQuote(entry.Name)} >/dev/null; fi");
         }
-        commands.Add($"  if {validateCommand}; then systemctl reload {ShellQuote(service)} || true; fi");
+        commands.Add($"  if {validateCommand}; then systemctl reload -- {ShellQuote(service)} || true; fi");
         commands.Add("  rm -rf -- \"$powerforge_apache_state\"");
         commands.Add("  exit \"$powerforge_apache_status\"");
         commands.Add("}");
@@ -164,7 +164,7 @@ internal static partial class WebCliCommandHandlers
             commands.Add($"{(entry.Enabled ? entry.Enable : entry.Disable)} {ShellQuote(entry.Name)}");
         }
         commands.Add(validateCommand);
-        commands.Add($"systemctl reload {ShellQuote(service)}");
+        commands.Add($"systemctl reload -- {ShellQuote(service)}");
         commands.Add("trap - EXIT HUP INT TERM");
         commands.Add("rm -rf -- \"$powerforge_apache_state\"");
         return string.Join('\n', commands);
