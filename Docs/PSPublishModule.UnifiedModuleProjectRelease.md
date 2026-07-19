@@ -148,25 +148,201 @@ Build-Module -ModuleName 'PSParseHTML' {
 The direct PowerShell route covers the project-build schema with first-class parameters and the `-Options`
 hashtable for additional fields.
 
-## One Version Decision
+## How Version Coordination Works
 
-`-SynchronizeModuleVersion` combines PowerShell Gallery and NuGet history without making either one the only source:
+`-SynchronizeModuleVersion` coordinates the module with `-PrimaryProject`. It does not, by itself, assign one version
+to every NuGet package in the repository.
 
-1. PowerForge resolves the next available module version from the module X-pattern.
-2. That version becomes a floor for `-PrimaryProject` in the one package lane marked `-UseAsReleaseVersionSource`.
-3. The package lane resolves its normal NuGet candidate. A higher numeric package candidate wins. At the same numeric
-   version, a stable X-pattern candidate does not erase the configured module prerelease; explicit prerelease versions
-   retain normal semantic-version ordering.
-4. When `AlignPackageVersions` is enabled, every package using the primary project's X-pattern receives that version.
-5. The final primary-package version is written back to the module manifest, artifacts, and publish operations.
+PowerForge makes the version decision in this order:
 
-The module and primary package must use compatible version lines. For example, a `2.1.X` module cannot coordinate
-with a primary package still configured as `2.0.X`; PowerForge rejects that before changing project versions.
-An exact primary-package version below the module floor is rejected for the same reason.
-Exactly one active lane may use `-UseAsReleaseVersionSource` when synchronization is enabled.
+1. Resolve the next available module version from the module X-pattern and module history.
+2. Use that version as a floor for `-PrimaryProject` in the one package lane marked `-UseAsReleaseVersionSource`.
+3. Resolve the primary project's normal candidate from its X-pattern and NuGet history.
+4. Select the higher numeric version. At the same numeric version, a stable X-pattern candidate does not erase a
+   configured module prerelease; explicit prerelease versions retain normal semantic-version ordering.
+5. If `AlignPackageVersions` is enabled, apply the final version to every project in the primary project's matching
+   ordinary X-pattern group or named `VersionTrack` alignment group.
+6. Synchronize the module manifest, artifacts, staging metadata, and publish operations to the final primary-project
+   version.
 
-`BuildBeforeModule` is enough to express the dependency order for a single package lane. Use `Release.BuildOrder`
-only when several lanes need an explicit order.
+### What AlignPackageVersions changes
+
+`AlignPackageVersions` defaults to `false`. Omitting it from `project.build.json` has the same behavior as setting it
+to `false`: the module and `PrimaryProject` coordinate, while other packages follow their normal project-build version
+policy. Ordinary X-pattern entries resolve independently; named `VersionTracks` already coordinate their members.
+
+| Module synchronization | Package alignment | Result |
+| --- | --- | --- |
+| Disabled | Disabled | The module uses module history. Ordinary package X-patterns resolve independently; each `VersionTrack` applies its configured exact version or anchor-derived X-pattern version to all members. |
+| Disabled | Enabled | The module still uses module history. Ordinary packages with the same X-pattern align; every named X-pattern `VersionTrack` remains a separate alignment group, while exact-version tracks remain exact. |
+| Enabled | Disabled | The module matches `PrimaryProject`. Other ordinary package X-patterns resolve independently; `VersionTracks` continue coordinating their own members. |
+| Enabled | Enabled | The module matches `PrimaryProject`. The primary project's ordinary X-pattern group or named X-pattern `VersionTrack` receives the coordinated floor; exact-version tracks remain exact and must be compatible with that floor. Other groups remain independent. |
+
+For ordinary `ExpectedVersion` and `ExpectedVersionMap` entries, `AlignPackageVersions` groups projects by their
+configured X-pattern. All ordinary projects configured with `2.1.X` form one group, while ordinary projects configured
+with `1.4.X` form another. Each group is stepped from the highest NuGet version found for a package in that group.
+The module floor is applied only to the group containing `PrimaryProject`.
+
+`VersionTracks` are explicit release trains and define their own boundaries:
+
+- With alignment disabled, each track applies one version to all members: either its configured exact version or an
+  X-pattern version resolved from its configured anchor.
+- With alignment enabled, each X-pattern track becomes its own alignment group. Two named X-pattern tracks using the
+  same pattern do not merge with each other or with ordinary projects using that pattern.
+- An exact-version track never becomes an alignment group. Its configured exact version is still applied to all members.
+- When `PrimaryProject` belongs to an aligned track, the module floor applies to the whole track.
+- When alignment is disabled, an anchor-derived track version below the module floor is rejected instead of splitting
+  the track by raising only the primary project.
+- When `PrimaryProject` belongs to an exact-version track, an exact version below the module floor is rejected; a
+  compatible exact version remains exact and is shared by the module and every track member.
+
+Ordinary exact versions outside `VersionTracks` do not participate in X-pattern alignment. Such an exact version remains
+exact unless it belongs to the primary project and is below the coordinated module floor, in which case validation fails
+before project files change.
+
+### Example: alignment disabled
+
+Assume this illustrative package configuration:
+
+```json
+{
+  "ExpectedVersionMap": {
+    "Mailozaurr": "2.1.X",
+    "Mailozaurr.Application": "2.1.X",
+    "Mailozaurr.Cli": "2.1.X"
+  },
+  "ExpectedVersionMapAsInclude": true,
+  "AlignPackageVersions": false
+}
+```
+
+and these histories:
+
+| Deliverable | Current published version | Normal next candidate |
+| --- | ---: | ---: |
+| Mailozaurr module | `2.1.6` | module floor `2.1.7` |
+| Mailozaurr package | `2.0.12` | `2.1.0` |
+| Mailozaurr.Application | `2.1.5` | `2.1.6` |
+| Mailozaurr.Cli | not published | `2.1.0` |
+
+The resolved release is:
+
+| Deliverable | Resolved version | Reason |
+| --- | ---: | --- |
+| Mailozaurr module | `2.1.7` | Synchronized to the primary project |
+| Mailozaurr package | `2.1.7` | Raised from `2.1.0` to the module floor |
+| Mailozaurr.Application | `2.1.6` | Keeps its independent NuGet candidate |
+| Mailozaurr.Cli | `2.1.0` | Keeps its independent NuGet candidate |
+
+This is the correct choice when companion packages have independent release histories. The combined GitHub release may
+contain packages with different versions; only the module and primary package are guaranteed to match. If the repository
+uses `VersionTracks`, members of each track still share their anchor-derived version even though alignment is disabled.
+
+### Example: alignment enabled
+
+Using the same histories, change the JSON setting to:
+
+```json
+{
+  "ExpectedVersionMap": {
+    "Mailozaurr": "2.1.X",
+    "Mailozaurr.Application": "2.1.X",
+    "Mailozaurr.Cli": "2.1.X"
+  },
+  "ExpectedVersionMapAsInclude": true,
+  "AlignPackageVersions": true
+}
+```
+
+The three packages share `2.1.X`, so they form one aligned group. Their NuGet-derived group candidate is `2.1.6`,
+while the module floor is `2.1.7`. The module floor wins and the complete release uses:
+
+| Deliverable | Resolved version |
+| --- | ---: |
+| Mailozaurr module | `2.1.7` |
+| Mailozaurr package | `2.1.7` |
+| Mailozaurr.Application | `2.1.7` |
+| Mailozaurr.Cli | `2.1.7` |
+
+Use alignment when those packages are one release train and should always carry the same version.
+
+### Example: NuGet history is ahead
+
+If the module floor is `2.1.7` but a package in the aligned `2.1.X` group is already published as `2.1.9`, the group
+candidate becomes `2.1.10`. That higher numeric candidate wins:
+
+| Deliverable | Resolved version |
+| --- | ---: |
+| Module | `2.1.10` |
+| Primary package | `2.1.10` |
+| Other packages in the `2.1.X` group | `2.1.10` |
+
+Synchronization therefore protects both histories: module history prevents the package release from moving backward,
+and NuGet history can move the module release forward.
+
+### Example: different version groups
+
+Consider this configuration:
+
+```json
+{
+  "ExpectedVersionMap": {
+    "Suite.Core": "2.1.X",
+    "Suite.Rendering": "2.1.X",
+    "Suite.LegacyBridge": "1.4.X",
+    "Suite.Protocol": "3.0.5"
+  },
+  "ExpectedVersionMapAsInclude": true,
+  "AlignPackageVersions": true
+}
+```
+
+If `Suite.Core` is `PrimaryProject`, the module floor applies to the `2.1.X` group containing `Suite.Core` and
+`Suite.Rendering`. `Suite.LegacyBridge` aligns only within the separate `1.4.X` group, and the exact
+`Suite.Protocol` version remains `3.0.5`. Enabling alignment does not force these four packages onto one universal
+version.
+
+### Prerelease example
+
+Suppose the configured module prerelease produces a floor of `2.1.7-beta.2`, while the package X-pattern produces the
+stable numeric candidate `2.1.7`. PowerForge keeps `2.1.7-beta.2`; the generated stable X-pattern candidate cannot
+silently turn a prerelease run into a stable release.
+
+Explicit versions retain normal semantic-version ordering. For example:
+
+```text
+2.1.7-beta.1 < 2.1.7-beta.2 < 2.1.7-rc.1 < 2.1.7
+```
+
+A genuinely higher numeric candidate such as `2.1.8` still wins and becomes the final module/package version.
+
+### Invalid configurations
+
+PowerForge rejects coordinated versioning before changing project files when:
+
+- `PrimaryProject` is missing or does not match a packable project name or package ID.
+- More than one active lane is marked `UseAsReleaseVersionSource`.
+- The selected lane runs after the module.
+- The module and primary package use incompatible version lines, such as module `2.1.X` and package `2.0.X`.
+- The primary package uses an exact version below the module floor.
+- Version updates are disabled for the selected package lane.
+
+`BuildBeforeModule` is enough to express dependency order for a single package lane. Use `Release.BuildOrder` only when
+several lanes need an explicit order.
+
+### Choosing whether to align
+
+Enable `AlignPackageVersions` when:
+
+- the packages are released and supported as one versioned product;
+- the module consumes those packages as one coordinated dependency set;
+- users expect every package asset in the release to carry the same version.
+
+Leave it disabled when:
+
+- companion packages have independent compatibility or release policies;
+- a repository intentionally contains several product/version lines;
+- only the module and `PrimaryProject` need to match.
 
 ## One GitHub Release
 
