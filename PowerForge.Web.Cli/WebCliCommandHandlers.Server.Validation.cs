@@ -15,6 +15,7 @@ internal static partial class WebCliCommandHandlers
         ValidateHostAndPackages(manifest, errors);
         ValidateOperationLocks(manifest, errors);
         ValidateSystemdActivation(manifest.Systemd, errors);
+        ValidateNamedCommandText(manifest.Bootstrap?.Commands, "bootstrap.commands", errors);
         ValidateNamedCommandText(manifest.Capture?.Commands, "capture.commands", errors);
         ValidateNamedCommandText(manifest.Deploy?.Commands, "deploy.commands", errors);
         ValidateNamedCommandText(manifest.Verify?.Commands, "verify.commands", errors);

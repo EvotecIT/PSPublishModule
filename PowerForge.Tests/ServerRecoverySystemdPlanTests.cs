@@ -211,6 +211,12 @@ public sealed class ServerRecoverySystemdPlanTests
                     },
                     new PowerForge.Web.Cli.PowerForgeServerSystemdUnit
                     {
+                        Name = "blank-activation.service",
+                        Enabled = true,
+                        Activation = " "
+                    },
+                    new PowerForge.Web.Cli.PowerForgeServerSystemdUnit
+                    {
                         Name = "--help.service"
                     },
                     new PowerForge.Web.Cli.PowerForgeServerSystemdUnit
@@ -236,6 +242,7 @@ public sealed class ServerRecoverySystemdPlanTests
         var errors = PowerForge.Web.Cli.WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
 
         Assert.Contains(errors, error => error.Contains("unsupported activation phase 'duringDeploy'", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("unsupported activation phase ' '", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("'disabled.service' must be enabled", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("safe .service unit name", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("'transient.service' must declare activation", StringComparison.Ordinal));
@@ -248,6 +255,17 @@ public sealed class ServerRecoverySystemdPlanTests
         var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
         {
             Target = new PowerForge.Web.Cli.PowerForgeServerTarget { Host = "example.test" },
+            Bootstrap = new PowerForge.Web.Cli.PowerForgeServerCommandGroup
+            {
+                Commands =
+                [
+                    new PowerForge.Web.Cli.PowerForgeServerNamedCommand
+                    {
+                        Id = "missing-bootstrap",
+                        Command = "  "
+                    }
+                ]
+            },
             Deploy = new PowerForge.Web.Cli.PowerForgeServerDeploy
             {
                 Commands =
@@ -265,6 +283,7 @@ public sealed class ServerRecoverySystemdPlanTests
 
         var errors = PowerForge.Web.Cli.WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
 
+        Assert.Contains(errors, error => error.Contains("bootstrap.commands[0].command must contain a non-whitespace command", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("deploy.commands[0].command must contain a non-whitespace command", StringComparison.Ordinal));
         Assert.Throws<InvalidOperationException>(() =>
             PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []));

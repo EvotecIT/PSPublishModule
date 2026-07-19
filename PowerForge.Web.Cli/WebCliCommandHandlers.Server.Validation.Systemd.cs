@@ -25,7 +25,7 @@ internal static partial class WebCliCommandHandlers
             if (!IsValidSystemdUnitName(unit.Name, requiredSuffix))
                 errors.Add($"{path}[{index}].name must be a safe {requiredSuffix} unit name.");
 
-            if (!string.IsNullOrWhiteSpace(unit.Activation))
+            if (unit.Activation is not null)
             {
                 if (unit.Activation is not (PowerForgeServerSystemdActivation.BeforeDeploy or PowerForgeServerSystemdActivation.AfterDeploy))
                     errors.Add($"Systemd unit '{unit.Name}' has unsupported activation phase '{unit.Activation}'.");

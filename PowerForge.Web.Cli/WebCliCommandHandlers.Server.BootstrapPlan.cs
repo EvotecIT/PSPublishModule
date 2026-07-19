@@ -256,7 +256,8 @@ internal static partial class WebCliCommandHandlers
 
         foreach (var command in manifest.Bootstrap?.Commands ?? Array.Empty<PowerForgeServerNamedCommand>())
         {
-            if (string.IsNullOrWhiteSpace(command.Command)) continue;
+            if (string.IsNullOrWhiteSpace(command.Command))
+                throw new InvalidOperationException($"Bootstrap command '{command.Id}' must contain a non-whitespace command.");
             AddStep(steps, ref order, "bootstrap", command.Id ?? "bootstrap command", command.Command, command.Sensitive, plannedCommands: plannedCommands);
         }
 
