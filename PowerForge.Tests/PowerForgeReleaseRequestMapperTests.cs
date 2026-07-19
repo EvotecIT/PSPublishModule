@@ -69,4 +69,30 @@ public sealed class PowerForgeReleaseRequestMapperTests
         Assert.Equal(new[] { "chat" }, defaults.WorkspaceEnableFeatures);
         Assert.Equal("Original", defaults.InstallerMsBuildProperties["ProductName"]);
     }
+
+    [Fact]
+    public void Build_MapsCompactAppleActionOverrides()
+    {
+        var request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(
+            "/repo/powerforge.release.json",
+            defaults: null,
+            new PSPublishModule.PowerForgeReleaseInvocationOptions
+            {
+                AppleAction = PowerForgeAppleReleaseAction.Upload,
+                AppleActionConfirmed = true,
+                AppleResume = false,
+                AppleWaitForProcessing = true,
+                AppleProcessingTimeoutSeconds = 900,
+                ApplePollIntervalSeconds = 15,
+                AppleSummaryOnly = true
+            });
+
+        Assert.Equal(PowerForgeAppleReleaseAction.Upload, request.AppleAction);
+        Assert.True(request.AppleActionConfirmed);
+        Assert.False(request.AppleResume);
+        Assert.True(request.AppleWaitForProcessing);
+        Assert.Equal(900, request.AppleProcessingTimeoutSeconds);
+        Assert.Equal(15, request.ApplePollIntervalSeconds);
+        Assert.True(request.AppleSummaryOnly);
+    }
 }

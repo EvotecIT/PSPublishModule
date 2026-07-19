@@ -74,6 +74,8 @@ internal static partial class Program
             return CommandProject(filteredArgs, cli, logger);
         case "release":
             return CommandRelease(filteredArgs, cli, logger);
+        case "apple-release":
+            return CommandAppleRelease(filteredArgs, cli, logger);
         case "store":
             return CommandStore(filteredArgs, cli, logger);
         case "run":

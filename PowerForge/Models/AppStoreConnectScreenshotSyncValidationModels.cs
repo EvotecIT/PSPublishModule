@@ -38,6 +38,9 @@ public sealed class AppStoreConnectScreenshotSetSyncValidationResult
     /// <summary>Files that would be uploaded.</summary>
     public string[] Files { get; set; } = Array.Empty<string>();
 
+    /// <summary>Detected PNG dimensions in file order.</summary>
+    public string[] Dimensions { get; set; } = Array.Empty<string>();
+
     /// <summary>Whether this set mapping is locally valid.</summary>
     public bool IsValid { get; set; }
 

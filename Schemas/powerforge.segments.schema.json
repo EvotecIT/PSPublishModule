@@ -282,7 +282,11 @@
         "MarketingVersion": { "type": ["string", "null"] },
         "UseResolvedVersion": { "type": "boolean" },
         "BuildNumber": { "type": ["string", "null"] },
-        "BuildNumberPolicy": { "$ref": "powerforge.common.schema.json#/$defs/AppleBuildNumberPolicy" }
+        "BuildNumberPolicy": { "$ref": "powerforge.common.schema.json#/$defs/AppleBuildNumberPolicy" },
+        "GenerateProjectIfMissing": { "type": "boolean" },
+        "RegenerateProject": { "type": "boolean" },
+        "XcodeGenExecutable": { "type": "string", "minLength": 1 },
+        "ProjectGenerationTimeoutSeconds": { "type": "integer", "minimum": 1 }
       },
       "required": ["ProjectPath"]
     },
