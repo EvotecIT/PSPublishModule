@@ -6,9 +6,11 @@ on:
     paths:
       - ".github/actions/powerforge-server-recovery-validate/**"
       - ".github/workflows/server-recovery-validation-tests.yml"
+      - "Deployment/Linux/powerforge-server-encrypted-capture.sh"
       - "PowerForge.Tests/GitHubServerRecoveryValidation*.cs"
       - "PowerForge.Tests/ServerRecovery*.cs"
       - "PowerForge.Tests/ServerScaffoldTests.cs"
+      - "PowerForge.Tests/WebCliServerCaptureTests.cs"
       - "PowerForge.Web.Cli/ServerScaffoldTemplateStore.cs"
       - "PowerForge.Web.Cli/ServerRecoveryModels.cs"
       - "PowerForge.Web.Cli/Templates/ServerScaffold/**"
@@ -18,9 +20,11 @@ on:
     paths:
       - ".github/actions/powerforge-server-recovery-validate/**"
       - ".github/workflows/server-recovery-validation-tests.yml"
+      - "Deployment/Linux/powerforge-server-encrypted-capture.sh"
       - "PowerForge.Tests/GitHubServerRecoveryValidation*.cs"
       - "PowerForge.Tests/ServerRecovery*.cs"
       - "PowerForge.Tests/ServerScaffoldTests.cs"
+      - "PowerForge.Tests/WebCliServerCaptureTests.cs"
       - "PowerForge.Web.Cli/ServerScaffoldTemplateStore.cs"
       - "PowerForge.Web.Cli/ServerRecoveryModels.cs"
       - "PowerForge.Web.Cli/Templates/ServerScaffold/**"
@@ -54,4 +58,4 @@ jobs:
           dotnet test ./PowerForge.Tests/PowerForge.Tests.csproj
           -c Release
           --no-restore
-          --filter 'FullyQualifiedName~GitHubServerRecoveryValidation|FullyQualifiedName~ServerRecovery|FullyQualifiedName~ServerScaffoldTests'
+          --filter 'FullyQualifiedName~GitHubServerRecoveryValidation|FullyQualifiedName~ServerRecovery|FullyQualifiedName~ServerScaffoldTests|FullyQualifiedName~WebCliServerCaptureTests'

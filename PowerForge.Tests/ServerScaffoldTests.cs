@@ -56,7 +56,8 @@ public sealed class ServerScaffoldTests
         Assert.Contains($"EvotecIT/PSPublishModule/{EngineRef}/Schemas/powerforge.web.serverrecovery.schema.json", manifest, StringComparison.Ordinal);
         Assert.DoesNotContain("EvotecIT/PSPublishModule/main/Schemas/powerforge.web.serverrecovery.schema.json", manifest, StringComparison.Ordinal);
         Assert.Contains("restricted SSH accounts", manifest, StringComparison.Ordinal);
-        Assert.Equal(2, manifest.Split("\"requiredDuringBootstrap\": false", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1, manifest.Split("\"requiredDuringBootstrap\": false", StringSplitOptions.None).Length - 1);
+        Assert.DoesNotContain("/etc/letsencrypt/accounts", manifest, StringComparison.Ordinal);
         Assert.Contains("/usr/local/sbin/powerforge-apache-site-enable --http-site example-test.conf --https-site example-test-le-ssl.conf --certificate-name example.test", manifest, StringComparison.Ordinal);
         Assert.DoesNotContain("sudo -n a2ensite", manifest, StringComparison.Ordinal);
         Assert.DoesNotContain("\"bootstrap\"", manifest, StringComparison.Ordinal);
@@ -70,11 +71,29 @@ public sealed class ServerScaffoldTests
         Assert.Equal(2, manifestNode["schemaVersion"]!.GetValue<int>());
         Assert.Null(manifestNode["target"]!["host"]);
         Assert.Null(manifestNode["apache"]!["reloadCommand"]);
+        Assert.Equal($"/var/lock/powerforge-site-{options.SiteId}.lock", manifestNode["operationLocks"]![0]!.GetValue<string>());
+        Assert.True(manifestNode["apache"]!["sites"]![0]!["enabled"]!.GetValue<bool>());
+        Assert.Null(manifestNode["apache"]!["sites"]![1]!["enabled"]);
+        Assert.Null(manifestNode["certificates"]![0]!["dryRunCommand"]);
+        Assert.DoesNotContain(manifestNode["verify"]!["commands"]!.AsArray(), command =>
+            command!["id"]!.GetValue<string>().Contains("certbot", StringComparison.Ordinal));
         var managedPaths = manifestNode["paths"]!.AsArray();
         Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/usr/local/sbin/powerforge-site-deploy" &&
                                               path["source"]!.GetValue<string>().EndsWith("/powerforge-site-deploy.sh", StringComparison.Ordinal));
         Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/etc/powerforge/sites/example.test.env" &&
                                               path["source"]!.GetValue<string>().EndsWith("/example.test.env", StringComparison.Ordinal));
+        Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/var/lib/powerforge-example-backup" &&
+                                              path["owner"]!.GetValue<string>() == "root" &&
+                                              path["group"]!.GetValue<string>() == "root" &&
+                                              path["mode"]!.GetValue<string>() == "755");
+        Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/var/lib/powerforge-example-backup/.ssh" &&
+                                              path["owner"]!.GetValue<string>() == "root" &&
+                                              path["group"]!.GetValue<string>() == "root" &&
+                                              path["mode"]!.GetValue<string>() == "755");
+        Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/var/lib/powerforge-example-backup/.ssh/authorized_keys" &&
+                                              path["owner"]!.GetValue<string>() == "root" &&
+                                              path["group"]!.GetValue<string>() == "root" &&
+                                              path["mode"]!.GetValue<string>() == "600");
         Assert.Equal(2, managedPaths.Count(path => path!["validation"]?.GetValue<string>() == "sudoers"));
     }
 
@@ -213,6 +232,29 @@ public sealed class ServerScaffoldTests
     }
 
     [Fact]
+    public void Scaffold_ShouldCaptureOneExactAcmeAccountWhenConfigured()
+    {
+        var options = CreateOptions();
+        options.AcmeAccountId = "0123456789abcdef";
+
+        var manifest = JsonNode.Parse(
+            WebCliCommandHandlers.BuildServerScaffoldFiles(options)["deploy/linux/example.serverrecovery.json"])!;
+        const string accountPath = "/etc/letsencrypt/accounts/acme-v02.api.letsencrypt.org/directory/0123456789abcdef";
+
+        Assert.Contains(manifest["capture"]!["encryptedFiles"]!.AsArray(), file =>
+            file!["target"]!.GetValue<string>() == accountPath);
+        Assert.Contains(manifest["secrets"]!.AsArray(), secret =>
+            secret!["path"]!.GetValue<string>() == accountPath &&
+            secret["capture"]!.GetValue<string>() == "encrypted");
+        Assert.Contains("certbot renew --dry-run", manifest["certificates"]![0]!["dryRunCommand"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains(manifest["verify"]!["commands"]!.AsArray(), command =>
+            command!["id"]!.GetValue<string>().Contains("certbot", StringComparison.Ordinal));
+
+        var schema = JsonSchema.FromText(File.ReadAllText(GetRepoPath("Schemas", "powerforge.web.serverrecovery.schema.json")));
+        Assert.True(EvaluateSchema(schema, manifest));
+    }
+
+    [Fact]
     public void Scaffold_ManifestShouldSatisfyPublishedSchema()
     {
         var files = WebCliCommandHandlers.BuildServerScaffoldFiles(CreateOptions());
@@ -337,6 +379,41 @@ public sealed class ServerScaffoldTests
         var apacheSite = trailingApacheTarget["apache"]!["sites"]!.AsArray()[0]!;
         apacheSite["target"] = apacheSite["target"]!.GetValue<string>() + "/";
         Assert.False(EvaluateSchema(schema, trailingApacheTarget));
+
+        var invalidOperationLock = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        invalidOperationLock["operationLocks"] = new JsonArray("/tmp/powerforge-site-example.lock");
+        Assert.False(EvaluateSchema(schema, invalidOperationLock));
+
+        var maximumOperationLock = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        maximumOperationLock["operationLocks"] = new JsonArray($"/var/lock/{new string('a', 126)}.lock");
+        Assert.True(EvaluateSchema(schema, maximumOperationLock));
+
+        var oversizedOperationLock = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        oversizedOperationLock["operationLocks"] = new JsonArray($"/var/lock/{new string('a', 127)}.lock");
+        Assert.False(EvaluateSchema(schema, oversizedOperationLock));
+
+        var duplicateOperationLock = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        duplicateOperationLock["operationLocks"] = new JsonArray(
+            "/var/lock/powerforge-site-example.lock",
+            "/var/lock/powerforge-site-example.lock");
+        Assert.False(EvaluateSchema(schema, duplicateOperationLock));
+
+        var apacheActivation = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        apacheActivation["apache"]!["sites"]![0]!["enabled"] = true;
+        Assert.True(EvaluateSchema(schema, apacheActivation));
+        apacheActivation["apache"]!["sites"]![0]!["enabled"] = "yes";
+        Assert.False(EvaluateSchema(schema, apacheActivation));
+
+        var oversizedApacheName = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        oversizedApacheName["apache"]!["sites"]![0]!["target"] =
+            "/etc/apache2/sites-available/" + new string('a', 251) + ".conf";
+        Assert.False(EvaluateSchema(schema, oversizedApacheName));
+
+        var deferredSecret = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        deferredSecret["secrets"]![0]!["restoreAfterRepositories"] = true;
+        Assert.True(EvaluateSchema(schema, deferredSecret));
+        deferredSecret["secrets"]![0]!["restoreAfterRepositories"] = "yes";
+        Assert.False(EvaluateSchema(schema, deferredSecret));
     }
 
     [Fact]
@@ -480,6 +557,17 @@ public sealed class ServerScaffoldTests
         var exception = Assert.Throws<InvalidOperationException>(() => WebCliCommandHandlers.ParseServerScaffoldOptions(args));
 
         Assert.Contains("DNS name or IPv4 address", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ScaffoldOptions_ShouldValidateExactAcmeAccountDirectoryName()
+    {
+        var valid = RequiredArguments("example.test").Concat(["--acme-account-id", "0123456789abcdef"]).ToArray();
+        var invalid = RequiredArguments("example.test").Concat(["--acme-account-id", "../account"]).ToArray();
+
+        Assert.Equal("0123456789abcdef", WebCliCommandHandlers.ParseServerScaffoldOptions(valid).AcmeAccountId);
+        var exception = Assert.Throws<InvalidOperationException>(() => WebCliCommandHandlers.ParseServerScaffoldOptions(invalid));
+        Assert.Contains("exact Certbot account directory", exception.Message, StringComparison.Ordinal);
     }
 
     private static PowerForgeServerScaffoldOptions CreateOptions()

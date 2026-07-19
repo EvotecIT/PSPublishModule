@@ -205,17 +205,34 @@ function Get-ExpectedEncryptedCaptureCommand {
         throw 'Credential-free validation does not resolve backupTarget.recipientEnv; encrypted capture requires a stable age public recipient in backupTarget.recipient.'
     }
 
-    $targets = Get-ValidatedCaptureTarget -Files $files -Label 'Encrypted'
+    $targets = @(Get-ValidatedCaptureTarget -Files $files -Label 'Encrypted')
+    $requiredTargets = [Collections.Generic.List[string]]::new()
+    $optionalTargets = [Collections.Generic.List[string]]::new()
+    for ($index = 0; $index -lt $files.Count; $index++) {
+        if ($files[$index].required -eq $true) {
+            $requiredTargets.Add($targets[$index])
+        } else {
+            $optionalTargets.Add($targets[$index])
+        }
+    }
 
     $parts = [Collections.Generic.List[string]]::new()
     $parts.Add('/usr/local/sbin/powerforge-server-encrypted-capture')
     $parts.Add('--recipient')
     $parts.Add($recipient)
-    if (-not @($files).Where({ $_.required -eq $true }).Count) {
+    if ($requiredTargets.Count -eq 0) {
         $parts.Add('--ignore-failed-read')
     }
     $parts.Add('--')
-    $parts.AddRange([string[]]$targets)
+    if ($requiredTargets.Count -eq 0) {
+        $parts.AddRange([string[]]$optionalTargets)
+    } else {
+        $parts.AddRange([string[]]$requiredTargets)
+        if ($optionalTargets.Count -gt 0) {
+            $parts.Add('--optional')
+            $parts.AddRange([string[]]$optionalTargets)
+        }
+    }
     $parts -join ' '
 }
 
@@ -337,6 +354,68 @@ $resolvedEntries = foreach ($entry in $managedEntries) {
     }
 }
 
+foreach ($secret in @($Manifest.secrets) | Where-Object { $_.restoreAfterRepositories -eq $true }) {
+    $secretPath = [string]$secret.path
+    $repository = @($Manifest.repositories) |
+        Where-Object {
+            -not [string]::IsNullOrWhiteSpace([string]$_.path) -and
+            $secretPath.StartsWith(([string]$_.path).TrimEnd('/') + '/', [StringComparison]::Ordinal)
+        } |
+        Sort-Object { ([string]$_.path).Length } -Descending |
+        Select-Object -First 1
+    if ($null -eq $repository) {
+        throw "Deferred repository secret is outside every pinned repository path: $secretPath"
+    }
+
+    $repositorySlug = Get-GitHubRepositorySlug -Url ([string]$repository.url)
+    $repositoryRef = [string]$repository.ref
+    $matchesCallerRepository = [string]::Equals(
+        $repositorySlug,
+        $CallerRepository,
+        [StringComparison]::OrdinalIgnoreCase
+    )
+    $matchesEngineRepository = [string]::Equals(
+        $repositorySlug,
+        $EngineRepository,
+        [StringComparison]::OrdinalIgnoreCase
+    )
+    $usesEngineCheckout = $matchesEngineRepository -and (
+        -not $matchesCallerRepository -or
+        [string]::Equals($repositoryRef, $env:POWERFORGE_ENGINE_REF, [StringComparison]::OrdinalIgnoreCase)
+    )
+    $localRoot = if ($usesEngineCheckout) {
+        $EngineRoot
+    } elseif ($matchesCallerRepository) {
+        $Workspace
+    } else {
+        throw "Deferred repository secret cannot be validated without its pinned checkout: $repositorySlug"
+    }
+
+    $repositoryPath = ([string]$repository.path).TrimEnd('/')
+    $relativePath = $secretPath.Substring($repositoryPath.Length + 1)
+    $root = [IO.Path]::GetFullPath($localRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    $candidate = [IO.Path]::GetFullPath((Join-Path $root $relativePath))
+    $rootPrefix = $root + [IO.Path]::DirectorySeparatorChar
+    if (-not $candidate.StartsWith($rootPrefix, [StringComparison]::Ordinal)) {
+        throw "Deferred repository secret resolves outside its pinned checkout: $secretPath"
+    }
+
+    & git -C $root ls-files --error-unmatch -- $relativePath *> $null
+    if ($LASTEXITCODE -eq 0) {
+        throw "Deferred repository secret target must not be tracked: $secretPath"
+    }
+    & git -C $root check-ignore -q -- $relativePath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Deferred repository secret target must be ignored for rerunnable recovery: $secretPath"
+    }
+    if (Test-Path -LiteralPath $candidate) {
+        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            throw "Deferred repository secret target must be a regular file when present: $secretPath"
+        }
+        Assert-PathHasNoReparsePoint -Root $root -Path $candidate
+    }
+}
+
 $sudoersRootSources = @($resolvedEntries).Where({
     [string]::Equals([string]$_.Target, '/etc/sudoers', [StringComparison]::Ordinal) -or
     [string]::Equals([string]$_.Target, '/etc/sudoers.d', [StringComparison]::Ordinal)
@@ -379,6 +458,45 @@ foreach ($sudoersSource in $sudoersSources) {
 }
 
 $expectedEncryptedCommand = Get-ExpectedEncryptedCaptureCommand -RecoveryManifest $Manifest
+if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
+    $captureAccounts = @(@($Manifest.accounts) | Where-Object {
+        [string]::Equals([string]$_.name, $CaptureUser, [StringComparison]::Ordinal)
+    })
+    if ($captureAccounts.Count -ne 1 -or [string]::IsNullOrWhiteSpace([string]$captureAccounts[0].home)) {
+        throw 'Encrypted recovery capture requires exactly one managed capture account with an explicit home directory.'
+    }
+    $captureAccountHome = ([string]$captureAccounts[0].home).TrimEnd('/')
+    $captureAccountKeyDirectory = $captureAccountHome + '/.ssh'
+    $authorizedKeysTarget = $captureAccountKeyDirectory + '/authorized_keys'
+    $rootControlledCaptureDirectories = @(@($Manifest.paths) | Where-Object {
+        ([string]$_.path -in @($captureAccountHome, $captureAccountKeyDirectory)) -and
+        [string]::Equals([string]$_.kind, 'directory', [StringComparison]::OrdinalIgnoreCase) -and
+        [string]::Equals([string]$_.owner, 'root', [StringComparison]::Ordinal) -and
+        [string]::Equals([string]$_.group, 'root', [StringComparison]::Ordinal) -and
+        ([string]$_.mode) -in @('755', '0755')
+    })
+    if ($rootControlledCaptureDirectories.Count -ne 2) {
+        throw 'Encrypted recovery capture requires root-controlled mode-755 account home and key directories.'
+    }
+    $authorizedKeysSources = @($resolvedEntries).Where({
+        [string]::Equals([string]$_.Target, $authorizedKeysTarget, [StringComparison]::Ordinal) -and
+        [string]::Equals([string]$_.Entry.kind, 'file', [StringComparison]::OrdinalIgnoreCase) -and
+        [string]::Equals([string]$_.Entry.owner, 'root', [StringComparison]::Ordinal) -and
+        [string]::Equals([string]$_.Entry.group, 'root', [StringComparison]::Ordinal) -and
+        ([string]$_.Entry.mode) -in @('600', '0600')
+    })
+    if ($authorizedKeysSources.Count -ne 1) {
+        throw 'Encrypted recovery capture requires one managed root-owned mode-600 authorized_keys file.'
+    }
+    $authorizedKeyLines = @(
+        (Get-Content -LiteralPath $authorizedKeysSources[0].Path -Raw) -split "`r?`n" |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
+    if ($authorizedKeyLines.Count -ne 1 -or
+        $authorizedKeyLines[0] -cnotmatch '^restrict ssh-ed25519 [A-Za-z0-9+/]+={0,3}(?: [^\r\n]+)?$') {
+        throw 'The recovery capture account authorized_keys source must contain exactly one restrict-prefixed Ed25519 public key.'
+    }
+}
 $commandAliases = [Collections.Generic.Dictionary[string, string[]]]::new([StringComparer]::Ordinal)
 $grantedAliases = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 $captureGrantCount = 0

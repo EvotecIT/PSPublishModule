@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using PowerForge.Web.Cli;
 
 namespace PowerForge.Tests;
@@ -85,16 +86,27 @@ public sealed class WebCliServerCaptureTests
     }
 
     [Fact]
-    public void BuildRemoteTarScript_EnforcesRequiredExactAndGlobPaths()
+    public void BuildRemoteTarScript_EnforcesRequiredExactPaths()
     {
         var script = WebCliCommandHandlers.BuildRemoteTarScript(
         [
             new PowerForgeServerManagedFile { Target = "/etc/example.conf", Required = true },
-            new PowerForgeServerManagedFile { Target = "/etc/example/*.json", Required = true },
             new PowerForgeServerManagedFile { Target = "/var/lib/example/optional.json" }
         ]);
 
-        Assert.Equal("set -e; sudo -n tar -czf - /etc/example.conf /etc/example/*.json /var/lib/example/optional.json", script);
+        Assert.Equal("set -e; sudo -n tar -czf - /etc/example.conf /var/lib/example/optional.json", script);
+    }
+
+    [Fact]
+    public void BuildRemoteTarScript_RejectsWildcardPaths()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            WebCliCommandHandlers.BuildRemoteTarScript(
+            [
+                new PowerForgeServerManagedFile { Target = "/etc/letsencrypt/*", Required = true }
+            ]));
+
+        Assert.Contains("unsupported characters", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -134,6 +146,20 @@ public sealed class WebCliServerCaptureTests
     }
 
     [Fact]
+    public void BuildRemoteEncryptedTarScript_DistinguishesMixedOptionalPaths()
+    {
+        var script = WebCliCommandHandlers.BuildRemoteEncryptedTarScript(
+        [
+            new PowerForgeServerManagedFile { Target = "/var/lib/example/optional.env" },
+            new PowerForgeServerManagedFile { Target = "/etc/example/required.env", Required = true }
+        ], "age1example");
+
+        Assert.Equal(
+            "sudo -n /usr/local/sbin/powerforge-server-encrypted-capture --recipient 'age1example' -- '/etc/example/required.env' --optional '/var/lib/example/optional.env'",
+            script);
+    }
+
+    [Fact]
     public void BuildRemoteEncryptedCaptureSudoersCommand_FixesRecipientAndRejectsWildcards()
     {
         var command = WebCliCommandHandlers.BuildRemoteEncryptedCaptureSudoersCommand(
@@ -142,6 +168,13 @@ public sealed class WebCliServerCaptureTests
         ], "age1example");
 
         Assert.Equal("/usr/local/sbin/powerforge-server-encrypted-capture --recipient age1example -- /etc/example/required.env", command);
+        Assert.Equal(
+            "/usr/local/sbin/powerforge-server-encrypted-capture --recipient age1example -- /etc/example/required.env --optional /var/lib/example/optional.env",
+            WebCliCommandHandlers.BuildRemoteEncryptedCaptureSudoersCommand(
+            [
+                new PowerForgeServerManagedFile { Target = "/var/lib/example/optional.env" },
+                new PowerForgeServerManagedFile { Target = "/etc/example/required.env", Required = true }
+            ], "age1example"));
         Assert.Throws<InvalidOperationException>(() =>
             WebCliCommandHandlers.BuildRemoteEncryptedCaptureSudoersCommand(
             [
@@ -162,5 +195,61 @@ public sealed class WebCliServerCaptureTests
             [
                 new PowerForgeServerManagedFile { Target = "/etc/example/secr\u00E9t.env", Required = true }
             ], "age1example"));
+    }
+
+    [Fact]
+    public void BuildRemoteOperationLockCommand_HoldsEveryDeclaredLockForSessionLifetime()
+    {
+        var command = WebCliCommandHandlers.BuildRemoteOperationLockCommand(
+        [
+            "/var/lock/powerforge-site-example.lock",
+            "/var/lock/powerforge-contact-example.lock",
+            "/var/lock/powerforge-site-example.lock"
+        ]);
+
+        Assert.Equal(1, command.Split("flock -n '/var/lock/powerforge-site-example.lock'", StringSplitOptions.None).Length - 1);
+        Assert.Contains("flock -n '/var/lock/powerforge-site-example.lock'", command, StringComparison.Ordinal);
+        Assert.Contains("flock -n '/var/lock/powerforge-contact-example.lock'", command, StringComparison.Ordinal);
+        Assert.Contains("test -f '/var/lock/powerforge-site-example.lock'", command, StringComparison.Ordinal);
+        Assert.Contains("test -f '/var/lock/powerforge-contact-example.lock'", command, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_OPERATION_LOCKED", command, StringComparison.Ordinal);
+        Assert.Contains("cat >/dev/null", command, StringComparison.Ordinal);
+        Assert.Throws<InvalidOperationException>(() =>
+            WebCliCommandHandlers.BuildRemoteOperationLockCommand(["/tmp/example.lock"]));
+        Assert.Throws<InvalidOperationException>(() =>
+            WebCliCommandHandlers.BuildRemoteOperationLockCommand(["/var/lock/.lock"]));
+        Assert.Throws<InvalidOperationException>(() =>
+            WebCliCommandHandlers.BuildRemoteOperationLockCommand(["/var/lock/_site.lock"]));
+    }
+
+    [Fact]
+    public void RemoteOperationLock_ReportsADeadSessionBeforeWorkCanContinue()
+    {
+        var startInfo = new ProcessStartInfo(OperatingSystem.IsWindows() ? "cmd.exe" : "sh")
+        {
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        if (OperatingSystem.IsWindows())
+        {
+            startInfo.ArgumentList.Add("/d");
+            startInfo.ArgumentList.Add("/c");
+            startInfo.ArgumentList.Add("exit 17");
+        }
+        else
+        {
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add("exit 17");
+        }
+        using var process = Process.Start(startInfo)!;
+        process.WaitForExit();
+        using var operationLock = new WebCliCommandHandlers.RemoteOperationLock(process);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            operationLock.EnsureHeld("before archive capture"));
+
+        Assert.Contains("ended before archive capture", exception.Message, StringComparison.Ordinal);
     }
 }

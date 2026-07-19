@@ -132,6 +132,7 @@ internal static partial class WebCliCommandHandlers
         var recoveryWatchPaths = ReadRecoveryWatchPaths(subArgs);
         var outputRoot = TryGetOptionValue(subArgs, "--out") ?? TryGetOptionValue(subArgs, "--output-dir") ?? Directory.GetCurrentDirectory();
         var portText = TryGetOptionValue(subArgs, "--ssh-port") ?? "22";
+        var acmeAccountId = TryGetOptionValue(subArgs, "--acme-account-id")?.Trim();
         var includeWwwAlias = HasOption(subArgs, "--www");
 
         if (!Regex.IsMatch(domain, "^(?=.{1,243}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$", RegexOptions.CultureInvariant))
@@ -154,6 +155,11 @@ internal static partial class WebCliCommandHandlers
             throw new InvalidOperationException("--ssh-port must be from 1 through 65535.");
         if (!backupRecipient.StartsWith("age1", StringComparison.Ordinal) || backupRecipient.Any(char.IsWhiteSpace))
             throw new InvalidOperationException("--backup-recipient must be an age public recipient beginning with age1.");
+        if (!string.IsNullOrWhiteSpace(acmeAccountId) &&
+            !Regex.IsMatch(acmeAccountId, "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$", RegexOptions.CultureInvariant))
+        {
+            throw new InvalidOperationException("--acme-account-id must be one exact Certbot account directory name.");
+        }
         if (includeWwwAlias && domain.StartsWith("www.", StringComparison.Ordinal))
             throw new InvalidOperationException("--www cannot be combined with a domain that already starts with www.");
         var smokePathValues = smokePaths.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -173,6 +179,7 @@ internal static partial class WebCliCommandHandlers
             Host = host,
             BackupRepository = backupRepository,
             BackupRecipient = backupRecipient,
+            AcmeAccountId = acmeAccountId,
             Branch = branch,
             WebsiteRoot = websiteRoot.Replace('\\', '/'),
             SiteId = siteId,
@@ -305,6 +312,7 @@ internal sealed class PowerForgeServerScaffoldOptions
     public int SshPort { get; set; } = 22;
     public string BackupRepository { get; set; } = string.Empty;
     public string BackupRecipient { get; set; } = string.Empty;
+    public string? AcmeAccountId { get; set; }
     public string SmokePaths { get; set; } = "/ /sitemap.xml";
     public string[] RecoveryWatchPaths { get; set; } = [];
     public string OutputRoot { get; set; } = string.Empty;

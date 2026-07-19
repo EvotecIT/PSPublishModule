@@ -10,6 +10,7 @@ internal sealed class PowerForgeServerRecoveryManifest
     public string? Name { get; set; }
     public string? Description { get; set; }
     public PowerForgeServerTarget? Target { get; set; }
+    public string[]? OperationLocks { get; set; }
     public PowerForgeServerRepository[]? Repositories { get; set; }
     public PowerForgeServerAccount[]? Accounts { get; set; }
     public PowerForgeServerPackages? Packages { get; set; }
@@ -21,7 +22,7 @@ internal sealed class PowerForgeServerRecoveryManifest
     public PowerForgeServerSecret[]? Secrets { get; set; }
     public PowerForgeServerCapture? Capture { get; set; }
     public PowerForgeServerCommandGroup? Bootstrap { get; set; }
-    public PowerForgeServerCommandGroup? Deploy { get; set; }
+    public PowerForgeServerDeploy? Deploy { get; set; }
     public PowerForgeServerVerify? Verify { get; set; }
     public PowerForgeServerBackupTarget? BackupTarget { get; set; }
     public string[]? Notes { get; set; }
@@ -84,9 +85,17 @@ internal sealed class PowerForgeServerApache
 {
     public string? Service { get; set; }
     public string[]? Modules { get; set; }
-    public PowerForgeServerManagedFile[]? Sites { get; set; }
-    public PowerForgeServerManagedFile[]? Conf { get; set; }
+    public PowerForgeServerApacheFile[]? Sites { get; set; }
+    public PowerForgeServerApacheFile[]? Conf { get; set; }
     public string? ValidateCommand { get; set; }
+}
+
+internal sealed class PowerForgeServerApacheFile
+{
+    public string? Source { get; set; }
+    public string? Target { get; set; }
+    public bool Required { get; set; }
+    public bool? Enabled { get; set; }
 }
 
 internal sealed class PowerForgeServerFirewall
@@ -132,6 +141,7 @@ internal sealed class PowerForgeServerSecret
     public string? Env { get; set; }
     public string[]? RequiredFor { get; set; }
     public bool? RequiredDuringBootstrap { get; set; }
+    public bool RestoreAfterRepositories { get; set; }
     public string Capture { get; set; } = "exclude";
     public string? RestoreMode { get; set; }
     public string? Owner { get; set; }
@@ -157,6 +167,12 @@ internal sealed class PowerForgeServerManagedFile
 
 internal sealed class PowerForgeServerCommandGroup
 {
+    public PowerForgeServerNamedCommand[]? Commands { get; set; }
+}
+
+internal sealed class PowerForgeServerDeploy
+{
+    public string? OperationLockOwner { get; set; }
     public PowerForgeServerNamedCommand[]? Commands { get; set; }
 }
 
@@ -350,6 +366,7 @@ internal sealed class PowerForgeServerRestoreSecretsPlanResult
     public string? ArchivePath { get; set; }
     public string? Encryption { get; set; }
     public string? RecipientEnv { get; set; }
+    public string? StagingRoot { get; set; }
     public string[]? AllowedArchivePaths { get; set; }
     public PowerForgeServerRestoreSecretEntry[]? Secrets { get; set; }
     public string[]? Warnings { get; set; }
@@ -362,9 +379,12 @@ internal sealed class PowerForgeServerRestoreSecretEntry
     public string? Env { get; set; }
     public string? RestoreMode { get; set; }
     public string? RequiredFor { get; set; }
+    public bool? RequiredDuringBootstrap { get; set; }
     public string? Owner { get; set; }
     public string? Group { get; set; }
     public string? Mode { get; set; }
+    public bool RestoreAfterRepositories { get; set; }
+    public string? StagedPath { get; set; }
 }
 
 internal sealed class PowerForgeServerScaffoldResult

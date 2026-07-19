@@ -94,6 +94,18 @@ internal static partial class WebCliCommandHandlers
                 plannedCommands: plannedCommands);
         }
 
+        var operationLocks = manifest.OperationLocks ?? Array.Empty<string>();
+        foreach (var operationLock in operationLocks)
+        {
+            AddStep(steps, ref order, "locking", $"Prepare shared operation lock {operationLock}",
+                BuildOperationLockInstallCommand(operationLock), plannedCommands: plannedCommands);
+        }
+        if (operationLocks.Length > 0)
+        {
+            AddStep(steps, ref order, "locking", "Acquire shared operation locks for bootstrap",
+                BuildBootstrapOperationLockAcquireCommand(operationLocks), plannedCommands: plannedCommands);
+        }
+
         if (manifest.Packages?.Apt?.Length > 0)
         {
             AddStep(steps, ref order, "packages", "Install apt prerequisites",
@@ -200,6 +212,34 @@ internal static partial class WebCliCommandHandlers
             }
         }
 
+        var deferredSecrets = (manifest.Secrets ?? Array.Empty<PowerForgeServerSecret>())
+            .Where(static secret => secret.RestoreAfterRepositories && !string.IsNullOrWhiteSpace(secret.Path))
+            .ToArray();
+        var secretStagingRoot = BuildRestoreSecretsStagingRoot(manifest.Name);
+        foreach (var secret in deferredSecrets)
+        {
+            var repositoryRoot = (manifest.Repositories ?? Array.Empty<PowerForgeServerRepository>())
+                .Select(static repository => repository.Path?.TrimEnd('/'))
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .Cast<string>()
+                .Where(root => PathStrictlyContains(root, secret.Path!))
+                .OrderByDescending(static root => root.Length)
+                .First();
+            AddStep(steps, ref order, "secrets", $"Install staged secret {secret.Id}",
+                BuildDeferredSecretInstallCommand(secret, secretStagingRoot, repositoryRoot),
+                plannedCommands: plannedCommands);
+        }
+        if (deferredSecrets.Length > 0)
+        {
+            AddStep(steps, ref order, "secrets", "Remove empty secret staging directory",
+                $"if [ -e {ShellQuote(secretStagingRoot)} ] || [ -L {ShellQuote(secretStagingRoot)} ]; then " +
+                $"test -d {ShellQuote(secretStagingRoot)} && test ! -L {ShellQuote(secretStagingRoot)} && " +
+                $"test \"$(stat -c '%U:%G %a' -- {ShellQuote(secretStagingRoot)})\" = 'root:root 700' && " +
+                $"find {ShellQuote(secretStagingRoot)} -depth -mindepth 1 -type d -empty -delete && " +
+                $"test -z \"$(find {ShellQuote(secretStagingRoot)} -mindepth 1 -print -quit)\" && rmdir -- {ShellQuote(secretStagingRoot)}; fi",
+                plannedCommands: plannedCommands);
+        }
+
         foreach (var path in manifest.Paths ?? Array.Empty<PowerForgeServerPath>())
         {
             if (string.IsNullOrWhiteSpace(path.Source) || string.IsNullOrWhiteSpace(path.Path)) continue;
@@ -220,8 +260,8 @@ internal static partial class WebCliCommandHandlers
         if (apacheModules.Length > 0)
             AddStep(steps, ref order, "apache", "Enable Apache modules", "a2enmod " + string.Join(' ', apacheModules.Select(ShellQuote)), plannedCommands: plannedCommands);
 
-        foreach (var file in (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerManagedFile>())
-                 .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>()))
+        foreach (var file in (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerApacheFile>())
+                 .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerApacheFile>()))
         {
             if (string.IsNullOrWhiteSpace(file.Source) || string.IsNullOrWhiteSpace(file.Target)) continue;
             var repository = FindManagedSourceRepository(manifest.Repositories, file.Source)
@@ -230,6 +270,16 @@ internal static partial class WebCliCommandHandlers
             AddStep(steps, ref order, "apache", $"Install Apache file {file.Target}",
                 BuildRepositoryManagedFileInstallCommand(file.Source, file.Target, repositoryRoot, "0644", repositoryRef: repository.Ref),
                 plannedCommands: plannedCommands);
+        }
+
+        var apacheActivationFiles = (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerApacheFile>())
+            .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerApacheFile>())
+            .Where(static file => file.Enabled is not null)
+            .ToArray();
+        if (apacheActivationFiles.Length > 0)
+        {
+            AddStep(steps, ref order, "apache", "Activate Apache configuration transactionally",
+                BuildApacheActivationCommand(manifest.Apache!), plannedCommands: plannedCommands);
         }
 
         foreach (var unit in (manifest.Systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>())
@@ -293,7 +343,15 @@ internal static partial class WebCliCommandHandlers
             AddStep(steps, ref order, "secrets", $"Confirm restored secret {secret.Id}", guard, plannedCommands: plannedCommands);
         }
 
-        foreach (var command in manifest.Deploy?.Commands ?? Array.Empty<PowerForgeServerNamedCommand>())
+        var deployCommands = manifest.Deploy?.Commands ?? Array.Empty<PowerForgeServerNamedCommand>();
+        if (operationLocks.Length > 0 &&
+            string.Equals(manifest.Deploy?.OperationLockOwner, "command", StringComparison.Ordinal))
+        {
+            AddStep(steps, ref order, "locking", "Release shared operation locks for command-owned deployment",
+                BuildBootstrapOperationLockReleaseCommand(operationLocks), plannedCommands: plannedCommands);
+        }
+
+        foreach (var command in deployCommands)
         {
             if (string.IsNullOrWhiteSpace(command.Command)) continue;
             var shell = string.IsNullOrWhiteSpace(command.WorkingDirectory)
@@ -532,8 +590,8 @@ internal static partial class WebCliCommandHandlers
         => manifest.Repositories?.Any(static repository => !string.IsNullOrWhiteSpace(repository.Path)) == true ||
            manifest.Paths?.Any(static path => !string.IsNullOrWhiteSpace(path.Source)) == true ||
            manifest.Paths?.Any(static path => string.Equals(path.Kind, "directory", StringComparison.OrdinalIgnoreCase)) == true ||
-           (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerManagedFile>())
-               .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerManagedFile>())
+           (manifest.Apache?.Sites ?? Array.Empty<PowerForgeServerApacheFile>())
+                .Concat(manifest.Apache?.Conf ?? Array.Empty<PowerForgeServerApacheFile>())
                .Any(static file => !string.IsNullOrWhiteSpace(file.Source)) ||
            (manifest.Systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>())
                .Concat(manifest.Systemd?.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
@@ -645,7 +703,7 @@ internal static partial class WebCliCommandHandlers
         File.WriteAllText(path, builder.ToString());
     }
 
-    private static void WriteBootstrapPlanScript(
+    internal static void WriteBootstrapPlanScript(
         string path,
         IReadOnlyList<PowerForgeServerBootstrapPlanStep> steps)
     {

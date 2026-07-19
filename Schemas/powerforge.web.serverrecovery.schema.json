@@ -10,6 +10,15 @@
     "name": { "type": "string", "minLength": 1 },
     "description": { "type": "string" },
     "target": { "$ref": "#/$defs/Target" },
+    "operationLocks": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^/var/lock/[A-Za-z0-9][A-Za-z0-9_.-]{0,125}\\.lock$"
+      }
+    },
     "repositories": {
       "type": "array",
       "items": { "$ref": "#/$defs/Repository" }
@@ -36,7 +45,7 @@
     },
     "capture": { "$ref": "#/$defs/Capture" },
     "bootstrap": { "$ref": "#/$defs/CommandGroup" },
-    "deploy": { "$ref": "#/$defs/CommandGroup" },
+    "deploy": { "$ref": "#/$defs/Deploy" },
     "verify": { "$ref": "#/$defs/Verify" },
     "backupTarget": { "$ref": "#/$defs/BackupTarget" },
     "notes": {
@@ -215,11 +224,11 @@
         },
         "sites": {
           "type": "array",
-          "items": { "$ref": "#/$defs/RepositoryManagedFile" }
+          "items": { "$ref": "#/$defs/ApacheSiteFile" }
         },
         "conf": {
           "type": "array",
-          "items": { "$ref": "#/$defs/RepositoryManagedFile" }
+          "items": { "$ref": "#/$defs/ApacheConfFile" }
         },
         "validateCommand": { "type": "string" }
       }
@@ -247,6 +256,37 @@
                 { "not": { "pattern": "^/etc/sudoers(?:$|\\.d(?:$|/))" } }
               ]
             }
+          }
+        }
+      ]
+    },
+    "ApacheFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+        "target": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+        "required": { "type": "boolean" },
+        "enabled": { "type": "boolean" }
+      },
+      "required": ["target"]
+    },
+    "ApacheSiteFile": {
+      "allOf": [
+        { "$ref": "#/$defs/ApacheFile" },
+        {
+          "properties": {
+            "target": { "pattern": "^/etc/apache2/sites-available/[A-Za-z0-9][A-Za-z0-9_.-]{0,249}\\.conf$" }
+          }
+        }
+      ]
+    },
+    "ApacheConfFile": {
+      "allOf": [
+        { "$ref": "#/$defs/ApacheFile" },
+        {
+          "properties": {
+            "target": { "pattern": "^/etc/apache2/conf-available/[A-Za-z0-9][A-Za-z0-9_.-]{0,249}\\.conf$" }
           }
         }
       ]
@@ -353,6 +393,10 @@
           "type": "boolean",
           "description": "Defaults to true. Set false only when a secret may be created after the initial bootstrap stage, such as first-issue certificate material."
         },
+        "restoreAfterRepositories": {
+          "type": "boolean",
+          "description": "Stage this exact file during secret restore and install it only after pinned repositories are cloned."
+        },
         "capture": {
           "type": "string",
           "enum": ["exclude", "encrypted"]
@@ -390,6 +434,21 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "commands": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NamedCommand" }
+        }
+      }
+    },
+    "Deploy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "operationLockOwner": {
+          "type": "string",
+          "enum": ["engine", "command"],
+          "description": "Defaults to engine. Command ownership requires exactly one deploy command that holds every declared operation lock for its complete lifetime."
+        },
         "commands": {
           "type": "array",
           "items": { "$ref": "#/$defs/NamedCommand" }
