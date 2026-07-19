@@ -1376,6 +1376,10 @@ public sealed partial class DotNetPublishPipelineRunner
             FloorDateUtc = versioning.FloorDateUtc,
             Monotonic = versioning.Monotonic,
             StatePath = versioning.StatePath,
+            Authority = versioning.Authority,
+            AuthorityKey = versioning.AuthorityKey,
+            GitRemote = versioning.GitRemote,
+            GitTagPrefix = versioning.GitTagPrefix,
             PropertyName = versioning.PropertyName,
             ApplyToPublish = versioning.ApplyToPublish,
             PublishProperties = versioning.PublishProperties?.ToArray() ?? Array.Empty<string>(),
@@ -2023,22 +2027,27 @@ public sealed partial class DotNetPublishPipelineRunner
                         AssemblyVersion = BuildFourPartVersion(resolved.Version!),
                         Patch = resolved.Patch,
                         StatePath = resolved.StatePath,
+                        Authority = resolved.Authority,
+                        AuthorityKey = resolved.AuthorityKey,
+                        GitRemote = resolved.GitRemote,
+                        GitTagPrefix = resolved.GitTagPrefix,
+                        AuthorityWorkingDirectory = projectRoot,
                         AllowOutputOverwrite = installer.Versioning.AllowOutputOverwrite
                     };
 
-                    if (!string.IsNullOrWhiteSpace(resolved.StatePath) && resolved.Patch.HasValue)
+                    if (!string.IsNullOrWhiteSpace(resolved.CoordinationKey) && resolved.Patch.HasValue)
                     {
                         if (installer.Versioning.AllowOutputOverwrite
-                            && plannedStates.ContainsKey(resolved.StatePath!))
+                            && plannedStates.ContainsKey(resolved.CoordinationKey!))
                         {
                             throw new InvalidOperationException(
                                 $"Installer '{installer.Id}' enables Versioning.AllowOutputOverwrite, but multiple publish " +
-                                $"combinations resolve to the same state path '{resolved.StatePath}'. Include one or more " +
+                                $"combinations resolve to the same state path or version authority '{resolved.CoordinationKey}'. Include one or more " +
                                 "combination tokens such as {target}, {framework}, {rid}, or {style} in Versioning.StatePath " +
-                                "so every completed output has an authoritative version to reuse.");
+                                "or Versioning.AuthorityKey so every completed output has an authoritative version to reuse.");
                         }
 
-                        plannedStates[resolved.StatePath!] = new MsiVersionState
+                        plannedStates[resolved.CoordinationKey!] = new MsiVersionState
                         {
                             LastPatch = resolved.Patch.Value,
                             Version = resolved.Version!,

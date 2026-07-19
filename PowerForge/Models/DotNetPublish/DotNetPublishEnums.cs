@@ -81,6 +81,17 @@ public enum DotNetPublishMsiVersionPattern
 }
 
 /// <summary>
+/// Persisted authority used to coordinate monotonic MSI versions.
+/// </summary>
+public enum DotNetPublishMsiVersionAuthorityKind
+{
+    /// <summary>Coordinate through one shared state file. This is safe only when every publisher sees the same file.</summary>
+    LocalFile,
+    /// <summary>Reserve immutable version tags in a shared Git remote so separate clones cannot reuse a version.</summary>
+    GitTags
+}
+
+/// <summary>
 /// Microsoft Store / MSIX packaging build mode.
 /// </summary>
 public enum DotNetPublishStoreBuildMode

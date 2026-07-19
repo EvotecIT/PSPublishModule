@@ -294,6 +294,12 @@ public sealed class DotNetPublishMsiBuildResult
     /// <summary>Version policy state file path (when monotonic mode is enabled).</summary>
     public string? VersionStatePath { get; set; }
 
+    /// <summary>Authority used to coordinate the resolved MSI version.</summary>
+    public DotNetPublishMsiVersionAuthorityKind VersionAuthority { get; set; }
+
+    /// <summary>Durable authority reference for the resolved version, such as an immutable Git tag ref.</summary>
+    public string? VersionAuthorityReference { get; set; }
+
     /// <summary>Resolved client-license path passed to MSI build (when enabled and found).</summary>
     public string? ClientLicensePath { get; set; }
 
