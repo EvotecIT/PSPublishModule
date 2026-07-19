@@ -9,15 +9,24 @@ schema: 2.0.0
 Uninstalls installed PowerShell module versions through the managed module engine.
 
 ## SYNTAX
-### __AllParameterSets
+### InputObjectParameterSet (Default)
 ```powershell
-Uninstall-ManagedModule [-Name] <string[]> [-Version <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-SkipDependencyCheck] [-LoadedModule <ManagedModuleLoadedModule[]>] [-AllowLoadedModuleUninstall] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
+Uninstall-ManagedModule [-InputObject] <ModuleStateInstalledModuleResult[]> [-SkipDependencyCheck] [-LoadedModule <ManagedModuleLoadedModule[]>] [-AllowLoadedModuleUninstall] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
+### NameParameterSet
+```powershell
+Uninstall-ManagedModule [-Name] <string[]> [-Version <string>] [-Prerelease] [-Scope <ManagedModuleInstallScope>] [-ShellEdition <ManagedModuleShellEdition>] [-ModuleRoot <string>] [-InstalledLocation <string>] [-SkipDependencyCheck] [-LoadedModule <ManagedModuleLoadedModule[]>] [-AllowLoadedModuleUninstall] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
 This command removes modules from the selected managed module root without invoking PowerShellGet or
 PSResourceGet. It follows PSResourceGet-shaped uninstall selection semantics while adding managed
-dependency and loaded-module safety checks.
+dependency and loaded-module safety checks. InstalledLocation always selects the exact installed directory,
+whether it is bound directly or received from Get-ManagedModule pipeline output. Typed Get-ManagedModule rows
+retain structured scanned-root provenance, so dependency checks preserve edition/profile visibility and require
+roots that were available during inventory to remain available. Multiple piped rows are preflighted as one batch
+across physical roots and selected dependents are removed before their selected dependencies.
 
 ## EXAMPLES
 
@@ -33,6 +42,12 @@ Uninstall-ManagedModule -Name Company.Tools -Version '[1.0.0,2.0.0)' -Plan
 ```
 
 
+### EXAMPLE 3
+```powershell
+Get-ManagedModule -Name Company.Tools -Version 1.2.0 | Uninstall-ManagedModule
+```
+
+
 ## PARAMETERS
 
 ### -AllowLoadedModuleUninstall
@@ -40,7 +55,7 @@ Allow removal of module versions that appear loaded in the current PowerShell se
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: InputObjectParameterSet, NameParameterSet
 Aliases: None
 Possible values:
 
@@ -51,12 +66,44 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -InputObject
+Installed module rows returned by Get-ManagedModule to uninstall.
+
+```yaml
+Type: ModuleStateInstalledModuleResult[]
+Parameter Sets: InputObjectParameterSet
+Aliases: None
+Possible values:
+
+Required: True
+Position: 0
+Default value: None
+Accept pipeline input: True (ByValue)
+Accept wildcard characters: True
+```
+
+### -InstalledLocation
+Exact installed location supplied by Get-ManagedModule pipeline rows. It takes precedence over ModuleRoot.
+
+```yaml
+Type: String
+Parameter Sets: NameParameterSet
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: True (ByPropertyName)
+Accept wildcard characters: True
+```
+
 ### -LoadedModule
 Loaded module evidence used to block risky in-session uninstalls.
 
 ```yaml
 Type: ManagedModuleLoadedModule[]
-Parameter Sets: __AllParameterSets
+Parameter Sets: InputObjectParameterSet, NameParameterSet
 Aliases: None
 Possible values:
 
@@ -72,7 +119,7 @@ Explicit module root. Use with Scope Custom.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: Path
 Possible values:
 
@@ -88,14 +135,14 @@ Module names or wildcard patterns to uninstall.
 
 ```yaml
 Type: String[]
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: ModuleName
 Possible values:
 
 Required: True
 Position: 0
 Default value: None
-Accept pipeline input: True (ByPropertyName)
+Accept pipeline input: True (ByValue, ByPropertyName)
 Accept wildcard characters: True
 ```
 
@@ -104,7 +151,7 @@ Return an inspectable uninstall plan without removing files.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: InputObjectParameterSet, NameParameterSet
 Aliases: None
 Possible values:
 
@@ -120,7 +167,7 @@ Restrict matching to prerelease module versions.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: AllowPrerelease
 Possible values:
 
@@ -136,7 +183,7 @@ Install scope used when ModuleRoot is not supplied.
 
 ```yaml
 Type: ManagedModuleInstallScope
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: None
 Possible values: CurrentUser, AllUsers, Custom
 
@@ -152,7 +199,7 @@ PowerShell path family used when resolving default CurrentUser or AllUsers modul
 
 ```yaml
 Type: ManagedModuleShellEdition
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: None
 Possible values: Auto, Desktop, Core
 
@@ -168,7 +215,7 @@ Skip checking whether removed modules are still required by other installed modu
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: __AllParameterSets
+Parameter Sets: InputObjectParameterSet, NameParameterSet
 Aliases: SkipDependenciesCheck
 Possible values:
 
@@ -184,7 +231,7 @@ Exact version or NuGet-style version range to uninstall. When omitted, the lates
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: NameParameterSet
 Aliases: RequiredVersion
 Possible values:
 
@@ -201,6 +248,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## INPUTS
 
 - `System.String[]
+PSPublishModule.ModuleStateInstalledModuleResult[]
 System.String`
 
 ## OUTPUTS

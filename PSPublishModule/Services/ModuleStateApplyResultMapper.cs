@@ -12,7 +12,11 @@ internal static class ModuleStateApplyResultMapper
         string? maintenanceReceiptOutputPath = null,
         bool executionRequested = false,
         ModuleStateDeliveryExecutionResult[]? executionResults = null,
-        ModuleStateInventoryResult? postApplyInventory = null)
+        ModuleStateInventoryResult? postApplyInventory = null,
+        ModuleStatePlanResult? postApplyPlan = null,
+        ModuleStateTestResult? postApplyTest = null,
+        bool executionSucceeded = false,
+        bool converged = false)
     {
         if (result is null)
             throw new ArgumentNullException(nameof(result));
@@ -39,7 +43,11 @@ internal static class ModuleStateApplyResultMapper
             }).ToArray(),
             ExecutionRequested = executionRequested,
             ExecutionResults = executionResults ?? Array.Empty<ModuleStateDeliveryExecutionResult>(),
-            PostApplyInventory = postApplyInventory
+            PostApplyInventory = postApplyInventory,
+            PostApplyPlan = postApplyPlan,
+            PostApplyTest = postApplyTest,
+            ExecutionSucceeded = executionSucceeded,
+            Converged = converged
         };
     }
 }

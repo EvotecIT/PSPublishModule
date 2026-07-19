@@ -261,6 +261,22 @@
         "UploadSymbols": { "type": "boolean" },
         "GenerateAppStoreInformation": { "type": "boolean" },
         "SigningStyle": { "type": [ "string", "null" ] },
+        "Automation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "WriteReceipt": { "type": "boolean" },
+            "ReceiptPath": { "type": "string" },
+            "Resume": { "type": "boolean" },
+            "WaitForProcessing": { "type": "boolean" },
+            "ProcessingTimeoutSeconds": { "type": "integer", "minimum": 1 },
+            "PollIntervalSeconds": { "type": "integer", "minimum": 1 },
+            "MinimumFreeSpaceGB": { "type": "number", "minimum": 0 },
+            "CleanupBeforeArchive": { "type": "boolean" },
+            "CleanupAfterProcessing": { "type": "boolean" },
+            "ArtifactRetentionDays": { "type": "integer", "minimum": 0 }
+          }
+        },
         "AppStoreConnectApiKeyPath": { "type": [ "string", "null" ] },
         "AppStoreConnectApiKeyId": { "type": [ "string", "null" ] },
         "AppStoreConnectApiIssuerId": { "type": [ "string", "null" ] },

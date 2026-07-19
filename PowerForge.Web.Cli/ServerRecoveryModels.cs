@@ -1,12 +1,18 @@
+using System.Text.Json.Serialization;
+
 namespace PowerForge.Web.Cli;
 
 internal sealed class PowerForgeServerRecoveryManifest
 {
+    [JsonPropertyName("$schema")]
+    public string? Schema { get; set; }
     public int SchemaVersion { get; set; }
     public string? Name { get; set; }
     public string? Description { get; set; }
     public PowerForgeServerTarget? Target { get; set; }
+    public string[]? OperationLocks { get; set; }
     public PowerForgeServerRepository[]? Repositories { get; set; }
+    public PowerForgeServerAccount[]? Accounts { get; set; }
     public PowerForgeServerPackages? Packages { get; set; }
     public PowerForgeServerPath[]? Paths { get; set; }
     public PowerForgeServerApache? Apache { get; set; }
@@ -16,7 +22,7 @@ internal sealed class PowerForgeServerRecoveryManifest
     public PowerForgeServerSecret[]? Secrets { get; set; }
     public PowerForgeServerCapture? Capture { get; set; }
     public PowerForgeServerCommandGroup? Bootstrap { get; set; }
-    public PowerForgeServerCommandGroup? Deploy { get; set; }
+    public PowerForgeServerDeploy? Deploy { get; set; }
     public PowerForgeServerVerify? Verify { get; set; }
     public PowerForgeServerBackupTarget? BackupTarget { get; set; }
     public string[]? Notes { get; set; }
@@ -38,7 +44,22 @@ internal sealed class PowerForgeServerRepository
     public string? Url { get; set; }
     public string? Path { get; set; }
     public string? Branch { get; set; }
+    public string? Ref { get; set; }
+    public string? RefCaptureCommandId { get; set; }
+    public string[]? RefCaptureCommandIds { get; set; }
     public bool Required { get; set; }
+    public string[]? BootstrapRequiredFiles { get; set; }
+    public string? SshIdentityFile { get; set; }
+    public string? SshKnownHostsFile { get; set; }
+}
+
+internal sealed class PowerForgeServerAccount
+{
+    public string Name { get; set; } = string.Empty;
+    public bool System { get; set; }
+    public bool CreateHome { get; set; }
+    public string? Home { get; set; }
+    public string? Shell { get; set; }
 }
 
 internal sealed class PowerForgeServerPackages
@@ -53,20 +74,29 @@ internal sealed class PowerForgeServerPath
 {
     public string? Id { get; set; }
     public string? Path { get; set; }
+    public string? Source { get; set; }
     public string? Owner { get; set; }
     public string? Group { get; set; }
     public string? Mode { get; set; }
     public string? Kind { get; set; }
+    public string? Validation { get; set; }
 }
 
 internal sealed class PowerForgeServerApache
 {
     public string? Service { get; set; }
     public string[]? Modules { get; set; }
-    public PowerForgeServerManagedFile[]? Sites { get; set; }
-    public PowerForgeServerManagedFile[]? Conf { get; set; }
+    public PowerForgeServerApacheFile[]? Sites { get; set; }
+    public PowerForgeServerApacheFile[]? Conf { get; set; }
     public string? ValidateCommand { get; set; }
-    public string? ReloadCommand { get; set; }
+}
+
+internal sealed class PowerForgeServerApacheFile
+{
+    public string? Source { get; set; }
+    public string? Target { get; set; }
+    public bool Required { get; set; }
+    public bool? Enabled { get; set; }
 }
 
 internal sealed class PowerForgeServerFirewall
@@ -111,8 +141,13 @@ internal sealed class PowerForgeServerSecret
     public string? Path { get; set; }
     public string? Env { get; set; }
     public string[]? RequiredFor { get; set; }
+    public bool? RequiredDuringBootstrap { get; set; }
+    public bool RestoreAfterRepositories { get; set; }
     public string Capture { get; set; } = "exclude";
     public string? RestoreMode { get; set; }
+    public string? Owner { get; set; }
+    public string? Group { get; set; }
+    public string? Mode { get; set; }
 }
 
 internal sealed class PowerForgeServerCapture
@@ -128,11 +163,17 @@ internal sealed class PowerForgeServerManagedFile
     public string? Source { get; set; }
     public string? Target { get; set; }
     public bool Required { get; set; }
-    public bool Sensitive { get; set; }
+    public bool? Sensitive { get; set; }
 }
 
 internal sealed class PowerForgeServerCommandGroup
 {
+    public PowerForgeServerNamedCommand[]? Commands { get; set; }
+}
+
+internal sealed class PowerForgeServerDeploy
+{
+    public string? OperationLockOwner { get; set; }
     public PowerForgeServerNamedCommand[]? Commands { get; set; }
 }
 
@@ -172,6 +213,7 @@ internal sealed class PowerForgeServerBackupTarget
 
 internal sealed class PowerForgeServerBackupRetention
 {
+    public int? KeepLatestInTree { get; set; }
     public int? KeepLatest { get; set; }
     public int? KeepDays { get; set; }
 }
@@ -184,6 +226,7 @@ internal sealed class PowerForgeServerRecoveryPlanResult
     public string? SshAlias { get; set; }
     public int? SshPort { get; set; }
     public int RepositoryCount { get; set; }
+    public int AccountCount { get; set; }
     public int PackageCount { get; set; }
     public int ApacheModuleCount { get; set; }
     public int SystemdServiceCount { get; set; }
@@ -324,6 +367,8 @@ internal sealed class PowerForgeServerRestoreSecretsPlanResult
     public string? ArchivePath { get; set; }
     public string? Encryption { get; set; }
     public string? RecipientEnv { get; set; }
+    public string? StagingRoot { get; set; }
+    public string[]? AllowedArchivePaths { get; set; }
     public PowerForgeServerRestoreSecretEntry[]? Secrets { get; set; }
     public string[]? Warnings { get; set; }
 }
@@ -335,6 +380,23 @@ internal sealed class PowerForgeServerRestoreSecretEntry
     public string? Env { get; set; }
     public string? RestoreMode { get; set; }
     public string? RequiredFor { get; set; }
+    public bool? RequiredDuringBootstrap { get; set; }
+    public string? Owner { get; set; }
+    public string? Group { get; set; }
+    public string? Mode { get; set; }
+    public bool RestoreAfterRepositories { get; set; }
+    public string? StagedPath { get; set; }
+}
+
+internal sealed class PowerForgeServerScaffoldResult
+{
+    public string? OutputRoot { get; set; }
+    public string? Domain { get; set; }
+    public string? SiteId { get; set; }
+    public bool CloudflareEnabled { get; set; }
+    public bool PrivateRepository { get; set; }
+    public string[]? Files { get; set; }
+    public string[]? NextSteps { get; set; }
 }
 
 internal sealed class ProcessResult

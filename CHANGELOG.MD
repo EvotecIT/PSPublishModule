@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### What's Changed
+- Fixed module merging so `using` lines inside PowerShell here-strings and block comments remain in place instead of being moved into the generated module header.
 - Hardened the canonical `AsyncPSCmdlet` lifecycle with request-specific prompt and `ShouldProcess` replies while preserving PowerShell-thread execution until the first await.
 - Converted Task-backed App Store Connect and managed catalog cmdlets from sync-over-async blocking to cancellable asynchronous lifecycle hooks.
 - Added `Import-IsolatedModule` with a built-in `ExchangeOnlineManagement` profile that loads EXO binary assemblies through a module-scoped AssemblyLoadContext, allowing EXO's OData 7.22 dependency line to coexist with Az.Storage's OData 7.6 line in the same PowerShell 7 process.

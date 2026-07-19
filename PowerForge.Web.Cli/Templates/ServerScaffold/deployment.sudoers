@@ -1,0 +1,3 @@
+__DEPLOYMENT_USER__ ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-site-deploy ^--site __DOMAIN_PATTERN__ --archive __TEMP_PATTERN__/artifact\.tar --metadata __TEMP_PATTERN__/deployment\.json --defer-public-verification$
+__DEPLOYMENT_USER__ ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-site-deploy ^--site __DOMAIN_PATTERN__ --finalize --release-id [A-Za-z0-9][A-Za-z0-9._-]*$
+__DEPLOYMENT_USER__ ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-site-deploy ^--site __DOMAIN_PATTERN__ --rollback --release-id [A-Za-z0-9][A-Za-z0-9._-]*$

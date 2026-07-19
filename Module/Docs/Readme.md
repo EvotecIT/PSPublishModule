@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.62
+Help Version: 3.0.66
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -33,6 +33,9 @@ Adds a benchmark comparison definition.
 
 ### [Add-BenchmarkEngine](Add-BenchmarkEngine.md)
 Adds a benchmark engine.
+
+### [Add-BenchmarkMetadata](Add-BenchmarkMetadata.md)
+Adds a suite-specific provenance value to benchmark metadata artifacts.
 
 ### [Add-BenchmarkMetric](Add-BenchmarkMetric.md)
 Adds a custom benchmark metric.
@@ -463,7 +466,7 @@ Removes a saved managed module repository profile.
 Removes specific files and folders from a project directory with safety features.
 
 ### [Repair-ManagedModule](Repair-ManagedModule.md)
-Repairs installed PowerShell modules through the managed module-state engine.
+Repairs and verifies installed PowerShell modules through the managed module-state engine.
 
 ### [Reset-ManagedModuleRepository](Reset-ManagedModuleRepository.md)
 Resets managed module repository profiles to PSPublishModule defaults.

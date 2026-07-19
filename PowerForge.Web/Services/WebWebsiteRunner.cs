@@ -177,6 +177,7 @@ public static class WebWebsiteRunner
         var assetPath = Path.Combine(sessionRoot, resolvedAsset.Name);
         DownloadFile(resolvedAsset.DownloadUrl, assetPath, options.GitHubToken);
         VerifySha256IfPresent(assetPath, string.IsNullOrWhiteSpace(toolLock.Sha256) ? resolvedAsset.Sha256 : toolLock.Sha256);
+        var assetSha256 = ComputeSha256(assetPath);
 
         var extractRoot = Path.Combine(sessionRoot, "tool");
         ExtractArchive(assetPath, extractRoot);
@@ -200,6 +201,7 @@ public static class WebWebsiteRunner
             Repository = repository,
             Tag = toolLock.Tag,
             Asset = resolvedAsset.Name,
+            AssetSha256 = assetSha256,
             LaunchedPath = executablePath
         };
     }
@@ -654,6 +656,12 @@ public static class WebWebsiteRunner
         var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
         if (!actual.Equals(normalizedExpected, StringComparison.Ordinal))
             throw new InvalidOperationException($"Downloaded asset SHA-256 mismatch for '{Path.GetFileName(assetPath)}'. Expected {normalizedExpected} but got {actual}.");
+    }
+
+    private static string ComputeSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
 
     private static void TryDeleteDirectory(string path)

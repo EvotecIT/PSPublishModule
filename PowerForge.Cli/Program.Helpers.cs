@@ -33,6 +33,10 @@ internal static partial class Program
                         [--package-sign-thumbprint <sha1>] [--package-sign-store <CurrentUser|LocalMachine>] [--package-sign-timestamp-url <url>]
                         [--tool-output <Tool|Portable|Installer|Store>[,<...>]] [--skip-tool-output <Tool|Portable|Installer|Store>[,<...>]]
                         [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]
+      powerforge apple-release <Status|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup>
+                        [--config <release.json>] [--plan] [--validate] [--confirm-apple-action] [--apple-resume|--no-apple-resume]
+                        [--apple-wait|--no-apple-wait] [--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>]
+                        [--target <Name[,Name...]>] [--summary] [--output json]
       powerforge store submit [--config <powerforge.store.submit.json>] [--list] [--list-assets] [--target <Name>] [--submission-id <id>] [--plan] [--validate] [--no-commit] [--no-wait] [--output json]
       powerforge run [--config <run.profiles.json>] [--list] [--target <Name>] [--configuration <Release|Debug>] [--framework <tfm>] [--no-build] [--no-restore]
                      [--allow-root <path[,path...]>] [--include-private-tool-packs] [--testimox-root <path>] [--extra-arg <value>] [--output json]
@@ -63,6 +67,9 @@ internal static partial class Program
                                       [--min-free-gb <N>] [--aggressive-threshold-gb <N>] [--dry-run|--apply] [--aggressive] [--allow-sudo]
                                       [--skip-diagnostics] [--skip-runner-temp] [--skip-actions-cache] [--skip-tool-cache] [--skip-dotnet-cache]
                                       [--skip-docker] [--no-docker-volumes] [--output json]
+      powerforge homeassistant release prepare --repo <owner/name> --pr-number <N> [--repository-root <path>] [--merge-sha <sha>] [--workflow-run-id <N>] [--apply]
+      powerforge homeassistant release build --repository-root <path> --release-version <X.Y.Z> --release-commit <sha>
+      powerforge homeassistant release publish --repo <owner/name> --pr-number <N> --release-version <X.Y.Z> --release-commit <sha>
       --verbose, -Verbose              Enable verbose diagnostics
       --diagnostics                    Include logs in JSON output
       --quiet, -q                      Suppress non-essential output

@@ -1,0 +1,39 @@
+name: Deploy Website
+
+on:
+  push:
+    branches: [__BRANCH__]
+    paths:
+      - "__WEBSITE_WATCH_PATH__"
+      - "deploy/linux/**"
+      - ".github/workflows/website-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+  id-token: write
+  packages: read
+  pages: write
+
+jobs:
+  deploy:
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-deploy.yml@__ENGINE_REF__
+    with:
+      website_root: __WEBSITE_ROOT__
+      pipeline_config: __WEBSITE_ROOT__/pipeline.json
+      engine_mode: source
+      powerforge_repository: EvotecIT/PSPublishModule
+      powerforge_ref: __ENGINE_REF__
+      deployment_target: linux
+      deployment_site: __DOMAIN__
+      deployment_environment: production
+      deployment_url: https://__DOMAIN__
+      deployment_smoke_paths: "__SMOKE_PATHS__"
+__CLOUDFLARE_INPUT__
+    secrets:
+      indexnow_key: ${{ secrets.INDEXNOW_KEY }}
+      deployment_host: ${{ secrets.DEPLOYMENT_HOST }}
+      deployment_ssh_private_key: ${{ secrets.DEPLOYMENT_SSH_PRIVATE_KEY }}
+      deployment_ssh_known_hosts: ${{ secrets.DEPLOYMENT_SSH_KNOWN_HOSTS }}
+__CLOUDFLARE_SECRET__

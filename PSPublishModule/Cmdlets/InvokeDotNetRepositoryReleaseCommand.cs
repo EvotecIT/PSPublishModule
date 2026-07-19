@@ -50,6 +50,10 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
     [Parameter]
     public SwitchParameter ExpectedVersionMapUseWildcards { get; set; }
 
+    /// <summary>Align projects sharing an X-pattern to one next version based on the highest current package version in that group.</summary>
+    [Parameter]
+    public SwitchParameter AlignPackageVersions { get; set; }
+
     /// <summary>Project names to include (csproj file name without extension).</summary>
     [Parameter]
     public string[]? IncludeProject { get; set; }
@@ -184,6 +188,7 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
             ExpectedVersionMap = ExpectedVersionMap,
             ExpectedVersionMapAsInclude = ExpectedVersionMapAsInclude.IsPresent,
             ExpectedVersionMapUseWildcards = ExpectedVersionMapUseWildcards.IsPresent,
+            AlignPackageVersions = AlignPackageVersions.IsPresent,
             IncludeProject = IncludeProject,
             ExcludeProject = ExcludeProject,
             ExcludeDirectories = ExcludeDirectories,

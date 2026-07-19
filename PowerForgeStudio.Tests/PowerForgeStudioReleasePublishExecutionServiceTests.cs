@@ -287,6 +287,7 @@ public sealed class PowerForgeStudioReleasePublishExecutionServiceTests
         var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
         var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
         File.WriteAllText(Path.Combine(buildDirectory, "Build-Module.ps1"), "# build");
+        File.WriteAllText(Path.Combine(buildDirectory, "github.token"), "token");
 
         var packageDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Artifacts", "Packed", "PSPublishModule")).FullName;
         var manifestPath = Path.Combine(packageDirectory, "PSPublishModule.psd1");
@@ -372,7 +373,7 @@ public sealed class PowerForgeStudioReleasePublishExecutionServiceTests
                                 "Enabled": true,
                                 "UserName": "EvotecIT",
                                 "RepositoryName": "PSPublishModule",
-                                "ApiKey": "token",
+                                "ApiKeyFilePath": "Build/github.token",
                                 "GenerateReleaseNotes": true
                               }
                             }
@@ -434,6 +435,7 @@ public sealed class PowerForgeStudioReleasePublishExecutionServiceTests
         var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
         var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
         File.WriteAllText(Path.Combine(buildDirectory, "Build-Module.ps1"), "# build");
+        File.WriteAllText(Path.Combine(buildDirectory, "gallery.key"), "gallery-key");
 
         var packageDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Artifacts", "Packed", "PSPublishModule")).FullName;
         var manifestPath = Path.Combine(packageDirectory, "PSPublishModule.psd1");
@@ -512,7 +514,7 @@ public sealed class PowerForgeStudioReleasePublishExecutionServiceTests
                                 "Destination": "PowerShellGallery",
                                 "Enabled": true,
                                 "Tool": "PSResourceGet",
-                                "ApiKey": "gallery-key",
+                                "ApiKeyFilePath": "Build/gallery.key",
                                 "RepositoryName": "PSGallery"
                               }
                             }

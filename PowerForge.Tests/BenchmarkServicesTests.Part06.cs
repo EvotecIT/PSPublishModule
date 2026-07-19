@@ -182,6 +182,7 @@ public sealed partial class BenchmarkServicesTests
 
         Assert.Contains("$benchmarkVariables[$property.Name] = $property.Value", script, StringComparison.Ordinal);
         Assert.DoesNotContain("[string] $property.Value", script, StringComparison.Ordinal);
+        Assert.Contains("$suite.MemoryCleanup = [PowerForge.PowerShellBenchmarkMemoryCleanupMode] $request.MemoryCleanup", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -352,11 +353,63 @@ benchmark 'stale-native-exit' {
     }
 
     [Fact]
+    public void Runner_RotatesComparisonGroupsAndEngineOrderBetweenMeasuredIterations()
+    {
+        var suite = CreateRunnableSuite();
+        suite.IterationCount = 2;
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows", Values = { 1, 2 } });
+        var other = new PowerShellBenchmarkEngine { Name = "Other" };
+        other.Operations["Run"] = ScriptBlock.Create("param($case, $run)");
+        suite.Engines.Add(other);
+        suite.Axes.Single(axis => axis.Name == "Engine").Values.Add("Other");
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+        var firstIteration = result.Samples
+            .Where(sample => sample.Iteration == 0)
+            .Select(sample => $"{sample.Variables["Rows"]}:{sample.Engine}")
+            .ToArray();
+        var secondIteration = result.Samples
+            .Where(sample => sample.Iteration == 1)
+            .Select(sample => $"{sample.Variables["Rows"]}:{sample.Engine}")
+            .ToArray();
+
+        Assert.Equal(new[] { "1:Managed", "1:Other", "2:Managed", "2:Other" }, firstIteration);
+        Assert.Equal(new[] { "2:Other", "2:Managed", "1:Other", "1:Managed" }, secondIteration);
+    }
+
+    [Fact]
+    public void Runner_GroupedRotatedKeepsComparisonIterationsTogetherAndAlternatesEngines()
+    {
+        var suite = CreateRunnableSuite();
+        suite.IterationCount = 2;
+        suite.RunOrder = PowerShellBenchmarkRunOrder.GroupedRotated;
+        suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows", Values = { 1, 2 } });
+        var other = new PowerShellBenchmarkEngine { Name = "Other" };
+        other.Operations["Run"] = ScriptBlock.Create("param($case, $run)");
+        suite.Engines.Add(other);
+        suite.Axes.Single(axis => axis.Name == "Engine").Values.Add("Other");
+
+        var result = new PowerShellBenchmarkRunner().Run(suite);
+        var order = result.Samples
+            .Select(sample => $"{sample.Variables["Rows"]}:{sample.Iteration}:{sample.Engine}")
+            .ToArray();
+
+        Assert.Equal(
+            new[]
+            {
+                "1:0:Managed", "1:0:Other", "1:1:Other", "1:1:Managed",
+                "2:0:Managed", "2:0:Other", "2:1:Other", "2:1:Managed"
+            },
+            order);
+    }
+
+    [Fact]
     public void Runner_HonorsSequentialRunOrderPolicy()
     {
         var suite = CreateRunnableSuite();
         suite.IterationCount = 2;
         suite.RunOrder = PowerShellBenchmarkRunOrder.Sequential;
+        suite.MemoryCleanup = PowerShellBenchmarkMemoryCleanupMode.BeforeIteration;
         suite.Axes.Add(new PowerShellBenchmarkAxis { Name = "Rows", Values = { 1, 2, 3 } });
 
         var result = new PowerShellBenchmarkRunner().Run(suite);
@@ -366,6 +419,7 @@ benchmark 'stale-native-exit' {
         Assert.Equal(new[] { "1", "2", "3" }, firstIteration);
         Assert.Equal(new[] { "1", "2", "3" }, secondIteration);
         Assert.Equal("Sequential", result.Metadata["runOrder"]);
+        Assert.Equal("BeforeIteration", result.Metadata["memoryCleanup"]);
     }
 
     [Fact]

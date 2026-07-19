@@ -93,6 +93,13 @@ PowerForge also passes these environment variables:
 Configured environment variables from `-Environment` are added before those PowerForge variables, so the built-in
 context variables remain authoritative.
 
+When `SynchronizeModuleVersion` is enabled, PowerForge resolves the next available module version and uses it as the
+minimum version for `Release.PrimaryProject`. The selected package lane may choose a higher numeric version from NuGet history.
+At the same numeric version, a stable X-pattern candidate does not erase the configured module prerelease; explicit
+prerelease versions retain normal semantic-version ordering.
+That final package version then becomes the module version. PowerForge completes this coordination before any lifecycle
+action, including `BeforeDependencies`, so `ResolvedVersion` and `PreRelease` are authoritative for every action stage.
+
 ## Stages
 
 Actions can run at these lifecycle points:

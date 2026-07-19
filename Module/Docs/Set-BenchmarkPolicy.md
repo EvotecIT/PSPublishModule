@@ -11,7 +11,7 @@ Sets benchmark run policy defaults.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Set-BenchmarkPolicy [-Warmup <int>] [-Iteration <int>] [-RunMode <string>] [-Order <PowerShellBenchmarkRunOrder>] [-CooldownMilliseconds <int>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [<CommonParameters>]
+Set-BenchmarkPolicy [-Warmup <int>] [-Iteration <int>] [-RunMode <string>] [-Order <PowerShellBenchmarkRunOrder>] [-MemoryCleanup <PowerShellBenchmarkMemoryCleanupMode>] [-CooldownMilliseconds <int>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -50,6 +50,22 @@ Measured iteration count.
 Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: Iterations
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -MemoryCleanup
+Managed-memory cleanup performed outside timed operations.
+
+```yaml
+Type: Nullable`1
+Parameter Sets: __AllParameterSets
+Aliases: None
 Possible values:
 
 Required: False

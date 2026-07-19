@@ -223,6 +223,20 @@ public sealed class ModuleVersionStepperTests
         Assert.Contains("fixed prefix is lower", exception.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("2.1.X", "2.1.7", true)]
+    [InlineData("2.1.X", "2.1.7-beta.1", true)]
+    [InlineData("2.1.X", "2.0.12", false)]
+    [InlineData("2.1.X", "2.1.7.1", false)]
+    [InlineData("2.1.3.X", "2.1.3.4", true)]
+    public void VersionPatternStepper_ReportsWhetherPatternCanRepresentExactVersion(
+        string pattern,
+        string exactVersion,
+        bool expected)
+    {
+        Assert.Equal(expected, VersionPatternStepper.CanRepresent(pattern, exactVersion));
+    }
+
     private static string VisibleRepositoryItem(string name, string version)
         => string.Join("::", new[]
         {

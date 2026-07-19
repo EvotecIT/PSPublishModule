@@ -28,7 +28,7 @@ namespace PSPublishModule;
 /// <code>Invoke-PowerForgeRelease -ConfigPath '.\Build\release.json' -ToolsOnly -PublishToolGitHub -ExitCode</code>
 /// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "PowerForgeRelease", SupportsShouldProcess = true, DefaultParameterSetName = ParameterSetConfig)]
-[OutputType(typeof(PowerForgeReleaseResult))]
+[OutputType(typeof(PowerForgeReleaseResult), typeof(PowerForgeAppleReleaseReceipt))]
 public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
 {
     private const string ParameterSetConfig = "Config";
@@ -179,6 +179,48 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     [Parameter]
     [Alias("Targets")]
     public string[]? Target { get; set; }
+
+    /// <summary>
+    /// Selects one explicit Apple release operation. Configured preserves legacy JSON action flags.
+    /// </summary>
+    [Parameter]
+    public PowerForgeAppleReleaseAction AppleAction { get; set; } = PowerForgeAppleReleaseAction.Configured;
+
+    /// <summary>
+    /// Explicitly confirms a risky Apple screenshot replacement, review submission, or public release action.
+    /// </summary>
+    [Parameter]
+    public SwitchParameter ConfirmAppleAction { get; set; }
+
+    /// <summary>Forces exact remote-build reuse on this run.</summary>
+    [Parameter]
+    public SwitchParameter AppleResume { get; set; }
+
+    /// <summary>Disables exact remote-build reuse on this run.</summary>
+    [Parameter]
+    public SwitchParameter NoAppleResume { get; set; }
+
+    /// <summary>Waits for App Store Connect build processing on this run.</summary>
+    [Parameter]
+    public SwitchParameter AppleWaitForProcessing { get; set; }
+
+    /// <summary>Returns after upload instead of waiting for build processing.</summary>
+    [Parameter]
+    public SwitchParameter NoAppleWaitForProcessing { get; set; }
+
+    /// <summary>Maximum App Store Connect processing wait in seconds.</summary>
+    [Parameter]
+    [ValidateRange(1, int.MaxValue)]
+    public int? AppleProcessingTimeoutSeconds { get; set; }
+
+    /// <summary>App Store Connect processing poll interval in seconds.</summary>
+    [Parameter]
+    [ValidateRange(1, int.MaxValue)]
+    public int? ApplePollIntervalSeconds { get; set; }
+
+    /// <summary>Requests compact Apple receipt-oriented output from compatible hosts.</summary>
+    [Parameter]
+    public SwitchParameter AppleSummary { get; set; }
 
     /// <summary>
     /// Optional runtime filter.
@@ -426,7 +468,9 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
                 DotNetAssemblySigningCallbackFactory.Create(logger),
                 DotNetAssemblySigningCallbackFactory.CreatePreflight(logger))
                 .Execute(spec, request);
-            WriteObject(result);
+            WriteObject(AppleSummary.IsPresent && result.AppleReceipt is not null
+                ? result.AppleReceipt
+                : result);
 
             if (!result.Success)
                 throw new InvalidOperationException(result.ErrorMessage ?? "Unified release workflow failed.");
@@ -648,7 +692,20 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             SignKeyContainer = NormalizeNullable(SignKeyContainer),
             PackageSignThumbprint = NormalizeNullable(PackageSignThumbprint),
             PackageSignStore = NormalizeNullable(PackageSignStore),
-            PackageSignTimestampUrl = NormalizeNullable(PackageSignTimestampUrl)
+            PackageSignTimestampUrl = NormalizeNullable(PackageSignTimestampUrl),
+            AppleAction = AppleAction,
+            AppleActionConfirmed = ConfirmAppleAction.IsPresent,
+            AppleResume = ResolveMutuallyExclusiveFlag(
+                boundParameters,
+                nameof(AppleResume),
+                nameof(NoAppleResume)),
+            AppleWaitForProcessing = ResolveMutuallyExclusiveFlag(
+                boundParameters,
+                nameof(AppleWaitForProcessing),
+                nameof(NoAppleWaitForProcessing)),
+            AppleProcessingTimeoutSeconds = AppleProcessingTimeoutSeconds,
+            ApplePollIntervalSeconds = ApplePollIntervalSeconds,
+            AppleSummaryOnly = AppleSummary.IsPresent
         };
 
         if (boundParameters?.ContainsKey(nameof(WorkspaceEnableFeature)) == true)
@@ -673,6 +730,18 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             options.InstallerMsBuildProperties = ParseKeyValuePairs(InstallerProperty);
 
         return options;
+    }
+
+    private static bool? ResolveMutuallyExclusiveFlag(
+        IDictionary<string, object>? boundParameters,
+        string enabledName,
+        string disabledName)
+    {
+        var enabled = boundParameters?.ContainsKey(enabledName) == true;
+        var disabled = boundParameters?.ContainsKey(disabledName) == true;
+        if (enabled && disabled)
+            throw new PSArgumentException($"Use only one of -{enabledName} or -{disabledName}.");
+        return enabled ? true : disabled ? false : null;
     }
 
     private static PowerForgeToolReleaseFlavor[] ParseFlavors(string[]? values)

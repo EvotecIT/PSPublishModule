@@ -21,20 +21,10 @@ public sealed partial class DotNetRepositoryReleaseService
         warning = null;
 
         if (!spec.UpdateVersions)
-        {
-            if (CsprojVersionEditor.TryGetVersion(project.CsprojPath, out var v))
-                return v;
-            warning = "UpdateVersions is disabled and no version tags were found in the project file.";
-            return string.Empty;
-        }
+            return ResolveCurrentProjectVersion(project, spec, out warning);
 
         if (string.IsNullOrWhiteSpace(expectedVersion))
-        {
-            if (CsprojVersionEditor.TryGetVersion(project.CsprojPath, out var v))
-                return v;
-            warning = "No expected version provided and no version tags were found in the project file.";
-            return string.Empty;
-        }
+            return ResolveCurrentProjectVersion(project, spec, out warning);
 
         if (PackageVersionUtility.TryNormalizeExact(expectedVersion, out var exact))
             return exact;
@@ -50,6 +40,79 @@ public sealed partial class DotNetRepositoryReleaseService
             warning = $"No current package version found; using 0 baseline for '{expectedVersion}'.";
 
         return VersionPatternStepper.Step(expectedVersion!, current);
+    }
+
+    private string ResolveCurrentProjectVersion(
+        DotNetRepositoryProjectResult project,
+        DotNetRepositoryReleaseSpec spec,
+        out string? warning)
+    {
+        warning = null;
+        string? declaredVersion = null;
+        string? declaredExactVersion = null;
+        if (CsprojVersionEditor.TryGetVersion(project.CsprojPath, out var candidate))
+        {
+            declaredVersion = candidate;
+            if (PackageVersionUtility.TryNormalizeExact(candidate, out var exact))
+                declaredExactVersion = exact;
+        }
+
+        if (spec.WhatIf)
+        {
+            if (!string.IsNullOrWhiteSpace(declaredVersion))
+                return declaredVersion!;
+
+            warning = "WhatIf cannot resolve a project version without evaluating MSBuild because no version tag was declared.";
+            return string.Empty;
+        }
+
+        var projectDirectory = Path.GetDirectoryName(project.CsprojPath) ?? spec.RootPath;
+        var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
+        var exitCode = RunDotnetMsBuildGetProperty(
+            project.CsprojPath,
+            projectDirectory,
+            configuration,
+            targetFramework: null,
+            propertyName: "PackageVersion",
+            project.ProjectName,
+            _logger,
+            out var evaluatedVersion,
+            out var stdErr,
+            out var stdOut,
+            out _);
+
+        if (exitCode == 0 &&
+            !string.IsNullOrWhiteSpace(evaluatedVersion) &&
+            PackageVersionUtility.TryNormalizeExact(evaluatedVersion, out var evaluatedExact))
+        {
+            return evaluatedExact;
+        }
+
+        if (exitCode != 0)
+        {
+            var detail = SummarizeProcessFailureOutput(stdErr, stdOut);
+            warning = !string.IsNullOrWhiteSpace(declaredExactVersion)
+                ? $"MSBuild PackageVersion evaluation failed; using declared project version '{declaredExactVersion}'. {detail}".Trim()
+                : string.IsNullOrWhiteSpace(declaredVersion)
+                    ? $"No literal project version was found and MSBuild PackageVersion evaluation failed. {detail}".Trim()
+                    : $"Project version '{declaredVersion}' requires MSBuild evaluation, but PackageVersion evaluation failed. {detail}".Trim();
+        }
+        else if (!string.IsNullOrWhiteSpace(evaluatedVersion))
+        {
+            warning = !string.IsNullOrWhiteSpace(declaredExactVersion)
+                ? $"MSBuild evaluated PackageVersion to unsupported value '{evaluatedVersion}'; using declared project version '{declaredExactVersion}'."
+                : $"MSBuild evaluated PackageVersion to unsupported value '{evaluatedVersion}'.";
+        }
+        else
+        {
+            warning = !string.IsNullOrWhiteSpace(declaredExactVersion)
+                ? $"MSBuild did not evaluate PackageVersion; using declared project version '{declaredExactVersion}'."
+                : string.IsNullOrWhiteSpace(declaredVersion)
+                    ? "No project version was found after evaluating MSBuild PackageVersion."
+                    : $"Project version '{declaredVersion}' did not evaluate to a package version.";
+        }
+
+        return declaredExactVersion ?? string.Empty;
     }
 
     private static DotNetPackResult PackProject(
@@ -90,7 +153,10 @@ public sealed partial class DotNetRepositoryReleaseService
                 var includePatterns = ResolveAssemblySigningIncludePatterns(project, spec, csprojDir, configuration, logger);
                 var resolveOutputWatch = Stopwatch.StartNew();
                 var outputDirectories = ResolveBuildOutputDirectories(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns);
-                var signingPlan = BuildAssemblySigningPlan(outputDirectories, includePatterns);
+                var signingPlan = BuildAssemblySigningPlan(
+                    outputDirectories,
+                    includePatterns,
+                    ResolvePackToolIntermediateAssemblyPaths(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns));
                 if (signingPlan.Files.Length == 0 && !spec.SignDependencyAssemblies)
                 {
                     var evaluatedIncludePatterns = ResolveAssemblySigningIncludePatterns(project, spec, csprojDir, configuration, logger);
@@ -98,7 +164,10 @@ public sealed partial class DotNetRepositoryReleaseService
                     {
                         includePatterns = evaluatedIncludePatterns;
                         outputDirectories = ResolveBuildOutputDirectories(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns);
-                        signingPlan = BuildAssemblySigningPlan(outputDirectories, includePatterns);
+                        signingPlan = BuildAssemblySigningPlan(
+                            outputDirectories,
+                            includePatterns,
+                            ResolvePackToolIntermediateAssemblyPaths(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns));
                     }
                 }
                 resolveOutputWatch.Stop();
@@ -393,6 +462,67 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
         });
     }
 
+    private static string[] ResolvePackToolIntermediateAssemblyPaths(
+        string csproj,
+        string workingDirectory,
+        string configuration,
+        string projectName,
+        ILogger logger,
+        IReadOnlyList<string> includePatterns)
+    {
+        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var targetFramework in ResolveConfiguredTargetFrameworks(csproj, workingDirectory, configuration, projectName, logger))
+        {
+            var packAsToolExitCode = RunDotnetMsBuildGetProperty(
+                csproj,
+                workingDirectory,
+                configuration,
+                targetFramework,
+                "PackAsTool",
+                projectName,
+                logger,
+                out var packAsToolValue,
+                out _,
+                out _,
+                out _);
+            if (packAsToolExitCode != 0 || !bool.TryParse(packAsToolValue?.Trim(), out var packAsTool) || !packAsTool)
+                continue;
+
+            var intermediateExitCode = RunDotnetMsBuildGetProperty(
+                csproj,
+                workingDirectory,
+                configuration,
+                targetFramework,
+                "IntermediateOutputPath",
+                projectName,
+                logger,
+                out var intermediateOutputPath,
+                out var stdErr,
+                out var stdOut,
+                out var duration);
+            if (intermediateExitCode != 0 || string.IsNullOrWhiteSpace(intermediateOutputPath))
+            {
+                logger.Verbose($"{projectName}: unable to resolve the pack-tool intermediate output in {FormatDuration(duration)}. {SummarizeProcessFailureOutput(stdErr, stdOut)}");
+                continue;
+            }
+
+            var normalizedIntermediateOutputPath = intermediateOutputPath!.Trim().Trim('"');
+            var resolvedDirectory = Path.IsPathRooted(normalizedIntermediateOutputPath)
+                ? Path.GetFullPath(normalizedIntermediateOutputPath)
+                : Path.GetFullPath(Path.Combine(workingDirectory, normalizedIntermediateOutputPath));
+            if (!Directory.Exists(resolvedDirectory))
+                continue;
+
+            foreach (var includePattern in includePatterns.Where(static pattern => !string.IsNullOrWhiteSpace(pattern)))
+            {
+                foreach (var path in Directory.EnumerateFiles(resolvedDirectory, includePattern, SearchOption.TopDirectoryOnly))
+                    files.Add(Path.GetFullPath(path));
+            }
+        }
+
+        return files.ToArray();
+    }
+
     private static string[] ResolveConventionalBuildOutputDirectories(
         string csproj,
         string workingDirectory,
@@ -473,7 +603,8 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
 
     private static AssemblySigningPlan BuildAssemblySigningPlan(
         IReadOnlyList<string> outputDirectories,
-        IReadOnlyList<string> includePatterns)
+        IReadOnlyList<string> includePatterns,
+        IReadOnlyList<string>? additionalFiles = null)
     {
         var files = new List<string>();
         var outputDirectoryCount = 0;
@@ -493,6 +624,12 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
             }
         }
 
+        if (additionalFiles is not null)
+        {
+            foreach (var path in additionalFiles.Where(File.Exists))
+                files.Add(path);
+        }
+
         return new AssemblySigningPlan
         {
             IncludePatterns = includePatterns.ToArray(),
@@ -500,7 +637,12 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
                 .Select(Path.GetFullPath)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
-            OutputDirectoryCount = outputDirectoryCount
+            OutputDirectoryCount = outputDirectoryCount + (additionalFiles ?? Array.Empty<string>())
+                .Where(File.Exists)
+                .Select(Path.GetDirectoryName)
+                .Where(static directory => !string.IsNullOrWhiteSpace(directory))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count()
         };
     }
 

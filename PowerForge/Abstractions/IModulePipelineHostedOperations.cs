@@ -34,7 +34,9 @@ internal interface IModulePipelineHostedOperations
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
         IReadOnlyList<ArtefactBuildResult> artefactResults,
-        bool includeScriptFolders);
+        bool includeScriptFolders,
+        Action? remotePublishAttempted,
+        Action? remoteSideEffectObserved);
 
     ModulePipelineActionResult RunAction(
         ModulePipelineActionConfiguration action,
@@ -56,4 +58,18 @@ internal interface IModulePipelineHostedOperations
         string[] includePatterns,
         string[] excludeSubstrings,
         SigningOptionsConfiguration signing);
+}
+
+internal interface IModulePipelinePublishPreflightOperations
+{
+    ModulePublishVersionPreflightResult ValidateModulePublishVersion(
+        PublishConfiguration publish,
+        ModulePipelinePlan plan,
+        bool allowExistingExactVersion);
+}
+
+internal enum ModulePublishVersionPreflightResult
+{
+    Available,
+    AlreadyPublished
 }

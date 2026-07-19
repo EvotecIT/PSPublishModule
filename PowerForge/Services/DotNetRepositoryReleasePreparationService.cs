@@ -49,6 +49,7 @@ internal sealed class DotNetRepositoryReleasePreparationService
                 ExpectedVersionsByProject = expectedByProject.Count == 0 ? null : expectedByProject,
                 ExpectedVersionMapAsInclude = request.ExpectedVersionMapAsInclude,
                 ExpectedVersionMapUseWildcards = request.ExpectedVersionMapUseWildcards,
+                AlignPackageVersions = request.AlignPackageVersions,
                 IncludeProjects = request.IncludeProject,
                 ExcludeProjects = request.ExcludeProject,
                 ExcludeDirectories = request.ExcludeDirectories,

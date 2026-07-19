@@ -1,0 +1,269 @@
+name: PowerForge Linux Service Deploy
+
+on:
+  workflow_call:
+    inputs:
+      service_root:
+        description: Repository-relative service source or prepared output directory to package.
+        required: true
+        type: string
+      service_validation_script:
+        description: Optional repository-relative Bash script that tests and prepares the service before packaging.
+        required: false
+        type: string
+        default: ""
+      deployment_service:
+        description: Host-configured service identifier.
+        required: true
+        type: string
+      deployment_host:
+        description: Explicit deployment host. Use the PowerForge Linux Service Deploy action when values come from a protected environment.
+        required: true
+        type: string
+      deployment_user:
+        description: Explicit least-privileged deployment user.
+        required: false
+        type: string
+        default: "powerforge-deploy"
+      deployment_port:
+        description: Explicit deployment SSH port.
+        required: false
+        type: number
+        default: 22
+      deployment_environment:
+        required: false
+        type: string
+        default: "production"
+      deployment_url:
+        required: false
+        type: string
+        default: ""
+      package_runner_labels_json:
+        required: false
+        type: string
+        default: '["ubuntu-latest"]'
+      publisher_runner_labels_json:
+        required: false
+        type: string
+        default: '["ubuntu-latest"]'
+      timeout_minutes:
+        required: false
+        type: number
+        default: 20
+      deployment_artifact_retention_days:
+        required: false
+        type: number
+        default: 7
+    secrets:
+      deployment_ssh_private_key:
+        required: false
+      deployment_ssh_known_hosts:
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: powerforge-service-deploy-${{ github.repository }}-${{ inputs.deployment_service }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: ${{ fromJson(inputs.package_runner_labels_json) }}
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    steps:
+      - name: Checkout caller repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ github.token }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Validate, test, and prepare service
+        shell: pwsh
+        env:
+          DEPLOYMENT_SERVICE: ${{ inputs.deployment_service }}
+          SERVICE_ROOT: ${{ inputs.service_root }}
+          SERVICE_VALIDATION_SCRIPT: ${{ inputs.service_validation_script }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_OS -ne 'Linux') {
+            throw 'The service packaging runner must be Linux.'
+          }
+          if ($env:DEPLOYMENT_SERVICE -notmatch '^[a-z0-9][a-z0-9.-]{0,62}$') {
+            throw 'deployment_service must be a lowercase DNS-style service identifier.'
+          }
+
+          $workspace = [System.IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([System.IO.Path]::DirectorySeparatorChar)
+          $workspacePrefix = $workspace + [System.IO.Path]::DirectorySeparatorChar
+
+          if (-not [string]::IsNullOrWhiteSpace($env:SERVICE_VALIDATION_SCRIPT)) {
+            $scriptPath = [System.IO.Path]::GetFullPath((Join-Path $workspace $env:SERVICE_VALIDATION_SCRIPT))
+            if (-not $scriptPath.StartsWith($workspacePrefix, [System.StringComparison]::Ordinal)) {
+              throw 'service_validation_script must remain inside the caller repository.'
+            }
+            if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) {
+              throw "Service validation script not found: $scriptPath"
+            }
+            bash $scriptPath
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+          $serviceRoot = [System.IO.Path]::GetFullPath((Join-Path $workspace $env:SERVICE_ROOT))
+          if (-not [string]::Equals($serviceRoot, $workspace, [System.StringComparison]::Ordinal) -and
+              -not $serviceRoot.StartsWith($workspacePrefix, [System.StringComparison]::Ordinal)) {
+            throw 'service_root must remain inside the caller repository.'
+          }
+          if (-not (Test-Path -LiteralPath $serviceRoot -PathType Container)) {
+            throw "Service root not found after validation: $serviceRoot"
+          }
+          "SERVICE_ROOT_RESOLVED=$serviceRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Archive service artifact
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          resolved_root="$(realpath -e "$SERVICE_ROOT_RESOLVED")"
+          case "$resolved_root" in
+            "$GITHUB_WORKSPACE"|"$GITHUB_WORKSPACE"/*) ;;
+            *) echo 'service_root must resolve inside the caller repository.' >&2; exit 1 ;;
+          esac
+          tar \
+            --directory "$resolved_root" \
+            -cf "$RUNNER_TEMP/artifact.tar" \
+            --exclude=.git \
+            --exclude=.github \
+            --exclude=_powerforge \
+            .
+
+      - name: Upload service artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: ${{ format('powerforge-service-{0}', inputs.deployment_service) }}
+          path: ${{ runner.temp }}/artifact.tar
+          if-no-files-found: error
+          retention-days: ${{ inputs.deployment_artifact_retention_days }}
+
+  deploy:
+    needs: package
+    runs-on: ${{ fromJson(inputs.publisher_runner_labels_json) }}
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    environment:
+      name: ${{ inputs.deployment_environment }}
+      url: ${{ inputs.deployment_url }}
+    steps:
+      - name: Validate Linux service deployment inputs
+        shell: pwsh
+        env:
+          DEPLOYMENT_HOST: ${{ inputs.deployment_host }}
+          DEPLOYMENT_PORT: ${{ inputs.deployment_port }}
+          DEPLOYMENT_SERVICE: ${{ inputs.deployment_service }}
+          DEPLOYMENT_USER: ${{ inputs.deployment_user }}
+          DEPLOYMENT_PRIVATE_KEY: ${{ secrets.deployment_ssh_private_key }}
+          DEPLOYMENT_KNOWN_HOSTS: ${{ secrets.deployment_ssh_known_hosts }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:DEPLOYMENT_SERVICE -notmatch '^[a-z0-9][a-z0-9.-]{0,62}$') {
+            throw 'deployment_service must be a lowercase DNS-style service identifier.'
+          }
+          if ($env:DEPLOYMENT_HOST -notmatch '^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$') {
+            throw 'deployment_host must be a DNS name or IPv4 address.'
+          }
+          if ($env:DEPLOYMENT_USER -notmatch '^[a-z_][a-z0-9_-]{0,31}$') {
+            throw 'deployment_user is not a valid Linux account name.'
+          }
+          $port = 0
+          if (-not [int]::TryParse($env:DEPLOYMENT_PORT, [ref] $port) -or $port -lt 1 -or $port -gt 65535) {
+            throw 'deployment_port must be an integer from 1 through 65535.'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:DEPLOYMENT_PRIVATE_KEY)) {
+            throw 'deployment_ssh_private_key is required.'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:DEPLOYMENT_KNOWN_HOSTS)) {
+            throw 'deployment_ssh_known_hosts is required; host key scanning at deploy time is intentionally disabled.'
+          }
+
+      - name: Download validated service artifact
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: ${{ format('powerforge-service-{0}', inputs.deployment_service) }}
+          path: ${{ runner.temp }}/powerforge-service
+
+      - name: Create deployment provenance
+        shell: pwsh
+        env:
+          SOURCE_REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $artifactPath = Join-Path $env:RUNNER_TEMP 'powerforge-service/artifact.tar'
+          if (-not (Test-Path -LiteralPath $artifactPath -PathType Leaf)) {
+            throw "Downloaded service artifact not found: $artifactPath"
+          }
+          $metadata = [ordered]@{
+            schemaVersion = 1
+            sourceRepository = $env:SOURCE_REPOSITORY
+            sourceSha = $env:SOURCE_SHA
+            workflowRunId = '${{ github.run_id }}'
+            workflowRunAttempt = '${{ github.run_attempt }}'
+            artifactSha256 = (Get-FileHash -LiteralPath $artifactPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            deployedAtUtc = [DateTimeOffset]::UtcNow.ToString('O')
+          }
+          $metadata | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-service/deployment.json') -Encoding utf8NoBOM
+
+      - name: Publish and promote Linux service release
+        shell: pwsh
+        env:
+          DEPLOYMENT_HOST: ${{ inputs.deployment_host }}
+          DEPLOYMENT_PORT: ${{ inputs.deployment_port }}
+          DEPLOYMENT_SERVICE: ${{ inputs.deployment_service }}
+          DEPLOYMENT_USER: ${{ inputs.deployment_user }}
+          DEPLOYMENT_PRIVATE_KEY: ${{ secrets.deployment_ssh_private_key }}
+          DEPLOYMENT_KNOWN_HOSTS: ${{ secrets.deployment_ssh_known_hosts }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sshRoot = Join-Path $env:RUNNER_TEMP 'powerforge-service-deployment-ssh'
+          New-Item -ItemType Directory -Force -Path $sshRoot | Out-Null
+          $keyPath = Join-Path $sshRoot 'id_ed25519'
+          $knownHostsPath = Join-Path $sshRoot 'known_hosts'
+          Set-Content -LiteralPath $keyPath -Value $env:DEPLOYMENT_PRIVATE_KEY -Encoding utf8NoBOM
+          Set-Content -LiteralPath $knownHostsPath -Value $env:DEPLOYMENT_KNOWN_HOSTS -Encoding utf8NoBOM
+          chmod 700 $sshRoot
+          chmod 600 $keyPath $knownHostsPath
+
+          $remoteBase = "/tmp/powerforge-service-$($env:DEPLOYMENT_SERVICE)"
+          $target = "$($env:DEPLOYMENT_USER)@$($env:DEPLOYMENT_HOST)"
+          $sshOptions = @('-i', $keyPath, '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHostsPath")
+          $scpArgs = @('-P', $env:DEPLOYMENT_PORT) + $sshOptions + @((Join-Path $env:RUNNER_TEMP 'powerforge-service/artifact.tar'), (Join-Path $env:RUNNER_TEMP 'powerforge-service/deployment.json'), "${target}:${remoteBase}/")
+          ssh @sshOptions -p $env:DEPLOYMENT_PORT $target "rm -rf -- '$remoteBase' && install -d -m 0700 '$remoteBase'"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          scp @scpArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ssh @sshOptions -p $env:DEPLOYMENT_PORT $target "sudo /usr/local/sbin/powerforge-service-deploy --service '$($env:DEPLOYMENT_SERVICE)'"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Cleanup deployment credentials and remote staging
+        if: ${{ always() }}
+        continue-on-error: true
+        shell: pwsh
+        env:
+          DEPLOYMENT_HOST: ${{ inputs.deployment_host }}
+          DEPLOYMENT_PORT: ${{ inputs.deployment_port }}
+          DEPLOYMENT_USER: ${{ inputs.deployment_user }}
+        run: |
+          $sshRoot = Join-Path $env:RUNNER_TEMP 'powerforge-service-deployment-ssh'
+          $keyPath = Join-Path $sshRoot 'id_ed25519'
+          $knownHostsPath = Join-Path $sshRoot 'known_hosts'
+          $remoteBase = "/tmp/powerforge-service-${{ inputs.deployment_service }}"
+          $target = "$($env:DEPLOYMENT_USER)@$($env:DEPLOYMENT_HOST)"
+          try {
+            if ((Test-Path -LiteralPath $keyPath) -and (Test-Path -LiteralPath $knownHostsPath)) {
+              ssh -i $keyPath -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$knownHostsPath" -p $env:DEPLOYMENT_PORT $target "rm -rf -- '$remoteBase'"
+            }
+          } finally {
+            if (Test-Path -LiteralPath $sshRoot) {
+              Remove-Item -LiteralPath $sshRoot -Recurse -Force
+            }
+          }

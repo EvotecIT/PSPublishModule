@@ -1,0 +1,192 @@
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory)][string] $DeploymentTarget,
+    [AllowEmptyString()][string] $DeploymentUrl = '',
+    [Parameter(Mandatory)][string] $PipelineConfig,
+    [string] $RequireSeoDoctorGuardrail = 'true',
+    [string] $Workspace = $env:GITHUB_WORKSPACE
+)
+
+$ErrorActionPreference = 'Stop'
+
+if ($DeploymentTarget -notin @('github-pages', 'linux')) {
+    throw "Unsupported deployment target '$DeploymentTarget'. Expected github-pages or linux."
+}
+if ($DeploymentTarget -eq 'linux' -and [string]::IsNullOrWhiteSpace($DeploymentUrl)) {
+    throw 'deployment_url is required when deployment_target is linux.'
+}
+if ($RequireSeoDoctorGuardrail -ne 'true') {
+    Write-Host 'SEO doctor deploy guardrail disabled for this workflow call.'
+    return
+}
+if ([string]::IsNullOrWhiteSpace($Workspace)) {
+    $Workspace = (Get-Location).Path
+}
+
+$workspaceRoot = [IO.Path]::GetFullPath($Workspace).TrimEnd([IO.Path]::DirectorySeparatorChar)
+$workspacePrefix = $workspaceRoot + [IO.Path]::DirectorySeparatorChar
+
+function Resolve-WorkspacePath {
+    param([Parameter(Mandatory)][string] $Path)
+
+    $candidate = if ([IO.Path]::IsPathFullyQualified($Path)) { $Path } else { Join-Path $workspaceRoot $Path }
+    $resolved = [IO.Path]::GetFullPath($candidate)
+    if (-not [string]::Equals($resolved, $workspaceRoot, [StringComparison]::Ordinal) -and
+        -not $resolved.StartsWith($workspacePrefix, [StringComparison]::Ordinal)) {
+        throw "Pipeline config must remain inside the caller workspace: $Path"
+    }
+    return $resolved
+}
+
+function Get-ResolvedPipelineSteps {
+    param(
+        [Parameter(Mandatory)][string] $PipelinePath,
+        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.HashSet[string]] $Visited
+    )
+
+    $resolvedPath = Resolve-WorkspacePath -Path $PipelinePath
+    if (-not $Visited.Add($resolvedPath)) {
+        return @()
+    }
+    if (-not (Test-Path -LiteralPath $resolvedPath -PathType Leaf)) {
+        throw "Pipeline config not found: $resolvedPath"
+    }
+
+    $document = Get-Content -LiteralPath $resolvedPath -Raw | ConvertFrom-Json -AsHashtable
+    $steps = @()
+    if ($document.ContainsKey('extends') -and -not [string]::IsNullOrWhiteSpace([string]$document['extends'])) {
+        $parentPath = Join-Path ([IO.Path]::GetDirectoryName($resolvedPath)) ([string]$document['extends'])
+        $steps += @(Get-ResolvedPipelineSteps -PipelinePath $parentPath -Visited $Visited)
+    }
+    if ($document.ContainsKey('steps') -and $null -ne $document['steps']) {
+        $steps += @($document['steps'])
+    }
+    return $steps
+}
+
+function Get-StepBooleanOption {
+    param(
+        [Parameter(Mandatory)][Collections.IDictionary] $Step,
+        [Parameter(Mandatory)][string[]] $Names
+    )
+
+    foreach ($name in $Names) {
+        if ($Step.Contains($name) -and ($Step[$name] -is [bool])) {
+            return [pscustomobject]@{
+                IsBoolean = $true
+                Value = $Step[$name]
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        IsBoolean = $false
+        Value = $null
+    }
+}
+
+function Get-StepStringArrayOption {
+    param(
+        [Parameter(Mandatory)][Collections.IDictionary] $Step,
+        [Parameter(Mandatory)][string[]] $Names
+    )
+
+    foreach ($name in $Names) {
+        if (-not $Step.Contains($name) -or ($Step[$name] -isnot [array])) {
+            continue
+        }
+
+        $values = @($Step[$name] | Where-Object { $null -ne $_ } | ForEach-Object { [string]$_ })
+        if ($values.Count -gt 0) {
+            return [pscustomobject]@{ Value = $values }
+        }
+    }
+
+    return [pscustomobject]@{ Value = @() }
+}
+
+function Test-StepRunsInCi {
+    param([Parameter(Mandatory)][Collections.IDictionary] $Step)
+
+    $includedModes = Get-StepStringArrayOption -Step $Step -Names @('modes', 'onlyModes', 'only-modes')
+    $modes = @($includedModes.Value)
+    if ($Step.Contains('mode') -and -not [string]::IsNullOrWhiteSpace([string]$Step['mode'])) {
+        $modes += [string]$Step['mode']
+    }
+
+    $skippedModes = Get-StepStringArrayOption -Step $Step -Names @('skipModes', 'skip-modes')
+    if (@($skippedModes.Value | Where-Object { [string]::Equals($_.Trim(), 'ci', [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) {
+        return $false
+    }
+
+    return $modes.Count -eq 0 -or
+        @($modes | Where-Object { [string]::Equals($_.Trim(), 'ci', [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
+}
+
+$pipelinePath = Resolve-WorkspacePath -Path $PipelineConfig
+$visited = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+$steps = @(Get-ResolvedPipelineSteps -PipelinePath $pipelinePath -Visited $visited)
+$seoDoctorSteps = @($steps | Where-Object {
+    $_ -is [Collections.IDictionary] -and
+    $_.Contains('task') -and
+    [string]::Equals([string]$_['task'], 'seo-doctor', [StringComparison]::OrdinalIgnoreCase)
+})
+if ($seoDoctorSteps.Count -eq 0) {
+    throw 'Deploy guardrail requires a seo-doctor step in the resolved pipeline config chain.'
+}
+
+$ciSeoDoctorSteps = @($seoDoctorSteps | Where-Object { Test-StepRunsInCi -Step $_ })
+if ($ciSeoDoctorSteps.Count -eq 0) {
+    throw 'Deploy guardrail requires a seo-doctor step that executes in ci mode.'
+}
+
+$gatingSteps = @($ciSeoDoctorSteps | Where-Object {
+    $failOnWarnings = Get-StepBooleanOption -Step $_ -Names @('failOnWarnings')
+    $failOnNewIssues = Get-StepBooleanOption -Step $_ -Names @('failOnNewIssues', 'failOnNew')
+    ($failOnWarnings.IsBoolean -and ($failOnWarnings.Value -eq $true)) -or
+    ($failOnNewIssues.IsBoolean -and ($failOnNewIssues.Value -eq $true))
+})
+if ($gatingSteps.Count -eq 0) {
+    throw 'Deploy guardrail found a ci seo-doctor step, but no resolved ci seo-doctor step gates deployment.'
+}
+
+$completeSteps = @($gatingSteps | Where-Object {
+    $contentLeaks = Get-StepBooleanOption -Step $_ -Names @('checkContentLeaks', 'check-content-leaks')
+    $canonical = Get-StepBooleanOption -Step $_ -Names @('requireCanonical', 'require-canonical')
+    $canonicalCheck = Get-StepBooleanOption -Step $_ -Names @('checkCanonical', 'check-canonical')
+    $contentLeaks.IsBoolean -and ($contentLeaks.Value -eq $true) -and
+    $canonical.IsBoolean -and ($canonical.Value -eq $true) -and
+    ((-not $canonicalCheck.IsBoolean) -or ($canonicalCheck.Value -eq $true))
+})
+if ($completeSteps.Count -eq 0) {
+    throw 'Deploy guardrail requires a gating seo-doctor step with content-leak and canonical checks enabled.'
+}
+
+$explicitModeSteps = @($completeSteps | ForEach-Object {
+    $hreflang = Get-StepBooleanOption -Step $_ -Names @('requireHreflang', 'require-hreflang')
+    $xDefault = Get-StepBooleanOption -Step $_ -Names @('requireHreflangXDefault', 'require-hreflang-x-default')
+    if ($hreflang.IsBoolean -and $xDefault.IsBoolean -and ($hreflang.Value -eq $xDefault.Value)) {
+        [pscustomobject]@{
+            Localized = [bool]$hreflang.Value
+            Step = $_
+        }
+    }
+})
+if ($explicitModeSteps.Count -eq 0) {
+    throw 'Deploy guardrail requires an explicit SEO localization mode: set requireHreflang and requireHreflangXDefault to true for localized sites or false for single-language sites.'
+}
+
+$effectiveModeSteps = @($explicitModeSteps | Where-Object {
+    if (-not $_.Localized) {
+        return $true
+    }
+    $hreflangCheck = Get-StepBooleanOption -Step $_.Step -Names @('checkHreflang', 'check-hreflang')
+    return (-not $hreflangCheck.IsBoolean) -or ($hreflangCheck.Value -eq $true)
+})
+if ($effectiveModeSteps.Count -eq 0) {
+    throw 'Deploy guardrail requires checkHreflang to remain enabled for localized sites.'
+}
+
+$localizedSteps = @($effectiveModeSteps | Where-Object { $_.Localized })
+$singleLanguageSteps = @($explicitModeSteps | Where-Object { -not $_.Localized })
+Write-Host "Validated $($seoDoctorSteps.Count) seo-doctor step(s); $($ciSeoDoctorSteps.Count) run in ci; $($gatingSteps.Count) gate deployment; $($completeSteps.Count) enforce content-leak/canonical checks; localization modes: $($localizedSteps.Count) localized, $($singleLanguageSteps.Count) single-language."

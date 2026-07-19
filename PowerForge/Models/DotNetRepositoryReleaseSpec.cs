@@ -5,6 +5,11 @@ namespace PowerForge;
 /// </summary>
 public sealed class DotNetRepositoryReleaseSpec
 {
+    internal Action? RemotePublishAttempted { get; set; }
+    internal string? ReleaseVersionFloor { get; set; }
+    internal string? ReleaseVersionFloorProject { get; set; }
+    internal string? ResolvedReleaseVersionFloorProject { get; set; }
+
     /// <summary>Root path of the repository to scan for projects.</summary>
     public string RootPath { get; set; } = string.Empty;
 
@@ -40,6 +45,17 @@ public sealed class DotNetRepositoryReleaseSpec
     /// When true, keys in <see cref="ExpectedVersionsByProject"/> may contain wildcards (*, ?).
     /// </summary>
     public bool ExpectedVersionMapUseWildcards { get; set; }
+
+    /// <summary>
+    /// When true, projects using the same X-pattern are stepped from the highest current
+    /// package version found across that group and receive one aligned next version.
+    /// </summary>
+    public bool AlignPackageVersions { get; set; }
+
+    /// <summary>
+    /// Project-build version tracks that need package-version alignment after project discovery.
+    /// </summary>
+    internal IReadOnlyList<ProjectBuildVersionAlignmentGroup>? VersionAlignmentGroups { get; set; }
 
     /// <summary>Sources used to resolve the current package version (v3 index or local path).</summary>
     public string[]? VersionSources { get; set; }

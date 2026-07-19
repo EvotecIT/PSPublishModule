@@ -93,6 +93,12 @@ internal sealed class ManagedModuleInstallContext : IDisposable
     public bool IsActive(string moduleName)
         => _active.Contains(moduleName.Trim());
 
+    /// <summary>
+    /// Gets whether the current branch is installing below the root request and may run alongside sibling branches.
+    /// </summary>
+    public bool IsDependencyInstall
+        => _active.Count > 1;
+
     public bool TryBeginInstall(
         string key,
         out Task<ManagedModuleInstallResult> existingInstall,

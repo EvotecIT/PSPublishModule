@@ -51,8 +51,8 @@
     "GitHubGenerateReleaseNotes": true,
     "GitHubReleaseMode": "Single",
     "GitHubPrimaryProject": "PowerForge.Cli",
-    "GitHubTagTemplate": "{Repo}-v{PrimaryVersion}",
-    "GitHubReleaseName": "{Repo} {PrimaryVersion}"
+    "GitHubTagTemplate": "PowerForge-v{PrimaryVersion}",
+    "GitHubReleaseName": "PowerForge {PrimaryVersion}"
   },
   "Tools": {
     "ProjectRoot": "..",

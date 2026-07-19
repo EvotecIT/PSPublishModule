@@ -10,7 +10,7 @@ namespace PowerForge;
 /// <summary>
 /// Runtime used by locally scoped benchmark DSL helper functions.
 /// </summary>
-public static class PowerShellBenchmarkDslRuntime
+public static partial class PowerShellBenchmarkDslRuntime
 {
     private static readonly AsyncLocal<PowerShellBenchmarkDslContext?> Current = new();
 
@@ -229,6 +229,19 @@ public static class PowerShellBenchmarkDslRuntime
     /// <param name="cooldownMilliseconds">Optional delay between measured samples.</param>
     /// <param name="outlierMode">Optional summary outlier policy.</param>
     public static void Policy(int? warmup, int? iteration, string? runMode, string? order, int? cooldownMilliseconds, string? outlierMode)
+        => Policy(warmup, iteration, runMode, order, memoryCleanup: null, cooldownMilliseconds, outlierMode);
+
+    /// <summary>
+    /// Applies benchmark execution policy to the current DSL suite.
+    /// </summary>
+    /// <param name="warmup">Optional warmup iteration count.</param>
+    /// <param name="iteration">Optional measured iteration count.</param>
+    /// <param name="runMode">Optional run mode label.</param>
+    /// <param name="order">Optional work-item ordering strategy.</param>
+    /// <param name="memoryCleanup">Optional managed-memory cleanup policy.</param>
+    /// <param name="cooldownMilliseconds">Optional delay between measured samples.</param>
+    /// <param name="outlierMode">Optional summary outlier policy.</param>
+    public static void Policy(int? warmup, int? iteration, string? runMode, string? order, string? memoryCleanup, int? cooldownMilliseconds, string? outlierMode)
     {
         var suite = RequireSuite();
         if (warmup.HasValue)
@@ -239,6 +252,8 @@ public static class PowerShellBenchmarkDslRuntime
             suite.RunMode = runMode!;
         if (!string.IsNullOrWhiteSpace(order))
             suite.RunOrder = ParseEnum<PowerShellBenchmarkRunOrder>(order!, "run order");
+        if (!string.IsNullOrWhiteSpace(memoryCleanup))
+            suite.MemoryCleanup = ParseEnum<PowerShellBenchmarkMemoryCleanupMode>(memoryCleanup!, "memory cleanup mode");
         if (cooldownMilliseconds.HasValue)
             suite.CooldownMilliseconds = Math.Max(0, cooldownMilliseconds.Value);
         if (!string.IsNullOrWhiteSpace(outlierMode))
@@ -381,7 +396,7 @@ public static class PowerShellBenchmarkDslRuntime
     /// <param name="baseline">Baseline value.</param>
     /// <param name="metric">Metric names.</param>
     public static void Compare(string dimension, string baseline, string[]? metric)
-        => Compare(dimension, baseline, metric, tieTolerance: 0);
+        => Compare(dimension, baseline, metric, tieTolerance: 0, requireBaselineFastest: false);
 
     /// <summary>
     /// Adds a comparison definition with a practical tie tolerance.
@@ -391,12 +406,24 @@ public static class PowerShellBenchmarkDslRuntime
     /// <param name="metric">Metric names.</param>
     /// <param name="tieTolerance">Fractional tolerance used to label practically equivalent results, such as <c>0.05</c> for five percent.</param>
     public static void Compare(string dimension, string baseline, string[]? metric, double tieTolerance)
+        => Compare(dimension, baseline, metric, tieTolerance, requireBaselineFastest: false);
+
+    /// <summary>
+    /// Adds a comparison definition with a practical tie tolerance and an optional fastest-baseline gate.
+    /// </summary>
+    /// <param name="dimension">Dimension name.</param>
+    /// <param name="baseline">Baseline value.</param>
+    /// <param name="metric">Metric names.</param>
+    /// <param name="tieTolerance">Fractional tolerance used to label practically equivalent results, such as <c>0.05</c> for five percent.</param>
+    /// <param name="requireBaselineFastest">Whether to fail when the baseline is materially slower than a successful competitor.</param>
+    public static void Compare(string dimension, string baseline, string[]? metric, double tieTolerance, bool requireBaselineFastest)
         => RequireSuite().Comparisons.Add(new PowerShellBenchmarkComparison
         {
             Dimension = string.IsNullOrWhiteSpace(dimension) ? "Engine" : dimension.Trim(),
             Baseline = baseline ?? string.Empty,
             Metrics = metric is { Length: > 0 } ? metric : new[] { "MedianMs" },
-            TieTolerance = tieTolerance
+            TieTolerance = tieTolerance,
+            RequireBaselineFastest = requireBaselineFastest
         });
 
     /// <summary>
@@ -462,6 +489,32 @@ public static class PowerShellBenchmarkDslRuntime
         const string InputBody = "param([Parameter(Position=0, Mandatory=$true)] [string] $Name, [Parameter(Position=1)] [object] $Default, [switch] $Required, [switch] $Int, [switch] $Bool) if ($Int.IsPresent) { $value = $BenchmarkVariables[$Name]; if ([string]::IsNullOrWhiteSpace([string] $value)) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' is required.\" }; if ($null -eq $Default) { return @() }; if ($Default -is [array]) { return @($Default | ForEach-Object { [int] $_ }) }; return @([string] $Default -split ',' | Where-Object { $_.Trim() } | ForEach-Object { [int] $_.Trim() }) }; $items = @(); foreach ($entry in ([string] $value -split ',')) { $trimmed = $entry.Trim(); if ($trimmed) { $items += [int] $trimmed } }; if ($items.Count -eq 0) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' did not contain any integer values.\" }; return $Default }; return $items } if ($Bool.IsPresent) { $value = $BenchmarkVariables[$Name]; if ([string]::IsNullOrWhiteSpace([string] $value)) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' is required.\" }; if ($null -eq $Default) { return $false }; switch -Regex ([string] $Default) { '^(?i:true|1|yes|on)$' { return $true } '^(?i:false|0|no|off)$' { return $false } default { throw \"Benchmark variable '$Name' default '$Default' is not a boolean value.\" } } }; switch -Regex ([string] $value) { '^(?i:true|1|yes|on)$' { return $true } '^(?i:false|0|no|off)$' { return $false } default { throw \"Benchmark variable '$Name' value '$value' is not a boolean value.\" } } } $value = $BenchmarkVariables[$Name]; if ([string]::IsNullOrWhiteSpace([string] $value)) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' is required.\" }; return $Default }; [string] $value";
         const string InputIntBody = "param([Parameter(Position=0, Mandatory=$true)] [string] $Name, [Parameter(Position=1)] [int[]] $Default, [switch] $Required) $value = $BenchmarkVariables[$Name]; if ([string]::IsNullOrWhiteSpace([string] $value)) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' is required.\" }; return $Default }; $items = @(); foreach ($entry in ([string] $value -split ',')) { $trimmed = $entry.Trim(); if ($trimmed) { $items += [int] $trimmed } }; if ($items.Count -eq 0) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' did not contain any integer values.\" }; return $Default }; $items";
         const string InputBoolBody = "param([Parameter(Position=0, Mandatory=$true)] [string] $Name, [Parameter(Position=1)] [object] $Default = $false, [switch] $Required) $value = $BenchmarkVariables[$Name]; if ([string]::IsNullOrWhiteSpace([string] $value)) { if ($Required.IsPresent) { throw \"Benchmark variable '$Name' is required.\" }; switch -Regex ([string] $Default) { '^(?i:true|1|yes|on)$' { return $true } '^(?i:false|0|no|off)$' { return $false } default { throw \"Benchmark variable '$Name' default '$Default' is not a boolean value.\" } } }; switch -Regex ([string] $value) { '^(?i:true|1|yes|on)$' { return $true } '^(?i:false|0|no|off)$' { return $false } default { throw \"Benchmark variable '$Name' value '$value' is not a boolean value.\" } }";
+        const string PolicyBody = """
+param(
+    [Parameter(Position=0)] [int] $Warmup,
+    [Parameter(Position=1)] [Alias('Iterations')] [int] $Iteration,
+    [Parameter(Position=2)] [string] $RunMode,
+    [Parameter(Position=3)] [object] $Order,
+    [Parameter(Position=4)] [int] $CooldownMilliseconds,
+    [Parameter(Position=5)] [object] $OutlierMode,
+    [Parameter(Position=6)] [object] $MemoryCleanup
+)
+$w = $null
+$i = $null
+$c = $null
+if ($PSBoundParameters.ContainsKey('Warmup')) { $w = $Warmup }
+if ($PSBoundParameters.ContainsKey('Iteration')) { $i = $Iteration }
+if ($PSBoundParameters.ContainsKey('CooldownMilliseconds')) { $c = $CooldownMilliseconds }
+$arguments = [object[]]::new(7)
+$arguments[0] = $w
+$arguments[1] = $i
+$arguments[2] = $RunMode
+$arguments[3] = [string] $Order
+$arguments[4] = [string] $MemoryCleanup
+$arguments[5] = $c
+$arguments[6] = [string] $OutlierMode
+__PowerForgeBenchmarkDslInvoke -Name 'Policy' -Arguments $arguments
+""";
 
         return new()
         {
@@ -489,14 +542,15 @@ try {
             ["data"] = Call("Data", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
             ["skip"] = Call("Skip", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
             ["validate"] = Call("Validate", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
-            ["policy"] = "param([int] $Warmup, [Alias('Iterations')] [int] $Iteration, [string] $RunMode, [object] $Order, [int] $CooldownMilliseconds, [object] $OutlierMode) $w=$null; $i=$null; $c=$null; if ($PSBoundParameters.ContainsKey('Warmup')) { $w=$Warmup }; if ($PSBoundParameters.ContainsKey('Iteration')) { $i=$Iteration }; if ($PSBoundParameters.ContainsKey('CooldownMilliseconds')) { $c=$CooldownMilliseconds }; $arguments = [object[]]::new(6); $arguments[0] = $w; $arguments[1] = $i; $arguments[2] = $RunMode; $arguments[3] = [string] $Order; $arguments[4] = $c; $arguments[5] = [string] $OutlierMode; __PowerForgeBenchmarkDslInvoke -Name 'Policy' -Arguments $arguments",
+            ["policy"] = PolicyBody,
             ["profile"] = Call("Profile", "param([Parameter(Position=0)] [string] $Name, [string] $Cleanup)", "[object[]] @($Name, $Cleanup)"),
             ["cleanup"] = Call("Cleanup", "param([Parameter(Position=0)] [string] $Name)", "[object[]] @($Name)"),
             ["engine"] = Call("Engine", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
             ["operation"] = Call("Operation", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
             ["metric"] = Call("Metric", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
-            ["compare"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric, [ValidateRange(0, [double]::MaxValue)] [double] $TieTolerance) $arguments = [object[]]::new(4); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; $arguments[3] = $TieTolerance; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
-            ["comparison"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric, [ValidateRange(0, [double]::MaxValue)] [double] $TieTolerance) $arguments = [object[]]::new(4); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; $arguments[3] = $TieTolerance; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
+            ["metadata"] = Call("Metadata", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [string] $Value)", "[object[]] @($Name, $Value)"),
+            ["compare"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric, [ValidateRange(0, [double]::MaxValue)] [double] $TieTolerance, [switch] $RequireBaselineFastest) $arguments = [object[]]::new(5); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; $arguments[3] = $TieTolerance; $arguments[4] = $RequireBaselineFastest.IsPresent; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
+            ["comparison"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric, [ValidateRange(0, [double]::MaxValue)] [double] $TieTolerance, [switch] $RequireBaselineFastest) $arguments = [object[]]::new(5); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; $arguments[3] = $TieTolerance; $arguments[4] = $RequireBaselineFastest.IsPresent; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
             ["readme"] = Call("Readme", "param([Parameter(Position=0)] [string] $Path, [string] $Block, [string] $Renderer)", "[object[]] @($Path, $Block, $Renderer)"),
             ["artifacts"] = "param([Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) $arguments = [object[]]::new(1); $arguments[0] = $Values; __PowerForgeBenchmarkDslInvoke -Name 'Artifacts' -Arguments $arguments",
             ["input"] = InputBody,
@@ -511,7 +565,7 @@ try {
             ["Add-BenchmarkAxis"] = "param([Parameter(Position=0)] [string] $Name, [Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) $arguments = [object[]]::new(2); $arguments[0] = $Name; $arguments[1] = $Values; __PowerForgeBenchmarkDslInvoke -Name 'Axis' -Arguments $arguments",
             ["Set-BenchmarkSetup"] = Call("Setup", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
             ["Set-BenchmarkDataFactory"] = Call("Data", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
-            ["Set-BenchmarkPolicy"] = "param([int] $Warmup, [Alias('Iterations')] [int] $Iteration, [string] $RunMode, [object] $Order, [int] $CooldownMilliseconds, [object] $OutlierMode) $w=$null; $i=$null; $c=$null; if ($PSBoundParameters.ContainsKey('Warmup')) { $w=$Warmup }; if ($PSBoundParameters.ContainsKey('Iteration')) { $i=$Iteration }; if ($PSBoundParameters.ContainsKey('CooldownMilliseconds')) { $c=$CooldownMilliseconds }; $arguments = [object[]]::new(6); $arguments[0] = $w; $arguments[1] = $i; $arguments[2] = $RunMode; $arguments[3] = [string] $Order; $arguments[4] = $c; $arguments[5] = [string] $OutlierMode; __PowerForgeBenchmarkDslInvoke -Name 'Policy' -Arguments $arguments",
+            ["Set-BenchmarkPolicy"] = PolicyBody,
             ["Set-BenchmarkProfile"] = Call("Profile", "param([Parameter(Position=0)] [string] $Name, [string] $Cleanup)", "[object[]] @($Name, $Cleanup)"),
             ["Set-BenchmarkCleanup"] = Call("Cleanup", "param([Parameter(Position=0)] [string] $Name)", "[object[]] @($Name)"),
             ["Add-BenchmarkEngine"] = Call("Engine", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
@@ -519,7 +573,8 @@ try {
             ["Add-BenchmarkSkipRule"] = Call("Skip", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
             ["Add-BenchmarkValidation"] = Call("Validate", "param([Parameter(Position=0)] [scriptblock] $ScriptBlock)", "[object[]] @($ScriptBlock)"),
             ["Add-BenchmarkMetric"] = Call("Metric", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [scriptblock] $ScriptBlock)", "[object[]] @($Name, $ScriptBlock)"),
-            ["Add-BenchmarkComparison"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric, [ValidateRange(0, [double]::MaxValue)] [double] $TieTolerance) $arguments = [object[]]::new(4); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; $arguments[3] = $TieTolerance; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
+            ["Add-BenchmarkMetadata"] = Call("Metadata", "param([Parameter(Position=0)] [string] $Name, [Parameter(Position=1)] [string] $Value)", "[object[]] @($Name, $Value)"),
+            ["Add-BenchmarkComparison"] = "param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric, [ValidateRange(0, [double]::MaxValue)] [double] $TieTolerance, [switch] $RequireBaselineFastest) $arguments = [object[]]::new(5); $arguments[0] = $Dimension; $arguments[1] = $Baseline; $arguments[2] = $Metric; $arguments[3] = $TieTolerance; $arguments[4] = $RequireBaselineFastest.IsPresent; __PowerForgeBenchmarkDslInvoke -Name 'Compare' -Arguments $arguments",
             ["Add-BenchmarkReadmeBlock"] = Call("Readme", "param([Parameter(Position=0)] [string] $Path, [string] $Block, [string] $Renderer)", "[object[]] @($Path, $Block, $Renderer)"),
             ["Set-BenchmarkArtifacts"] = "param([Parameter(ValueFromRemainingArguments=$true)] [object[]] $Values) $arguments = [object[]]::new(1); $arguments[0] = $Values; __PowerForgeBenchmarkDslInvoke -Name 'Artifacts' -Arguments $arguments",
             ["Get-BenchmarkInput"] = InputBody,
@@ -603,7 +658,14 @@ try {
         => InvokeWithNativeExitCheck(scriptBlock, functionsToDefine);
 
     private static Collection<PSObject> InvokeWithNativeExitCheck(ScriptBlock scriptBlock, Hashtable? functionsToDefine)
-        => NativeExitAwareInvokeWrapper.InvokeWithContext(functionsToDefine, CreateInvocationVariables(), new object[] { scriptBlock, Array.Empty<object>(), true, typeof(PowerShellNativeExitCodeTracker) });
+    {
+        // GetNewClosure binds settings to a dynamic module. Run the wrapper in that
+        // module so its injected DSL functions and variables remain visible.
+        var wrapper = scriptBlock.Module is null
+            ? NativeExitAwareInvokeWrapper
+            : scriptBlock.Module.NewBoundScriptBlock(NativeExitAwareInvokeWrapper);
+        return wrapper.InvokeWithContext(functionsToDefine, CreateInvocationVariables(), new object[] { scriptBlock, Array.Empty<object>(), true, typeof(PowerShellNativeExitCodeTracker) });
+    }
 
     private static readonly ScriptBlock NativeExitAwareInvokeWrapper =
         ScriptBlock.Create(EmbeddedScripts.Load("Scripts/Benchmarks/Invoke-NativeExitAwareBlock.ps1"));
@@ -774,10 +836,11 @@ try {
         setter.AddCommand("Set-Item")
             .AddArgument("Function:compare")
             .AddParameter("Value", ScriptBlock.Create("""
-param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric, [ValidateRange(0, [double]::MaxValue)] [double] $TieTolerance)
+param([Parameter(Position=0)] [string] $Dimension, [string] $Baseline, [string[]] $Metric, [ValidateRange(0, [double]::MaxValue)] [double] $TieTolerance, [switch] $RequireBaselineFastest)
 $parameters = @{ Dimension = $Dimension; Baseline = $Baseline }
 if ($PSBoundParameters.ContainsKey('Metric')) { $parameters['Metric'] = $Metric }
 if ($PSBoundParameters.ContainsKey('TieTolerance')) { $parameters['TieTolerance'] = $TieTolerance }
+if ($RequireBaselineFastest.IsPresent) { $parameters['RequireBaselineFastest'] = $true }
 Add-BenchmarkComparison @parameters
 """))
             .AddParameter("Force")

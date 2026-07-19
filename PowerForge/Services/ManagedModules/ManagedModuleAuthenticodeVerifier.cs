@@ -12,6 +12,7 @@ internal sealed class ManagedModuleAuthenticodeVerifier
         ".ps1xml",
         ".pssc",
         ".psrc",
+        ".mof",
         ".dll",
         ".exe",
         ".cat"

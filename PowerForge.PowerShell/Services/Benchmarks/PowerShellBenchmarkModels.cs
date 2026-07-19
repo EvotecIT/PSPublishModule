@@ -37,11 +37,35 @@ public enum PowerShellBenchmarkRunOrder
     /// <summary>Run work items in their resolved plan order every iteration.</summary>
     Sequential,
 
-    /// <summary>Rotate work item order by iteration to reduce first-lane bias.</summary>
+    /// <summary>
+    /// Rotate equivalent comparison groups and the work items inside each group by iteration to
+    /// reduce both first-group and first-engine bias.
+    /// </summary>
     Rotated,
 
     /// <summary>Shuffle work item order deterministically for each iteration.</summary>
-    Randomized
+    Randomized,
+
+    /// <summary>
+    /// Run every equivalent comparison group as one block while rotating engine order between the
+    /// group's measured iterations. This limits contamination from unrelated benchmark cases.
+    /// </summary>
+    GroupedRotated
+}
+
+/// <summary>
+/// Managed-memory cleanup applied outside timed benchmark operations.
+/// </summary>
+public enum PowerShellBenchmarkMemoryCleanupMode
+{
+    /// <summary>Do not request an explicit managed-memory cleanup.</summary>
+    None,
+
+    /// <summary>
+    /// Complete a full managed collection after setup and data creation, immediately before every
+    /// warmup and measured operation.
+    /// </summary>
+    BeforeIteration
 }
 
 /// <summary>
@@ -67,6 +91,9 @@ public sealed class PowerShellBenchmarkSuite
     /// <summary>Measured work-item ordering strategy.</summary>
     public PowerShellBenchmarkRunOrder RunOrder { get; set; } = PowerShellBenchmarkRunOrder.Rotated;
 
+    /// <summary>Managed-memory cleanup performed outside timed operations.</summary>
+    public PowerShellBenchmarkMemoryCleanupMode MemoryCleanup { get; set; } = PowerShellBenchmarkMemoryCleanupMode.None;
+
     /// <summary>Delay between measured samples, in milliseconds.</summary>
     public int CooldownMilliseconds { get; set; }
 
@@ -81,6 +108,9 @@ public sealed class PowerShellBenchmarkSuite
 
     /// <summary>Cleanup behavior for benchmark-owned temporary environment state.</summary>
     public PowerShellBenchmarkCleanupMode Cleanup { get; set; } = PowerShellBenchmarkCleanupMode.Always;
+
+    /// <summary>Suite-specific provenance written to benchmark metadata artifacts.</summary>
+    public Dictionary<string, string> Metadata { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Declared benchmark cases.</summary>
     public List<PowerShellBenchmarkCase> Cases { get; } = new();
@@ -195,6 +225,11 @@ public sealed class PowerShellBenchmarkComparison
 
     /// <summary>Fractional tolerance used to label practically equivalent results, such as <c>0.05</c> for five percent.</summary>
     public double TieTolerance { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the benchmark run must fail when the baseline is materially slower than a successful competitor.
+    /// </summary>
+    public bool RequireBaselineFastest { get; set; }
 }
 
 /// <summary>

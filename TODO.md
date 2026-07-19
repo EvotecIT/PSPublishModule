@@ -60,4 +60,5 @@
 ## DotNet Publish and Managed Modules
 
 - [ ] Review `Docs/PSPublishModule.DotNetPublish.ImplementationPlan.md` and promote concrete root release blockers into this file.
-- [ ] Review `Docs/PSPublishModule.ManagedModules.Roadmap.md` and promote concrete root release blockers into this file.
+- [ ] Complete managed-module Authenticode catalog, timestamp, and short-lived certificate-chain proof with signed fixtures.
+- [ ] Refresh managed-module release-candidate benchmark evidence and regenerate the public README tables.

@@ -6,12 +6,12 @@ schema: 2.0.0
 ---
 # Repair-ManagedModule
 ## SYNOPSIS
-Repairs installed PowerShell modules through the managed module-state engine.
+Repairs and verifies installed PowerShell modules through the managed module-state engine.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Repair-ManagedModule [[-Name] <string[]>] [-InstallMissing] [-RequiredResource <Object>] [-RequiredResourceFile <string>] [-Inventory <ModuleStateInventoryResult>] [-InventoryPath <string>] [-ModulePath <string[]>] [-IncludeLoaded] [-MaintenanceReceiptPath <string[]>] [-Latest] [-Version <string>] [-MinimumVersion <string>] [-VersionPolicy <string>] [-Cleanup <string>] [-Family <string[]>] [-Scope <string>] [-ProfileName <string>] [-Repository <string>] [-Transport <ModuleStateDeliveryTransport>] [-ModuleRoot <string>] [-Prerelease] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-AllowConflict] [-Plan] [-ShowSummary] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Repair-ManagedModule [[-Name] <string[]>] [-InstallMissing] [-RequiredResource <Object>] [-RequiredResourceFile <string>] [-Inventory <ModuleStateInventoryResult>] [-InventoryPath <string>] [-ModulePath <string[]>] [-UserProfilePath <string[]>] [-IncludeAllUserProfiles] [-IncludeLoaded] [-MaintenanceReceiptPath <string[]>] [-Latest] [-Version <string>] [-MinimumVersion <string>] [-VersionPolicy <string>] [-Cleanup <string>] [-Family <string[]>] [-Scope <string>] [-ProfileName <string>] [-Repository <string>] [-Transport <ModuleStateDeliveryTransport>] [-ModuleRoot <string>] [-Prerelease] [-Force] [-AllowClobber] [-AcceptLicense] [-SkipDependencyCheck] [-AllowConflict] [-Plan] [-ShowSummary] [-Credential <pscredential>] [-CredentialUserName <string>] [-CredentialSecret <string>] [-CredentialSecretFilePath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -19,6 +19,31 @@ This command is the managed operator surface for module estate maintenance. It
 inventories installed modules, plans stale-version, receipt-drift, source,
 scope, family, and cleanup actions, and can apply the plan through the
 managed delivery engine.
+
+PSResourceGet has no equivalent estate-repair command. Use the lifecycle cmdlets for one requested operation and
+this command when the desired outcome spans installed-state discovery, drift analysis, repair, and cleanup.
+
+Repair keeps module copies in separate physical roots, PowerShell editions, scopes, and local user profiles
+independent. Missing modules require an explicit ModuleRoot or exactly one eligible scanned root; ambiguous
+destinations are reported and blocked. A single explicit UserProfilePath supplies the current PowerShell
+edition's standard CurrentUser root even when that root does not exist yet; it never overrides an AllUsers
+request. Explicit ModuleRoot and profile destinations are merged into supplied Inventory or InventoryPath
+artifacts and remain part of convergence scans. Module roots declared by maintenance receipts are merged the
+same way, including roots that do not exist until repair delivery creates them. A successfully enumerated
+explicit root replaces stale artifact rows and diagnostics for that root, even when the live root is empty.
+
+Live apply performs delivery, inventories the same estate again, replans exact-path old-version cleanup from
+current state. Cleanup requires that refreshed plan to be error-free, preflights the complete exact-path removal
+set, validates loaded-module and dependency safety across relevant global/profile roots, and removes selected
+dependents before their selected dependencies. Current-runspace loaded modules are protected even when
+IncludeLoaded is not used for inventory output. A declined delivery or cleanup action is reported as skipped and
+cannot be reported as successful convergence. Repair performs a final live inventory and returns post-apply plan
+and convergence evidence after execution or a no-action apply. Operational failures remain visible in the typed
+result and are also written as nonterminating errors.
+
+This is local-machine estate management suitable for workstations and servers, including service-account and
+multi-profile roots. It does not connect to or orchestrate remote computers; invoke it in each target session or
+through the operator's existing remoting/configuration system.
 
 ## EXAMPLES
 
@@ -49,6 +74,24 @@ Repair-ManagedModule -RequiredResourceFile .\required-resources.psd1 -Latest -Re
 ### EXAMPLE 5
 ```powershell
 Repair-ManagedModule -MaintenanceReceiptPath .\module-maintenance.json -ProfileName CompanyModules -AcceptLicense
+```
+
+
+### EXAMPLE 6
+```powershell
+Repair-ManagedModule -ModulePath $ps5Root,$ps7Root -Latest -Cleanup OldVersions -Repository PSGallery -Plan -ShowSummary
+```
+
+
+### EXAMPLE 7
+```powershell
+Repair-ManagedModule -UserProfilePath C:\Users\Alice,C:\Users\Service.PowerShell -Name Company.* -Latest -Repository CompanyModules -Plan -ShowSummary
+```
+
+
+### EXAMPLE 8
+```powershell
+Repair-ManagedModule -IncludeAllUserProfiles -Latest -Cleanup OldVersions -Repository CompanyModules -Confirm:$false -ShowSummary
 ```
 
 
@@ -103,7 +146,7 @@ Accept wildcard characters: True
 ```
 
 ### -Cleanup
-Optional cleanup planning for managed modules.
+Optional old-version cleanup. Live apply replans after delivery, requires an error-free refreshed estate, batch-preflights exact paths, and removes selected dependents before dependencies.
 
 ```yaml
 Type: String
@@ -214,8 +257,24 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -IncludeAllUserProfiles
+Discover existing standard PowerShell module roots below the local profile container. Unix root sessions scan /home and retain /root; inaccessible optional profiles or roots are reported as warnings. Use UserProfilePath or ModulePath for redirected and custom layouts.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -IncludeLoaded
-Include modules loaded in the current runspace as inventory evidence.
+Include modules loaded in the current runspace as inventory and plan evidence. Cleanup protects current-runspace modules regardless of this reporting option.
 
 ```yaml
 Type: SwitchParameter
@@ -247,7 +306,7 @@ Accept wildcard characters: True
 ```
 
 ### -Inventory
-Existing inventory object. When omitted, local module paths are inventoried.
+Existing inventory object. Explicit ModuleRoot and UserProfilePath destinations are merged into it and included in post-apply convergence scans.
 
 ```yaml
 Type: ModuleStateInventoryResult
@@ -295,7 +354,7 @@ Accept wildcard characters: True
 ```
 
 ### -MaintenanceReceiptPath
-Optional module-state maintenance receipt artifacts used for drift checks.
+Optional module-state maintenance receipt artifacts used for drift checks. Receipt-declared module roots are inventoried and retained for post-apply convergence.
 
 ```yaml
 Type: String[]
@@ -327,7 +386,7 @@ Accept wildcard characters: True
 ```
 
 ### -ModulePath
-Explicit module roots to inventory. When omitted, PSModulePath is used.
+Explicit required module roots to inventory. Missing or inaccessible roots block apply. When omitted, optional roots inherited together from the current process's PSModulePath are treated as one dependency-visibility context.
 
 ```yaml
 Type: String[]
@@ -343,7 +402,7 @@ Accept wildcard characters: True
 ```
 
 ### -ModuleRoot
-Custom module root for managed delivery.
+Explicit physical module root used to narrow inventory selection and managed delivery. It also resolves missing-module destination ambiguity.
 
 ```yaml
 Type: String
@@ -375,7 +434,7 @@ Accept wildcard characters: True
 ```
 
 ### -Plan
-Return the repair plan without applying install/update actions.
+Return the full repair and cleanup plan without applying any actions.
 
 ```yaml
 Type: SwitchParameter
@@ -526,6 +585,22 @@ Type: ModuleStateDeliveryTransport
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: PrivateModule, ManagedModule, Auto
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -UserProfilePath
+Explicit user profile home directories whose platform-standard module roots are inventoried. Existing roots are required and block repair when inaccessible; a missing current-edition root remains a creatable destination. One explicit profile provides that CurrentUser destination for missing modules, but never overrides AllUsers scope.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
 
 Required: False
 Position: named

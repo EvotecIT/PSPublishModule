@@ -397,19 +397,29 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         }
     }
 
-    [Fact]
-    public void Run_UsesProjectBuildReleaseVersionWithoutChangingModulePublishVersion()
+    [Theory]
+    [InlineData(false, "2.1.6", "2.0.11", "2.1.6", null, false)]
+    [InlineData(true, "2.0.10", "2.0.11", "2.0.11", null, false)]
+    [InlineData(true, "2.0.10", "2.0.11-beta.2", "2.0.11", "beta.2", false)]
+    [InlineData(true, "2.0.10", "2.0.12", "2.0.12", null, true)]
+    public void Run_UsesProjectBuildReleaseVersionWithOptInModuleSynchronization(
+        bool synchronizeModuleVersion,
+        string moduleVersion,
+        string projectVersion,
+        string expectedModuleVersion,
+        string? expectedPreRelease,
+        bool useReleaseBuildOrder)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
         try
         {
             const string moduleName = "Mailozaurr";
-            WriteMinimalModule(root.FullName, moduleName, "2.1.6");
+            WriteMinimalModule(root.FullName, moduleName, moduleVersion);
             WriteProjectBuildConfig(root.FullName, Path.Combine("Build", "project.build.json"));
 
             var packageOutput = Path.Combine(root.FullName, "Artifacts", "NuGet");
-            var packagePath = Path.Combine(packageOutput, "Mailozaurr.2.0.11.nupkg");
+            var packagePath = Path.Combine(packageOutput, $"Mailozaurr.{projectVersion}.nupkg");
             var hostedOperations = new FakeHostedOperations(new List<string>());
             var runner = new ModulePipelineRunner(
                 new NullLogger(),
@@ -424,14 +434,14 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                     Directory.CreateDirectory(packageOutput);
                     File.WriteAllText(packagePath, "package");
 
-                    var release = new DotNetRepositoryReleaseResult { Success = true, ResolvedVersion = "2.0.11" };
-                    release.ResolvedVersionsByProject[moduleName] = "2.0.11";
+                    var release = new DotNetRepositoryReleaseResult { Success = true, ResolvedVersion = projectVersion };
+                    release.ResolvedVersionsByProject[moduleName] = projectVersion;
                     var project = new DotNetRepositoryProjectResult
                     {
                         ProjectName = moduleName,
                         PackageId = moduleName,
                         IsPackable = true,
-                        NewVersion = "2.0.11"
+                        NewVersion = projectVersion
                     };
                     project.Packages.Add(packagePath);
                     release.Projects.Add(project);
@@ -456,7 +466,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                 {
                     Name = moduleName,
                     SourcePath = root.FullName,
-                    Version = "2.1.6",
+                    Version = moduleVersion,
                     StagingPath = stagingPath
                 },
                 Install = new ModulePipelineInstallOptions { Enabled = false },
@@ -468,7 +478,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                         {
                             Name = moduleName,
                             ConfigPath = Path.Combine("Build", "project.build.json"),
-                            BuildBeforeModule = true,
+                            BuildBeforeModule = !useReleaseBuildOrder,
                             UseAsReleaseVersionSource = true
                         }
                     },
@@ -478,7 +488,11 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                         {
                             StageRoot = Path.Combine(root.FullName, "Artifacts", "Unified"),
                             VersionSource = ReleaseVersionSource.ProjectBuild,
-                            PrimaryProject = moduleName
+                            PrimaryProject = moduleName,
+                            SynchronizeModuleVersion = synchronizeModuleVersion,
+                            BuildOrder = useReleaseBuildOrder
+                                ? new[] { "ProjectBuild", "Module" }
+                                : null
                         }
                     },
                     new ConfigurationPublishSegment
@@ -496,13 +510,127 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
 
             var result = runner.Run(spec);
 
-            Assert.Equal("2.1.6", result.Plan.ResolvedVersion);
-            Assert.Equal("2.1.6", result.Plan.BuildSpec.Version);
-            Assert.Contains("ModuleVersion = '2.1.6'", File.ReadAllText(result.BuildResult.ManifestPath), StringComparison.Ordinal);
+            Assert.Equal(expectedModuleVersion, result.Plan.ResolvedVersion);
+            Assert.Equal(expectedPreRelease, result.Plan.PreRelease);
+            Assert.Equal(expectedModuleVersion, result.Plan.BuildSpec.Version);
+            Assert.Contains($"ModuleVersion = '{expectedModuleVersion}'", File.ReadAllText(result.BuildResult.ManifestPath), StringComparison.Ordinal);
+            if (string.IsNullOrWhiteSpace(expectedPreRelease))
+            {
+                Assert.False(ManifestEditor.TryGetPsDataStringArray(result.BuildResult.ManifestPath, "Prerelease", out _));
+            }
+            else
+            {
+                Assert.True(ManifestEditor.TryGetPsDataStringArray(result.BuildResult.ManifestPath, "Prerelease", out var manifestPreRelease));
+                Assert.Equal(new[] { expectedPreRelease }, manifestPreRelease);
+            }
             Assert.NotNull(result.ReleaseCoordinationResult);
-            Assert.Equal("2.1.6", result.ReleaseCoordinationResult!.ModuleVersion);
-            Assert.Equal("2.0.11", result.ReleaseCoordinationResult.ReleaseVersion);
-            Assert.Equal(new[] { "2.1.6" }, hostedOperations.PublishedModuleVersions);
+            var expectedPublishedModuleVersion = string.IsNullOrWhiteSpace(expectedPreRelease)
+                ? expectedModuleVersion
+                : $"{expectedModuleVersion}-{expectedPreRelease}";
+            Assert.Equal(expectedPublishedModuleVersion, result.ReleaseCoordinationResult!.ModuleVersion);
+            Assert.Equal(projectVersion, result.ReleaseCoordinationResult.ReleaseVersion);
+            Assert.Equal(new[] { expectedModuleVersion }, hostedOperations.PublishedModuleVersions);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_PassesModuleVersionFloorToSelectedProjectBuild()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "Mailozaurr";
+            const string coordinatedVersion = "2.1.7";
+            WriteMinimalModule(root.FullName, moduleName, "2.1.6");
+            WriteProjectBuildConfig(root.FullName, Path.Combine("Build", "project.build.json"));
+
+            string? capturedFloor = null;
+            string? capturedProject = null;
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    capturedFloor = request.ReleaseVersionFloor;
+                    capturedProject = request.ReleaseVersionFloorProject;
+                    var release = new DotNetRepositoryReleaseResult
+                    {
+                        Success = true,
+                        ResolvedVersion = coordinatedVersion
+                    };
+                    release.ResolvedVersionsByProject[moduleName] = coordinatedVersion;
+                    release.Projects.Add(new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = moduleName,
+                        PackageId = moduleName,
+                        IsPackable = true,
+                        NewVersion = coordinatedVersion
+                    });
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        Result = new ProjectBuildResult
+                        {
+                            Success = true,
+                            Release = release
+                        }
+                    };
+                });
+
+            var result = runner.Run(new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "2.1.X",
+                    StagingPath = stagingPath
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration { LocalVersion = true }
+                    },
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            Name = moduleName,
+                            ConfigPath = Path.Combine("Build", "project.build.json"),
+                            BuildBeforeModule = true,
+                            UseAsReleaseVersionSource = true
+                        }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            VersionSource = ReleaseVersionSource.ProjectBuild,
+                            PrimaryProject = moduleName,
+                            SynchronizeModuleVersion = true
+                        }
+                    }
+                }
+            });
+
+            Assert.Equal(coordinatedVersion, capturedFloor);
+            Assert.Equal(moduleName, capturedProject);
+            Assert.Equal(coordinatedVersion, result.Plan.ResolvedVersion);
         }
         finally
         {
@@ -1193,6 +1321,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
     {
         Directory.CreateDirectory(moduleRoot);
+        Directory.CreateDirectory(Path.Combine(moduleRoot, ".git"));
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psm1"), "function Get-Test { 'ok' }");
 
         var psd1 = string.Join(Environment.NewLine, new[]
@@ -1207,6 +1336,18 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         }) + Environment.NewLine;
 
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psd1"), psd1);
+    }
+
+    private static string GetCoordinatedReleaseCheckpointRoot(string projectRoot)
+        => Path.Combine(
+            ModulePipelineRunner.ResolveSynchronizedReleaseStateRoot(projectRoot),
+            "coordinated-release");
+
+    private static void AssertNoCoordinatedReleaseCheckpoint(string projectRoot)
+    {
+        var checkpointRoot = GetCoordinatedReleaseCheckpointRoot(projectRoot);
+        if (Directory.Exists(checkpointRoot))
+            Assert.Empty(Directory.GetFiles(checkpointRoot, "*.json"));
     }
 
     private static void WriteProjectBuildConfig(string rootPath, string relativePath)
@@ -1226,7 +1367,9 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             }));
     }
 
-    private sealed class FakeHostedOperations : IModulePipelineHostedOperations
+    private sealed class FakeHostedOperations :
+        IModulePipelineHostedOperations,
+        IModulePipelinePublishPreflightOperations
     {
         private readonly List<string> _events;
 
@@ -1236,6 +1379,12 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         }
 
         public List<string> PublishedModuleVersions { get; } = new();
+        public Func<PublishConfiguration, ModulePipelinePlan, ModulePublishVersionPreflightResult>? ModulePublishVersionPreflight { get; set; }
+        public Func<PublishConfiguration, ModulePipelinePlan, bool, ModulePublishVersionPreflightResult>? ModulePublishVersionPreflightWithExistingPolicy { get; set; }
+        public Action<PublishConfiguration, ModulePipelinePlan>? ModulePublishPreflightAction { get; set; }
+        public Action<Action?>? ModulePublishRemoteSideEffectAction { get; set; }
+        public Action<PublishConfiguration, ModulePipelinePlan>? ModulePublishAction { get; set; }
+        public Func<ModulePipelineActionConfiguration, ModulePipelineActionContext, ModulePipelineActionResult>? ModuleAction { get; set; }
 
         public IReadOnlyList<ModuleDependencyInstallResult> EnsureDependenciesInstalled(
             ModuleDependency[] dependencies,
@@ -1272,8 +1421,14 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             ModulePipelinePlan plan,
             ModuleBuildResult buildResult,
             IReadOnlyList<ArtefactBuildResult> artefactResults,
-            bool includeScriptFolders)
+            bool includeScriptFolders,
+            Action? remotePublishAttempted,
+            Action? remoteSideEffectObserved)
         {
+            ModulePublishPreflightAction?.Invoke(publish, plan);
+            ModulePublishRemoteSideEffectAction?.Invoke(remoteSideEffectObserved);
+            remotePublishAttempted?.Invoke();
+            ModulePublishAction?.Invoke(publish, plan);
             _events.Add($"module:{publish.Destination}");
             PublishedModuleVersions.Add(plan.ResolvedVersion);
             return new ModulePublishResult(
@@ -1289,12 +1444,21 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                 errorMessage: null);
         }
 
+        public ModulePublishVersionPreflightResult ValidateModulePublishVersion(
+            PublishConfiguration publish,
+            ModulePipelinePlan plan,
+            bool allowExistingExactVersion)
+            => ModulePublishVersionPreflightWithExistingPolicy?.Invoke(publish, plan, allowExistingExactVersion) ??
+               ModulePublishVersionPreflight?.Invoke(publish, plan) ??
+               ModulePublishVersionPreflightResult.Available;
+
         public ModulePipelineActionResult RunAction(
             ModulePipelineActionConfiguration action,
             ModulePipelineActionContext context,
             string contextPath,
             string projectRoot)
-            => throw new InvalidOperationException("Actions are not used in this test.");
+            => ModuleAction?.Invoke(action, context) ??
+               throw new InvalidOperationException("Actions are not used in this test.");
 
         public void ValidateModuleImports(
             string manifestPath,

@@ -9,6 +9,7 @@ internal static partial class Program
 {
     private const string GitHubArtifactsPruneUsage = "Usage: powerforge github artifacts prune [--repo <owner/repo>] [--api-base-url <Url>] [--token-env <ENV>] [--token <TOKEN>] [--name <pattern[,pattern...]>] [--exclude <pattern[,pattern...]>] [--keep <N>] [--max-age-days <N>] [--max-delete <N>] [--dry-run|--apply] [--fail-on-delete-error] [--output json]";
     private const string GitHubCachesPruneUsage = "Usage: powerforge github caches prune [--repo <owner/repo>] [--api-base-url <Url>] [--token-env <ENV>] [--token <TOKEN>] [--key <pattern[,pattern...]>] [--exclude <pattern[,pattern...]>] [--keep <N>] [--max-age-days <N>] [--max-delete <N>] [--dry-run|--apply] [--fail-on-delete-error] [--output json]";
+    private const string GitHubContentSyncUsage = "Usage: powerforge github content sync [--config <file>] [--login <LOGIN>] [--graphql-endpoint <URL>] [--token-env <ENV>] [--token <TOKEN>] [--restrict-output-root <path>] [--output json]";
     private const string GitHubHousekeepingUsage = "Usage: powerforge github housekeeping [--config <file>] [--repo <owner/repo>] [--api-base-url <Url>] [--token-env <ENV>] [--token <TOKEN>] [--runner-min-free-gb <N>] [--dry-run|--apply] [--output json]";
     private const string GitHubRunnerCleanupUsage = "Usage: powerforge github runner cleanup [--runner-temp <path>] [--work-root <path>] [--runner-root <path>] [--diag-root <path>] [--tool-cache <path>] [--min-free-gb <N>] [--aggressive-threshold-gb <N>] [--diag-retention-days <N>] [--actions-retention-days <N>] [--workspaces-retention-days|--workspace-retention-days <N>] [--tool-cache-retention-days <N>] [--dry-run|--apply] [--aggressive] [--allow-sudo] [--clean-workspaces] [--skip-diagnostics] [--skip-runner-temp] [--skip-actions-cache] [--skip-workspaces] [--skip-tool-cache] [--skip-dotnet-cache] [--skip-docker] [--no-docker-volumes] [--output json] (when conflicting cleanup/skip flags are provided, the later flag wins)";
 
@@ -19,6 +20,7 @@ internal static partial class Program
         {
             Console.WriteLine(GitHubArtifactsPruneUsage);
             Console.WriteLine(GitHubCachesPruneUsage);
+            Console.WriteLine(GitHubContentSyncUsage);
             Console.WriteLine(GitHubHousekeepingUsage);
             Console.WriteLine(GitHubRunnerCleanupUsage);
             return 2;
@@ -28,6 +30,7 @@ internal static partial class Program
         {
             "artifacts" => CommandGitHubArtifacts(argv.Skip(1).ToArray(), cli, logger),
             "caches" => CommandGitHubCaches(argv.Skip(1).ToArray(), cli, logger),
+            "content" => CommandGitHubContent(argv.Skip(1).ToArray(), cli, logger),
             "housekeeping" => CommandGitHubHousekeeping(argv.Skip(1).ToArray(), cli, logger),
             "runner" => CommandGitHubRunner(argv.Skip(1).ToArray(), cli, logger),
             _ => UnknownGitHubCommand()
@@ -317,6 +320,7 @@ internal static partial class Program
     {
         Console.WriteLine(GitHubArtifactsPruneUsage);
         Console.WriteLine(GitHubCachesPruneUsage);
+        Console.WriteLine(GitHubContentSyncUsage);
         Console.WriteLine(GitHubHousekeepingUsage);
         Console.WriteLine(GitHubRunnerCleanupUsage);
         return 2;

@@ -96,6 +96,7 @@ engine as tied. Omitting it preserves exact ranking.
 | `skip` | `Add-BenchmarkSkipRule` |
 | `validate` | `Add-BenchmarkValidation` |
 | `metric` | `Add-BenchmarkMetric` |
+| `metadata` | `Add-BenchmarkMetadata` |
 | `comparison` | `Add-BenchmarkComparison` |
 | `readme` | `Add-BenchmarkReadmeBlock` |
 | `artifacts` | `Set-BenchmarkArtifacts` |
@@ -132,6 +133,24 @@ benchmark 'sql-import' {
 
 Input helpers keep benchmark files focused on benchmark intent. Use `-Required`
 when a value has no safe default.
+
+### Benchmark Provenance
+
+Use `metadata` for suite-specific provenance that should travel with every
+artifact, such as the exact compared product versions, binary hashes, source
+endpoints, or comparison mode:
+
+```powershell
+benchmark 'installer-race' {
+    metadata ComparisonMode 'DefaultSources'
+    metadata ToolVersion '1.0.0-beta1'
+    metadata ToolSha256 '0123456789ABCDEF'
+}
+```
+
+Declared values are written to `metadata.json`, the returned run metadata, and
+`run-report.json` with a `benchmark.` prefix. Duplicate names and empty values
+are rejected so a benchmark cannot silently replace its own provenance.
 
 ## Running A Suite
 

@@ -167,6 +167,20 @@ internal sealed class PowerForgeReleaseRequest
     public PowerForgeReleaseToolOutputKind[] ToolOutputs { get; set; } = Array.Empty<PowerForgeReleaseToolOutputKind>();
 
     public PowerForgeReleaseToolOutputKind[] SkipToolOutputs { get; set; } = Array.Empty<PowerForgeReleaseToolOutputKind>();
+
+    public PowerForgeAppleReleaseAction AppleAction { get; set; } = PowerForgeAppleReleaseAction.Configured;
+
+    public bool AppleActionConfirmed { get; set; }
+
+    public bool? AppleResume { get; set; }
+
+    public bool? AppleWaitForProcessing { get; set; }
+
+    public int? AppleProcessingTimeoutSeconds { get; set; }
+
+    public int? ApplePollIntervalSeconds { get; set; }
+
+    public bool AppleSummaryOnly { get; set; }
 }
 
 /// <summary>
@@ -199,6 +213,8 @@ internal sealed class PowerForgeReleaseResult
     public PowerForgeAppleReleasePlan? AppleAppPlan { get; set; }
 
     public PowerForgeAppleAppReleaseResult[] AppleApps { get; set; } = Array.Empty<PowerForgeAppleAppReleaseResult>();
+
+    public PowerForgeAppleReleaseReceipt? AppleReceipt { get; set; }
 
     public WorkspaceValidationPlan? WorkspaceValidationPlan { get; set; }
 
@@ -302,6 +318,8 @@ internal sealed class PowerForgeAppleReleaseOptions
 
     public string? SigningStyle { get; set; }
 
+    public PowerForgeAppleReleaseAutomationOptions Automation { get; set; } = new();
+
     internal string? AppStoreConnectApiKeyPath { get; set; }
 
     internal string? AppStoreConnectApiKeyId { get; set; }
@@ -372,6 +390,12 @@ internal sealed class PowerForgeAppleReleasePlan
     public string ProjectRoot { get; set; } = string.Empty;
 
     public string Configuration { get; set; } = "Release";
+
+    public PowerForgeAppleReleaseAction Action { get; set; }
+
+    public PowerForgeAppleReleaseAutomationOptions Automation { get; set; } = new();
+
+    public string ReceiptPath { get; set; } = string.Empty;
 
     public bool Archive { get; set; }
 
@@ -489,6 +513,14 @@ internal sealed class PowerForgeAppleAppReleaseTargetPlan
     public string? BuildNumber { get; set; }
 
     public AppleBuildNumberPolicy BuildNumberPolicy { get; set; } = AppleBuildNumberPolicy.KeepExisting;
+
+    public bool GenerateProjectIfMissing { get; set; }
+
+    public bool RegenerateProject { get; set; }
+
+    public string XcodeGenExecutable { get; set; } = "xcodegen";
+
+    public int ProjectGenerationTimeoutSeconds { get; set; } = 120;
 }
 
 internal sealed class PowerForgeAppleAppReleaseResult
@@ -510,6 +542,14 @@ internal sealed class PowerForgeAppleAppReleaseResult
     public AppStoreConnectReviewSubmissionResult? ReviewSubmission { get; set; }
 
     public AppStoreConnectVersionReleaseResult? VersionRelease { get; set; }
+
+    public AppStoreConnectReleaseStateResult? RemoteState { get; set; }
+
+    public bool ResumedExistingBuild { get; set; }
+
+    public bool ProjectGenerated { get; set; }
+
+    public string[] SkippedSteps { get; set; } = Array.Empty<string>();
 
     public bool Success { get; set; }
 

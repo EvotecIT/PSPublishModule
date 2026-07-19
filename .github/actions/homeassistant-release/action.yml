@@ -1,0 +1,198 @@
+name: PowerForge Home Assistant Release Stage
+description: Run one isolated prepare, build, or publish stage for a Home Assistant or HACS release.
+
+inputs:
+  stage:
+    description: "Isolated release stage: prepare, build, or publish."
+    required: true
+  repository-root:
+    description: Checked-out receiver repository root for prepare or build.
+    required: false
+    default: ""
+  repository:
+    description: GitHub repository in owner/name form for prepare or publish.
+    required: false
+    default: ""
+  pr-number:
+    description: Merged pull request number for prepare or publish.
+    required: false
+    default: ""
+  merge-sha:
+    description: Expected pull request merge commit SHA.
+    required: false
+    default: ""
+  default-branch:
+    description: Branch that receives the version-only release commit.
+    required: false
+    default: main
+  increment:
+    description: Optional auto, none, patch, minor, or major override.
+    required: false
+    default: auto
+  release-version:
+    description: Prepared semantic version for build or publish.
+    required: false
+    default: ""
+  release-commit:
+    description: Exact prepared commit for build or publish.
+    required: false
+    default: ""
+  required-asset:
+    description: Required HACS asset name for publish, or empty for source-only integrations.
+    required: false
+    default: ""
+  asset-path:
+    description: Downloaded required HACS asset path for publish.
+    required: false
+    default: ""
+  github-token:
+    description: Write token used only by prepare or publish. Never pass it to build.
+    required: false
+    default: ""
+  powerforge-version:
+    description: Exact PowerForge.Build tool version used by the action.
+    required: false
+    default: "1.0.4"
+
+outputs:
+  action:
+    description: Release action taken by PowerForge.
+    value: ${{ steps.run.outputs.action }}
+  version:
+    description: Released or planned version.
+    value: ${{ steps.run.outputs.version }}
+  tag:
+    description: Released or planned tag.
+    value: ${{ steps.run.outputs.tag }}
+  release-commit:
+    description: Exact prepared release commit.
+    value: ${{ steps.run.outputs.release-commit }}
+  repository-kind:
+    description: Detected receiver repository kind.
+    value: ${{ steps.run.outputs.repository-kind }}
+  required-asset:
+    description: Required HACS asset name, or empty when none is required.
+    value: ${{ steps.run.outputs.required-asset }}
+  asset-path:
+    description: Built HACS asset path in the build job.
+    value: ${{ steps.run.outputs.asset-path }}
+  release-url:
+    description: Published or reused GitHub release URL.
+    value: ${{ steps.run.outputs.release-url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Install PowerForge CLI
+      shell: pwsh
+      run: |
+        $toolPath = Join-Path $env:RUNNER_TEMP 'powerforge-homeassistant-tools'
+        dotnet tool install --tool-path $toolPath PowerForge.Build --version $env:INPUT_POWERFORGE_VERSION
+      env:
+        DOTNET_NOLOGO: true
+        DOTNET_CLI_TELEMETRY_OPTOUT: 1
+        INPUT_POWERFORGE_VERSION: ${{ inputs.powerforge-version }}
+
+    - name: Run isolated PowerForge stage
+      id: run
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $tool = Join-Path $env:RUNNER_TEMP 'powerforge-homeassistant-tools/powerforge'
+        $stage = $env:INPUT_STAGE.ToLowerInvariant()
+        $arguments = @('homeassistant', 'release', $stage)
+
+        switch ($stage) {
+          'prepare' {
+            $arguments += @(
+              '--repository-root', $env:INPUT_REPOSITORY_ROOT,
+              '--repo', $env:INPUT_REPOSITORY,
+              '--pr-number', $env:INPUT_PR_NUMBER,
+              '--default-branch', $env:INPUT_DEFAULT_BRANCH,
+              '--increment', $env:INPUT_INCREMENT,
+              '--apply'
+            )
+            if (-not [string]::IsNullOrWhiteSpace($env:INPUT_MERGE_SHA)) {
+              $arguments += @('--merge-sha', $env:INPUT_MERGE_SHA)
+            }
+          }
+          'build' {
+            $arguments += @(
+              '--repository-root', $env:INPUT_REPOSITORY_ROOT,
+              '--release-version', $env:INPUT_RELEASE_VERSION,
+              '--release-commit', $env:INPUT_RELEASE_COMMIT
+            )
+          }
+          'publish' {
+            $arguments += @(
+              '--repo', $env:INPUT_REPOSITORY,
+              '--pr-number', $env:INPUT_PR_NUMBER,
+              '--merge-sha', $env:INPUT_MERGE_SHA,
+              '--release-version', $env:INPUT_RELEASE_VERSION,
+              '--release-commit', $env:INPUT_RELEASE_COMMIT
+            )
+            if (-not [string]::IsNullOrWhiteSpace($env:INPUT_REQUIRED_ASSET)) {
+              $arguments += @(
+                '--required-asset', $env:INPUT_REQUIRED_ASSET,
+                '--asset', $env:INPUT_ASSET_PATH
+              )
+            }
+          }
+          default { throw "Stage must be prepare, build, or publish." }
+        }
+
+        $arguments += @('--output', 'json')
+        $output = & $tool @arguments
+        if ($LASTEXITCODE -ne 0) {
+          $output | ForEach-Object { Write-Host $_ }
+          exit $LASTEXITCODE
+        }
+
+        $envelope = ($output -join [Environment]::NewLine) | ConvertFrom-Json
+        if (-not $envelope.success) {
+          throw "PowerForge $stage stage failed: $($envelope.error)"
+        }
+
+        $result = $envelope.result
+        $assetPath = if ($result.assetFiles.Count -gt 0) { $result.assetFiles[0] } else { '' }
+        "action=$($result.action)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "version=$($result.releaseVersion)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "tag=$($result.tagName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "release-commit=$($result.releaseCommitSha)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "repository-kind=$($result.repositoryKind)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "required-asset=$($result.requiredAssetName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "asset-path=$assetPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "release-url=$($result.releaseUrl)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+        @"
+        ## PowerForge Home Assistant release: $stage
+
+        - Action: $($result.action)
+        - Repository type: $($result.repositoryKind)
+        - Version: $($result.releaseVersion)
+        - Tag: $($result.tagName)
+        - Commit: $($result.releaseCommitSha)
+        - Required asset: $($result.requiredAssetName)
+        - Release: $($result.releaseUrl)
+        - Detail: $($result.message)
+        "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+      env:
+        DOTNET_NOLOGO: true
+        DOTNET_CLI_TELEMETRY_OPTOUT: 1
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_STAGE: ${{ inputs.stage }}
+        INPUT_REPOSITORY_ROOT: ${{ inputs.repository-root }}
+        INPUT_REPOSITORY: ${{ inputs.repository }}
+        INPUT_PR_NUMBER: ${{ inputs.pr-number }}
+        INPUT_MERGE_SHA: ${{ inputs.merge-sha }}
+        INPUT_DEFAULT_BRANCH: ${{ inputs.default-branch }}
+        INPUT_INCREMENT: ${{ inputs.increment }}
+        INPUT_RELEASE_VERSION: ${{ inputs.release-version }}
+        INPUT_RELEASE_COMMIT: ${{ inputs.release-commit }}
+        INPUT_REQUIRED_ASSET: ${{ inputs.required-asset }}
+        INPUT_ASSET_PATH: ${{ inputs.asset-path }}

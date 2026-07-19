@@ -244,19 +244,17 @@ public sealed partial class DotNetRepositoryReleaseService
                 var wildcard = spec.ExpectedVersionMapUseWildcards ? ", wildcards enabled" : string.Empty;
                 _logger.Info($"Expected version map: {expectedMap.Count} project(s) ({mode}{wildcard}).");
             }
+
+            PrepareReleaseVersionFloor(packable, expectedGlobal, expectedMap, spec);
+            var alignedVersions = ResolveAlignedPackageVersions(packable, expectedGlobal, expectedMap, spec);
             foreach (var project in packable)
             {
-                var expectedVersion = expectedGlobal;
-                var expectedSource = "global";
-                if (expectedMap.TryGetValue(project.ProjectName, out var overrideVersion) && !string.IsNullOrWhiteSpace(overrideVersion))
-                {
-                    expectedVersion = overrideVersion;
-                    expectedSource = "per-project";
-                }
-                else if (string.IsNullOrWhiteSpace(expectedGlobal))
-                {
-                    expectedSource = "csproj";
-                }
+                var expectedVersion = ResolveExpectedVersion(
+                    project.ProjectName,
+                    expectedGlobal,
+                    expectedMap,
+                    spec.ExpectedVersionMapUseWildcards,
+                    out var expectedSource);
 
                 if (!string.IsNullOrWhiteSpace(expectedVersion))
                     _logger.Info($"{project.ProjectName}: expected version {expectedVersion} ({expectedSource}).");
@@ -267,7 +265,21 @@ public sealed partial class DotNetRepositoryReleaseService
                 string? resolutionWarning;
                 try
                 {
-                    resolvedVersion = ResolveVersion(project, expectedVersion, spec, out resolutionWarning);
+                    if (alignedVersions.TryGetValue(project.ProjectName, out var alignedVersion))
+                    {
+                        resolvedVersion = alignedVersion;
+                        resolutionWarning = null;
+                    }
+                    else
+                    {
+                        resolvedVersion = ResolveVersion(project, expectedVersion, spec, out resolutionWarning);
+                    }
+
+                    resolvedVersion = ApplyReleaseVersionFloor(
+                        project,
+                        expectedVersion,
+                        resolvedVersion,
+                        spec);
                 }
                 catch (Exception ex)
                 {
@@ -291,12 +303,25 @@ public sealed partial class DotNetRepositoryReleaseService
                     _logger.Warn($"{project.ProjectName}: {resolutionWarning}");
 
                 result.ResolvedVersionsByProject[project.ProjectName] = resolvedVersion;
+                var shouldUpdateProjectVersion = spec.UpdateVersions &&
+                    (alignedVersions.ContainsKey(project.ProjectName) || !string.IsNullOrWhiteSpace(expectedVersion));
 
-                if (CsprojVersionEditor.TryGetVersion(project.CsprojPath, out var oldV))
+                if (CsprojVersionEditor.TryGetVersion(project.CsprojPath, out var oldV) &&
+                    PackageVersionUtility.TryNormalizeExact(oldV, out var normalizedOldVersion))
+                {
+                    project.OldVersion = normalizedOldVersion;
+                }
+                else if (!shouldUpdateProjectVersion)
+                {
+                    project.OldVersion = resolvedVersion;
+                }
+                else if (!string.IsNullOrWhiteSpace(oldV))
+                {
                     project.OldVersion = oldV;
+                }
 
                 project.NewVersion = resolvedVersion;
-                if (spec.WhatIf || !spec.UpdateVersions) continue;
+                if (spec.WhatIf || !shouldUpdateProjectVersion) continue;
 
                 var content = File.ReadAllText(project.CsprojPath);
                 var updated = CsprojVersionEditor.UpdateVersionText(content, resolvedVersion, out _);
@@ -593,6 +618,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
                     _logger.Info($"Publishing {Path.GetFileName(pkg)}...");
                     var packagePublishWatch = Stopwatch.StartNew();
+                    spec.RemotePublishAttempted?.Invoke();
                     var pushResult = PushPackage(
                         pkg,
                         spec.PublishApiKey!,

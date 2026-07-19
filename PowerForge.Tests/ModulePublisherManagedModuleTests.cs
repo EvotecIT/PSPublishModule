@@ -5,7 +5,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class ModulePublisherManagedModuleTests
+public sealed partial class ModulePublisherManagedModuleTests
 {
     [Fact]
     public void Publish_ManagedModule_UsesManagedEngineWithoutPowerShellRunner()
@@ -111,6 +111,48 @@ public sealed class ModulePublisherManagedModuleTests
             if (Directory.Exists(stagingRoot))
                 Directory.Delete(stagingRoot, recursive: true);
         }
+    }
+
+    [Fact]
+    public void Publish_ManagedModule_ResolvesRelativeRepositoryAgainstProjectRoot()
+    {
+        using var root = new TemporaryDirectory();
+        var stagingRoot = Path.Combine(root.Path, "staging");
+        Directory.CreateDirectory(stagingRoot);
+        var manifestPath = Path.Combine(stagingRoot, "PSPublishModule.psd1");
+        File.WriteAllText(
+            manifestPath,
+            "@{ ModuleVersion = '3.0.15'; RootModule = 'PSPublishModule.psm1'; Author = 'Evotec'; Description = 'Relative managed publish test.' }");
+        File.WriteAllText(Path.Combine(stagingRoot, "PSPublishModule.psm1"), string.Empty);
+
+        var publisher = new ModulePublisher(
+            new NullLogger(),
+            new StubPowerShellRunner(_ => throw new InvalidOperationException("PowerShell runner should not be used by managed publish.")));
+        var publish = new PublishConfiguration
+        {
+            Destination = PublishDestination.PowerShellGallery,
+            Enabled = true,
+            Tool = PublishTool.ManagedModule,
+            RepositoryName = "Local",
+            Repository = new PublishRepositoryConfiguration
+            {
+                Name = "Local",
+                Uri = "./feed"
+            }
+        };
+        var buildResult = new ModuleBuildResult(
+            stagingPath: stagingRoot,
+            manifestPath: manifestPath,
+            exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+        var result = publisher.Publish(
+            publish,
+            CreatePlan(root.Path),
+            buildResult,
+            Array.Empty<ArtefactBuildResult>());
+
+        Assert.True(result.Succeeded);
+        Assert.True(File.Exists(Path.Combine(root.Path, "feed", "PSPublishModule.3.0.15.nupkg")));
     }
 
     [Fact]
@@ -292,11 +334,12 @@ public sealed class ModulePublisherManagedModuleTests
         }
     }
 
-    private static ModulePipelinePlan CreatePlan()
+    private static ModulePipelinePlan CreatePlan(string? projectRoot = null)
     {
+        projectRoot ??= @"C:\repo\PSPublishModule";
         return new ModulePipelinePlan(
             moduleName: "PSPublishModule",
-            projectRoot: @"C:\repo\PSPublishModule",
+            projectRoot: projectRoot,
             expectedVersion: "3.0.13",
             resolvedVersion: "3.0.13",
             preRelease: null,
@@ -304,7 +347,7 @@ public sealed class ModulePublisherManagedModuleTests
             buildSpec: new ModuleBuildSpec
             {
                 Name = "PSPublishModule",
-                SourcePath = @"C:\repo\PSPublishModule",
+                SourcePath = projectRoot,
                 Version = "3.0.13"
             },
             resolvedCsprojPath: null,

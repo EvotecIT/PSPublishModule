@@ -11,7 +11,7 @@ Adds a benchmark comparison definition.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Add-BenchmarkComparison [[-Dimension] <string>] -Baseline <string> [-Metric <string[]>] [-TieTolerance <double>] [<CommonParameters>]
+Add-BenchmarkComparison [[-Dimension] <string>] -Baseline <string> [-Metric <string[]>] [-TieTolerance <double>] [-RequireBaselineFastest] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -64,6 +64,22 @@ Metric names.
 
 ```yaml
 Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RequireBaselineFastest
+Fail the benchmark when the baseline is materially slower than a successful competitor.
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

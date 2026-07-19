@@ -1,0 +1,135 @@
+name: PowerForge GitHub Content
+
+on:
+  workflow_call:
+    inputs:
+      config_path:
+        description: Path to the GitHub content config in the caller repository.
+        required: false
+        default: ".powerforge/github-content.json"
+        type: string
+      powerforge_ref:
+        description: Optional PSPublishModule ref override. By default the exact reusable-workflow commit is used.
+        required: false
+        default: ""
+        type: string
+      commit_changes:
+        description: Commit and push generated document changes to the checked-out branch.
+        required: false
+        default: true
+        type: boolean
+      commit_message:
+        description: Commit message used when generated content changes.
+        required: false
+        default: "docs: update GitHub sponsors"
+        type: string
+    secrets:
+      github_token:
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: powerforge-github-content-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  content:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Validate caller ref
+        if: inputs.commit_changes
+        shell: pwsh
+        env:
+          CALLER_REF: ${{ github.ref }}
+        run: |
+          if (-not $env:CALLER_REF.StartsWith('refs/heads/', [System.StringComparison]::Ordinal)) {
+            throw "commit_changes requires a branch ref, but the caller ref is '$env:CALLER_REF'. Set commit_changes to false for tag or pull request refs."
+          }
+
+      - name: Checkout caller repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # Resolve the branch when this serialized job actually starts. The event SHA
+          # may predate a generated-content commit pushed by an earlier queued run.
+          ref: ${{ github.ref }}
+
+      - name: Resolve shared workflow source
+        id: workflow_source
+        shell: pwsh
+        env:
+          POWERFORGE_REF: ${{ inputs.powerforge_ref }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          $repository = [string]$env:WORKFLOW_REPOSITORY
+          $ref = [string]$env:POWERFORGE_REF
+          $workflowSha = [string]$env:WORKFLOW_SHA
+
+          if ([string]::IsNullOrWhiteSpace($repository)) {
+            $repository = 'EvotecIT/PSPublishModule'
+          }
+          if ([string]::IsNullOrWhiteSpace($ref)) {
+            $ref = $workflowSha
+          }
+          if ([string]::IsNullOrWhiteSpace($ref)) {
+            throw 'Unable to resolve the exact shared workflow commit from job.workflow_sha. Pass powerforge_ref explicitly.'
+          }
+          if ($ref.IndexOfAny([char[]]"`r`n") -ge 0) {
+            throw 'powerforge_ref must be a single-line Git ref or commit SHA.'
+          }
+
+          Write-Host "Using GitHub content engine $repository@$ref"
+          "repository=$repository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "ref=$ref" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Checkout PowerForge
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: ${{ steps.workflow_source.outputs.repository }}
+          ref: ${{ steps.workflow_source.outputs.ref }}
+          path: .powerforge-runtime/pspublishmodule
+
+      - name: Generate GitHub repository content
+        id: content
+        uses: ./.powerforge-runtime/pspublishmodule/.github/actions/github-content
+        with:
+          config-path: ${{ inputs.config_path }}
+          github-token: ${{ secrets.github_token != '' && secrets.github_token || github.token }}
+
+      - name: Commit generated content
+        if: inputs.commit_changes && steps.content.outputs.changed == 'true'
+        shell: pwsh
+        env:
+          CHANGED_PATHS_JSON: ${{ steps.content.outputs.changed-paths-json }}
+          COMMIT_MESSAGE: ${{ inputs.commit_message }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $paths = @($env:CHANGED_PATHS_JSON | ConvertFrom-Json)
+          if ($paths.Count -eq 0) {
+            throw 'PowerForge reported changes without any changed document paths.'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:COMMIT_MESSAGE)) {
+            throw 'A non-empty commit message is required when commit_changes is enabled.'
+          }
+          foreach ($path in $paths) {
+            git --literal-pathspecs add -- $path
+          }
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host 'Generated content is already current.'
+            exit 0
+          }
+          if ($LASTEXITCODE -ne 1) {
+            exit $LASTEXITCODE
+          }
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m $env:COMMIT_MESSAGE
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          git push

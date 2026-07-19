@@ -1,0 +1,75 @@
+name: PowerForge Server Backup
+description: Capture, encrypt, validate, retain, and publish server recovery state from a caller-owned protected environment.
+
+inputs:
+  manifest-path:
+    description: Repository-relative PowerForge server recovery manifest.
+    required: true
+  capture-user:
+    description: Dedicated least-privileged SSH account used for capture.
+    required: true
+  server-host:
+    description: Optional capture-host override from the caller job's protected environment. Falls back to target.host in the manifest.
+    required: false
+    default: ""
+  server-ssh-private-key:
+    description: Capture-host private key from the caller job's protected environment.
+    required: true
+  server-ssh-known-hosts:
+    description: Pinned capture-host entries from the caller job's protected environment.
+    required: true
+  backup-repository-ssh-private-key:
+    description: Backup-repository private key from the caller job's protected environment.
+    required: true
+  backup-repository-ssh-known-hosts:
+    description: Pinned backup-repository host entries from the caller job's protected environment.
+    required: true
+
+outputs:
+  backup-repository:
+    description: Repository that received the encrypted capture.
+    value: ${{ steps.backup.outputs.backup-repository }}
+  backup-path:
+    description: Repository-relative root that received the encrypted capture.
+    value: ${{ steps.backup.outputs.backup-path }}
+  capture-name:
+    description: Timestamped capture directory name, or empty when a concurrent retention update superseded it.
+    value: ${{ steps.backup.outputs.capture-name }}
+  published-commit:
+    description: Exact backup repository commit that was published.
+    value: ${{ steps.backup.outputs.published-commit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Reject pull request backups
+      if: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'merge_group' }}
+      shell: pwsh
+      run: throw 'PowerForge protected backups cannot run from pull request events.'
+
+    - name: Checkout caller repository
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        token: ${{ github.token }}
+        ref: ${{ github.sha }}
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+      with:
+        global-json-file: ${{ github.action_path }}/../../../global.json
+
+    - name: Capture and publish encrypted server recovery state
+      id: backup
+      shell: pwsh
+      env:
+        POWERFORGE_BACKUP_REPOSITORY_SSH_KNOWN_HOSTS: ${{ inputs.backup-repository-ssh-known-hosts }}
+        POWERFORGE_BACKUP_REPOSITORY_SSH_PRIVATE_KEY: ${{ inputs.backup-repository-ssh-private-key }}
+        POWERFORGE_CAPTURE_USER: ${{ inputs.capture-user }}
+        POWERFORGE_ENGINE_REF: ${{ github.action_ref }}
+        POWERFORGE_ENGINE_REPOSITORY: ${{ github.action_repository }}
+        POWERFORGE_MANIFEST_PATH: ${{ inputs.manifest-path }}
+        POWERFORGE_SERVER_HOST: ${{ inputs.server-host }}
+        POWERFORGE_SERVER_SSH_KNOWN_HOSTS: ${{ inputs.server-ssh-known-hosts }}
+        POWERFORGE_SERVER_SSH_PRIVATE_KEY: ${{ inputs.server-ssh-private-key }}
+        POWERFORGE_SOURCE_SHA: ${{ github.sha }}
+      run: '& "$env:GITHUB_ACTION_PATH/Invoke-PowerForgeServerBackup.ps1"'

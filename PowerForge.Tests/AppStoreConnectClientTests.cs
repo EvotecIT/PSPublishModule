@@ -566,6 +566,79 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task ReleasePreparationService_EnforcesScreenshotQualityBeforeRemoteMutation()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var folder = Directory.CreateDirectory(Path.Combine(root.FullName, "iphone-6-5"));
+            var png = Convert.FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII=");
+            await File.WriteAllBytesAsync(Path.Combine(folder.FullName, "01-home.png"), png);
+            await File.WriteAllBytesAsync(Path.Combine(folder.FullName, "02-room.png"), png);
+            var handler = new SequenceHandler(
+                new SequenceResponse(HttpStatusCode.OK,
+                    """
+                    {
+                      "data": [
+                        {
+                          "id": "version-1",
+                          "type": "appStoreVersions",
+                          "attributes": { "versionString": "1.0.5", "platform": "IOS" }
+                        }
+                      ]
+                    }
+                    """));
+            using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+            using var client = new AppStoreConnectClient(CreateCredential(), http);
+            var service = new AppStoreConnectReleasePreparationService(client);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PrepareAsync(
+                new AppStoreConnectReleasePreparationRequest
+                {
+                    AppId = "app-1",
+                    VersionString = "1.0.5",
+                    BuildNumber = "9",
+                    Platform = ApplePlatform.iOS,
+                    CreateVersion = false,
+                    SelectBuild = false,
+                    ScreenshotSpec = new AppStoreConnectScreenshotSyncSpec
+                    {
+                        AppId = "app-1",
+                        VersionString = "1.0.5",
+                        Platform = ApplePlatform.iOS,
+                        Locale = "en-US",
+                        Quality = new AppStoreConnectScreenshotQualitySpec
+                        {
+                            Enabled = true,
+                            RejectDuplicates = true,
+                            RequireConsistentDimensions = true,
+                            MinimumFileBytes = 0,
+                            MinimumKilobytesPerMegapixel = 0
+                        },
+                        ScreenshotSets = new[]
+                        {
+                            new AppStoreConnectScreenshotSetSyncSpec
+                            {
+                                ScreenshotDisplayType = "APP_IPHONE_65",
+                                Path = folder.FullName
+                            }
+                        }
+                    },
+                    BaseDirectory = root.FullName
+                }));
+
+            Assert.Contains("duplicate", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Single(handler.Methods);
+            Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task GetSubscriptionsForAppAsync_ListsGroupsAndSubscriptions()
     {
         var handler = new SequenceHandler(
@@ -850,7 +923,7 @@ public sealed partial class AppStoreConnectClientTests
             using var client = new AppStoreConnectClient(CreateCredential(), http);
             var service = new AppStoreConnectScreenshotSyncService(client);
 
-            await Assert.ThrowsAsync<DirectoryNotFoundException>(() => service.SyncAsync(new AppStoreConnectScreenshotSyncRequest
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.SyncAsync(new AppStoreConnectScreenshotSyncRequest
             {
                 BaseDirectory = root.FullName,
                 Spec = new AppStoreConnectScreenshotSyncSpec
@@ -875,6 +948,63 @@ public sealed partial class AppStoreConnectClientTests
                 }
             }));
 
+            Assert.Contains("Screenshot preflight failed", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("folder was not found", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(handler.RequestUris);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task ScreenshotSyncService_RejectsQualityFailuresBeforeRemoteRequests()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var folder = Directory.CreateDirectory(Path.Combine(root.FullName, "iphone-6-5"));
+            var png = Convert.FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII=");
+            await File.WriteAllBytesAsync(Path.Combine(folder.FullName, "01-home.png"), png);
+            await File.WriteAllBytesAsync(Path.Combine(folder.FullName, "02-room.png"), png);
+
+            var handler = new SequenceHandler();
+            using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+            using var client = new AppStoreConnectClient(CreateCredential(), http);
+            var service = new AppStoreConnectScreenshotSyncService(client);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.SyncAsync(
+                new AppStoreConnectScreenshotSyncRequest
+                {
+                    BaseDirectory = root.FullName,
+                    ReplaceExisting = true,
+                    Spec = new AppStoreConnectScreenshotSyncSpec
+                    {
+                        AppId = "app-1",
+                        VersionString = "1.0.0",
+                        Platform = ApplePlatform.iOS,
+                        Locale = "en-US",
+                        Quality = new AppStoreConnectScreenshotQualitySpec
+                        {
+                            Enabled = true,
+                            MinimumFileBytes = 0,
+                            MinimumKilobytesPerMegapixel = 0,
+                            RejectDuplicates = true
+                        },
+                        ScreenshotSets = new[]
+                        {
+                            new AppStoreConnectScreenshotSetSyncSpec
+                            {
+                                ScreenshotDisplayType = "APP_IPHONE_65",
+                                Path = "iphone-6-5"
+                            }
+                        }
+                    }
+                }));
+
+            Assert.Contains("duplicates", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Empty(handler.RequestUris);
         }
         finally

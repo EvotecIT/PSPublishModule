@@ -1,28 +1,187 @@
 # PowerForge.Web Linux Deployment Pattern
 
-Last updated: 2026-05-02
+Last updated: 2026-07-16
 
 This pattern is the reusable baseline for static PowerForge.Web sites hosted on Linux with Apache or another file-based web server.
 
 ## Goals
 
 - Build deploy artifacts from a clean checkout.
+- Build on the runner required by each website instead of assuming the web host can build it.
 - Publish each deploy into a timestamped release directory.
 - Promote the release by moving a `current` symlink.
+- Record the exact source commit, PowerForge commit, workflow run, and artifact checksum.
+- Roll back automatically when origin or externally verified public smoke checks fail.
 - Keep generated web-server redirect artifacts in sync.
-- Run cheap hourly change checks without rebuilding when nothing changed.
 - Keep provider-specific cache purges in environment variables, not in repo files.
 
-## Repository Flow
+## CI Artifact Flow (Recommended)
 
-Use one website checkout and, when developing against a local engine checkout, one engine checkout:
+Use the pinned `powerforge-website-deploy.yml` reusable workflow for the normal static-site lane. Its Linux deployment and optional cache-policy jobs name the protected environment themselves. GitHub therefore resolves that environment's deployment variables and secrets inside the called jobs; the caller does not pass environment-only credentials through `workflow_call`.
+
+The protected deployment action rejects `pull_request`, `pull_request_target`, and `merge_group` events. Invoke this workflow only from trusted `push` or `workflow_dispatch` events. The build still runs on `runner_labels_json`, so Windows-only and Linux-compatible sites use the same publication contract without moving their toolchains onto the web server.
+
+```yaml
+jobs:
+  deploy:
+    permissions:
+      actions: write
+      contents: read
+      id-token: write
+      packages: read
+      pages: write
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-website-deploy.yml@POWERFORGE_COMMIT
+    with:
+      website_root: Website
+      pipeline_config: Website/pipeline.json
+      engine_mode: source
+      powerforge_repository: EvotecIT/PSPublishModule
+      powerforge_ref: POWERFORGE_COMMIT
+      deployment_target: linux
+      deployment_site: example.com
+      deployment_environment: production
+      deployment_url: https://example.com
+      deployment_smoke_paths: "/ /sitemap.xml"
+    secrets:
+      indexnow_key: ${{ secrets.INDEXNOW_KEY }}
+```
+
+The caller grants `pages: write` and `id-token: write` because GitHub validates the permission ceiling for every job in the reusable workflow before evaluating the Linux/Pages conditions. Those permissions are consumed only by the conditional GitHub Pages job; the Linux deployment job explicitly limits its token to `actions: read` and `contents: read`.
+
+The gating `seo-doctor` step must execute in `ci` mode, use real JSON booleans, enable content-leak and canonical checks, and declare its localization mode explicitly. Set both `requireHreflang` and `requireHreflangXDefault` to `true` for localized sites, or set both to `false` for an intentionally single-language site. Localized sites must not disable `checkHreflang`. The documented kebab-case aliases are equivalent. Mixed or omitted values fail before build and deployment.
+
+The `production` environment owns variables `POWERFORGE_WEBSITE_DEPLOY_HOST`, `POWERFORGE_WEBSITE_DEPLOY_PORT`, and `POWERFORGE_WEBSITE_DEPLOY_USER`, plus secrets `DEPLOYMENT_SSH_PRIVATE_KEY` and `DEPLOYMENT_SSH_KNOWN_HOSTS`. Add `deployment_cloudflare_zone` only after the per-site token is stored as the environment secret `DEPLOYMENT_CLOUDFLARE_API_TOKEN` and the non-secret exact zone id is stored as the environment variable `CLOUDFLARE_ZONE_ID`. The called workflow then applies the managed cache policy before deployment and cache purge. Omitting the zone performs no Cloudflare API operation.
+
+This lane:
+
+1. runs the normal PowerForge CI pipeline and quality guardrails
+2. archives the validated `_site` output on its native build runner
+3. records exact source and engine SHAs plus the artifact SHA-256
+4. transfers the artifact through a pinned SSH host key
+5. invokes the root-owned server promoter for an allowlisted site id
+6. verifies the promoted release directly at the origin and from the GitHub runner
+7. finalizes the release, or restores the previous symlink and purges the rejected release from cache when Cloudflare is enabled
+
+Use the lower-level `powerforge-website-run.yml` plus `powerforge-linux-site-deploy` composite action only when a product needs additional caller-owned jobs between build and promotion. Keep those jobs declarative and do not copy the shared PowerShell implementation into the consumer workflow.
+
+Install `Deployment/Linux/powerforge-site-deploy.sh` as
+`/usr/local/sbin/powerforge-site-deploy` and
+`Deployment/Linux/powerforge-site-reconcile.sh` as
+`/usr/local/sbin/powerforge-site-reconcile`. Install and enable the matching
+`powerforge-site-reconcile.service` and `powerforge-site-reconcile.timer` units from
+`Deployment/Linux/systemd`. Install one root-owned configuration from
+`Deployment/Linux/powerforge-site.env.example` under
+`/etc/powerforge/sites/<site>.env`. The workflow cannot provide release roots,
+Cloudflare credentials, origin addresses, or smoke policy; those remain trusted host
+configuration. The protected action also requires an explicit `deployment-public-url`;
+the site id is an allowlist key and is not assumed to be a public hostname.
+
+```bash
+sudo install -m 0755 Deployment/Linux/powerforge-site-reconcile.sh /usr/local/sbin/powerforge-site-reconcile
+sudo install -m 0644 Deployment/Linux/systemd/powerforge-site-reconcile.service /etc/systemd/system/powerforge-site-reconcile.service
+sudo install -m 0644 Deployment/Linux/systemd/powerforge-site-reconcile.timer /etc/systemd/system/powerforge-site-reconcile.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now powerforge-site-reconcile.timer
+```
+
+Give each repository a separate deployment key and a protected GitHub environment.
+Restrict its server account/sudo rule to the expected site argument. Do not share one
+unrestricted deployment key across every repository.
+
+The protected action uses three promoter commands: deferred promotion, finalization,
+and rollback. Allow only those exact command shapes for the repository's deployment
+account. For example:
+
+```sudoers
+powerforge-example ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-site-deploy ^--site example\.com --archive /tmp/powerforge-[0-9]+-[0-9]+-example\.com/artifact\.tar --metadata /tmp/powerforge-[0-9]+-[0-9]+-example\.com/deployment\.json --defer-public-verification$
+powerforge-example ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-site-deploy ^--site example\.com --finalize --release-id [A-Za-z0-9][A-Za-z0-9._-]*$
+powerforge-example ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-site-deploy ^--site example\.com --rollback --release-id [A-Za-z0-9][A-Za-z0-9._-]*$
+```
+
+Validate the installed file with `visudo -cf`. Sites upgrading from the earlier
+one-shot action must install these rules before repinning the action; retaining only
+the old promotion rule will reject the deferred verification protocol.
+
+The promoter rejects path traversal, links, special files, checksum mismatches,
+unconfigured site ids, mutable site configuration, and workflow staging files owned
+by another account. It atomically promotes a timestamped release, purges Cloudflare
+without disabling proxying, and verifies exact provenance directly at the origin. The
+composite action then verifies the same provenance and configured smoke paths through
+the public URL from the GitHub runner. This separation avoids treating an origin-host
+Cloudflare challenge as a broken release. A public verification failure restores the
+previous symlink remotely, removes the rejected release, and purges Cloudflare again.
+Release pruning happens only after the runner finalizes a verified release. Deferred
+promotions create root-only pending state with a ten-minute deadline. The reconciler
+checks that state every minute and restores an abandoned release after runner
+cancellation, timeout, or loss. Deferred promotion refuses to start when that timer is
+not active. The trusted pending state stores the exact resolved previous target, so
+rollback also preserves an existing `current` symlink outside the managed release root;
+that path is never accepted from the runner. Finalize and rollback acknowledge the
+same completed release idempotently, and the runner retries once when an SSH response
+is lost after the host has already reached that terminal state.
+
+On the first PowerForge deployment, an existing non-symlink `current` directory is
+moved into the release history and becomes the rollback target. This lets the shared
+promoter take over a legacy in-place site without a consumer-specific migration
+script or an unprotected delete-and-replace step.
+
+When `deployment-cloudflare-zone` is set, the action uses `cloudflare-zone-id`
+directly and transfers the deploy-only `deployment-cloudflare-api-token` and zone
+id only inside temporary deployment staging. A least-privilege cache-purge token
+therefore does not need Zone Read. If
+the zone-id secret is absent, the action may discover exactly one active zone by
+name; that fallback also requires Zone Read and uses Cloudflare's valid page size.
+The promoter copies the credentials into root-only staging and purges before exact-SHA
+verification. During deferred verification it retains the scoped token only in the
+root-only pending directory so an abandoned release can be rolled back and purged.
+Finalization, explicit rollback, or deadline reconciliation erases that pending state.
+The normal website-pipeline Cloudflare token remains isolated to the build and is
+never reused for Linux promotion.
+This keeps Cloudflare proxying and cache analytics enabled without storing a broad
+CI token permanently on the web host. Sites may instead use a scoped, root-owned
+host token file when that is their preferred recovery model.
+
+## Cloudflare Origin Trust
+
+For Apache hosts that receive traffic through Cloudflare, install the generic
+`Deployment/Linux/powerforge-cloudflare-origin-sync.sh` helper and its systemd
+service/timer. It downloads Cloudflare's published IPv4 and IPv6 ranges over HTTPS,
+validates every CIDR, refreshes the Cloudflare-specific UFW rules, and generates an Apache
+`mod_remoteip` configuration that trusts `CF-Connecting-IP` only from those edge
+networks. This preserves Cloudflare proxy/cache analytics while restoring the real
+browser address to Apache logs and upstream services.
+
+```bash
+sudo install -m 0755 Deployment/Linux/powerforge-cloudflare-origin-sync.sh /usr/local/sbin/powerforge-cloudflare-origin-sync
+sudo install -m 0644 Deployment/Linux/systemd/powerforge-cloudflare-origin-sync.service /etc/systemd/system/powerforge-cloudflare-origin-sync.service
+sudo install -m 0644 Deployment/Linux/systemd/powerforge-cloudflare-origin-sync.timer /etc/systemd/system/powerforge-cloudflare-origin-sync.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now powerforge-cloudflare-origin-sync.timer
+sudo systemctl start powerforge-cloudflare-origin-sync.service
+```
+
+The service optionally reads `/etc/powerforge/cloudflare-origin.env`; use
+`Deployment/Linux/powerforge-cloudflare-origin.env.example` as the starting point.
+Set `POWERFORGE_CLOUDFLARE_MANAGE_UFW=0` only when another firewall owner manages
+the Cloudflare origin rules. The synchronizer validates Apache before reload and
+restores the previous generated configuration if validation or reload fails.
+
+## Host Build Flow (Special Case)
+
+Some sites intentionally regenerate from changing external inputs even when Git has
+not changed. Those sites may retain a host-side daily rebuild as a safety lane. Use
+one website checkout and one engine checkout:
 
 ```text
 /srv/example/Website
 /srv/example/PSPublishModule
 ```
 
-The deploy script should fetch both repositories, reset them to configured branches, and compare the current commits with the last successful deploy metadata. If both commits are unchanged and `DEPLOY_ONLY_ON_CHANGE=1`, exit successfully without running the pipeline.
+The deploy script should fetch both repositories, reset them to configured branches,
+and compare current commits with the last successful metadata. It must install every
+runtime dependency required by the strict pipeline, including the configured
+Playwright browser. Prefer the CI artifact flow for normal commits so host tool drift
+cannot silently stop publication.
 
 Recommended environment variables:
 
@@ -36,12 +195,12 @@ DEPLOY_ONLY_ON_CHANGE=0
 DEPLOY_STATE_ROOT=/srv/example/deploy-state/website
 ```
 
-## Timers
+## Optional Timers
 
 Use two timers:
 
 - Daily full rebuild: catches generated content, external data, feeds, and slow-moving maintenance work.
-- Hourly change rebuild: fetches repositories and deploys only when `Website` or the engine commit changed.
+- Hourly change rebuild: only for sites that intentionally use the host-build flow.
 
 Example change-check service:
 

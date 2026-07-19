@@ -1,0 +1,114 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PowerForge GitHub Repository Content",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sponsors"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "graphQlEndpoint": { "type": ["string", "null"], "format": "uri", "pattern": "^https://" },
+    "token": { "type": ["string", "null"] },
+    "tokenEnvName": { "type": "string", "default": "GITHUB_TOKEN" },
+    "sponsors": { "$ref": "#/definitions/sponsors" }
+  },
+  "definitions": {
+    "sponsors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "outputs"],
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "sponsorableLogin": { "type": "string", "minLength": 1 },
+        "includeFormer": { "type": "boolean", "default": true },
+        "failOnEmpty": { "type": "boolean", "default": true },
+        "requireFundingTierData": { "type": "boolean", "default": false },
+        "pageSize": { "type": "integer", "minimum": 1, "maximum": 100, "default": 100 },
+        "tierRecognition": { "$ref": "#/definitions/tierRecognition" },
+        "overrides": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/override" }
+        },
+        "manualEntries": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/manualEntry" }
+        },
+        "outputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/output" }
+        }
+      }
+    },
+    "tierRecognition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "useDefaultTiers": { "type": "boolean", "default": true },
+        "unmappedTierKey": { "type": "string", "default": "Sponsors" },
+        "tiers": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/tier" }
+        }
+      }
+    },
+    "tier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "heading"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "heading": { "type": "string", "minLength": 1 },
+        "minimumMonthlyDollars": { "type": ["integer", "null"], "minimum": 0 },
+        "order": { "type": "integer", "default": 0 },
+        "avatarSize": { "type": "integer", "minimum": 24, "maximum": 256, "default": 64 }
+      }
+    },
+    "override": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["login"],
+      "properties": {
+        "login": { "type": "string", "minLength": 1 },
+        "recognitionTierKey": { "type": ["string", "null"] },
+        "displayName": { "type": ["string", "null"] },
+        "profileUrl": { "type": ["string", "null"] },
+        "avatarUrl": { "type": ["string", "null"] },
+        "exclude": { "type": "boolean", "default": false }
+      }
+    },
+    "manualEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "displayName"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "displayName": { "type": "string", "minLength": 1 },
+        "login": { "type": ["string", "null"] },
+        "profileUrl": { "type": ["string", "null"] },
+        "avatarUrl": { "type": ["string", "null"] },
+        "recognitionTierKey": { "type": ["string", "null"] },
+        "former": { "type": "boolean", "default": false }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "blockId"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "blockId": { "type": "string", "minLength": 1, "pattern": "^[^:\\r\\n]+$" },
+        "layout": { "type": "string", "enum": ["Full", "Compact"], "default": "Full" },
+        "title": { "type": "string", "default": "Sponsors" },
+        "introduction": { "type": ["string", "null"] },
+        "closing": { "type": ["string", "null"] },
+        "includeFormer": { "type": "boolean", "default": true },
+        "createIfMissing": { "type": "boolean", "default": false },
+        "missingBlockBehavior": { "type": "string", "enum": ["Fail", "Append"], "default": "Fail" },
+        "avatarSize": { "type": "integer", "minimum": 24, "maximum": 256, "default": 64 },
+        "maxEntries": { "type": "integer", "minimum": 0, "default": 0 },
+        "moreLink": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

@@ -62,6 +62,9 @@ if (-not [string]::IsNullOrWhiteSpace($request.RunMode)) {
 if (-not [string]::IsNullOrWhiteSpace($request.RunOrder)) {
     $suite.RunOrder = [PowerForge.PowerShellBenchmarkRunOrder] $request.RunOrder
 }
+if (-not [string]::IsNullOrWhiteSpace($request.MemoryCleanup)) {
+    $suite.MemoryCleanup = [PowerForge.PowerShellBenchmarkMemoryCleanupMode] $request.MemoryCleanup
+}
 if (-not [string]::IsNullOrWhiteSpace($request.OutlierMode)) {
     $suite.OutlierMode = [PowerForge.PowerShellBenchmarkOutlierMode] $request.OutlierMode
 }
@@ -87,6 +90,11 @@ for ($index = 0; $index -lt $suite.ReadmeBlocks.Count -and $index -lt $readmePat
 }
 if ($request.PSObject.Properties.Name -contains 'UpdateReadmeBlocks' -and -not $request.UpdateReadmeBlocks) {
     $suite.ReadmeBlocks.Clear()
+}
+if ($request.PSObject.Properties.Name -contains 'ValidateComparisonGates' -and -not $request.ValidateComparisonGates) {
+    foreach ($comparison in @($suite.Comparisons)) {
+        $comparison.RequireBaselineFastest = $false
+    }
 }
 try {
     $result = [PowerForge.PowerShellBenchmarkRunner]::new().Run($suite)

@@ -16,6 +16,7 @@ public sealed class ProjectBuildSupportServiceTests
 {
   // comment
   "PublishGitHub": true,
+  "AlignPackageVersions": true,
   "GitHubRepositoryName": "PSPublishModule",
 }
 """);
@@ -24,6 +25,7 @@ public sealed class ProjectBuildSupportServiceTests
             var config = service.LoadConfig(configPath);
 
             Assert.True(config.PublishGitHub);
+            Assert.True(config.AlignPackageVersions);
             Assert.Equal("PSPublishModule", config.GitHubRepositoryName);
         }
         finally

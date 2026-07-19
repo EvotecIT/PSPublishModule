@@ -36,6 +36,27 @@ public sealed class ManagedModuleUninstallRequest
     public string? ModuleRoot { get; set; }
 
     /// <summary>
+    /// Exact installed module directory to remove when the request originates from installed-resource inventory.
+    /// </summary>
+    public string? InstalledLocation { get; set; }
+
+    /// <summary>
+    /// Module roots whose installed modules participate in dependency validation. The target
+    /// root is always included even when it is not listed explicitly.
+    /// </summary>
+    public IReadOnlyList<string> DependencyModuleRoots { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Visibility-specific root groups that must each pass dependency validation independently.
+    /// </summary>
+    internal IReadOnlyList<IReadOnlyList<string>> DependencyModuleRootGroups { get; set; } = Array.Empty<IReadOnlyList<string>>();
+
+    /// <summary>
+    /// Roots proven available by upstream inventory that must still be available when the uninstall plan is created.
+    /// </summary>
+    internal IReadOnlyList<string> DependencyModuleRootsRequiringAvailability { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// Skip checking whether removed modules are still required by other installed modules.
     /// </summary>
     public bool SkipDependencyCheck { get; set; }

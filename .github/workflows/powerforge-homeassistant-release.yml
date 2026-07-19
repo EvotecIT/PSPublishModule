@@ -1,0 +1,147 @@
+name: PowerForge Home Assistant Release
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: Merged pull request number that initiated the release.
+        required: true
+        type: string
+      merge_commit_sha:
+        description: Expected pull request merge commit SHA.
+        required: false
+        default: ""
+        type: string
+      default_branch:
+        description: Branch that receives the version-only release commit.
+        required: false
+        default: main
+        type: string
+      increment:
+        description: Optional auto, none, patch, minor, or major override.
+        required: false
+        default: auto
+        type: string
+    secrets:
+      github-token:
+        required: false
+
+concurrency:
+  group: powerforge-homeassistant-release-${{ github.repository }}
+  queue: max
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      checks: read
+      contents: write
+      pull-requests: read
+    outputs:
+      action: ${{ steps.prepare.outputs.action }}
+      version: ${{ steps.prepare.outputs.version }}
+      tag: ${{ steps.prepare.outputs.tag }}
+      release-commit: ${{ steps.prepare.outputs.release-commit }}
+      release-url: ${{ steps.prepare.outputs.release-url }}
+    steps:
+      - name: Checkout default branch for trusted metadata preparation
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.default_branch }}
+          fetch-depth: 0
+          path: source
+          persist-credentials: false
+          token: ${{ secrets['github-token'] != '' && secrets['github-token'] || github.token }}
+
+      - name: Prepare immutable release commit
+        id: prepare
+        uses: EvotecIT/PSPublishModule/.github/actions/homeassistant-release@068a5d464b82b5d50ef3a1f44e8dc8f3bdfc4b8f
+        with:
+          stage: prepare
+          repository-root: ${{ github.workspace }}/source
+          repository: ${{ github.repository }}
+          pr-number: ${{ inputs.pr_number }}
+          merge-sha: ${{ inputs.merge_commit_sha }}
+          default-branch: ${{ inputs.default_branch }}
+          increment: ${{ inputs.increment }}
+          github-token: ${{ secrets['github-token'] != '' && secrets['github-token'] || github.token }}
+          powerforge-version: 1.0.4
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.action == 'Prepared'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      required-asset: ${{ steps.build.outputs.required-asset }}
+      asset-path: ${{ steps.build.outputs.asset-path }}
+    steps:
+      - name: Checkout exact prepared commit without persisted credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.prepare.outputs.release-commit }}
+          fetch-depth: 1
+          path: source
+          persist-credentials: false
+
+      - name: Setup Node.js for HACS plugin builds
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - name: Build without GitHub write credentials
+        id: build
+        uses: EvotecIT/PSPublishModule/.github/actions/homeassistant-release@068a5d464b82b5d50ef3a1f44e8dc8f3bdfc4b8f
+        with:
+          stage: build
+          repository-root: ${{ github.workspace }}/source
+          release-version: ${{ needs.prepare.outputs.version }}
+          release-commit: ${{ needs.prepare.outputs.release-commit }}
+          powerforge-version: 1.0.4
+
+      - name: Transfer the single release asset to the publish job
+        if: steps.build.outputs.required-asset != ''
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: powerforge-homeassistant-release-asset
+          path: ${{ steps.build.outputs.asset-path }}
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1
+
+  publish:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.action == 'Prepared'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: read
+    outputs:
+      release-url: ${{ steps.publish.outputs.release-url }}
+    steps:
+      - name: Download isolated release asset
+        if: needs.build.outputs.required-asset != ''
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: powerforge-homeassistant-release-asset
+          path: ${{ runner.temp }}/powerforge-homeassistant-release-asset
+
+      - name: Publish and verify without receiver source code
+        id: publish
+        uses: EvotecIT/PSPublishModule/.github/actions/homeassistant-release@068a5d464b82b5d50ef3a1f44e8dc8f3bdfc4b8f
+        with:
+          stage: publish
+          repository: ${{ github.repository }}
+          pr-number: ${{ inputs.pr_number }}
+          merge-sha: ${{ inputs.merge_commit_sha }}
+          release-version: ${{ needs.prepare.outputs.version }}
+          release-commit: ${{ needs.prepare.outputs.release-commit }}
+          required-asset: ${{ needs.build.outputs.required-asset }}
+          asset-path: ${{ needs.build.outputs.required-asset != '' && format('{0}/powerforge-homeassistant-release-asset/{1}', runner.temp, needs.build.outputs.required-asset) || '' }}
+          github-token: ${{ secrets['github-token'] != '' && secrets['github-token'] || github.token }}
+          powerforge-version: 1.0.4

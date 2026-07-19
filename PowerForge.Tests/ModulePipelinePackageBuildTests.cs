@@ -69,6 +69,7 @@ public sealed partial class ModulePipelinePackageBuildTests
                             {
                                 ["HtmlTinkerX"] = "2.0.X"
                             },
+                            AlignPackageVersions = true,
                             BuildBeforeModule = true,
                             Build = true,
                             PublishNuget = false,
@@ -98,6 +99,7 @@ public sealed partial class ModulePipelinePackageBuildTests
             var inlineConfiguration = calls[1].Configuration!;
             Assert.Equal(Path.Combine(root.FullName, "Sources"), inlineConfiguration.RootPath);
             Assert.Equal("2.0.X", inlineConfiguration.ExpectedVersionMap?["HtmlTinkerX"]);
+            Assert.True(inlineConfiguration.AlignPackageVersions);
             Assert.True(calls[1].Request.Build);
             Assert.False(calls[1].Request.PublishNuget);
             Assert.False(calls[1].Request.PublishGitHub);

@@ -25,6 +25,43 @@ public sealed class ProjectBuildPreparationServiceTests
     }
 
     [Fact]
+    public void Prepare_propagates_package_version_alignment()
+    {
+        var service = new ProjectBuildPreparationService();
+
+        var context = service.Prepare(
+            new ProjectBuildConfiguration
+            {
+                ExpectedVersion = "2.0.X",
+                AlignPackageVersions = true
+            },
+            Directory.GetCurrentDirectory(),
+            null,
+            new ProjectBuildRequestedActions());
+
+        Assert.True(context.Spec.AlignPackageVersions);
+    }
+
+    [Fact]
+    public void Prepare_propagates_internal_release_version_floor()
+    {
+        var service = new ProjectBuildPreparationService();
+
+        var context = service.Prepare(
+            new ProjectBuildConfiguration(),
+            Directory.GetCurrentDirectory(),
+            null,
+            new ProjectBuildRequestedActions
+            {
+                ReleaseVersionFloor = "2.1.7",
+                ReleaseVersionFloorProject = "Mailozaurr"
+            });
+
+        Assert.Equal("2.1.7", context.Spec.ReleaseVersionFloor);
+        Assert.Equal("Mailozaurr", context.Spec.ReleaseVersionFloorProject);
+    }
+
+    [Fact]
     public void Prepare_honors_explicit_action_overrides_and_derives_default_output_paths()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-projectbuild-prepare-" + Guid.NewGuid().ToString("N")));

@@ -727,6 +727,7 @@ public sealed partial class ManagedModuleInstallService
                     extraction = await ExtractBufferedPackageForInstallAsync(
                         bufferedPackage,
                         stageModulePath,
+                        context,
                         cancellationToken).ConfigureAwait(false);
                 }
                 else

@@ -1,0 +1,773 @@
+namespace PowerForge.Tests;
+
+public sealed class ServerRecoveryBootstrapPlanTests
+{
+    [Fact]
+    public void JsonOutputMode_DoesNotBecomePlanOutputDirectory()
+    {
+        var outputDirectory = PowerForge.Web.Cli.WebCliCommandHandlers.ResolveServerPlanOutputDirectory(
+            ["--output", "json"]);
+
+        Assert.Null(outputDirectory);
+    }
+
+    [Theory]
+    [InlineData("--out")]
+    [InlineData("--output-dir")]
+    public void PlanOutputDirectory_AcceptsDocumentedOptions(string option)
+    {
+        var outputDirectory = PowerForge.Web.Cli.WebCliCommandHandlers.ResolveServerPlanOutputDirectory(
+            [option, "recovery-plan"]);
+
+        Assert.Equal("recovery-plan", outputDirectory);
+    }
+
+    [Fact]
+    public void BuildPlan_CreatesAccountsBeforeOwnedPathsAndChecksRepositoryPrerequisites()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Accounts =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerAccount
+                {
+                    Name = "example-service",
+                    System = true,
+                    Home = "/nonexistent",
+                    Shell = "/usr/sbin/nologin"
+                }
+            ],
+            Paths =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerPath
+                {
+                    Id = "service-state",
+                    Path = "/var/lib/example-service",
+                    Kind = "directory",
+                    Owner = "example-service",
+                    Group = "example-service",
+                    Mode = "750"
+                }
+            ],
+            Repositories =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerRepository
+                {
+                    Role = "private-application",
+                    Url = "git@example.test:owner/repository.git",
+                    Path = "/srv/example",
+                    Branch = "main",
+                    Ref = "0123456789abcdef0123456789abcdef01234567",
+                    BootstrapRequiredFiles = ["/etc/example/id_ed25519", "/etc/example/known_hosts"],
+                    SshIdentityFile = "/etc/example/id_ed25519",
+                    SshKnownHostsFile = "/etc/example/known_hosts"
+                }
+            ]
+        };
+
+        var warnings = new List<string>();
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, warnings);
+
+        var account = Assert.Single(steps, step => step.Category == "accounts");
+        var path = Assert.Single(steps, step => step.Category == "filesystem");
+        var repositorySteps = steps.Where(step => step.Category == "repositories").ToArray();
+        Assert.True(account.Order < path.Order);
+        Assert.Equal(2, repositorySteps.Length);
+        Assert.True(repositorySteps[0].Order < repositorySteps[1].Order);
+        Assert.Contains("useradd --system --user-group --no-create-home", account.Command, StringComparison.Ordinal);
+        Assert.Contains("test -s '/etc/example/id_ed25519'", repositorySteps[0].Command, StringComparison.Ordinal);
+        Assert.Contains("test -s '/etc/example/known_hosts'", repositorySteps[0].Command, StringComparison.Ordinal);
+        Assert.Contains("exit 3", repositorySteps[0].Command, StringComparison.Ordinal);
+        Assert.Contains("fetch --all --tags --prune", repositorySteps[1].Command, StringComparison.Ordinal);
+        Assert.Contains("git clone --branch 'main'", repositorySteps[1].Command, StringComparison.Ordinal);
+        Assert.Equal(2, repositorySteps[1].Command!.Split("GIT_SSH_COMMAND=", StringSplitOptions.None).Length - 1);
+        Assert.Contains("IdentitiesOnly=yes", repositorySteps[1].Command, StringComparison.Ordinal);
+        Assert.Contains("StrictHostKeyChecking=yes", repositorySteps[1].Command, StringComparison.Ordinal);
+        Assert.Contains("UserKnownHostsFile=", repositorySteps[1].Command, StringComparison.Ordinal);
+        Assert.Contains("git -C '/srv/example' checkout --detach '0123456789abcdef0123456789abcdef01234567'", repositorySteps[1].Command, StringComparison.Ordinal);
+        Assert.Contains("if runuser -u 'example-service' -g 'example-service' -- install -d -m '750' '/var/lib/example-service' && test -d '/var/lib/example-service'", path.Command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path '/var/lib'", path.Command, StringComparison.Ordinal);
+        Assert.Contains("install -d -o 'example-service' -g 'example-service' -m '750' '/var/lib/example-service'", path.Command, StringComparison.Ordinal);
+        Assert.Empty(warnings);
+    }
+
+    [Fact]
+    public void BuildPlan_UsesRerunnableSecretPresenceGuards()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Secrets =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerSecret { Id = "directory", Path = "/etc/example", RestoreMode = "directory" },
+                new PowerForge.Web.Cli.PowerForgeServerSecret { Id = "file", Path = "/etc/example/token", RestoreMode = "file" },
+                new PowerForge.Web.Cli.PowerForgeServerSecret { Id = "environment", Env = "EXAMPLE_TOKEN" },
+                new PowerForge.Web.Cli.PowerForgeServerSecret { Id = "first-issue-certificate", Path = "/etc/example/certificate", RequiredDuringBootstrap = false }
+            ]
+        };
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        var secrets = steps.Where(step => step.Category == "secrets").ToArray();
+
+        Assert.Equal(3, secrets.Length);
+        Assert.DoesNotContain(secrets, step => step.Title.Contains("first-issue-certificate", StringComparison.Ordinal));
+        Assert.Contains("test -d '/etc/example'", secrets[0].Command, StringComparison.Ordinal);
+        Assert.Contains("-mindepth 1 -maxdepth 1", secrets[0].Command, StringComparison.Ordinal);
+        Assert.Contains("test -s '/etc/example/token'", secrets[1].Command, StringComparison.Ordinal);
+        Assert.Contains("printenv 'EXAMPLE_TOKEN'", secrets[2].Command, StringComparison.Ordinal);
+        Assert.All(secrets, step =>
+        {
+            Assert.False(step.Manual);
+            Assert.False(step.Sensitive);
+            Assert.DoesNotContain("TODO", step.Command, StringComparison.Ordinal);
+            Assert.Contains("exit 3", step.Command, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void BuildPlan_DoesNotInventUndeclaredSystemdOrFirewallWork()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest();
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+
+        Assert.DoesNotContain(steps, step => step.Category == "systemd");
+        Assert.DoesNotContain(steps, step => step.Category == "firewall");
+        Assert.DoesNotContain(steps, step => step.Command?.Contains("ufw --force enable", StringComparison.Ordinal) == true);
+    }
+
+    [Fact]
+    public void BuildPlan_FailsClosedUntilCapturedRepositoryRevisionIsHydrated()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Repositories =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerRepository
+                {
+                    Role = "application",
+                    Url = "https://github.com/ExampleOrg/ExampleSite.git",
+                    Path = "/srv/example",
+                    RefCaptureCommandId = "static-source-ref"
+                }
+            ]
+        };
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        var guard = Assert.Single(steps, step => step.Title.Contains("captured revision", StringComparison.Ordinal));
+
+        Assert.Contains("Use the captured recovery manifest", guard.Command, StringComparison.Ordinal);
+        Assert.Contains("exit 3", guard.Command, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildPlan_FailsClosedUntilConsensusRepositoryRevisionIsHydrated()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Repositories =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerRepository
+                {
+                    Role = "application",
+                    Url = "https://github.com/ExampleOrg/ExampleSite.git",
+                    Path = "/srv/example",
+                    RefCaptureCommandIds = ["xyz-source-ref", "pl-source-ref"]
+                }
+            ]
+        };
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        var guard = Assert.Single(steps, step => step.Title.Contains("captured revision", StringComparison.Ordinal));
+
+        Assert.Contains("xyz-source-ref, pl-source-ref", guard.Command, StringComparison.Ordinal);
+        Assert.Contains("exit 3", guard.Command, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildPlan_InstallsSourceManagedFilesAfterRepositories()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Repositories =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerRepository
+                {
+                    Role = "application",
+                    Url = "https://github.com/ExampleOrg/ExampleSite.git",
+                    Path = "/srv/example",
+                    Ref = "0123456789abcdef0123456789abcdef01234567"
+                }
+            ],
+            Paths =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerPath
+                {
+                    Id = "site-config",
+                    Path = "/etc/example/site.env",
+                    Source = "/srv/example/deploy/site.env",
+                    Kind = "file",
+                    Owner = "root",
+                    Group = "example",
+                    Mode = "0640"
+                }
+            ]
+        };
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        var repository = Assert.Single(steps, step => step.Category == "repositories");
+        var managedFile = Assert.Single(steps, step => step.Category == "managed-files");
+
+        Assert.True(repository.Order < managedFile.Order);
+        Assert.Contains("test ! -L '/srv/example/deploy/site.env'", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("realpath -e -- '/srv/example/deploy/site.env'", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("realpath -e -- '/srv/example'", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("cat-file -t '0123456789abcdef0123456789abcdef01234567:deploy/site.env'", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("ls-tree '0123456789abcdef0123456789abcdef01234567' -- 'deploy/site.env'", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("case \"$powerforge_managed_source_mode\" in 100644|100755)", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("test \"$powerforge_managed_source_type\" = blob", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("cat-file -p '0123456789abcdef0123456789abcdef01234567:deploy/site.env' | cmp -s -- '/srv/example/deploy/site.env' -", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path \"$powerforge_managed_source_real\" || { echo", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("Managed source must be a safe tracked file in the declared repository revision", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("exit 3", managedFile.Command, StringComparison.Ordinal);
+        Assert.EndsWith(
+            "install -T -o 'root' -g 'example' -m '0640' '/srv/example/deploy/site.env' '/etc/example/site.env'",
+            managedFile.Command,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildPlan_UsesManagedFileSafetyForApacheAndSystemd()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Repositories =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerRepository
+                {
+                    Role = "application",
+                    Url = "https://github.com/ExampleOrg/ExampleSite.git",
+                    Path = "/srv/example"
+                }
+            ],
+            Apache = new PowerForge.Web.Cli.PowerForgeServerApache
+            {
+                Sites =
+                [
+                    new PowerForge.Web.Cli.PowerForgeServerApacheFile
+                    {
+                        Source = "/srv/example/deploy/apache.conf",
+                        Target = "/etc/apache2/sites-available/example.conf",
+                        Enabled = true
+                    }
+                ],
+                Conf =
+                [
+                    new PowerForge.Web.Cli.PowerForgeServerApacheFile
+                    {
+                        Source = "/srv/example/deploy/platform.conf",
+                        Target = "/etc/apache2/conf-available/platform.conf",
+                        Enabled = false
+                    }
+                ]
+            },
+            Systemd = new PowerForge.Web.Cli.PowerForgeServerSystemd
+            {
+                Services =
+                [
+                    new PowerForge.Web.Cli.PowerForgeServerSystemdUnit
+                    {
+                        Name = "example.service",
+                        Source = "/srv/example/deploy/example.service",
+                        Target = "/etc/systemd/system/example.service"
+                    }
+                ]
+            }
+        };
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        var apache = Assert.Single(steps, step => step.Title == "Install Apache file /etc/apache2/sites-available/example.conf");
+        var apacheConf = Assert.Single(steps, step => step.Title == "Install Apache file /etc/apache2/conf-available/platform.conf");
+        var activateApache = Assert.Single(steps, step => step.Title == "Activate Apache configuration transactionally");
+        var systemd = Assert.Single(steps, step => step.Title == "Install systemd unit example.service");
+
+        Assert.Contains("test ! -L '/srv/example/deploy/apache.conf'", apache.Command, StringComparison.Ordinal);
+        Assert.EndsWith(
+            "install -T -o 'root' -g 'root' -m '0644' '/srv/example/deploy/apache.conf' '/etc/apache2/sites-available/example.conf'",
+            apache.Command,
+            StringComparison.Ordinal);
+        Assert.Contains("test ! -L '/srv/example/deploy/platform.conf'", apacheConf.Command, StringComparison.Ordinal);
+        Assert.Contains("a2ensite 'example.conf'", activateApache.Command, StringComparison.Ordinal);
+        Assert.Contains("a2disconf 'platform.conf'", activateApache.Command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_restore_apache_activation", activateApache.Command, StringComparison.Ordinal);
+        Assert.Contains("apachectl configtest", activateApache.Command, StringComparison.Ordinal);
+        Assert.Contains("systemctl reload 'apache2'", activateApache.Command, StringComparison.Ordinal);
+        var apacheCommands = Assert.IsType<string>(activateApache.Command).Split('\n');
+        var siteSnapshot = Array.FindIndex(apacheCommands, static command =>
+            command.StartsWith("if [ -e '/etc/apache2/sites-enabled/example.conf'", StringComparison.Ordinal));
+        var confSnapshot = Array.FindIndex(apacheCommands, static command =>
+            command.StartsWith("if [ -e '/etc/apache2/conf-enabled/platform.conf'", StringComparison.Ordinal));
+        var rollbackTrap = Array.IndexOf(apacheCommands, "trap powerforge_restore_apache_activation EXIT");
+        var firstMutation = Array.IndexOf(apacheCommands, "a2ensite 'example.conf'");
+        Assert.True(siteSnapshot >= 0 && siteSnapshot < rollbackTrap);
+        Assert.True(confSnapshot >= 0 && confSnapshot < rollbackTrap);
+        Assert.True(rollbackTrap < firstMutation);
+        Assert.Contains("test ! -L '/srv/example/deploy/example.service'", systemd.Command, StringComparison.Ordinal);
+        Assert.EndsWith(
+            "install -T -o 'root' -g 'root' -m '0644' '/srv/example/deploy/example.service' '/etc/systemd/system/example.service'",
+            systemd.Command,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildPlan_CreatesFreshRepositoryParentsAndRequiresRootControlledSources()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Repositories =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerRepository
+                {
+                    Role = "application",
+                    Url = "https://github.com/ExampleOrg/ExampleSite.git",
+                    Path = "/srv/powerforge/sources/example",
+                    Branch = "main"
+                }
+            ],
+            Paths =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerPath
+                {
+                    Id = "authorized-keys",
+                    Path = "/home/example/.ssh/authorized_keys",
+                    Source = "/srv/powerforge/sources/example/deploy/authorized_keys",
+                    Kind = "file",
+                    Owner = "example",
+                    Group = "example",
+                    Mode = "0600"
+                }
+            ]
+        };
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        var guard = Assert.Single(steps, step => step.Title == "Define root-controlled path guard");
+        var repository = Assert.Single(steps, step => step.Title == "Clone or update application repository");
+        var managedFile = Assert.Single(steps, step => step.Title == "Install managed file /home/example/.ssh/authorized_keys");
+
+        Assert.Contains("test \"$(stat -c '%u' -- \"$powerforge_path\")\" = 0 ||", guard.Command, StringComparison.Ordinal);
+        Assert.Contains("return 1", guard.Command, StringComparison.Ordinal);
+        Assert.Contains("-perm /022", guard.Command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_repository_ancestor='/srv/powerforge/sources'", repository.Command, StringComparison.Ordinal);
+        Assert.Contains("while [ ! -e \"$powerforge_repository_ancestor\" ] && [ ! -L \"$powerforge_repository_ancestor\" ]", repository.Command, StringComparison.Ordinal);
+        Assert.Contains("mkdir -p -- '/srv/powerforge/sources'", repository.Command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path '/srv/powerforge/sources'", repository.Command, StringComparison.Ordinal);
+        Assert.Contains("test ! -e '/srv/powerforge/sources/example' && test ! -L '/srv/powerforge/sources/example'", repository.Command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path '/srv/powerforge/sources/example'", repository.Command, StringComparison.Ordinal);
+        Assert.Contains("git --no-optional-locks -C '/srv/powerforge/sources/example' status --porcelain --untracked-files=normal", repository.Command, StringComparison.Ordinal);
+        Assert.Contains("Repository must be clean before installing managed files", repository.Command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path \"$powerforge_managed_source_real\"", managedFile.Command, StringComparison.Ordinal);
+        Assert.Contains("cat-file -t 'HEAD:deploy/authorized_keys'", managedFile.Command, StringComparison.Ordinal);
+        Assert.EndsWith(
+            "runuser -u 'example' -g 'example' -- install -T -m '0600' '/srv/powerforge/sources/example/deploy/authorized_keys' '/home/example/.ssh/authorized_keys'",
+            managedFile.Command,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("dirname -- '/home/example/.ssh/authorized_keys'", managedFile.Command, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildRepositoryManagedFileInstall_RejectsUnsafeExistingRootTarget()
+    {
+        var command = PowerForge.Web.Cli.WebCliCommandHandlers.BuildRepositoryManagedFileInstallCommand(
+            "/srv/example/deploy/apache.conf",
+            "/etc/apache2/sites-available/example.conf",
+            "/srv/example",
+            "0644");
+        var numericRootCommand = PowerForge.Web.Cli.WebCliCommandHandlers.BuildRepositoryManagedFileInstallCommand(
+            "/srv/example/deploy/numeric.conf",
+            "/etc/example/numeric.conf",
+            "/srv/example",
+            "0644",
+            "0",
+            "0");
+
+        Assert.Contains(
+            "powerforge_assert_root_controlled_path \"$(dirname -- '/etc/apache2/sites-available/example.conf')\"",
+            command,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "if [ -e '/etc/apache2/sites-available/example.conf' ] || [ -L '/etc/apache2/sites-available/example.conf' ]; then test -f '/etc/apache2/sites-available/example.conf' && test ! -L '/etc/apache2/sites-available/example.conf'",
+            command,
+            StringComparison.Ordinal);
+        Assert.EndsWith(
+            "install -T -o 'root' -g 'root' -m '0644' '/srv/example/deploy/apache.conf' '/etc/apache2/sites-available/example.conf'",
+            command,
+            StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path \"$(dirname -- '/etc/example/numeric.conf')\"", numericRootCommand, StringComparison.Ordinal);
+        Assert.EndsWith("install -T -o '0' -g '0' -m '0644' '/srv/example/deploy/numeric.conf' '/etc/example/numeric.conf'", numericRootCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("runuser", numericRootCommand, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildManagedDirectoryInstall_RejectsSymlinksAndLimitsPrivilegeByOwner()
+    {
+        var rootCommand = PowerForge.Web.Cli.WebCliCommandHandlers.BuildManagedDirectoryInstallCommand(
+            "/var/www/example/site/releases",
+            "root",
+            "root",
+            "0755");
+        var userCommand = PowerForge.Web.Cli.WebCliCommandHandlers.BuildManagedDirectoryInstallCommand(
+            "/home/example/.ssh",
+            "example",
+            "example",
+            "0700");
+        var numericCommand = PowerForge.Web.Cli.WebCliCommandHandlers.BuildManagedDirectoryInstallCommand(
+            "/var/lib/example-numeric",
+            "0",
+            "0",
+            "0750");
+
+        Assert.Contains("powerforge_directory_ancestor='/var/www/example/site'", rootCommand, StringComparison.Ordinal);
+        Assert.Contains("while [ ! -e \"$powerforge_directory_ancestor\" ] && [ ! -L \"$powerforge_directory_ancestor\" ]", rootCommand, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path \"$powerforge_directory_ancestor\"", rootCommand, StringComparison.Ordinal);
+        Assert.Contains("mkdir -p -- '/var/www/example/site'", rootCommand, StringComparison.Ordinal);
+        Assert.Contains("test -d '/var/www/example/site/releases' && test ! -L '/var/www/example/site/releases'", rootCommand, StringComparison.Ordinal);
+        Assert.Contains("test \"$(stat -c '%U' -- '/var/www/example/site/releases')\" = 'root'", rootCommand, StringComparison.Ordinal);
+        Assert.Contains("test \"$(stat -c '%G' -- '/var/www/example/site/releases')\" = 'root'", rootCommand, StringComparison.Ordinal);
+        Assert.EndsWith("test \"$(stat -c '%a' -- '/var/www/example/site/releases')\" = '755'", rootCommand, StringComparison.Ordinal);
+        Assert.Contains("test -d '/home/example/.ssh' && test ! -L '/home/example/.ssh'", userCommand, StringComparison.Ordinal);
+        Assert.Contains("if runuser -u 'example' -g 'example' -- install -d -m '0700' '/home/example/.ssh' && test -d '/home/example/.ssh'", userCommand, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path \"$powerforge_directory_ancestor\"", userCommand, StringComparison.Ordinal);
+        Assert.Contains("install -d -o 'example' -g 'example' -m '0700' '/home/example/.ssh'", userCommand, StringComparison.Ordinal);
+        Assert.EndsWith("test \"$(stat -c '%a' -- '/home/example/.ssh')\" = '700'", userCommand, StringComparison.Ordinal);
+        Assert.Contains("test \"$(stat -c '%u' -- '/var/lib/example-numeric')\" = '0'", numericCommand, StringComparison.Ordinal);
+        Assert.Contains("test \"$(stat -c '%g' -- '/var/lib/example-numeric')\" = '0'", numericCommand, StringComparison.Ordinal);
+        Assert.Contains("powerforge_assert_root_controlled_path '/var/lib'", numericCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("runuser", numericCommand, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildPlan_InstallsRepositorySecretOnlyAfterCloneAndPrunesStagingTree()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Name = "example",
+            OperationLocks = ["/var/lock/powerforge-site-example.lock"],
+            Repositories =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerRepository
+                {
+                    Role = "application",
+                    Url = "https://github.com/ExampleOrg/ExampleSite.git",
+                    Path = "/srv/example"
+                }
+            ],
+            Secrets =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerSecret
+                {
+                    Id = "repository-key",
+                    Path = "/srv/example/.deploy-key",
+                    RestoreAfterRepositories = true,
+                    RestoreMode = "file",
+                    Owner = "root",
+                    Group = "root",
+                    Mode = "0600"
+                }
+            ]
+        };
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        var prepareOperationLock = Assert.Single(steps, step => step.Title.StartsWith("Prepare shared operation lock", StringComparison.Ordinal));
+        var acquireOperationLocks = Assert.Single(steps, step => step.Title == "Acquire shared operation locks for bootstrap");
+        var repository = Assert.Single(steps, step => step.Category == "repositories");
+        var secret = Assert.Single(steps, step => step.Title == "Install staged secret repository-key");
+        var cleanup = Assert.Single(steps, step => step.Title == "Remove empty secret staging directory");
+
+        Assert.True(prepareOperationLock.Order < acquireOperationLocks.Order);
+        Assert.True(acquireOperationLocks.Order < repository.Order);
+        Assert.True(repository.Order < secret.Order);
+        Assert.False(secret.Sensitive);
+        Assert.False(cleanup.Sensitive);
+        Assert.Contains("root:root 644", prepareOperationLock.Command, StringComparison.Ordinal);
+        Assert.Contains("/etc/tmpfiles.d/powerforge-operation-lock-powerforge-site-example.conf", prepareOperationLock.Command, StringComparison.Ordinal);
+        Assert.Contains("systemd-tmpfiles --create", prepareOperationLock.Command, StringComparison.Ordinal);
+        Assert.Contains("flock -n \"$powerforge_operation_lock_fd_1\"", acquireOperationLocks.Command, StringComparison.Ordinal);
+        Assert.Contains("root:root 644", acquireOperationLocks.Command, StringComparison.Ordinal);
+        Assert.Contains("/var/lib/powerforge/restore-secrets/", secret.Command, StringComparison.Ordinal);
+        Assert.Contains("/srv/example/.deploy-key", secret.Command, StringComparison.Ordinal);
+        Assert.Contains("ls-files --error-unmatch -- '.deploy-key'", secret.Command, StringComparison.Ordinal);
+        Assert.Contains("check-ignore -q -- '.deploy-key'", secret.Command, StringComparison.Ordinal);
+        Assert.Contains("test ! -L '/srv/example/.deploy-key'", secret.Command, StringComparison.Ordinal);
+        Assert.Contains("install -T -o 'root' -g 'root' -m '0600'", secret.Command, StringComparison.Ordinal);
+        Assert.Contains("find '/var/lib/powerforge/restore-secrets/", cleanup.Command, StringComparison.Ordinal);
+        Assert.Contains("-depth -mindepth 1 -type d -empty -delete", cleanup.Command, StringComparison.Ordinal);
+        Assert.StartsWith("if [ -e ", cleanup.Command, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildPlan_LocksTheFullMutationWindowAndHandsLockOwnershipToDeployCommand()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            OperationLocks = ["/var/lock/powerforge-site-example.lock"],
+            Packages = new PowerForge.Web.Cli.PowerForgeServerPackages { Apt = ["git"] },
+            Accounts = [new PowerForge.Web.Cli.PowerForgeServerAccount { Name = "example" }],
+            Paths =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerPath
+                {
+                    Id = "state",
+                    Path = "/var/lib/example",
+                    Kind = "directory"
+                }
+            ],
+            Deploy = new PowerForge.Web.Cli.PowerForgeServerDeploy
+            {
+                OperationLockOwner = "command",
+                Commands =
+                [
+                    new PowerForge.Web.Cli.PowerForgeServerNamedCommand
+                    {
+                        Id = "deploy",
+                        Command = "sudo -n /usr/local/sbin/powerforge-site-deploy --site example"
+                    }
+                ]
+            }
+        };
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        var acquire = Assert.Single(steps, step => step.Title == "Acquire shared operation locks for bootstrap");
+        var package = Assert.Single(steps, step => step.Category == "packages");
+        var account = Assert.Single(steps, step => step.Category == "accounts");
+        var path = Assert.Single(steps, step => step.Category == "filesystem");
+        var release = Assert.Single(steps, step => step.Title == "Release shared operation locks for command-owned deployment");
+        var deploy = Assert.Single(steps, step => step.Category == "deploy");
+
+        Assert.True(acquire.Order < package.Order);
+        Assert.True(acquire.Order < account.Order);
+        Assert.True(acquire.Order < path.Order);
+        Assert.True(path.Order < release.Order);
+        Assert.True(release.Order < deploy.Order);
+        Assert.Equal("exec {powerforge_operation_lock_fd_1}>&-", release.Command);
+    }
+
+    [Fact]
+    public void BootstrapScript_ExecutesGeneratedDeferredSecretSteps()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-bootstrap-script-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var scriptPath = Path.Combine(root, "bootstrap-plan.sh");
+            var steps = new[]
+            {
+                new PowerForge.Web.Cli.PowerForgeServerBootstrapPlanStep
+                {
+                    Order = 1,
+                    Category = "secrets",
+                    Title = "Install staged secret",
+                    Command = "if git -C '/srv/example' check-ignore -q -- '.secret'; then install -T '/staged' '/srv/example/.secret'; fi"
+                }
+            };
+
+            PowerForge.Web.Cli.WebCliCommandHandlers.WriteBootstrapPlanScript(scriptPath, steps);
+            var script = File.ReadAllText(scriptPath);
+
+            Assert.Contains("\nif git -C '/srv/example'", script, StringComparison.Ordinal);
+            Assert.DoesNotContain("\n# if git -C '/srv/example'", script, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RecoveryStages_IncludeDeclarativeBootstrapWorkWithoutLegacyCommands()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Paths =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerPath
+                {
+                    Id = "site-config",
+                    Path = "/etc/example/site.env",
+                    Source = "/srv/example/deploy/site.env",
+                    Kind = "file",
+                    Owner = "root",
+                    Group = "root",
+                    Mode = "0640"
+                }
+            ]
+        };
+
+        var stages = PowerForge.Web.Cli.WebCliCommandHandlers.BuildServerRecoveryStages(manifest);
+
+        Assert.Contains("bootstrap", stages);
+        Assert.Null(manifest.Bootstrap);
+
+        var runtimeOnly = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Packages = new PowerForge.Web.Cli.PowerForgeServerPackages
+            {
+                DotnetSdks = ["10.0"],
+                Powershell = true
+            },
+            Paths =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerPath
+                {
+                    Id = "current",
+                    Path = "/var/www/example/current",
+                    Kind = "symlink"
+                }
+            ]
+        };
+
+        Assert.Contains(
+            "bootstrap",
+            PowerForge.Web.Cli.WebCliCommandHandlers.BuildServerRecoveryStages(runtimeOnly));
+    }
+
+    [Fact]
+    public void BuildPlan_InstallsDeclaredRuntimesAndFailsClosedOnHostMismatch()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Target = new PowerForge.Web.Cli.PowerForgeServerTarget
+            {
+                Os = "ubuntu-24.04",
+                Architecture = "x64"
+            },
+            Packages = new PowerForge.Web.Cli.PowerForgeServerPackages
+            {
+                DotnetSdks = ["8", "10.0"],
+                Powershell = true
+            }
+        };
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        var preflight = Assert.Single(steps, step => step.Category == "preflight");
+        var runtimes = steps.Where(step => step.Category == "runtimes").ToArray();
+
+        Assert.Equal(3, runtimes.Length);
+        Assert.Equal(
+            "test -r /etc/os-release && . /etc/os-release && test \"$ID\" = 'ubuntu' && " +
+            "test \"$VERSION_ID\" = '24.04' && test \"$(uname -m)\" = 'x86_64'",
+            preflight.Command);
+        Assert.Equal("apt-get update && apt-get install -y 'dotnet-sdk-8.0' 'dotnet-sdk-10.0'", runtimes[0].Command);
+        Assert.Contains("packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb", runtimes[1].Command, StringComparison.Ordinal);
+        Assert.Contains("apt-get install -y ca-certificates curl", runtimes[1].Command, StringComparison.Ordinal);
+        Assert.Contains("dpkg -i \"$powerforge_ms_repo\"", runtimes[1].Command, StringComparison.Ordinal);
+        Assert.DoesNotContain("dpkg-query", runtimes[1].Command, StringComparison.Ordinal);
+        Assert.Contains("trap 'exit 130' INT", runtimes[1].Command, StringComparison.Ordinal);
+        Assert.DoesNotContain("| dpkg", runtimes[1].Command, StringComparison.Ordinal);
+        Assert.Equal("apt-get install -y powershell", runtimes[2].Command);
+    }
+
+    [Fact]
+    public void BuildPlan_UsesUbuntuFeedForDotnetWithoutPowerShell()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Target = new PowerForge.Web.Cli.PowerForgeServerTarget
+            {
+                Os = "ubuntu-24.04",
+                Architecture = "x64"
+            },
+            Packages = new PowerForge.Web.Cli.PowerForgeServerPackages
+            {
+                DotnetSdks = ["10.0"],
+                Powershell = false
+            }
+        };
+
+        var runtimes = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, [])
+            .Where(step => step.Category == "runtimes")
+            .ToArray();
+
+        var runtime = Assert.Single(runtimes);
+        Assert.Equal("apt-get update && apt-get install -y 'dotnet-sdk-10.0'", runtime.Command);
+        Assert.DoesNotContain("packages.microsoft.com", runtime.Command, StringComparison.Ordinal);
+        Assert.DoesNotContain(runtimes, step => step.Command?.Contains("apt-get install -y powershell", StringComparison.Ordinal) == true);
+    }
+
+    [Theory]
+    [InlineData("8", "8.0")]
+    [InlineData("8.0", "8.0")]
+    [InlineData("10", "10.0")]
+    [InlineData("10.0", "10.0")]
+    public void DotnetSdkVersionsNormalizeToAptPackageVersions(string value, string expected)
+    {
+        Assert.True(PowerForge.Web.Cli.WebCliCommandHandlers.TryNormalizeDotnetSdkVersion(value, out var normalized));
+        Assert.Equal(expected, normalized);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("1")]
+    [InlineData("2.1")]
+    [InlineData("3.1")]
+    [InlineData("4")]
+    [InlineData("4.0")]
+    [InlineData("6.0")]
+    [InlineData("8.1")]
+    [InlineData("9.0")]
+    [InlineData("10.99")]
+    [InlineData("11.0")]
+    [InlineData("100")]
+    public void DotnetSdkVersionsRejectImpossibleAptPackageVersions(string value)
+    {
+        Assert.False(PowerForge.Web.Cli.WebCliCommandHandlers.TryNormalizeDotnetSdkVersion(value, out _));
+    }
+
+    [Theory]
+    [InlineData("Curl")]
+    [InlineData("libSSL3")]
+    [InlineData("ca-Certificates")]
+    public void AptPackageNamesRejectUppercaseCharacters(string value)
+    {
+        Assert.False(PowerForge.Web.Cli.WebCliCommandHandlers.IsSafeAptPackageName(value));
+    }
+
+    [Fact]
+    public void SudoersManagedFileUsesValidatedAtomicReplacementWithRollback()
+    {
+        var path = new PowerForge.Web.Cli.PowerForgeServerPath
+        {
+            Id = "sudoers",
+            Path = "/etc/sudoers.d/powerforge-example",
+            Source = "/srv/example/deploy/powerforge-example.sudoers",
+            Kind = "file",
+            Owner = "root",
+            Group = "root",
+            Mode = "0440",
+            Validation = "sudoers"
+        };
+
+        var command = PowerForge.Web.Cli.WebCliCommandHandlers.BuildManagedFileInstallCommand(path, "/srv/example");
+
+        Assert.Contains("test ! -L '/srv/example/deploy/powerforge-example.sudoers'", command, StringComparison.Ordinal);
+        Assert.Contains("realpath -e -- '/srv/example/deploy/powerforge-example.sudoers'", command, StringComparison.Ordinal);
+        Assert.Contains("case \"$powerforge_managed_source_real\"", command, StringComparison.Ordinal);
+        Assert.Contains("install -T", command, StringComparison.Ordinal);
+        Assert.Contains("mktemp '/etc/sudoers.d/powerforge-example.powerforge.XXXXXX'", command, StringComparison.Ordinal);
+        Assert.Contains("visudo -cf \"$powerforge_sudoers_temp\"", command, StringComparison.Ordinal);
+        Assert.Contains("trap powerforge_sudoers_restore EXIT", command, StringComparison.Ordinal);
+        Assert.Contains("trap 'exit 130' INT", command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_sudoers_replaced=1", command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_sudoers_had_previous", command, StringComparison.Ordinal);
+        Assert.Contains("test -f '/etc/sudoers.d/powerforge-example' && test ! -L '/etc/sudoers.d/powerforge-example'", command, StringComparison.Ordinal);
+        Assert.Contains("|| { echo 'Managed root target must be a regular non-symlink file when it already exists: /etc/sudoers.d/powerforge-example' >&2; exit 3; }", command, StringComparison.Ordinal);
+        Assert.Contains("if [ -e '/etc/sudoers.d/powerforge-example' ]; then cp -a -- '/etc/sudoers.d/powerforge-example'", command, StringComparison.Ordinal);
+        Assert.Contains("mv -fT -- \"$powerforge_sudoers_backup\" '/etc/sudoers.d/powerforge-example'", command, StringComparison.Ordinal);
+        Assert.Contains("visudo -c || powerforge_sudoers_status=1", command, StringComparison.Ordinal);
+        Assert.Contains("trap - EXIT HUP INT TERM", command, StringComparison.Ordinal);
+
+        var lines = command.Split('\n');
+        var rollbackArmed = Array.IndexOf(lines, "powerforge_sudoers_replaced=1");
+        var replacement = Array.IndexOf(lines, "mv -fT -- \"$powerforge_sudoers_temp\" '/etc/sudoers.d/powerforge-example'");
+        Assert.True(rollbackArmed >= 0 && rollbackArmed < replacement);
+    }
+
+}

@@ -86,7 +86,9 @@ function Invoke-WithFileRetry {
 
 function Add-FailedFile {
   param(
-    [Parameter(Mandatory = $true)] [System.Collections.Generic.List[string]]$List,
+    [Parameter(Mandatory = $true)]
+    [AllowEmptyCollection()]
+    [System.Collections.Generic.List[string]]$List,
     [Parameter(Mandatory = $true)] [string]$FilePath,
     [string]$Message
   )

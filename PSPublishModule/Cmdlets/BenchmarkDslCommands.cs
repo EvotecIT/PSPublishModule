@@ -275,6 +275,10 @@ public sealed class SetBenchmarkPolicyCommand : BenchmarkDslCommand
     [Parameter]
     public PowerShellBenchmarkRunOrder? Order { get; set; }
 
+    /// <summary>Managed-memory cleanup performed outside timed operations.</summary>
+    [Parameter]
+    public PowerShellBenchmarkMemoryCleanupMode? MemoryCleanup { get; set; }
+
     /// <summary>Delay between measured samples, in milliseconds.</summary>
     [Parameter]
     [ValidateRange(0, int.MaxValue)]
@@ -291,6 +295,7 @@ public sealed class SetBenchmarkPolicyCommand : BenchmarkDslCommand
             Iteration,
             RunMode,
             Order?.ToString(),
+            MemoryCleanup?.ToString(),
             CooldownMilliseconds,
             OutlierMode?.ToString());
 }
@@ -427,6 +432,32 @@ public sealed class AddBenchmarkMetricCommand : BenchmarkDslCommand
 }
 
 /// <summary>
+/// Adds a suite-specific provenance value to benchmark metadata artifacts.
+/// </summary>
+/// <example>
+/// <summary>Add benchmark provenance metadata</summary>
+/// <code>Add-BenchmarkMetadata -Name 'runtime' -Value 'net10.0'</code>
+/// </example>
+[Cmdlet(VerbsCommon.Add, "BenchmarkMetadata")]
+[Alias("metadata")]
+public sealed class AddBenchmarkMetadataCommand : BenchmarkDslCommand
+{
+    /// <summary>Metadata name.</summary>
+    [Parameter(Mandatory = true, Position = 0)]
+    [ValidateNotNullOrEmpty]
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Metadata value.</summary>
+    [Parameter(Mandatory = true, Position = 1)]
+    [ValidateNotNullOrEmpty]
+    public string Value { get; set; } = string.Empty;
+
+    /// <inheritdoc />
+    protected override void ProcessRecord()
+        => PowerShellBenchmarkDslRuntime.Metadata(Name, Value);
+}
+
+/// <summary>
 /// Adds a benchmark comparison definition.
 /// </summary>
 [Cmdlet(VerbsCommon.Add, "BenchmarkComparison")]
@@ -452,9 +483,13 @@ public sealed class AddBenchmarkComparisonCommand : BenchmarkDslCommand
     [ValidateRange(0d, double.MaxValue)]
     public double TieTolerance { get; set; }
 
+    /// <summary>Fail the benchmark when the baseline is materially slower than a successful competitor.</summary>
+    [Parameter]
+    public SwitchParameter RequireBaselineFastest { get; set; }
+
     /// <inheritdoc />
     protected override void ProcessRecord()
-        => PowerShellBenchmarkDslRuntime.Compare(Dimension, Baseline, Metric, TieTolerance);
+        => PowerShellBenchmarkDslRuntime.Compare(Dimension, Baseline, Metric, TieTolerance, RequireBaselineFastest.IsPresent);
 }
 
 /// <summary>

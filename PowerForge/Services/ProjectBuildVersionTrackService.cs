@@ -39,7 +39,14 @@ internal sealed class ProjectBuildVersionTrackService
 
         var resolved = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var entry in ExpandTracks(config.VersionTracks, config.ExpectedVersion, defaultSources, credential, credentialsBySource, config.IncludePrerelease))
+        foreach (var entry in ExpandTracks(
+                     config.VersionTracks,
+                     config.ExpectedVersion,
+                     defaultSources,
+                     credential,
+                     credentialsBySource,
+                     config.IncludePrerelease,
+                     config.AlignPackageVersions))
             resolved[entry.Key] = entry.Value;
 
         var explicitMap = config.ExpectedVersionMap;
@@ -57,13 +64,57 @@ internal sealed class ProjectBuildVersionTrackService
         return resolved.Count == 0 ? null : resolved;
     }
 
+    /// <summary>
+    /// Describes X-pattern version tracks that must be resolved after repository project
+    /// discovery so every project's actual package identifier can participate.
+    /// </summary>
+    public IReadOnlyList<ProjectBuildVersionAlignmentGroup>? ResolveVersionAlignmentGroups(
+        ProjectBuildConfiguration config,
+        IReadOnlyList<string>? defaultSources)
+    {
+        if (config is null)
+            throw new ArgumentNullException(nameof(config));
+        if (!config.AlignPackageVersions || config.VersionTracks is null || config.VersionTracks.Count == 0)
+            return null;
+
+        var groups = new List<ProjectBuildVersionAlignmentGroup>();
+        foreach (var entry in config.VersionTracks)
+        {
+            var trackName = string.IsNullOrWhiteSpace(entry.Key) ? "<unnamed>" : entry.Key.Trim();
+            var track = entry.Value ?? throw new ArgumentException($"VersionTracks entry '{trackName}' is null.", nameof(config));
+            var expectedVersion = NormalizeNullable(track.ExpectedVersion) ?? NormalizeNullable(config.ExpectedVersion);
+            if (string.IsNullOrWhiteSpace(expectedVersion) || PackageVersionUtility.TryNormalizeExact(expectedVersion, out _))
+                continue;
+
+            var sources = (track.NugetSource ?? defaultSources ?? Array.Empty<string>())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            groups.Add(new ProjectBuildVersionAlignmentGroup
+            {
+                Name = trackName,
+                ExpectedVersion = expectedVersion!,
+                Projects = ResolveProjects(trackName, track).ToArray(),
+                AnchorProject = NormalizeNullable(track.AnchorProject),
+                AnchorPackageId = NormalizeNullable(track.AnchorPackageId),
+                VersionSources = sources.Length == 0 ? null : sources,
+                IncludePrerelease = track.IncludePrerelease ?? config.IncludePrerelease
+            });
+        }
+
+        return groups.Count == 0 ? null : groups;
+    }
+
     private IEnumerable<KeyValuePair<string, string>> ExpandTracks(
         IReadOnlyDictionary<string, ProjectBuildVersionTrack>? tracks,
         string? defaultExpectedVersion,
         IReadOnlyList<string>? defaultSources,
         RepositoryCredential? credential,
         IReadOnlyDictionary<string, RepositoryCredential>? credentialsBySource,
-        bool defaultIncludePrerelease)
+        bool defaultIncludePrerelease,
+        bool preservePatternsForAlignment)
     {
         if (tracks is null || tracks.Count == 0)
             yield break;
@@ -76,8 +127,17 @@ internal sealed class ProjectBuildVersionTrackService
             if (string.IsNullOrWhiteSpace(expectedVersion))
                 throw new ArgumentException($"VersionTracks['{trackName}'] must define ExpectedVersion or rely on a non-empty top-level ExpectedVersion.", nameof(tracks));
 
-            var resolvedVersion = ResolveTrackVersion(trackName, track, expectedVersion!, defaultSources, credential, credentialsBySource, defaultIncludePrerelease);
-            foreach (var project in ResolveProjects(trackName, track))
+            var projects = ResolveProjects(trackName, track);
+            var resolvedVersion = ResolveTrackVersion(
+                trackName,
+                track,
+                expectedVersion!,
+                defaultSources,
+                credential,
+                credentialsBySource,
+                defaultIncludePrerelease,
+                preservePatternsForAlignment);
+            foreach (var project in projects)
                 yield return new KeyValuePair<string, string>(project, resolvedVersion);
         }
     }
@@ -89,7 +149,8 @@ internal sealed class ProjectBuildVersionTrackService
         IReadOnlyList<string>? defaultSources,
         RepositoryCredential? credential,
         IReadOnlyDictionary<string, RepositoryCredential>? credentialsBySource,
-        bool defaultIncludePrerelease)
+        bool defaultIncludePrerelease,
+        bool preservePatternForAlignment)
     {
         if (PackageVersionUtility.TryNormalizeExact(expectedVersion, out var exact))
             return exact;
@@ -97,6 +158,9 @@ internal sealed class ProjectBuildVersionTrackService
         var anchorPackageId = NormalizeNullable(track.AnchorPackageId) ?? NormalizeNullable(track.AnchorProject);
         if (anchorPackageId is null)
             throw new ArgumentException($"VersionTracks['{trackName}'] uses pattern version '{expectedVersion}' but does not define AnchorProject or AnchorPackageId.");
+
+        if (preservePatternForAlignment)
+            return expectedVersion;
 
         var sources = (track.NugetSource ?? defaultSources ?? Array.Empty<string>())
             .Where(value => !string.IsNullOrWhiteSpace(value))

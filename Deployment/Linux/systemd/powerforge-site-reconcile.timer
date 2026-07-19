@@ -1,0 +1,12 @@
+[Unit]
+Description=Reconcile abandoned PowerForge website releases every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Persistent=true
+Unit=powerforge-site-reconcile.service
+
+[Install]
+WantedBy=timers.target

@@ -119,6 +119,9 @@ public sealed class PackageBuildConfiguration
     /// <summary>When true, <see cref="ExpectedVersionMap"/> keys support wildcard matching.</summary>
     public bool ExpectedVersionMapUseWildcards { get; set; }
 
+    /// <summary>When true, projects sharing an X-pattern receive one next version based on the highest current package version in that group.</summary>
+    public bool AlignPackageVersions { get; set; }
+
     /// <summary>Project names to include.</summary>
     public string[]? IncludeProjects { get; set; }
 
@@ -453,8 +456,23 @@ public sealed class ReleaseConfiguration
     /// <summary>Source used to resolve the coordinated release version.</summary>
     public ReleaseVersionSource VersionSource { get; set; } = ReleaseVersionSource.Module;
 
-    /// <summary>Primary package/project used when the version source is package/project build.</summary>
+    /// <summary>
+    /// Primary package/project used when the version source is a package/project build.
+    /// Required by <see cref="SynchronizeModuleVersion"/> to identify the package coordinated with module history.
+    /// </summary>
     public string? PrimaryProject { get; set; }
+
+    /// <summary>
+    /// When enabled, coordinates the module and selected primary package on one version.
+    /// The next available module version becomes a floor for the primary package; a higher numeric package version still wins.
+    /// At the same numeric version, a stable X-pattern candidate does not erase the configured module prerelease;
+    /// explicit prerelease versions retain normal semantic-version ordering.
+    /// <see cref="PrimaryProject"/> is required, and exactly one selected lane must run before the module and be marked with
+    /// <c>UseAsReleaseVersionSource</c>. Package groups using <c>AlignPackageVersions</c> are raised together.
+    /// Publish runs persist a credential-free checkpoint so a partial release resumes the exact versions
+    /// and skips destinations that already completed.
+    /// </summary>
+    public bool SynchronizeModuleVersion { get; set; }
 
     /// <summary>Explicit release version used when <see cref="VersionSource"/> is <see cref="ReleaseVersionSource.Manual"/>.</summary>
     public string? Version { get; set; }

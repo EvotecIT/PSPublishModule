@@ -1,18 +1,31 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "powerforge.web.serverrecovery.schema.json",
-  "title": "PowerForge Web Server Recovery Manifest (schema v1)",
+  "title": "PowerForge Web Server Recovery Manifest (schema v2)",
   "type": "object",
   "additionalProperties": false,
   "properties": {
     "$schema": { "type": "string" },
-    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "schemaVersion": { "type": "integer", "minimum": 2, "maximum": 2 },
     "name": { "type": "string", "minLength": 1 },
     "description": { "type": "string" },
     "target": { "$ref": "#/$defs/Target" },
+    "operationLocks": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^/var/lock/[A-Za-z0-9][A-Za-z0-9_.-]{0,125}\\.lock$"
+      }
+    },
     "repositories": {
       "type": "array",
       "items": { "$ref": "#/$defs/Repository" }
+    },
+    "accounts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Account" }
     },
     "packages": { "$ref": "#/$defs/Packages" },
     "paths": {
@@ -32,7 +45,7 @@
     },
     "capture": { "$ref": "#/$defs/Capture" },
     "bootstrap": { "$ref": "#/$defs/CommandGroup" },
-    "deploy": { "$ref": "#/$defs/CommandGroup" },
+    "deploy": { "$ref": "#/$defs/Deploy" },
     "verify": { "$ref": "#/$defs/Verify" },
     "backupTarget": { "$ref": "#/$defs/BackupTarget" },
     "notes": {
@@ -41,7 +54,32 @@
     }
   },
   "required": ["schemaVersion", "name", "target"],
+  "allOf": [
+    {
+      "if": { "required": ["backupTarget"] },
+      "then": {
+        "required": ["capture"],
+        "properties": {
+          "capture": {
+            "required": ["plainFiles", "encryptedFiles"],
+            "properties": {
+              "plainFiles": { "minItems": 1 },
+              "encryptedFiles": { "minItems": 1 }
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
+    "AbsoluteUnixPath": {
+      "type": "string",
+      "pattern": "^/(?!\\.{1,2}(?:/|$))(?!.*/\\.{1,2}(?:/|$))(?!.*//)[A-Za-z0-9_./-]+$"
+    },
+    "AbsoluteUnixExactPath": {
+      "type": "string",
+      "pattern": "^/(?!\\.{1,2}(?:/|$))(?!.*/\\.{1,2}(?:/|$))(?!.*//)[A-Za-z0-9_./-]*[A-Za-z0-9_.-]$"
+    },
     "Target": {
       "type": "object",
       "additionalProperties": false,
@@ -50,8 +88,8 @@
         "host": { "type": "string" },
         "user": { "type": "string" },
         "sshPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
-        "os": { "type": "string" },
-        "architecture": { "type": "string" }
+        "os": { "type": "string", "pattern": "^ubuntu(?:-[0-9]{2}\\.[0-9]{2})?$" },
+        "architecture": { "type": "string", "enum": ["x64", "arm64"] }
       },
       "anyOf": [
         { "required": ["sshAlias"] },
@@ -64,11 +102,45 @@
       "properties": {
         "role": { "type": "string", "minLength": 1 },
         "url": { "type": "string" },
-        "path": { "type": "string" },
+        "path": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
         "branch": { "type": "string" },
-        "required": { "type": "boolean" }
+        "ref": { "type": "string", "minLength": 1 },
+        "refCaptureCommandId": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$" },
+        "refCaptureCommandIds": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$" }
+        },
+        "required": { "type": "boolean" },
+        "sshIdentityFile": { "$ref": "#/$defs/AbsoluteUnixPath" },
+        "sshKnownHostsFile": { "$ref": "#/$defs/AbsoluteUnixPath" },
+        "bootstrapRequiredFiles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/AbsoluteUnixPath" }
+        }
       },
+      "dependentRequired": {
+        "sshIdentityFile": ["sshKnownHostsFile", "bootstrapRequiredFiles"],
+        "sshKnownHostsFile": ["sshIdentityFile", "bootstrapRequiredFiles"]
+      },
+      "not": { "required": ["refCaptureCommandId", "refCaptureCommandIds"] },
       "required": ["role", "path"]
+    },
+    "Account": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z_][a-z0-9_-]{0,31}$" },
+        "system": { "type": "boolean" },
+        "createHome": { "type": "boolean" },
+        "home": { "type": "string" },
+        "shell": { "type": "string" }
+      },
+      "required": ["name"]
     },
     "Packages": {
       "type": "object",
@@ -76,15 +148,15 @@
       "properties": {
         "apt": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9+.:-]{0,127}$" }
         },
         "apacheModules": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$" }
         },
         "dotnetSdks": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string", "pattern": "^(?:8|8\\.0|10|10\\.0)$" }
         },
         "powershell": { "type": "boolean" }
       }
@@ -94,16 +166,60 @@
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string", "minLength": 1 },
-        "path": { "type": "string" },
-        "owner": { "type": "string" },
-        "group": { "type": "string" },
-        "mode": { "type": "string" },
+        "path": {
+          "allOf": [
+            { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+            { "not": { "enum": ["/etc/sudoers", "/etc/sudoers.d"] } }
+          ]
+        },
+        "source": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+        "owner": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$" },
+        "group": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$" },
+        "mode": { "type": "string", "pattern": "^[0-7]{3,4}$" },
         "kind": {
           "type": "string",
           "enum": ["directory", "file", "symlink"]
+        },
+        "validation": {
+          "type": "string",
+          "enum": ["sudoers"]
         }
       },
-      "required": ["id", "path"]
+      "required": ["id", "path"],
+      "allOf": [
+        {
+          "if": { "required": ["source"] },
+          "then": {
+            "required": ["kind", "owner", "group", "mode"],
+            "properties": {
+              "kind": { "enum": ["file"] },
+              "path": { "$ref": "#/$defs/AbsoluteUnixExactPath" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "validation": { "enum": ["sudoers"] } }, "required": ["validation"] },
+          "then": {
+            "required": ["source", "owner", "group", "mode", "kind"],
+            "properties": {
+              "kind": { "enum": ["file"] },
+              "owner": { "enum": ["root"] },
+              "group": { "enum": ["root"] },
+              "mode": { "enum": ["440", "0440"] },
+              "path": { "pattern": "^/etc/sudoers\\.d/[A-Za-z0-9_-]+$" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "path": { "pattern": "^/etc/sudoers\\.d/" } }, "required": ["path"] },
+          "then": {
+            "required": ["validation"],
+            "properties": {
+              "validation": { "enum": ["sudoers"] }
+            }
+          }
+        }
+      ]
     },
     "Apache": {
       "type": "object",
@@ -112,18 +228,17 @@
         "service": { "type": "string" },
         "modules": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$" }
         },
         "sites": {
           "type": "array",
-          "items": { "$ref": "#/$defs/ManagedFile" }
+          "items": { "$ref": "#/$defs/ApacheSiteFile" }
         },
         "conf": {
           "type": "array",
-          "items": { "$ref": "#/$defs/ManagedFile" }
+          "items": { "$ref": "#/$defs/ApacheConfFile" }
         },
-        "validateCommand": { "type": "string" },
-        "reloadCommand": { "type": "string" }
+        "validateCommand": { "type": "string" }
       }
     },
     "ManagedFile": {
@@ -136,6 +251,74 @@
         "sensitive": { "type": "boolean" }
       },
       "required": ["target"]
+    },
+    "RepositoryManagedFile": {
+      "allOf": [
+        { "$ref": "#/$defs/ManagedFile" },
+        {
+          "properties": {
+            "source": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+            "target": {
+              "allOf": [
+                { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+                { "not": { "pattern": "^/etc/sudoers(?:$|\\.d(?:$|/))" } }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ApacheFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+        "target": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+        "required": { "type": "boolean" },
+        "enabled": { "type": "boolean" }
+      },
+      "required": ["target"]
+    },
+    "ApacheSiteFile": {
+      "allOf": [
+        { "$ref": "#/$defs/ApacheFile" },
+        {
+          "properties": {
+            "target": { "pattern": "^/etc/apache2/sites-available/[A-Za-z0-9][A-Za-z0-9_.-]{0,249}\\.conf$" }
+          }
+        }
+      ]
+    },
+    "ApacheConfFile": {
+      "allOf": [
+        { "$ref": "#/$defs/ApacheFile" },
+        {
+          "properties": {
+            "target": { "pattern": "^/etc/apache2/conf-available/[A-Za-z0-9][A-Za-z0-9_.-]{0,249}\\.conf$" }
+          }
+        }
+      ]
+    },
+    "PlainCaptureFile": {
+      "allOf": [
+        { "$ref": "#/$defs/ManagedFile" },
+        {
+          "properties": {
+            "sensitive": { "enum": [false] }
+          }
+        }
+      ]
+    },
+    "EncryptedCaptureFile": {
+      "allOf": [
+        { "$ref": "#/$defs/ManagedFile" },
+        {
+          "properties": {
+            "sensitive": { "enum": [true] }
+          },
+          "required": ["sensitive"]
+        }
+      ]
     },
     "Firewall": {
       "type": "object",
@@ -191,8 +374,13 @@
       "additionalProperties": false,
       "properties": {
         "name": { "type": "string", "minLength": 1 },
-        "source": { "type": "string" },
-        "target": { "type": "string" },
+        "source": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+        "target": {
+          "allOf": [
+            { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+            { "not": { "pattern": "^/etc/sudoers(?:$|\\.d(?:$|/))" } }
+          ]
+        },
         "enabled": { "type": "boolean" },
         "required": { "type": "boolean" }
       },
@@ -209,11 +397,22 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "requiredDuringBootstrap": {
+          "type": "boolean",
+          "description": "Defaults to true. Set false only when a secret may be created after the initial bootstrap stage, such as first-issue certificate material."
+        },
+        "restoreAfterRepositories": {
+          "type": "boolean",
+          "description": "Stage this exact file during secret restore and install it only after pinned repositories are cloned."
+        },
         "capture": {
           "type": "string",
           "enum": ["exclude", "encrypted"]
         },
-        "restoreMode": { "type": "string" }
+        "restoreMode": { "type": "string", "enum": ["file", "directory"] },
+        "owner": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$" },
+        "group": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$" },
+        "mode": { "type": "string", "pattern": "^[0-7]{3,4}$" }
       },
       "required": ["id", "capture"]
     },
@@ -223,11 +422,11 @@
       "properties": {
         "plainFiles": {
           "type": "array",
-          "items": { "$ref": "#/$defs/ManagedFile" }
+          "items": { "$ref": "#/$defs/PlainCaptureFile" }
         },
         "encryptedFiles": {
           "type": "array",
-          "items": { "$ref": "#/$defs/ManagedFile" }
+          "items": { "$ref": "#/$defs/EncryptedCaptureFile" }
         },
         "commands": {
           "type": "array",
@@ -243,6 +442,21 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "commands": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NamedCommand" }
+        }
+      }
+    },
+    "Deploy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "operationLockOwner": {
+          "type": "string",
+          "enum": ["engine", "command"],
+          "description": "Defaults to engine. Command ownership requires exactly one deploy command that holds every declared operation lock for its complete lifetime."
+        },
         "commands": {
           "type": "array",
           "items": { "$ref": "#/$defs/NamedCommand" }
@@ -293,24 +507,52 @@
           "type": "string",
           "enum": ["github"]
         },
-        "repository": { "type": "string" },
-        "branch": { "type": "string" },
-        "path": { "type": "string" },
+        "repository": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "branch": {
+          "type": "string",
+          "pattern": "^(?!.*[\\r\\n])(?!/)(?!.*\\.\\.)[A-Za-z0-9_./-]+$"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^(?!.*[\\r\\n])(?!/)(?!.*\\.\\.)[A-Za-z0-9_./-]+$"
+        },
         "encryption": {
           "type": "string",
           "enum": ["age"]
         },
-        "recipient": { "type": "string" },
-        "recipientEnv": { "type": "string" },
+        "recipient": { "type": "string", "minLength": 1 },
+        "recipientEnv": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
         "retention": { "$ref": "#/$defs/BackupRetention" }
-      }
+      },
+      "required": ["type", "repository", "branch", "path", "encryption", "retention"],
+      "anyOf": [
+        { "required": ["recipient"] },
+        { "required": ["recipientEnv"] }
+      ]
     },
     "BackupRetention": {
       "type": "object",
       "additionalProperties": false,
+      "anyOf": [
+        { "required": ["keepLatestInTree"] },
+        { "required": ["keepLatest"] }
+      ],
+      "not": { "required": ["keepLatestInTree", "keepLatest"] },
       "properties": {
-        "keepLatest": { "type": "integer", "minimum": 1 },
-        "keepDays": { "type": "integer", "minimum": 1 }
+        "keepLatestInTree": { "type": "integer", "minimum": 1, "maximum": 365 },
+        "keepLatest": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 365,
+          "deprecated": true,
+          "description": "Compatibility alias for keepLatestInTree. Git history is preserved."
+        }
       }
     }
   }

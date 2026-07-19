@@ -28,11 +28,14 @@ public sealed class ManagedModuleBenchmarkSuiteTests
         var text = File.ReadAllText(path);
         var lines = File.ReadLines(path).Where(static line => !string.IsNullOrWhiteSpace(line)).Count();
 
-        Assert.True(lines <= 210, "Managed module benchmark spec should stay readable and data-driven.");
+        Assert.True(lines <= 245, "Managed module benchmark spec should stay readable and data-driven.");
         Assert.Contains("benchmark 'managed-modules'", text, StringComparison.Ordinal);
         Assert.Contains("caseSource", text, StringComparison.Ordinal);
         Assert.Contains("engine Managed", text, StringComparison.Ordinal);
         Assert.Contains("operation Install", text, StringComparison.Ordinal);
+        Assert.Contains("metadata ComparisonMode", text, StringComparison.Ordinal);
+        Assert.Contains("ManagedModuleSha256", text, StringComparison.Ordinal);
+        Assert.Contains("ModuleFastSha256", text, StringComparison.Ordinal);
         Assert.DoesNotContain("ModuleFastCSharp", text, StringComparison.Ordinal);
         Assert.DoesNotContain("New-ManagedModuleBenchmarkSuite", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Invoke-BenchmarkSuite", text, StringComparison.Ordinal);
@@ -75,6 +78,46 @@ public sealed class ManagedModuleBenchmarkSuiteTests
 
         Assert.Single(plan);
         Assert.Empty(suite.Comparisons);
+    }
+
+    [Fact]
+    public void ManagedModuleSuite_InstallComparisonKeepsProviderSetupOutOfMeasuredHandlers()
+    {
+        var path = Path.Combine(RepoRootLocator.Find(), "Benchmarks", "ManagedModules", "managed-modules.benchmark.ps1");
+        var text = File.ReadAllText(path);
+        var setupStart = text.IndexOf("    setup {", StringComparison.Ordinal);
+        var setupEnd = text.IndexOf("    skip {", StringComparison.Ordinal);
+        var setup = text.Substring(setupStart, setupEnd - setupStart);
+        var managedStart = text.IndexOf("    engine Managed {", StringComparison.Ordinal);
+        var managedEnd = text.IndexOf("        operation Save {", managedStart, StringComparison.Ordinal);
+        var managedInstall = text.Substring(managedStart, managedEnd - managedStart);
+        var moduleFastStart = text.IndexOf("    engine ModuleFast {", StringComparison.Ordinal);
+        var moduleFastEnd = text.IndexOf("    engine PSResourceGet {", moduleFastStart, StringComparison.Ordinal);
+        var moduleFastInstall = text.Substring(moduleFastStart, moduleFastEnd - moduleFastStart);
+
+        Assert.Contains("Import-Module", setup, StringComparison.Ordinal);
+        Assert.Contains("Clear-ModuleFastCache", setup, StringComparison.Ordinal);
+        Assert.Contains("$run.RunId", setup, StringComparison.Ordinal);
+        Assert.Contains("$run.Iteration", setup, StringComparison.Ordinal);
+        Assert.Contains("ManagedCommandSha256", setup, StringComparison.Ordinal);
+        Assert.Contains("ModuleFastCommandSha256", setup, StringComparison.Ordinal);
+        Assert.DoesNotContain("PackageCacheDirectory", managedInstall, StringComparison.Ordinal);
+        Assert.DoesNotContain("Import-Module", moduleFastInstall, StringComparison.Ordinal);
+        Assert.Contains("DestinationOnly", moduleFastInstall, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ManagedModuleSuite_OnlyUpdatesRootReadmeWhenExplicitlyRequested()
+    {
+        var normal = LoadSuite();
+        var publishing = LoadSuite(variables: new Dictionary<string, string?>
+        {
+            ["UpdateReadme"] = "true"
+        });
+
+        Assert.Empty(normal.ReadmeBlocks);
+        var block = Assert.Single(publishing.ReadmeBlocks);
+        Assert.Equal("managed-module-benchmark-table", block.BlockId);
     }
 
     [Fact]

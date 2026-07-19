@@ -67,6 +67,12 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
     public PowerShellBenchmarkRunOrder? RunOrder { get; set; }
 
     /// <summary>
+    /// Optional managed-memory cleanup override.
+    /// </summary>
+    [Parameter]
+    public PowerShellBenchmarkMemoryCleanupMode? MemoryCleanup { get; set; }
+
+    /// <summary>
     /// Optional delay between measured samples, in milliseconds.
     /// </summary>
     [Parameter]
@@ -204,6 +210,7 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
                     IterationCount = suite.IterationCount,
                     RunMode = suite.RunMode,
                     RunOrder = suite.RunOrder,
+                    MemoryCleanup = suite.MemoryCleanup,
                     CooldownMilliseconds = suite.CooldownMilliseconds,
                     OutlierMode = suite.OutlierMode,
                     SuiteName = suite.Name,
@@ -233,6 +240,7 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
                     IterationCount = suite.IterationCount,
                     RunMode = suite.RunMode,
                     RunOrder = suite.RunOrder,
+                    MemoryCleanup = suite.MemoryCleanup,
                     CooldownMilliseconds = suite.CooldownMilliseconds,
                     OutlierMode = suite.OutlierMode,
                     SuiteName = suite.Name,
@@ -258,6 +266,7 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
         if (IterationCount.HasValue) suite.IterationCount = Math.Max(1, IterationCount.Value);
         if (!string.IsNullOrWhiteSpace(RunMode)) suite.RunMode = RunMode!;
         if (RunOrder.HasValue) suite.RunOrder = RunOrder.Value;
+        if (MemoryCleanup.HasValue) suite.MemoryCleanup = MemoryCleanup.Value;
         if (CooldownMilliseconds.HasValue) suite.CooldownMilliseconds = Math.Max(0, CooldownMilliseconds.Value);
         if (OutlierMode.HasValue) suite.OutlierMode = OutlierMode.Value;
         if (!string.IsNullOrWhiteSpace(Suite)) suite.Name = Suite!;

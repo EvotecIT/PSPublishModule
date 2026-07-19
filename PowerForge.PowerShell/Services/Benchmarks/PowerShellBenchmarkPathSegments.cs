@@ -1,9 +1,12 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace PowerForge;
 
 internal static class PowerShellBenchmarkPathSegments
 {
+    private const int MaxMatrixSegmentLength = 80;
     private static readonly HashSet<string> WindowsDeviceNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "CON",
@@ -56,7 +59,18 @@ internal static class PowerShellBenchmarkPathSegments
                 .Where(k => !isBuiltInPathValue(k.Key))
                 .OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(k => string.Concat(Value(k.Key), "=", Value(Convert.ToString(k.Value, CultureInfo.InvariantCulture)))));
-        return string.IsNullOrWhiteSpace(text) ? "matrix" : text;
+        if (string.IsNullOrWhiteSpace(text))
+            return "matrix";
+        if (text.Length <= MaxMatrixSegmentLength)
+            return text;
+
+        string hash;
+        using (var sha256 = SHA256.Create())
+        {
+            var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(text));
+            hash = BitConverter.ToString(bytes, 0, 6).Replace("-", string.Empty);
+        }
+        return string.Concat(text.Substring(0, MaxMatrixSegmentLength - hash.Length - 1), "~", hash);
     }
 
     private static string EscapeTrailingWindowsIgnoredCharacters(string escaped)

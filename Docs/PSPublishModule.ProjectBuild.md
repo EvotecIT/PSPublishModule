@@ -4,7 +4,8 @@ This document describes the JSON configuration consumed by `Invoke-ProjectBuild`
 For the unified repo-level entrypoint that combines package and downloadable tool releases in one file,
 see `Build/release.json` and `powerforge release`.
 For module-plus-NuGet repository releases such as PSParseHTML, where one run should publish packages,
-the PowerShell module, and one GitHub asset set, see `Docs/PSPublishModule.UnifiedModuleProjectRelease.md`.
+the PowerShell module, and one GitHub asset set, see
+[Unified Module And Project Releases](PSPublishModule.UnifiedModuleProjectRelease.md).
 For a PowerShell-first authoring layer proposal that keeps the same engine but avoids raw CLI argument shaping,
 see `Docs/PSPublishModule.ProjectBuild.DslProposal.md`.
 
@@ -319,10 +320,28 @@ Versioning
 - `VersionTracks.<Name>.AnchorPackageId`: optional explicit package identity when it differs from the project name.
 - `VersionTracks.<Name>.Projects`: sibling projects that should be stamped to the same resolved version. `AnchorProject` is included automatically.
 - When `AnchorPackageId` is used, also set `AnchorProject` so the anchor project itself is stamped automatically.
+- `AlignPackageVersions`: defaults to false. When true, ordinary projects using the same X-pattern are stepped from the highest current package version found for any project in that group. For example, if one `2.0.X` package is at `2.0.5` and another is new, both plan `2.0.6`. Ordinary exact-version overrides outside a version track remain exact. `VersionTracks` already coordinate their members when alignment is false and remain explicit, separate group boundaries when it is true. This does not assign one universal version to every project. See [Unified Module And Project Releases](PSPublishModule.UnifiedModuleProjectRelease.md) for complete aligned, non-aligned, and version-track behavior.
+- In a module pipeline with `Release.SynchronizeModuleVersion`, the next available module version is also a floor for `Release.PrimaryProject`. If that project belongs to an aligned X-pattern group, the whole group is raised to the floor. A higher numeric NuGet-derived package candidate still wins. At the same numeric version, a stable X-pattern candidate does not erase the configured module prerelease; explicit prerelease versions retain normal semantic-version ordering. The module and primary package patterns must describe the same version line.
 - When no expected version is provided for a project, the existing csproj version is used.
 - When both `VersionTracks` and `ExpectedVersionMap` are present, the explicit map wins for matching projects.
 - `UpdateVersions`: when false, csproj files are not updated.
 - Version source resolution can use `NugetSource` (v3 index URL or local folder) with optional credentials.
+
+To keep an existing package family and newly added packages on one release version, enable alignment alongside the shared X-pattern:
+
+```json
+{
+  "ExpectedVersion": "2.0.X",
+  "ExpectedVersionMap": {
+    "ExampleSuite.Core": "2.0.X",
+    "ExampleSuite.Excel": "2.0.X",
+    "ExampleSuite.NewPackage": "2.0.X"
+  },
+  "ExpectedVersionMapAsInclude": true,
+  "AlignPackageVersions": true
+}
+```
+
 - `PackStrategy`: optional packing strategy. `PerProject` runs a non-incremental build followed by `dotnet pack --no-build` for each project. `MSBuild` (alias `Batch`) requires `OutputPath` or `StagingPath`, generates a temporary traversal project, and runs `Restore;Rebuild;Pack` for selected projects in parallel. If no package output path is available, it logs a warning and falls back to `PerProject`. Both strategies verify primary managed assemblies under `lib/<tfm>`, `runtimes/<rid>/lib/<tfm>`, and `tools/<tfm>/any` against exact fresh build target directories before package signing or publishing. Native runtime assets and metadata-only packages are not assembly-hash targets. Private feed credentials must already be available to `dotnet`/MSBuild restore. Batch mode stops on the first project failure and treats the whole failed batch as failed, so already-produced packages from that batch are not signed or published. Projects without a resolved version are reported as failed skipped projects.
 
 Staging and outputs

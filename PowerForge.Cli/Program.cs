@@ -74,6 +74,8 @@ internal static partial class Program
             return CommandProject(filteredArgs, cli, logger);
         case "release":
             return CommandRelease(filteredArgs, cli, logger);
+        case "apple-release":
+            return CommandAppleRelease(filteredArgs, cli, logger);
         case "store":
             return CommandStore(filteredArgs, cli, logger);
         case "run":
@@ -82,6 +84,9 @@ internal static partial class Program
             return CommandWorkspace(filteredArgs, cli, logger);
         case "github":
             return CommandGitHub(filteredArgs, cli, logger);
+        case "homeassistant":
+        case "hacs":
+            return CommandHomeAssistant(filteredArgs, cli, logger);
         case "normalize":
         {
             var argv = filteredArgs.Skip(1).ToArray();

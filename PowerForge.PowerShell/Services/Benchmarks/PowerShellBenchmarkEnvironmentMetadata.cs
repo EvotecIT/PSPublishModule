@@ -35,10 +35,13 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
             ["warmupCount"] = suite.WarmupCount.ToString(CultureInfo.InvariantCulture),
             ["iterationCount"] = suite.IterationCount.ToString(CultureInfo.InvariantCulture),
             ["runOrder"] = suite.RunOrder.ToString(),
+            ["memoryCleanup"] = suite.MemoryCleanup.ToString(),
             ["cooldownMilliseconds"] = suite.CooldownMilliseconds.ToString(CultureInfo.InvariantCulture),
             ["outlierMode"] = suite.OutlierMode.ToString(),
             ["runMode"] = suite.RunMode
         };
+        foreach (var item in suite.Metadata)
+            metadata["benchmark." + item.Key] = item.Value;
         AddMetadata(metadata, "gitSha", ReadGitValue("rev-parse HEAD"));
         AddMetadata(metadata, "gitBranch", ReadGitValue("branch --show-current"));
         return metadata;
@@ -51,7 +54,7 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
     }
 
     private static string PSVersionInfo()
-        => Convert.ToString(PSObject.AsPSObject(typeof(PSObject).Assembly.GetName().Version).BaseObject, CultureInfo.InvariantCulture) ?? string.Empty;
+        => Convert.ToString(PSVersionInfoValue("PSVersion"), CultureInfo.InvariantCulture) ?? string.Empty;
 
     private static object? PSVersionInfoValue(string name)
     {

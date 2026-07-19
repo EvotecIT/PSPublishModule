@@ -22,6 +22,9 @@ public sealed class AppStoreConnectScreenshotSyncSpec
 
     /// <summary>Screenshot set folder mappings.</summary>
     public AppStoreConnectScreenshotSetSyncSpec[] ScreenshotSets { get; set; } = Array.Empty<AppStoreConnectScreenshotSetSyncSpec>();
+
+    /// <summary>Optional local screenshot quality gates applied before upload.</summary>
+    public AppStoreConnectScreenshotQualitySpec Quality { get; set; } = new();
 }
 
 /// <summary>
@@ -40,6 +43,33 @@ public sealed class AppStoreConnectScreenshotSetSyncSpec
 
     /// <summary>Maximum screenshots to upload from this folder.</summary>
     public int MaxCount { get; set; } = 10;
+
+    /// <summary>Optional allowed PNG dimensions in WIDTHxHEIGHT form.</summary>
+    public string[] AllowedDimensions { get; set; } = Array.Empty<string>();
+}
+
+/// <summary>
+/// Configurable, deterministic screenshot quality checks.
+/// </summary>
+public sealed class AppStoreConnectScreenshotQualitySpec
+{
+    /// <summary>Enables screenshot quality validation.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>Rejects byte-identical images inside one screenshot set.</summary>
+    public bool RejectDuplicates { get; set; } = true;
+
+    /// <summary>Requires every PNG in a screenshot set to use the same dimensions.</summary>
+    public bool RequireConsistentDimensions { get; set; } = true;
+
+    /// <summary>Minimum accepted screenshot file size.</summary>
+    public long MinimumFileBytes { get; set; } = 4096;
+
+    /// <summary>
+    /// Minimum compressed kilobytes per megapixel. This catches near-empty or blank captures
+    /// without depending on platform image frameworks. Set to zero to disable the heuristic.
+    /// </summary>
+    public double MinimumKilobytesPerMegapixel { get; set; } = 12;
 }
 
 /// <summary>
