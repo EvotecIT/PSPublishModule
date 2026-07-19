@@ -166,6 +166,8 @@ public sealed partial class DotNetPublishPipelineRunner
             VersionPropertyName = versionResolution.PropertyName,
             VersionPatch = versionResolution.Patch,
             VersionStatePath = versionResolution.StatePath,
+            VersionAuthority = versionResolution.Authority,
+            VersionAuthorityReference = BuildMsiVersionAuthorityReference(versionResolution),
             ClientLicensePath = licenseResolution.Path,
             ClientLicensePropertyName = licenseResolution.PropertyName,
             ClientId = licenseResolution.ClientId
@@ -601,6 +603,10 @@ public sealed partial class DotNetPublishPipelineRunner
         var patch = Clamp(basePatch, 0, patchCap);
         var propertyName = string.IsNullOrWhiteSpace(v.PropertyName) ? "ProductVersion" : v.PropertyName!.Trim();
         string? statePath = null;
+        string? coordinationKey = null;
+        string? authorityKey = null;
+        string? gitRemote = null;
+        string? gitTagPrefix = null;
 
         if (v.Monotonic)
         {
@@ -622,10 +628,44 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!plan.AllowOutputOutsideProjectRoot)
                 EnsurePathWithinRoot(plan.ProjectRoot, statePath, $"Installer '{installer.Id}' version state path");
 
+            MsiVersionState? authorityState = null;
+            if (v.Authority == DotNetPublishMsiVersionAuthorityKind.GitTags)
+            {
+                if (v.AllowOutputOverwrite)
+                {
+                    throw new InvalidOperationException(
+                        $"Installer '{installer.Id}' cannot combine Versioning.Authority=GitTags with " +
+                        "Versioning.AllowOutputOverwrite. Shared release identities are immutable.");
+                }
+
+                var authorityTemplate = string.IsNullOrWhiteSpace(v.AuthorityKey)
+                    ? installer.Id
+                    : v.AuthorityKey!;
+                authorityKey = NormalizeMsiGitRefPath(
+                    ApplyTemplate(authorityTemplate, tokens),
+                    "MSI version authority key");
+                gitRemote = NormalizeMsiGitRemote(v.GitRemote);
+                gitTagPrefix = NormalizeMsiGitRefPath(v.GitTagPrefix, "MSI version Git tag prefix", "powerforge-msi");
+                coordinationKey = $"git:{gitRemote}:{gitTagPrefix}:{authorityKey}";
+                authorityState = ReadMsiGitTagVersionState(
+                    plan.ProjectRoot,
+                    gitRemote,
+                    gitTagPrefix,
+                    authorityKey);
+            }
+            else
+            {
+                coordinationKey = statePath;
+            }
+
             MsiVersionState? plannedState = null;
             var hasPlannedState = stateOverrides is not null
-                                  && stateOverrides.TryGetValue(statePath, out plannedState);
-            var previous = hasPlannedState ? plannedState : ReadMsiVersionState(statePath);
+                                  && stateOverrides.TryGetValue(coordinationKey, out plannedState);
+            var previous = SelectLatestMsiVersionState(
+                plannedState,
+                ReadMsiVersionState(statePath),
+                authorityState);
+            ThrowIfMsiVersionLineRegresses(previous, major, minor, installer.Id);
             if (!hasPlannedState
                 && v.AllowOutputOverwrite
                 && TryResolveReusableMsiPatch(previous, major, minor, patch, patchCap, out var reusablePatch))
@@ -633,7 +673,24 @@ public sealed partial class DotNetPublishPipelineRunner
                 patch = reusablePatch;
             }
             else if (ShouldBumpMsiPatch(previous, major, minor, patch))
-                patch = Math.Min(patchCap, previous!.LastPatch + 1);
+            {
+                if (previous!.LastPatch >= patchCap)
+                {
+                    throw new InvalidOperationException(
+                        $"Installer '{installer.Id}' cannot advance beyond MSI patch '{previous.LastPatch}' " +
+                        $"because Versioning.PatchCap is '{patchCap}'. Increase the version line or patch cap.");
+                }
+
+                patch = previous.LastPatch + 1;
+            }
+
+            ThrowIfMsiVersionRegresses(
+                previous,
+                major,
+                minor,
+                patch,
+                allowEqual: v.AllowOutputOverwrite,
+                installer.Id);
         }
 
         if (patch >= patchCap && basePatch > patchCap)
@@ -644,7 +701,16 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         var version = $"{major}.{minor}.{patch}";
-        return new MsiVersionResolution(version, propertyName, patch, statePath);
+        return new MsiVersionResolution(
+            version,
+            propertyName,
+            patch,
+            statePath,
+            coordinationKey,
+            v.Authority,
+            authorityKey,
+            gitRemote,
+            gitTagPrefix);
     }
 
     private MsiVersionResolution ResolveMsiVersionForStep(
@@ -663,7 +729,16 @@ public sealed partial class DotNetPublishPipelineRunner
                     $"MSI build for installer '{installer.Id}'",
                     reservationOwner,
                     cached.AllowOutputOverwrite);
-                return new MsiVersionResolution(cached.Version, cached.VersionPropertyName, cached.Patch, cached.StatePath);
+                return new MsiVersionResolution(
+                    cached.Version,
+                    cached.VersionPropertyName,
+                    cached.Patch,
+                    cached.StatePath,
+                    BuildMsiVersionCoordinationKey(cached),
+                    cached.Authority,
+                    cached.AuthorityKey,
+                    cached.GitRemote,
+                    cached.GitTagPrefix);
             }
         }
 
@@ -675,6 +750,11 @@ public sealed partial class DotNetPublishPipelineRunner
             AssemblyVersion = BuildFourPartVersion(resolved.Version ?? string.Empty),
             Patch = resolved.Patch,
             StatePath = resolved.StatePath,
+            Authority = resolved.Authority,
+            AuthorityKey = resolved.AuthorityKey,
+            GitRemote = resolved.GitRemote,
+            GitTagPrefix = resolved.GitTagPrefix,
+            AuthorityWorkingDirectory = plan.ProjectRoot,
             AllowOutputOverwrite = installer?.Versioning?.AllowOutputOverwrite == true
         };
         ReserveMsiVersionState(
@@ -798,6 +878,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 throw new InvalidOperationException(
                     $"MSI version state '{version.StatePath}' advanced to '{previousVersion}' before {context} could reserve '{version.Version}'. Re-plan or rerun the publish to avoid duplicate MSI versions.");
             }
+
+            ReserveMsiGitTagVersion(version, context, reservationOwner);
 
             WriteMsiVersionState(stateStream, patch, version.Version, reservationOwner);
         }
@@ -1070,17 +1152,45 @@ public sealed partial class DotNetPublishPipelineRunner
         public string? PropertyName { get; }
         public int? Patch { get; }
         public string? StatePath { get; }
+        public string? CoordinationKey { get; }
+        public DotNetPublishMsiVersionAuthorityKind Authority { get; }
+        public string? AuthorityKey { get; }
+        public string? GitRemote { get; }
+        public string? GitTagPrefix { get; }
 
-        public MsiVersionResolution(string? version, string? propertyName, int? patch, string? statePath)
+        public MsiVersionResolution(
+            string? version,
+            string? propertyName,
+            int? patch,
+            string? statePath,
+            string? coordinationKey,
+            DotNetPublishMsiVersionAuthorityKind authority,
+            string? authorityKey,
+            string? gitRemote,
+            string? gitTagPrefix)
         {
             Version = version;
             PropertyName = propertyName;
             Patch = patch;
             StatePath = statePath;
+            CoordinationKey = coordinationKey;
+            Authority = authority;
+            AuthorityKey = authorityKey;
+            GitRemote = gitRemote;
+            GitTagPrefix = gitTagPrefix;
         }
 
         public static MsiVersionResolution None()
-            => new(version: null, propertyName: null, patch: null, statePath: null);
+            => new(
+                version: null,
+                propertyName: null,
+                patch: null,
+                statePath: null,
+                coordinationKey: null,
+                authority: DotNetPublishMsiVersionAuthorityKind.LocalFile,
+                authorityKey: null,
+                gitRemote: null,
+                gitTagPrefix: null);
     }
 
     private sealed class MsiClientLicenseResolution
