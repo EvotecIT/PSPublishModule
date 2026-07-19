@@ -95,4 +95,20 @@ public sealed class PowerForgeReleaseRequestMapperTests
         Assert.Equal(15, request.ApplePollIntervalSeconds);
         Assert.True(request.AppleSummaryOnly);
     }
+
+    [Fact]
+    public void Build_MapsModuleRunMode()
+    {
+        var request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(
+            "/repo/powerforge.release.json",
+            defaults: null,
+            new PSPublishModule.PowerForgeReleaseInvocationOptions
+            {
+                ModuleFramework = "net10.0",
+                ModuleRunMode = ConfigurationGateMode.Publish
+            });
+
+        Assert.Equal("net10.0", request.ModuleFramework);
+        Assert.Equal(ConfigurationGateMode.Publish, request.ModuleRunMode);
+    }
 }

@@ -8,7 +8,8 @@
       "Module/Artefacts/Packed",
       "Module/Artefacts/PackedWithModules",
       "Module/Artefacts/Unpacked"
-    ]
+    ],
+    "IncludesPackages": true
   },
   "Packages": {
     "RootPath": "..",

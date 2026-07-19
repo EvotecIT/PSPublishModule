@@ -149,6 +149,32 @@ public sealed class PSPublishModuleManifestContractTests
     }
 
     [Fact]
+    public void Publish_entry_point_coordinates_module_nuget_and_native_tool_releases()
+    {
+        var repoRoot = RepoRootLocator.Find();
+        var wrapperScript = File.ReadAllText(Path.Combine(repoRoot, "Build", "Build-Module.ps1"));
+        var projectWrapperScript = File.ReadAllText(Path.Combine(repoRoot, "Build", "Build-Project.ps1"));
+        var selfBuildScript = File.ReadAllText(Path.Combine(repoRoot, "Module", "Build", "Build-ModuleSelf.ps1"));
+        var buildScript = File.ReadAllText(Path.Combine(repoRoot, "Module", "Build", "Build-Module.ps1"));
+        var releaseConfig = File.ReadAllText(Path.Combine(repoRoot, "Build", "release.json"));
+
+        Assert.Contains("New-ConfigurationProjectBuild -Name 'PowerForge' -ConfigPath '../Build/release.json' -BuildBeforeModule -PublishNuget", buildScript, StringComparison.Ordinal);
+        Assert.Contains("New-ConfigurationRelease -StageRoot 'Module/Artefacts/UploadReady'", buildScript, StringComparison.Ordinal);
+        Assert.Contains("-PublishOrder 'NuGet', 'PowerShellGallery', 'GitHub'", buildScript, StringComparison.Ordinal);
+        Assert.Contains("if ($RunMode -in @('Build', 'Publish'))", buildScript, StringComparison.Ordinal);
+        Assert.Contains("$PowerForgeReleaseStage", buildScript, StringComparison.Ordinal);
+        Assert.Contains("'--module-framework', $Framework", selfBuildScript, StringComparison.Ordinal);
+        Assert.Contains("'--module-run-mode', 'Publish'", selfBuildScript, StringComparison.Ordinal);
+        Assert.Contains("'--publish-tool-github'", selfBuildScript, StringComparison.Ordinal);
+        Assert.Contains("RunMode        = $RunMode", wrapperScript, StringComparison.Ordinal);
+        Assert.Contains("$cmdletFramework = if ($PSEdition -eq 'Desktop')", projectWrapperScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("$moduleFramework = if ($PSEdition -eq 'Desktop')", projectWrapperScript, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("if ($PSBoundParameters.ContainsKey('PublishNuget')) { $invokeParams.PublishNuget = $PublishNuget.IsPresent }", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("if ($PSBoundParameters.ContainsKey('PublishGitHub')) { $invokeParams.PublishProjectGitHub = $PublishGitHub.IsPresent }", projectWrapperScript, StringComparison.Ordinal);
+        Assert.Contains("\"IncludesPackages\": true", releaseConfig, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Module_exports_embedded_dependency_cmdlets()
     {
         var repoRoot = RepoRootLocator.Find();

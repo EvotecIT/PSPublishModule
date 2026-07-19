@@ -23,6 +23,8 @@ internal static class PowerForgeReleaseRequestMapper
         request.PublishNuget = ChooseBool(request.PublishNuget, options.PublishNuget);
         request.PublishProjectGitHub = ChooseBool(request.PublishProjectGitHub, options.PublishProjectGitHub);
         request.PublishToolGitHub = ChooseBool(request.PublishToolGitHub, options.PublishToolGitHub);
+        request.ModuleFramework = ChooseString(request.ModuleFramework, options.ModuleFramework);
+        request.ModuleRunMode = options.ModuleRunMode ?? request.ModuleRunMode;
         request.ModuleNoDotnetBuild = ChooseBool(request.ModuleNoDotnetBuild, options.ModuleNoDotnetBuild);
         request.ModuleNoSign = ChooseBool(request.ModuleNoSign, options.ModuleNoSign);
         request.ModuleSignModule = ChooseBool(request.ModuleSignModule, options.ModuleSignModule);
@@ -123,6 +125,8 @@ internal static class PowerForgeReleaseRequestMapper
             PublishProjectGitHub = source.PublishProjectGitHub,
             PublishToolGitHub = source.PublishToolGitHub,
             Configuration = source.Configuration,
+            ModuleFramework = source.ModuleFramework,
+            ModuleRunMode = source.ModuleRunMode,
             ModuleNoDotnetBuild = source.ModuleNoDotnetBuild,
             ModuleVersion = source.ModuleVersion,
             ModulePreReleaseTag = source.ModulePreReleaseTag,

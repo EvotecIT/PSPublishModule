@@ -58,7 +58,7 @@ public sealed class ModuleBuildHostService
         var result = await Task.Run(() => _powerShellRunner.Run(PowerShellRunRequest.ForCommand(
             commandText: script,
             timeout: TimeSpan.FromMinutes(15),
-            preferPwsh: !FrameworkCompatibility.IsWindows(),
+            preferPwsh: true,
             workingDirectory: workingDirectory,
             executableOverride: Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_POWERSHELL_EXE"))), cancellationToken).ConfigureAwait(false);
         startedAt.Stop();
@@ -74,7 +74,7 @@ public sealed class ModuleBuildHostService
 
     private static string BuildExportScript(string repositoryRoot, string scriptPath, string outputPath, string modulePath)
     {
-        var moduleRoot = Directory.GetParent(Path.GetDirectoryName(scriptPath)!)?.FullName ?? repositoryRoot;
+        var moduleRoot = ResolveModuleRoot(repositoryRoot, scriptPath);
         return string.Join(Environment.NewLine, new[] {
             "$ErrorActionPreference = 'Stop'",
             $"Set-Location -LiteralPath {QuoteLiteral(moduleRoot)}",
@@ -159,7 +159,7 @@ public sealed class ModuleBuildHostService
 
     private static string BuildBuildScript(string repositoryRoot, string scriptPath, string modulePath, ModuleBuildHostBuildRequest request)
     {
-        var moduleRoot = Directory.GetParent(Path.GetDirectoryName(scriptPath)!)?.FullName ?? repositoryRoot;
+        var moduleRoot = ResolveModuleRoot(repositoryRoot, scriptPath);
         var invocation = BuildScriptInvocation(scriptPath, request);
         return string.Join(Environment.NewLine, new[] {
             "$ErrorActionPreference = 'Stop'",
@@ -181,6 +181,22 @@ public sealed class ModuleBuildHostService
         if (!string.IsNullOrWhiteSpace(request.Configuration))
         {
             arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('Configuration')) {{ $buildScriptArguments['Configuration'] = {QuoteLiteral(request.Configuration!)} }}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Framework))
+        {
+            arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('Framework')) {{ $buildScriptArguments['Framework'] = {QuoteLiteral(request.Framework!)} }}");
+        }
+
+        if (request.RunMode.HasValue)
+        {
+            var runMode = request.RunMode.Value.ToString();
+            arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('RunMode')) {{ $buildScriptArguments['RunMode'] = {QuoteLiteral(runMode)} }} elseif ($buildScriptCommand.Parameters.ContainsKey('ConfigurationGateMode')) {{ $buildScriptArguments['ConfigurationGateMode'] = {QuoteLiteral(runMode)} }}");
+        }
+
+        if (request.PowerForgeReleaseStage)
+        {
+            arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('PowerForgeReleaseStage')) { $buildScriptArguments['PowerForgeReleaseStage'] = $true }");
         }
 
         if (request.NoDotnetBuild)
@@ -215,6 +231,21 @@ public sealed class ModuleBuildHostService
         => File.Exists(modulePath)
             ? $"try {{ Import-Module {QuoteLiteral(modulePath)} -Force -ErrorAction Stop }} catch {{ Import-Module PSPublishModule -Force -ErrorAction Stop }}"
             : "Import-Module PSPublishModule -Force -ErrorAction Stop";
+
+    private static string ResolveModuleRoot(string repositoryRoot, string scriptPath)
+    {
+        var scriptDirectory = Path.GetDirectoryName(scriptPath);
+        if (!string.IsNullOrWhiteSpace(scriptDirectory))
+            return Directory.GetParent(scriptDirectory)?.FullName ?? repositoryRoot;
+
+        var scriptSeparator = Math.Max(scriptPath.LastIndexOf('/'), scriptPath.LastIndexOf('\\'));
+        if (scriptSeparator <= 0)
+            return repositoryRoot;
+
+        var foreignScriptDirectory = scriptPath.Substring(0, scriptSeparator);
+        var parentSeparator = Math.Max(foreignScriptDirectory.LastIndexOf('/'), foreignScriptDirectory.LastIndexOf('\\'));
+        return parentSeparator > 0 ? foreignScriptDirectory.Substring(0, parentSeparator) : repositoryRoot;
+    }
 
     private static string QuoteLiteral(string value)
         => $"'{(value ?? string.Empty).Replace("'", "''")}'";

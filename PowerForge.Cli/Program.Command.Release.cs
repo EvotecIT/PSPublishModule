@@ -5,7 +5,7 @@ using System.Text.Json;
 internal static partial class Program
 {
     private const string ReleaseUsage =
-        "Usage: powerforge release [--config <release.json>] [--plan] [--validate] [--packages-only] [--module-only] [--tools-only] [--apple-action <Configured|Status|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup>] [--confirm-apple-action] [--apple-resume|--no-apple-resume] [--apple-wait|--no-apple-wait] [--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>] [--summary] [--configuration <Release|Debug>] [--module-no-dotnet-build] [--module-version <version>] [--module-prerelease-tag <tag>] [--module-no-sign] [--module-sign] [--skip-workspace-validation] [--workspace-config <workspace.validation.json>] [--workspace-profile <name>] [--workspace-testimox-root <path>] [--workspace-enable-feature <name[,name...]>] [--workspace-disable-feature <name[,name...]>] [--publish-nuget] [--publish-project-github] [--publish-tool-github] [--submit-winget] [--skip-winget-submit] [--winget-submit-mode <Manifest|Update>] [--winget-tool-path <path>] [--winget-token-env <name>] [--winget-token-file <path>] [--winget-pr-title <text>] [--winget-open-browser] [--winget-replace [version]] [--winget-allow-interactive-auth] [--winget-timeout-seconds <seconds>] [--skip-restore] [--skip-build] [--output-root <path>] [--stage-root <path>] [--manifest-json <path>] [--allow-output-outside-project-root] [--allow-manifest-outside-project-root] [--checksums-path <path>] [--skip-release-checksums] [--keep-symbols] [--sign] [--sign-profile <name>] [--sign-tool-path <path>] [--sign-thumbprint <sha1>] [--sign-subject-name <name>] [--sign-on-missing-tool <Warn|Fail|Skip>] [--sign-on-failure <Warn|Fail|Skip>] [--sign-timeout-seconds <seconds>] [--sign-timestamp-url <url>] [--sign-description <text>] [--sign-url <url>] [--sign-csp <name>] [--sign-key-container <name>] [--package-sign-thumbprint <sha1>] [--package-sign-store <CurrentUser|LocalMachine>] [--package-sign-timestamp-url <url>] [--installer-property <Name=Value>] [--tool-output <Tool|Portable|Installer|Store>[,<...>]] [--skip-tool-output <...>] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]";
+        "Usage: powerforge release [--config <release.json>] [--plan] [--validate] [--packages-only] [--module-only] [--tools-only] [--apple-action <Configured|Status|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup>] [--confirm-apple-action] [--apple-resume|--no-apple-resume] [--apple-wait|--no-apple-wait] [--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>] [--summary] [--configuration <Release|Debug>] [--module-framework <auto|net10.0|net8.0>] [--module-run-mode <Manifest|Documentation|Build|Publish>] [--module-no-dotnet-build] [--module-version <version>] [--module-prerelease-tag <tag>] [--module-no-sign] [--module-sign] [--skip-workspace-validation] [--workspace-config <workspace.validation.json>] [--workspace-profile <name>] [--workspace-testimox-root <path>] [--workspace-enable-feature <name[,name...]>] [--workspace-disable-feature <name[,name...]>] [--publish-nuget] [--publish-project-github] [--publish-tool-github] [--submit-winget] [--skip-winget-submit] [--winget-submit-mode <Manifest|Update>] [--winget-tool-path <path>] [--winget-token-env <name>] [--winget-token-file <path>] [--winget-pr-title <text>] [--winget-open-browser] [--winget-replace [version]] [--winget-allow-interactive-auth] [--winget-timeout-seconds <seconds>] [--skip-restore] [--skip-build] [--output-root <path>] [--stage-root <path>] [--manifest-json <path>] [--allow-output-outside-project-root] [--allow-manifest-outside-project-root] [--checksums-path <path>] [--skip-release-checksums] [--keep-symbols] [--sign] [--sign-profile <name>] [--sign-tool-path <path>] [--sign-thumbprint <sha1>] [--sign-subject-name <name>] [--sign-on-missing-tool <Warn|Fail|Skip>] [--sign-on-failure <Warn|Fail|Skip>] [--sign-timeout-seconds <seconds>] [--sign-timestamp-url <url>] [--sign-description <text>] [--sign-url <url>] [--sign-csp <name>] [--sign-key-container <name>] [--package-sign-thumbprint <sha1>] [--package-sign-store <CurrentUser|LocalMachine>] [--package-sign-timestamp-url <url>] [--installer-property <Name=Value>] [--tool-output <Tool|Portable|Installer|Store>[,<...>]] [--skip-tool-output <...>] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]";
 
     private static int CommandRelease(
         string[] filteredArgs,
@@ -354,6 +354,12 @@ internal static partial class Program
         request.EnableSigning = ChooseBool(request.EnableSigning, argv.Any(a => a.Equals("--sign", StringComparison.OrdinalIgnoreCase)) ? true : null);
 
         request.Configuration = ChooseString(request.Configuration, TryGetOptionValue(argv, "--configuration"));
+        var moduleFramework = TryGetOptionValue(argv, "--module-framework");
+        if (!string.IsNullOrWhiteSpace(moduleFramework))
+            request.ModuleFramework = ParseModuleFramework(moduleFramework);
+        var moduleRunMode = TryGetOptionValue(argv, "--module-run-mode");
+        if (!string.IsNullOrWhiteSpace(moduleRunMode))
+            request.ModuleRunMode = ParseConfigurationGateMode(moduleRunMode);
         request.WorkspaceConfigPath = ChooseString(request.WorkspaceConfigPath, TryGetOptionValue(argv, "--workspace-config"));
         request.WorkspaceProfile = ChooseString(request.WorkspaceProfile, TryGetOptionValue(argv, "--workspace-profile"));
         request.WorkspaceTestimoXRoot = ChooseString(request.WorkspaceTestimoXRoot, TryGetOptionValue(argv, "--workspace-testimox-root"));
@@ -439,6 +445,29 @@ internal static partial class Program
             && Enum.IsDefined(typeof(PowerForgeAppleReleaseAction), action))
             return action;
         throw new ArgumentException($"Unknown Apple release action '{value}'.");
+    }
+
+    private static ConfigurationGateMode ParseConfigurationGateMode(string value)
+    {
+        if (Enum.TryParse<ConfigurationGateMode>(value, ignoreCase: true, out var mode) &&
+            Enum.IsDefined(typeof(ConfigurationGateMode), mode))
+        {
+            return mode;
+        }
+
+        throw new ArgumentException($"Unknown module run mode '{value}'.");
+    }
+
+    private static string ParseModuleFramework(string value)
+    {
+        if (value.Equals("auto", StringComparison.OrdinalIgnoreCase))
+            return "auto";
+        if (value.Equals("net10.0", StringComparison.OrdinalIgnoreCase))
+            return "net10.0";
+        if (value.Equals("net8.0", StringComparison.OrdinalIgnoreCase))
+            return "net8.0";
+
+        throw new ArgumentException($"Unknown module framework '{value}'.");
     }
 
     private static JsonElement CreateAppleSummaryElement(

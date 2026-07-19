@@ -102,6 +102,20 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     public string? Configuration { get; set; }
 
     /// <summary>
+    /// Target framework used by the native module-release lane.
+    /// </summary>
+    [Parameter]
+    [ValidateSet("auto", "net10.0", "net8.0")]
+    public string? ModuleFramework { get; set; }
+
+    /// <summary>
+    /// Module pipeline gate used by the native module-release lane.
+    /// </summary>
+    [Parameter]
+    [ValidateSet("Manifest", "Documentation", "Build", "Publish")]
+    public ConfigurationGateMode? ModuleRunMode { get; set; }
+
+    /// <summary>
     /// Skips the dotnet build step inside the native module-release lane.
     /// </summary>
     [Parameter]
@@ -659,6 +673,8 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             WingetSubmitReplaceVersion = NormalizeNullable(WingetReplaceVersion),
             WingetSubmitAllowInteractiveAuthentication = ResolveRequestedFlag(boundParameters, nameof(WingetAllowInteractiveAuthentication)),
             WingetSubmitTimeoutSeconds = WingetTimeoutSeconds,
+            ModuleFramework = NormalizeNullable(ModuleFramework),
+            ModuleRunMode = ModuleRunMode,
             ModuleNoDotnetBuild = ResolveRequestedFlag(boundParameters, nameof(ModuleNoDotnetBuild)),
             ModuleNoSign = ResolveRequestedFlag(boundParameters, nameof(ModuleNoSign)),
             ModuleSignModule = ResolveRequestedFlag(boundParameters, nameof(ModuleSignModule)),

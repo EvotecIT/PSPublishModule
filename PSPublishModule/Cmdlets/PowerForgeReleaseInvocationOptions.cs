@@ -24,6 +24,10 @@ internal sealed class PowerForgeReleaseInvocationOptions
 
     public string? Configuration { get; set; }
 
+    public string? ModuleFramework { get; set; }
+
+    public ConfigurationGateMode? ModuleRunMode { get; set; }
+
     public bool? ModuleNoDotnetBuild { get; set; }
 
     public string? ModuleVersion { get; set; }

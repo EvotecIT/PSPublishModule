@@ -604,8 +604,19 @@ dotnet test .\PSPublishModule.sln -c Release
 Run the module build:
 
 ```powershell
-.\Module\Build\Build-Module.ps1
+.\Build\Build-Module.ps1
 ```
+
+Publish the complete repository release:
+
+```powershell
+.\Build\Build-Module.ps1 -RunMode Publish
+```
+
+The publish gate builds the PowerShell module and PowerForge packages, publishes the NuGet and PowerShell Gallery
+artifacts, creates the coordinated module GitHub release, and publishes the configured Windows, Linux, Intel macOS,
+and Apple-silicon macOS CLI archives. Running `Module\Build\Build-Module.ps1 -RunMode Publish` routes to the same
+entry point.
 
 Run the unified release plan:
 

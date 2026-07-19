@@ -26,6 +26,22 @@ public sealed class ModuleBuildHostBuildRequest
     public string? Configuration { get; set; }
 
     /// <summary>
+    /// Optional target framework used by the module build script.
+    /// </summary>
+    public string? Framework { get; set; }
+
+    /// <summary>
+    /// Optional module pipeline gate to forward to the build script.
+    /// </summary>
+    public ConfigurationGateMode? RunMode { get; set; }
+
+    /// <summary>
+    /// Marks the invocation as a child stage of the unified release engine.
+    /// Repository wrappers can use this to avoid routing back into the release entry point.
+    /// </summary>
+    public bool PowerForgeReleaseStage { get; set; }
+
+    /// <summary>
     /// Skips the preliminary dotnet build step inside the module script.
     /// </summary>
     public bool NoDotnetBuild { get; set; }

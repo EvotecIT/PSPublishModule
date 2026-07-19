@@ -54,6 +54,10 @@ internal sealed class PowerForgeReleaseRequest
 
     public string? Configuration { get; set; }
 
+    public string? ModuleFramework { get; set; }
+
+    public ConfigurationGateMode? ModuleRunMode { get; set; }
+
     public bool? ModuleNoDotnetBuild { get; set; }
 
     public string? ModuleVersion { get; set; }
@@ -795,6 +799,10 @@ internal sealed class PowerForgeModuleReleaseOptions
 
     public string? ModulePath { get; set; }
 
+    public bool IncludesPackages { get; set; }
+
+    public string? Framework { get; set; }
+
     public bool? NoDotnetBuild { get; set; }
 
     public string? ModuleVersion { get; set; }
@@ -817,6 +825,12 @@ internal sealed class PowerForgeModuleReleasePlanSummary
     public string ModulePath { get; set; } = string.Empty;
 
     public string? Configuration { get; set; }
+
+    public string? Framework { get; set; }
+
+    public ConfigurationGateMode RunMode { get; set; } = ConfigurationGateMode.Build;
+
+    public bool IncludesPackages { get; set; }
 
     public bool NoDotnetBuild { get; set; }
 

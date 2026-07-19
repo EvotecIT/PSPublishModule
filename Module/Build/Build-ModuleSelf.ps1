@@ -101,6 +101,52 @@ $configPath = $null
 $buildScript = Join-Path -Path $repoRoot -ChildPath 'Module\Build\Build-Module.ps1'
 if (-not (Test-Path -LiteralPath $buildScript)) { throw "Build-Module.ps1 not found: $buildScript" }
 try {
+    if ($RunMode -eq 'Publish') {
+        $unsupportedPublishOverrides = @(
+            'CertificateThumbprint',
+            'SignIncludeBinaries',
+            'SignIncludeInternals',
+            'SignIncludeExe',
+            'DiagnosticsBaselinePath',
+            'GenerateDiagnosticsBaseline',
+            'UpdateDiagnosticsBaseline',
+            'FailOnNewDiagnostics',
+            'FailOnDiagnosticsSeverity'
+        ) | Where-Object { $PSBoundParameters.ContainsKey($_) }
+        if ($unsupportedPublishOverrides.Count -gt 0) {
+            throw "Unified publishing does not accept module-only override(s): $($unsupportedPublishOverrides -join ', '). Configure them in Module/Build/Build-Module.ps1 before publishing."
+        }
+
+        $releaseConfig = Join-Path -Path $repoRoot -ChildPath 'Build/release.json'
+        if (-not (Test-Path -LiteralPath $releaseConfig)) {
+            throw "Unified release configuration not found: $releaseConfig"
+        }
+
+        $cmd = @(
+            'release',
+            '--config', $releaseConfig,
+            '--configuration', $Configuration,
+            '--module-framework', $Framework,
+            '--module-run-mode', 'Publish',
+            '--module-no-dotnet-build',
+            '--publish-tool-github'
+        )
+        if ($PSBoundParameters.ContainsKey('ModuleVersion')) { $cmd += @('--module-version', $ModuleVersion) }
+        if ($PSBoundParameters.ContainsKey('PreReleaseTag')) { $cmd += @('--module-prerelease-tag', $PreReleaseTag) }
+        if ($NoSign) { $cmd += '--module-no-sign' }
+        if ($SignModule) { $cmd += '--module-sign' }
+        if ($Json) { $cmd += @('--output', 'json') }
+
+        if ([IO.Path]::DirectorySeparatorChar -eq '\' -and (Test-Path -LiteralPath $cliExe)) {
+            & $cliExe @cmd
+            exit $LASTEXITCODE
+        }
+
+        if (-not (Test-Path -LiteralPath $cliDll)) { throw "CLI build output not found: $cliDll" }
+        dotnet $cliDll @cmd
+        exit $LASTEXITCODE
+    }
+
     # Keep the generated config in the repo root so relative paths (e.g. "Module") resolve correctly.
     $configPath = Join-Path -Path $repoRoot -ChildPath ("powerforge.pipeline.self.{0}.json" -f [Guid]::NewGuid().ToString('N'))
     $buildArgs = @{

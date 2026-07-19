@@ -249,6 +249,10 @@ internal sealed partial class PowerForgeReleaseService
             runModule = false;
             runPackages = false;
         }
+        else if (runModule && spec.Module!.IncludesPackages)
+        {
+            runPackages = false;
+        }
 
         var willRunTools = runTools && ShouldRunSectionForTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches);
         var willRunAppleApps = runAppleApps && ShouldRunSectionForTargets(selectedTargets, appleTargetMatches, runTools, toolTargetMatches);
@@ -297,7 +301,15 @@ internal sealed partial class PowerForgeReleaseService
 
         if (runModule)
         {
-            var module = PrepareModuleRelease(spec.Module!, configPath, request, configurationOverride);
+            var packagePublishingRequested =
+                (request.PublishNuget ?? spec.Packages?.PublishNuget) == true ||
+                (request.PublishProjectGitHub ?? spec.Packages?.PublishGitHub) == true;
+            var module = PrepareModuleRelease(
+                spec.Module!,
+                configPath,
+                request,
+                configurationOverride,
+                packagePublishingRequested);
             result.ModulePlan = module.Plan;
             result.ModuleAssets = module.ArtifactPaths;
 
@@ -708,7 +720,8 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeModuleReleaseOptions options,
         string releaseConfigPath,
         PowerForgeReleaseRequest request,
-        string? configurationOverride)
+        string? configurationOverride,
+        bool packagePublishingRequested)
     {
         var configDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
         var repositoryRoot = Path.GetFullPath(Path.IsPathRooted(options.RepositoryRoot)
@@ -740,6 +753,9 @@ internal sealed partial class PowerForgeReleaseService
             ScriptPath = scriptPath,
             ModulePath = modulePath,
             Configuration = configurationOverride,
+            Framework = request.ModuleFramework ?? options.Framework,
+            RunMode = ResolveModuleRunMode(options, request, packagePublishingRequested),
+            PowerForgeReleaseStage = true,
             NoDotnetBuild = request.ModuleNoDotnetBuild ?? options.NoDotnetBuild ?? false,
             ModuleVersion = request.ModuleVersion ?? options.ModuleVersion,
             PreReleaseTag = request.ModulePreReleaseTag ?? options.PreReleaseTag,
@@ -753,6 +769,9 @@ internal sealed partial class PowerForgeReleaseService
             ScriptPath = scriptPath,
             ModulePath = modulePath,
             Configuration = buildRequest.Configuration,
+            Framework = buildRequest.Framework,
+            RunMode = buildRequest.RunMode ?? ConfigurationGateMode.Build,
+            IncludesPackages = options.IncludesPackages,
             NoDotnetBuild = buildRequest.NoDotnetBuild,
             ModuleVersion = buildRequest.ModuleVersion,
             PreReleaseTag = buildRequest.PreReleaseTag,
@@ -762,6 +781,19 @@ internal sealed partial class PowerForgeReleaseService
         };
 
         return (buildRequest, plan, artifactPaths);
+    }
+
+    private static ConfigurationGateMode ResolveModuleRunMode(
+        PowerForgeModuleReleaseOptions options,
+        PowerForgeReleaseRequest request,
+        bool packagePublishingRequested)
+    {
+        if (request.ModuleRunMode.HasValue)
+            return request.ModuleRunMode.Value;
+
+        return options.IncludesPackages && packagePublishingRequested
+            ? ConfigurationGateMode.Publish
+            : ConfigurationGateMode.Build;
     }
 
     private static PowerForgeAppleReleasePlan PrepareAppleRelease(

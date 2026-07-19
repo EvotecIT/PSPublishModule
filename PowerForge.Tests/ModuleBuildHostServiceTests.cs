@@ -95,6 +95,35 @@ public sealed class ModuleBuildHostServiceTests
     }
 
     [Fact]
+    public async Task ExecuteBuildAsync_ForwardsRunModeAndUnifiedReleaseStage()
+    {
+        PowerShellRunRequest? captured = null;
+        var runner = new StubPowerShellRunner(request => {
+            captured = request;
+            return new PowerShellRunResult(0, "ok", string.Empty, "pwsh");
+        });
+        var service = new ModuleBuildHostService(runner);
+
+        var result = await service.ExecuteBuildAsync(new ModuleBuildHostBuildRequest {
+            RepositoryRoot = @"C:\repo",
+            ScriptPath = @"C:\repo\Build\Build-Module.ps1",
+            ModulePath = @"C:\repo\Module\PSPublishModule.psd1",
+            Framework = "net10.0",
+            RunMode = ConfigurationGateMode.Publish,
+            PowerForgeReleaseStage = true
+        });
+
+        Assert.NotNull(captured);
+        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('Framework')", captured!.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['Framework'] = 'net10.0'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('RunMode')", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['RunMode'] = 'Publish'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('PowerForgeReleaseStage')", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['PowerForgeReleaseStage'] = $true", captured.CommandText!, StringComparison.Ordinal);
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
     public async Task ExecuteBuildAsync_DoesNotForwardSigningFlags_WhenUnset()
     {
         PowerShellRunRequest? captured = null;
