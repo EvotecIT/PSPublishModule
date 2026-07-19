@@ -22,8 +22,9 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
         RepositoryCredential? targetCredential,
         RepositoryCredential? targetPublishCredential,
         ModulePipelinePlan plan,
-        ModuleBuildResult buildResult)
-        => ValidateAsync(publish, targetRepository, targetCredential, targetPublishCredential, plan, buildResult).GetAwaiter().GetResult();
+        ModuleBuildResult buildResult,
+        Action? remoteSideEffectObserved = null)
+        => ValidateAsync(publish, targetRepository, targetCredential, targetPublishCredential, plan, buildResult, remoteSideEffectObserved).GetAwaiter().GetResult();
 
     private async Task ValidateAsync(
         PublishConfiguration publish,
@@ -32,6 +33,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
         RepositoryCredential? targetPublishCredential,
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
+        Action? remoteSideEffectObserved,
         CancellationToken cancellationToken = default)
     {
         if (publish is null) throw new ArgumentNullException(nameof(publish));
@@ -52,7 +54,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
 
         var externalModuleDependencies = RequiredModuleRepositoryValidator.GetExternalModulesForPublish(buildResult, plan);
         var source = publish.PublishRequiredModules
-            ? ResolveSourceRepository(publish, targetRepository)
+            ? ResolveSourceRepository(publish, targetRepository, plan.ProjectRoot)
             : null;
         var sourceCredential = ReferenceEquals(source, targetRepository) ? targetCredential : null;
         var mirroredPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -88,6 +90,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
                         cacheDirectory,
                         mirroredPackages,
                         visitingPackages,
+                        remoteSideEffectObserved,
                         cancellationToken).ConfigureAwait(false);
 
                     if (await TargetContainsMatchingVersionAsync(targetRepository, targetCredential, requiredModule.ModuleName, range, cancellationToken).ConfigureAwait(false))
@@ -131,6 +134,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
         string cacheDirectory,
         ISet<string> mirroredPackages,
         ISet<string> visitingPackages,
+        Action? remoteSideEffectObserved,
         CancellationToken cancellationToken)
     {
         var selected = await SelectSourceVersionAsync(sourceRepository, sourceCredential, packageId, range, cancellationToken).ConfigureAwait(false);
@@ -170,9 +174,11 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
                     cacheDirectory,
                     mirroredPackages,
                     visitingPackages,
+                    remoteSideEffectObserved,
                     cancellationToken).ConfigureAwait(false);
             }
 
+            remoteSideEffectObserved?.Invoke();
             var publish = await _repositoryClient.PublishPackageAsync(
                 targetRepository,
                 download.PackagePath,
@@ -296,14 +302,17 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
 
     private static ManagedModuleRepository ResolveSourceRepository(
         PublishConfiguration publish,
-        ManagedModuleRepository targetRepository)
+        ManagedModuleRepository targetRepository,
+        string projectRoot)
     {
         var source = ResolveSourceRepositoryName(publish);
         if (!string.IsNullOrWhiteSpace(publish.RequiredModuleSourceRepositoryUri))
         {
             return new ManagedModuleRepository(
                 source,
-                publish.RequiredModuleSourceRepositoryUri!.Trim(),
+                ManagedModuleRepositoryPathResolver.NormalizeSource(
+                    publish.RequiredModuleSourceRepositoryUri!,
+                    projectRoot),
                 ManagedModuleRepositoryKind.Auto,
                 trusted: true);
         }
@@ -315,7 +324,11 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
             return targetRepository;
 
         if (LooksLikeRepositorySource(source))
-            return new ManagedModuleRepository(source, source, ManagedModuleRepositoryKind.Auto, trusted: true);
+            return new ManagedModuleRepository(
+                source,
+                ManagedModuleRepositoryPathResolver.NormalizeSource(source, projectRoot),
+                ManagedModuleRepositoryKind.Auto,
+                trusted: true);
 
         throw new InvalidOperationException(
             $"Managed required-module mirroring could not resolve source repository '{source}'. Use PSGallery, a repository URL, a local feed path, or the target repository name.");

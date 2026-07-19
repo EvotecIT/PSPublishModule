@@ -1,6 +1,6 @@
-# Unified Module And Project Release Proposal
+# Unified Module And Project Releases
 
-This proposal covers repositories such as PSParseHTML where one release should build:
+Use this workflow when one repository publishes a PowerShell module and one or more NuGet packages from the same build:
 
 - the PowerShell module through `Build/Build-Module.ps1`
 - one or more NuGet packages through the project build pipeline
@@ -8,49 +8,49 @@ This proposal covers repositories such as PSParseHTML where one release should b
 - NuGet publishing
 - a single GitHub release containing the module, NuGet packages, checksums, and manifest
 
-The important design point is that this should be one PowerForge release runtime, not `Build-Module.ps1`
+The important design point is that this is one PowerForge release runtime, not `Build-Module.ps1`
 manually calling `Build-Project.ps1`.
 
 In this document, "one package" means one coordinated release transaction and one staged GitHub asset set.
 NuGet and PowerShell Gallery still receive their native package formats because those ecosystems have different
 contracts.
 
-## Current Shape In PSParseHTML
+## When To Use It
 
-PSParseHTML currently has two cleanly separated entrypoints:
+Repositories such as PSParseHTML commonly have two cleanly separated entrypoints:
 
 - `Build/Build-Module.ps1` declares module manifest, merge, binary module build, signing, and module artifacts through the existing `Build-Module` / `New-Configuration*` DSL.
 - `Build/Build-Project.ps1` is a thin wrapper over `Invoke-ProjectBuild -ConfigPath Build/project.build.json`.
 - `Build/project.build.json` owns the HtmlTinkerX NuGet package release settings, NuGet.org publishing, and GitHub project-release settings.
 
-That split is good for ownership, but awkward for release day because the operator wants one answer:
+Keep that ownership split. The coordinated module pipeline provides one release-day entrypoint:
 
 > Build everything for this version, publish packages to NuGet, publish the module to PSGallery, and upload the final release set to GitHub.
 
-## Goal
+## Public Surface
 
-Extend the existing `Build-Module {}` / `New-Configuration*` authoring model so the module build script can
-declare package builds, release staging, and publishing intent in the same settings block.
+The existing `Build-Module {}` / `New-Configuration*` authoring model can declare package builds, release staging,
+version coordination, and publishing intent in the same settings block.
 
-The operator should still run the familiar command:
+The operator runs the familiar command:
 
 ```powershell
 .\Build\Build-Module.ps1
 ```
 
-or, when explicit publish controls are needed:
+or selects the wrapper's publish gate when explicit gate controls are exposed:
 
 ```powershell
-.\Build\Build-Module.ps1 -PublishNuget -PublishGallery -PublishGitHub
+.\Build\Build-Module.ps1 -ConfigurationGateMode Publish
 ```
 
-Internally, `Build-Module {}` keeps using the module pipeline but now carries package and release coordination
+Internally, `Build-Module {}` keeps using the module pipeline and carries package and release coordination
 segments in the same runtime. This keeps the user-facing DSL in one place without turning the module script into
 a second package engine.
 
 ## Recommended Build-Module Shape
 
-The Build-Module-first version should support both JSON-backed and PowerShell-authored package configuration.
+The Build-Module-first workflow supports both JSON-backed and PowerShell-authored package configuration.
 
 ### JSON-backed package configuration
 
@@ -68,12 +68,14 @@ Build-Module -ModuleName 'PSParseHTML' {
         -ConfigPath '.\Build\project.build.json' `
         -BuildBeforeModule `
         -UseAsReleaseVersionSource `
-        -ProvideLocalNuGetFeed
+        -ProvideLocalNuGetFeed `
+        -PublishNuget
 
     New-ConfigurationRelease `
         -StageRoot '.\Artefacts\UploadReady' `
         -VersionSource ProjectBuild `
         -PrimaryProject 'HtmlTinkerX' `
+        -SynchronizeModuleVersion `
         -PublishOrder NuGet, PowerShellGallery, GitHub
 
     New-ConfigurationPublish -Type PowerShellGallery -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt' -Enabled
@@ -93,9 +95,8 @@ publish configuration.
 
 ### PowerShell-authored package configuration
 
-For modules where you want the whole release in PowerShell, the package config can be declared inline. This
-should map one-for-one to `ProjectBuildConfiguration` so it can later export to JSON and run through the same
-engine.
+For modules where you want the whole release in PowerShell, declare the package config inline. It maps to
+`ProjectBuildConfiguration`, exports to JSON, and runs through the same engine.
 
 ```powershell
 Build-Module -ModuleName 'PSParseHTML' {
@@ -125,6 +126,7 @@ Build-Module -ModuleName 'PSParseHTML' {
         -StageRoot '.\Artefacts\UploadReady' `
         -VersionSource PackageBuild `
         -PrimaryProject 'HtmlTinkerX' `
+        -SynchronizeModuleVersion `
         -PublishOrder NuGet, PowerShellGallery, GitHub
 
     New-ConfigurationPublish `
@@ -143,15 +145,222 @@ Build-Module -ModuleName 'PSParseHTML' {
 } -ExitCode
 ```
 
-The direct PowerShell route should be complete, not a toy subset. If the equivalent JSON field exists in
-`project.build.schema.json`, there should be a PowerShell way to set it, either as a first-class parameter or
-as a hashtable escape hatch while the surface matures.
+The direct PowerShell route covers the project-build schema with first-class parameters and the `-Options`
+hashtable for additional fields.
+
+## How Version Coordination Works
+
+`-SynchronizeModuleVersion` coordinates the module with `-PrimaryProject`. It does not, by itself, assign one version
+to every NuGet package in the repository.
+
+PowerForge makes the version decision in this order:
+
+1. Resolve the next available module version from the module X-pattern and module history.
+2. Use that version as a floor for `-PrimaryProject` in the one package lane marked `-UseAsReleaseVersionSource`.
+3. Resolve the primary project's normal candidate from its X-pattern and NuGet history.
+4. Select the higher numeric version. At the same numeric version, a stable X-pattern candidate does not erase a
+   configured module prerelease; explicit prerelease versions retain normal semantic-version ordering.
+5. If `AlignPackageVersions` is enabled, apply the final version to every project in the primary project's matching
+   ordinary X-pattern group or named `VersionTrack` alignment group.
+6. Synchronize the module manifest, artifacts, staging metadata, and publish operations to the final primary-project
+   version.
+
+### What AlignPackageVersions changes
+
+`AlignPackageVersions` defaults to `false`. Omitting it from `project.build.json` has the same behavior as setting it
+to `false`: the module and `PrimaryProject` coordinate, while other packages follow their normal project-build version
+policy. Ordinary X-pattern entries resolve independently; named `VersionTracks` already coordinate their members.
+
+| Module synchronization | Package alignment | Result |
+| --- | --- | --- |
+| Disabled | Disabled | The module uses module history. Ordinary package X-patterns resolve independently; each `VersionTrack` applies its configured exact version or anchor-derived X-pattern version to all members. |
+| Disabled | Enabled | The module still uses module history. Ordinary packages with the same X-pattern align; every named X-pattern `VersionTrack` remains a separate alignment group, while exact-version tracks remain exact. |
+| Enabled | Disabled | The module matches `PrimaryProject`. Other ordinary package X-patterns resolve independently; `VersionTracks` continue coordinating their own members. |
+| Enabled | Enabled | The module matches `PrimaryProject`. The primary project's ordinary X-pattern group or named X-pattern `VersionTrack` receives the coordinated floor; exact-version tracks remain exact and must be compatible with that floor. Other groups remain independent. |
+
+For ordinary `ExpectedVersion` and `ExpectedVersionMap` entries, `AlignPackageVersions` groups projects by their
+configured X-pattern. All ordinary projects configured with `2.1.X` form one group, while ordinary projects configured
+with `1.4.X` form another. Each group is stepped from the highest NuGet version found for a package in that group.
+The module floor is applied only to the group containing `PrimaryProject`.
+
+`VersionTracks` are explicit release trains and define their own boundaries:
+
+- With alignment disabled, each track applies one version to all members: either its configured exact version or an
+  X-pattern version resolved from its configured anchor.
+- With alignment enabled, each X-pattern track becomes its own alignment group. Two named X-pattern tracks using the
+  same pattern do not merge with each other or with ordinary projects using that pattern.
+- An exact-version track never becomes an alignment group. Its configured exact version is still applied to all members.
+- When `PrimaryProject` belongs to an aligned track, the module floor applies to the whole track.
+- When alignment is disabled, an anchor-derived track version below the module floor is rejected instead of splitting
+  the track by raising only the primary project.
+- When `PrimaryProject` belongs to an exact-version track, an exact version below the module floor is rejected; a
+  compatible exact version remains exact and is shared by the module and every track member.
+
+Ordinary exact versions outside `VersionTracks` do not participate in X-pattern alignment. Such an exact version remains
+exact unless it belongs to the primary project and is below the coordinated module floor, in which case validation fails
+before project files change.
+
+### Example: alignment disabled
+
+Assume this illustrative package configuration:
+
+```json
+{
+  "ExpectedVersionMap": {
+    "Mailozaurr": "2.1.X",
+    "Mailozaurr.Application": "2.1.X",
+    "Mailozaurr.Cli": "2.1.X"
+  },
+  "ExpectedVersionMapAsInclude": true,
+  "AlignPackageVersions": false
+}
+```
+
+and these histories:
+
+| Deliverable | Current published version | Normal next candidate |
+| --- | ---: | ---: |
+| Mailozaurr module | `2.1.6` | module floor `2.1.7` |
+| Mailozaurr package | `2.0.12` | `2.1.0` |
+| Mailozaurr.Application | `2.1.5` | `2.1.6` |
+| Mailozaurr.Cli | not published | `2.1.0` |
+
+The resolved release is:
+
+| Deliverable | Resolved version | Reason |
+| --- | ---: | --- |
+| Mailozaurr module | `2.1.7` | Synchronized to the primary project |
+| Mailozaurr package | `2.1.7` | Raised from `2.1.0` to the module floor |
+| Mailozaurr.Application | `2.1.6` | Keeps its independent NuGet candidate |
+| Mailozaurr.Cli | `2.1.0` | Keeps its independent NuGet candidate |
+
+This is the correct choice when companion packages have independent release histories. The combined GitHub release may
+contain packages with different versions; only the module and primary package are guaranteed to match. If the repository
+uses `VersionTracks`, members of each track still share their anchor-derived version even though alignment is disabled.
+
+### Example: alignment enabled
+
+Using the same histories, change the JSON setting to:
+
+```json
+{
+  "ExpectedVersionMap": {
+    "Mailozaurr": "2.1.X",
+    "Mailozaurr.Application": "2.1.X",
+    "Mailozaurr.Cli": "2.1.X"
+  },
+  "ExpectedVersionMapAsInclude": true,
+  "AlignPackageVersions": true
+}
+```
+
+The three packages share `2.1.X`, so they form one aligned group. Their NuGet-derived group candidate is `2.1.6`,
+while the module floor is `2.1.7`. The module floor wins and the complete release uses:
+
+| Deliverable | Resolved version |
+| --- | ---: |
+| Mailozaurr module | `2.1.7` |
+| Mailozaurr package | `2.1.7` |
+| Mailozaurr.Application | `2.1.7` |
+| Mailozaurr.Cli | `2.1.7` |
+
+Use alignment when those packages are one release train and should always carry the same version.
+
+### Example: NuGet history is ahead
+
+If the module floor is `2.1.7` but a package in the aligned `2.1.X` group is already published as `2.1.9`, the group
+candidate becomes `2.1.10`. That higher numeric candidate wins:
+
+| Deliverable | Resolved version |
+| --- | ---: |
+| Module | `2.1.10` |
+| Primary package | `2.1.10` |
+| Other packages in the `2.1.X` group | `2.1.10` |
+
+Synchronization therefore protects both histories: module history prevents the package release from moving backward,
+and NuGet history can move the module release forward.
+
+### Example: different version groups
+
+Consider this configuration:
+
+```json
+{
+  "ExpectedVersionMap": {
+    "Suite.Core": "2.1.X",
+    "Suite.Rendering": "2.1.X",
+    "Suite.LegacyBridge": "1.4.X",
+    "Suite.Protocol": "3.0.5"
+  },
+  "ExpectedVersionMapAsInclude": true,
+  "AlignPackageVersions": true
+}
+```
+
+If `Suite.Core` is `PrimaryProject`, the module floor applies to the `2.1.X` group containing `Suite.Core` and
+`Suite.Rendering`. `Suite.LegacyBridge` aligns only within the separate `1.4.X` group, and the exact
+`Suite.Protocol` version remains `3.0.5`. Enabling alignment does not force these four packages onto one universal
+version.
+
+### Prerelease example
+
+Suppose the configured module prerelease produces a floor of `2.1.7-beta.2`, while the package X-pattern produces the
+stable numeric candidate `2.1.7`. PowerForge keeps `2.1.7-beta.2`; the generated stable X-pattern candidate cannot
+silently turn a prerelease run into a stable release.
+
+Explicit versions retain normal semantic-version ordering. For example:
+
+```text
+2.1.7-beta.1 < 2.1.7-beta.2 < 2.1.7-rc.1 < 2.1.7
+```
+
+A genuinely higher numeric candidate such as `2.1.8` still wins and becomes the final module/package version.
+
+### Invalid configurations
+
+PowerForge rejects coordinated versioning before changing project files when:
+
+- `PrimaryProject` is missing or does not match a packable project name or package ID.
+- More than one active lane is marked `UseAsReleaseVersionSource`.
+- The selected lane runs after the module.
+- The module and primary package use incompatible version lines, such as module `2.1.X` and package `2.0.X`.
+- The primary package uses an exact version below the module floor.
+- Version updates are disabled for the selected package lane.
+
+`BuildBeforeModule` is enough to express dependency order for a single package lane. Use `Release.BuildOrder` only when
+several lanes need an explicit order.
+
+### Choosing whether to align
+
+Enable `AlignPackageVersions` when:
+
+- the packages are released and supported as one versioned product;
+- the module consumes those packages as one coordinated dependency set;
+- users expect every package asset in the release to carry the same version.
+
+Leave it disabled when:
+
+- companion packages have independent compatibility or release policies;
+- a repository intentionally contains several product/version lines;
+- only the module and `PrimaryProject` need to match.
+
+## One GitHub Release
+
+Choose one GitHub publisher. The normal unified shape is:
+
+- package lane: `-PublishNuget`
+- module publish segment: `-Type GitHub`
+- release order: `NuGet`, `PowerShellGallery`, `GitHub`
+
+The module GitHub operation uploads the staged module and package assets together. Do not also set `-PublishGitHub`
+on `New-ConfigurationProjectBuild` or `New-ConfigurationPackageBuild` unless two separate GitHub operations are
+intentional.
 
 ## JSON Or Direct PowerShell
 
-Support both.
+Both forms use the same model.
 
-JSON should remain the canonical interchange format for CI, schema validation, generated configs, and exact
+JSON remains the canonical interchange format for CI, schema validation, generated configs, and exact
 round-tripping:
 
 ```powershell
@@ -160,7 +369,7 @@ Build-Module -ModuleName 'PSParseHTML' {
 }
 ```
 
-PowerShell should be the canonical maintainer authoring experience for module repositories:
+PowerShell is the maintainer authoring experience for module repositories:
 
 ```powershell
 Build-Module -ModuleName 'PSParseHTML' {
@@ -168,7 +377,7 @@ Build-Module -ModuleName 'PSParseHTML' {
 }
 ```
 
-The same model should support:
+The same model supports:
 
 - `Invoke-ModuleBuild -JsonOnly -JsonPath .\Artefacts\powerforge.release.json`
 - import/export of the package/release section
@@ -208,16 +417,16 @@ Keep three layers:
 
 2. Package lane
    - Existing `Invoke-ProjectBuild` / `project.build.json` remains the source for NuGet package discovery, versioning, packing, signing, and NuGet.org publishing.
-   - In unified mode, package GitHub publishing should be disabled when top-level GitHub publishing is active, so assets are uploaded once.
+   - In unified mode, disable package GitHub publishing when top-level GitHub publishing is active, so assets are uploaded once.
 
 3. Release lane
    - `New-ConfigurationRelease` owns the module-pipeline coordination slice: staged root and the single top-level GitHub asset set.
    - The broader `Invoke-PowerForgeRelease` engine remains the long-term owner for checksums, release manifests, and richer graph planning.
-   - Phase order should come from declared dependencies instead of relying on script call order.
+   - `BuildBeforeModule` and optional `Release.BuildOrder` declare phase order instead of relying on script call order.
 
-## Required Release Phases
+## Release Phases
 
-The release runtime should execute these phases:
+The release runtime executes these phases:
 
 1. Load and validate every section.
 2. Resolve one release version from `VersionTracks`, `ExpectedVersionMap`, explicit module version, or a declared primary package.
@@ -234,80 +443,9 @@ The release runtime should execute these phases:
 This keeps publication fail-fast while avoiding a half-published release where NuGet is updated before the
 module can even be built.
 
-## JSON Shape
-
-The existing `powerforge.release.schema.json` is already close. It has top-level `Module`, `Packages`,
-`Outputs`, and `GitHub` sections. For PSParseHTML-style flows it needs a small extension for graph/order
-and package-to-module dependency injection.
-
-Proposed additive shape:
-
-```json
-{
-  "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/powerforge.release.schema.json",
-  "SchemaVersion": 1,
-  "Release": {
-    "VersionSource": "Packages",
-    "PrimaryProject": "HtmlTinkerX",
-    "BuildOrder": [ "Packages", "Module" ],
-    "PublishOrder": [ "NuGet", "PowerShellGallery", "GitHub" ]
-  },
-  "Module": {
-    "RepositoryRoot": ".",
-    "ScriptPath": "Build/Build-Module.ps1",
-    "ArtifactPaths": [
-      "Artefacts/Packed"
-    ],
-    "UseResolvedReleaseVersion": true,
-    "PackageDependencies": [
-      {
-        "PackageId": "HtmlTinkerX",
-        "Source": "Packages",
-        "Injection": "LocalNuGetFeed"
-      }
-    ],
-    "Publish": {
-      "PowerShellGallery": true
-    }
-  },
-  "Packages": {
-    "RootPath": "Sources",
-    "ExpectedVersionMap": {
-      "HtmlTinkerX": "2.0.X"
-    },
-    "ExpectedVersionMapAsInclude": true,
-    "StagingPath": "Artefacts/ProjectBuild",
-    "PublishNuget": true,
-    "PublishGitHub": false
-  },
-  "Outputs": {
-    "Staging": {
-      "RootPath": "Artefacts/UploadReady",
-      "ModulesPath": "PowerShellGallery",
-      "PackagesPath": "NuGet",
-      "MetadataPath": "Metadata",
-      "ModulesNameTemplate": "{FileName}",
-      "PackagesNameTemplate": "{PackageId}.{Version}{Extension}"
-    }
-  },
-  "GitHub": {
-    "Publish": true,
-    "Owner": "EvotecIT",
-    "Repository": "PSParseHTML",
-    "TokenFilePath": "C:\\Support\\Important\\GithubAPI.txt",
-    "TagTemplate": "{Repository}-v{Version}",
-    "ReleaseNameTemplate": "{Repository} {Version}"
-  }
-}
-```
-
-The current schema can already express most of this, but not `Release.BuildOrder`,
-`Release.PublishOrder`, `Module.UseResolvedReleaseVersion`, `Module.PackageDependencies`, or
-`Module.Publish`.
-
 ## Build-Module Runtime Behavior
 
-`Build-Module {}` should keep its current module-only behavior when no project/release segments are present.
+`Build-Module {}` keeps its current module-only behavior when no project/release segments are present.
 When `New-ConfigurationProjectBuild`, `New-ConfigurationPackageBuild`, or `New-ConfigurationRelease` is
 present, `Invoke-ModuleBuild` now keeps those segments in the module pipeline plan:
 
@@ -322,15 +460,11 @@ present, `Invoke-ModuleBuild` now keeps those segments in the module pipeline pl
 That means consumer repos can stay with one script and one DSL block, while PowerForge still keeps one reusable
 implementation for package build, module build, and GitHub publishing.
 
-## Implementation Slices
-
-### Implemented slices
-
-The first slices add the authoring, interchange, planning, and package-before-module execution contract:
+## Runtime Contract
 
 - `New-ConfigurationProjectBuild` references existing `project.build.json` files from `Build-Module {}`.
 - `New-ConfigurationPackageBuild` declares inline package build settings with first-class parameters for the
-  current project-build options and `-Options` for future fields.
+  current project-build options and `-Options` for additional fields.
 - `New-ConfigurationRelease` declares repo-level coordination settings such as stage root, version source,
   primary project, build order, and publish order.
 - `ModulePipelineSpec` JSON serialization and deserialization preserve these segments.
@@ -351,55 +485,30 @@ The first slices add the authoring, interchange, planning, and package-before-mo
 - Release staging writes `metadata/release-manifest.json` and `metadata/SHA256SUMS.txt` and includes them in
   the top-level GitHub asset list.
 - `ModulePipelineResult.ReleaseCoordinationResult` reports the staged module/package assets and GitHub result.
-- `Release.VersionSource` and lane-level `UseAsReleaseVersionSource` can flow a project/package build version
-  into the module build spec, manifest refresh, stage-root tokens, metadata, and GitHub tag.
-
-1. Schema and model slice
-   - Extend the native `PowerForgeReleaseSpec` when the broader release engine is ready to own this same flow.
-   - Add module package dependency declarations.
-   - Add gallery publish options to the native module release section.
-
-2. Planner slice
-   - Make `Invoke-PowerForgeRelease -Plan` produce a combined graph:
-     packages, module, publish targets, staged assets, and GitHub assets.
-   - Detect impossible graph states before building.
-   - Refuse `PublishGitHub` at both package and top-level release scopes unless explicitly allowed.
-
-3. Module publish slice
-   - Teach native module release mode how to publish to PSGallery/private gallery from staged module artifacts.
-   - Reuse existing `New-ConfigurationPublish` / repository profile resolution where possible.
-
-4. Additional asset slice
-   - Include optional package release zips when configured.
-
-5. PSParseHTML proof
-   - Add package/release segments to `Build/Build-Module.ps1`.
-   - Optionally export `Build/release.json` from the same DSL for CI.
-   - Keep `Build/Build-Project.ps1` thin.
-   - Keep module-only builds working when publish/release segments are absent or disabled.
-   - Validate with plan mode, local build mode, and publish dry-run/preflight.
+- `Release.VersionSource`, `PrimaryProject`, lane-level `UseAsReleaseVersionSource`, and
+  `SynchronizeModuleVersion` produce one module/package version decision.
+- Publish runs preflight the synchronized module version before the first remote package publish.
+- A credential-free checkpoint records exact project versions and completed destinations so retries do not
+  step versions again or repeat completed publishes.
 
 ## Validation Contract
 
-Focused tests should prove contracts users care about:
+Use gate modes for the same wrapper in CI and at release time:
 
-- release planning orders package-before-module when module package dependencies are declared
-- plan mode does not require already-created artifacts
-- top-level GitHub publishing uses the combined staged module/package asset list
-- package-level GitHub publishing is disabled in package configuration when top-level GitHub publishing is intended
-- staged assets include module and NuGet outputs with category metadata
-- resolved package version can flow into module version when requested
-- local package feed injection is visible to the module build host without leaking into repo config
+- `Manifest`: refresh module metadata without package builds or publishing.
+- `Build`: resolve coordinated versions, build packages, feed them to the module build, and stage artifacts without publishing.
+- `Publish`: rebuild or reuse the exact coordinated package state and publish in `Release.PublishOrder`.
 
-For PSParseHTML proof, the practical command sequence should be:
+For a wrapper exposing `-ConfigurationGateMode`, the practical sequence is:
 
 ```powershell
-.\Build\Build-Module.ps1 -Plan
-.\Build\Build-Module.ps1 -PublishNuget:$false -PublishGallery:$false -PublishGitHub:$false
-.\Build\Build-Module.ps1 -Validate
+.\Build\Build-Module.ps1 -ConfigurationGateMode Manifest
+.\Build\Build-Module.ps1 -ConfigurationGateMode Build
+.\Build\Build-Module.ps1 -ConfigurationGateMode Publish
 ```
 
-Only after that should a real publish run be attempted.
+The Build gate should report the same resolved version for the primary package and module, list the local NuGet
+source added for the module build, and show the combined module/package assets under `Release.StageRoot`.
 
 ## Recommendation
 

@@ -49925,7 +49925,8 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>PrimaryProject</maml:name>
           <maml:description>
-            <maml:para>Primary package/project used when the version source is package/project build.</maml:para>
+            <maml:para>Primary package/project used when the version source is a package/project build.&#xD;
+Required by SynchronizeModuleVersion to identify the package coordinated with module history.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -49954,6 +49955,25 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SynchronizeModuleVersion</maml:name>
+          <maml:description>
+            <maml:para>Coordinates the module and selected primary package on one version.&#xD;
+The next available module version becomes a floor for the primary package; a higher numeric package version still wins.&#xD;
+At the same numeric version, a stable X-pattern candidate does not erase the configured module prerelease;&#xD;
+explicit prerelease versions retain normal semantic-version ordering.&#xD;
+PrimaryProject is required, and exactly one selected lane must run before the module and use&#xD;
+UseAsReleaseVersionSource. Package groups using AlignPackageVersions are raised together.&#xD;
+Publish runs persist a credential-free checkpoint so a partial release resumes the exact versions&#xD;
+and skips destinations that already completed.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -50006,7 +50026,8 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>PrimaryProject</maml:name>
         <maml:description>
-          <maml:para>Primary package/project used when the version source is package/project build.</maml:para>
+          <maml:para>Primary package/project used when the version source is a package/project build.&#xD;
+Required by SynchronizeModuleVersion to identify the package coordinated with module history.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -50035,6 +50056,25 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SynchronizeModuleVersion</maml:name>
+        <maml:description>
+          <maml:para>Coordinates the module and selected primary package on one version.&#xD;
+The next available module version becomes a floor for the primary package; a higher numeric package version still wins.&#xD;
+At the same numeric version, a stable X-pattern candidate does not erase the configured module prerelease;&#xD;
+explicit prerelease versions retain normal semantic-version ordering.&#xD;
+PrimaryProject is required, and exactly one selected lane must run before the module and use&#xD;
+UseAsReleaseVersionSource. Package groups using AlignPackageVersions are raised together.&#xD;
+Publish runs persist a credential-free checkpoint so a partial release resumes the exact versions&#xD;
+and skips destinations that already completed.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

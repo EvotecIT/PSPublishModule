@@ -27,10 +27,19 @@ public sealed class ManagedRequiredModuleRepositoryValidatorTests
             stagingPath: targetContainer.Path,
             manifestPath: Path.Combine(targetContainer.Path, "missing.psd1"),
             exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+        var remoteSideEffects = 0;
 
-        validator.Validate(publish, targetRepository, targetCredential: null, targetPublishCredential: null, plan, buildResult);
+        validator.Validate(
+            publish,
+            targetRepository,
+            targetCredential: null,
+            targetPublishCredential: null,
+            plan,
+            buildResult,
+            remoteSideEffectObserved: () => remoteSideEffects++);
 
         Assert.True(LocalPackageExists(targetPath, "Company.Core", "1.0.0"));
+        Assert.Equal(1, remoteSideEffects);
     }
 
     [Fact]
@@ -61,12 +70,21 @@ public sealed class ManagedRequiredModuleRepositoryValidatorTests
             stagingPath: target.Path,
             manifestPath: Path.Combine(target.Path, "missing.psd1"),
             exports: new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+        var remoteSideEffects = 0;
 
-        validator.Validate(publish, new ManagedModuleRepository("Private", target.Path), targetCredential: null, targetPublishCredential: null, plan, buildResult);
+        validator.Validate(
+            publish,
+            new ManagedModuleRepository("Private", target.Path),
+            targetCredential: null,
+            targetPublishCredential: null,
+            plan,
+            buildResult,
+            remoteSideEffectObserved: () => remoteSideEffects++);
 
         Assert.True(LocalPackageExists(target.Path, "Company.Core", "1.0.0"));
         Assert.True(LocalPackageExists(target.Path, "Company.Dependency", "1.0.0"));
         Assert.False(LocalPackageExists(target.Path, "Company.Dependency", "2.0.0"));
+        Assert.Equal(2, remoteSideEffects);
     }
 
     [Fact]

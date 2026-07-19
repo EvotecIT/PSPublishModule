@@ -91,6 +91,8 @@ internal sealed class ProjectBuildPreparationService
         context.Spec = new DotNetRepositoryReleaseSpec
         {
             RootPath = context.RootPath,
+            ReleaseVersionFloor = requestedActions.ReleaseVersionFloor,
+            ReleaseVersionFloorProject = requestedActions.ReleaseVersionFloorProject,
             ExpectedVersion = config.ExpectedVersion,
             ExpectedVersionsByProject = expectedVersionMap,
             ExpectedVersionMapAsInclude = config.ExpectedVersionMapAsInclude,

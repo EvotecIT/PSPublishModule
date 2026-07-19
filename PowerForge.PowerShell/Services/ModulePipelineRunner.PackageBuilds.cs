@@ -62,6 +62,7 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineRunState state,
         PackageBuildPublishDestination destination)
     {
+        var coordinatedReleaseCheckpointActive = state.SynchronizedReleaseCheckpoint is not null;
         var mode = destination == PackageBuildPublishDestination.NuGet
             ? PackageBuildExecutionMode.PublishNuGet
             : PackageBuildExecutionMode.PublishGitHub;
@@ -71,10 +72,38 @@ public sealed partial class ModulePipelineRunner
             if (segment?.Configuration is null || !ShouldExecuteProjectBuildPublish(plan, segment, destination))
                 continue;
 
-            if (TryExecuteExistingProjectBuildPublish(plan, session, state, segment, destination))
+            var operationKey = CreateProjectBuildPublishOperationFingerprint(plan, segment, destination);
+            if (ShouldSkipSynchronizedReleaseOperation(state, operationKey))
                 continue;
 
-            ExecuteProjectBuildSegment(plan, session, state, segment, mode);
+            var useDuplicateTolerantNuGetRetry = destination == PackageBuildPublishDestination.NuGet &&
+                state.IsResumingSynchronizedRelease &&
+                WasSynchronizedReleaseOperationAttempted(state, operationKey);
+            Action remotePublishAttempted = () => MarkSynchronizedReleaseOperationAttempted(state, operationKey);
+            if (TryExecuteExistingProjectBuildPublish(
+                    plan,
+                    session,
+                    state,
+                    segment,
+                    destination,
+                    useDuplicateTolerantNuGetRetry,
+                    remotePublishAttempted,
+                    coordinatedReleaseCheckpointActive))
+            {
+                MarkSynchronizedReleaseOperationCompleted(state, operationKey);
+                continue;
+            }
+
+            ExecuteProjectBuildSegment(
+                plan,
+                session,
+                state,
+                segment,
+                mode,
+                useDuplicateTolerantNuGetRetry,
+                remotePublishAttempted,
+                coordinatedReleaseCheckpointActive);
+            MarkSynchronizedReleaseOperationCompleted(state, operationKey);
         }
 
         foreach (var segment in plan.PackageBuilds ?? Array.Empty<ConfigurationPackageBuildSegment>())
@@ -82,10 +111,38 @@ public sealed partial class ModulePipelineRunner
             if (segment?.Configuration is null || !ShouldExecutePackageBuildPublish(plan, segment, destination))
                 continue;
 
-            if (TryExecuteExistingPackageBuildPublish(plan, session, state, segment, destination))
+            var operationKey = CreatePackageBuildPublishOperationFingerprint(plan, segment, destination);
+            if (ShouldSkipSynchronizedReleaseOperation(state, operationKey))
                 continue;
 
-            ExecutePackageBuildSegment(plan, session, state, segment, mode);
+            var useDuplicateTolerantNuGetRetry = destination == PackageBuildPublishDestination.NuGet &&
+                state.IsResumingSynchronizedRelease &&
+                WasSynchronizedReleaseOperationAttempted(state, operationKey);
+            Action remotePublishAttempted = () => MarkSynchronizedReleaseOperationAttempted(state, operationKey);
+            if (TryExecuteExistingPackageBuildPublish(
+                    plan,
+                    session,
+                    state,
+                    segment,
+                    destination,
+                    useDuplicateTolerantNuGetRetry,
+                    remotePublishAttempted,
+                    coordinatedReleaseCheckpointActive))
+            {
+                MarkSynchronizedReleaseOperationCompleted(state, operationKey);
+                continue;
+            }
+
+            ExecutePackageBuildSegment(
+                plan,
+                session,
+                state,
+                segment,
+                mode,
+                useDuplicateTolerantNuGetRetry,
+                remotePublishAttempted,
+                coordinatedReleaseCheckpointActive);
+            MarkSynchronizedReleaseOperationCompleted(state, operationKey);
         }
     }
 
@@ -94,7 +151,10 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineExecutionSession session,
         ModulePipelineRunState state,
         ConfigurationProjectBuildSegment segment,
-        PackageBuildPublishDestination destination)
+        PackageBuildPublishDestination destination,
+        bool useDuplicateTolerantNuGetRetry,
+        Action remotePublishAttempted,
+        bool coordinatedReleaseCheckpointActive)
     {
         if (!state.PackageBuildResultsBySegment.TryGetValue(segment, out var existing))
             return false;
@@ -104,6 +164,7 @@ public sealed partial class ModulePipelineRunner
         var cfg = segment.Configuration ?? throw new InvalidOperationException("ProjectBuild configuration is missing.");
         var configPath = ResolvePackageBuildPath(plan.ProjectRoot, cfg.ConfigPath);
         var configuration = LoadProjectBuildConfiguration(configPath, cfg);
+        ApplySynchronizedNuGetRetryPolicy(configuration, useDuplicateTolerantNuGetRetry);
         if (!CanPublishExistingPackageBuildResult(configuration, configPath, destination))
             return false;
         if (!HasReusablePackageBuildArtifacts(existing.Result.Release, destination))
@@ -113,7 +174,13 @@ public sealed partial class ModulePipelineRunner
         session.Start(step);
         try
         {
-            PublishExistingPackageBuildResult(existing, configuration, configPath, destination);
+            PublishExistingPackageBuildResult(
+                existing,
+                configuration,
+                configPath,
+                destination,
+                remotePublishAttempted,
+                coordinatedReleaseCheckpointActive);
             session.Done(step);
             return true;
         }
@@ -129,7 +196,10 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineExecutionSession session,
         ModulePipelineRunState state,
         ConfigurationPackageBuildSegment segment,
-        PackageBuildPublishDestination destination)
+        PackageBuildPublishDestination destination,
+        bool useDuplicateTolerantNuGetRetry,
+        Action remotePublishAttempted,
+        bool coordinatedReleaseCheckpointActive)
     {
         if (!state.PackageBuildResultsBySegment.TryGetValue(segment, out var existing))
             return false;
@@ -137,6 +207,7 @@ public sealed partial class ModulePipelineRunner
             return false;
 
         var configuration = MapPackageBuildConfiguration(segment.Configuration, plan.ProjectRoot);
+        ApplySynchronizedNuGetRetryPolicy(configuration, useDuplicateTolerantNuGetRetry);
         var configPath = Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
         if (!CanPublishExistingPackageBuildResult(configuration, configPath, destination))
             return false;
@@ -147,7 +218,13 @@ public sealed partial class ModulePipelineRunner
         session.Start(step);
         try
         {
-            PublishExistingPackageBuildResult(existing, configuration, configPath, destination);
+            PublishExistingPackageBuildResult(
+                existing,
+                configuration,
+                configPath,
+                destination,
+                remotePublishAttempted,
+                coordinatedReleaseCheckpointActive);
             session.Done(step);
             return true;
         }
@@ -206,11 +283,21 @@ public sealed partial class ModulePipelineRunner
         return paths.Length > 0 && paths.All(path => File.Exists(path!));
     }
 
+    private static void ApplySynchronizedNuGetRetryPolicy(
+        ProjectBuildConfiguration configuration,
+        bool useDuplicateTolerantNuGetRetry)
+    {
+        if (useDuplicateTolerantNuGetRetry)
+            configuration.SkipDuplicate = true;
+    }
+
     private void PublishExistingPackageBuildResult(
         ProjectBuildHostExecutionResult existing,
         ProjectBuildConfiguration configuration,
         string configPath,
-        PackageBuildPublishDestination destination)
+        PackageBuildPublishDestination destination,
+        Action remotePublishAttempted,
+        bool coordinatedReleaseCheckpointActive)
     {
         var release = existing.Result.Release
             ?? throw new InvalidOperationException($"Cannot reuse package build result for {destination}; the earlier package build did not include a release result.");
@@ -221,10 +308,21 @@ public sealed partial class ModulePipelineRunner
         switch (destination)
         {
             case PackageBuildPublishDestination.NuGet:
-                PublishExistingNuGetPackages(release, configuration, configPath, existing.RootPath);
+                PublishExistingNuGetPackages(
+                    release,
+                    configuration,
+                    configPath,
+                    existing.RootPath,
+                    remotePublishAttempted);
                 break;
             case PackageBuildPublishDestination.GitHub:
-                PublishExistingGitHubRelease(existing, release, configuration, configPath);
+                PublishExistingGitHubRelease(
+                    existing,
+                    release,
+                    configuration,
+                    configPath,
+                    remotePublishAttempted,
+                    coordinatedReleaseCheckpointActive);
                 break;
         }
     }
@@ -233,7 +331,8 @@ public sealed partial class ModulePipelineRunner
         DotNetRepositoryReleaseResult release,
         ProjectBuildConfiguration configuration,
         string configPath,
-        string repositoryRoot)
+        string repositoryRoot,
+        Action remotePublishAttempted)
     {
         var configDirectory = Path.GetDirectoryName(configPath);
         if (string.IsNullOrWhiteSpace(configDirectory))
@@ -267,7 +366,8 @@ public sealed partial class ModulePipelineRunner
             source,
             configuration.SkipDuplicate ?? true,
             configuration.PublishFailFast ?? true,
-            suppressCompanionSymbols: !(configuration.IncludeSymbols ?? false) || publishSymbolsSeparately);
+            suppressCompanionSymbols: !(configuration.IncludeSymbols ?? false) || publishSymbolsSeparately,
+            remotePublishAttempted: remotePublishAttempted);
 
         ApplyPublishedNuGetArtifactOutcomes(
             release,
@@ -349,7 +449,9 @@ public sealed partial class ModulePipelineRunner
         ProjectBuildHostExecutionResult existing,
         DotNetRepositoryReleaseResult release,
         ProjectBuildConfiguration configuration,
-        string configPath)
+        string configPath,
+        Action remotePublishAttempted,
+        bool coordinatedReleaseCheckpointActive)
     {
         var configDirectory = Path.GetDirectoryName(configPath);
         if (string.IsNullOrWhiteSpace(configDirectory))
@@ -362,11 +464,15 @@ public sealed partial class ModulePipelineRunner
         if (string.IsNullOrWhiteSpace(configuration.GitHubUsername) || string.IsNullOrWhiteSpace(configuration.GitHubRepositoryName))
             throw new InvalidOperationException("GitHubUsername and GitHubRepositoryName are required for package GitHub publishing.");
 
+        if (coordinatedReleaseCheckpointActive)
+            ValidateCoordinatedProjectBuildGitHubRetrySafety(configuration, release);
+
         var preflightError = new ProjectBuildGitHubPreflightService(_logger).Validate(configuration, release, token!);
         if (!string.IsNullOrWhiteSpace(preflightError))
             throw new InvalidOperationException(preflightError);
 
         _logger.Info("Publishing GitHub release from existing package build result.");
+        remotePublishAttempted();
         var summary = new ProjectBuildPublishHostService(_logger).PublishGitHub(
             new ProjectBuildPublishHostConfiguration
             {
@@ -398,19 +504,36 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineExecutionSession session,
         ModulePipelineRunState state,
         ConfigurationProjectBuildSegment segment,
-        PackageBuildExecutionMode mode)
+        PackageBuildExecutionMode mode,
+        bool useDuplicateTolerantNuGetRetry = false,
+        Action? remotePublishAttempted = null,
+        bool coordinatedReleaseCheckpointActive = false)
     {
         var step = session.GetProjectBuildStep(segment);
         session.Start(step);
         try
         {
-            var result = ExecuteProjectBuildSegment(plan, segment, mode);
+            var result = ExecuteProjectBuildSegment(
+                plan,
+                state,
+                segment,
+                mode,
+                useDuplicateTolerantNuGetRetry,
+                remotePublishAttempted,
+                coordinatedReleaseCheckpointActive);
+            var laneLabel = segment.Configuration.Name ?? result.ConfigPath;
+            var checkpointKey = ResolveSynchronizedReleaseLaneKey(
+                plan,
+                ReleaseVersionSource.ProjectBuild,
+                segment,
+                laneLabel);
             CompletePackageBuildExecution(
                 plan,
                 state,
                 result,
                 ReleaseVersionSource.ProjectBuild,
-                segment.Configuration.Name ?? result.ConfigPath,
+                laneLabel,
+                checkpointKey,
                 segment.Configuration.UseAsReleaseVersionSource,
                 segment.Configuration.ProvideLocalNuGetFeed,
                 segment,
@@ -431,19 +554,36 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineExecutionSession session,
         ModulePipelineRunState state,
         ConfigurationPackageBuildSegment segment,
-        PackageBuildExecutionMode mode)
+        PackageBuildExecutionMode mode,
+        bool useDuplicateTolerantNuGetRetry = false,
+        Action? remotePublishAttempted = null,
+        bool coordinatedReleaseCheckpointActive = false)
     {
         var step = session.GetPackageBuildStep(segment);
         session.Start(step);
         try
         {
-            var result = ExecutePackageBuildSegment(plan, segment, mode);
+            var result = ExecutePackageBuildSegment(
+                plan,
+                state,
+                segment,
+                mode,
+                useDuplicateTolerantNuGetRetry,
+                remotePublishAttempted,
+                coordinatedReleaseCheckpointActive);
+            var laneLabel = segment.Configuration.Name ?? result.ConfigPath;
+            var checkpointKey = ResolveSynchronizedReleaseLaneKey(
+                plan,
+                ReleaseVersionSource.PackageBuild,
+                segment,
+                laneLabel);
             CompletePackageBuildExecution(
                 plan,
                 state,
                 result,
                 ReleaseVersionSource.PackageBuild,
-                segment.Configuration.Name ?? result.ConfigPath,
+                laneLabel,
+                checkpointKey,
                 segment.Configuration.UseAsReleaseVersionSource,
                 segment.Configuration.ProvideLocalNuGetFeed,
                 segment,
@@ -465,12 +605,16 @@ public sealed partial class ModulePipelineRunner
         ProjectBuildHostExecutionResult result,
         ReleaseVersionSource source,
         string laneLabel,
+        string checkpointKey,
         bool useAsReleaseVersionSource,
         bool provideLocalNuGetFeed,
         object segment,
         PackageBuildExecutionMode mode,
         string failurePrefix)
     {
+        if (mode is not PackageBuildExecutionMode.PublishNuGet and not PackageBuildExecutionMode.PublishGitHub)
+            RecordSynchronizedReleaseLaneCheckpoint(state, source, laneLabel, checkpointKey, result);
+
         if (!result.Success)
             throw new InvalidOperationException(result.ErrorMessage ?? $"{failurePrefix} failed for '{result.ConfigPath}'.");
 
@@ -490,14 +634,19 @@ public sealed partial class ModulePipelineRunner
             state,
             source,
             laneLabel,
+            checkpointKey,
             useAsReleaseVersionSource,
             result);
     }
 
     private ProjectBuildHostExecutionResult ExecuteProjectBuildSegment(
         ModulePipelinePlan plan,
+        ModulePipelineRunState state,
         ConfigurationProjectBuildSegment segment,
-        PackageBuildExecutionMode mode)
+        PackageBuildExecutionMode mode,
+        bool useDuplicateTolerantNuGetRetry = false,
+        Action? remotePublishAttempted = null,
+        bool coordinatedReleaseCheckpointActive = false)
     {
         var cfg = segment.Configuration ?? throw new InvalidOperationException("ProjectBuild configuration is missing.");
         if (string.IsNullOrWhiteSpace(cfg.ConfigPath))
@@ -505,6 +654,28 @@ public sealed partial class ModulePipelineRunner
 
         var configPath = ResolvePackageBuildPath(plan.ProjectRoot, cfg.ConfigPath);
         var configuration = LoadProjectBuildConfiguration(configPath, cfg);
+        ApplySynchronizedNuGetRetryPolicy(configuration, useDuplicateTolerantNuGetRetry);
+        var laneLabel = cfg.Name ?? configPath;
+        var checkpointKey = ResolveSynchronizedReleaseLaneKey(
+            plan,
+            ReleaseVersionSource.ProjectBuild,
+            segment,
+            laneLabel);
+        ApplySynchronizedReleaseCheckpointVersion(
+            plan,
+            state,
+            ReleaseVersionSource.ProjectBuild,
+            laneLabel,
+            checkpointKey,
+            configuration);
+        var releaseVersionFloor = ResolveCoordinatedVersionFloor(
+            plan,
+            state,
+            ReleaseVersionSource.ProjectBuild,
+            checkpointKey,
+            cfg.UseAsReleaseVersionSource);
+        if (mode is not PackageBuildExecutionMode.PublishNuGet and not PackageBuildExecutionMode.PublishGitHub)
+            MarkSynchronizedReleaseLaneAttempted(state, checkpointKey);
         ApplyProjectBuildGateDefaults(configuration, mode, plan.GateMode);
         var actions = ResolveEffectiveActions(configuration);
         var request = new ProjectBuildHostRequest
@@ -515,7 +686,13 @@ public sealed partial class ModulePipelineRunner
             UpdateVersions = ResolveUpdateVersions(actions, mode, plan.GateMode),
             Build = ResolveBuild(actions, mode, plan.GateMode),
             PublishNuget = ResolvePublishNuGet(actions, mode),
-            PublishGitHub = ResolvePublishGitHub(actions, mode)
+            PublishGitHub = ResolvePublishGitHub(actions, mode),
+            ReleaseVersionFloor = releaseVersionFloor,
+            ReleaseVersionFloorProject = releaseVersionFloor is null
+                ? null
+                : plan.Release?.Configuration?.PrimaryProject,
+            RemotePublishAttempted = remotePublishAttempted,
+            CoordinatedReleaseCheckpointActive = coordinatedReleaseCheckpointActive
         };
 
         _logger.Info($"Running package project build ({DescribePackageBuildMode(mode)}): {configPath}");
@@ -524,11 +701,37 @@ public sealed partial class ModulePipelineRunner
 
     private ProjectBuildHostExecutionResult ExecutePackageBuildSegment(
         ModulePipelinePlan plan,
+        ModulePipelineRunState state,
         ConfigurationPackageBuildSegment segment,
-        PackageBuildExecutionMode mode)
+        PackageBuildExecutionMode mode,
+        bool useDuplicateTolerantNuGetRetry = false,
+        Action? remotePublishAttempted = null,
+        bool coordinatedReleaseCheckpointActive = false)
     {
         var cfg = segment.Configuration ?? throw new InvalidOperationException("PackageBuild configuration is missing.");
         var projectBuildConfig = MapPackageBuildConfiguration(cfg, plan.ProjectRoot);
+        ApplySynchronizedNuGetRetryPolicy(projectBuildConfig, useDuplicateTolerantNuGetRetry);
+        var laneLabel = cfg.Name ?? Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
+        var checkpointKey = ResolveSynchronizedReleaseLaneKey(
+            plan,
+            ReleaseVersionSource.PackageBuild,
+            segment,
+            laneLabel);
+        ApplySynchronizedReleaseCheckpointVersion(
+            plan,
+            state,
+            ReleaseVersionSource.PackageBuild,
+            laneLabel,
+            checkpointKey,
+            projectBuildConfig);
+        var releaseVersionFloor = ResolveCoordinatedVersionFloor(
+            plan,
+            state,
+            ReleaseVersionSource.PackageBuild,
+            checkpointKey,
+            cfg.UseAsReleaseVersionSource);
+        if (mode is not PackageBuildExecutionMode.PublishNuGet and not PackageBuildExecutionMode.PublishGitHub)
+            MarkSynchronizedReleaseLaneAttempted(state, checkpointKey);
         ApplyProjectBuildGateDefaults(projectBuildConfig, mode, plan.GateMode);
         var actions = ResolveEffectiveActions(projectBuildConfig);
         var configPath = Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
@@ -540,7 +743,13 @@ public sealed partial class ModulePipelineRunner
             UpdateVersions = ResolveUpdateVersions(actions, mode, plan.GateMode),
             Build = ResolveBuild(actions, mode, plan.GateMode),
             PublishNuget = ResolvePublishNuGet(actions, mode),
-            PublishGitHub = ResolvePublishGitHub(actions, mode)
+            PublishGitHub = ResolvePublishGitHub(actions, mode),
+            ReleaseVersionFloor = releaseVersionFloor,
+            ReleaseVersionFloorProject = releaseVersionFloor is null
+                ? null
+                : plan.Release?.Configuration?.PrimaryProject,
+            RemotePublishAttempted = remotePublishAttempted,
+            CoordinatedReleaseCheckpointActive = coordinatedReleaseCheckpointActive
         };
 
         _logger.Info($"Running inline package build ({DescribePackageBuildMode(mode)}).");
@@ -748,11 +957,16 @@ public sealed partial class ModulePipelineRunner
     }
 
     private static bool ShouldRunPackageBuildBeforeModule(ModulePipelinePlan plan, bool buildBeforeModule)
-        => ResolveReleaseBuildOrderOverride(plan) ?? buildBeforeModule;
+        => ShouldRunPackageBuildBeforeModule(plan.Release, buildBeforeModule);
 
-    private static bool? ResolveReleaseBuildOrderOverride(ModulePipelinePlan plan)
+    private static bool ShouldRunPackageBuildBeforeModule(
+        ConfigurationReleaseSegment? release,
+        bool buildBeforeModule)
+        => ResolveReleaseBuildOrderOverride(release) ?? buildBeforeModule;
+
+    private static bool? ResolveReleaseBuildOrderOverride(ConfigurationReleaseSegment? release)
     {
-        var order = plan.Release?.Configuration?.BuildOrder;
+        var order = release?.Configuration?.BuildOrder;
         if (order is null || order.Length == 0)
             return null;
 

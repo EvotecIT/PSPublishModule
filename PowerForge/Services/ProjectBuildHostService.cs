@@ -120,6 +120,8 @@ public sealed class ProjectBuildHostService
             configDirectory,
             request.PlanOutputPath,
             new ProjectBuildRequestedActions {
+                ReleaseVersionFloor = request.ReleaseVersionFloor,
+                ReleaseVersionFloorProject = request.ReleaseVersionFloorProject,
                 PlanOnly = request.PlanOnly,
                 UpdateVersions = request.UpdateVersions,
                 Build = request.Build,
@@ -134,7 +136,13 @@ public sealed class ProjectBuildHostService
             _validateGitHubPreflight,
             _signAssemblies,
             _validateAssemblySigning)
-            .Execute(config, configDirectory, preparation, request.ExecuteBuild);
+            .Execute(
+                config,
+                configDirectory,
+                preparation,
+                request.ExecuteBuild,
+                request.RemotePublishAttempted,
+                request.CoordinatedReleaseCheckpointActive);
 
         return new ProjectBuildHostExecutionResult {
             Success = workflow.Result.Success,

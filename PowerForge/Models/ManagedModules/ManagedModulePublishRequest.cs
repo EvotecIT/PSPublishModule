@@ -5,6 +5,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class ManagedModulePublishRequest
 {
+    internal Action? RemotePublishAttempted { get; set; }
+
     /// <summary>
     /// Module folder to package.
     /// </summary>

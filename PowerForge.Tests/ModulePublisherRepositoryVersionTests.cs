@@ -8,7 +8,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class ModulePublisherRepositoryVersionTests
+public sealed partial class ModulePublisherRepositoryVersionTests
 {
     [Fact]
     public void PSResourceGetClient_Find_PreservesPrereleaseField()
@@ -145,6 +145,52 @@ public sealed class ModulePublisherRepositoryVersionTests
             credential: null));
 
         Assert.Contains("not greater than repository version '3.0.0'", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ValidateVersionForPublish_RejectsSynchronizedVersionAlreadyInRepository()
+    {
+        using var client = new HttpClient(new FakePowerShellGalleryFeedHandler());
+        var publisher = new ModulePublisher(
+            new NullLogger(),
+            new StubPowerShellRunner(new PowerShellRunResult(0, VisibleRepositoryItem("PSPublishModule", "3.0.0"), string.Empty, "pwsh.exe")),
+            client);
+        var publish = new PublishConfiguration
+        {
+            Enabled = true,
+            Destination = PublishDestination.PowerShellGallery,
+            RepositoryName = "PSGallery",
+            Tool = PublishTool.PSResourceGet
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            publisher.ValidateVersionForPublish(publish, CreatePlan(resolvedVersion: "3.0.0")));
+
+        Assert.Contains("not greater than repository version '3.0.0'", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ValidateVersionForPublish_AllowsExactRepositoryVersionWhenResumingRelease()
+    {
+        using var client = new HttpClient(new FakePowerShellGalleryFeedHandler());
+        var publisher = new ModulePublisher(
+            new NullLogger(),
+            new StubPowerShellRunner(new PowerShellRunResult(0, VisibleRepositoryItem("PSPublishModule", "3.0.0"), string.Empty, "pwsh.exe")),
+            client);
+        var publish = new PublishConfiguration
+        {
+            Enabled = true,
+            Destination = PublishDestination.PowerShellGallery,
+            RepositoryName = "PSGallery",
+            Tool = PublishTool.PSResourceGet
+        };
+
+        var result = publisher.ValidateVersionForPublish(
+            publish,
+            CreatePlan(resolvedVersion: "3.0.0"),
+            allowExistingExactVersion: true);
+
+        Assert.Equal(ModulePublishVersionPreflightResult.AlreadyPublished, result);
     }
 
     [Fact]
@@ -845,20 +891,20 @@ public sealed class ModulePublisherRepositoryVersionTests
             Encode(version)
         });
 
-    private static ModulePipelinePlan CreatePlan()
+    private static ModulePipelinePlan CreatePlan(string resolvedVersion = "3.0.13")
     {
         return new ModulePipelinePlan(
             moduleName: "PSPublishModule",
             projectRoot: @"C:\repo\PSPublishModule",
-            expectedVersion: "3.0.13",
-            resolvedVersion: "3.0.13",
+            expectedVersion: resolvedVersion,
+            resolvedVersion: resolvedVersion,
             preRelease: null,
             manifest: null,
             buildSpec: new ModuleBuildSpec
             {
                 Name = "PSPublishModule",
                 SourcePath = @"C:\repo\PSPublishModule",
-                Version = "3.0.13"
+                Version = resolvedVersion
             },
             resolvedCsprojPath: null,
             syncNETProjectVersion: false,
@@ -947,6 +993,22 @@ public sealed class ModulePublisherRepositoryVersionTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var uri = request.RequestUri?.ToString() ?? string.Empty;
+            if (uri.Contains("/Packages(", StringComparison.OrdinalIgnoreCase))
+            {
+                if (uri.Contains("2.5.0", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+                }
+
+                var exactVersion = uri.Contains("2.0.27", StringComparison.OrdinalIgnoreCase)
+                    ? "2.0.27"
+                    : "3.0.0";
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(BuildExactVersion(exactVersion), Encoding.UTF8, "application/atom+xml")
+                });
+            }
+
             var body = uri.Contains("$skip=100", StringComparison.OrdinalIgnoreCase)
                 ? BuildSecondPage()
                 : BuildFirstPage();
@@ -956,6 +1018,18 @@ public sealed class ModulePublisherRepositoryVersionTests
                 Content = new StringContent(body, Encoding.UTF8, "application/atom+xml")
             });
         }
+
+        private static string BuildExactVersion(string version)
+            => $"""
+               <?xml version="1.0" encoding="utf-8"?>
+               <entry xmlns="http://www.w3.org/2005/Atom"
+                      xmlns:d="http://schemas.microsoft.com/ado/2007/08/dataservices"
+                      xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata">
+                 <m:properties>
+                   <d:Version>{version}</d:Version>
+                 </m:properties>
+               </entry>
+               """;
 
         private static string BuildFirstPage()
             => """

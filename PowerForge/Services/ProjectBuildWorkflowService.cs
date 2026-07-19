@@ -36,7 +36,9 @@ internal sealed class ProjectBuildWorkflowService
         ProjectBuildConfiguration config,
         string configDir,
         ProjectBuildPreparedContext preparation,
-        bool executeBuild)
+        bool executeBuild,
+        Action? remotePublishAttempted = null,
+        bool coordinatedReleaseCheckpointActive = false)
     {
         if (config is null)
             throw new ArgumentNullException(nameof(config));
@@ -88,7 +90,14 @@ internal sealed class ProjectBuildWorkflowService
             preflightErrors.Add(preflightError!);
 
         var gitHubToken = preparation.PublishGitHub ? preparation.GitHubToken : null;
-        if (preparation.PublishGitHub && string.IsNullOrWhiteSpace(preflightError))
+        if (preparation.PublishGitHub && coordinatedReleaseCheckpointActive)
+        {
+            var retrySafetyError = ProjectBuildGitHubRetrySafety.Validate(config, plan);
+            if (!string.IsNullOrWhiteSpace(retrySafetyError))
+                preflightErrors.Add(retrySafetyError!);
+        }
+
+        if (preparation.PublishGitHub && preflightErrors.Count == 0)
         {
             var gitHubPreflightError = _validateGitHubPreflight(config, plan, gitHubToken!);
             if (!string.IsNullOrWhiteSpace(gitHubPreflightError))
@@ -110,6 +119,7 @@ internal sealed class ProjectBuildWorkflowService
         _support.TryWritePlan(plan, preparation.PlanOutputPath);
 
         spec.WhatIf = false;
+        spec.RemotePublishAttempted = remotePublishAttempted;
         var releaseWatch = Stopwatch.StartNew();
         var release = _executeRelease(spec, _signAssemblies, _validateAssemblySigning);
         releaseWatch.Stop();
@@ -151,6 +161,7 @@ internal sealed class ProjectBuildWorkflowService
         }
 
         var gitHubWatch = Stopwatch.StartNew();
+        remotePublishAttempted?.Invoke();
         var publishSummary = _publishGitHub(new ProjectBuildGitHubPublishRequest
         {
             Owner = config.GitHubUsername!,

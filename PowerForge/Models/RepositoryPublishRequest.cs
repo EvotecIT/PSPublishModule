@@ -5,6 +5,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class RepositoryPublishRequest
 {
+    internal Action? RemotePublishAttempted { get; set; }
+
     /// <summary>Path to a module folder (<c>-Path</c>) or a .nupkg file (<c>-NupkgPath</c> for PSResourceGet).</summary>
     public string Path { get; set; } = string.Empty;
 

@@ -59,7 +59,7 @@ public sealed class ModuleBuildSpec
     /// </summary>
     public string[] ExcludeDirectories { get; set; } =
     {
-        ".git", ".vs", ".vscode", "bin", "obj", "packages", "node_modules", "Artefacts"
+        ".git", ".vs", ".vscode", "bin", "obj", "packages", "node_modules", "Artefacts", "Artifacts"
     };
 
     /// <summary>

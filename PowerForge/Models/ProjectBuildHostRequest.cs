@@ -5,6 +5,11 @@ namespace PowerForge;
 /// </summary>
 public sealed class ProjectBuildHostRequest
 {
+    internal Action? RemotePublishAttempted { get; set; }
+    internal bool CoordinatedReleaseCheckpointActive { get; set; }
+    internal string? ReleaseVersionFloor { get; set; }
+    internal string? ReleaseVersionFloorProject { get; set; }
+
     /// <summary>
     /// Path to the <c>project.build.json</c> configuration file.
     /// </summary>

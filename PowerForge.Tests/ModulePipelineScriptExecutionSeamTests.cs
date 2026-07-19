@@ -685,7 +685,9 @@ public sealed class ModulePipelineScriptExecutionSeamTests
             ModulePipelinePlan plan,
             ModuleBuildResult buildResult,
             IReadOnlyList<ArtefactBuildResult> artefactResults,
-            bool includeScriptFolders)
+            bool includeScriptFolders,
+            Action? remotePublishAttempted,
+            Action? remoteSideEffectObserved)
             => throw new InvalidOperationException("Not used in this test.");
 
         public void ValidateModuleImports(

@@ -390,7 +390,8 @@ public sealed partial class ModulePipelineRunner
     private ModulePublishResult PublishUnifiedGitHubRelease(
         PublishConfiguration publish,
         ModulePipelinePlan plan,
-        ModulePipelineRunState state)
+        ModulePipelineRunState state,
+        Action remotePublishAttempted)
     {
         if (publish is null)
             throw new ArgumentNullException(nameof(publish));
@@ -406,6 +407,9 @@ public sealed partial class ModulePipelineRunner
 
         if (release.ModuleAssetPaths.Length == 0 && release.PackageAssetPaths.Length == 0)
             throw new InvalidOperationException("No module or package assets were produced for unified GitHub publishing.");
+        var missingAsset = release.AssetPaths.FirstOrDefault(static asset => string.IsNullOrWhiteSpace(asset) || !File.Exists(asset));
+        if (missingAsset is not null)
+            throw new FileNotFoundException($"Unified GitHub release asset was not found: {missingAsset}", missingAsset);
 
         var owner = publish.UserName!.Trim();
         var repo = string.IsNullOrWhiteSpace(publish.RepositoryName) ? plan.ModuleName : publish.RepositoryName!.Trim();
@@ -414,6 +418,7 @@ public sealed partial class ModulePipelineRunner
         var isPreRelease = !string.IsNullOrWhiteSpace(plan.PreRelease) && !publish.DoNotMarkAsPreRelease;
 
         _logger.Info($"Publishing unified GitHub release {owner}/{repo} tag '{tag}' with {release.AssetPaths.Length} asset(s).");
+        remotePublishAttempted();
         var gitHub = _gitHubReleasePublisher(new GitHubReleasePublishRequest
         {
             Owner = owner,
