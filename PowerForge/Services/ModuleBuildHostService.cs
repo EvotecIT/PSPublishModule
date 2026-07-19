@@ -63,7 +63,7 @@ public sealed class ModuleBuildHostService
         var result = await Task.Run(() => _powerShellRunner.Run(PowerShellRunRequest.ForCommand(
             commandText: script,
             timeout: timeout,
-            preferPwsh: true,
+            preferPwsh: !FrameworkCompatibility.IsWindows(),
             workingDirectory: workingDirectory,
             executableOverride: Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_POWERSHELL_EXE"))), cancellationToken).ConfigureAwait(false);
         startedAt.Stop();

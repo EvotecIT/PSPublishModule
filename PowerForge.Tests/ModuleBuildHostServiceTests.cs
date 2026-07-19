@@ -23,6 +23,7 @@ public sealed class ModuleBuildHostServiceTests
 
         Assert.NotNull(captured);
         Assert.Equal(PowerShellInvocationMode.Command, captured!.InvocationMode);
+        Assert.Equal(!FrameworkCompatibility.IsWindows(), captured.PreferPwsh);
         Assert.Equal(@"C:\repo", captured.WorkingDirectory);
         Assert.Contains("JsonOnly = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("JsonPath = $targetJson", captured.CommandText!, StringComparison.Ordinal);
@@ -152,6 +153,7 @@ public sealed class ModuleBuildHostServiceTests
 
         Assert.NotNull(captured);
         Assert.Equal(TimeSpan.FromHours(3), captured!.Timeout);
+        Assert.Equal(!FrameworkCompatibility.IsWindows(), captured.PreferPwsh);
         Assert.Contains("$buildScriptArguments['IncludeProjectPackages'] = $false", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$buildScriptArguments['CertificateThumbprint'] = 'ABC123'", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$buildScriptArguments['SignIncludeBinaries'] = $true", captured.CommandText!, StringComparison.Ordinal);
