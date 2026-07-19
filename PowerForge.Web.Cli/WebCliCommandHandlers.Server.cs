@@ -172,14 +172,18 @@ internal static partial class WebCliCommandHandlers
                 sshCommand,
                 target,
                 manifest.OperationLocks ?? Array.Empty<string>());
-            foreach (var command in commandList.Where(static command => !command.Sensitive))
+            for (var commandIndex = 0; commandIndex < commandList.Length; commandIndex++)
             {
+                var command = commandList[commandIndex];
+                if (command.Sensitive)
+                    continue;
                 captureLock?.EnsureHeld($"before capture command '{command.Id}'");
                 var result = CaptureRemoteCommand(
                     sshCommand,
                     target,
                     command,
-                    Path.Combine(outputRoot, "commands"));
+                    Path.Combine(outputRoot, "commands"),
+                    commandIndex);
                 captureLock?.EnsureHeld($"after capture command '{command.Id}'");
                 commandResults.Add(result);
                 if (!result.Success && command.Required)
@@ -303,29 +307,57 @@ internal static partial class WebCliCommandHandlers
 
         foreach (var repository in manifest.Repositories ?? Array.Empty<PowerForgeServerRepository>())
         {
-            var commandId = repository.RefCaptureCommandId;
-            if (string.IsNullOrWhiteSpace(commandId))
+            var commandIds = GetRepositoryRefCaptureCommandIds(repository);
+            if (commandIds.Length == 0)
                 continue;
 
             // A dynamic ref must never fall back to a stale source-manifest value.
             repository.Ref = null;
-            var result = commandResults.SingleOrDefault(candidate =>
-                string.Equals(candidate.Id, commandId, StringComparison.Ordinal));
-            if (result is null || !result.Success || string.IsNullOrWhiteSpace(result.StdoutPath) || !File.Exists(result.StdoutPath))
+            var revisions = new List<string>(commandIds.Length);
+            var captureFailed = false;
+            foreach (var commandId in commandIds)
             {
-                warnings.Add($"Repository '{repository.Role}' revision capture is missing or failed for command '{commandId}'.");
+                var result = commandResults.SingleOrDefault(candidate =>
+                    string.Equals(candidate.Id, commandId, StringComparison.Ordinal));
+                if (result is null || !result.Success || string.IsNullOrWhiteSpace(result.StdoutPath) || !File.Exists(result.StdoutPath))
+                {
+                    warnings.Add($"Repository '{repository.Role}' revision capture is missing or failed for command '{commandId}'.");
+                    captureFailed = true;
+                    continue;
+                }
+
+                var revision = File.ReadAllText(result.StdoutPath).Trim().ToLowerInvariant();
+                if (!PowerForge.Web.WebEngineLockFile.IsCommitSha(revision))
+                {
+                    warnings.Add($"Repository '{repository.Role}' revision capture is not an exact commit for command '{commandId}'.");
+                    captureFailed = true;
+                    continue;
+                }
+
+                revisions.Add(revision);
+            }
+
+            if (captureFailed)
+                continue;
+
+            var distinctRevisions = revisions.Distinct(StringComparer.Ordinal).ToArray();
+            if (distinctRevisions.Length != 1)
+            {
+                warnings.Add($"Repository '{repository.Role}' revision captures disagree across commands '{string.Join("', '", commandIds)}'.");
                 continue;
             }
 
-            var revision = File.ReadAllText(result.StdoutPath).Trim().ToLowerInvariant();
-            if (!PowerForge.Web.WebEngineLockFile.IsCommitSha(revision))
-            {
-                warnings.Add($"Repository '{repository.Role}' revision capture is not an exact commit for command '{commandId}'.");
-                continue;
-            }
-
-            repository.Ref = revision;
+            repository.Ref = distinctRevisions[0];
         }
+    }
+
+    private static string[] GetRepositoryRefCaptureCommandIds(PowerForgeServerRepository repository)
+    {
+        if (repository.RefCaptureCommandIds is { Length: > 0 })
+            return repository.RefCaptureCommandIds;
+        return string.IsNullOrWhiteSpace(repository.RefCaptureCommandId)
+            ? Array.Empty<string>()
+            : [repository.RefCaptureCommandId];
     }
 
     private static (PowerForgeServerRecoveryManifest? Manifest, string? ManifestPath, int ExitCode) LoadServerRecoveryManifest(
@@ -395,9 +427,10 @@ internal static partial class WebCliCommandHandlers
         string sshCommand,
         string target,
         PowerForgeServerNamedCommand command,
-        string commandOutputDirectory)
+        string commandOutputDirectory,
+        int commandIndex)
     {
-        var id = SanitizeFileName(string.IsNullOrWhiteSpace(command.Id) ? "command" : command.Id);
+        var id = BuildCaptureCommandOutputStem(commandIndex, command.Id);
         var stdoutPath = Path.Combine(commandOutputDirectory, $"{id}.out.txt");
         var stderrPath = Path.Combine(commandOutputDirectory, $"{id}.err.txt");
         var execution = RunProcessCaptureText(sshCommand, BuildSshArguments(target, command.Command ?? string.Empty));
@@ -414,6 +447,16 @@ internal static partial class WebCliCommandHandlers
             StdoutPath = stdoutPath,
             StderrPath = stderrPath
         };
+    }
+
+    internal static string BuildCaptureCommandOutputStem(int commandIndex, string? commandId)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(commandIndex);
+        var id = SanitizeFileName(string.IsNullOrWhiteSpace(commandId) ? "command" : commandId);
+        const int maximumReadableIdLength = 80;
+        if (id.Length > maximumReadableIdLength)
+            id = id[..maximumReadableIdLength];
+        return $"{commandIndex:D4}-{id}";
     }
 
     private static ProcessResult CaptureRemoteTarArchive(

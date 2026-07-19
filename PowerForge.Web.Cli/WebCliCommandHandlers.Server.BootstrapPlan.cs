@@ -182,9 +182,10 @@ internal static partial class WebCliCommandHandlers
                     $"{checks} || {{ echo {message} >&2; exit 3; }}",
                     plannedCommands: plannedCommands);
             }
-            if (!string.IsNullOrWhiteSpace(repository.RefCaptureCommandId) && string.IsNullOrWhiteSpace(repository.Ref))
+            var refCaptureCommandIds = GetRepositoryRefCaptureCommandIds(repository);
+            if (refCaptureCommandIds.Length > 0 && string.IsNullOrWhiteSpace(repository.Ref))
             {
-                var message = ShellQuote($"Use the captured recovery manifest containing repository ref from command {repository.RefCaptureCommandId}.");
+                var message = ShellQuote($"Use the captured recovery manifest containing repository ref from command(s) {string.Join(", ", refCaptureCommandIds)}.");
                 AddStep(steps, ref order, "repositories", $"Verify {repository.Role} captured revision",
                     $"echo {message} >&2; exit 3",
                     plannedCommands: plannedCommands);

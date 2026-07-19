@@ -491,20 +491,51 @@ internal static partial class WebCliCommandHandlers
                     errors.Add($"{field}.bootstrapRequiredFiles must include sshKnownHostsFile '{knownHosts}'.");
             }
 
+            var refCaptureCommandIds = new List<(string Field, string Id)>();
             if (!string.IsNullOrWhiteSpace(repository.RefCaptureCommandId))
             {
-                var commandId = repository.RefCaptureCommandId;
+                refCaptureCommandIds.Add(($"{field}.refCaptureCommandId", repository.RefCaptureCommandId));
+            }
+
+            if (repository.RefCaptureCommandIds is not null)
+            {
+                if (repository.RefCaptureCommandIds.Length is < 2 or > 16)
+                    errors.Add($"{field}.refCaptureCommandIds must contain between 2 and 16 command identifiers.");
+                if (!string.IsNullOrWhiteSpace(repository.RefCaptureCommandId))
+                    errors.Add($"{field} must not declare both refCaptureCommandId and refCaptureCommandIds.");
+
+                var seenRefCaptureCommandIds = new HashSet<string>(StringComparer.Ordinal);
+                for (var commandIndex = 0; commandIndex < repository.RefCaptureCommandIds.Length; commandIndex++)
+                {
+                    var commandId = repository.RefCaptureCommandIds[commandIndex];
+                    var commandField = $"{field}.refCaptureCommandIds[{commandIndex}]";
+                    if (string.IsNullOrWhiteSpace(commandId) || !IsSafeIdentifier(commandId))
+                    {
+                        errors.Add($"{commandField} contains unsupported characters.");
+                        continue;
+                    }
+                    if (!seenRefCaptureCommandIds.Add(commandId))
+                    {
+                        errors.Add($"{commandField} duplicates capture command '{commandId}'.");
+                        continue;
+                    }
+                    refCaptureCommandIds.Add((commandField, commandId));
+                }
+            }
+
+            foreach (var (commandField, commandId) in refCaptureCommandIds)
+            {
                 if (!IsSafeIdentifier(commandId))
                 {
-                    errors.Add($"{field}.refCaptureCommandId contains unsupported characters.");
+                    errors.Add($"{commandField} contains unsupported characters.");
                 }
                 else if (!captureCommandsById.TryGetValue(commandId, out var commands) || commands.Length != 1)
                 {
-                    errors.Add($"{field}.refCaptureCommandId must identify exactly one capture command.");
+                    errors.Add($"{commandField} must identify exactly one capture command.");
                 }
                 else if (!commands[0].Required || commands[0].Sensitive)
                 {
-                    errors.Add($"{field}.refCaptureCommandId must identify a required, non-sensitive capture command.");
+                    errors.Add($"{commandField} must identify a required, non-sensitive capture command.");
                 }
             }
 
