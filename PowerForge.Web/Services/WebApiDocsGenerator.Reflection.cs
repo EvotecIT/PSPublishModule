@@ -43,7 +43,7 @@ public static partial class WebApiDocsGenerator
 
             foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
             {
-                if (method.IsSpecialName) continue;
+                if (!ShouldIncludeReflectedMethod(method)) continue;
                 model.Methods.Add(new ApiMemberModel
                 {
                     Name = method.Name,
@@ -140,7 +140,7 @@ public static partial class WebApiDocsGenerator
 
             foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
             {
-                if (method.IsSpecialName) continue;
+                if (!ShouldIncludeReflectedMethod(method)) continue;
                 var member = FindMethodModel(model.Methods, method);
                 if (member is null)
                 {
@@ -266,6 +266,34 @@ public static partial class WebApiDocsGenerator
             }
         }
     }
+
+    private static void RestrictToPublicAssemblySurface(ApiDocModel doc, Assembly assembly)
+    {
+        var exportedTypes = GetExportedTypesSafe(assembly)
+            .Where(static type => type is not null)
+            .Select(static type => (type!.FullName ?? type.Name).Replace('+', '.'))
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var typeName in doc.Types.Keys.Where(typeName => !exportedTypes.Contains(typeName)).ToArray())
+            doc.Types.Remove(typeName);
+
+        foreach (var type in doc.Types.Values)
+        {
+            type.Methods.RemoveAll(static member => !IsPublicAssemblyMember(member));
+            type.Constructors.RemoveAll(static member => !IsPublicAssemblyMember(member));
+            type.Properties.RemoveAll(static member => !IsPublicAssemblyMember(member));
+            type.Fields.RemoveAll(static member => !IsPublicAssemblyMember(member));
+            type.Events.RemoveAll(static member => !IsPublicAssemblyMember(member));
+            type.ExtensionMethods.RemoveAll(static member => !IsPublicAssemblyMember(member));
+        }
+    }
+
+    private static bool IsPublicAssemblyMember(ApiMemberModel member) =>
+        string.Equals(member.Access, "public", StringComparison.Ordinal);
+
+    private static bool ShouldIncludeReflectedMethod(MethodInfo method) =>
+        !method.IsSpecialName ||
+        method.Name.StartsWith("op_", StringComparison.Ordinal);
 
     private static ApiMemberModel? FindNamedMember(List<ApiMemberModel> members, string name)
     {

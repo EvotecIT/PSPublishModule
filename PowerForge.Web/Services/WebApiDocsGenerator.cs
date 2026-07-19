@@ -434,6 +434,7 @@ public static partial class WebApiDocsGenerator
         if (options.Type == ApiDocsType.CSharp && assembly is not null)
         {
             EnrichFromAssembly(apiDoc, assembly, options, warnings);
+            RestrictToPublicAssemblySurface(apiDoc, assembly);
         }
         var assemblyName = apiDoc.AssemblyName;
         var assemblyVersion = apiDoc.AssemblyVersion;
