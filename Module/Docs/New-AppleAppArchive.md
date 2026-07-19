@@ -11,7 +11,7 @@ Creates an Apple app .xcarchive using xcodebuild.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-AppleAppArchive [-ProjectPath] <string> -Scheme <string> [-Workspace] [-Configuration <string>] [-Platform <ApplePlatform>] [-Destination <string>] [-ArchivePath <string>] [-ArchiveRoot <string>] [-XcodeBuild <string>] [-AllowProvisioningUpdates] [-AdditionalArgument <string[]>] [-TimeoutMinutes <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
+New-AppleAppArchive [-ProjectPath] <string> -Scheme <string> [-Workspace] [-Configuration <string>] [-Platform <ApplePlatform>] [-ArchiveVariant <AppleArchiveVariant>] [-Destination <string>] [-ArchivePath <string>] [-ArchiveRoot <string>] [-XcodeBuild <string>] [-AllowProvisioningUpdates] [-AdditionalArgument <string[]>] [-TimeoutMinutes <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -83,6 +83,22 @@ Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ArchiveVariant
+Optional archive destination variant, such as Mac Catalyst.
+
+```yaml
+Type: AppleArchiveVariant
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: Default, MacCatalyst
 
 Required: False
 Position: named

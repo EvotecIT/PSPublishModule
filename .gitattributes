@@ -1,3 +1,5 @@
 Module/PSPublishModule.Tests.ps1 text eol=crlf
 Module/Docs/Invoke-PowerForgeRelease.md -text whitespace=cr-at-eol
+Module/Docs/New-AppleAppArchive.md -text whitespace=cr-at-eol
+Module/Docs/New-ConfigurationAppleApp.md -text whitespace=cr-at-eol
 Module/en-US/PSPublishModule-help.xml -text whitespace=cr-at-eol

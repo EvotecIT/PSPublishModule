@@ -68,6 +68,26 @@ internal sealed class PowerForgeReleaseRequest
 
     public bool? ModuleSignModule { get; set; }
 
+    public int? ModuleTimeoutSeconds { get; set; }
+
+    public string? ModuleCertificateThumbprint { get; set; }
+
+    public bool? ModuleSignIncludeBinaries { get; set; }
+
+    public bool? ModuleSignIncludeInternals { get; set; }
+
+    public bool? ModuleSignIncludeExe { get; set; }
+
+    public string? ModuleDiagnosticsBaselinePath { get; set; }
+
+    public bool? ModuleGenerateDiagnosticsBaseline { get; set; }
+
+    public bool? ModuleUpdateDiagnosticsBaseline { get; set; }
+
+    public bool? ModuleFailOnNewDiagnostics { get; set; }
+
+    public string? ModuleFailOnDiagnosticsSeverity { get; set; }
+
     public bool SkipRestore { get; set; }
 
     public bool SkipBuild { get; set; }
@@ -490,6 +510,8 @@ internal sealed class PowerForgeAppleAppReleaseTargetPlan
 
     public ApplePlatform Platform { get; set; }
 
+    public AppleArchiveVariant ArchiveVariant { get; set; }
+
     public string? AppStoreConnectAppId { get; set; }
 
     public string ProjectPath { get; set; } = string.Empty;
@@ -813,6 +835,8 @@ internal sealed class PowerForgeModuleReleaseOptions
 
     public bool? SignModule { get; set; }
 
+    public int TimeoutSeconds { get; set; } = 7200;
+
     public string[] ArtifactPaths { get; set; } = Array.Empty<string>();
 }
 
@@ -831,6 +855,10 @@ internal sealed class PowerForgeModuleReleasePlanSummary
     public ConfigurationGateMode RunMode { get; set; } = ConfigurationGateMode.Build;
 
     public bool IncludesPackages { get; set; }
+
+    public bool IncludesProjectPackages { get; set; }
+
+    public int TimeoutSeconds { get; set; }
 
     public bool NoDotnetBuild { get; set; }
 

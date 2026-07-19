@@ -38,6 +38,26 @@ internal sealed class PowerForgeReleaseInvocationOptions
 
     public bool? ModuleSignModule { get; set; }
 
+    public int? ModuleTimeoutSeconds { get; set; }
+
+    public string? ModuleCertificateThumbprint { get; set; }
+
+    public bool? ModuleSignIncludeBinaries { get; set; }
+
+    public bool? ModuleSignIncludeInternals { get; set; }
+
+    public bool? ModuleSignIncludeExe { get; set; }
+
+    public string? ModuleDiagnosticsBaselinePath { get; set; }
+
+    public bool? ModuleGenerateDiagnosticsBaseline { get; set; }
+
+    public bool? ModuleUpdateDiagnosticsBaseline { get; set; }
+
+    public bool? ModuleFailOnNewDiagnostics { get; set; }
+
+    public string? ModuleFailOnDiagnosticsSeverity { get; set; }
+
     public bool SkipWorkspaceValidation { get; set; }
 
     public string? WorkspaceConfigPath { get; set; }

@@ -166,6 +166,13 @@ public sealed class PSPublishModuleManifestContractTests
         Assert.Contains("'--module-framework', $Framework", selfBuildScript, StringComparison.Ordinal);
         Assert.Contains("'--module-run-mode', 'Publish'", selfBuildScript, StringComparison.Ordinal);
         Assert.Contains("'--publish-tool-github'", selfBuildScript, StringComparison.Ordinal);
+        Assert.Contains("'--module-certificate-thumbprint', $CertificateThumbprint", selfBuildScript, StringComparison.Ordinal);
+        Assert.Contains("'--module-sign-include-binaries'", selfBuildScript, StringComparison.Ordinal);
+        Assert.Contains("'--module-diagnostics-baseline'", selfBuildScript, StringComparison.Ordinal);
+        Assert.Contains("'--module-fail-on-new-diagnostics'", selfBuildScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("Unified publishing does not accept module-only override", selfBuildScript, StringComparison.Ordinal);
+        Assert.Contains("[bool] $IncludeProjectPackages = $true", buildScript, StringComparison.Ordinal);
+        Assert.Contains("if ($IncludeProjectPackages)", buildScript, StringComparison.Ordinal);
         Assert.Contains("RunMode        = $RunMode", wrapperScript, StringComparison.Ordinal);
         Assert.Contains("$cmdletFramework = if ($PSEdition -eq 'Desktop')", projectWrapperScript, StringComparison.Ordinal);
         Assert.DoesNotContain("$moduleFramework = if ($PSEdition -eq 'Desktop')", projectWrapperScript, StringComparison.OrdinalIgnoreCase);

@@ -53,6 +53,45 @@ public sealed class AppleAppArchiveServiceTests
     }
 
     [Fact]
+    public async Task CreateArchiveAsync_uses_mac_catalyst_destination()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var runner = new CapturingProcessRunner();
+            var service = new AppleAppArchiveService(runner);
+
+            var result = await service.CreateArchiveAsync(new AppleAppArchiveRequest
+            {
+                ProjectPath = project.FullName,
+                Scheme = "CasaRay",
+                ArchivePath = Path.Combine(root.FullName, "CasaRay.xcarchive"),
+                Platform = ApplePlatform.macOS,
+                ArchiveVariant = AppleArchiveVariant.MacCatalyst
+            });
+
+            Assert.True(result.Succeeded);
+            Assert.Equal("generic/platform=macOS,variant=Mac Catalyst", result.Destination);
+            Assert.Contains(result.Destination, Assert.Single(runner.Requests).Arguments);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void GetGenericDestination_rejects_mac_catalyst_without_macos_store_platform()
+    {
+        var exception = Assert.Throws<ArgumentException>(() =>
+            AppleAppArchiveService.GetGenericDestination(ApplePlatform.iOS, AppleArchiveVariant.MacCatalyst));
+
+        Assert.Contains("Platform macOS", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CreateArchiveAsync_generates_unique_default_archive_paths()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

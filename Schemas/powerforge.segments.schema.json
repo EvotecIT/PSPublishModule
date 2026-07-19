@@ -276,6 +276,7 @@
         "Name": { "type": ["string", "null"] },
         "BundleId": { "type": ["string", "null"] },
         "Platform": { "$ref": "powerforge.common.schema.json#/$defs/ApplePlatform" },
+        "ArchiveVariant": { "$ref": "powerforge.common.schema.json#/$defs/AppleArchiveVariant" },
         "ProjectPath": { "type": "string", "minLength": 1 },
         "Scheme": { "type": ["string", "null"] },
         "AppStoreConnectAppId": { "type": ["string", "null"] },

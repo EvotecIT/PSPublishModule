@@ -26,6 +26,11 @@
         "PreReleaseTag": { "type": [ "string", "null" ] },
         "NoSign": { "type": [ "boolean", "null" ] },
         "SignModule": { "type": [ "boolean", "null" ] },
+        "TimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum runtime for the out-of-process module build/publish lane. Defaults to 7200 seconds."
+        },
         "ArtifactPaths": {
           "type": "array",
           "items": { "type": "string" }

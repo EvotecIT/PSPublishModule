@@ -145,6 +145,48 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     [Parameter]
     public SwitchParameter ModuleSignModule { get; set; }
 
+    /// <summary>Maximum runtime in seconds for the native module-release lane.</summary>
+    [Parameter]
+    [ValidateRange(1, int.MaxValue)]
+    public int? ModuleTimeoutSeconds { get; set; }
+
+    /// <summary>Optional signing certificate thumbprint for the native module-release lane.</summary>
+    [Parameter]
+    public string? ModuleCertificateThumbprint { get; set; }
+
+    /// <summary>Controls whether the native module-release lane signs binaries.</summary>
+    [Parameter]
+    public bool ModuleSignIncludeBinaries { get; set; }
+
+    /// <summary>Controls whether the native module-release lane signs internal files.</summary>
+    [Parameter]
+    public bool ModuleSignIncludeInternals { get; set; }
+
+    /// <summary>Controls whether the native module-release lane signs executables.</summary>
+    [Parameter]
+    public bool ModuleSignIncludeExe { get; set; }
+
+    /// <summary>Optional diagnostics baseline path for the native module-release lane.</summary>
+    [Parameter]
+    public string? ModuleDiagnosticsBaselinePath { get; set; }
+
+    /// <summary>Controls diagnostics baseline generation in the native module-release lane.</summary>
+    [Parameter]
+    public bool ModuleGenerateDiagnosticsBaseline { get; set; }
+
+    /// <summary>Controls diagnostics baseline updates in the native module-release lane.</summary>
+    [Parameter]
+    public bool ModuleUpdateDiagnosticsBaseline { get; set; }
+
+    /// <summary>Controls failure on new diagnostics in the native module-release lane.</summary>
+    [Parameter]
+    public bool ModuleFailOnNewDiagnostics { get; set; }
+
+    /// <summary>Optional diagnostics severity threshold for the native module-release lane.</summary>
+    [Parameter]
+    [ValidateSet("Warning", "Error")]
+    public string? ModuleFailOnDiagnosticsSeverity { get; set; }
+
     /// <summary>
     /// Skips workspace validation defined by the release config.
     /// </summary>
@@ -678,6 +720,16 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             ModuleNoDotnetBuild = ResolveRequestedFlag(boundParameters, nameof(ModuleNoDotnetBuild)),
             ModuleNoSign = ResolveRequestedFlag(boundParameters, nameof(ModuleNoSign)),
             ModuleSignModule = ResolveRequestedFlag(boundParameters, nameof(ModuleSignModule)),
+            ModuleTimeoutSeconds = ModuleTimeoutSeconds,
+            ModuleCertificateThumbprint = NormalizeNullable(ModuleCertificateThumbprint),
+            ModuleSignIncludeBinaries = ResolveRequestedFlag(boundParameters, nameof(ModuleSignIncludeBinaries)),
+            ModuleSignIncludeInternals = ResolveRequestedFlag(boundParameters, nameof(ModuleSignIncludeInternals)),
+            ModuleSignIncludeExe = ResolveRequestedFlag(boundParameters, nameof(ModuleSignIncludeExe)),
+            ModuleDiagnosticsBaselinePath = NormalizeNullable(ModuleDiagnosticsBaselinePath),
+            ModuleGenerateDiagnosticsBaseline = ResolveRequestedFlag(boundParameters, nameof(ModuleGenerateDiagnosticsBaseline)),
+            ModuleUpdateDiagnosticsBaseline = ResolveRequestedFlag(boundParameters, nameof(ModuleUpdateDiagnosticsBaseline)),
+            ModuleFailOnNewDiagnostics = ResolveRequestedFlag(boundParameters, nameof(ModuleFailOnNewDiagnostics)),
+            ModuleFailOnDiagnosticsSeverity = NormalizeNullable(ModuleFailOnDiagnosticsSeverity),
             SkipWorkspaceValidation = SkipWorkspaceValidation.IsPresent,
             SkipRestore = SkipRestore.IsPresent,
             SkipBuild = SkipBuild.IsPresent,

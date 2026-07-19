@@ -65,4 +65,41 @@ public sealed class ModuleBuildHostBuildRequest
     /// Enables module signing when true.
     /// </summary>
     public bool SignModule { get; set; }
+
+    /// <summary>
+    /// Includes project-package work declared by the module build script.
+    /// </summary>
+    public bool IncludeProjectPackages { get; set; } = true;
+
+    /// <summary>
+    /// Maximum runtime for the out-of-process module workflow.
+    /// </summary>
+    public TimeSpan Timeout { get; set; } = TimeSpan.FromHours(2);
+
+    /// <summary>Optional module signing certificate thumbprint.</summary>
+    public string? CertificateThumbprint { get; set; }
+
+    /// <summary>Optional override for signing binaries.</summary>
+    public bool? SignIncludeBinaries { get; set; }
+
+    /// <summary>Optional override for signing internal files.</summary>
+    public bool? SignIncludeInternals { get; set; }
+
+    /// <summary>Optional override for signing executable files.</summary>
+    public bool? SignIncludeExe { get; set; }
+
+    /// <summary>Optional diagnostics baseline path.</summary>
+    public string? DiagnosticsBaselinePath { get; set; }
+
+    /// <summary>Optional diagnostics-baseline generation override.</summary>
+    public bool? GenerateDiagnosticsBaseline { get; set; }
+
+    /// <summary>Optional diagnostics-baseline update override.</summary>
+    public bool? UpdateDiagnosticsBaseline { get; set; }
+
+    /// <summary>Optional new-diagnostics policy override.</summary>
+    public bool? FailOnNewDiagnostics { get; set; }
+
+    /// <summary>Optional diagnostics severity threshold.</summary>
+    public string? FailOnDiagnosticsSeverity { get; set; }
 }

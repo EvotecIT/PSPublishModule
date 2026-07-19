@@ -3,7 +3,7 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
-    public void Execute_ModuleOwnedPackages_SkipsOuterPackageLane()
+    public void Execute_ModuleOwnedPackages_PlansOuterPackageLaneWithoutExecutingIt()
     {
         var root = CreateSandbox();
         try
@@ -12,9 +12,18 @@ public sealed partial class PowerForgeReleaseServiceTests
             Directory.CreateDirectory(Path.GetDirectoryName(buildScript)!);
             File.WriteAllText(buildScript, "# test build script");
 
+            var packageCalls = 0;
             var service = new PowerForgeReleaseService(
                 new NullLogger(),
-                executePackages: (_, _, _) => throw new InvalidOperationException("Outer package lane should not run."),
+                executePackages: (request, _, configPath) =>
+                {
+                    packageCalls++;
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        ConfigPath = configPath,
+                        Success = request.PlanOnly == true && !request.ExecuteBuild
+                    };
+                },
                 planTools: (_, _, _) => throw new InvalidOperationException("Tools should not run."),
                 runTools: _ => throw new InvalidOperationException("Tools should not run."),
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
@@ -43,6 +52,59 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.NotNull(result.ModulePlan);
             Assert.Equal(ConfigurationGateMode.Publish, result.ModulePlan!.RunMode);
             Assert.True(result.ModulePlan.IncludesPackages);
+            Assert.True(result.ModulePlan.IncludesProjectPackages);
+            Assert.Equal(1, packageCalls);
+            Assert.NotNull(result.Packages);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_ModuleOnly_DisablesModuleOwnedProjectPackages()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var buildScript = Path.Combine(root, "Module", "Build", "Build-Module.ps1");
+            Directory.CreateDirectory(Path.GetDirectoryName(buildScript)!);
+            File.WriteAllText(buildScript, "# test build script");
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Module-only must not run package planning."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Tools should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Module = new PowerForgeModuleReleaseOptions
+                    {
+                        RepositoryRoot = ".",
+                        IncludesPackages = true
+                    },
+                    Packages = new ProjectBuildConfiguration
+                    {
+                        RootPath = ".",
+                        PublishNuget = true
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    PlanOnly = true,
+                    ModuleOnly = true,
+                    ModuleRunMode = ConfigurationGateMode.Publish
+                });
+
+            Assert.True(result.Success);
+            Assert.NotNull(result.ModulePlan);
+            Assert.True(result.ModulePlan!.IncludesPackages);
+            Assert.False(result.ModulePlan.IncludesProjectPackages);
             Assert.Null(result.Packages);
         }
         finally
@@ -120,7 +182,11 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             var service = new PowerForgeReleaseService(
                 new NullLogger(),
-                executePackages: (_, _, _) => throw new InvalidOperationException("Outer package lane should not run."),
+                executePackages: (request, _, configPath) => new ProjectBuildHostExecutionResult
+                {
+                    ConfigPath = configPath,
+                    Success = request.PlanOnly == true && !request.ExecuteBuild
+                },
                 planTools: (_, _, _) => throw new InvalidOperationException("Tools should not run."),
                 runTools: _ => throw new InvalidOperationException("Tools should not run."),
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
@@ -151,7 +217,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.NotNull(result.ModulePlan);
             Assert.Equal(ConfigurationGateMode.Publish, result.ModulePlan!.RunMode);
             Assert.Equal("net10.0", result.ModulePlan.Framework);
-            Assert.Null(result.Packages);
+            Assert.NotNull(result.Packages);
         }
         finally
         {
@@ -180,7 +246,11 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             var service = new PowerForgeReleaseService(
                 new NullLogger(),
-                executePackages: (_, _, _) => throw new InvalidOperationException("Outer package lane should not run."),
+                executePackages: (request, _, configPath) => new ProjectBuildHostExecutionResult
+                {
+                    ConfigPath = configPath,
+                    Success = request.PlanOnly == true && !request.ExecuteBuild
+                },
                 planTools: (_, _, _) => throw new InvalidOperationException("Tools should not run."),
                 runTools: _ => throw new InvalidOperationException("Tools should not run."),
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
@@ -211,7 +281,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(result.Success);
             Assert.NotNull(result.ModulePlan);
             Assert.Equal(expectedRunMode, result.ModulePlan!.RunMode);
-            Assert.Null(result.Packages);
+            Assert.NotNull(result.Packages);
         }
         finally
         {

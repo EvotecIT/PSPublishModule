@@ -5,7 +5,7 @@ using System.Text.Json;
 internal static partial class Program
 {
     private const string ReleaseUsage =
-        "Usage: powerforge release [--config <release.json>] [--plan] [--validate] [--packages-only] [--module-only] [--tools-only] [--apple-action <Configured|Status|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup>] [--confirm-apple-action] [--apple-resume|--no-apple-resume] [--apple-wait|--no-apple-wait] [--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>] [--summary] [--configuration <Release|Debug>] [--module-framework <auto|net10.0|net8.0>] [--module-run-mode <Manifest|Documentation|Build|Publish>] [--module-no-dotnet-build] [--module-version <version>] [--module-prerelease-tag <tag>] [--module-no-sign] [--module-sign] [--skip-workspace-validation] [--workspace-config <workspace.validation.json>] [--workspace-profile <name>] [--workspace-testimox-root <path>] [--workspace-enable-feature <name[,name...]>] [--workspace-disable-feature <name[,name...]>] [--publish-nuget] [--publish-project-github] [--publish-tool-github] [--submit-winget] [--skip-winget-submit] [--winget-submit-mode <Manifest|Update>] [--winget-tool-path <path>] [--winget-token-env <name>] [--winget-token-file <path>] [--winget-pr-title <text>] [--winget-open-browser] [--winget-replace [version]] [--winget-allow-interactive-auth] [--winget-timeout-seconds <seconds>] [--skip-restore] [--skip-build] [--output-root <path>] [--stage-root <path>] [--manifest-json <path>] [--allow-output-outside-project-root] [--allow-manifest-outside-project-root] [--checksums-path <path>] [--skip-release-checksums] [--keep-symbols] [--sign] [--sign-profile <name>] [--sign-tool-path <path>] [--sign-thumbprint <sha1>] [--sign-subject-name <name>] [--sign-on-missing-tool <Warn|Fail|Skip>] [--sign-on-failure <Warn|Fail|Skip>] [--sign-timeout-seconds <seconds>] [--sign-timestamp-url <url>] [--sign-description <text>] [--sign-url <url>] [--sign-csp <name>] [--sign-key-container <name>] [--package-sign-thumbprint <sha1>] [--package-sign-store <CurrentUser|LocalMachine>] [--package-sign-timestamp-url <url>] [--installer-property <Name=Value>] [--tool-output <Tool|Portable|Installer|Store>[,<...>]] [--skip-tool-output <...>] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]";
+        "Usage: powerforge release [--config <release.json>] [--plan] [--validate] [--packages-only] [--module-only] [--tools-only] [--apple-action <Configured|Status|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup>] [--confirm-apple-action] [--apple-resume|--no-apple-resume] [--apple-wait|--no-apple-wait] [--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>] [--summary] [--configuration <Release|Debug>] [--module-framework <auto|net10.0|net8.0>] [--module-run-mode <Manifest|Documentation|Build|Publish>] [--module-timeout-seconds <seconds>] [--module-no-dotnet-build] [--module-version <version>] [--module-prerelease-tag <tag>] [--module-no-sign] [--module-sign] [--module-certificate-thumbprint <sha1>] [--module-sign-include-binaries|--module-no-sign-include-binaries] [--module-sign-include-internals|--module-no-sign-include-internals] [--module-sign-include-exe|--module-no-sign-include-exe] [--module-diagnostics-baseline <path>] [--module-diagnostics-baseline-generate|--module-no-diagnostics-baseline-generate] [--module-diagnostics-baseline-update|--module-no-diagnostics-baseline-update] [--module-fail-on-new-diagnostics|--module-no-fail-on-new-diagnostics] [--module-fail-on-diagnostics-severity <Warning|Error>] [--skip-workspace-validation] [--workspace-config <workspace.validation.json>] [--workspace-profile <name>] [--workspace-testimox-root <path>] [--workspace-enable-feature <name[,name...]>] [--workspace-disable-feature <name[,name...]>] [--publish-nuget] [--publish-project-github] [--publish-tool-github] [--submit-winget] [--skip-winget-submit] [--winget-submit-mode <Manifest|Update>] [--winget-tool-path <path>] [--winget-token-env <name>] [--winget-token-file <path>] [--winget-pr-title <text>] [--winget-open-browser] [--winget-replace [version]] [--winget-allow-interactive-auth] [--winget-timeout-seconds <seconds>] [--skip-restore] [--skip-build] [--output-root <path>] [--stage-root <path>] [--manifest-json <path>] [--allow-output-outside-project-root] [--allow-manifest-outside-project-root] [--checksums-path <path>] [--skip-release-checksums] [--keep-symbols] [--sign] [--sign-profile <name>] [--sign-tool-path <path>] [--sign-thumbprint <sha1>] [--sign-subject-name <name>] [--sign-on-missing-tool <Warn|Fail|Skip>] [--sign-on-failure <Warn|Fail|Skip>] [--sign-timeout-seconds <seconds>] [--sign-timestamp-url <url>] [--sign-description <text>] [--sign-url <url>] [--sign-csp <name>] [--sign-key-container <name>] [--package-sign-thumbprint <sha1>] [--package-sign-store <CurrentUser|LocalMachine>] [--package-sign-timestamp-url <url>] [--installer-property <Name=Value>] [--tool-output <Tool|Portable|Installer|Store>[,<...>]] [--skip-tool-output <...>] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]";
 
     private static int CommandRelease(
         string[] filteredArgs,
@@ -80,7 +80,10 @@ internal static partial class Program
 
             var request = BuildReleaseRequestFromArgs(argv, fullConfigPath, planOnly, validateOnly, packagesOnly, moduleOnly, toolsOnly);
 
-            var service = new PowerForgeReleaseService(cmdLogger);
+            var service = new PowerForgeReleaseService(
+                cmdLogger,
+                DotNetAssemblySigningCallbackFactory.Create(cmdLogger),
+                DotNetAssemblySigningCallbackFactory.CreatePreflight(cmdLogger));
             var result = RunWithStatus(outputJson, cli, "Running unified release workflow", () => service.Execute(spec, request));
             var exitCode = result.Success ? 0 : 1;
 
@@ -350,6 +353,12 @@ internal static partial class Program
         request.ModuleNoDotnetBuild = ChooseBool(request.ModuleNoDotnetBuild, argv.Any(a => a.Equals("--module-no-dotnet-build", StringComparison.OrdinalIgnoreCase)) ? true : null);
         request.ModuleNoSign = ChooseBool(request.ModuleNoSign, argv.Any(a => a.Equals("--module-no-sign", StringComparison.OrdinalIgnoreCase)) ? true : null);
         request.ModuleSignModule = ChooseBool(request.ModuleSignModule, argv.Any(a => a.Equals("--module-sign", StringComparison.OrdinalIgnoreCase)) ? true : null);
+        request.ModuleSignIncludeBinaries = ResolveBooleanOverride(argv, "--module-sign-include-binaries", "--module-no-sign-include-binaries", request.ModuleSignIncludeBinaries);
+        request.ModuleSignIncludeInternals = ResolveBooleanOverride(argv, "--module-sign-include-internals", "--module-no-sign-include-internals", request.ModuleSignIncludeInternals);
+        request.ModuleSignIncludeExe = ResolveBooleanOverride(argv, "--module-sign-include-exe", "--module-no-sign-include-exe", request.ModuleSignIncludeExe);
+        request.ModuleGenerateDiagnosticsBaseline = ResolveBooleanOverride(argv, "--module-diagnostics-baseline-generate", "--module-no-diagnostics-baseline-generate", request.ModuleGenerateDiagnosticsBaseline);
+        request.ModuleUpdateDiagnosticsBaseline = ResolveBooleanOverride(argv, "--module-diagnostics-baseline-update", "--module-no-diagnostics-baseline-update", request.ModuleUpdateDiagnosticsBaseline);
+        request.ModuleFailOnNewDiagnostics = ResolveBooleanOverride(argv, "--module-fail-on-new-diagnostics", "--module-no-fail-on-new-diagnostics", request.ModuleFailOnNewDiagnostics);
         request.KeepSymbols = ChooseBool(request.KeepSymbols, argv.Any(a => a.Equals("--keep-symbols", StringComparison.OrdinalIgnoreCase)) ? true : null);
         request.EnableSigning = ChooseBool(request.EnableSigning, argv.Any(a => a.Equals("--sign", StringComparison.OrdinalIgnoreCase)) ? true : null);
 
@@ -367,6 +376,17 @@ internal static partial class Program
         request.StageRoot = ChooseString(request.StageRoot, TryGetOptionValue(argv, "--stage-root"));
         request.ModuleVersion = ChooseString(request.ModuleVersion, TryGetOptionValue(argv, "--module-version"));
         request.ModulePreReleaseTag = ChooseString(request.ModulePreReleaseTag, TryGetOptionValue(argv, "--module-prerelease-tag"));
+        request.ModuleCertificateThumbprint = ChooseString(request.ModuleCertificateThumbprint, TryGetOptionValue(argv, "--module-certificate-thumbprint"));
+        request.ModuleDiagnosticsBaselinePath = ChooseString(request.ModuleDiagnosticsBaselinePath, TryGetOptionValue(argv, "--module-diagnostics-baseline"));
+        request.ModuleFailOnDiagnosticsSeverity = ChooseString(request.ModuleFailOnDiagnosticsSeverity, TryGetOptionValue(argv, "--module-fail-on-diagnostics-severity"));
+        if (!string.IsNullOrWhiteSpace(request.ModuleFailOnDiagnosticsSeverity) &&
+            !request.ModuleFailOnDiagnosticsSeverity.Equals("Warning", StringComparison.OrdinalIgnoreCase) &&
+            !request.ModuleFailOnDiagnosticsSeverity.Equals("Error", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("Invalid value for --module-fail-on-diagnostics-severity. Expected Warning or Error.");
+        }
+        if (TryParsePositiveInt(TryGetOptionValue(argv, "--module-timeout-seconds"), out var moduleTimeoutSeconds))
+            request.ModuleTimeoutSeconds = moduleTimeoutSeconds;
         request.ManifestJsonPath = ChooseString(request.ManifestJsonPath, TryGetOptionValue(argv, "--manifest-json"));
         request.ChecksumsPath = ChooseString(request.ChecksumsPath, TryGetOptionValue(argv, "--checksums-path"));
         request.SignProfile = ChooseString(request.SignProfile, TryGetOptionValue(argv, "--sign-profile"));

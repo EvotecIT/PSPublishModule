@@ -326,6 +326,17 @@ public enum ApplePlatform
 }
 
 /// <summary>
+/// Archive destination variant for an Apple app target.
+/// </summary>
+public enum AppleArchiveVariant
+{
+    /// <summary>Use the generic destination derived from <see cref="ApplePlatform"/>.</summary>
+    Default,
+    /// <summary>Archive an iOS-family app for Mac Catalyst.</summary>
+    MacCatalyst
+}
+
+/// <summary>
 /// Build number policy for Apple app local project preparation.
 /// </summary>
 public enum AppleBuildNumberPolicy

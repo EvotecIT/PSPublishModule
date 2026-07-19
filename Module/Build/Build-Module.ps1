@@ -22,6 +22,7 @@
     [ValidateSet('Manifest', 'Documentation', 'Build', 'Publish')]
     [string] $RunMode = 'Build',
     [switch] $PowerForgeReleaseStage,
+    [bool] $IncludeProjectPackages = $true,
     [string] $DiagnosticsBaselinePath,
     [switch] $GenerateDiagnosticsBaseline,
     [switch] $UpdateDiagnosticsBaseline,
@@ -259,8 +260,12 @@ Invoke-ModuleBuild @buildParams -Settings {
     New-ConfigurationArtefact -Type Packed -Enable -Path (Join-Path $artefactsRoot 'Packed') -IncludeTagName -ID 'ToGitHub' -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"
 
     if ($RunMode -in @('Build', 'Publish')) {
-        New-ConfigurationProjectBuild -Name 'PowerForge' -ConfigPath '../Build/release.json' -BuildBeforeModule -PublishNuget
-        New-ConfigurationRelease -StageRoot 'Module/Artefacts/UploadReady' -VersionSource Module -BuildOrder 'Packages', 'Module' -PublishOrder 'NuGet', 'PowerShellGallery', 'GitHub'
+        if ($IncludeProjectPackages) {
+            New-ConfigurationProjectBuild -Name 'PowerForge' -ConfigPath '../Build/release.json' -BuildBeforeModule -PublishNuget
+            New-ConfigurationRelease -StageRoot 'Module/Artefacts/UploadReady' -VersionSource Module -BuildOrder 'Packages', 'Module' -PublishOrder 'NuGet', 'PowerShellGallery', 'GitHub'
+        } else {
+            New-ConfigurationRelease -StageRoot 'Module/Artefacts/UploadReady' -VersionSource Module -BuildOrder 'Module' -PublishOrder 'PowerShellGallery', 'GitHub'
+        }
     }
 
     #New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Utility', 'ActiveDirectory' -IgnoreFunctionName 'Get-ADUser'

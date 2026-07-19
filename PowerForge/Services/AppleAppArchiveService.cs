@@ -42,7 +42,7 @@ public sealed class AppleAppArchiveService
 
         var archivePath = ResolveArchivePath(request);
         var destination = string.IsNullOrWhiteSpace(request.Destination)
-            ? GetGenericDestination(request.Platform)
+            ? GetGenericDestination(request.Platform, request.ArchiveVariant)
             : request.Destination!.Trim();
         Directory.CreateDirectory(Path.GetDirectoryName(archivePath)!);
 
@@ -187,7 +187,28 @@ public sealed class AppleAppArchiveService
     /// <param name="platform">Apple platform.</param>
     /// <returns>xcodebuild destination string.</returns>
     public static string GetGenericDestination(ApplePlatform platform)
-        => platform switch
+        => GetGenericDestination(platform, AppleArchiveVariant.Default);
+
+    /// <summary>
+    /// Resolves the generic xcodebuild destination for an Apple platform and archive variant.
+    /// </summary>
+    /// <param name="platform">Apple platform.</param>
+    /// <param name="archiveVariant">Optional archive destination variant.</param>
+    /// <returns>xcodebuild destination string.</returns>
+    public static string GetGenericDestination(ApplePlatform platform, AppleArchiveVariant archiveVariant)
+    {
+        if (archiveVariant == AppleArchiveVariant.MacCatalyst)
+        {
+            if (platform != ApplePlatform.macOS)
+                throw new ArgumentException("MacCatalyst archive targets must use Platform macOS for App Store Connect.", nameof(platform));
+
+            return "generic/platform=macOS,variant=Mac Catalyst";
+        }
+
+        if (archiveVariant != AppleArchiveVariant.Default)
+            throw new ArgumentOutOfRangeException(nameof(archiveVariant), archiveVariant, "Unsupported Apple archive variant.");
+
+        return platform switch
         {
             ApplePlatform.iOS => "generic/platform=iOS",
             ApplePlatform.iPadOS => "generic/platform=iOS",
@@ -197,6 +218,7 @@ public sealed class AppleAppArchiveService
             ApplePlatform.visionOS => "generic/platform=visionOS",
             _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, "Unsupported Apple platform.")
         };
+    }
 
     private static string ResolveArchivePath(AppleAppArchiveRequest request)
     {

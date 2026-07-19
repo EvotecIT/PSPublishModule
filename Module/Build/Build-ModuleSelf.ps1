@@ -127,21 +127,6 @@ $cliDll = Join-Path -Path $cliHostDir -ChildPath 'PowerForge.Cli.dll'
 $configPath = $null
 try {
     if ($RunMode -eq 'Publish') {
-        $unsupportedPublishOverrides = @(
-            'CertificateThumbprint',
-            'SignIncludeBinaries',
-            'SignIncludeInternals',
-            'SignIncludeExe',
-            'DiagnosticsBaselinePath',
-            'GenerateDiagnosticsBaseline',
-            'UpdateDiagnosticsBaseline',
-            'FailOnNewDiagnostics',
-            'FailOnDiagnosticsSeverity'
-        ) | Where-Object { $PSBoundParameters.ContainsKey($_) }
-        if ($unsupportedPublishOverrides.Count -gt 0) {
-            throw "Unified publishing does not accept module-only override(s): $($unsupportedPublishOverrides -join ', '). Configure them in Module/Build/Build-Module.ps1 before publishing."
-        }
-
         $releaseConfig = Join-Path -Path $repoRoot -ChildPath 'Build/release.json'
         if (-not (Test-Path -LiteralPath $releaseConfig)) {
             throw "Unified release configuration not found: $releaseConfig"
@@ -160,6 +145,15 @@ try {
         if ($PSBoundParameters.ContainsKey('PreReleaseTag')) { $cmd += @('--module-prerelease-tag', $PreReleaseTag) }
         if ($NoSign) { $cmd += '--module-no-sign' }
         if ($SignModule) { $cmd += '--module-sign' }
+        if ($PSBoundParameters.ContainsKey('CertificateThumbprint')) { $cmd += @('--module-certificate-thumbprint', $CertificateThumbprint) }
+        if ($PSBoundParameters.ContainsKey('SignIncludeBinaries')) { $cmd += $(if ($SignIncludeBinaries) { '--module-sign-include-binaries' } else { '--module-no-sign-include-binaries' }) }
+        if ($PSBoundParameters.ContainsKey('SignIncludeInternals')) { $cmd += $(if ($SignIncludeInternals) { '--module-sign-include-internals' } else { '--module-no-sign-include-internals' }) }
+        if ($PSBoundParameters.ContainsKey('SignIncludeExe')) { $cmd += $(if ($SignIncludeExe) { '--module-sign-include-exe' } else { '--module-no-sign-include-exe' }) }
+        if ($PSBoundParameters.ContainsKey('DiagnosticsBaselinePath')) { $cmd += @('--module-diagnostics-baseline', $DiagnosticsBaselinePath) }
+        if ($PSBoundParameters.ContainsKey('GenerateDiagnosticsBaseline')) { $cmd += $(if ($GenerateDiagnosticsBaseline) { '--module-diagnostics-baseline-generate' } else { '--module-no-diagnostics-baseline-generate' }) }
+        if ($PSBoundParameters.ContainsKey('UpdateDiagnosticsBaseline')) { $cmd += $(if ($UpdateDiagnosticsBaseline) { '--module-diagnostics-baseline-update' } else { '--module-no-diagnostics-baseline-update' }) }
+        if ($PSBoundParameters.ContainsKey('FailOnNewDiagnostics')) { $cmd += $(if ($FailOnNewDiagnostics) { '--module-fail-on-new-diagnostics' } else { '--module-no-fail-on-new-diagnostics' }) }
+        if ($PSBoundParameters.ContainsKey('FailOnDiagnosticsSeverity')) { $cmd += @('--module-fail-on-diagnostics-severity', $FailOnDiagnosticsSeverity) }
         if ($Json) { $cmd += @('--output', 'json') }
 
         if ([IO.Path]::DirectorySeparatorChar -eq '\' -and (Test-Path -LiteralPath $cliExe)) {

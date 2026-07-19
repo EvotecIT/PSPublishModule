@@ -20,6 +20,9 @@ public sealed class AppleAppArchiveRequest
     /// <summary>Apple platform used to resolve the generic archive destination.</summary>
     public ApplePlatform Platform { get; set; } = ApplePlatform.iOS;
 
+    /// <summary>Optional archive destination variant used with the selected platform.</summary>
+    public AppleArchiveVariant ArchiveVariant { get; set; } = AppleArchiveVariant.Default;
+
     /// <summary>Explicit xcodebuild destination. When omitted, a generic destination is derived from Platform.</summary>
     public string? Destination { get; set; }
 
