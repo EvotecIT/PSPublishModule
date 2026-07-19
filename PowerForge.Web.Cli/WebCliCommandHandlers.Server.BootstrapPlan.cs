@@ -94,6 +94,18 @@ internal static partial class WebCliCommandHandlers
                 plannedCommands: plannedCommands);
         }
 
+        var operationLocks = manifest.OperationLocks ?? Array.Empty<string>();
+        foreach (var operationLock in operationLocks)
+        {
+            AddStep(steps, ref order, "locking", $"Prepare shared operation lock {operationLock}",
+                BuildOperationLockInstallCommand(operationLock), plannedCommands: plannedCommands);
+        }
+        if (operationLocks.Length > 0)
+        {
+            AddStep(steps, ref order, "locking", "Acquire shared operation locks for bootstrap",
+                BuildBootstrapOperationLockAcquireCommand(operationLocks), plannedCommands: plannedCommands);
+        }
+
         if (manifest.Packages?.Apt?.Length > 0)
         {
             AddStep(steps, ref order, "packages", "Install apt prerequisites",
@@ -153,18 +165,6 @@ internal static partial class WebCliCommandHandlers
                     BuildManagedDirectoryInstallCommand(path.Path, owner, group, mode),
                     plannedCommands: plannedCommands);
             }
-        }
-
-        var operationLocks = manifest.OperationLocks ?? Array.Empty<string>();
-        foreach (var operationLock in operationLocks)
-        {
-            AddStep(steps, ref order, "locking", $"Prepare shared operation lock {operationLock}",
-                BuildOperationLockInstallCommand(operationLock), plannedCommands: plannedCommands);
-        }
-        if (operationLocks.Length > 0)
-        {
-            AddStep(steps, ref order, "locking", "Acquire shared operation locks for bootstrap",
-                BuildBootstrapOperationLockAcquireCommand(operationLocks), plannedCommands: plannedCommands);
         }
 
         foreach (var repository in manifest.Repositories ?? Array.Empty<PowerForgeServerRepository>())
@@ -227,17 +227,16 @@ internal static partial class WebCliCommandHandlers
                 .First();
             AddStep(steps, ref order, "secrets", $"Install staged secret {secret.Id}",
                 BuildDeferredSecretInstallCommand(secret, secretStagingRoot, repositoryRoot),
-                sensitive: true,
                 plannedCommands: plannedCommands);
         }
         if (deferredSecrets.Length > 0)
         {
             AddStep(steps, ref order, "secrets", "Remove empty secret staging directory",
+                $"if [ -e {ShellQuote(secretStagingRoot)} ] || [ -L {ShellQuote(secretStagingRoot)} ]; then " +
                 $"test -d {ShellQuote(secretStagingRoot)} && test ! -L {ShellQuote(secretStagingRoot)} && " +
                 $"test \"$(stat -c '%U:%G %a' -- {ShellQuote(secretStagingRoot)})\" = 'root:root 700' && " +
                 $"find {ShellQuote(secretStagingRoot)} -depth -mindepth 1 -type d -empty -delete && " +
-                $"test -z \"$(find {ShellQuote(secretStagingRoot)} -mindepth 1 -print -quit)\" && rmdir -- {ShellQuote(secretStagingRoot)}",
-                sensitive: true,
+                $"test -z \"$(find {ShellQuote(secretStagingRoot)} -mindepth 1 -print -quit)\" && rmdir -- {ShellQuote(secretStagingRoot)}; fi",
                 plannedCommands: plannedCommands);
         }
 
@@ -344,7 +343,15 @@ internal static partial class WebCliCommandHandlers
             AddStep(steps, ref order, "secrets", $"Confirm restored secret {secret.Id}", guard, plannedCommands: plannedCommands);
         }
 
-        foreach (var command in manifest.Deploy?.Commands ?? Array.Empty<PowerForgeServerNamedCommand>())
+        var deployCommands = manifest.Deploy?.Commands ?? Array.Empty<PowerForgeServerNamedCommand>();
+        if (operationLocks.Length > 0 &&
+            string.Equals(manifest.Deploy?.OperationLockOwner, "command", StringComparison.Ordinal))
+        {
+            AddStep(steps, ref order, "locking", "Release shared operation locks for command-owned deployment",
+                BuildBootstrapOperationLockReleaseCommand(operationLocks), plannedCommands: plannedCommands);
+        }
+
+        foreach (var command in deployCommands)
         {
             if (string.IsNullOrWhiteSpace(command.Command)) continue;
             var shell = string.IsNullOrWhiteSpace(command.WorkingDirectory)
@@ -696,7 +703,7 @@ internal static partial class WebCliCommandHandlers
         File.WriteAllText(path, builder.ToString());
     }
 
-    private static void WriteBootstrapPlanScript(
+    internal static void WriteBootstrapPlanScript(
         string path,
         IReadOnlyList<PowerForgeServerBootstrapPlanStep> steps)
     {

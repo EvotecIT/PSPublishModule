@@ -344,9 +344,10 @@ internal static partial class WebCliCommandHandlers
             if (string.IsNullOrWhiteSpace(target) ||
                 !target.StartsWith(targetRoot, StringComparison.Ordinal) ||
                 !target.EndsWith(".conf", StringComparison.Ordinal) ||
-                target[targetRoot.Length..].Contains('/', StringComparison.Ordinal))
+                target[targetRoot.Length..].Contains('/', StringComparison.Ordinal) ||
+                System.Text.Encoding.UTF8.GetByteCount(Path.GetFileName(target)) > 255)
             {
-                errors.Add($"{section}[{index}].target must be an exact .conf file directly below '{targetRoot.TrimEnd('/')}'.");
+                errors.Add($"{section}[{index}].target must be an exact .conf file with a filename of at most 255 bytes directly below '{targetRoot.TrimEnd('/')}'.");
             }
         }
 
@@ -594,8 +595,8 @@ internal static partial class WebCliCommandHandlers
                 paths.Add(path);
                 if (!seenPaths.Add(path))
                     errors.Add($"{section}[{index}] duplicates capture path '{path}'.");
-                if (sensitive && path.IndexOfAny(['*', '?', '[']) >= 0)
-                    errors.Add($"{section}[{index}] must use an exact path so restore can enforce an archive allowlist.");
+                if (path.IndexOfAny(['*', '?', '[']) >= 0)
+                    errors.Add($"{section}[{index}] must use an exact path so capture and restore share one archive allowlist.");
             }
             if (entry.Sensitive is null)
             {

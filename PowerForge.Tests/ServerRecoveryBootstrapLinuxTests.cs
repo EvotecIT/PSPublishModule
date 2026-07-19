@@ -32,6 +32,31 @@ public sealed class ServerRecoveryBootstrapLinuxTests
     }
 
     [Fact]
+    public void BootstrapOperationLocks_CanBeHandedToCommandOwnedDeploymentOnLinux()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-bootstrap-lock-release-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var lockPath = Path.Combine(root, "operation.lock").Replace('\\', '/');
+            var acquire = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapOperationLockAcquireCommand([lockPath]);
+            var release = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapOperationLockReleaseCommand([lockPath]);
+            var script = $"set -Eeuo pipefail\n: >'{lockPath}'\n{acquire}\n{release}\nflock -n '{lockPath}' -c true\n";
+
+            var result = RunBash(script);
+
+            Assert.Equal(0, result.ExitCode);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ApacheActivation_RollsBackBeforeReturningValidationFailureOnLinux()
     {
         if (!OperatingSystem.IsLinux())
@@ -201,6 +226,50 @@ public sealed class ServerRecoveryBootstrapLinuxTests
             Assert.Equal(0, second.ExitCode);
             Assert.Equal("restored", File.ReadAllText(normalizedTarget));
             Assert.False(File.Exists(staged));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DeferredSecretInstall_AllowsAnAbsentOptionalSecretOnLinux()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-deferred-optional-" + Guid.NewGuid().ToString("N"));
+        var repository = Path.Combine(root, "repo");
+        var staging = Path.Combine(root, "staging");
+        Directory.CreateDirectory(repository);
+        try
+        {
+            RunProcess("git", repository, "init", "--quiet").EnsureSuccess();
+            RunProcess("git", repository, "config", "user.email", "powerforge-tests@example.invalid").EnsureSuccess();
+            RunProcess("git", repository, "config", "user.name", "PowerForge Tests").EnsureSuccess();
+            File.WriteAllText(Path.Combine(repository, ".gitignore"), ".secret\n");
+            RunProcess("git", repository, "add", ".gitignore").EnsureSuccess();
+            RunProcess("git", repository, "commit", "-m", "fixture", "--quiet").EnsureSuccess();
+
+            var normalizedTarget = Path.Combine(repository, ".secret").Replace('\\', '/');
+            var command = PowerForge.Web.Cli.WebCliCommandHandlers.BuildDeferredSecretInstallCommand(
+                new PowerForge.Web.Cli.PowerForgeServerSecret
+                {
+                    Id = "optional-repository-secret",
+                    Path = normalizedTarget,
+                    RequiredDuringBootstrap = false,
+                    Owner = "root",
+                    Group = "root",
+                    Mode = "0600"
+                },
+                staging.Replace('\\', '/'),
+                repository.Replace('\\', '/'));
+
+            var result = RunBash("set -Eeuo pipefail\npowerforge_assert_root_controlled_path() { :; }\n" + command);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.False(File.Exists(normalizedTarget));
         }
         finally
         {

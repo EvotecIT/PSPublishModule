@@ -73,7 +73,7 @@ public sealed class ServerScaffoldTests
         Assert.Null(manifestNode["apache"]!["reloadCommand"]);
         Assert.Equal($"/var/lock/powerforge-site-{options.SiteId}.lock", manifestNode["operationLocks"]![0]!.GetValue<string>());
         Assert.True(manifestNode["apache"]!["sites"]![0]!["enabled"]!.GetValue<bool>());
-        Assert.False(manifestNode["apache"]!["sites"]![1]!["enabled"]!.GetValue<bool>());
+        Assert.Null(manifestNode["apache"]!["sites"]![1]!["enabled"]);
         Assert.Null(manifestNode["certificates"]![0]!["dryRunCommand"]);
         Assert.DoesNotContain(manifestNode["verify"]!["commands"]!.AsArray(), command =>
             command!["id"]!.GetValue<string>().Contains("certbot", StringComparison.Ordinal));
@@ -403,6 +403,11 @@ public sealed class ServerScaffoldTests
         Assert.True(EvaluateSchema(schema, apacheActivation));
         apacheActivation["apache"]!["sites"]![0]!["enabled"] = "yes";
         Assert.False(EvaluateSchema(schema, apacheActivation));
+
+        var oversizedApacheName = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        oversizedApacheName["apache"]!["sites"]![0]!["target"] =
+            "/etc/apache2/sites-available/" + new string('a', 251) + ".conf";
+        Assert.False(EvaluateSchema(schema, oversizedApacheName));
 
         var deferredSecret = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
         deferredSecret["secrets"]![0]!["restoreAfterRepositories"] = true;

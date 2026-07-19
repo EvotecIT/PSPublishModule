@@ -29,6 +29,16 @@ internal static partial class WebCliCommandHandlers
         return string.Join('\n', commands);
     }
 
+    internal static string BuildBootstrapOperationLockReleaseCommand(IEnumerable<string> paths)
+    {
+        var lockCount = paths
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.Ordinal)
+            .Count();
+        return string.Join('\n', Enumerable.Range(1, lockCount)
+            .Select(static index => $"exec {{powerforge_operation_lock_fd_{index}}}>&-"));
+    }
+
     internal static string BuildDeferredSecretInstallCommand(
         PowerForgeServerSecret secret,
         string stagingRoot,
@@ -53,6 +63,10 @@ internal static partial class WebCliCommandHandlers
             $"test \"$(stat -c '{ownerFormat}' -- {quotedTarget})\" = {ShellQuote(owner)}",
             $"test \"$(stat -c '{groupFormat}' -- {quotedTarget})\" = {ShellQuote(group)}",
             $"test \"$(stat -c '%a' -- {quotedTarget})\" = {ShellQuote(normalizedMode)}");
+        var invalidTarget = $"echo {ShellQuote($"Deferred repository secret target is missing or has unexpected metadata: {target}")} >&2; exit 3";
+        var validateTarget = secret.RequiredDuringBootstrap == false
+            ? $"if [ -e {quotedTarget} ] || [ -L {quotedTarget} ]; then {targetPostcondition} || {{ {invalidTarget}; }}; fi"
+            : $"{targetPostcondition} || {{ {invalidTarget}; }}";
         return string.Join("; ",
             $"if git -C {ShellQuote(repositoryRoot)} ls-files --error-unmatch -- {ShellQuote(relativeTarget)} >/dev/null 2>&1; then echo {ShellQuote($"Deferred repository secret must not be tracked: {target}")} >&2; exit 3; fi",
             $"git -C {ShellQuote(repositoryRoot)} check-ignore -q -- {ShellQuote(relativeTarget)} || {{ echo {ShellQuote($"Deferred repository secret must be ignored for rerunnable recovery: {target}")} >&2; exit 3; }}",
@@ -62,7 +76,7 @@ internal static partial class WebCliCommandHandlers
             $"{BuildExistingRegularFileTargetGuard(target)}; " +
             $"install -T -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {quotedStaged} {quotedTarget}; " +
             $"rm -f -- {quotedStaged}; else {BuildExistingRegularFileTargetGuard(target)}; fi",
-            $"{targetPostcondition} || {{ echo {ShellQuote($"Deferred repository secret target is missing or has unexpected metadata: {target}")} >&2; exit 3; }}");
+            validateTarget);
     }
 
     internal static string BuildApacheActivationCommand(PowerForgeServerApache apache)

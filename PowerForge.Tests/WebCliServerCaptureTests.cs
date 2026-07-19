@@ -86,16 +86,27 @@ public sealed class WebCliServerCaptureTests
     }
 
     [Fact]
-    public void BuildRemoteTarScript_EnforcesRequiredExactAndGlobPaths()
+    public void BuildRemoteTarScript_EnforcesRequiredExactPaths()
     {
         var script = WebCliCommandHandlers.BuildRemoteTarScript(
         [
             new PowerForgeServerManagedFile { Target = "/etc/example.conf", Required = true },
-            new PowerForgeServerManagedFile { Target = "/etc/example/*.json", Required = true },
             new PowerForgeServerManagedFile { Target = "/var/lib/example/optional.json" }
         ]);
 
-        Assert.Equal("set -e; sudo -n tar -czf - /etc/example.conf /etc/example/*.json /var/lib/example/optional.json", script);
+        Assert.Equal("set -e; sudo -n tar -czf - /etc/example.conf /var/lib/example/optional.json", script);
+    }
+
+    [Fact]
+    public void BuildRemoteTarScript_RejectsWildcardPaths()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            WebCliCommandHandlers.BuildRemoteTarScript(
+            [
+                new PowerForgeServerManagedFile { Target = "/etc/letsencrypt/*", Required = true }
+            ]));
+
+        Assert.Contains("unsupported characters", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

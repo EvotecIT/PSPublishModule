@@ -510,7 +510,7 @@ internal static partial class WebCliCommandHandlers
 
     internal static string BuildRemoteTarScript(PowerForgeServerManagedFile[] files)
     {
-        var captureFiles = GetRemoteCaptureFiles(files, allowWildcards: true);
+        var captureFiles = GetRemoteCaptureFiles(files, allowWildcards: false);
 
         var script = new StringBuilder("set -e; sudo -n tar -czf - ");
         if (!captureFiles.Any(static file => file.Required))

@@ -217,6 +217,40 @@ public sealed partial class ServerRecoverySecurityTests
         Assert.Contains(errors, error => error.Contains("must use encrypted capture", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void ManifestValidation_RejectsWildcardPlainCaptureBeforeShellExpansion()
+    {
+        var manifest = CreateManifest();
+        manifest.Capture!.PlainFiles =
+        [
+            new PowerForgeServerManagedFile { Target = "/etc/letsencrypt/*", Required = true, Sensitive = false }
+        ];
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("must use an exact path", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ManifestValidation_RejectsApacheFilenameBeyondFilesystemLimit()
+    {
+        var manifest = CreateManifest();
+        manifest.Apache = new PowerForgeServerApache
+        {
+            Sites =
+            [
+                new PowerForgeServerApacheFile
+                {
+                    Target = "/etc/apache2/sites-available/" + new string('a', 251) + ".conf"
+                }
+            ]
+        };
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("at most 255 bytes", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("/etc/letsencrypt/accounts/acme-v02.api.letsencrypt.org/directory/account")]
     [InlineData("/etc/letsencrypt/archive/example.com")]

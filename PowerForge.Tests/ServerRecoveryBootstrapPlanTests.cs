@@ -451,6 +451,8 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.True(prepareOperationLock.Order < acquireOperationLocks.Order);
         Assert.True(acquireOperationLocks.Order < repository.Order);
         Assert.True(repository.Order < secret.Order);
+        Assert.False(secret.Sensitive);
+        Assert.False(cleanup.Sensitive);
         Assert.Contains("root:root 644", prepareOperationLock.Command, StringComparison.Ordinal);
         Assert.Contains("flock -n \"$powerforge_operation_lock_fd_1\"", acquireOperationLocks.Command, StringComparison.Ordinal);
         Assert.Contains("/var/lib/powerforge/restore-secrets/", secret.Command, StringComparison.Ordinal);
@@ -461,6 +463,85 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Contains("install -T -o 'root' -g 'root' -m '0600'", secret.Command, StringComparison.Ordinal);
         Assert.Contains("find '/var/lib/powerforge/restore-secrets/", cleanup.Command, StringComparison.Ordinal);
         Assert.Contains("-depth -mindepth 1 -type d -empty -delete", cleanup.Command, StringComparison.Ordinal);
+        Assert.StartsWith("if [ -e ", cleanup.Command, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildPlan_LocksTheFullMutationWindowAndHandsLockOwnershipToDeployCommand()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            OperationLocks = ["/var/lock/powerforge-site-example.lock"],
+            Packages = new PowerForge.Web.Cli.PowerForgeServerPackages { Apt = ["git"] },
+            Accounts = [new PowerForge.Web.Cli.PowerForgeServerAccount { Name = "example" }],
+            Paths =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerPath
+                {
+                    Id = "state",
+                    Path = "/var/lib/example",
+                    Kind = "directory"
+                }
+            ],
+            Deploy = new PowerForge.Web.Cli.PowerForgeServerDeploy
+            {
+                OperationLockOwner = "command",
+                Commands =
+                [
+                    new PowerForge.Web.Cli.PowerForgeServerNamedCommand
+                    {
+                        Id = "deploy",
+                        Command = "sudo -n /usr/local/sbin/powerforge-site-deploy --site-id example"
+                    }
+                ]
+            }
+        };
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        var acquire = Assert.Single(steps, step => step.Title == "Acquire shared operation locks for bootstrap");
+        var package = Assert.Single(steps, step => step.Category == "packages");
+        var account = Assert.Single(steps, step => step.Category == "accounts");
+        var path = Assert.Single(steps, step => step.Category == "filesystem");
+        var release = Assert.Single(steps, step => step.Title == "Release shared operation locks for command-owned deployment");
+        var deploy = Assert.Single(steps, step => step.Category == "deploy");
+
+        Assert.True(acquire.Order < package.Order);
+        Assert.True(acquire.Order < account.Order);
+        Assert.True(acquire.Order < path.Order);
+        Assert.True(path.Order < release.Order);
+        Assert.True(release.Order < deploy.Order);
+        Assert.Equal("exec {powerforge_operation_lock_fd_1}>&-", release.Command);
+    }
+
+    [Fact]
+    public void BootstrapScript_ExecutesGeneratedDeferredSecretSteps()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-bootstrap-script-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var scriptPath = Path.Combine(root, "bootstrap-plan.sh");
+            var steps = new[]
+            {
+                new PowerForge.Web.Cli.PowerForgeServerBootstrapPlanStep
+                {
+                    Order = 1,
+                    Category = "secrets",
+                    Title = "Install staged secret",
+                    Command = "if git -C '/srv/example' check-ignore -q -- '.secret'; then install -T '/staged' '/srv/example/.secret'; fi"
+                }
+            };
+
+            PowerForge.Web.Cli.WebCliCommandHandlers.WriteBootstrapPlanScript(scriptPath, steps);
+            var script = File.ReadAllText(scriptPath);
+
+            Assert.Contains("\nif git -C '/srv/example'", script, StringComparison.Ordinal);
+            Assert.DoesNotContain("\n# if git -C '/srv/example'", script, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]

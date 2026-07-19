@@ -197,7 +197,7 @@ internal static partial class WebCliCommandHandlers
                 Sites =
                 [
                     new PowerForgeServerApacheFile { Source = $"{websiteRepositoryRoot}/deploy/apache.conf", Target = $"/etc/apache2/sites-available/{domainFile}.conf", Required = true, Enabled = true },
-                    new PowerForgeServerApacheFile { Source = $"{websiteRepositoryRoot}/deploy/apache-ssl.conf", Target = $"/etc/apache2/sites-available/{domainFile}-le-ssl.conf", Required = true, Enabled = false }
+                    new PowerForgeServerApacheFile { Source = $"{websiteRepositoryRoot}/deploy/apache-ssl.conf", Target = $"/etc/apache2/sites-available/{domainFile}-le-ssl.conf", Required = true }
                 ],
                 ValidateCommand = "sudo -n apachectl configtest"
             },

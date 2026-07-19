@@ -276,7 +276,7 @@
         { "$ref": "#/$defs/ApacheFile" },
         {
           "properties": {
-            "target": { "pattern": "^/etc/apache2/sites-available/[A-Za-z0-9][A-Za-z0-9_.-]{0,250}\\.conf$" }
+            "target": { "pattern": "^/etc/apache2/sites-available/[A-Za-z0-9][A-Za-z0-9_.-]{0,249}\\.conf$" }
           }
         }
       ]
@@ -286,7 +286,7 @@
         { "$ref": "#/$defs/ApacheFile" },
         {
           "properties": {
-            "target": { "pattern": "^/etc/apache2/conf-available/[A-Za-z0-9][A-Za-z0-9_.-]{0,250}\\.conf$" }
+            "target": { "pattern": "^/etc/apache2/conf-available/[A-Za-z0-9][A-Za-z0-9_.-]{0,249}\\.conf$" }
           }
         }
       ]
