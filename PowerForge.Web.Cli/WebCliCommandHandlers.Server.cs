@@ -303,29 +303,57 @@ internal static partial class WebCliCommandHandlers
 
         foreach (var repository in manifest.Repositories ?? Array.Empty<PowerForgeServerRepository>())
         {
-            var commandId = repository.RefCaptureCommandId;
-            if (string.IsNullOrWhiteSpace(commandId))
+            var commandIds = GetRepositoryRefCaptureCommandIds(repository);
+            if (commandIds.Length == 0)
                 continue;
 
             // A dynamic ref must never fall back to a stale source-manifest value.
             repository.Ref = null;
-            var result = commandResults.SingleOrDefault(candidate =>
-                string.Equals(candidate.Id, commandId, StringComparison.Ordinal));
-            if (result is null || !result.Success || string.IsNullOrWhiteSpace(result.StdoutPath) || !File.Exists(result.StdoutPath))
+            var revisions = new List<string>(commandIds.Length);
+            var captureFailed = false;
+            foreach (var commandId in commandIds)
             {
-                warnings.Add($"Repository '{repository.Role}' revision capture is missing or failed for command '{commandId}'.");
+                var result = commandResults.SingleOrDefault(candidate =>
+                    string.Equals(candidate.Id, commandId, StringComparison.Ordinal));
+                if (result is null || !result.Success || string.IsNullOrWhiteSpace(result.StdoutPath) || !File.Exists(result.StdoutPath))
+                {
+                    warnings.Add($"Repository '{repository.Role}' revision capture is missing or failed for command '{commandId}'.");
+                    captureFailed = true;
+                    continue;
+                }
+
+                var revision = File.ReadAllText(result.StdoutPath).Trim().ToLowerInvariant();
+                if (!PowerForge.Web.WebEngineLockFile.IsCommitSha(revision))
+                {
+                    warnings.Add($"Repository '{repository.Role}' revision capture is not an exact commit for command '{commandId}'.");
+                    captureFailed = true;
+                    continue;
+                }
+
+                revisions.Add(revision);
+            }
+
+            if (captureFailed)
+                continue;
+
+            var distinctRevisions = revisions.Distinct(StringComparer.Ordinal).ToArray();
+            if (distinctRevisions.Length != 1)
+            {
+                warnings.Add($"Repository '{repository.Role}' revision captures disagree across commands '{string.Join("', '", commandIds)}'.");
                 continue;
             }
 
-            var revision = File.ReadAllText(result.StdoutPath).Trim().ToLowerInvariant();
-            if (!PowerForge.Web.WebEngineLockFile.IsCommitSha(revision))
-            {
-                warnings.Add($"Repository '{repository.Role}' revision capture is not an exact commit for command '{commandId}'.");
-                continue;
-            }
-
-            repository.Ref = revision;
+            repository.Ref = distinctRevisions[0];
         }
+    }
+
+    private static string[] GetRepositoryRefCaptureCommandIds(PowerForgeServerRepository repository)
+    {
+        if (repository.RefCaptureCommandIds is { Length: > 0 })
+            return repository.RefCaptureCommandIds;
+        return string.IsNullOrWhiteSpace(repository.RefCaptureCommandId)
+            ? Array.Empty<string>()
+            : [repository.RefCaptureCommandId];
     }
 
     private static (PowerForgeServerRecoveryManifest? Manifest, string? ManifestPath, int ExitCode) LoadServerRecoveryManifest(

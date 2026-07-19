@@ -46,6 +46,7 @@ internal sealed class PowerForgeServerRepository
     public string? Branch { get; set; }
     public string? Ref { get; set; }
     public string? RefCaptureCommandId { get; set; }
+    public string[]? RefCaptureCommandIds { get; set; }
     public bool Required { get; set; }
     public string[]? BootstrapRequiredFiles { get; set; }
     public string? SshIdentityFile { get; set; }

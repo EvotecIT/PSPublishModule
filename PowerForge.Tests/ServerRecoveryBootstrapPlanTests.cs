@@ -160,6 +160,30 @@ public sealed class ServerRecoveryBootstrapPlanTests
     }
 
     [Fact]
+    public void BuildPlan_FailsClosedUntilConsensusRepositoryRevisionIsHydrated()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Repositories =
+            [
+                new PowerForge.Web.Cli.PowerForgeServerRepository
+                {
+                    Role = "application",
+                    Url = "https://github.com/ExampleOrg/ExampleSite.git",
+                    Path = "/srv/example",
+                    RefCaptureCommandIds = ["xyz-source-ref", "pl-source-ref"]
+                }
+            ]
+        };
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        var guard = Assert.Single(steps, step => step.Title.Contains("captured revision", StringComparison.Ordinal));
+
+        Assert.Contains("xyz-source-ref, pl-source-ref", guard.Command, StringComparison.Ordinal);
+        Assert.Contains("exit 3", guard.Command, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildPlan_InstallsSourceManagedFilesAfterRepositories()
     {
         var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest

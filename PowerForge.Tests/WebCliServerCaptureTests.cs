@@ -86,6 +86,56 @@ public sealed class WebCliServerCaptureTests
     }
 
     [Fact]
+    public void HydrateCapturedRepositoryRefs_RequiresAllConsensusCommandsToAgree()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-ref-consensus-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var xyzOutputPath = Path.Combine(root, "xyz-source-ref.out.txt");
+            var plOutputPath = Path.Combine(root, "pl-source-ref.out.txt");
+            const string revision = "abcdef0123456789abcdef0123456789abcdef01";
+            File.WriteAllText(xyzOutputPath, revision + "\n");
+            File.WriteAllText(plOutputPath, revision.ToUpperInvariant() + "\n");
+            var manifest = new PowerForgeServerRecoveryManifest
+            {
+                Repositories =
+                [
+                    new PowerForgeServerRepository
+                    {
+                        Role = "application",
+                        Ref = "1111111111111111111111111111111111111111",
+                        RefCaptureCommandIds = ["xyz-source-ref", "pl-source-ref"]
+                    }
+                ]
+            };
+            var commandResults = new[]
+            {
+                new PowerForgeServerCaptureCommandResult { Id = "xyz-source-ref", Success = true, StdoutPath = xyzOutputPath },
+                new PowerForgeServerCaptureCommandResult { Id = "pl-source-ref", Success = true, StdoutPath = plOutputPath }
+            };
+            var warnings = new List<string>();
+
+            WebCliCommandHandlers.HydrateCapturedRepositoryRefs(manifest, commandResults, warnings);
+
+            Assert.Equal(revision, manifest.Repositories[0].Ref);
+            Assert.Empty(warnings);
+
+            File.WriteAllText(plOutputPath, "1234567890abcdef1234567890abcdef12345678\n");
+            manifest.Repositories[0].Ref = "1111111111111111111111111111111111111111";
+
+            WebCliCommandHandlers.HydrateCapturedRepositoryRefs(manifest, commandResults, warnings);
+
+            Assert.Null(manifest.Repositories[0].Ref);
+            Assert.Contains(warnings, warning => warning.Contains("revision captures disagree", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void BuildRemoteTarScript_EnforcesRequiredExactPaths()
     {
         var script = WebCliCommandHandlers.BuildRemoteTarScript(

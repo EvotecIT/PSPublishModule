@@ -710,6 +710,43 @@ public sealed partial class ServerRecoverySecurityTests
         Assert.Contains(errors, error => error.Contains("required, non-sensitive capture command", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void ManifestValidation_RequiresDistinctConsensusRevisionCaptureCommands()
+    {
+        var manifest = CreateManifest();
+        manifest.Repositories =
+        [
+            new PowerForgeServerRepository
+            {
+                Role = "application",
+                Url = "https://github.com/ExampleOrg/ExampleSite.git",
+                Path = "/srv/example",
+                RefCaptureCommandIds = ["xyz-source-ref", "pl-source-ref"]
+            }
+        ];
+        manifest.Capture!.Commands =
+        [
+            new PowerForgeServerNamedCommand { Id = "xyz-source-ref", Command = "printf xyz", Required = true },
+            new PowerForgeServerNamedCommand { Id = "pl-source-ref", Command = "printf pl", Required = true }
+        ];
+
+        var validErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+        Assert.DoesNotContain(validErrors, error => error.Contains("refCaptureCommand", StringComparison.Ordinal));
+
+        manifest.Repositories[0].RefCaptureCommandId = "xyz-source-ref";
+        var mixedErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+        Assert.Contains(mixedErrors, error => error.Contains("must not declare both", StringComparison.Ordinal));
+
+        manifest.Repositories[0].RefCaptureCommandId = null;
+        manifest.Repositories[0].RefCaptureCommandIds = ["xyz-source-ref", "xyz-source-ref"];
+        var duplicateErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+        Assert.Contains(duplicateErrors, error => error.Contains("duplicates capture command", StringComparison.Ordinal));
+
+        manifest.Repositories[0].RefCaptureCommandIds = ["xyz-source-ref"];
+        var countErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+        Assert.Contains(countErrors, error => error.Contains("between 2 and 16", StringComparison.Ordinal));
+    }
+
     private static PowerForgeServerRecoveryManifest CreateManifest()
         => new()
         {
