@@ -1273,6 +1273,11 @@ public static partial class WebApiDocsGenerator
         {
             return BuildPowerShellSyntaxSignature(displayName, member.Parameters, member.IncludesCommonParameters);
         }
+        if (section == "Properties" && args.Count > 0)
+        {
+            var returnType = string.IsNullOrWhiteSpace(member.ReturnType) ? string.Empty : $"{member.ReturnType} ";
+            return $"{prefix}{returnType}this[{string.Join(", ", args)}]".Trim();
+        }
 
         if (!string.IsNullOrWhiteSpace(member.ReturnType))
         {

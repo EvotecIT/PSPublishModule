@@ -101,6 +101,7 @@ public static partial class WebApiDocsGenerator
             Returns = source.Returns,
             Value = source.Value,
             ValueSummary = source.ValueSummary,
+            DocumentationSignature = source.DocumentationSignature,
             Source = source.Source is null
                 ? null
                 : new ApiSourceLink { Path = source.Source.Path, Line = source.Source.Line, Url = source.Source.Url }
@@ -216,7 +217,11 @@ public static partial class WebApiDocsGenerator
         if (property.GetMethod is not null) accessors.Add("get;");
         if (property.SetMethod is not null) accessors.Add("set;");
         var prefix = BuildPropertyPrefix(property);
-        return $"{prefix}{GetReadableTypeName(property.PropertyType)} {property.Name} {{ {string.Join(" ", accessors)} }}".Trim();
+        var parameters = property.GetIndexParameters();
+        var displayName = parameters.Length == 0
+            ? property.Name
+            : $"this[{string.Join(", ", parameters.Select(BuildParameterSignature))}]";
+        return $"{prefix}{GetReadableTypeName(property.PropertyType)} {displayName} {{ {string.Join(" ", accessors)} }}".Trim();
     }
 
     private static string BuildFieldSignature(FieldInfo field)
@@ -835,6 +840,7 @@ public static partial class WebApiDocsGenerator
         var parameterTypes = ParseParameterTypes(fullName);
         var parameterNames = TryResolveParameterNames(assembly, typeName, name, parameterTypes);
         var parameters = ParseParameters(member, parameterTypes, parameterNames, memberKey, memberLookup);
+        var conversionReturnType = ParseDocumentationConversionReturnType(fullName);
 
         var isCtor = IsConstructorName(name);
         var displayName = isCtor ? GetShortTypeName(typeName) : name;
@@ -846,7 +852,10 @@ public static partial class WebApiDocsGenerator
             Kind = isCtor ? "Constructor" : "Method",
             Parameters = parameters,
             Returns = GetElement(member, "returns", memberKey, memberLookup),
-            IsConstructor = isCtor
+            IsConstructor = isCtor,
+            DocumentationSignature = isCtor
+                ? null
+                : BuildDocumentationMethodSignature(name, parameterTypes, conversionReturnType)
         };
         model.TypeParameters.AddRange(GetTypeParameters(member, memberKey, memberLookup));
         model.Examples.AddRange(GetExamples(member, memberKey, memberLookup));
@@ -871,12 +880,18 @@ public static partial class WebApiDocsGenerator
         var name = ExtractMemberName(fullName);
         if (string.IsNullOrWhiteSpace(name)) return;
 
+        var parameterTypes = ParseParameterTypes(fullName);
         var model = new ApiMemberModel
         {
             Name = name,
             Summary = GetSummary(member, memberKey, memberLookup),
             Kind = "Property",
-            ValueSummary = GetElement(member, "value", memberKey, memberLookup)
+            DocumentationSignature = BuildDocumentationMethodSignature(
+                name,
+                parameterTypes,
+                conversionReturnType: null),
+            ValueSummary = GetElement(member, "value", memberKey, memberLookup),
+            Parameters = ParseParameters(member, parameterTypes, null, memberKey, memberLookup)
         };
         model.Examples.AddRange(GetExamples(member, memberKey, memberLookup));
         model.Exceptions.AddRange(GetExceptions(member, memberKey, memberLookup));

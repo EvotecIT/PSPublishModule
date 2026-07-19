@@ -102,6 +102,10 @@
       "type": "string",
       "enum": ["FixedMajorMinorDatePatch", "UtcShortYearMonthDayMinute"]
     },
+    "DotNetPublishMsiVersionAuthorityKind": {
+      "type": "string",
+      "enum": ["LocalFile", "GitTags"]
+    },
     "DotNetPublishEnvironmentVariable": {
       "type": "object",
       "additionalProperties": false,
@@ -128,13 +132,18 @@
         "FloorDateUtc": { "type": ["string", "null"] },
         "Monotonic": { "type": "boolean" },
         "StatePath": { "type": ["string", "null"] },
+        "Authority": { "$ref": "#/$defs/DotNetPublishMsiVersionAuthorityKind" },
+        "AuthorityKey": { "type": ["string", "null"] },
+        "GitRemote": { "type": ["string", "null"] },
+        "GitTagPrefix": { "type": ["string", "null"] },
         "PropertyName": { "type": ["string", "null"] },
         "ApplyToPublish": { "type": "boolean" },
         "PublishProperties": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
         },
-        "PatchCap": { "type": "integer", "minimum": 1, "maximum": 65535 }
+        "PatchCap": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "AllowOutputOverwrite": { "type": "boolean", "default": false }
       }
     },
     "DotNetPublishMsiClientLicenseOptions": {

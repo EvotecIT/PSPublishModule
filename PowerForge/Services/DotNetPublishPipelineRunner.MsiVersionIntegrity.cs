@@ -1,0 +1,315 @@
+using System.Diagnostics;
+using System.Text;
+
+namespace PowerForge;
+
+public sealed partial class DotNetPublishPipelineRunner
+{
+    internal static string CreateMsiReservationOwner()
+        => Guid.NewGuid().ToString("N");
+
+    internal static void EnsureVersionedOutputDoesNotExist(
+        string? outputDirectory,
+        string? outputName,
+        string? version,
+        bool allowOutputOverwrite,
+        string installerId)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(outputDirectory) || string.IsNullOrWhiteSpace(outputName))
+        {
+            throw new InvalidOperationException(
+                $"Versioned MSI installer '{installerId}' requires explicit OutputPath and OutputName values " +
+                "so immutable output protection can resolve the exact target file.");
+        }
+
+        if (allowOutputOverwrite)
+        {
+            return;
+        }
+
+        var outputPath = Path.Combine(outputDirectory!, outputName! + ".msi");
+        if (!File.Exists(outputPath))
+            return;
+
+        throw new InvalidOperationException(
+            $"MSI output '{outputPath}' already exists for immutable version {version}. " +
+            $"Advance the version state for installer '{installerId}' or explicitly set " +
+            $"Versioning.AllowOutputOverwrite=true for a non-release rebuild.");
+    }
+
+    internal static IDisposable ReserveVersionedOutput(
+        string? outputDirectory,
+        string? outputName,
+        string? version,
+        bool allowOutputOverwrite,
+        string installerId,
+        string reservationOwner)
+    {
+        EnsureVersionedOutputDoesNotExist(
+            outputDirectory,
+            outputName,
+            version,
+            allowOutputOverwrite,
+            installerId);
+        if (string.IsNullOrWhiteSpace(version))
+            return EmptyReservation.Instance;
+
+        var outputPath = Path.Combine(outputDirectory!, outputName! + ".msi");
+        var reservationPath = outputPath + ".powerforge-reservation";
+        FileStream stream;
+        try
+        {
+            stream = new FileStream(
+                reservationPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None);
+        }
+        catch (IOException ex)
+        {
+            throw new InvalidOperationException(
+                $"MSI output '{outputPath}' is already reserved by another publish. " +
+                "Wait for that publish to finish or advance the version state.",
+                ex);
+        }
+
+        try
+        {
+            if (!allowOutputOverwrite && File.Exists(outputPath))
+            {
+                throw new InvalidOperationException(
+                    $"MSI output '{outputPath}' appeared while immutable version {version} was being reserved.");
+            }
+
+            var reservation = Encoding.UTF8.GetBytes(
+                $"owner={reservationOwner}{Environment.NewLine}" +
+                $"version={version}{Environment.NewLine}" +
+                $"createdUtc={DateTime.UtcNow:o}{Environment.NewLine}");
+            stream.Write(reservation, 0, reservation.Length);
+            stream.Flush(flushToDisk: true);
+            return new OutputReservation(stream, reservationPath);
+        }
+        catch
+        {
+            stream.Dispose();
+            TryDeleteReservation(reservationPath);
+            throw;
+        }
+    }
+
+    internal static SourceProvenance ReadSourceProvenance(
+        string projectRoot,
+        IEnumerable<string>? generatedPaths = null)
+    {
+        var gitRevision = ReadGitText(projectRoot, "rev-parse HEAD");
+        var environmentRevision = Environment.GetEnvironmentVariable("GITHUB_SHA")?.Trim();
+        var revision = string.IsNullOrWhiteSpace(gitRevision) ? environmentRevision : gitRevision;
+        var gitRoot = ReadGitText(projectRoot, "rev-parse --show-toplevel");
+        if (string.IsNullOrWhiteSpace(gitRoot))
+        {
+            return new SourceProvenance(
+                string.IsNullOrWhiteSpace(revision) ? null : revision,
+                null);
+        }
+
+        var trackedStatus = ReadGitText(gitRoot!, "status --porcelain --untracked-files=no");
+        var untrackedOutput = ReadGitText(gitRoot!, "ls-files --others --exclude-standard -z");
+        bool? dirty = trackedStatus is null || untrackedOutput is null
+            ? null
+            : trackedStatus.Length > 0 || HasUntrackedSourceFiles(
+                projectRoot,
+                gitRoot!,
+                untrackedOutput,
+                generatedPaths);
+        return new SourceProvenance(
+            string.IsNullOrWhiteSpace(revision) ? null : revision,
+            dirty);
+    }
+
+    private static IEnumerable<string> EnumerateGeneratedProvenancePaths(
+        DotNetPublishPlan plan,
+        IEnumerable<DotNetPublishArtefactResult> artefacts,
+        IEnumerable<DotNetPublishStorePackageResult> storePackages,
+        IEnumerable<DotNetPublishMsiBuildResult> msiBuilds)
+    {
+        yield return plan.Outputs.ManifestJsonPath ?? string.Empty;
+        yield return plan.Outputs.ManifestTextPath ?? string.Empty;
+        yield return plan.Outputs.ChecksumsPath ?? string.Empty;
+        yield return plan.Outputs.RunReportPath ?? string.Empty;
+        yield return plan.Outputs.RunReportMarkdownPath ?? string.Empty;
+
+        foreach (var version in plan.MsiVersions.Values)
+            yield return version.StatePath ?? string.Empty;
+
+        foreach (var step in plan.Steps)
+        {
+            yield return step.StagingPath ?? string.Empty;
+            yield return step.ManifestPath ?? string.Empty;
+            yield return step.HarvestPath ?? string.Empty;
+            yield return step.BundleOutputPath ?? string.Empty;
+            yield return step.BundleZipPath ?? string.Empty;
+            yield return step.StorePackageOutputPath ?? string.Empty;
+        }
+
+        foreach (var artefact in artefacts)
+        {
+            yield return artefact.PublishDir;
+            yield return artefact.OutputDir;
+            yield return artefact.ZipPath ?? string.Empty;
+            foreach (var outputFile in artefact.OutputFiles ?? Array.Empty<string>())
+                yield return outputFile;
+        }
+
+        foreach (var storePackage in storePackages)
+        {
+            yield return storePackage.OutputDir;
+            foreach (var outputFile in EnumerateStorePackageFiles(storePackage))
+                yield return outputFile;
+        }
+
+        foreach (var msiBuild in msiBuilds)
+        {
+            yield return msiBuild.VersionStatePath ?? string.Empty;
+            if (msiBuild.GeneratedProject)
+                yield return Path.GetDirectoryName(msiBuild.ProjectPath) ?? string.Empty;
+            foreach (var outputFile in msiBuild.OutputFiles ?? Array.Empty<string>())
+                yield return outputFile;
+        }
+    }
+
+    private static bool HasUntrackedSourceFiles(
+        string projectRoot,
+        string gitRoot,
+        string untrackedOutput,
+        IEnumerable<string>? generatedPaths)
+    {
+        var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var exclusions = (generatedPaths ?? Array.Empty<string>())
+            .Select(path => ToGitRelativeExclusion(projectRoot, gitRoot, path))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .ToArray();
+
+        foreach (var untrackedPath in untrackedOutput.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var normalizedPath = untrackedPath.Replace('\\', '/').TrimStart('/');
+            bool generated = exclusions.Any(exclusion =>
+                string.Equals(normalizedPath, exclusion, comparison)
+                || normalizedPath.StartsWith(exclusion + "/", comparison));
+            if (!generated)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string? ToGitRelativeExclusion(string projectRoot, string gitRoot, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        var root = Path.GetFullPath(gitRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullPath = Path.GetFullPath(
+            Path.IsPathRooted(path)
+                ? path
+                : Path.Combine(projectRoot, path));
+        var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (string.Equals(root, fullPath, comparison))
+            return null;
+
+        var rootPrefix = root + Path.DirectorySeparatorChar;
+        if (!fullPath.StartsWith(rootPrefix, comparison))
+            return null;
+
+        return fullPath.Substring(rootPrefix.Length)
+            .Replace('\\', '/')
+            .Trim('/');
+    }
+
+    private static string? ReadGitText(string projectRoot, string arguments)
+    {
+        try
+        {
+            using var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "git",
+                    Arguments = arguments,
+                    WorkingDirectory = projectRoot,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+            if (!process.Start()) return null;
+            var output = process.StandardOutput.ReadToEnd().Trim();
+            if (!process.WaitForExit(5000) || process.ExitCode != 0) return null;
+            return output;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    internal sealed class SourceProvenance
+    {
+        public SourceProvenance(string? revision, bool? dirty)
+        {
+            Revision = revision;
+            Dirty = dirty;
+        }
+
+        public string? Revision { get; }
+
+        public bool? Dirty { get; }
+    }
+
+    private static void TryDeleteReservation(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch
+        {
+            // A stale reservation sidecar is safer than silently reusing an artifact identity.
+        }
+    }
+
+    private sealed class OutputReservation : IDisposable
+    {
+        private readonly string _path;
+        private FileStream? _stream;
+
+        public OutputReservation(FileStream stream, string path)
+        {
+            _stream = stream;
+            _path = path;
+        }
+
+        public void Dispose()
+        {
+            _stream?.Dispose();
+            _stream = null;
+            TryDeleteReservation(_path);
+        }
+    }
+
+    private sealed class EmptyReservation : IDisposable
+    {
+        internal static EmptyReservation Instance { get; } = new();
+
+        public void Dispose()
+        {
+        }
+    }
+}

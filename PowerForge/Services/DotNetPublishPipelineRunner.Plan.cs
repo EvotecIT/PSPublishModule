@@ -1376,10 +1376,15 @@ public sealed partial class DotNetPublishPipelineRunner
             FloorDateUtc = versioning.FloorDateUtc,
             Monotonic = versioning.Monotonic,
             StatePath = versioning.StatePath,
+            Authority = versioning.Authority,
+            AuthorityKey = versioning.AuthorityKey,
+            GitRemote = versioning.GitRemote,
+            GitTagPrefix = versioning.GitTagPrefix,
             PropertyName = versioning.PropertyName,
             ApplyToPublish = versioning.ApplyToPublish,
             PublishProperties = versioning.PublishProperties?.ToArray() ?? Array.Empty<string>(),
-            PatchCap = versioning.PatchCap
+            PatchCap = versioning.PatchCap,
+            AllowOutputOverwrite = versioning.AllowOutputOverwrite
         };
     }
 
@@ -2021,12 +2026,28 @@ public sealed partial class DotNetPublishPipelineRunner
                         VersionPropertyName = resolved.PropertyName,
                         AssemblyVersion = BuildFourPartVersion(resolved.Version!),
                         Patch = resolved.Patch,
-                        StatePath = resolved.StatePath
+                        StatePath = resolved.StatePath,
+                        Authority = resolved.Authority,
+                        AuthorityKey = resolved.AuthorityKey,
+                        GitRemote = resolved.GitRemote,
+                        GitTagPrefix = resolved.GitTagPrefix,
+                        AuthorityWorkingDirectory = projectRoot,
+                        AllowOutputOverwrite = installer.Versioning.AllowOutputOverwrite
                     };
 
-                    if (!string.IsNullOrWhiteSpace(resolved.StatePath) && resolved.Patch.HasValue)
+                    if (!string.IsNullOrWhiteSpace(resolved.CoordinationKey) && resolved.Patch.HasValue)
                     {
-                        plannedStates[resolved.StatePath!] = new MsiVersionState
+                        if (installer.Versioning.AllowOutputOverwrite
+                            && plannedStates.ContainsKey(resolved.CoordinationKey!))
+                        {
+                            throw new InvalidOperationException(
+                                $"Installer '{installer.Id}' enables Versioning.AllowOutputOverwrite, but multiple publish " +
+                                $"combinations resolve to the same state path or version authority '{resolved.CoordinationKey}'. Include one or more " +
+                                "combination tokens such as {target}, {framework}, {rid}, or {style} in Versioning.StatePath " +
+                                "or Versioning.AuthorityKey so every completed output has an authoritative version to reuse.");
+                        }
+
+                        plannedStates[resolved.CoordinationKey!] = new MsiVersionState
                         {
                             LastPatch = resolved.Patch.Value,
                             Version = resolved.Version!,

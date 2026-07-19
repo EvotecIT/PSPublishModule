@@ -728,6 +728,30 @@ public sealed class DotNetPublishMsiVersionOptions
     public string? StatePath { get; set; }
 
     /// <summary>
+    /// Authority used to coordinate monotonic versions. Default: <see cref="DotNetPublishMsiVersionAuthorityKind.LocalFile"/>.
+    /// Use <see cref="DotNetPublishMsiVersionAuthorityKind.GitTags"/> for release builds that can run from separate clones.
+    /// </summary>
+    public DotNetPublishMsiVersionAuthorityKind Authority { get; set; } = DotNetPublishMsiVersionAuthorityKind.LocalFile;
+
+    /// <summary>
+    /// Stable authority key template used by <see cref="DotNetPublishMsiVersionAuthorityKind.GitTags"/>.
+    /// Defaults to the installer id and supports the same tokens as <see cref="StatePath"/>.
+    /// </summary>
+    public string? AuthorityKey { get; set; }
+
+    /// <summary>
+    /// Git remote used by <see cref="DotNetPublishMsiVersionAuthorityKind.GitTags"/>. Default: <c>origin</c>.
+    /// Authentication is delegated to the normal Git credential flow.
+    /// </summary>
+    public string? GitRemote { get; set; } = "origin";
+
+    /// <summary>
+    /// Git tag namespace used by <see cref="DotNetPublishMsiVersionAuthorityKind.GitTags"/>.
+    /// Default: <c>powerforge-msi</c>.
+    /// </summary>
+    public string? GitTagPrefix { get; set; } = "powerforge-msi";
+
+    /// <summary>
     /// MSBuild property name used to pass resolved MSI version. Default: <c>ProductVersion</c>.
     /// </summary>
     public string? PropertyName { get; set; } = "ProductVersion";
@@ -747,6 +771,15 @@ public sealed class DotNetPublishMsiVersionOptions
     /// Maximum allowed patch segment. Default: 65535.
     /// </summary>
     public int PatchCap { get; set; } = 65535;
+
+    /// <summary>
+    /// When true, permits an MSI build to overwrite an existing configured output file.
+    /// For monotonic versioning, the latest completed version is reused when its line is still current.
+    /// Concurrent overwrite rebuilds remain serialized. The secure default is false so an immutable version
+    /// cannot silently acquire different bytes. When one installer publishes multiple combinations, its
+    /// <see cref="StatePath"/> must include combination tokens so every completed output has distinct state.
+    /// </summary>
+    public bool AllowOutputOverwrite { get; set; }
 }
 
 /// <summary>
