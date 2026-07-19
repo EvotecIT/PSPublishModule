@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.Versioning;
+using System.Text;
 
 namespace PowerForge.Tests;
 
@@ -277,6 +278,154 @@ public sealed class ServerRecoveryBootstrapLinuxTests
         }
     }
 
+    [Fact]
+    public void DeferredSecretInstall_CreatesAMissingIgnoredParentOnLinux()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-deferred-parent-" + Guid.NewGuid().ToString("N"));
+        var repository = Path.Combine(root, "repo");
+        var staging = Path.Combine(root, "staging");
+        Directory.CreateDirectory(repository);
+        try
+        {
+            RunProcess("git", repository, "init", "--quiet").EnsureSuccess();
+            RunProcess("git", repository, "config", "user.email", "powerforge-tests@example.invalid").EnsureSuccess();
+            RunProcess("git", repository, "config", "user.name", "PowerForge Tests").EnsureSuccess();
+            File.WriteAllText(Path.Combine(repository, ".gitignore"), "runtime/\n");
+            RunProcess("git", repository, "add", ".gitignore").EnsureSuccess();
+            RunProcess("git", repository, "commit", "-m", "fixture", "--quiet").EnsureSuccess();
+
+            var normalizedTarget = Path.Combine(repository, "runtime", "secret.env").Replace('\\', '/');
+            var normalizedRepository = repository.Replace('\\', '/');
+            var normalizedStaging = staging.Replace('\\', '/');
+            var staged = normalizedStaging.TrimEnd('/') + normalizedTarget;
+            Directory.CreateDirectory(Path.GetDirectoryName(staged)!);
+            File.WriteAllText(staged, "restored");
+            var owner = RunProcess("id", root, "-u").Stdout.Trim();
+            var group = RunProcess("id", root, "-g").Stdout.Trim();
+            var command = PowerForge.Web.Cli.WebCliCommandHandlers.BuildDeferredSecretInstallCommand(
+                new PowerForge.Web.Cli.PowerForgeServerSecret
+                {
+                    Id = "nested-repository-secret",
+                    Path = normalizedTarget,
+                    Owner = owner,
+                    Group = group,
+                    Mode = "0600"
+                },
+                normalizedStaging,
+                normalizedRepository);
+
+            var result = RunBash("set -Eeuo pipefail\npowerforge_assert_root_controlled_path() { :; }\n" + command);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Equal("restored", File.ReadAllText(normalizedTarget));
+            Assert.True(Directory.Exists(Path.GetDirectoryName(normalizedTarget)));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void OptionalDeferredSecretExtraction_UsesOnlyValidatedPresentMembersOnLinux()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-optional-extract-" + Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "source");
+        var staging = Path.Combine(root, "staging");
+        var present = Path.Combine(source, "srv", "example", "present.env");
+        Directory.CreateDirectory(Path.GetDirectoryName(present)!);
+        Directory.CreateDirectory(staging);
+        try
+        {
+            File.WriteAllText(present, "present");
+            RunProcess("tar", root, "-czf", Path.Combine(root, "secrets.tar.gz"), "-C", source, "srv/example/present.env").EnsureSuccess();
+            File.WriteAllBytes(
+                Path.Combine(root, "present-optional-deferred-paths"),
+                [.. Encoding.UTF8.GetBytes("srv/example/present.env"), 0]);
+            var generated = PowerForge.Web.Cli.WebCliCommandHandlers.BuildRestoreSecretsScript(
+                "archive.age",
+                ["/srv/example/present.env", "/srv/example/absent.env"],
+                [
+                    new PowerForge.Web.Cli.PowerForgeServerRestoreSecretEntry
+                    {
+                        Id = "present",
+                        Path = "/srv/example/present.env",
+                        RequiredDuringBootstrap = false,
+                        RestoreAfterRepositories = true
+                    },
+                    new PowerForge.Web.Cli.PowerForgeServerRestoreSecretEntry
+                    {
+                        Id = "absent",
+                        Path = "/srv/example/absent.env",
+                        RequiredDuringBootstrap = false,
+                        RestoreAfterRepositories = true
+                    }
+                ],
+                staging.Replace('\\', '/'));
+            var extract = Assert.Single(generated.Split('\n'), static line =>
+                line.StartsWith("if [ -s \"$tmp_dir/present-optional-deferred-paths\" ]", StringComparison.Ordinal));
+            var normalizedRoot = root.Replace('\\', '/');
+            var normalizedStaging = staging.Replace('\\', '/');
+            var result = RunBash(
+                $"set -Eeuo pipefail\ntmp_dir={BashQuote(normalizedRoot)}\nstaging_root={BashQuote(normalizedStaging)}\n{extract}\n" +
+                $"test \"$(cat -- {BashQuote(normalizedStaging + "/srv/example/present.env")})\" = present\n" +
+                $"test ! -e {BashQuote(normalizedStaging + "/srv/example/absent.env")}\n");
+
+            Assert.Equal(0, result.ExitCode);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RestoreScript_WithOptionalDeferredSecrets_PassesBashAndShellCheckOnLinux()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-restore-shellcheck-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var scriptPath = Path.Combine(root, "restore-secrets.sh");
+            var script = PowerForge.Web.Cli.WebCliCommandHandlers.BuildRestoreSecretsScript(
+                "archive.age",
+                ["/srv/example/required.env", "/srv/example/optional.env"],
+                [
+                    new PowerForge.Web.Cli.PowerForgeServerRestoreSecretEntry
+                    {
+                        Id = "required",
+                        Path = "/srv/example/required.env",
+                        RestoreAfterRepositories = true
+                    },
+                    new PowerForge.Web.Cli.PowerForgeServerRestoreSecretEntry
+                    {
+                        Id = "optional",
+                        Path = "/srv/example/optional.env",
+                        RequiredDuringBootstrap = false,
+                        RestoreAfterRepositories = true
+                    }
+                ],
+                "/var/lib/powerforge/restore-secrets/fixture");
+            File.WriteAllText(scriptPath, script);
+
+            RunProcess("bash", root, "-n", scriptPath).EnsureSuccess();
+            RunProcess("shellcheck", root, "-S", "warning", "--", scriptPath).EnsureSuccess();
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static (int ExitCode, string Stdout, string Stderr) RunBash(
         string script,
         IReadOnlyDictionary<string, string>? environment = null)
@@ -330,6 +479,9 @@ public sealed class ServerRecoveryBootstrapLinuxTests
         process.WaitForExit();
         return new ProcessResult(process.ExitCode, stdout, stderr);
     }
+
+    private static string BashQuote(string value)
+        => "'" + value.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
 
     private sealed record ProcessResult(int ExitCode, string Stdout, string Stderr)
     {

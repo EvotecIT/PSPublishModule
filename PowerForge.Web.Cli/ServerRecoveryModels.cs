@@ -379,6 +379,7 @@ internal sealed class PowerForgeServerRestoreSecretEntry
     public string? Env { get; set; }
     public string? RestoreMode { get; set; }
     public string? RequiredFor { get; set; }
+    public bool? RequiredDuringBootstrap { get; set; }
     public string? Owner { get; set; }
     public string? Group { get; set; }
     public string? Mode { get; set; }

@@ -277,6 +277,16 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.Contains("powerforge_restore_apache_activation", activateApache.Command, StringComparison.Ordinal);
         Assert.Contains("apachectl configtest", activateApache.Command, StringComparison.Ordinal);
         Assert.Contains("systemctl reload 'apache2'", activateApache.Command, StringComparison.Ordinal);
+        var apacheCommands = Assert.IsType<string>(activateApache.Command).Split('\n');
+        var siteSnapshot = Array.FindIndex(apacheCommands, static command =>
+            command.StartsWith("if [ -e '/etc/apache2/sites-enabled/example.conf'", StringComparison.Ordinal));
+        var confSnapshot = Array.FindIndex(apacheCommands, static command =>
+            command.StartsWith("if [ -e '/etc/apache2/conf-enabled/platform.conf'", StringComparison.Ordinal));
+        var rollbackTrap = Array.IndexOf(apacheCommands, "trap powerforge_restore_apache_activation EXIT");
+        var firstMutation = Array.IndexOf(apacheCommands, "a2ensite 'example.conf'");
+        Assert.True(siteSnapshot >= 0 && siteSnapshot < rollbackTrap);
+        Assert.True(confSnapshot >= 0 && confSnapshot < rollbackTrap);
+        Assert.True(rollbackTrap < firstMutation);
         Assert.Contains("test ! -L '/srv/example/deploy/example.service'", systemd.Command, StringComparison.Ordinal);
         Assert.EndsWith(
             "install -T -o 'root' -g 'root' -m '0644' '/srv/example/deploy/example.service' '/etc/systemd/system/example.service'",

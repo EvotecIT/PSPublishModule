@@ -70,7 +70,7 @@ internal static partial class WebCliCommandHandlers
         return string.Join("; ",
             $"if git -C {ShellQuote(repositoryRoot)} ls-files --error-unmatch -- {ShellQuote(relativeTarget)} >/dev/null 2>&1; then echo {ShellQuote($"Deferred repository secret must not be tracked: {target}")} >&2; exit 3; fi",
             $"git -C {ShellQuote(repositoryRoot)} check-ignore -q -- {ShellQuote(relativeTarget)} || {{ echo {ShellQuote($"Deferred repository secret must be ignored for rerunnable recovery: {target}")} >&2; exit 3; }}",
-            BuildRootControlledTargetParentSafetyCommand(target),
+            BuildRootControlledParentPreparationCommand(target, "deferred_secret"),
             $"if [ -e {quotedStaged} ] || [ -L {quotedStaged} ]; then " +
             $"test -f {quotedStaged} && test ! -L {quotedStaged} || {{ echo {ShellQuote($"Staged repository secret is unsafe: {secret.Id}")} >&2; exit 3; }}; " +
             $"{BuildExistingRegularFileTargetGuard(target)}; " +
@@ -120,7 +120,7 @@ internal static partial class WebCliCommandHandlers
         commands.Add("  rm -rf -- \"$powerforge_apache_state\"");
         commands.Add("  exit \"$powerforge_apache_status\"");
         commands.Add("}");
-        commands.Add("trap powerforge_restore_apache_activation EXIT");
+        commands.Add("trap 'rm -rf -- \"$powerforge_apache_state\"' EXIT");
         commands.Add("trap 'exit 129' HUP");
         commands.Add("trap 'exit 130' INT");
         commands.Add("trap 'exit 143' TERM");
@@ -129,6 +129,11 @@ internal static partial class WebCliCommandHandlers
             var entry = entries[index];
             commands.Add(
                 $"if [ -e {ShellQuote(entry.ActivePath)} ] || [ -L {ShellQuote(entry.ActivePath)} ]; then : >\"$powerforge_apache_state/{index}.enabled\"; fi");
+        }
+        commands.Add("trap powerforge_restore_apache_activation EXIT");
+        for (var index = 0; index < entries.Count; index++)
+        {
+            var entry = entries[index];
             commands.Add($"{(entry.Enabled ? entry.Enable : entry.Disable)} {ShellQuote(entry.Name)}");
         }
         commands.Add(validateCommand);

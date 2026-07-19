@@ -45,6 +45,7 @@ internal static partial class WebCliCommandHandlers
                     Env = secret.Env,
                     RestoreMode = secret.RestoreMode,
                     RequiredFor = secret.RequiredFor is { Length: > 0 } ? string.Join(", ", secret.RequiredFor) : null,
+                    RequiredDuringBootstrap = secret.RequiredDuringBootstrap,
                     Owner = secret.Owner ?? managedPath?.Owner,
                     Group = secret.Group ?? managedPath?.Group,
                     Mode = secret.Mode ?? managedPath?.Mode,
@@ -181,6 +182,12 @@ internal static partial class WebCliCommandHandlers
         var deferredSecrets = secrets
             .Where(static secret => secret.RestoreAfterRepositories && !string.IsNullOrWhiteSpace(secret.Path))
             .ToArray();
+        var requiredDeferredSecrets = deferredSecrets
+            .Where(static secret => secret.RequiredDuringBootstrap != false)
+            .ToArray();
+        var optionalDeferredSecrets = deferredSecrets
+            .Where(static secret => secret.RequiredDuringBootstrap == false)
+            .ToArray();
         if (deferredSecrets.Length > 0 && string.IsNullOrWhiteSpace(stagingRoot))
             throw new InvalidOperationException("Repository-overlapping secret restore requires a deterministic staging root.");
 
@@ -209,15 +216,21 @@ internal static partial class WebCliCommandHandlers
         foreach (var allowedPath in allowedArchivePaths)
             builder.AppendLine(allowedPath.TrimStart('/'));
         builder.AppendLine("POWERFORGE_ALLOWED_PATHS");
-        builder.AppendLine("python3 - \"$tmp_dir/secrets.tar.gz\" \"$tmp_dir/allowed-paths\" <<'POWERFORGE_VALIDATE_ARCHIVE'");
+        builder.AppendLine("cat >\"$tmp_dir/optional-deferred-paths\" <<'POWERFORGE_OPTIONAL_DEFERRED_PATHS'");
+        foreach (var secret in optionalDeferredSecrets)
+            builder.AppendLine(secret.Path!.TrimStart('/'));
+        builder.AppendLine("POWERFORGE_OPTIONAL_DEFERRED_PATHS");
+        builder.AppendLine("python3 - \"$tmp_dir/secrets.tar.gz\" \"$tmp_dir/allowed-paths\" \"$tmp_dir/optional-deferred-paths\" \"$tmp_dir/present-optional-deferred-paths\" <<'POWERFORGE_VALIDATE_ARCHIVE'");
         builder.AppendLine("import os");
         builder.AppendLine("import posixpath");
         builder.AppendLine("import sys");
         builder.AppendLine("import tarfile");
         builder.AppendLine();
-        builder.AppendLine("archive_path, allowlist_path = sys.argv[1:3]");
+        builder.AppendLine("archive_path, allowlist_path, optional_deferred_path, present_optional_deferred_path = sys.argv[1:5]");
         builder.AppendLine("with open(allowlist_path, encoding='utf-8') as stream:");
         builder.AppendLine("    allowed = tuple(line.strip().strip('/') for line in stream if line.strip())");
+        builder.AppendLine("with open(optional_deferred_path, encoding='utf-8') as stream:");
+        builder.AppendLine("    optional_deferred = frozenset(line.strip().strip('/') for line in stream if line.strip())");
         builder.AppendLine("if not allowed:");
         builder.AppendLine("    raise SystemExit('Encrypted archive allowlist is empty.')");
         builder.AppendLine();
@@ -233,6 +246,7 @@ internal static partial class WebCliCommandHandlers
         builder.AppendLine();
         builder.AppendLine("seen = set()");
         builder.AppendLine("members = []");
+        builder.AppendLine("present_optional_deferred = set()");
         builder.AppendLine("symlink_targets = {}");
         builder.AppendLine("with tarfile.open(archive_path, mode='r:gz') as archive:");
         builder.AppendLine("    for member in archive.getmembers():");
@@ -262,6 +276,8 @@ internal static partial class WebCliCommandHandlers
         builder.AppendLine("            raise SystemExit(f'Unsupported archive member type: {original}')");
         builder.AppendLine("        if member.mode & 0o7000:");
         builder.AppendLine("            raise SystemExit(f'Archive member has unsafe special permission bits: {original}')");
+        builder.AppendLine("        if normalized in optional_deferred:");
+        builder.AppendLine("            present_optional_deferred.add(normalized)");
         builder.AppendLine("        members.append((member, normalized))");
         builder.AppendLine();
         builder.AppendLine("for member, normalized in members:");
@@ -270,6 +286,9 @@ internal static partial class WebCliCommandHandlers
         builder.AppendLine("for link, target in symlink_targets.items():");
         builder.AppendLine("    if target == link or target.startswith(link + '/') or any(target == other or target.startswith(other + '/') for other in symlink_targets if other != link):");
         builder.AppendLine("        raise SystemExit(f'Archive symlink chains are not allowed: {link}')");
+        builder.AppendLine("with open(present_optional_deferred_path, mode='wb') as stream:");
+        builder.AppendLine("    for path in sorted(present_optional_deferred):");
+        builder.AppendLine("        stream.write(path.encode('utf-8') + b'\\0')");
         builder.AppendLine("POWERFORGE_VALIDATE_ARCHIVE");
         builder.AppendLine();
         builder.AppendLine("if [ \"${POWERFORGE_RESTORE_SECRETS_CONFIRM:-}\" != \"YES\" ]; then");
@@ -292,13 +311,15 @@ internal static partial class WebCliCommandHandlers
             directExtract.Append(" --exclude=").Append(ShellQuote(secret.Path!.TrimStart('/')));
         directExtract.Append(" -xzf \"$tmp_dir/secrets.tar.gz\" -C /");
         builder.AppendLine(directExtract.ToString());
-        if (deferredSecrets.Length > 0)
+        if (requiredDeferredSecrets.Length > 0)
         {
             var stagedExtract = new StringBuilder("tar --no-same-owner --no-same-permissions --no-overwrite-dir --no-acls --no-selinux --no-xattrs -xzf \"$tmp_dir/secrets.tar.gz\" -C \"$staging_root\" --");
-            foreach (var secret in deferredSecrets)
+            foreach (var secret in requiredDeferredSecrets)
                 stagedExtract.Append(' ').Append(ShellQuote(secret.Path!.TrimStart('/')));
             builder.AppendLine(stagedExtract.ToString());
         }
+        if (optionalDeferredSecrets.Length > 0)
+            builder.AppendLine("if [ -s \"$tmp_dir/present-optional-deferred-paths\" ]; then tar --no-same-owner --no-same-permissions --no-overwrite-dir --no-acls --no-selinux --no-xattrs --null --verbatim-files-from -xzf \"$tmp_dir/secrets.tar.gz\" -C \"$staging_root\" --files-from=\"$tmp_dir/present-optional-deferred-paths\"; fi");
         if (secrets.Any(secret =>
                 string.Equals(secret.RestoreMode, "directory", StringComparison.OrdinalIgnoreCase) &&
                 (!string.IsNullOrWhiteSpace(secret.Owner) ||

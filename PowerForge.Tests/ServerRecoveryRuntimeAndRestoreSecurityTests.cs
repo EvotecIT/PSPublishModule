@@ -246,4 +246,33 @@ public sealed partial class ServerRecoverySecurityTests
         Assert.DoesNotContain("chown -h 'root:root' -- '/srv/example/.deploy-key'", script, StringComparison.Ordinal);
         Assert.Contains("run the generated bootstrap plan to install them after clone", script, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void RestoreScript_ExtractsOnlyOptionalDeferredSecretsPresentInTheValidatedArchive()
+    {
+        const string stagingRoot = "/var/lib/powerforge/restore-secrets/fixture";
+        var script = WebCliCommandHandlers.BuildRestoreSecretsScript(
+            "archive.age",
+            ["/srv/example/runtime/optional.env"],
+            [
+                new PowerForgeServerRestoreSecretEntry
+                {
+                    Id = "optional-runtime-secret",
+                    Path = "/srv/example/runtime/optional.env",
+                    RequiredDuringBootstrap = false,
+                    RestoreMode = "file",
+                    RestoreAfterRepositories = true,
+                    StagedPath = stagingRoot + "/srv/example/runtime/optional.env"
+                }
+            ],
+            stagingRoot);
+
+        Assert.Contains("optional-deferred-paths", script, StringComparison.Ordinal);
+        Assert.Contains("present-optional-deferred-paths", script, StringComparison.Ordinal);
+        Assert.Contains("if normalized in optional_deferred:", script, StringComparison.Ordinal);
+        Assert.Contains("stream.write(path.encode('utf-8') + b'\\0')", script, StringComparison.Ordinal);
+        Assert.Contains("if [ -s \"$tmp_dir/present-optional-deferred-paths\" ]", script, StringComparison.Ordinal);
+        Assert.Contains("--null --verbatim-files-from", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("-C \"$staging_root\" -- 'srv/example/runtime/optional.env'", script, StringComparison.Ordinal);
+    }
 }
