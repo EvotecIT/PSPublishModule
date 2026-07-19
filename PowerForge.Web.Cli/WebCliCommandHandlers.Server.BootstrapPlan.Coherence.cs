@@ -102,7 +102,7 @@ internal static partial class WebCliCommandHandlers
             $"test -f {quotedStaged} && test ! -L {quotedStaged} || {{ echo {ShellQuote($"Staged repository secret is unsafe: {secret.Id}")} >&2; exit 3; }}; " +
             $"{BuildExistingRegularFileTargetGuard(target)}; " +
             $"install -T -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {quotedStaged} {quotedTarget}; " +
-            $"rm -f -- {quotedStaged}; else {BuildExistingRegularFileTargetGuard(target)}; fi",
+            $"rm -f -- {quotedStaged}; else\n{BuildExistingRegularFileTargetGuard(target)}; fi",
             validateTarget);
     }
 
