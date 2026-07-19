@@ -32,7 +32,8 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
         string authorizedKeyContent = RestrictedCaptureKey,
         string authorizedKeyOwner = "root",
         string captureDirectoryOwner = "root",
-        bool includeOptionalEncryptedCapture = false)
+        bool includeOptionalEncryptedCapture = false,
+        bool allEncryptedCaptureOptional = false)
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-recovery-source-security-" + Guid.NewGuid().ToString("N"));
         var workspace = Path.Combine(root, "caller");
@@ -45,9 +46,11 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
             File.WriteAllText(
                 Path.Combine(engineRoot, "Deployment", "Linux", "powerforge-server-encrypted-capture.sh"),
                 "#!/usr/bin/env bash\nset -euo pipefail\n");
-            var expectedEncryptedCommand = includeOptionalEncryptedCapture
-                ? ExpectedCaptureCommand + " --optional /var/lib/example/optional"
-                : ExpectedCaptureCommand;
+            var expectedEncryptedCommand = allEncryptedCaptureOptional
+                ? "/usr/local/sbin/powerforge-server-encrypted-capture --recipient age1example --ignore-failed-read -- /var/lib/example/optional"
+                : includeOptionalEncryptedCapture
+                    ? ExpectedCaptureCommand + " --optional /var/lib/example/optional"
+                    : ExpectedCaptureCommand;
             File.WriteAllText(
                 Path.Combine(workspace, "deploy", "linux", "backup.sudoers"),
                 sudoers ?? (includeCapture
@@ -166,7 +169,9 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
                 });
             }
 
-            var encryptedFiles = includeOptionalEncryptedCapture
+            var encryptedFiles = allEncryptedCaptureOptional
+                ? new[] { new { target = "/var/lib/example/optional", required = false } }
+                : includeOptionalEncryptedCapture
                 ? new[]
                 {
                     new { target = "/etc/example/secret", required = true },

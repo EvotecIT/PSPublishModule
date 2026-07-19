@@ -94,6 +94,12 @@ public sealed partial class ServerRecoverySecurityTests
         var shellSyntaxErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
         manifest.Deploy.Commands[0].Command = "sudo -n /usr/local/sbin/./powerforge-site-deploy --site other";
         var equivalentPathErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+        manifest.Deploy.Commands[0].Command = "sudo -n -- /usr/local/sbin/powerforge-site-deploy --site other";
+        var sudoSeparatorErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+        manifest.Deploy.Commands[0].Command = "sudo -n '/usr/local/sbin/powerforge-site-deploy' --site other";
+        var quotedExecutableErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+        manifest.Deploy.Commands[0].Command = "sudo -n /usr/local/sbin/powerforge-site-dep\\loy --site other";
+        var escapedExecutableErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
 
         Assert.Contains(mismatchedLockErrors, error => error.Contains("requires exactly operationLocks", StringComparison.Ordinal));
         Assert.Contains(extraLockErrors, error => error.Contains("requires exactly operationLocks", StringComparison.Ordinal));
@@ -101,6 +107,9 @@ public sealed partial class ServerRecoverySecurityTests
         Assert.Contains(duplicateSiteErrors, error => error.Contains("canonical", StringComparison.Ordinal));
         Assert.Contains(shellSyntaxErrors, error => error.Contains("canonical", StringComparison.Ordinal));
         Assert.Contains(equivalentPathErrors, error => error.Contains("canonical", StringComparison.Ordinal));
+        Assert.Contains(sudoSeparatorErrors, error => error.Contains("canonical", StringComparison.Ordinal));
+        Assert.Contains(quotedExecutableErrors, error => error.Contains("canonical", StringComparison.Ordinal));
+        Assert.Contains(escapedExecutableErrors, error => error.Contains("canonical", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -58,20 +58,38 @@ internal static partial class WebCliCommandHandlers
 
     private static bool InvokesPowerForgeSiteDeploy(string? command)
     {
-        var tokens = (command?.Trim() ?? string.Empty)
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var commandIndex = tokens.Length >= 2 &&
-                           string.Equals(tokens[0], "sudo", StringComparison.Ordinal) &&
-                           string.Equals(tokens[1], "-n", StringComparison.Ordinal)
-            ? 2
-            : 0;
-        if (tokens.Length <= commandIndex)
+        if (string.IsNullOrWhiteSpace(command))
             return false;
 
-        var executable = tokens[commandIndex].TrimEnd('/');
-        var separator = executable.LastIndexOf('/');
-        var fileName = separator >= 0 ? executable[(separator + 1)..] : executable;
-        return string.Equals(fileName, "powerforge-site-deploy", StringComparison.Ordinal);
+        var comparison = new System.Text.StringBuilder(command.Length);
+        var singleQuoted = false;
+        var doubleQuoted = false;
+        for (var index = 0; index < command.Length; index++)
+        {
+            var character = command[index];
+            if (character == '\'' && !doubleQuoted)
+            {
+                singleQuoted = !singleQuoted;
+                continue;
+            }
+            if (character == '"' && !singleQuoted)
+            {
+                doubleQuoted = !doubleQuoted;
+                continue;
+            }
+            if (character == '\\' && !singleQuoted && index + 1 < command.Length)
+            {
+                index++;
+                if (command[index] == '\r' && index + 1 < command.Length && command[index + 1] == '\n')
+                    index++;
+                else if (command[index] != '\n')
+                    comparison.Append(command[index]);
+                continue;
+            }
+            comparison.Append(character);
+        }
+
+        return comparison.ToString().Contains("powerforge-site-deploy", StringComparison.Ordinal);
     }
 
     private static bool TryGetPowerForgeSiteDeploySite(string? command, out string site)
