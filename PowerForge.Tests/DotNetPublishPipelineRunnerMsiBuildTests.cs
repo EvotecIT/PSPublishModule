@@ -117,6 +117,22 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void ResolveInstallerOutputName_DoesNotAcceptVersionPrefixCollision()
+    {
+        var outputName = DotNetPublishPipelineRunner.ResolveInstallerOutputName(
+            new DotNetPublishPlan { Configuration = "Release" },
+            new DotNetPublishInstallerPlan
+            {
+                Id = "app",
+                OutputName = "app-1.0.10.msi"
+            },
+            new DotNetPublishStep(),
+            "1.0.1");
+
+        Assert.Equal("app-1.0.10-1.0.1", outputName);
+    }
+
+    [Fact]
     public void VersionedMsiOutput_RejectsSilentOverwriteByDefault()
     {
         var root = CreateTempRoot();

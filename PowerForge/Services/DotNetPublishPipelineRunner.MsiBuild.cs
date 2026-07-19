@@ -369,11 +369,41 @@ public sealed partial class DotNetPublishPipelineRunner
             ? Path.GetFileNameWithoutExtension(name)
             : name;
 
-        if (hasVersion && !name.Contains(version!, StringComparison.OrdinalIgnoreCase))
+        if (hasVersion && !ContainsCompleteVersionToken(name, version!))
             name = ToSafeFileName($"{name}-{version}", "installer");
 
         return name;
     }
+
+    private static bool ContainsCompleteVersionToken(string name, string version)
+    {
+        var searchIndex = 0;
+        while (searchIndex <= name.Length - version.Length)
+        {
+            var matchIndex = name.IndexOf(version, searchIndex, StringComparison.OrdinalIgnoreCase);
+            if (matchIndex < 0)
+                return false;
+
+            var beforeIsBoundary = matchIndex == 0
+                || IsVersionTokenDelimiter(name[matchIndex - 1])
+                || (IsVersionPrefix(name[matchIndex - 1])
+                    && (matchIndex == 1 || IsVersionTokenDelimiter(name[matchIndex - 2])));
+            var afterIndex = matchIndex + version.Length;
+            var afterIsBoundary = afterIndex == name.Length
+                || IsVersionTokenDelimiter(name[afterIndex]);
+            if (beforeIsBoundary && afterIsBoundary)
+                return true;
+
+            searchIndex = matchIndex + 1;
+        }
+
+        return false;
+    }
+
+    private static bool IsVersionPrefix(char value) => value is 'v' or 'V';
+
+    private static bool IsVersionTokenDelimiter(char value) =>
+        !char.IsLetterOrDigit(value) && value != '.';
 
     private static Dictionary<string, string> BuildInstallerOutputTokens(
         DotNetPublishPlan plan,
