@@ -673,7 +673,24 @@ public sealed partial class DotNetPublishPipelineRunner
                 patch = reusablePatch;
             }
             else if (ShouldBumpMsiPatch(previous, major, minor, patch))
-                patch = Math.Min(patchCap, previous!.LastPatch + 1);
+            {
+                if (previous!.LastPatch >= patchCap)
+                {
+                    throw new InvalidOperationException(
+                        $"Installer '{installer.Id}' cannot advance beyond MSI patch '{previous.LastPatch}' " +
+                        $"because Versioning.PatchCap is '{patchCap}'. Increase the version line or patch cap.");
+                }
+
+                patch = previous.LastPatch + 1;
+            }
+
+            ThrowIfMsiVersionRegresses(
+                previous,
+                major,
+                minor,
+                patch,
+                allowEqual: v.AllowOutputOverwrite,
+                installer.Id);
         }
 
         if (patch >= patchCap && basePatch > patchCap)

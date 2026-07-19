@@ -13,7 +13,15 @@ public sealed partial class DotNetPublishPipelineRunner
             || remote.Any(char.IsWhiteSpace))
         {
             throw new InvalidOperationException(
-                $"Invalid MSI version Git remote '{remote}'. Use a configured remote name or credential-free URL.");
+                "The MSI version Git remote is invalid. Use a configured remote name or credential-free URL.");
+        }
+
+        if (Uri.TryCreate(remote, UriKind.Absolute, out var uri)
+            && !string.IsNullOrWhiteSpace(uri.UserInfo))
+        {
+            throw new InvalidOperationException(
+                "The MSI version Git remote must not contain embedded credentials. " +
+                "Use the normal Git credential flow instead.");
         }
 
         return remote;
@@ -70,6 +78,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string authorityKey)
     {
         var refPrefix = BuildMsiGitTagRefPrefix(tagPrefix, authorityKey);
+        ValidateMsiGitRef(projectRoot, refPrefix + "0.0.0");
         var result = RunProcessCore(
             "git",
             projectRoot,
@@ -79,7 +88,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (result.ExitCode != 0 || result.TimedOut)
         {
             throw new InvalidOperationException(
-                $"Unable to read shared MSI version authority '{remote}:{refPrefix}'. " +
+                $"Unable to read shared MSI version authority ref '{refPrefix}' from the configured Git remote. " +
                 "Verify Git connectivity and credentials before publishing.");
         }
 
@@ -131,9 +140,10 @@ public sealed partial class DotNetPublishPipelineRunner
         var tagPrefix = NormalizeMsiGitRefPath(version.GitTagPrefix, "MSI version Git tag prefix", "powerforge-msi");
         var authorityKey = NormalizeMsiGitRefPath(version.AuthorityKey, "MSI version authority key");
         var targetRef = BuildMsiGitTagRefPrefix(tagPrefix, authorityKey) + version.Version;
+        ValidateMsiGitRef(workingDirectory, targetRef);
 
         var head = RunRequiredGit(workingDirectory, "rev-parse", "HEAD");
-        var tree = RunRequiredGit(workingDirectory, "rev-parse", "HEAD^{tree}");
+        var emptyTree = CreateEmptyGitTree(workingDirectory);
         var timestamp = DateTimeOffset.UtcNow;
         var identityEnvironment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
@@ -153,7 +163,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var reservationCommit = RunProcessCore(
             "git",
             workingDirectory,
-            new[] { "commit-tree", tree, "-p", head, "-m", reservationMessage },
+            new[] { "commit-tree", emptyTree, "-m", reservationMessage },
             TimeSpan.FromSeconds(30),
             identityEnvironment);
         if (reservationCommit.ExitCode != 0
@@ -175,7 +185,74 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             throw new InvalidOperationException(
                 $"MSI version '{version.Version}' is already reserved or the shared authority " +
-                $"'{remote}:{targetRef}' rejected the reservation for {context}. Re-plan or rerun to allocate the next version.");
+                $"ref '{targetRef}' rejected the reservation for {context}. Re-plan or rerun to allocate the next version.");
+        }
+    }
+
+    private static string CreateEmptyGitTree(string workingDirectory)
+    {
+        var temporaryDirectory = Path.Combine(Path.GetTempPath(), "PowerForge", "MsiVersionAuthority");
+        Directory.CreateDirectory(temporaryDirectory);
+        var indexPath = Path.Combine(temporaryDirectory, Guid.NewGuid().ToString("N") + ".index");
+        var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["GIT_INDEX_FILE"] = indexPath
+        };
+
+        try
+        {
+            var initialize = RunProcessCore(
+                "git",
+                workingDirectory,
+                new[] { "read-tree", "--empty" },
+                TimeSpan.FromSeconds(30),
+                environment);
+            if (initialize.ExitCode != 0 || initialize.TimedOut)
+                throw new InvalidOperationException("Unable to initialize an isolated MSI reservation tree.");
+
+            var tree = RunProcessCore(
+                "git",
+                workingDirectory,
+                new[] { "write-tree" },
+                TimeSpan.FromSeconds(30),
+                environment);
+            if (tree.ExitCode != 0 || tree.TimedOut || string.IsNullOrWhiteSpace(tree.StdOut))
+                throw new InvalidOperationException("Unable to create an isolated MSI reservation tree.");
+
+            return tree.StdOut.Trim();
+        }
+        finally
+        {
+            TryDeleteFile(indexPath);
+            TryDeleteFile(indexPath + ".lock");
+        }
+    }
+
+    private static void ValidateMsiGitRef(string workingDirectory, string gitRef)
+    {
+        var result = RunProcessCore(
+            "git",
+            workingDirectory,
+            new[] { "check-ref-format", gitRef },
+            TimeSpan.FromSeconds(30),
+            environmentVariables: null);
+        if (result.ExitCode != 0 || result.TimedOut)
+        {
+            throw new InvalidOperationException(
+                $"MSI version authority ref '{gitRef}' is not a valid Git ref. " +
+                "Choose a simpler GitTagPrefix or AuthorityKey.");
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch
+        {
+            // A temporary index contains no repository content or secrets and can be reclaimed later.
         }
     }
 
@@ -264,6 +341,31 @@ public sealed partial class DotNetPublishPipelineRunner
             throw new InvalidOperationException(
                 $"Installer '{installerId}' requests MSI version line '{major}.{minor}', but the authority " +
                 $"already contains '{previous.Version}'. Increase Major/Minor instead of regressing the product version.");
+        }
+    }
+
+    private static void ThrowIfMsiVersionRegresses(
+        MsiVersionState? previous,
+        int major,
+        int minor,
+        int patch,
+        bool allowEqual,
+        string installerId)
+    {
+        if (previous is null
+            || !TryParseMsiVersion(previous.Version, out var previousMajor, out var previousMinor, out var previousPatch))
+        {
+            return;
+        }
+
+        var comparison = major.CompareTo(previousMajor);
+        if (comparison == 0) comparison = minor.CompareTo(previousMinor);
+        if (comparison == 0) comparison = patch.CompareTo(previousPatch);
+        if (comparison < 0 || (comparison == 0 && !allowEqual))
+        {
+            throw new InvalidOperationException(
+                $"Installer '{installerId}' resolved MSI version '{major}.{minor}.{patch}', but the authority " +
+                $"already contains '{previous.Version}'. Increase the version line or patch cap instead of regressing or reusing a release identity.");
         }
     }
 }

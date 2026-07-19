@@ -33,7 +33,7 @@ public sealed class DotNetPublishMsiGitAuthorityTests
     }
 
     [Fact]
-    public void SeparateClones_CannotReserveTheSameMsiVersion_AndReplanAdvances()
+    public async Task SeparateClones_CannotReserveTheSameMsiVersion_AndDoNotTransferSourceCommits()
     {
         var root = CreateTempRoot();
         try
@@ -54,23 +54,62 @@ public sealed class DotNetPublishMsiGitAuthorityTests
             Assert.Equal("26.6.9677", versionA.Version);
             Assert.Equal(versionA.Version, versionB.Version);
 
-            DotNetPublishPipelineRunner.ReserveMsiVersionState(
-                versionA,
-                "publisher A",
-                "publisher-a");
-            var collision = Assert.Throws<InvalidOperationException>(() =>
-                DotNetPublishPipelineRunner.ReserveMsiVersionState(
-                    versionB,
-                    "publisher B",
-                    "publisher-b"));
+            File.WriteAllText(Path.Combine(cloneA, "local-only-secret.txt"), "must not reach the remote");
+            RunGit(cloneA, "config", "user.name", "PowerForge Tests");
+            RunGit(cloneA, "config", "user.email", "powerforge-tests@invalid.local");
+            RunGit(cloneA, "add", "local-only-secret.txt");
+            RunGit(cloneA, "commit", "-m", "local only source commit");
+            var localOnlySourceCommit = RunGit(cloneA, "rev-parse", "HEAD");
+
+            using var start = new ManualResetEventSlim(initialState: false);
+            Exception? failureA = null;
+            Exception? failureB = null;
+            var taskA = Task.Run(() =>
+            {
+                start.Wait();
+                try
+                {
+                    DotNetPublishPipelineRunner.ReserveMsiVersionState(
+                        versionA,
+                        "publisher A",
+                        "publisher-a");
+                }
+                catch (Exception ex)
+                {
+                    failureA = ex;
+                }
+            });
+            var taskB = Task.Run(() =>
+            {
+                start.Wait();
+                try
+                {
+                    DotNetPublishPipelineRunner.ReserveMsiVersionState(
+                        versionB,
+                        "publisher B",
+                        "publisher-b");
+                }
+                catch (Exception ex)
+                {
+                    failureB = ex;
+                }
+            });
+            start.Set();
+            await Task.WhenAll(taskA, taskB);
+
+            var collision = Assert.Single(new[] { failureA, failureB }.OfType<Exception>());
             Assert.Contains("already reserved", collision.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.True(DotNetPublishPipelineRunner.ReleaseMsiVersionStateReservation(versionA, "publisher-a"));
+            if (failureA is null)
+                Assert.True(DotNetPublishPipelineRunner.ReleaseMsiVersionStateReservation(versionA, "publisher-a"));
+            if (failureB is null)
+                Assert.True(DotNetPublishPipelineRunner.ReleaseMsiVersionStateReservation(versionB, "publisher-b"));
 
             var replanned = runner.Plan(CreateSpec(cloneB), Path.Combine(cloneB, "powerforge.json"));
             Assert.Equal("26.6.9678", Assert.Single(replanned.MsiVersions.Values).Version);
             var tags = RunGit(root, "ls-remote", "--refs", "--tags", remote, "refs/tags/powerforge-msi/syncse/*");
             Assert.Single(tags.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
             Assert.Contains("refs/tags/powerforge-msi/syncse/26.6.9677", tags, StringComparison.Ordinal);
+            Assert.NotEqual(0, RunGitExitCode(remote, "cat-file", "-e", localOnlySourceCommit + "^{commit}"));
         }
         finally
         {
@@ -121,6 +160,92 @@ public sealed class DotNetPublishMsiGitAuthorityTests
                     Path.Combine(seed, "powerforge.json")));
 
             Assert.Contains("instead of regressing", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(9677)]
+    [InlineData(9000)]
+    public void Authority_RejectsPatchCapThatCannotAdvance(int patchCap)
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var remote = Path.Combine(root, "authority.git");
+            var seed = Path.Combine(root, "seed");
+            var clone = Path.Combine(root, "clone");
+            InitializeRepository(remote, seed);
+            RunGit(root, "clone", remote, clone);
+
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            var initial = runner.Plan(CreateSpec(seed), Path.Combine(seed, "powerforge.json"));
+            var initialVersion = Assert.Single(initial.MsiVersions.Values);
+            DotNetPublishPipelineRunner.ReserveMsiVersionState(initialVersion, "initial publisher", "initial-owner");
+            Assert.True(DotNetPublishPipelineRunner.ReleaseMsiVersionStateReservation(initialVersion, "initial-owner"));
+
+            var regressing = CreateSpec(clone);
+            regressing.Installers[0].Versioning!.PatchCap = patchCap;
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                runner.Plan(regressing, Path.Combine(clone, "powerforge.json")));
+
+            Assert.Contains("cannot advance", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Authority_RejectsCredentialBearingRemoteWithoutDisclosingTheSecret()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var remote = Path.Combine(root, "authority.git");
+            var seed = Path.Combine(root, "seed");
+            InitializeRepository(remote, seed);
+            var spec = CreateSpec(seed);
+            const string secret = "super-secret-value";
+            spec.Installers[0].Versioning!.GitRemote = $"https://x-access-token:{secret}@example.invalid/repo.git";
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(
+                    spec,
+                    Path.Combine(seed, "powerforge.json")));
+
+            Assert.Contains("embedded credentials", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(secret, exception.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("x-access-token", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Authority_RejectsAuthorityKeyThatCannotFormAValidGitRef()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var remote = Path.Combine(root, "authority.git");
+            var seed = Path.Combine(root, "seed");
+            InitializeRepository(remote, seed);
+            var spec = CreateSpec(seed);
+            spec.Installers[0].Versioning!.AuthorityKey = "syncse..release";
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(
+                    spec,
+                    Path.Combine(seed, "powerforge.json")));
+
+            Assert.Contains("not a valid Git ref", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -226,6 +351,27 @@ public sealed class DotNetPublishMsiGitAuthorityTests
             throw new InvalidOperationException($"git {string.Join(' ', arguments)} failed: {error}");
 
         return output.Trim();
+    }
+
+    private static int RunGitExitCode(string workingDirectory, params string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "git",
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var argument in arguments)
+            startInfo.ArgumentList.Add(argument);
+
+        using var process = Process.Start(startInfo)!;
+        _ = process.StandardOutput.ReadToEnd();
+        _ = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return process.ExitCode;
     }
 
     private static string CreateTempRoot()
