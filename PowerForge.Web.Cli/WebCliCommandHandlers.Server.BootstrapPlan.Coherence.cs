@@ -40,14 +40,29 @@ internal static partial class WebCliCommandHandlers
         var owner = string.IsNullOrWhiteSpace(secret.Owner) ? "root" : secret.Owner;
         var group = string.IsNullOrWhiteSpace(secret.Group) ? "root" : secret.Group;
         var mode = string.IsNullOrWhiteSpace(secret.Mode) ? "0600" : secret.Mode;
+        var normalizedMode = mode.TrimStart('0');
+        if (normalizedMode.Length == 0)
+            normalizedMode = "0";
+        var ownerFormat = IsNumericUnixIdentity(owner) ? "%u" : "%U";
+        var groupFormat = IsNumericUnixIdentity(group) ? "%g" : "%G";
+        var quotedTarget = ShellQuote(target);
+        var quotedStaged = ShellQuote(staged);
+        var targetPostcondition = string.Join(" && ",
+            $"test -f {quotedTarget}",
+            $"test ! -L {quotedTarget}",
+            $"test \"$(stat -c '{ownerFormat}' -- {quotedTarget})\" = {ShellQuote(owner)}",
+            $"test \"$(stat -c '{groupFormat}' -- {quotedTarget})\" = {ShellQuote(group)}",
+            $"test \"$(stat -c '%a' -- {quotedTarget})\" = {ShellQuote(normalizedMode)}");
         return string.Join("; ",
-            $"test -f {ShellQuote(staged)} && test ! -L {ShellQuote(staged)} || {{ echo {ShellQuote($"Staged repository secret is missing or unsafe: {secret.Id}")} >&2; exit 3; }}",
             $"if git -C {ShellQuote(repositoryRoot)} ls-files --error-unmatch -- {ShellQuote(relativeTarget)} >/dev/null 2>&1; then echo {ShellQuote($"Deferred repository secret must not be tracked: {target}")} >&2; exit 3; fi",
             $"git -C {ShellQuote(repositoryRoot)} check-ignore -q -- {ShellQuote(relativeTarget)} || {{ echo {ShellQuote($"Deferred repository secret must be ignored for rerunnable recovery: {target}")} >&2; exit 3; }}",
             BuildRootControlledTargetParentSafetyCommand(target),
-            BuildExistingRegularFileTargetGuard(target),
-            $"install -T -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {ShellQuote(staged)} {ShellQuote(target)}",
-            $"rm -f -- {ShellQuote(staged)}");
+            $"if [ -e {quotedStaged} ] || [ -L {quotedStaged} ]; then " +
+            $"test -f {quotedStaged} && test ! -L {quotedStaged} || {{ echo {ShellQuote($"Staged repository secret is unsafe: {secret.Id}")} >&2; exit 3; }}; " +
+            $"{BuildExistingRegularFileTargetGuard(target)}; " +
+            $"install -T -o {ShellQuote(owner)} -g {ShellQuote(group)} -m {ShellQuote(mode)} {quotedStaged} {quotedTarget}; " +
+            $"rm -f -- {quotedStaged}; else {BuildExistingRegularFileTargetGuard(target)}; fi",
+            $"{targetPostcondition} || {{ echo {ShellQuote($"Deferred repository secret target is missing or has unexpected metadata: {target}")} >&2; exit 3; }}");
     }
 
     internal static string BuildApacheActivationCommand(PowerForgeServerApache apache)

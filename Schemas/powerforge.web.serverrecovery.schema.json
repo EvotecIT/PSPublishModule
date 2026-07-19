@@ -45,7 +45,7 @@
     },
     "capture": { "$ref": "#/$defs/Capture" },
     "bootstrap": { "$ref": "#/$defs/CommandGroup" },
-    "deploy": { "$ref": "#/$defs/CommandGroup" },
+    "deploy": { "$ref": "#/$defs/Deploy" },
     "verify": { "$ref": "#/$defs/Verify" },
     "backupTarget": { "$ref": "#/$defs/BackupTarget" },
     "notes": {
@@ -434,6 +434,21 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "commands": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NamedCommand" }
+        }
+      }
+    },
+    "Deploy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "operationLockOwner": {
+          "type": "string",
+          "enum": ["engine", "command"],
+          "description": "Defaults to engine. Command ownership requires exactly one deploy command that holds every declared operation lock for its complete lifetime."
+        },
         "commands": {
           "type": "array",
           "items": { "$ref": "#/$defs/NamedCommand" }

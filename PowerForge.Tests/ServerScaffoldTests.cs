@@ -72,6 +72,11 @@ public sealed class ServerScaffoldTests
         Assert.Null(manifestNode["target"]!["host"]);
         Assert.Null(manifestNode["apache"]!["reloadCommand"]);
         Assert.Equal($"/var/lock/powerforge-site-{options.SiteId}.lock", manifestNode["operationLocks"]![0]!.GetValue<string>());
+        Assert.True(manifestNode["apache"]!["sites"]![0]!["enabled"]!.GetValue<bool>());
+        Assert.False(manifestNode["apache"]!["sites"]![1]!["enabled"]!.GetValue<bool>());
+        Assert.Null(manifestNode["certificates"]![0]!["dryRunCommand"]);
+        Assert.DoesNotContain(manifestNode["verify"]!["commands"]!.AsArray(), command =>
+            command!["id"]!.GetValue<string>().Contains("certbot", StringComparison.Ordinal));
         var managedPaths = manifestNode["paths"]!.AsArray();
         Assert.Contains(managedPaths, path => path!["path"]!.GetValue<string>() == "/usr/local/sbin/powerforge-site-deploy" &&
                                               path["source"]!.GetValue<string>().EndsWith("/powerforge-site-deploy.sh", StringComparison.Ordinal));
@@ -224,6 +229,29 @@ public sealed class ServerScaffoldTests
         Assert.Contains("ServerAlias www.example.test", files["Website/deploy/apache.conf"], StringComparison.Ordinal);
         Assert.Contains("ServerAlias www.example.test", files["Website/deploy/apache-ssl.conf"], StringComparison.Ordinal);
         Assert.Contains("www.example.test", manifest, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Scaffold_ShouldCaptureOneExactAcmeAccountWhenConfigured()
+    {
+        var options = CreateOptions();
+        options.AcmeAccountId = "0123456789abcdef";
+
+        var manifest = JsonNode.Parse(
+            WebCliCommandHandlers.BuildServerScaffoldFiles(options)["deploy/linux/example.serverrecovery.json"])!;
+        const string accountPath = "/etc/letsencrypt/accounts/acme-v02.api.letsencrypt.org/directory/0123456789abcdef";
+
+        Assert.Contains(manifest["capture"]!["encryptedFiles"]!.AsArray(), file =>
+            file!["target"]!.GetValue<string>() == accountPath);
+        Assert.Contains(manifest["secrets"]!.AsArray(), secret =>
+            secret!["path"]!.GetValue<string>() == accountPath &&
+            secret["capture"]!.GetValue<string>() == "encrypted");
+        Assert.Contains("certbot renew --dry-run", manifest["certificates"]![0]!["dryRunCommand"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains(manifest["verify"]!["commands"]!.AsArray(), command =>
+            command!["id"]!.GetValue<string>().Contains("certbot", StringComparison.Ordinal));
+
+        var schema = JsonSchema.FromText(File.ReadAllText(GetRepoPath("Schemas", "powerforge.web.serverrecovery.schema.json")));
+        Assert.True(EvaluateSchema(schema, manifest));
     }
 
     [Fact]
@@ -524,6 +552,17 @@ public sealed class ServerScaffoldTests
         var exception = Assert.Throws<InvalidOperationException>(() => WebCliCommandHandlers.ParseServerScaffoldOptions(args));
 
         Assert.Contains("DNS name or IPv4 address", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ScaffoldOptions_ShouldValidateExactAcmeAccountDirectoryName()
+    {
+        var valid = RequiredArguments("example.test").Concat(["--acme-account-id", "0123456789abcdef"]).ToArray();
+        var invalid = RequiredArguments("example.test").Concat(["--acme-account-id", "../account"]).ToArray();
+
+        Assert.Equal("0123456789abcdef", WebCliCommandHandlers.ParseServerScaffoldOptions(valid).AcmeAccountId);
+        var exception = Assert.Throws<InvalidOperationException>(() => WebCliCommandHandlers.ParseServerScaffoldOptions(invalid));
+        Assert.Contains("exact Certbot account directory", exception.Message, StringComparison.Ordinal);
     }
 
     private static PowerForgeServerScaffoldOptions CreateOptions()

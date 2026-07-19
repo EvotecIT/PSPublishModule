@@ -154,6 +154,60 @@ public sealed class ServerRecoveryBootstrapLinuxTests
         }
     }
 
+    [Fact]
+    public void DeferredSecretInstall_IsRerunnableAfterStagingIsRemovedOnLinux()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-deferred-rerun-" + Guid.NewGuid().ToString("N"));
+        var repository = Path.Combine(root, "repo");
+        var staging = Path.Combine(root, "staging");
+        Directory.CreateDirectory(repository);
+        try
+        {
+            RunProcess("git", repository, "init", "--quiet").EnsureSuccess();
+            RunProcess("git", repository, "config", "user.email", "powerforge-tests@example.invalid").EnsureSuccess();
+            RunProcess("git", repository, "config", "user.name", "PowerForge Tests").EnsureSuccess();
+            File.WriteAllText(Path.Combine(repository, ".gitignore"), ".secret\n");
+            RunProcess("git", repository, "add", ".gitignore").EnsureSuccess();
+            RunProcess("git", repository, "commit", "-m", "fixture", "--quiet").EnsureSuccess();
+
+            var normalizedTarget = Path.Combine(repository, ".secret").Replace('\\', '/');
+            var normalizedRepository = repository.Replace('\\', '/');
+            var normalizedStaging = staging.Replace('\\', '/');
+            var staged = normalizedStaging.TrimEnd('/') + normalizedTarget;
+            Directory.CreateDirectory(Path.GetDirectoryName(staged)!);
+            File.WriteAllText(staged, "restored");
+            var owner = RunProcess("id", root, "-u").Stdout.Trim();
+            var group = RunProcess("id", root, "-g").Stdout.Trim();
+            var command = PowerForge.Web.Cli.WebCliCommandHandlers.BuildDeferredSecretInstallCommand(
+                new PowerForge.Web.Cli.PowerForgeServerSecret
+                {
+                    Id = "repository-secret",
+                    Path = normalizedTarget,
+                    Owner = owner,
+                    Group = group,
+                    Mode = "0600"
+                },
+                normalizedStaging,
+                normalizedRepository);
+            var script = "set -Eeuo pipefail\npowerforge_assert_root_controlled_path() { :; }\n" + command;
+
+            var first = RunBash(script);
+            var second = RunBash(script);
+
+            Assert.Equal(0, first.ExitCode);
+            Assert.Equal(0, second.ExitCode);
+            Assert.Equal("restored", File.ReadAllText(normalizedTarget));
+            Assert.False(File.Exists(staged));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static (int ExitCode, string Stdout, string Stderr) RunBash(
         string script,
         IReadOnlyDictionary<string, string>? environment = null)

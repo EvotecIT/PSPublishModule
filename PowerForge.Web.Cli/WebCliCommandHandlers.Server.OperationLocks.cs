@@ -18,7 +18,7 @@ internal static partial class WebCliCommandHandlers
         return builder.ToString();
     }
 
-    private static IDisposable? AcquireRemoteOperationLocks(
+    private static RemoteOperationLock? AcquireRemoteOperationLocks(
         string sshCommand,
         string target,
         IEnumerable<string> paths)
@@ -92,12 +92,7 @@ internal static partial class WebCliCommandHandlers
             .ToArray();
         foreach (var path in locks)
         {
-            const string prefix = "/var/lock/";
-            if (!path.StartsWith(prefix, StringComparison.Ordinal) ||
-                !path.EndsWith(".lock", StringComparison.Ordinal) ||
-                path[prefix.Length..].Contains('/', StringComparison.Ordinal) ||
-                path[prefix.Length..].Length > 131 ||
-                path.Any(static character => !(IsAsciiLetterOrDigit(character) || character is '/' or '.' or '_' or '-')))
+            if (!IsValidOperationLockPath(path))
             {
                 throw new InvalidOperationException($"Operation lock contains unsupported characters or location: {path}");
             }
@@ -105,12 +100,45 @@ internal static partial class WebCliCommandHandlers
         return locks;
     }
 
-    private sealed class RemoteOperationLock : IDisposable
+    internal static bool IsValidOperationLockPath(string path)
+    {
+        const string prefix = "/var/lock/";
+        if (!path.StartsWith(prefix, StringComparison.Ordinal))
+            return false;
+
+        var name = path[prefix.Length..];
+        if (name.Length is < 6 or > 131 ||
+            !name.EndsWith(".lock", StringComparison.Ordinal) ||
+            name.Contains('/', StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var stem = name[..^".lock".Length];
+        return IsAsciiLetterOrDigit(stem[0]) &&
+               stem[1..].All(static character => IsAsciiLetterOrDigit(character) || character is '_' or '.' or '-');
+    }
+
+    internal sealed class RemoteOperationLock : IDisposable
     {
         private readonly Process _process;
         private bool _disposed;
 
         internal RemoteOperationLock(Process process) => _process = process;
+
+        internal void EnsureHeld(string phase)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(RemoteOperationLock));
+            if (!_process.HasExited)
+                return;
+
+            var stderr = _process.StandardError.ReadToEnd().Trim();
+            var detail = string.IsNullOrWhiteSpace(stderr)
+                ? $"exit code {_process.ExitCode}"
+                : $"exit code {_process.ExitCode}: {stderr}";
+            throw new InvalidOperationException($"Remote operation lock session ended {phase} ({detail}).");
+        }
 
         public void Dispose()
         {

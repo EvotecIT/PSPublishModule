@@ -22,7 +22,7 @@ internal sealed class PowerForgeServerRecoveryManifest
     public PowerForgeServerSecret[]? Secrets { get; set; }
     public PowerForgeServerCapture? Capture { get; set; }
     public PowerForgeServerCommandGroup? Bootstrap { get; set; }
-    public PowerForgeServerCommandGroup? Deploy { get; set; }
+    public PowerForgeServerDeploy? Deploy { get; set; }
     public PowerForgeServerVerify? Verify { get; set; }
     public PowerForgeServerBackupTarget? BackupTarget { get; set; }
     public string[]? Notes { get; set; }
@@ -167,6 +167,12 @@ internal sealed class PowerForgeServerManagedFile
 
 internal sealed class PowerForgeServerCommandGroup
 {
+    public PowerForgeServerNamedCommand[]? Commands { get; set; }
+}
+
+internal sealed class PowerForgeServerDeploy
+{
+    public string? OperationLockOwner { get; set; }
     public PowerForgeServerNamedCommand[]? Commands { get; set; }
 }
 

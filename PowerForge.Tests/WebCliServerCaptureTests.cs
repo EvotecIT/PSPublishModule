@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using PowerForge.Web.Cli;
 
 namespace PowerForge.Tests;
@@ -181,5 +182,40 @@ public sealed class WebCliServerCaptureTests
         Assert.Contains("cat >/dev/null", command, StringComparison.Ordinal);
         Assert.Throws<InvalidOperationException>(() =>
             WebCliCommandHandlers.BuildRemoteOperationLockCommand(["/tmp/example.lock"]));
+        Assert.Throws<InvalidOperationException>(() =>
+            WebCliCommandHandlers.BuildRemoteOperationLockCommand(["/var/lock/.lock"]));
+        Assert.Throws<InvalidOperationException>(() =>
+            WebCliCommandHandlers.BuildRemoteOperationLockCommand(["/var/lock/_site.lock"]));
+    }
+
+    [Fact]
+    public void RemoteOperationLock_ReportsADeadSessionBeforeWorkCanContinue()
+    {
+        var startInfo = new ProcessStartInfo(OperatingSystem.IsWindows() ? "cmd.exe" : "sh")
+        {
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        if (OperatingSystem.IsWindows())
+        {
+            startInfo.ArgumentList.Add("/d");
+            startInfo.ArgumentList.Add("/c");
+            startInfo.ArgumentList.Add("exit 17");
+        }
+        else
+        {
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add("exit 17");
+        }
+        using var process = Process.Start(startInfo)!;
+        process.WaitForExit();
+        using var operationLock = new WebCliCommandHandlers.RemoteOperationLock(process);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            operationLock.EnsureHeld("before archive capture"));
+
+        Assert.Contains("ended before archive capture", exception.Message, StringComparison.Ordinal);
     }
 }

@@ -176,11 +176,13 @@ internal static partial class WebCliCommandHandlers
                 manifest.OperationLocks ?? Array.Empty<string>());
             foreach (var command in commandList.Where(static command => !command.Sensitive))
             {
+                captureLock?.EnsureHeld($"before capture command '{command.Id}'");
                 var result = CaptureRemoteCommand(
                     sshCommand,
                     target,
                     command,
                     Path.Combine(outputRoot, "commands"));
+                captureLock?.EnsureHeld($"after capture command '{command.Id}'");
                 commandResults.Add(result);
                 if (!result.Success && command.Required)
                     warnings.Add($"Required capture command '{result.Id}' failed with exit code {result.ExitCode}.");
@@ -188,7 +190,9 @@ internal static partial class WebCliCommandHandlers
 
             if (!skipFiles && plainFiles.Length > 0 && plainArchivePath is not null)
             {
+                captureLock?.EnsureHeld("before plain archive capture");
                 var archiveResult = CaptureRemoteTarArchive(sshCommand, target, plainFiles, plainArchivePath);
+                captureLock?.EnsureHeld("after plain archive capture");
                 if (!archiveResult.Success)
                 {
                     warnings.Add($"Plain file archive failed with exit code {archiveResult.ExitCode}.");
@@ -213,6 +217,7 @@ internal static partial class WebCliCommandHandlers
                 else
                 {
                     encryptedArchivePath = Path.Combine(outputRoot, "encrypted-secrets.tar.gz.age");
+                    captureLock?.EnsureHeld("before encrypted archive capture");
                     var encryptedResult = encryptRemote
                         ? CaptureRemoteEncryptedTarArchive(
                             sshCommand,
@@ -227,6 +232,7 @@ internal static partial class WebCliCommandHandlers
                             encryptedFiles,
                             encryptedArchivePath,
                             recipient);
+                    captureLock?.EnsureHeld("after encrypted archive capture");
                     if (!encryptedResult.Success)
                     {
                         warnings.Add($"Encrypted capture failed with exit code {encryptedResult.ExitCode}.");

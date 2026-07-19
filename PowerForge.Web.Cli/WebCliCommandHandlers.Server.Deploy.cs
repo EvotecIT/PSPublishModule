@@ -20,10 +20,16 @@ internal static partial class WebCliCommandHandlers
         var warnings = new List<string>();
 
         var deployCommands = manifest.Deploy?.Commands ?? Array.Empty<PowerForgeServerNamedCommand>();
+        var commandOwnsOperationLocks = string.Equals(
+            manifest.Deploy?.OperationLockOwner,
+            "command",
+            StringComparison.Ordinal);
         if (deployCommands.Length == 0)
             warnings.Add("No deploy commands are defined in the manifest.");
+        else if (commandOwnsOperationLocks)
+            warnings.Add("The single deploy command owns every declared operation lock for its complete lifetime.");
 
-        using var operationLock = dryRun || deployCommands.Length == 0
+        using var operationLock = dryRun || deployCommands.Length == 0 || commandOwnsOperationLocks
             ? null
             : AcquireRemoteOperationLocks(
                 sshCommand,
@@ -71,7 +77,9 @@ internal static partial class WebCliCommandHandlers
                 continue;
             }
 
+            operationLock?.EnsureHeld($"before deploy command '{command.Id}'");
             var result = ExecuteRemote(sshCommand, target, commandText);
+            operationLock?.EnsureHeld($"after deploy command '{command.Id}'");
             commandResults.Add(new PowerForgeServerDeployCommandResult
             {
                 Id = command.Id,

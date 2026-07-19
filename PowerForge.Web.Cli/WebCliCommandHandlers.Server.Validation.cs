@@ -19,8 +19,7 @@ internal static partial class WebCliCommandHandlers
         var encryptedFiles = manifest.Capture?.EncryptedFiles ?? Array.Empty<PowerForgeServerManagedFile>();
         var plainPaths = ValidateCaptureEntries(plainFiles, "capture.plainFiles", sensitive: false, errors);
         var encryptedPaths = ValidateCaptureEntries(encryptedFiles, "capture.encryptedFiles", sensitive: true, errors);
-        foreach (var encryptedPath in encryptedPaths.Where(IsOverbroadLetsEncryptCapturePath))
-            errors.Add($"Encrypted capture path '{encryptedPath}' is too broad; capture an exact certificate lineage or one exact ACME account directory.");
+        ValidateLetsEncryptCapturePaths(plainPaths, encryptedPaths, errors);
         var retention = manifest.BackupTarget?.Retention;
         if (retention?.KeepDays is not null)
             errors.Add("backupTarget.retention.keepDays is not implemented; use keepLatestInTree for current-tree retention.");
@@ -364,61 +363,6 @@ internal static partial class WebCliCommandHandlers
             managedTargets,
             sourceManagedPaths,
             errors);
-    }
-
-    private static void ValidateOperationLocks(
-        PowerForgeServerRecoveryManifest manifest,
-        ICollection<string> errors)
-    {
-        var locks = manifest.OperationLocks ?? Array.Empty<string>();
-        if (manifest.Capture is not null && manifest.Deploy?.Commands?.Length > 0 && locks.Length == 0)
-            errors.Add("operationLocks is required when a manifest contains both capture and deploy work.");
-
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        for (var index = 0; index < locks.Length; index++)
-        {
-            var path = NormalizeCapturePath(locks[index], $"operationLocks[{index}]", errors);
-            if (path is null)
-                continue;
-            var name = path.StartsWith("/var/lock/", StringComparison.Ordinal)
-                ? path["/var/lock/".Length..]
-                : string.Empty;
-            if (name.Length is 0 or > 131 ||
-                !name.EndsWith(".lock", StringComparison.Ordinal) ||
-                name.Contains('/', StringComparison.Ordinal) ||
-                !name[..^".lock".Length].All(static character => IsAsciiLetterOrDigit(character) || character is '_' or '.' or '-'))
-            {
-                errors.Add($"operationLocks[{index}] must be an exact .lock file directly below /var/lock.");
-            }
-            if (!seen.Add(path))
-                errors.Add($"operationLocks[{index}] duplicates lock path '{path}'.");
-        }
-    }
-
-    private static bool IsOverbroadLetsEncryptCapturePath(string path)
-    {
-        const string accountsRoot = "/etc/letsencrypt/accounts";
-        if (PathContains(path, accountsRoot))
-            return true;
-        if (PathStrictlyContains(accountsRoot, path))
-        {
-            var accountSegments = path[(accountsRoot.Length + 1)..]
-                .Split('/', StringSplitOptions.RemoveEmptyEntries);
-            return accountSegments.Length != 3;
-        }
-
-        foreach (var lineageRoot in new[] { "/etc/letsencrypt/archive", "/etc/letsencrypt/live" })
-        {
-            if (PathContains(path, lineageRoot))
-                return true;
-            if (PathStrictlyContains(lineageRoot, path) &&
-                path[(lineageRoot.Length + 1)..].Contains('/', StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static void ValidateManagedTargetHierarchy(
