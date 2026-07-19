@@ -300,13 +300,6 @@ internal static partial class WebCliCommandHandlers
         if (manifest.Systemd is not null)
         {
             AddStep(steps, ref order, "systemd", "Reload systemd units", "systemctl daemon-reload", plannedCommands: plannedCommands);
-
-            foreach (var unit in (manifest.Systemd.Services ?? Array.Empty<PowerForgeServerSystemdUnit>())
-                     .Concat(manifest.Systemd.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
-                     .Where(static unit => unit.Enabled && !string.IsNullOrWhiteSpace(unit.Name)))
-            {
-                AddStep(steps, ref order, "systemd", $"Enable {unit.Name}", $"systemctl enable {ShellQuote(unit.Name!)}", plannedCommands: plannedCommands);
-            }
         }
 
         if (manifest.Firewall is not null)
@@ -359,6 +352,14 @@ internal static partial class WebCliCommandHandlers
                 ? command.Command
                 : $"cd {ShellQuote(command.WorkingDirectory)} && {command.Command}";
             AddStep(steps, ref order, "deploy", command.Id ?? "deploy command", shell, command.Sensitive, plannedCommands: plannedCommands);
+        }
+
+        foreach (var unit in (manifest.Systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>())
+                 .Concat(manifest.Systemd?.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
+                 .Where(static unit => unit.Enabled && !string.IsNullOrWhiteSpace(unit.Name)))
+        {
+            AddStep(steps, ref order, "systemd", $"Enable {unit.Name}", $"systemctl enable {ShellQuote(unit.Name!)}", plannedCommands: plannedCommands);
+            AddStep(steps, ref order, "systemd", $"Start {unit.Name}", $"systemctl start {ShellQuote(unit.Name!)}", plannedCommands: plannedCommands);
         }
 
         AddStep(steps, ref order, "verify", "Run PowerForge server verify", "# Run from an operator workstation: powerforge-web server verify --manifest <manifest> --fail-on-failure", manual: true, plannedCommands: plannedCommands);
