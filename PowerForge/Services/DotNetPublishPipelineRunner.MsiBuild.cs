@@ -359,7 +359,7 @@ public sealed partial class DotNetPublishPipelineRunner
             return null;
 
         var tokens = BuildInstallerOutputTokens(plan, installer.Id, step, version);
-        var name = ApplyTemplate(configuredName, tokens).Trim();
+        var name = ApplyTemplate(configuredName!, tokens).Trim();
         if (string.IsNullOrWhiteSpace(name))
             return null;
 
