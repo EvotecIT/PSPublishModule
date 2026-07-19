@@ -20,10 +20,10 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunGit(root, "config user.name \"PowerForge Tests\"");
             RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
             File.WriteAllText(Path.Combine(root, "source.txt"), "committed");
-            RunGit(root, "add source.txt");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "Artifacts/" + Environment.NewLine);
+            RunGit(root, "add source.txt .gitignore");
             RunGit(root, "commit -m \"test source\"");
             string revision = RunGit(root, "rev-parse HEAD").Trim();
-            var cleanProvenance = DotNetPublishPipelineRunner.ReadSourceProvenance(root);
 
             var output = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "Publish", "app")).FullName;
             File.WriteAllText(Path.Combine(output, "app.dll"), "payload");
@@ -49,7 +49,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
                 }
             };
 
-            InvokeWriteManifests(plan, artefacts, cleanProvenance);
+            InvokeWriteManifests(plan, artefacts);
 
             using (var document = JsonDocument.Parse(File.ReadAllText(manifestPath)))
             {
@@ -60,8 +60,7 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             File.WriteAllText(Path.Combine(root, "source.txt"), "modified");
             File.WriteAllText(Path.Combine(root, "untracked-input.cs"), "source input");
-            var dirtyProvenance = DotNetPublishPipelineRunner.ReadSourceProvenance(root);
-            InvokeWriteManifests(plan, artefacts, dirtyProvenance);
+            InvokeWriteManifests(plan, artefacts);
 
             using var dirtyDocument = JsonDocument.Parse(File.ReadAllText(manifestPath));
             Assert.True(dirtyDocument.RootElement.EnumerateArray().Single().GetProperty("SourceDirty").GetBoolean());
@@ -79,15 +78,13 @@ public sealed class DotNetPublishPipelineRunnerManifestProvenanceTests
 
     private static void InvokeWriteManifests(
         DotNetPublishPlan plan,
-        List<DotNetPublishArtefactResult> artefacts,
-        DotNetPublishPipelineRunner.SourceProvenance provenance)
+        List<DotNetPublishArtefactResult> artefacts)
     {
         DotNetPublishPipelineRunner.WriteManifestsWithProvenance(
             plan,
             artefacts,
             new List<DotNetPublishStorePackageResult>(),
-            new List<DotNetPublishMsiBuildResult>(),
-            provenance);
+            new List<DotNetPublishMsiBuildResult>());
     }
 
     private static string RunGit(string root, string arguments)

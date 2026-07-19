@@ -334,18 +334,39 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishStep step,
         string? version)
     {
-        if (installer is null || string.IsNullOrWhiteSpace(installer.OutputName))
+        if (installer is null)
+            return null;
+
+        var hasVersion = !string.IsNullOrWhiteSpace(version);
+        string? configuredName = installer.OutputName;
+        if (string.IsNullOrWhiteSpace(configuredName) && hasVersion)
+        {
+            var baseName = string.IsNullOrWhiteSpace(step.TargetName)
+                ? installer.Id
+                : step.TargetName;
+            configuredName = string.Join(
+                "-",
+                new[] { baseName, step.Runtime, version }
+                    .Where(static value => !string.IsNullOrWhiteSpace(value)));
+        }
+
+        if (string.IsNullOrWhiteSpace(configuredName))
             return null;
 
         var tokens = BuildInstallerOutputTokens(plan, installer.Id, step, version);
-        var name = ApplyTemplate(installer.OutputName!, tokens).Trim();
+        var name = ApplyTemplate(configuredName, tokens).Trim();
         if (string.IsNullOrWhiteSpace(name))
             return null;
 
         name = ToSafeFileName(name, "installer");
-        return name.EndsWith(".msi", StringComparison.OrdinalIgnoreCase)
+        name = name.EndsWith(".msi", StringComparison.OrdinalIgnoreCase)
             ? Path.GetFileNameWithoutExtension(name)
             : name;
+
+        if (hasVersion && !name.Contains(version!, StringComparison.OrdinalIgnoreCase))
+            name = ToSafeFileName($"{name}-{version}", "installer");
+
+        return name;
     }
 
     private static Dictionary<string, string> BuildInstallerOutputTokens(

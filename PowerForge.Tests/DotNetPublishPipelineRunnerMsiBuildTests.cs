@@ -50,6 +50,45 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void ResolveInstallerOutputName_DerivesVersionedDefault()
+    {
+        var plan = new DotNetPublishPlan { Configuration = "Release" };
+        var installer = new DotNetPublishInstallerPlan { Id = "syncse" };
+        var step = new DotNetPublishStep
+        {
+            TargetName = "GraphEssentialsX.Sync.Service",
+            Runtime = "win-x64"
+        };
+
+        var outputName = DotNetPublishPipelineRunner.ResolveInstallerOutputName(
+            plan,
+            installer,
+            step,
+            "1.0.9638");
+
+        Assert.Equal("GraphEssentialsX.Sync.Service-win-x64-1.0.9638", outputName);
+    }
+
+    [Fact]
+    public void ResolveInstallerOutputName_AppendsVersionToStaticName()
+    {
+        var plan = new DotNetPublishPlan { Configuration = "Release" };
+        var installer = new DotNetPublishInstallerPlan
+        {
+            Id = "app",
+            OutputName = "app.msi"
+        };
+
+        var outputName = DotNetPublishPipelineRunner.ResolveInstallerOutputName(
+            plan,
+            installer,
+            new DotNetPublishStep(),
+            "1.0.9638");
+
+        Assert.Equal("app-1.0.9638", outputName);
+    }
+
+    [Fact]
     public void VersionedMsiOutput_RejectsSilentOverwriteByDefault()
     {
         var root = CreateTempRoot();

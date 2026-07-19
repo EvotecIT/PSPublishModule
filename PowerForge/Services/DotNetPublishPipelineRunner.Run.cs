@@ -16,7 +16,6 @@ public sealed partial class DotNetPublishPipelineRunner
         progress ??= NullDotNetPublishProgressReporter.Instance;
 
         var runStartedUtc = DateTimeOffset.UtcNow;
-        var sourceProvenance = ReadSourceProvenance(plan.ProjectRoot);
         var runStopwatch = Stopwatch.StartNew();
         var artefacts = new List<DotNetPublishArtefactResult>();
         var msiPrepares = new List<DotNetPublishMsiPrepareResult>();
@@ -88,8 +87,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                 plan,
                                 artefacts,
                                 storePackages,
-                                msiBuilds,
-                                sourceProvenance);
+                                msiBuilds);
                             break;
                     }
 

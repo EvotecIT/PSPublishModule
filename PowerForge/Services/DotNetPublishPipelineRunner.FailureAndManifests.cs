@@ -316,15 +316,13 @@ public sealed partial class DotNetPublishPipelineRunner
             plan,
             artefacts,
             storePackages,
-            msiBuilds,
-            ReadSourceProvenance(plan.ProjectRoot));
+            msiBuilds);
 
     internal static (string? ManifestJson, string? ManifestText, string? ChecksumsPath) WriteManifestsWithProvenance(
         DotNetPublishPlan plan,
         List<DotNetPublishArtefactResult> artefacts,
         List<DotNetPublishStorePackageResult>? storePackages,
-        List<DotNetPublishMsiBuildResult>? msiBuilds,
-        SourceProvenance sourceProvenance)
+        List<DotNetPublishMsiBuildResult>? msiBuilds)
     {
         var orderedArtefacts = (artefacts ?? new List<DotNetPublishArtefactResult>())
             .OrderBy(a => a.Target, StringComparer.OrdinalIgnoreCase)
@@ -347,7 +345,7 @@ public sealed partial class DotNetPublishPipelineRunner
             .ThenBy(a => a.Style.ToString(), StringComparer.OrdinalIgnoreCase)
             .ThenBy(a => a.InstallerId, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var provenance = sourceProvenance;
+        var provenance = ReadSourceProvenance(plan.ProjectRoot);
         var manifestEntries = BuildManifestEntries(
             plan.ProjectRoot,
             orderedArtefacts,
