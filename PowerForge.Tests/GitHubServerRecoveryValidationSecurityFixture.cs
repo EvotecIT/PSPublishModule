@@ -31,7 +31,8 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
         bool includeCaptureAccount = true,
         string authorizedKeyContent = RestrictedCaptureKey,
         string authorizedKeyOwner = "root",
-        string captureDirectoryOwner = "root")
+        string captureDirectoryOwner = "root",
+        bool includeOptionalEncryptedCapture = false)
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-recovery-source-security-" + Guid.NewGuid().ToString("N"));
         var workspace = Path.Combine(root, "caller");
@@ -44,9 +45,14 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
             File.WriteAllText(
                 Path.Combine(engineRoot, "Deployment", "Linux", "powerforge-server-encrypted-capture.sh"),
                 "#!/usr/bin/env bash\nset -euo pipefail\n");
+            var expectedEncryptedCommand = includeOptionalEncryptedCapture
+                ? ExpectedCaptureCommand + " --optional /var/lib/example/optional"
+                : ExpectedCaptureCommand;
             File.WriteAllText(
                 Path.Combine(workspace, "deploy", "linux", "backup.sudoers"),
-                sudoers ?? (includeCapture ? BuildExpectedSudoers(CaptureUser, "root") : "# no privileged capture grants\n"));
+                sudoers ?? (includeCapture
+                    ? BuildExpectedSudoers(CaptureUser, "root", expectedEncryptedCommand)
+                    : "# no privileged capture grants\n"));
             File.WriteAllText(
                 Path.Combine(workspace, "deploy", "linux", "backup-authorized_keys"),
                 authorizedKeyContent + "\n");
@@ -160,11 +166,18 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
                 });
             }
 
+            var encryptedFiles = includeOptionalEncryptedCapture
+                ? new[]
+                {
+                    new { target = "/etc/example/secret", required = true },
+                    new { target = "/var/lib/example/optional", required = false }
+                }
+                : new[] { new { target = "/etc/example/secret", required = true } };
             object? capture = includeCapture
                 ? new
                 {
                     plainFiles = new[] { new { target = plainCaptureTarget, required = true } },
-                    encryptedFiles = new[] { new { target = "/etc/example/secret", required = true } },
+                    encryptedFiles,
                     commands = new[] { new { id = "apache-vhosts", command = captureCommand, required = true } }
                 }
                 : null;
@@ -260,13 +273,16 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
         }
     }
 
-    private static string BuildExpectedAliases()
+    private static string BuildExpectedAliases(string encryptedCommand = ExpectedCaptureCommand)
         => $"Cmnd_Alias BACKUP_PLAIN = {ExpectedPlainCaptureCommand}\n" +
-           $"Cmnd_Alias BACKUP_ENCRYPTED = {ExpectedCaptureCommand}\n" +
+           $"Cmnd_Alias BACKUP_ENCRYPTED = {encryptedCommand}\n" +
            $"Cmnd_Alias BACKUP_INSPECT = {ExpectedInspectCommand}\n";
 
-    private static string BuildExpectedSudoers(string principal, string runAs)
-        => BuildExpectedAliases() +
+    private static string BuildExpectedSudoers(
+        string principal,
+        string runAs,
+        string encryptedCommand = ExpectedCaptureCommand)
+        => BuildExpectedAliases(encryptedCommand) +
            $"{principal} ALL=({runAs}) NOPASSWD: BACKUP_PLAIN, BACKUP_ENCRYPTED, BACKUP_INSPECT\n";
 
     private static string CreateVisudoStub(string root, string logPath)

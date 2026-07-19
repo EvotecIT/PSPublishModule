@@ -142,10 +142,8 @@ internal static partial class WebCliCommandHandlers
         var dryRun = HasOption(subArgs, "--dry-run");
         var skipFiles = HasOption(subArgs, "--skip-files");
         var skipEncrypted = HasOption(subArgs, "--skip-encrypted");
-        var encryptRemote = HasOption(subArgs, "--encrypt-remote") || HasOption(subArgs, "--remote-encryption");
         var failOnFailure = HasOption(subArgs, "--fail-on-failure");
         var sshCommand = TryGetOptionValue(subArgs, "--ssh") ?? "ssh";
-        var ageCommand = TryGetOptionValue(subArgs, "--age") ?? "age";
         var target = BuildServerSshTarget(manifest.Target);
 
         var outputRoot = ResolveCaptureOutputPath(outPathArg, manifest);
@@ -218,20 +216,12 @@ internal static partial class WebCliCommandHandlers
                 {
                     encryptedArchivePath = Path.Combine(outputRoot, "encrypted-secrets.tar.gz.age");
                     captureLock?.EnsureHeld("before encrypted archive capture");
-                    var encryptedResult = encryptRemote
-                        ? CaptureRemoteEncryptedTarArchive(
-                            sshCommand,
-                            target,
-                            encryptedFiles,
-                            encryptedArchivePath,
-                            recipient)
-                        : CaptureEncryptedRemoteTarArchive(
-                            sshCommand,
-                            ageCommand,
-                            target,
-                            encryptedFiles,
-                            encryptedArchivePath,
-                            recipient);
+                    var encryptedResult = CaptureRemoteEncryptedTarArchive(
+                        sshCommand,
+                        target,
+                        encryptedFiles,
+                        encryptedArchivePath,
+                        recipient);
                     captureLock?.EnsureHeld("after encrypted archive capture");
                     if (!encryptedResult.Success)
                     {
@@ -434,67 +424,6 @@ internal static partial class WebCliCommandHandlers
     {
         var script = BuildRemoteTarScript(files);
         return RunProcessCaptureBinary(sshCommand, BuildSshArguments(target, script), outputPath);
-    }
-
-    private static ProcessResult CaptureEncryptedRemoteTarArchive(
-        string sshCommand,
-        string ageCommand,
-        string target,
-        PowerForgeServerManagedFile[] files,
-        string outputPath,
-        string recipient)
-    {
-        var script = BuildRemoteTarScript(files);
-        using var ssh = CreateProcess(sshCommand, BuildSshArguments(target, script));
-        using var age = CreateProcess(ageCommand, new[] { "-r", recipient, "-o", outputPath });
-        ssh.StartInfo.RedirectStandardOutput = true;
-        ssh.StartInfo.RedirectStandardError = true;
-        age.StartInfo.RedirectStandardInput = true;
-        age.StartInfo.RedirectStandardError = true;
-
-        if (!ssh.Start())
-            throw new InvalidOperationException("Failed to start ssh.");
-        if (!age.Start())
-            throw new InvalidOperationException("Failed to start age.");
-
-        var copyTask = CopyAndCloseAsync(ssh.StandardOutput.BaseStream, age.StandardInput.BaseStream);
-        var sshErrTask = ssh.StandardError.ReadToEndAsync();
-        var ageErrTask = age.StandardError.ReadToEndAsync();
-
-        ssh.WaitForExit();
-        string? copyError = null;
-        try
-        {
-            copyTask.GetAwaiter().GetResult();
-        }
-        catch (Exception ex)
-        {
-            copyError = ex.GetBaseException().Message;
-        }
-        age.WaitForExit();
-
-        var stderr = string.Concat(
-            sshErrTask.GetAwaiter().GetResult(),
-            ageErrTask.GetAwaiter().GetResult(),
-            string.IsNullOrWhiteSpace(copyError) ? string.Empty : $"{Environment.NewLine}stream copy failed: {copyError}");
-        return new ProcessResult
-        {
-            ExitCode = copyError is null ? (ssh.ExitCode == 0 ? age.ExitCode : ssh.ExitCode) : 1,
-            Stdout = string.Empty,
-            Stderr = stderr
-        };
-    }
-
-    private static async Task CopyAndCloseAsync(Stream input, Stream output)
-    {
-        try
-        {
-            await input.CopyToAsync(output);
-        }
-        finally
-        {
-            output.Close();
-        }
     }
 
     private static ProcessResult CaptureRemoteEncryptedTarArchive(

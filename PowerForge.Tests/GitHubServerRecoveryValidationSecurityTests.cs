@@ -25,6 +25,15 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
     }
 
     [Fact]
+    public void Validator_ShouldPartitionMixedOptionalEncryptedCapture()
+    {
+        var result = RunValidator(includeOptionalEncryptedCapture: true);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("3", result.StandardOutput.Trim());
+    }
+
+    [Fact]
     public void Validator_ShouldResolveEngineAndCallerSourcesWhenRepositorySlugsMatch()
     {
         var result = RunValidator(

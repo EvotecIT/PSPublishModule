@@ -35,7 +35,7 @@ internal static partial class WebCliCommandHandlers
                 errors.Add("Command-owned deploy locking requires at least one declared operation lock.");
             if (deployCommands.Length != 1 || deployCommands[0].Sensitive)
                 errors.Add("Command-owned deploy locking requires exactly one non-sensitive deploy command.");
-            else if (deployCommands[0].Command?.Contains("/usr/local/sbin/powerforge-site-deploy", StringComparison.Ordinal) == true)
+            else if (InvokesPowerForgeSiteDeploy(deployCommands[0].Command))
             {
                 if (!TryGetPowerForgeSiteDeploySite(deployCommands[0].Command, out var site))
                 {
@@ -49,12 +49,29 @@ internal static partial class WebCliCommandHandlers
                 }
             }
         }
-        else if (deployCommands.Any(static command =>
-                     command.Command?.Contains("powerforge-site-deploy", StringComparison.Ordinal) == true))
+        else if (deployCommands.Any(static command => InvokesPowerForgeSiteDeploy(command.Command)))
         {
             errors.Add("A deploy command that invokes powerforge-site-deploy must set deploy.operationLockOwner to 'command' to avoid nested lock acquisition.");
         }
 
+    }
+
+    private static bool InvokesPowerForgeSiteDeploy(string? command)
+    {
+        var tokens = (command?.Trim() ?? string.Empty)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var commandIndex = tokens.Length >= 2 &&
+                           string.Equals(tokens[0], "sudo", StringComparison.Ordinal) &&
+                           string.Equals(tokens[1], "-n", StringComparison.Ordinal)
+            ? 2
+            : 0;
+        if (tokens.Length <= commandIndex)
+            return false;
+
+        var executable = tokens[commandIndex].TrimEnd('/');
+        var separator = executable.LastIndexOf('/');
+        var fileName = separator >= 0 ? executable[(separator + 1)..] : executable;
+        return string.Equals(fileName, "powerforge-site-deploy", StringComparison.Ordinal);
     }
 
     private static bool TryGetPowerForgeSiteDeploySite(string? command, out string site)

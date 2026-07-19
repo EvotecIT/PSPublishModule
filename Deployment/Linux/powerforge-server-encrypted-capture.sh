@@ -8,7 +8,8 @@ die() {
 
 (( EUID == 0 )) || die 'must run as root'
 [[ "${1:-}" == '--recipient' ]] || die 'expected --recipient'
-recipient="${2:-}"
+(($# >= 2)) || die '--recipient requires an age public recipient'
+recipient="$2"
 shift 2
 
 ignore_failed_read=0

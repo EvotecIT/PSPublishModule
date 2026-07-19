@@ -18,13 +18,12 @@ public sealed class ServerRecoveryBootstrapLinuxTests
         {
             var lockPath = Path.Combine(root, "operation.lock").Replace('\\', '/');
             var acquire = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapOperationLockAcquireCommand([lockPath]);
-            var script = $"set -Eeuo pipefail\n: >'{lockPath}'\n{acquire}\nif flock -n '{lockPath}' -c true; then exit 71; fi\n";
+            var release = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapOperationLockReleaseCommand([lockPath]);
+            var script = $"set -Eeuo pipefail\ninstall -o root -g root -m 0644 /dev/null '{lockPath}'\n{acquire}\nif flock -n '{lockPath}' -c true; then exit 71; fi\n{release}\nrm -f -- '{lockPath}'\n";
 
-            var held = RunBash(script);
-            var released = RunBash($"flock -n '{lockPath}' -c true");
+            var held = RunRootBash(script);
 
             Assert.Equal(0, held.ExitCode);
-            Assert.Equal(0, released.ExitCode);
         }
         finally
         {
@@ -45,9 +44,9 @@ public sealed class ServerRecoveryBootstrapLinuxTests
             var lockPath = Path.Combine(root, "operation.lock").Replace('\\', '/');
             var acquire = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapOperationLockAcquireCommand([lockPath]);
             var release = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapOperationLockReleaseCommand([lockPath]);
-            var script = $"set -Eeuo pipefail\n: >'{lockPath}'\n{acquire}\n{release}\nflock -n '{lockPath}' -c true\n";
+            var script = $"set -Eeuo pipefail\ninstall -o root -g root -m 0644 /dev/null '{lockPath}'\n{acquire}\n{release}\nflock -n '{lockPath}' -c true\nrm -f -- '{lockPath}'\n";
 
-            var result = RunBash(script);
+            var result = RunRootBash(script);
 
             Assert.Equal(0, result.ExitCode);
         }
@@ -531,14 +530,31 @@ public sealed class ServerRecoveryBootstrapLinuxTests
     private static (int ExitCode, string Stdout, string Stderr) RunBash(
         string script,
         IReadOnlyDictionary<string, string>? environment = null)
+        => RunBashProcess("bash", [], script, environment);
+
+    private static (int ExitCode, string Stdout, string Stderr) RunRootBash(string script)
     {
-        var startInfo = new ProcessStartInfo("bash")
+        var userId = RunProcess("id", Path.GetTempPath(), "-u").Stdout.Trim();
+        return userId == "0"
+            ? RunBash(script)
+            : RunBashProcess("sudo", ["-n", "bash"], script, environment: null);
+    }
+
+    private static (int ExitCode, string Stdout, string Stderr) RunBashProcess(
+        string fileName,
+        IReadOnlyList<string> arguments,
+        string script,
+        IReadOnlyDictionary<string, string>? environment)
+    {
+        var startInfo = new ProcessStartInfo(fileName)
         {
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false
         };
+        foreach (var argument in arguments)
+            startInfo.ArgumentList.Add(argument);
         if (environment is not null)
         {
             foreach (var pair in environment)

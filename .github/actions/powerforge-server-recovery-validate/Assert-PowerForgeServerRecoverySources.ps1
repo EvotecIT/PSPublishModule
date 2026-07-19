@@ -205,17 +205,34 @@ function Get-ExpectedEncryptedCaptureCommand {
         throw 'Credential-free validation does not resolve backupTarget.recipientEnv; encrypted capture requires a stable age public recipient in backupTarget.recipient.'
     }
 
-    $targets = Get-ValidatedCaptureTarget -Files $files -Label 'Encrypted'
+    $targets = @(Get-ValidatedCaptureTarget -Files $files -Label 'Encrypted')
+    $requiredTargets = [Collections.Generic.List[string]]::new()
+    $optionalTargets = [Collections.Generic.List[string]]::new()
+    for ($index = 0; $index -lt $files.Count; $index++) {
+        if ($files[$index].required -eq $true) {
+            $requiredTargets.Add($targets[$index])
+        } else {
+            $optionalTargets.Add($targets[$index])
+        }
+    }
 
     $parts = [Collections.Generic.List[string]]::new()
     $parts.Add('/usr/local/sbin/powerforge-server-encrypted-capture')
     $parts.Add('--recipient')
     $parts.Add($recipient)
-    if (-not @($files).Where({ $_.required -eq $true }).Count) {
+    if ($requiredTargets.Count -eq 0) {
         $parts.Add('--ignore-failed-read')
     }
     $parts.Add('--')
-    $parts.AddRange([string[]]$targets)
+    if ($requiredTargets.Count -eq 0) {
+        $parts.AddRange([string[]]$optionalTargets)
+    } else {
+        $parts.AddRange([string[]]$requiredTargets)
+        if ($optionalTargets.Count -gt 0) {
+            $parts.Add('--optional')
+            $parts.AddRange([string[]]$optionalTargets)
+        }
+    }
     $parts -join ' '
 }
 

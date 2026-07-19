@@ -92,12 +92,15 @@ public sealed partial class ServerRecoverySecurityTests
         var duplicateSiteErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
         manifest.Deploy.Commands[0].Command = "sudo -n /usr/local/sbin/powerforge-site-deploy --site other; true";
         var shellSyntaxErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+        manifest.Deploy.Commands[0].Command = "sudo -n /usr/local/sbin/./powerforge-site-deploy --site other";
+        var equivalentPathErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
 
         Assert.Contains(mismatchedLockErrors, error => error.Contains("requires exactly operationLocks", StringComparison.Ordinal));
         Assert.Contains(extraLockErrors, error => error.Contains("requires exactly operationLocks", StringComparison.Ordinal));
         Assert.Contains(nonCanonicalErrors, error => error.Contains("canonical", StringComparison.Ordinal));
         Assert.Contains(duplicateSiteErrors, error => error.Contains("canonical", StringComparison.Ordinal));
         Assert.Contains(shellSyntaxErrors, error => error.Contains("canonical", StringComparison.Ordinal));
+        Assert.Contains(equivalentPathErrors, error => error.Contains("canonical", StringComparison.Ordinal));
     }
 
     [Fact]
