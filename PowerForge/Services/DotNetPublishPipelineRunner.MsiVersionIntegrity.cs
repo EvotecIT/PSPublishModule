@@ -96,15 +96,134 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    internal static SourceProvenance ReadSourceProvenance(string projectRoot)
+    internal static SourceProvenance ReadSourceProvenance(
+        string projectRoot,
+        IEnumerable<string>? generatedPaths = null)
     {
         var gitRevision = ReadGitText(projectRoot, "rev-parse HEAD");
         var environmentRevision = Environment.GetEnvironmentVariable("GITHUB_SHA")?.Trim();
         var revision = string.IsNullOrWhiteSpace(gitRevision) ? environmentRevision : gitRevision;
-        var status = ReadGitText(projectRoot, "status --porcelain --untracked-files=all");
+        var gitRoot = ReadGitText(projectRoot, "rev-parse --show-toplevel");
+        if (string.IsNullOrWhiteSpace(gitRoot))
+        {
+            return new SourceProvenance(
+                string.IsNullOrWhiteSpace(revision) ? null : revision,
+                null);
+        }
+
+        var trackedStatus = ReadGitText(gitRoot!, "status --porcelain --untracked-files=no");
+        var untrackedOutput = ReadGitText(gitRoot!, "ls-files --others --exclude-standard -z");
+        bool? dirty = trackedStatus is null || untrackedOutput is null
+            ? null
+            : trackedStatus.Length > 0 || HasUntrackedSourceFiles(
+                projectRoot,
+                gitRoot!,
+                untrackedOutput,
+                generatedPaths);
         return new SourceProvenance(
             string.IsNullOrWhiteSpace(revision) ? null : revision,
-            status is null ? null : status.Length > 0);
+            dirty);
+    }
+
+    private static IEnumerable<string> EnumerateGeneratedProvenancePaths(
+        DotNetPublishPlan plan,
+        IEnumerable<DotNetPublishArtefactResult> artefacts,
+        IEnumerable<DotNetPublishStorePackageResult> storePackages,
+        IEnumerable<DotNetPublishMsiBuildResult> msiBuilds)
+    {
+        yield return plan.Outputs.ManifestJsonPath ?? string.Empty;
+        yield return plan.Outputs.ManifestTextPath ?? string.Empty;
+        yield return plan.Outputs.ChecksumsPath ?? string.Empty;
+        yield return plan.Outputs.RunReportPath ?? string.Empty;
+        yield return plan.Outputs.RunReportMarkdownPath ?? string.Empty;
+
+        foreach (var version in plan.MsiVersions.Values)
+            yield return version.StatePath ?? string.Empty;
+
+        foreach (var step in plan.Steps)
+        {
+            yield return step.StagingPath ?? string.Empty;
+            yield return step.ManifestPath ?? string.Empty;
+            yield return step.HarvestPath ?? string.Empty;
+            yield return step.BundleOutputPath ?? string.Empty;
+            yield return step.BundleZipPath ?? string.Empty;
+            yield return step.StorePackageOutputPath ?? string.Empty;
+        }
+
+        foreach (var artefact in artefacts)
+        {
+            yield return artefact.PublishDir;
+            yield return artefact.OutputDir;
+            yield return artefact.ZipPath ?? string.Empty;
+            foreach (var outputFile in artefact.OutputFiles ?? Array.Empty<string>())
+                yield return outputFile;
+        }
+
+        foreach (var storePackage in storePackages)
+        {
+            yield return storePackage.OutputDir;
+            foreach (var outputFile in EnumerateStorePackageFiles(storePackage))
+                yield return outputFile;
+        }
+
+        foreach (var msiBuild in msiBuilds)
+        {
+            yield return msiBuild.VersionStatePath ?? string.Empty;
+            if (msiBuild.GeneratedProject)
+                yield return Path.GetDirectoryName(msiBuild.ProjectPath) ?? string.Empty;
+            foreach (var outputFile in msiBuild.OutputFiles ?? Array.Empty<string>())
+                yield return outputFile;
+        }
+    }
+
+    private static bool HasUntrackedSourceFiles(
+        string projectRoot,
+        string gitRoot,
+        string untrackedOutput,
+        IEnumerable<string>? generatedPaths)
+    {
+        var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var exclusions = (generatedPaths ?? Array.Empty<string>())
+            .Select(path => ToGitRelativeExclusion(projectRoot, gitRoot, path))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .ToArray();
+
+        foreach (var untrackedPath in untrackedOutput.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var normalizedPath = untrackedPath.Replace('\\', '/').TrimStart('/');
+            bool generated = exclusions.Any(exclusion =>
+                string.Equals(normalizedPath, exclusion, comparison)
+                || normalizedPath.StartsWith(exclusion + "/", comparison));
+            if (!generated)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string? ToGitRelativeExclusion(string projectRoot, string gitRoot, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        var root = Path.GetFullPath(gitRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullPath = Path.GetFullPath(
+            Path.IsPathRooted(path)
+                ? path
+                : Path.Combine(projectRoot, path));
+        var comparison = IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (string.Equals(root, fullPath, comparison))
+            return null;
+
+        var rootPrefix = root + Path.DirectorySeparatorChar;
+        if (!fullPath.StartsWith(rootPrefix, comparison))
+            return null;
+
+        return fullPath.Substring(rootPrefix.Length)
+            .Replace('\\', '/')
+            .Trim('/');
     }
 
     private static string? ReadGitText(string projectRoot, string arguments)

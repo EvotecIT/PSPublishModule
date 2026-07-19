@@ -345,7 +345,13 @@ public sealed partial class DotNetPublishPipelineRunner
             .ThenBy(a => a.Style.ToString(), StringComparer.OrdinalIgnoreCase)
             .ThenBy(a => a.InstallerId, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var provenance = ReadSourceProvenance(plan.ProjectRoot);
+        var provenance = ReadSourceProvenance(
+            plan.ProjectRoot,
+            EnumerateGeneratedProvenancePaths(
+                plan,
+                orderedArtefacts,
+                orderedStorePackages,
+                orderedMsiBuilds));
         var manifestEntries = BuildManifestEntries(
             plan.ProjectRoot,
             orderedArtefacts,

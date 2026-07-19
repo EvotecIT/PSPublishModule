@@ -158,6 +158,7 @@ public sealed partial class DotNetPublishPipelineRunner
             Runtime = runtime,
             Style = style.Value,
             ProjectPath = installerProjectPath,
+            GeneratedProject = isGeneratedInstallerProject,
             OutputFiles = outputs,
             PackageMetadata = packageMetadata,
             Version = versionResolution.Version,
