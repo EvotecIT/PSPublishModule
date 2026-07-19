@@ -78,7 +78,11 @@ public static partial class WebApiDocsGenerator
                 model.Properties.Add(new ApiMemberModel
                 {
                     Name = property.Name,
-                    DisplayName = property.Name
+                    DisplayName = property.Name,
+                    DocumentationSignature = BuildDocumentationPropertySignature(property),
+                    Parameters = property.GetIndexParameters()
+                        .Select(BuildParameterModel)
+                        .ToList()
                 });
             }
 
@@ -327,20 +331,9 @@ public static partial class WebApiDocsGenerator
 
     private static ApiMemberModel? FindPropertyModel(List<ApiMemberModel> members, PropertyInfo property)
     {
-        var candidates = members
-            .Where(member => string.Equals(member.Name, property.Name, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        if (candidates.Count == 0)
-            return null;
-
-        var parameters = property.GetIndexParameters();
-        foreach (var candidate in candidates)
-        {
-            if (candidate.Parameters.Count != parameters.Length) continue;
-            if (ParamsMatch(candidate.Parameters, parameters)) return candidate;
-        }
-
-        return null;
+        var signature = BuildDocumentationPropertySignature(property);
+        return members.FirstOrDefault(candidate =>
+            string.Equals(candidate.DocumentationSignature, signature, StringComparison.Ordinal));
     }
 
     private static bool ParamsMatch(List<ApiParameterModel> parameters, ParameterInfo[] infos)
@@ -402,6 +395,16 @@ public static partial class WebApiDocsGenerator
             name,
             method.GetParameters().Select(parameter => GetDocumentationTypeName(parameter.ParameterType)).ToArray(),
             conversionReturnType);
+    }
+
+    private static string BuildDocumentationPropertySignature(PropertyInfo property)
+    {
+        return BuildDocumentationMethodSignature(
+            property.Name,
+            property.GetIndexParameters()
+                .Select(parameter => GetDocumentationTypeName(parameter.ParameterType))
+                .ToArray(),
+            conversionReturnType: null);
     }
 
     private static string BuildDocumentationMethodSignature(
@@ -608,6 +611,7 @@ public static partial class WebApiDocsGenerator
     private static void FillPropertyMember(ApiMemberModel member, PropertyInfo property, Type declaring)
     {
         member.Kind = "Property";
+        member.DocumentationSignature = BuildDocumentationPropertySignature(property);
         member.ReturnType = GetReadableTypeName(property.PropertyType);
         member.Signature = BuildPropertySignature(property);
         member.IsStatic = (property.GetMethod ?? property.SetMethod)?.IsStatic == true;
@@ -620,6 +624,20 @@ public static partial class WebApiDocsGenerator
         member.Modifiers.AddRange(GetPropertyModifiers(property));
         if (string.IsNullOrWhiteSpace(member.DisplayName))
             member.DisplayName = property.Name;
+
+        var parameters = property.GetIndexParameters();
+        if (member.Parameters.Count == 0)
+        {
+            member.Parameters = parameters.Select(BuildParameterModel).ToList();
+        }
+        else
+        {
+            for (var i = 0; i < parameters.Length; i++)
+            {
+                if (i >= member.Parameters.Count) break;
+                ApplyParameterMetadata(member.Parameters[i], parameters[i]);
+            }
+        }
     }
 
     private static void FillFieldMember(ApiMemberModel member, FieldInfo field, Type declaring)

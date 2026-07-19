@@ -682,7 +682,9 @@ public static partial class WebApiDocsGenerator
                     ["displayName"] = p.DisplayName,
                     ["summary"] = p.Summary,
                     ["kind"] = p.Kind,
-                    ["signature"] = p.Signature,
+                    ["signature"] = string.IsNullOrWhiteSpace(p.Signature)
+                        ? BuildSignature(p, "Properties")
+                        : p.Signature,
                     ["returnType"] = p.ReturnType,
                     ["declaringType"] = p.DeclaringType,
                     ["source"] = BuildSourceJson(p.Source),
@@ -700,7 +702,19 @@ public static partial class WebApiDocsGenerator
                         ["type"] = ex.Type,
                         ["summary"] = ex.Summary
                     }).ToList(),
-                    ["seeAlso"] = p.SeeAlso
+                    ["seeAlso"] = p.SeeAlso,
+                    ["parameters"] = p.Parameters.Select(parameter => new Dictionary<string, object?>
+                    {
+                        ["name"] = parameter.Name,
+                        ["type"] = parameter.Type,
+                        ["summary"] = parameter.Summary,
+                        ["aliases"] = parameter.Aliases,
+                        ["possibleValues"] = parameter.PossibleValues,
+                        ["isOptional"] = parameter.IsOptional,
+                        ["defaultValue"] = parameter.DefaultValue,
+                        ["position"] = parameter.Position,
+                        ["pipelineInput"] = parameter.PipelineInput
+                    }).ToList()
                 }).ToList(),
                 ["fields"] = type.Fields.Select(f => new Dictionary<string, object?>
                 {
