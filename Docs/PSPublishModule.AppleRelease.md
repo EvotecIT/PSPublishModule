@@ -104,10 +104,10 @@ Set-AppStoreConnectVersionBuild -IssuerId $issuerId -KeyId $keyId -PrivateKeyPat
 
 ## Unified Release Flow
 
-Apple app archive/upload targets can also live in the same `powerforge.release.json`
-used for modules, NuGet packages, downloadable tools, Winget manifests, and GitHub
-release assets. This is the preferred shape for apps such as Tactra or BayManager
-that need one release file to describe iPhone, iPad, macOS, and store-delivery lanes.
+Apple targets live in the same `powerforge.release.json` used for the rest of a
+PowerForge release. Keep action flags disabled in the committed file and select one
+named action per run. This prevents a status check or metadata update from accidentally
+submitting a version.
 
 ```json
 {
@@ -119,12 +119,31 @@ that need one release file to describe iPhone, iPad, macOS, and store-delivery l
     "ArchiveRoot": "Artifacts/Apple/Archives",
     "ExportRoot": "Artifacts/Apple/Exports",
     "TeamId": "8ZPGZ79T7J",
+    "Archive": false,
     "Upload": false,
-    "PrepareDistribution": true,
-    "SelectBuildForDistribution": true,
-    "SyncAppInfo": true,
+    "PrepareDistribution": false,
+    "SyncMetadata": false,
+    "SyncAppInfo": false,
+    "SyncScreenshots": false,
+    "ReplaceScreenshots": true,
+    "CheckReleaseReadiness": false,
+    "DistributeTestFlight": false,
+    "SubmitTestFlightBetaReview": false,
+    "SubmitForReview": false,
+    "ReleaseApprovedVersion": false,
+    "Automation": {
+      "WriteReceipt": true,
+      "ReceiptPath": "build/powerforge/apple/release-receipt.json",
+      "Resume": true,
+      "WaitForProcessing": true,
+      "ProcessingTimeoutSeconds": 1800,
+      "PollIntervalSeconds": 20,
+      "MinimumFreeSpaceGB": 20,
+      "CleanupBeforeArchive": true,
+      "CleanupAfterProcessing": true,
+      "ArtifactRetentionDays": 7
+    },
     "AppInfoConfigPath": "build/appstore-metadata/app-info.json",
-    "SyncScreenshots": true,
     "ScreenshotConfigPaths": [
       "build/appstore-screenshots/ios.json",
       "build/appstore-screenshots/macos.json"
@@ -134,68 +153,89 @@ that need one release file to describe iPhone, iPad, macOS, and store-delivery l
     "AppStoreConnectApiIssuerId": "00000000-0000-0000-0000-000000000000",
     "Apps": [
       {
-        "Name": "Tactra iPhone",
-        "BundleId": "com.evotecit.tactra",
+        "Name": "Example iOS and iPadOS",
+        "BundleId": "com.example.product",
         "AppStoreConnectAppId": "1234567890",
         "Platform": "iOS",
-        "ProjectPath": "Tactra.xcodeproj",
-        "Scheme": "Tactra"
+        "ProjectPath": "Product.xcodeproj",
+        "Scheme": "Product"
       },
       {
-        "Name": "Tactra iPad",
-        "BundleId": "com.evotecit.tactra",
-        "AppStoreConnectAppId": "1234567890",
-        "Platform": "iPadOS",
-        "ProjectPath": "Tactra.xcodeproj",
-        "Scheme": "Tactra"
-      },
-      {
-        "Name": "Tactra Mac",
-        "BundleId": "com.evotecit.tactra.mac",
+        "Name": "Example Mac",
+        "BundleId": "com.example.product",
         "AppStoreConnectAppId": "1234567890",
         "Platform": "macOS",
-        "ProjectPath": "Tactra.xcodeproj",
-        "Scheme": "TactraMac"
+        "ProjectPath": "Product.xcodeproj",
+        "Scheme": "ProductMac"
       }
     ]
   }
 }
 ```
 
-Plan first:
+Start with a read-only status receipt:
 
-```powershell
-Invoke-PowerForgeRelease -ConfigPath '.\powerforge.release.json' -Plan
+```text
+powerforge release --config powerforge.release.json --apple-action Status --summary --output json
 ```
 
-Archive without uploading:
+Use the same entry point for each transition:
 
-```powershell
-Invoke-PowerForgeRelease -ConfigPath '.\powerforge.release.json'
+| Action | Result |
+| --- | --- |
+| `Status` | Reads the exact configured version/build and recommends the next action. |
+| `Archive` | Creates signed archives without uploading. |
+| `Upload` | Archives, uploads, waits for processing, and resumes an exact remote build when possible. |
+| `UploadExisting` | Uploads existing archives and uses the same resume/wait behavior. |
+| `Prepare` | Creates/updates versions, metadata, app information, build selection, and readiness. |
+| `Screenshots` | Validates and syncs configured screenshot sets as a separate, deliberate transition. |
+| `TestFlight` | Assigns the processed build to configured groups and testers. |
+| `SubmitTestFlightReview` | Submits external TestFlight distribution for Beta App Review. |
+| `SubmitAppReview` | Submits a ready App Store version for App Review. |
+| `Release` | Publishes a version waiting for developer release. |
+| `Cleanup` | Removes stale files only from configured archive/export roots. |
+
+Plan a mutating action before running it:
+
+```text
+powerforge release --config powerforge.release.json --apple-action Upload --plan
+powerforge release --config powerforge.release.json --apple-action Upload --summary --output json
 ```
 
-Upload to App Store Connect by setting `AppleApps.Upload` to `true`, or by keeping a
-separate release config for the store lane. The unified flow reuses the same archive
-and `xcodebuild -exportArchive` helpers as `New-AppleAppArchive` and
-`Publish-AppleAppArchive`; it does not duplicate signing or upload behavior.
-`-ToolsOnly` intentionally runs downloadable tool targets only and skips `AppleApps`.
+`SubmitTestFlightReview`, `SubmitAppReview`, and `Release` require
+`--confirm-apple-action`. `Screenshots` also requires confirmation when
+`ReplaceScreenshots=true`. The PowerShell surface uses the same actions:
+
+```powershell
+Invoke-PowerForgeRelease `
+    -ConfigPath '.\powerforge.release.json' `
+    -AppleAction SubmitAppReview `
+    -ConfirmAppleAction
+```
+
+The receipt is the handoff between people, CI, and agents. It records the target,
+version/build, processing and review states, selected-build state, performed/skipped
+steps, bounded cleanup, and policy-aware next actions. `readinessChecked=false` means
+the read-only status action did not query metadata or screenshot readiness; run
+`Prepare` or `Screenshots` for those checks. The persisted receipt uses its configured
+project-relative path and never contains API credentials. A rerun with `Resume=true`
+checks the exact remote version/build before rebuilding or uploading.
+
+Projects generated by XcodeGen can set `GenerateProjectIfMissing` on a target. PowerForge
+then runs `xcodegen generate` from the directory containing `project.yml` before an
+archive action. This keeps project-generation logic out of consumer scripts.
 
 ## Current Boundary
 
-These helpers automate signed binary archive/upload, App Store version preparation,
-processed build selection, version metadata, app-level App Information, and screenshot
-sync. `AppleApps.PrepareDistribution`
-creates the App Store version when needed, finds the matching uploaded build by
-marketing version/build number/platform, and attaches it once App Store Connect reports
-the build as `VALID`. `AppleApps.SyncAppInfo` updates localized app-level fields such as
-the name, subtitle, and privacy policy URL from `AppInfoConfigPath` or
-`AppInfoConfigPaths`. `AppleApps.SyncScreenshots` runs the same screenshot sync engine
-from the unified release flow for matching screenshot config files.
+PowerForge owns archive/upload, bounded build processing waits, Distribution
+preparation, metadata and screenshot sync, build selection, TestFlight distribution,
+review submission, approved-version release, status receipts, and local artifact
+cleanup. Apple still owns processing and review decisions. Pricing and phased-release
+configuration remain explicit App Store Connect operations.
 
-Pricing, phased release controls, and final approved-version release decisions remain
-explicit App Store Connect operations. Keep `SubmitForReview` and
-`ReleaseApprovedVersion` disabled in committed consumer configuration until the release
-run is intentionally performing those actions.
+Keep every mutating action flag disabled in committed consumer configuration. Named
+actions override those flags for one run, and the three review/release transitions stay
+behind explicit confirmation.
 
 ## App Information Metadata
 

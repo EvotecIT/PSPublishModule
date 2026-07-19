@@ -81,6 +81,8 @@ namespace PowerForge.Cli;
 [JsonSerializable(typeof(PowerForgeReleaseSpec))]
 [JsonSerializable(typeof(PowerForgeReleaseResult))]
 [JsonSerializable(typeof(PowerForgeReleaseRequest))]
+[JsonSerializable(typeof(PowerForgeAppleReleaseReceipt))]
+[JsonSerializable(typeof(AppleReleaseCliPlanSummary))]
 [JsonSerializable(typeof(PowerForgeWingetManifestArtifact))]
 [JsonSerializable(typeof(PowerForgeWingetSubmissionPlan))]
 [JsonSerializable(typeof(PowerForgeWingetSubmissionResult))]

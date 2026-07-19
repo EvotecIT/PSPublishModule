@@ -131,4 +131,18 @@ internal sealed class PowerForgeReleaseInvocationOptions
     public int? WingetSubmitTimeoutSeconds { get; set; }
 
     public Dictionary<string, string> InstallerMsBuildProperties { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public PowerForgeAppleReleaseAction AppleAction { get; set; } = PowerForgeAppleReleaseAction.Configured;
+
+    public bool AppleActionConfirmed { get; set; }
+
+    public bool? AppleResume { get; set; }
+
+    public bool? AppleWaitForProcessing { get; set; }
+
+    public int? AppleProcessingTimeoutSeconds { get; set; }
+
+    public int? ApplePollIntervalSeconds { get; set; }
+
+    public bool AppleSummaryOnly { get; set; }
 }

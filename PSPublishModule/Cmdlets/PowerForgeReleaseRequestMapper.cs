@@ -28,6 +28,8 @@ internal static class PowerForgeReleaseRequestMapper
         request.ModuleSignModule = ChooseBool(request.ModuleSignModule, options.ModuleSignModule);
         request.KeepSymbols = ChooseBool(request.KeepSymbols, options.KeepSymbols);
         request.EnableSigning = ChooseBool(request.EnableSigning, options.EnableSigning);
+        request.AppleResume = ChooseBool(request.AppleResume, options.AppleResume);
+        request.AppleWaitForProcessing = ChooseBool(request.AppleWaitForProcessing, options.AppleWaitForProcessing);
 
         request.SkipWorkspaceValidation = request.SkipWorkspaceValidation || options.SkipWorkspaceValidation;
         request.SkipRestore = request.SkipRestore || options.SkipRestore;
@@ -57,6 +59,11 @@ internal static class PowerForgeReleaseRequestMapper
         request.PackageSignThumbprint = ChooseString(request.PackageSignThumbprint, options.PackageSignThumbprint);
         request.PackageSignStore = ChooseString(request.PackageSignStore, options.PackageSignStore);
         request.PackageSignTimestampUrl = ChooseString(request.PackageSignTimestampUrl, options.PackageSignTimestampUrl);
+        request.AppleAction = options.AppleAction;
+        request.AppleActionConfirmed = options.AppleActionConfirmed;
+        request.AppleProcessingTimeoutSeconds = options.AppleProcessingTimeoutSeconds ?? request.AppleProcessingTimeoutSeconds;
+        request.ApplePollIntervalSeconds = options.ApplePollIntervalSeconds ?? request.ApplePollIntervalSeconds;
+        request.AppleSummaryOnly = options.AppleSummaryOnly;
         request.SubmitWinget = ChooseBool(request.SubmitWinget, options.SubmitWinget);
         request.WingetSubmitToolPath = ChooseString(request.WingetSubmitToolPath, options.WingetSubmitToolPath);
         request.WingetSubmitTokenFilePath = ChooseString(request.WingetSubmitTokenFilePath, options.WingetSubmitTokenFilePath);
@@ -171,7 +178,14 @@ internal static class PowerForgeReleaseRequestMapper
             Styles = source.Styles.ToArray(),
             Flavors = source.Flavors.ToArray(),
             ToolOutputs = source.ToolOutputs.ToArray(),
-            SkipToolOutputs = source.SkipToolOutputs.ToArray()
+            SkipToolOutputs = source.SkipToolOutputs.ToArray(),
+            AppleAction = source.AppleAction,
+            AppleActionConfirmed = source.AppleActionConfirmed,
+            AppleResume = source.AppleResume,
+            AppleWaitForProcessing = source.AppleWaitForProcessing,
+            AppleProcessingTimeoutSeconds = source.AppleProcessingTimeoutSeconds,
+            ApplePollIntervalSeconds = source.ApplePollIntervalSeconds,
+            AppleSummaryOnly = source.AppleSummaryOnly
         };
     }
 

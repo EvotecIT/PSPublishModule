@@ -222,6 +222,18 @@ public sealed class AppleAppConfiguration
 
     /// <summary>Build number policy used when preparing the local Xcode project.</summary>
     public AppleBuildNumberPolicy BuildNumberPolicy { get; set; } = AppleBuildNumberPolicy.KeepExisting;
+
+    /// <summary>Generate a missing Xcode project from project.yml before archive creation.</summary>
+    public bool GenerateProjectIfMissing { get; set; }
+
+    /// <summary>Regenerate the Xcode project even when it already exists.</summary>
+    public bool RegenerateProject { get; set; }
+
+    /// <summary>XcodeGen executable used for project generation.</summary>
+    public string XcodeGenExecutable { get; set; } = "xcodegen";
+
+    /// <summary>Maximum XcodeGen execution time in seconds.</summary>
+    public int ProjectGenerationTimeoutSeconds { get; set; } = 120;
 }
 
 /// <summary>
