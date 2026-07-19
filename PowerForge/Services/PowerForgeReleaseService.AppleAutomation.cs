@@ -321,7 +321,21 @@ internal sealed partial class PowerForgeReleaseService
             var review = platform?.ReviewSubmissions.FirstOrDefault(static value => value.IsSubmitted == true) ??
                          platform?.ReviewSubmissions.FirstOrDefault();
             (string? MarketingVersion, string? BuildNumber) values = (null, null);
-            if (plan.Action != PowerForgeAppleReleaseAction.Cleanup)
+            if (plan.Action == PowerForgeAppleReleaseAction.Archive)
+            {
+                try
+                {
+                    var resolved = ResolveAppleDistributionValues(app, result?.VersionUpdate);
+                    values = (resolved.MarketingVersion, resolved.BuildNumber);
+                }
+                catch
+                {
+                    values = (
+                        result?.VersionUpdate?.After.MarketingVersion ?? app.MarketingVersion,
+                        result?.VersionUpdate?.After.BuildNumber ?? app.BuildNumber);
+                }
+            }
+            else if (plan.Action != PowerForgeAppleReleaseAction.Cleanup)
             {
                 try
                 {

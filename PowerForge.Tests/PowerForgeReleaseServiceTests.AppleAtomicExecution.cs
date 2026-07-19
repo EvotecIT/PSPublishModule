@@ -124,6 +124,79 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void Execute_AppleArchive_WorkspaceWithoutReleaseIdentityWritesSuccessfulReceipt()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "CasaRay.xcworkspace"));
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var app = Assert.Single(spec.AppleApps!.Apps);
+            app.ProjectPath = "CasaRay.xcworkspace";
+            app.MarketingVersion = null;
+            app.BuildNumber = null;
+
+            var result = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("Archive action should not query App Store Connect."),
+                    archiveAppleApp: CreateSuccessfulArchive)
+                .Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Archive
+                    });
+
+            Assert.True(result.Success);
+            var target = Assert.Single(Assert.IsType<PowerForgeAppleReleaseReceipt>(result.AppleReceipt).Targets);
+            Assert.True(target.ArchiveCreated);
+            Assert.Null(target.Version);
+            Assert.Null(target.Build);
+            Assert.Null(target.ErrorMessage);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleArchive_ProjectIdentityIsRetainedInReceipt()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+
+            var result = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("Archive action should not query App Store Connect."),
+                    archiveAppleApp: CreateSuccessfulArchive)
+                .Execute(
+                    CreateAppleAutomationSpec(root, keyPath),
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Archive
+                    });
+
+            Assert.True(result.Success);
+            var target = Assert.Single(Assert.IsType<PowerForgeAppleReleaseReceipt>(result.AppleReceipt).Targets);
+            Assert.True(target.ArchiveCreated);
+            Assert.Equal("1.2.0", target.Version);
+            Assert.Equal("9", target.Build);
+            Assert.Null(target.ErrorMessage);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private static PowerForgeReleaseSpec CreateTwoTargetAppleSpec(string root, string keyPath)
     {
         var spec = CreateAppleAutomationSpec(root, keyPath);
