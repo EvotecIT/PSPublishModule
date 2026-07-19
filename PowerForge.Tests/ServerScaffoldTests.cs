@@ -422,6 +422,14 @@ public sealed class ServerScaffoldTests
         invalidSystemdName["systemd"]!["timers"]![0]!["name"] = "--help.timer";
         Assert.False(EvaluateSchema(schema, invalidSystemdName));
 
+        var serviceWithTimerSuffix = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        serviceWithTimerSuffix["systemd"]!["services"]![0]!["name"] = "cleanup.timer";
+        Assert.False(EvaluateSchema(schema, serviceWithTimerSuffix));
+
+        var timerWithServiceSuffix = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        timerWithServiceSuffix["systemd"]!["timers"]![0]!["name"] = "cleanup.service";
+        Assert.False(EvaluateSchema(schema, timerWithServiceSuffix));
+
         var whitespaceCommand = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
         whitespaceCommand["deploy"]!["commands"]![0]!["command"] = "   ";
         Assert.False(EvaluateSchema(schema, whitespaceCommand));

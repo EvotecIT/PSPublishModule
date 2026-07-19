@@ -361,11 +361,21 @@
       "properties": {
         "services": {
           "type": "array",
-          "items": { "$ref": "#/$defs/SystemdUnit" }
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/SystemdUnit" },
+              { "properties": { "name": { "pattern": "\\.service$" } } }
+            ]
+          }
         },
         "timers": {
           "type": "array",
-          "items": { "$ref": "#/$defs/SystemdUnit" }
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/SystemdUnit" },
+              { "properties": { "name": { "pattern": "\\.timer$" } } }
+            ]
+          }
         }
       }
     },
