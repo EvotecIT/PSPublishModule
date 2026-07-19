@@ -7,7 +7,11 @@ internal static partial class Program
     private const string ReleaseUsage =
         "Usage: powerforge release [--config <release.json>] [--plan] [--validate] [--packages-only] [--module-only] [--tools-only] [--apple-action <Configured|Status|Archive|Upload|UploadExisting|Prepare|Screenshots|TestFlight|SubmitTestFlightReview|SubmitAppReview|Release|Cleanup>] [--confirm-apple-action] [--apple-resume|--no-apple-resume] [--apple-wait|--no-apple-wait] [--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>] [--summary] [--configuration <Release|Debug>] [--module-no-dotnet-build] [--module-version <version>] [--module-prerelease-tag <tag>] [--module-no-sign] [--module-sign] [--skip-workspace-validation] [--workspace-config <workspace.validation.json>] [--workspace-profile <name>] [--workspace-testimox-root <path>] [--workspace-enable-feature <name[,name...]>] [--workspace-disable-feature <name[,name...]>] [--publish-nuget] [--publish-project-github] [--publish-tool-github] [--submit-winget] [--skip-winget-submit] [--winget-submit-mode <Manifest|Update>] [--winget-tool-path <path>] [--winget-token-env <name>] [--winget-token-file <path>] [--winget-pr-title <text>] [--winget-open-browser] [--winget-replace [version]] [--winget-allow-interactive-auth] [--winget-timeout-seconds <seconds>] [--skip-restore] [--skip-build] [--output-root <path>] [--stage-root <path>] [--manifest-json <path>] [--allow-output-outside-project-root] [--allow-manifest-outside-project-root] [--checksums-path <path>] [--skip-release-checksums] [--keep-symbols] [--sign] [--sign-profile <name>] [--sign-tool-path <path>] [--sign-thumbprint <sha1>] [--sign-subject-name <name>] [--sign-on-missing-tool <Warn|Fail|Skip>] [--sign-on-failure <Warn|Fail|Skip>] [--sign-timeout-seconds <seconds>] [--sign-timestamp-url <url>] [--sign-description <text>] [--sign-url <url>] [--sign-csp <name>] [--sign-key-container <name>] [--package-sign-thumbprint <sha1>] [--package-sign-store <CurrentUser|LocalMachine>] [--package-sign-timestamp-url <url>] [--installer-property <Name=Value>] [--tool-output <Tool|Portable|Installer|Store>[,<...>]] [--skip-tool-output <...>] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|FrameworkDependent|AotSpeed|AotSize>[,<...>]] [--flavor <SingleContained|SingleFx|Portable|Fx>[,<...>]] [--output json]";
 
-    private static int CommandRelease(string[] filteredArgs, CliOptions cli, ILogger logger)
+    private static int CommandRelease(
+        string[] filteredArgs,
+        CliOptions cli,
+        ILogger logger,
+        string commandName = "release")
     {
         var argv = filteredArgs.Skip(1).ToArray();
         var outputJson = IsJsonOutput(argv);
@@ -18,7 +22,7 @@ internal static partial class Program
                 WriteJson(new CliJsonEnvelope
                 {
                     SchemaVersion = OutputSchemaVersion,
-                    Command = "release",
+                    Command = commandName,
                     Success = true,
                     ExitCode = 0,
                     Result = JsonSerializer.SerializeToElement(new { usage = ReleaseUsage })
@@ -41,7 +45,7 @@ internal static partial class Program
         var scopedCount = (packagesOnly ? 1 : 0) + (moduleOnly ? 1 : 0) + (toolsOnly ? 1 : 0);
         if (scopedCount > 1)
         {
-            return WriteReleaseError(outputJson, "release", 2, "Use at most one of --packages-only, --module-only, or --tools-only.", logger);
+            return WriteReleaseError(outputJson, commandName, 2, "Use at most one of --packages-only, --module-only, or --tools-only.", logger);
         }
 
         var configPath = TryGetOptionValue(argv, "--config");
@@ -55,7 +59,7 @@ internal static partial class Program
                 WriteJson(new CliJsonEnvelope
                 {
                     SchemaVersion = OutputSchemaVersion,
-                    Command = "release",
+                    Command = commandName,
                     Success = false,
                     ExitCode = 2,
                     Error = "Missing --config and no default release config found."
@@ -88,7 +92,7 @@ internal static partial class Program
                 WriteJson(new CliJsonEnvelope
                 {
                     SchemaVersion = OutputSchemaVersion,
-                    Command = "release",
+                    Command = commandName,
                     Success = result.Success,
                     ExitCode = exitCode,
                     Error = result.ErrorMessage,
@@ -248,7 +252,7 @@ internal static partial class Program
         }
         catch (Exception ex)
         {
-            return WriteReleaseError(outputJson, "release", 1, ex.Message, logger);
+            return WriteReleaseError(outputJson, commandName, 1, ex.Message, logger);
         }
     }
 

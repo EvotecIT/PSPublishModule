@@ -117,14 +117,18 @@ public sealed partial class PowerForgeReleaseServiceTests
             WriteAppInfoConfig(root, includeAppId: false);
             var service = CreateAppInfoReleaseService(new List<AppStoreConnectReleasePreparationRequest>());
 
-            var exception = Assert.Throws<InvalidOperationException>(() => service.Execute(
+            var result = service.Execute(
                 CreateAppInfoReleaseSpec(keyPath),
                 new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json")
-                }));
+                });
 
-            Assert.Contains("must declare AppId", exception.Message, StringComparison.Ordinal);
+            Assert.False(result.Success);
+            Assert.Contains(
+                "must declare AppId",
+                Assert.IsType<string>(Assert.Single(result.AppleReceipt!.Targets).ErrorMessage),
+                StringComparison.Ordinal);
         }
         finally
         {
@@ -197,14 +201,18 @@ public sealed partial class PowerForgeReleaseServiceTests
             WriteAppInfoConfig(root, "app-info.json", "app-2", "en-US");
             var service = CreateAppInfoReleaseService(new List<AppStoreConnectReleasePreparationRequest>());
 
-            var exception = Assert.Throws<InvalidOperationException>(() => service.Execute(
+            var result = service.Execute(
                 CreateAppInfoReleaseSpec(keyPath),
                 new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json")
-                }));
+                });
 
-            Assert.Contains("No App Information metadata config matches", exception.Message, StringComparison.Ordinal);
+            Assert.False(result.Success);
+            Assert.Contains(
+                "No App Information metadata config matches",
+                Assert.IsType<string>(Assert.Single(result.AppleReceipt!.Targets).ErrorMessage),
+                StringComparison.Ordinal);
         }
         finally
         {

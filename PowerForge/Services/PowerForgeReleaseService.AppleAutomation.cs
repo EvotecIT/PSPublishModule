@@ -9,7 +9,7 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeAppleReleaseOptions? options,
         PowerForgeReleaseRequest request)
     {
-        if (request.AppleAction == PowerForgeAppleReleaseAction.Configured)
+        if (request.AppleAction == PowerForgeAppleReleaseAction.Configured && options is null)
             return;
         if (options is null)
             throw new InvalidOperationException("The selected Apple action requires an AppleApps release configuration.");
@@ -22,6 +22,8 @@ internal sealed partial class PowerForgeReleaseService
                 $"Apple action '{request.AppleAction}' requires explicit confirmation. " +
                 "Use --confirm-apple-action or PowerShell -ConfirmAppleAction after reviewing the compact status receipt.");
         }
+        if (request.AppleAction == PowerForgeAppleReleaseAction.Configured)
+            return;
 
         options.Archive = false;
         options.Upload = false;
@@ -82,7 +84,12 @@ internal sealed partial class PowerForgeReleaseService
     private static bool RequiresExplicitConfirmation(
         PowerForgeAppleReleaseAction action,
         PowerForgeAppleReleaseOptions options)
-        => action == PowerForgeAppleReleaseAction.SubmitTestFlightReview ||
+        => (action == PowerForgeAppleReleaseAction.Configured &&
+            (options.SubmitTestFlightBetaReview ||
+             options.SubmitForReview ||
+             options.ReleaseApprovedVersion ||
+             (options.SyncScreenshots && options.ReplaceScreenshots))) ||
+           action == PowerForgeAppleReleaseAction.SubmitTestFlightReview ||
            action == PowerForgeAppleReleaseAction.SubmitAppReview ||
            action == PowerForgeAppleReleaseAction.Release ||
            (action == PowerForgeAppleReleaseAction.Screenshots && options.ReplaceScreenshots);
@@ -117,9 +124,12 @@ internal sealed partial class PowerForgeReleaseService
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var candidate = Path.GetFullPath(path)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (!candidate.Equals(root, StringComparison.OrdinalIgnoreCase) &&
-            !candidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
-            !candidate.StartsWith(root + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        var comparison = Path.DirectorySeparatorChar == '\\'
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (!candidate.Equals(root, comparison) &&
+            !candidate.StartsWith(root + Path.DirectorySeparatorChar, comparison) &&
+            !candidate.StartsWith(root + Path.AltDirectorySeparatorChar, comparison))
         {
             throw new InvalidOperationException($"{settingName} must remain inside AppleApps.ProjectRoot.");
         }
@@ -137,11 +147,13 @@ internal sealed partial class PowerForgeReleaseService
         var platform = AssertSinglePlatformState(state, app);
         if (platform.MatchedBuild is null)
             return false;
-        if (string.Equals(platform.MatchedBuild.ProcessingState, "INVALID", StringComparison.OrdinalIgnoreCase))
+        if (IsTerminalAppleBuildFailure(platform.MatchedBuild.ProcessingState))
         {
-            throw new InvalidOperationException(
-                $"App Store Connect already contains invalid build {state.VersionString} ({state.BuildNumber}) for '{app.Name}'. " +
-                "Increment the build number before uploading again.");
+            throw new AppleBuildProcessingException(
+                $"App Store Connect already contains build {state.VersionString} ({state.BuildNumber}) " +
+                $"in terminal processing state '{platform.MatchedBuild.ProcessingState}' for '{app.Name}'. " +
+                "Diagnose the processing failure and increment the build number before uploading again.",
+                state);
         }
 
         if (plan.Automation.WaitForProcessing &&
@@ -189,8 +201,13 @@ internal sealed partial class PowerForgeReleaseService
             var processingState = platform.MatchedBuild?.ProcessingState;
             if (string.Equals(processingState, "VALID", StringComparison.OrdinalIgnoreCase))
                 return state;
-            if (string.Equals(processingState, "INVALID", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException($"App Store Connect marked build {state.VersionString} ({state.BuildNumber}) invalid for '{app.Name}'.");
+            if (IsTerminalAppleBuildFailure(processingState))
+            {
+                throw new AppleBuildProcessingException(
+                    $"App Store Connect marked build {state.VersionString} ({state.BuildNumber}) " +
+                    $"as '{processingState}' for '{app.Name}'.",
+                    state);
+            }
             if (check == maximumChecks - 1)
                 break;
 
@@ -198,10 +215,17 @@ internal sealed partial class PowerForgeReleaseService
             state = ReadAppleReleaseState(plan, app);
         }
 
-        throw new TimeoutException(
+        throw new AppleBuildProcessingException(
             $"Timed out after {plan.Automation.ProcessingTimeoutSeconds} seconds waiting for " +
-            $"App Store Connect build processing for '{app.Name}'.");
+            $"App Store Connect build processing for '{app.Name}'.",
+            state);
     }
+
+    private static bool IsTerminalAppleBuildFailure(string? state)
+        => string.Equals(state, "INVALID", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(state, "FAILED", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(state, "ERROR", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(state, "REJECTED", StringComparison.OrdinalIgnoreCase);
 
     private static AppStoreConnectPlatformReleaseState AssertSinglePlatformState(
         AppStoreConnectReleaseStateResult state,
@@ -223,8 +247,19 @@ internal sealed partial class PowerForgeReleaseService
         {
             if (!resultByName.TryGetValue(app.Name, out var result))
                 continue;
-            if (remoteAction && result.RemoteState is null)
-                result.RemoteState = ReadAppleReleaseState(plan, app);
+            if (remoteAction && result.Success && result.RemoteState is null)
+            {
+                try
+                {
+                    result.RemoteState = ReadAppleReleaseState(plan, app);
+                }
+                catch (Exception exception)
+                {
+                    result.Success = false;
+                    result.ErrorMessage =
+                        $"Unable to read the final App Store Connect state for '{app.Name}': {exception.Message}";
+                }
+            }
         }
 
         if (IsUploadAction(plan.Action) &&
@@ -292,7 +327,7 @@ internal sealed partial class PowerForgeReleaseService
             CheckedAt = DateTimeOffset.UtcNow,
             Success = results.All(static result => result.Success),
             ErrorMessage = errors.Length == 0 ? null : string.Join(" ", errors),
-            ReceiptPath = Path.GetRelativePath(plan.ProjectRoot, plan.ReceiptPath).Replace('\\', '/'),
+            ReceiptPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, plan.ReceiptPath).Replace('\\', '/'),
             Targets = targets,
             Cleanup = cleanup,
             NextActions = targets
@@ -366,5 +401,18 @@ internal sealed partial class PowerForgeReleaseService
 
         using var client = new AppStoreConnectClient(request.Credential);
         return new AppStoreConnectReleaseStateService(client).GetAsync(request).GetAwaiter().GetResult();
+    }
+
+    private sealed class AppleBuildProcessingException : InvalidOperationException
+    {
+        internal AppleBuildProcessingException(
+            string message,
+            AppStoreConnectReleaseStateResult state)
+            : base(message)
+        {
+            State = state;
+        }
+
+        internal AppStoreConnectReleaseStateResult State { get; }
     }
 }

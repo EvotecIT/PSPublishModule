@@ -203,7 +203,8 @@ public sealed class AppStoreConnectReleasePreparationService
             VersionId = versionId,
             Platform = platform,
             Locale = source.Locale,
-            ScreenshotSets = source.ScreenshotSets
+            ScreenshotSets = source.ScreenshotSets,
+            Quality = source.Quality
         };
     }
 

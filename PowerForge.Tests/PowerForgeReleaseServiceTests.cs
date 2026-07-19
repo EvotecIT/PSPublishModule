@@ -1076,7 +1076,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 },
                 new PowerForgeReleaseRequest
                 {
-                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleActionConfirmed = true
                 });
 
             Assert.True(result.Success);
@@ -1239,7 +1240,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 },
                 new PowerForgeReleaseRequest
                 {
-                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleActionConfirmed = true
                 });
 
             Assert.True(result.Success);

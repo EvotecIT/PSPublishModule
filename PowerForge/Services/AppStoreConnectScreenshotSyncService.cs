@@ -49,6 +49,17 @@ public sealed class AppStoreConnectScreenshotSyncService
         if (duplicateDisplayTypes.Length > 0)
             throw new ArgumentException($"Duplicate screenshot display type mapping: {string.Join(", ", duplicateDisplayTypes)}", nameof(request));
 
+        var validation = new AppStoreConnectScreenshotSyncConfigValidator()
+            .Validate(spec, request.BaseDirectory);
+        if (!validation.IsValid)
+        {
+            var messages = validation.Messages
+                .Concat(validation.ScreenshotSets.SelectMany(static set => set.Messages))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+            throw new InvalidOperationException(
+                $"Screenshot preflight failed: {string.Join(" ", messages)}");
+        }
+
         var preflightedSets = spec.ScreenshotSets
             .Select(setSpec => PreflightScreenshotSet(request.BaseDirectory, setSpec))
             .ToArray();

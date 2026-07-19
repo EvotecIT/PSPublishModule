@@ -1,1 +1,3 @@
 Module/PSPublishModule.Tests.ps1 text eol=crlf
+Module/Docs/Invoke-PowerForgeRelease.md text eol=crlf whitespace=cr-at-eol
+Module/en-US/PSPublishModule-help.xml text eol=crlf whitespace=cr-at-eol
