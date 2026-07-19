@@ -341,12 +341,17 @@ public sealed partial class DotNetPublishPipelineRunner
         string? configuredName = installer.OutputName;
         if (string.IsNullOrWhiteSpace(configuredName) && hasVersion)
         {
-            var baseName = string.IsNullOrWhiteSpace(step.TargetName)
-                ? installer.Id
-                : step.TargetName;
             configuredName = string.Join(
                 "-",
-                new[] { baseName, step.Runtime, version }
+                new[]
+                {
+                    step.TargetName,
+                    installer.Id,
+                    step.Runtime,
+                    step.Framework,
+                    step.Style?.ToString(),
+                    version
+                }
                     .Where(static value => !string.IsNullOrWhiteSpace(value)));
         }
 

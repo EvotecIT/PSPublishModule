@@ -50,6 +50,34 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     }
 
     [Fact]
+    public void ResolveInstallerOutputName_DistinguishesInstallerAndMatrixVariants()
+    {
+        var plan = new DotNetPublishPlan { Configuration = "Release" };
+        var step = new DotNetPublishStep
+        {
+            TargetName = "app",
+            Runtime = "win-x64",
+            Framework = "net10.0",
+            Style = DotNetPublishStyle.PortableCompat
+        };
+
+        var perUser = DotNetPublishPipelineRunner.ResolveInstallerOutputName(
+            plan,
+            new DotNetPublishInstallerPlan { Id = "per-user" },
+            step,
+            "1.0.9638");
+        var perMachine = DotNetPublishPipelineRunner.ResolveInstallerOutputName(
+            plan,
+            new DotNetPublishInstallerPlan { Id = "per-machine" },
+            step,
+            "1.0.9638");
+
+        Assert.Equal("app-per-user-win-x64-net10.0-PortableCompat-1.0.9638", perUser);
+        Assert.Equal("app-per-machine-win-x64-net10.0-PortableCompat-1.0.9638", perMachine);
+        Assert.NotEqual(perUser, perMachine);
+    }
+
+    [Fact]
     public void ResolveInstallerOutputName_DerivesVersionedDefault()
     {
         var plan = new DotNetPublishPlan { Configuration = "Release" };
@@ -66,7 +94,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             step,
             "1.0.9638");
 
-        Assert.Equal("GraphEssentialsX.Sync.Service-win-x64-1.0.9638", outputName);
+        Assert.Equal("GraphEssentialsX.Sync.Service-syncse-win-x64-1.0.9638", outputName);
     }
 
     [Fact]
