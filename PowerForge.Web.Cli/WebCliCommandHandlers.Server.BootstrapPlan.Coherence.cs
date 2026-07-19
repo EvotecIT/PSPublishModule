@@ -4,9 +4,35 @@ internal static partial class WebCliCommandHandlers
 {
     internal static string BuildOperationLockInstallCommand(string path)
     {
+        var (configPath, configLine) = GetOperationLockTmpfilesDefinition(path);
+        return string.Join("; ",
+            "test -d '/etc/tmpfiles.d' && test ! -L '/etc/tmpfiles.d' && test \"$(stat -c '%U:%G' -- '/etc/tmpfiles.d')\" = 'root:root' || { echo 'systemd tmpfiles configuration directory is unsafe' >&2; exit 3; }",
+            "powerforge_tmpfiles_mode=$(stat -c '%a' -- '/etc/tmpfiles.d')",
+            "(( (8#$powerforge_tmpfiles_mode & 0022) == 0 )) || { echo 'systemd tmpfiles configuration directory must not be group/world writable' >&2; exit 3; }",
+            "powerforge_operation_lock_tmp_config=$(mktemp '/etc/tmpfiles.d/.powerforge-operation-lock.XXXXXX')",
+            "trap 'rm -f -- \"$powerforge_operation_lock_tmp_config\"' EXIT",
+            $"printf '%s\\n' {ShellQuote(configLine)} >\"$powerforge_operation_lock_tmp_config\"",
+            "chown root:root \"$powerforge_operation_lock_tmp_config\"",
+            "chmod 0644 \"$powerforge_operation_lock_tmp_config\"",
+            $"mv -Tf -- \"$powerforge_operation_lock_tmp_config\" {ShellQuote(configPath)}",
+            "trap - EXIT",
+            $"systemd-tmpfiles --create {ShellQuote(configPath)}",
+            BuildOperationLockPostcondition(path));
+    }
+
+    internal static (string Path, string Line) GetOperationLockTmpfilesDefinition(string path)
+    {
+        if (!IsValidOperationLockPath(path))
+            throw new InvalidOperationException($"Operation lock contains unsupported characters or location: {path}");
+
+        var lockName = path["/var/lock/".Length..^".lock".Length];
+        return ($"/etc/tmpfiles.d/powerforge-operation-lock-{lockName}.conf", $"f {path} 0644 root root -");
+    }
+
+    internal static string BuildOperationLockPostcondition(string path)
+    {
         var quoted = ShellQuote(path);
-        return $"if [ ! -e {quoted} ] && [ ! -L {quoted} ]; then install -T -o root -g root -m 0644 /dev/null {quoted}; fi; " +
-               $"test -f {quoted} && test ! -L {quoted} && " +
+        return $"test -f {quoted} && test ! -L {quoted} && " +
                $"test \"$(stat -c '%U:%G %a' -- {quoted})\" = 'root:root 644' || " +
                $"{{ echo {ShellQuote($"Operation lock must be a root-owned mode-644 regular file: {path}")} >&2; exit 3; }}";
     }
@@ -22,6 +48,7 @@ internal static partial class WebCliCommandHandlers
         for (var index = 0; index < locks.Length; index++)
         {
             var descriptor = $"powerforge_operation_lock_fd_{index + 1}";
+            commands.Add(BuildOperationLockPostcondition(locks[index]));
             commands.Add($"exec {{{descriptor}}}>{ShellQuote(locks[index])}");
             commands.Add(
                 $"flock -n \"${descriptor}\" || {{ echo {ShellQuote($"Another host operation holds recovery lock: {locks[index]}")} >&2; exit 3; }}");

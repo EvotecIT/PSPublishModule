@@ -542,16 +542,25 @@ internal static partial class WebCliCommandHandlers
 
         static string Raw(string value) => value;
         Func<string, string> format = quoteArguments ? ShellQuote : Raw;
+        var requiredFiles = captureFiles.Where(static file => file.Required).ToArray();
+        var optionalFiles = captureFiles.Where(static file => !file.Required).ToArray();
         var arguments = new List<string>
         {
             "/usr/local/sbin/powerforge-server-encrypted-capture",
             "--recipient",
             format(recipient)
         };
-        if (!captureFiles.Any(static file => file.Required))
+        if (requiredFiles.Length == 0)
             arguments.Add("--ignore-failed-read");
         arguments.Add("--");
-        arguments.AddRange(captureFiles.Select(file => format(file.Target)));
+        arguments.AddRange(requiredFiles.Length == 0
+            ? optionalFiles.Select(file => format(file.Target))
+            : requiredFiles.Select(file => format(file.Target)));
+        if (requiredFiles.Length > 0 && optionalFiles.Length > 0)
+        {
+            arguments.Add("--optional");
+            arguments.AddRange(optionalFiles.Select(file => format(file.Target)));
+        }
         return string.Join(' ', arguments);
     }
 

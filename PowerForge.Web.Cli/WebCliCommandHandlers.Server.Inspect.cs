@@ -293,8 +293,14 @@ internal static partial class WebCliCommandHandlers
         => $"sudo -n readlink -f {ShellQuote(path)}";
 
     internal static string BuildOperationLockCheckCommand(string path)
-        => $"sudo -n test -f {ShellQuote(path)} && sudo -n test ! -L {ShellQuote(path)} && " +
-           $"test \"$(sudo -n stat -c '%U:%G %a' -- {ShellQuote(path)})\" = 'root:root 644'";
+    {
+        var (configPath, configLine) = GetOperationLockTmpfilesDefinition(path);
+        return $"sudo -n test -f {ShellQuote(path)} && sudo -n test ! -L {ShellQuote(path)} && " +
+               $"test \"$(sudo -n stat -c '%U:%G %a' -- {ShellQuote(path)})\" = 'root:root 644' && " +
+               $"test -f {ShellQuote(configPath)} && test ! -L {ShellQuote(configPath)} && " +
+               $"test \"$(stat -c '%U:%G %a' -- {ShellQuote(configPath)})\" = 'root:root 644' && " +
+               $"test \"$(cat -- {ShellQuote(configPath)})\" = {ShellQuote(configLine)}";
+    }
 
     internal static string BuildManagedFileContentCheckCommand(string source, string target)
         => $"sudo -n cmp -s -- {ShellQuote(source)} {ShellQuote(target)}";

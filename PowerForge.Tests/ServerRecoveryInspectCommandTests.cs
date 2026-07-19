@@ -85,10 +85,12 @@ public sealed class ServerRecoveryInspectCommandTests
     [Fact]
     public void OperationLockChecksRequireExactRootOwnedRegularFile()
     {
-        Assert.Equal(
-            "sudo -n test -f '/var/lock/powerforge-site-example.lock' && sudo -n test ! -L '/var/lock/powerforge-site-example.lock' && " +
-            "test \"$(sudo -n stat -c '%U:%G %a' -- '/var/lock/powerforge-site-example.lock')\" = 'root:root 644'",
-            WebCliCommandHandlers.BuildOperationLockCheckCommand("/var/lock/powerforge-site-example.lock"));
+        var command = WebCliCommandHandlers.BuildOperationLockCheckCommand("/var/lock/powerforge-site-example.lock");
+
+        Assert.Contains("sudo -n test -f '/var/lock/powerforge-site-example.lock'", command, StringComparison.Ordinal);
+        Assert.Contains("root:root 644", command, StringComparison.Ordinal);
+        Assert.Contains("test -f '/etc/tmpfiles.d/powerforge-operation-lock-powerforge-site-example.conf'", command, StringComparison.Ordinal);
+        Assert.Contains("f /var/lock/powerforge-site-example.lock 0644 root root -", command, StringComparison.Ordinal);
     }
 
     [Theory]

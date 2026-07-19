@@ -146,6 +146,20 @@ public sealed class WebCliServerCaptureTests
     }
 
     [Fact]
+    public void BuildRemoteEncryptedTarScript_DistinguishesMixedOptionalPaths()
+    {
+        var script = WebCliCommandHandlers.BuildRemoteEncryptedTarScript(
+        [
+            new PowerForgeServerManagedFile { Target = "/var/lib/example/optional.env" },
+            new PowerForgeServerManagedFile { Target = "/etc/example/required.env", Required = true }
+        ], "age1example");
+
+        Assert.Equal(
+            "sudo -n /usr/local/sbin/powerforge-server-encrypted-capture --recipient 'age1example' -- '/etc/example/required.env' --optional '/var/lib/example/optional.env'",
+            script);
+    }
+
+    [Fact]
     public void BuildRemoteEncryptedCaptureSudoersCommand_FixesRecipientAndRejectsWildcards()
     {
         var command = WebCliCommandHandlers.BuildRemoteEncryptedCaptureSudoersCommand(
@@ -154,6 +168,13 @@ public sealed class WebCliServerCaptureTests
         ], "age1example");
 
         Assert.Equal("/usr/local/sbin/powerforge-server-encrypted-capture --recipient age1example -- /etc/example/required.env", command);
+        Assert.Equal(
+            "/usr/local/sbin/powerforge-server-encrypted-capture --recipient age1example -- /etc/example/required.env --optional /var/lib/example/optional.env",
+            WebCliCommandHandlers.BuildRemoteEncryptedCaptureSudoersCommand(
+            [
+                new PowerForgeServerManagedFile { Target = "/var/lib/example/optional.env" },
+                new PowerForgeServerManagedFile { Target = "/etc/example/required.env", Required = true }
+            ], "age1example"));
         Assert.Throws<InvalidOperationException>(() =>
             WebCliCommandHandlers.BuildRemoteEncryptedCaptureSudoersCommand(
             [
@@ -186,9 +207,11 @@ public sealed class WebCliServerCaptureTests
             "/var/lock/powerforge-site-example.lock"
         ]);
 
-        Assert.Equal(1, command.Split("powerforge-site-example.lock", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1, command.Split("flock -n '/var/lock/powerforge-site-example.lock'", StringSplitOptions.None).Length - 1);
         Assert.Contains("flock -n '/var/lock/powerforge-site-example.lock'", command, StringComparison.Ordinal);
         Assert.Contains("flock -n '/var/lock/powerforge-contact-example.lock'", command, StringComparison.Ordinal);
+        Assert.Contains("test -f '/var/lock/powerforge-site-example.lock'", command, StringComparison.Ordinal);
+        Assert.Contains("test -f '/var/lock/powerforge-contact-example.lock'", command, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_OPERATION_LOCKED", command, StringComparison.Ordinal);
         Assert.Contains("cat >/dev/null", command, StringComparison.Ordinal);
         Assert.Throws<InvalidOperationException>(() =>

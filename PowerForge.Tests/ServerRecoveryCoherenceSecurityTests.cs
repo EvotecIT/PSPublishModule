@@ -55,7 +55,7 @@ public sealed partial class ServerRecoverySecurityTests
                 new PowerForgeServerNamedCommand
                 {
                     Id = "deploy",
-                    Command = "sudo -n /usr/local/sbin/powerforge-site-deploy --site-id example"
+                    Command = "sudo -n /usr/local/sbin/powerforge-site-deploy --site example"
                 }
             ]
         };
@@ -69,6 +69,35 @@ public sealed partial class ServerRecoverySecurityTests
         Assert.Contains(engineOwnedErrors, error => error.Contains("avoid nested lock acquisition", StringComparison.Ordinal));
         Assert.Empty(commandOwnedErrors);
         Assert.Contains(multipleCommandErrors, error => error.Contains("exactly one non-sensitive deploy command", StringComparison.Ordinal));
+
+        manifest.Deploy.Commands =
+        [
+            new PowerForgeServerNamedCommand
+            {
+                Id = "deploy",
+                Command = "sudo -n /usr/local/sbin/powerforge-site-deploy --site other"
+            }
+        ];
+        var mismatchedLockErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+        manifest.OperationLocks =
+        [
+            "/var/lock/powerforge-site-other.lock",
+            "/var/lock/powerforge-contact-other.lock"
+        ];
+        var extraLockErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+        manifest.OperationLocks = ["/var/lock/powerforge-site-other.lock"];
+        manifest.Deploy.Commands[0].Command = "sudo -n /usr/local/sbin/powerforge-site-deploy --site-id other";
+        var nonCanonicalErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+        manifest.Deploy.Commands[0].Command = "sudo -n /usr/local/sbin/powerforge-site-deploy --site other --site example";
+        var duplicateSiteErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+        manifest.Deploy.Commands[0].Command = "sudo -n /usr/local/sbin/powerforge-site-deploy --site other; true";
+        var shellSyntaxErrors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(mismatchedLockErrors, error => error.Contains("requires exactly operationLocks", StringComparison.Ordinal));
+        Assert.Contains(extraLockErrors, error => error.Contains("requires exactly operationLocks", StringComparison.Ordinal));
+        Assert.Contains(nonCanonicalErrors, error => error.Contains("canonical", StringComparison.Ordinal));
+        Assert.Contains(duplicateSiteErrors, error => error.Contains("canonical", StringComparison.Ordinal));
+        Assert.Contains(shellSyntaxErrors, error => error.Contains("canonical", StringComparison.Ordinal));
     }
 
     [Fact]

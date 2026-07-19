@@ -464,7 +464,10 @@ public sealed class ServerRecoveryBootstrapPlanTests
         Assert.False(secret.Sensitive);
         Assert.False(cleanup.Sensitive);
         Assert.Contains("root:root 644", prepareOperationLock.Command, StringComparison.Ordinal);
+        Assert.Contains("/etc/tmpfiles.d/powerforge-operation-lock-powerforge-site-example.conf", prepareOperationLock.Command, StringComparison.Ordinal);
+        Assert.Contains("systemd-tmpfiles --create", prepareOperationLock.Command, StringComparison.Ordinal);
         Assert.Contains("flock -n \"$powerforge_operation_lock_fd_1\"", acquireOperationLocks.Command, StringComparison.Ordinal);
+        Assert.Contains("root:root 644", acquireOperationLocks.Command, StringComparison.Ordinal);
         Assert.Contains("/var/lib/powerforge/restore-secrets/", secret.Command, StringComparison.Ordinal);
         Assert.Contains("/srv/example/.deploy-key", secret.Command, StringComparison.Ordinal);
         Assert.Contains("ls-files --error-unmatch -- '.deploy-key'", secret.Command, StringComparison.Ordinal);
@@ -501,7 +504,7 @@ public sealed class ServerRecoveryBootstrapPlanTests
                     new PowerForge.Web.Cli.PowerForgeServerNamedCommand
                     {
                         Id = "deploy",
-                        Command = "sudo -n /usr/local/sbin/powerforge-site-deploy --site-id example"
+                        Command = "sudo -n /usr/local/sbin/powerforge-site-deploy --site example"
                     }
                 ]
             }

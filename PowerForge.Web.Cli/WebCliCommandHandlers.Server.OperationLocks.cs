@@ -13,6 +13,8 @@ internal static partial class WebCliCommandHandlers
 
         var builder = new StringBuilder("set -e; ");
         foreach (var path in locks)
+            builder.Append(BuildOperationLockPostcondition(path)).Append("; ");
+        foreach (var path in locks)
             builder.Append("flock -n ").Append(ShellQuote(path)).Append(' ');
         builder.Append("sh -c ").Append(ShellQuote("printf 'POWERFORGE_OPERATION_LOCKED\\n'; cat >/dev/null"));
         return builder.ToString();
