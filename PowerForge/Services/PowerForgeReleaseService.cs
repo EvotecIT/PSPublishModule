@@ -851,6 +851,14 @@ internal sealed partial class PowerForgeReleaseService
                 $"AppleApps target names must be unique. '{duplicateName.Key}' is configured more than once. " +
                 "Give each platform target a stable name so receipts and artifact paths cannot collide.");
         }
+        ValidateUniqueAppleArtifactPaths(
+            apps,
+            static app => app.ArchivePath,
+            "archive");
+        ValidateUniqueAppleArtifactPaths(
+            apps,
+            static app => app.ExportPath,
+            "export");
         var requiresAppStoreConnect = request.AppleAction == PowerForgeAppleReleaseAction.Status ||
                                       IsUploadAction(request.AppleAction) ||
                                       options.PrepareDistribution ||
@@ -1066,13 +1074,31 @@ internal sealed partial class PowerForgeReleaseService
         };
     }
 
+    private static void ValidateUniqueAppleArtifactPaths(
+        PowerForgeAppleAppReleaseTargetPlan[] apps,
+        Func<PowerForgeAppleAppReleaseTargetPlan, string> selector,
+        string artifactKind)
+    {
+        var collision = apps
+            .GroupBy(
+                app => Path.GetFullPath(selector(app))
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(static group => group.Count() > 1);
+        if (collision is null)
+            return;
+
+        throw new InvalidOperationException(
+            $"AppleApps target names produce the same {artifactKind} artifact path: {collision.Key}. " +
+            $"Choose names that remain unique after file-name normalization ({string.Join(", ", collision.Select(static app => app.Name))}).");
+    }
+
     private PowerForgeAppleAppReleaseResult[] RunAppleRelease(
         PowerForgeAppleReleasePlan plan,
         out PowerForgeAppleReleaseCleanupReceipt cleanup)
     {
         cleanup = new PowerForgeAppleReleaseCleanupReceipt();
         var preflightCompleted = false;
-        var results = new List<PowerForgeAppleAppReleaseResult>();
         var needsScreenshotSpecs = plan.SyncScreenshots ||
                                    plan.CheckReleaseReadiness ||
                                    (plan.SubmitForReview && !plan.SkipReviewReadinessCheck);
@@ -1103,6 +1129,7 @@ internal sealed partial class PowerForgeReleaseService
         var metadataByApp = new Dictionary<
             PowerForgeAppleAppReleaseTargetPlan,
             (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)?>();
+        var resumedByApp = new Dictionary<PowerForgeAppleAppReleaseTargetPlan, bool>();
         var preflightAttempted = new HashSet<PowerForgeAppleAppReleaseTargetPlan>();
 
         foreach (var app in plan.Apps)
@@ -1169,6 +1196,18 @@ internal sealed partial class PowerForgeReleaseService
                 metadataByApp[app] = matchingMetadataSpec;
                 if (matchingMetadataSpec is not null)
                     ValidateAppleMetadataPreflight(matchingMetadataSpec.Value);
+
+                var resumedUpload = TryResumeAppleUpload(plan, app, result);
+                resumedByApp[app] = resumedUpload;
+                if (plan.Upload &&
+                    !plan.Archive &&
+                    !resumedUpload &&
+                    !Directory.Exists(app.ArchivePath))
+                {
+                    throw new FileNotFoundException(
+                        $"Apple app archive was not found for upload-only release: {app.ArchivePath}",
+                        app.ArchivePath);
+                }
             }
             catch (Exception exception)
             {
@@ -1176,12 +1215,17 @@ internal sealed partial class PowerForgeReleaseService
                 {
                     var targetResult = resultsByApp[target];
                     targetResult.Success = false;
-                    targetResult.SkippedSteps = ReferenceEquals(target, app) ||
-                                                preflightAttempted.Contains(target)
-                        ? new[] { "remoteActions" }
-                        : new[] { "preflight", "remoteActions" };
+                    targetResult.SkippedSteps = MergeAppleSkippedSteps(
+                        targetResult.SkippedSteps,
+                        ReferenceEquals(target, app) || preflightAttempted.Contains(target)
+                            ? new[] { "remoteActions" }
+                            : new[] { "preflight", "remoteActions" });
                     if (ReferenceEquals(target, app))
+                    {
                         targetResult.ErrorMessage = exception.Message;
+                        if (exception is AppleBuildProcessingException processing)
+                            targetResult.RemoteState = processing.State;
+                    }
                 }
 
                 return plan.Apps.Select(target => resultsByApp[target]).ToArray();
@@ -1193,7 +1237,7 @@ internal sealed partial class PowerForgeReleaseService
             var result = resultsByApp[app];
             try
             {
-                var resumedUpload = TryResumeAppleUpload(plan, app, result);
+                var resumedUpload = resumedByApp[app];
 
                 if (plan.Archive && !resumedUpload)
                 {
@@ -1202,16 +1246,6 @@ internal sealed partial class PowerForgeReleaseService
                         cleanup = _appleArtifactService.Preflight(plan);
                         preflightCompleted = true;
                     }
-                }
-
-                if (plan.Upload &&
-                    !plan.Archive &&
-                    !resumedUpload &&
-                    !Directory.Exists(app.ArchivePath))
-                {
-                    throw new FileNotFoundException(
-                        $"Apple app archive was not found for upload-only release: {app.ArchivePath}",
-                        app.ArchivePath);
                 }
 
                 if (plan.Archive && app.VersionUpdateRequested && !resumedUpload)
@@ -1241,8 +1275,7 @@ internal sealed partial class PowerForgeReleaseService
                 {
                     result.Success = false;
                     result.ErrorMessage = $"xcodebuild archive failed for '{app.Name}' with exit code {archive.ProcessResult.ExitCode}.";
-                    results.Add(result);
-                    return results.ToArray();
+                    return CompleteAppleExecutionFailure(plan, resultsByApp, app);
                 }
             }
 
@@ -1268,8 +1301,7 @@ internal sealed partial class PowerForgeReleaseService
                 {
                     result.Success = false;
                     result.ErrorMessage = $"xcodebuild exportArchive upload failed for '{app.Name}' with exit code {upload.ProcessResult.ExitCode}.";
-                    results.Add(result);
-                    return results.ToArray();
+                    return CompleteAppleExecutionFailure(plan, resultsByApp, app);
                 }
 
                 if (IsUploadAction(plan.Action) &&
@@ -1400,15 +1432,38 @@ internal sealed partial class PowerForgeReleaseService
                 result.ErrorMessage = exception.Message;
                 if (exception is AppleBuildProcessingException processing)
                     result.RemoteState = processing.State;
-                results.Add(result);
-                return results.ToArray();
+                return CompleteAppleExecutionFailure(plan, resultsByApp, app);
             }
-
-            results.Add(result);
         }
 
-        return results.ToArray();
+        return plan.Apps.Select(app => resultsByApp[app]).ToArray();
     }
+
+    private static PowerForgeAppleAppReleaseResult[] CompleteAppleExecutionFailure(
+        PowerForgeAppleReleasePlan plan,
+        Dictionary<PowerForgeAppleAppReleaseTargetPlan, PowerForgeAppleAppReleaseResult> resultsByApp,
+        PowerForgeAppleAppReleaseTargetPlan failedApp)
+    {
+        var failedIndex = Array.IndexOf(plan.Apps, failedApp);
+        for (var index = failedIndex + 1; index < plan.Apps.Length; index++)
+        {
+            var untouched = resultsByApp[plan.Apps[index]];
+            untouched.Success = false;
+            untouched.SkippedSteps = MergeAppleSkippedSteps(
+                untouched.SkippedSteps,
+                new[] { "notAttempted" });
+        }
+
+        return plan.Apps.Select(app => resultsByApp[app]).ToArray();
+    }
+
+    private static string[] MergeAppleSkippedSteps(
+        string[] existing,
+        string[] additional)
+        => existing
+            .Concat(additional)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
     private static AppStoreConnectReleasePreparationResult PrepareAppleDistribution(AppStoreConnectReleasePreparationRequest request)
     {

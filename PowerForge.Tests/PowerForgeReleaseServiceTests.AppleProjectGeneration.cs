@@ -92,6 +92,52 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void Execute_ApplePlan_RejectsTargetNamesWithCollidingArtifactPaths()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var first = Assert.Single(spec.AppleApps!.Apps);
+            first.Name = "CasaRay Phone";
+            spec.AppleApps.Apps = new[]
+            {
+                first,
+                new AppleAppConfiguration
+                {
+                    Name = "CasaRay-Phone",
+                    BundleId = "com.evotecit.casaray.secondary",
+                    Platform = ApplePlatform.iOS,
+                    ProjectPath = "CasaRay.xcodeproj",
+                    Scheme = "CasaRay",
+                    AppStoreConnectAppId = "6778025329"
+                }
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new PowerForgeReleaseService(new NullLogger()).Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Archive,
+                        PlanOnly = true
+                    }));
+
+            Assert.Contains("same archive artifact path", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("CasaRay Phone", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("CasaRay-Phone", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Theory]
     [InlineData(PowerForgeAppleReleaseAction.Status)]
     [InlineData(PowerForgeAppleReleaseAction.Upload)]

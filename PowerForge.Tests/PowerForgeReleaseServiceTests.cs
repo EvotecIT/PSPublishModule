@@ -1606,9 +1606,19 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             Assert.False(result.Success);
             Assert.Contains("First", result.ErrorMessage, StringComparison.Ordinal);
-            var appResult = Assert.Single(result.AppleApps);
-            Assert.Equal("First", appResult.Plan.Name);
-            Assert.False(appResult.Success);
+            Assert.Collection(
+                result.AppleApps,
+                first =>
+                {
+                    Assert.Equal("First", first.Plan.Name);
+                    Assert.False(first.Success);
+                },
+                second =>
+                {
+                    Assert.Equal("Second", second.Plan.Name);
+                    Assert.False(second.Success);
+                    Assert.Contains("notAttempted", second.SkippedSteps);
+                });
             Assert.Single(archiveRequests);
             Assert.Empty(uploadRequests);
         }
