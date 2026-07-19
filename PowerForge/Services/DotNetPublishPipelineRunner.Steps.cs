@@ -292,7 +292,13 @@ public sealed partial class DotNetPublishPipelineRunner
         return args;
     }
 
-    private DotNetPublishArtefactResult Publish(DotNetPublishPlan plan, string targetName, string framework, string rid, DotNetPublishStyle? styleOverride)
+    private DotNetPublishArtefactResult Publish(
+        DotNetPublishPlan plan,
+        string targetName,
+        string framework,
+        string rid,
+        DotNetPublishStyle? styleOverride,
+        string reservationOwner)
     {
         var target = plan.Targets.FirstOrDefault(t => string.Equals(t.Name, targetName, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException($"Target not found: {targetName}");
@@ -356,7 +362,7 @@ public sealed partial class DotNetPublishPipelineRunner
             _logger.Info($"Using staging publish dir -> {publishDir}");
         }
 
-        var publishArgs = BuildPublishArguments(plan, target, tfm, rid, style, publishDir, _msiReservationOwner);
+        var publishArgs = BuildPublishArguments(plan, target, tfm, rid, style, publishDir, reservationOwner);
 
         _logger.Info($"Publishing {target.Name} ({rid}) -> {publishDir}");
         RunDotnet(plan.ProjectRoot, publishArgs, plan.EnvironmentVariables);
@@ -516,7 +522,7 @@ public sealed partial class DotNetPublishPipelineRunner
             framework,
             runtime,
             style,
-            reserveMonotonicVersions: true,
+            reserveMonotonicVersions: !string.IsNullOrWhiteSpace(reservationOwner),
             reservationOwner: reservationOwner);
         return merged;
     }
@@ -544,12 +550,14 @@ public sealed partial class DotNetPublishPipelineRunner
 
             if (reserveMonotonicVersions)
             {
+                if (string.IsNullOrWhiteSpace(reservationOwner))
+                    throw new InvalidOperationException("A per-run MSI reservation owner is required before publishing.");
+
                 ReserveMsiVersionState(
                     resolved,
                     $"publish for installer '{installer.Id}'",
-                    reservationOwner ?? resolved.ReservationOwner,
+                    reservationOwner!,
                     resolved.AllowOutputOverwrite);
-                resolved.ReservationOwner = reservationOwner ?? resolved.ReservationOwner;
             }
 
             foreach (var propertyName in ResolvePublishVersionProperties(versioning))

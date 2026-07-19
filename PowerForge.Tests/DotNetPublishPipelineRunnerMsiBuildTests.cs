@@ -374,18 +374,162 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             var runner = new DotNetPublishPipelineRunner(new NullLogger());
             var plan = runner.Plan(spec, null);
             var version = Assert.Single(plan.MsiVersions.Values);
+            const string reservationOwner = "publisher-run-cleanup";
             DotNetPublishPipelineRunner.ReserveMsiVersionState(
                 version,
                 "run cleanup test",
-                version.ReservationOwner,
+                reservationOwner,
                 allowOutputOverwrite: true);
             plan.Steps = Array.Empty<DotNetPublishStep>();
 
-            var result = runner.Run(plan, null);
+            var result = runner.RunWithReservationOwner(plan, null, reservationOwner);
 
             Assert.True(result.Succeeded);
             string state = File.ReadAllText(version.StatePath!);
             Assert.Contains("\"ReservationOwner\": null", state, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Run_UsesDistinctReservationOwnerAndDoesNotReleaseAnotherRun()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var statePath = Path.Combine(root, "state", "version.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(statePath)!);
+            File.WriteAllText(statePath, "{ \"lastPatch\": 101, \"version\": \"1.0.101\" }");
+            var version = new DotNetPublishMsiVersionPlan
+            {
+                Version = "1.0.101",
+                Patch = 101,
+                StatePath = statePath,
+                AllowOutputOverwrite = true
+            };
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["app"] = version
+                },
+                Steps = Array.Empty<DotNetPublishStep>()
+            };
+            var ownerA = DotNetPublishPipelineRunner.CreateMsiReservationOwner();
+            var ownerB = DotNetPublishPipelineRunner.CreateMsiReservationOwner();
+            Assert.NotEqual(ownerA, ownerB);
+            DotNetPublishPipelineRunner.ReserveMsiVersionState(
+                version,
+                "first run",
+                ownerA,
+                allowOutputOverwrite: true);
+
+            var otherRun = new DotNetPublishPipelineRunner(new NullLogger())
+                .RunWithReservationOwner(plan, null, ownerB);
+
+            Assert.True(otherRun.Succeeded);
+            Assert.Contains($"\"ReservationOwner\": \"{ownerA}\"", File.ReadAllText(statePath), StringComparison.Ordinal);
+            Assert.True(DotNetPublishPipelineRunner.ReleaseMsiVersionStateReservation(version, ownerA));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Run_MalformedVersionStateDoesNotEscapeFailureResult()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var statePath = Path.Combine(root, "state", "version.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(statePath)!);
+            File.WriteAllText(statePath, "{ malformed");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release",
+                MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["app"] = new DotNetPublishMsiVersionPlan
+                    {
+                        Version = "1.0.101",
+                        Patch = 101,
+                        StatePath = statePath,
+                        AllowOutputOverwrite = true
+                    }
+                },
+                Steps = new[]
+                {
+                    new DotNetPublishStep
+                    {
+                        Key = "hook:invalid",
+                        Kind = DotNetPublishStepKind.CommandHook,
+                        HookId = "invalid"
+                    }
+                }
+            };
+
+            var result = new DotNetPublishPipelineRunner(new NullLogger()).Run(plan, null);
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("missing HookCommand", result.ErrorMessage, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_OverwriteWithMultipleCombinationsRequiresCombinationScopedState()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var app = CreateProject(root, "App/App.csproj");
+            var spec = CreateBaseSpec(root, app);
+            spec.Targets[0].Publish.Styles = new[]
+            {
+                DotNetPublishStyle.FrameworkDependent,
+                DotNetPublishStyle.PortableCompat
+            };
+            spec.Installers = new[]
+            {
+                new DotNetPublishInstaller
+                {
+                    Id = "app.msi",
+                    PrepareFromTarget = "app",
+                    Authoring = CreateSimpleAuthoring("ProductFiles"),
+                    Versioning = new DotNetPublishMsiVersionOptions
+                    {
+                        Enabled = true,
+                        Major = 1,
+                        Minor = 0,
+                        FloorDateUtc = "2026-06-01",
+                        Monotonic = true,
+                        StatePath = "Artifacts/version.state.json",
+                        ApplyToPublish = true,
+                        AllowOutputOverwrite = true
+                    }
+                }
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+
+            Assert.Contains("multiple publish combinations resolve to the same state path", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("{style}", exception.Message, StringComparison.Ordinal);
+
+            spec.Installers[0].Versioning!.StatePath = "Artifacts/{style}/version.state.json";
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            Assert.Equal(2, plan.MsiVersions.Count);
+            Assert.Equal(2, plan.MsiVersions.Values.Select(static version => version.StatePath).Distinct(StringComparer.OrdinalIgnoreCase).Count());
         }
         finally
         {

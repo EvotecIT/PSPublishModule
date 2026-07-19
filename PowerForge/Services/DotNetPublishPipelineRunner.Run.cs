@@ -11,8 +11,16 @@ public sealed partial class DotNetPublishPipelineRunner
     /// Executes the provided <paramref name="plan"/>.
     /// </summary>
     public DotNetPublishResult Run(DotNetPublishPlan plan, IDotNetPublishProgressReporter? progress)
+        => RunWithReservationOwner(plan, progress, CreateMsiReservationOwner());
+
+    internal DotNetPublishResult RunWithReservationOwner(
+        DotNetPublishPlan plan,
+        IDotNetPublishProgressReporter? progress,
+        string msiReservationOwner)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
+        if (string.IsNullOrWhiteSpace(msiReservationOwner))
+            throw new ArgumentException("MSI reservation owner cannot be empty.", nameof(msiReservationOwner));
         progress ??= NullDotNetPublishProgressReporter.Instance;
 
         var runStartedUtc = DateTimeOffset.UtcNow;
@@ -56,7 +64,13 @@ public sealed partial class DotNetPublishPipelineRunner
                             Build(plan, step);
                             break;
                         case DotNetPublishStepKind.Publish:
-                            artefacts.Add(Publish(plan, step.TargetName!, step.Framework ?? string.Empty, step.Runtime!, step.Style));
+                            artefacts.Add(Publish(
+                                plan,
+                                step.TargetName!,
+                                step.Framework ?? string.Empty,
+                                step.Runtime!,
+                                step.Style,
+                                msiReservationOwner));
                             break;
                         case DotNetPublishStepKind.Bundle:
                             artefacts.Add(BuildBundle(plan, artefacts, step));
@@ -68,7 +82,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             msiPrepares.Add(PrepareMsiPackage(plan, artefacts, step));
                             break;
                         case DotNetPublishStepKind.MsiBuild:
-                            msiBuilds.Add(BuildMsiPackage(plan, msiPrepares, step));
+                            msiBuilds.Add(BuildMsiPackage(plan, msiPrepares, step, msiReservationOwner));
                             break;
                         case DotNetPublishStepKind.MsiSign:
                             SignMsiPackage(plan, msiBuilds, step);
@@ -189,7 +203,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             foreach (var version in plan.MsiVersions.Values)
             {
-                if (!ReleaseMsiVersionStateReservation(version, _msiReservationOwner))
+                if (!ReleaseMsiVersionStateReservation(version, msiReservationOwner))
                 {
                     _logger.Warn(
                         $"MSI version reservation for '{version.Version}' in '{version.StatePath}' " +

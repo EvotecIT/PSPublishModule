@@ -12,7 +12,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private DotNetPublishMsiBuildResult BuildMsiPackage(
         DotNetPublishPlan plan,
         IReadOnlyList<DotNetPublishMsiPrepareResult> prepares,
-        DotNetPublishStep step)
+        DotNetPublishStep step,
+        string reservationOwner)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (prepares is null) throw new ArgumentNullException(nameof(prepares));
@@ -48,7 +49,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var installerConfig = (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
             .FirstOrDefault(i => string.Equals(i.Id, installerId, StringComparison.OrdinalIgnoreCase));
-        var versionResolution = ResolveMsiVersionForStep(plan, installerConfig, step);
+        var versionResolution = ResolveMsiVersionForStep(plan, installerConfig, step, reservationOwner);
         var licenseResolution = ResolveInstallerClientLicense(plan, installerConfig, step);
         var isGeneratedInstallerProject = IsGeneratedInstallerProject(step, installerConfig);
 
@@ -95,7 +96,7 @@ public sealed partial class DotNetPublishPipelineRunner
             versionResolution.Version,
             installerConfig?.Versioning?.AllowOutputOverwrite == true,
             installerId,
-            _msiReservationOwner);
+            reservationOwner);
         var installerMsBuildProperties = BuildInstallerMsBuildProperties(
             plan.MsBuildProperties,
             installerConfig?.MsBuildProperties,
@@ -649,7 +650,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private MsiVersionResolution ResolveMsiVersionForStep(
         DotNetPublishPlan plan,
         DotNetPublishInstallerPlan? installer,
-        DotNetPublishStep step)
+        DotNetPublishStep step,
+        string reservationOwner)
     {
         if (installer is not null)
         {
@@ -659,9 +661,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 ReserveMsiVersionState(
                     cached,
                     $"MSI build for installer '{installer.Id}'",
-                    _msiReservationOwner,
+                    reservationOwner,
                     cached.AllowOutputOverwrite);
-                cached.ReservationOwner = _msiReservationOwner;
                 return new MsiVersionResolution(cached.Version, cached.VersionPropertyName, cached.Patch, cached.StatePath);
             }
         }
@@ -674,13 +675,12 @@ public sealed partial class DotNetPublishPipelineRunner
             AssemblyVersion = BuildFourPartVersion(resolved.Version ?? string.Empty),
             Patch = resolved.Patch,
             StatePath = resolved.StatePath,
-            AllowOutputOverwrite = installer?.Versioning?.AllowOutputOverwrite == true,
-            ReservationOwner = _msiReservationOwner
+            AllowOutputOverwrite = installer?.Versioning?.AllowOutputOverwrite == true
         };
         ReserveMsiVersionState(
             versionPlan,
             $"MSI build for installer '{installer?.Id ?? step.InstallerId}'",
-            _msiReservationOwner,
+            reservationOwner,
             versionPlan.AllowOutputOverwrite);
         if (installer is not null && step.Style.HasValue)
         {
@@ -834,6 +834,10 @@ public sealed partial class DotNetPublishPipelineRunner
             return false;
         }
         catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+        catch (JsonException)
         {
             return false;
         }

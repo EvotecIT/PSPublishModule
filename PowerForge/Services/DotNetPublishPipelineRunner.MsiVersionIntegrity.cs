@@ -5,7 +5,8 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    private readonly string _msiReservationOwner = Guid.NewGuid().ToString("N");
+    internal static string CreateMsiReservationOwner()
+        => Guid.NewGuid().ToString("N");
 
     internal static void EnsureVersionedOutputDoesNotExist(
         string? outputDirectory,
