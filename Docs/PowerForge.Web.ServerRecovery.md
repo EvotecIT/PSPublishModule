@@ -174,11 +174,11 @@ The engine should plan and run these stages:
 3. Create service users, directories, and permissions.
 4. Configure SSH, UFW, and base security posture.
 5. Install Apache modules, vhosts, and managed includes.
-6. Install systemd services and timers and reload systemd.
+6. Install systemd services and timers and reload systemd. Units may opt into `beforeDeploy` activation when deployment requires them.
 7. Clone or update website and engine repositories.
 8. Restore or prompt for secrets.
 9. Run the site deploy script.
-10. Enable and start declared systemd units after secrets and deployment are ready.
+10. Enable and start units that declare `afterDeploy` activation after secrets and deployment are ready. Units without an activation phase retain enable-only behavior.
 11. Verify local services, origin behavior, public URLs, and certificate renewal.
 
 Stages must be resumable. A failed stage should leave a report that tells the operator what already happened and what remains.

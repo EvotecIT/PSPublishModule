@@ -57,6 +57,31 @@ public sealed class ServerRecoveryBootstrapLinuxTests
     }
 
     [Fact]
+    public void BootstrapOperationLocks_CanBeReacquiredAfterCommandOwnedDeploymentOnLinux()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-bootstrap-lock-reacquire-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var lockPath = Path.Combine(root, "operation.lock").Replace('\\', '/');
+            var acquire = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapOperationLockAcquireCommand([lockPath]);
+            var release = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapOperationLockReleaseCommand([lockPath]);
+            var script = $"set -Eeuo pipefail\ninstall -o root -g root -m 0644 /dev/null '{lockPath}'\n{acquire}\n{release}\nflock -n '{lockPath}' -c true\n{acquire}\nif flock -n '{lockPath}' -c true; then exit 71; fi\n{release}\nrm -f -- '{lockPath}'\n";
+
+            var result = RunRootBash(script);
+
+            Assert.Equal(0, result.ExitCode);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ApacheActivation_RollsBackBeforeReturningValidationFailureOnLinux()
     {
         if (!OperatingSystem.IsLinux())

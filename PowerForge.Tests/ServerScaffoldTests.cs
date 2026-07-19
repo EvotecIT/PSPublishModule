@@ -74,6 +74,9 @@ public sealed class ServerScaffoldTests
         Assert.Equal($"/var/lock/powerforge-site-{options.SiteId}.lock", manifestNode["operationLocks"]![0]!.GetValue<string>());
         Assert.True(manifestNode["apache"]!["sites"]![0]!["enabled"]!.GetValue<bool>());
         Assert.Null(manifestNode["apache"]!["sites"]![1]!["enabled"]);
+        Assert.Equal("beforeDeploy", manifestNode["systemd"]!["timers"]![0]!["activation"]!.GetValue<string>());
+        Assert.DoesNotContain(manifestNode["deploy"]!["commands"]!.AsArray(), command =>
+            command!["command"]!.GetValue<string>().Contains("systemctl", StringComparison.Ordinal));
         Assert.Null(manifestNode["certificates"]![0]!["dryRunCommand"]);
         Assert.DoesNotContain(manifestNode["verify"]!["commands"]!.AsArray(), command =>
             command!["id"]!.GetValue<string>().Contains("certbot", StringComparison.Ordinal));

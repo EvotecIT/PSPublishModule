@@ -14,6 +14,7 @@ internal static partial class WebCliCommandHandlers
 
         ValidateHostAndPackages(manifest, errors);
         ValidateOperationLocks(manifest, errors);
+        ValidateSystemdActivation(manifest.Systemd, errors);
 
         var plainFiles = manifest.Capture?.PlainFiles ?? Array.Empty<PowerForgeServerManagedFile>();
         var encryptedFiles = manifest.Capture?.EncryptedFiles ?? Array.Empty<PowerForgeServerManagedFile>();

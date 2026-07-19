@@ -95,6 +95,9 @@ internal static partial class WebCliCommandHandlers
         }
 
         var operationLocks = manifest.OperationLocks ?? Array.Empty<string>();
+        var systemdUnits = (manifest.Systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>())
+            .Concat(manifest.Systemd?.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
+            .ToArray();
         foreach (var operationLock in operationLocks)
         {
             AddStep(steps, ref order, "locking", $"Prepare shared operation lock {operationLock}",
@@ -283,8 +286,7 @@ internal static partial class WebCliCommandHandlers
                 BuildApacheActivationCommand(manifest.Apache!), plannedCommands: plannedCommands);
         }
 
-        foreach (var unit in (manifest.Systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>())
-                 .Concat(manifest.Systemd?.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>()))
+        foreach (var unit in systemdUnits)
         {
             if (!string.IsNullOrWhiteSpace(unit.Source) && !string.IsNullOrWhiteSpace(unit.Target))
             {
@@ -300,6 +302,14 @@ internal static partial class WebCliCommandHandlers
         if (manifest.Systemd is not null)
         {
             AddStep(steps, ref order, "systemd", "Reload systemd units", "systemctl daemon-reload", plannedCommands: plannedCommands);
+
+            foreach (var unit in systemdUnits.Where(static unit =>
+                         unit.Enabled &&
+                         string.IsNullOrWhiteSpace(unit.Activation) &&
+                         !string.IsNullOrWhiteSpace(unit.Name)))
+            {
+                AddStep(steps, ref order, "systemd", $"Enable {unit.Name}", $"systemctl enable {ShellQuote(unit.Name!)}", plannedCommands: plannedCommands);
+            }
         }
 
         if (manifest.Firewall is not null)
@@ -337,6 +347,13 @@ internal static partial class WebCliCommandHandlers
             AddStep(steps, ref order, "secrets", $"Confirm restored secret {secret.Id}", guard, plannedCommands: plannedCommands);
         }
 
+        AddSystemdActivationSteps(
+            steps,
+            ref order,
+            systemdUnits,
+            PowerForgeServerSystemdActivation.BeforeDeploy,
+            plannedCommands);
+
         var deployCommands = manifest.Deploy?.Commands ?? Array.Empty<PowerForgeServerNamedCommand>();
         if (operationLocks.Length > 0 &&
             string.Equals(manifest.Deploy?.OperationLockOwner, "command", StringComparison.Ordinal))
@@ -351,16 +368,38 @@ internal static partial class WebCliCommandHandlers
             var shell = string.IsNullOrWhiteSpace(command.WorkingDirectory)
                 ? command.Command
                 : $"cd {ShellQuote(command.WorkingDirectory)} && {command.Command}";
-            AddStep(steps, ref order, "deploy", command.Id ?? "deploy command", shell, command.Sensitive, plannedCommands: plannedCommands);
+            AddStep(
+                steps,
+                ref order,
+                "deploy",
+                command.Id ?? "deploy command",
+                shell,
+                command.Sensitive,
+                manual: command.Sensitive && command.Required,
+                plannedCommands: plannedCommands);
         }
 
-        foreach (var unit in (manifest.Systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>())
-                 .Concat(manifest.Systemd?.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
-                 .Where(static unit => unit.Enabled && !string.IsNullOrWhiteSpace(unit.Name)))
+        var hasAfterDeployActivation = systemdUnits.Any(static unit =>
+            unit.Enabled &&
+            string.Equals(unit.Activation, PowerForgeServerSystemdActivation.AfterDeploy, StringComparison.Ordinal) &&
+            !string.IsNullOrWhiteSpace(unit.Name));
+        if (hasAfterDeployActivation &&
+            operationLocks.Length > 0 &&
+            string.Equals(manifest.Deploy?.OperationLockOwner, "command", StringComparison.Ordinal))
         {
-            AddStep(steps, ref order, "systemd", $"Enable {unit.Name}", $"systemctl enable {ShellQuote(unit.Name!)}", plannedCommands: plannedCommands);
-            AddStep(steps, ref order, "systemd", $"Start {unit.Name}", $"systemctl start {ShellQuote(unit.Name!)}", plannedCommands: plannedCommands);
+            AddStep(
+                steps,
+                ref order,
+                "locking",
+                "Reacquire shared operation locks after command-owned deployment",
+                BuildBootstrapOperationLockAcquireCommand(operationLocks));
         }
+        AddSystemdActivationSteps(
+            steps,
+            ref order,
+            systemdUnits,
+            PowerForgeServerSystemdActivation.AfterDeploy,
+            plannedCommands);
 
         AddStep(steps, ref order, "verify", "Run PowerForge server verify", "# Run from an operator workstation: powerforge-web server verify --manifest <manifest> --fail-on-failure", manual: true, plannedCommands: plannedCommands);
         return steps;

@@ -382,6 +382,11 @@
           ]
         },
         "enabled": { "type": "boolean" },
+        "activation": {
+          "type": "string",
+          "enum": ["beforeDeploy", "afterDeploy"],
+          "description": "Optionally start an enabled unit before or after declared deploy commands. Omit for legacy enable-only behavior."
+        },
         "required": { "type": "boolean" }
       },
       "required": ["name"]

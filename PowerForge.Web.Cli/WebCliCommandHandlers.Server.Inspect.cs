@@ -458,6 +458,12 @@ internal static partial class WebCliCommandHandlers
                 enabled.Stdout.Trim().Equals("enabled", StringComparison.OrdinalIgnoreCase),
                 "enabled",
                 enabled.Stdout.Trim());
+            if (string.IsNullOrWhiteSpace(unit.Activation)) continue;
+            var active = ExecuteRemote(sshCommand, target, $"systemctl is-active {ShellQuote(unit.Name)}");
+            AddBooleanCheck(checks, $"systemd.{kind}.{unit.Name}.active", "systemd", $"systemd {kind} is active: {unit.Name}",
+                active.Stdout.Trim().Equals("active", StringComparison.OrdinalIgnoreCase),
+                "active",
+                active.Stdout.Trim());
         }
     }
 
