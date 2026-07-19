@@ -14,7 +14,7 @@ public sealed partial class DotNetPublishPipelineRunner
         bool allowOutputOverwrite,
         string installerId)
     {
-        if (allowOutputOverwrite || string.IsNullOrWhiteSpace(version))
+        if (string.IsNullOrWhiteSpace(version))
         {
             return;
         }
@@ -24,6 +24,11 @@ public sealed partial class DotNetPublishPipelineRunner
             throw new InvalidOperationException(
                 $"Versioned MSI installer '{installerId}' requires explicit OutputPath and OutputName values " +
                 "so immutable output protection can resolve the exact target file.");
+        }
+
+        if (allowOutputOverwrite)
+        {
+            return;
         }
 
         var outputPath = Path.Combine(outputDirectory!, outputName! + ".msi");
@@ -50,7 +55,7 @@ public sealed partial class DotNetPublishPipelineRunner
             version,
             allowOutputOverwrite,
             installerId);
-        if (allowOutputOverwrite || string.IsNullOrWhiteSpace(version))
+        if (string.IsNullOrWhiteSpace(version))
             return EmptyReservation.Instance;
 
         var outputPath = Path.Combine(outputDirectory!, outputName! + ".msi");
@@ -74,7 +79,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         try
         {
-            if (File.Exists(outputPath))
+            if (!allowOutputOverwrite && File.Exists(outputPath))
             {
                 throw new InvalidOperationException(
                     $"MSI output '{outputPath}' appeared while immutable version {version} was being reserved.");

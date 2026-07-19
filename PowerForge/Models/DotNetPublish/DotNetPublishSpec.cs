@@ -750,7 +750,9 @@ public sealed class DotNetPublishMsiVersionOptions
 
     /// <summary>
     /// When true, permits an MSI build to overwrite an existing configured output file.
-    /// The secure default is false so an immutable version cannot silently acquire different bytes.
+    /// For monotonic versioning, the latest completed version is reused when its line is still current.
+    /// Concurrent overwrite rebuilds remain serialized. The secure default is false so an immutable version
+    /// cannot silently acquire different bytes.
     /// </summary>
     public bool AllowOutputOverwrite { get; set; }
 }

@@ -356,7 +356,7 @@ public sealed partial class DotNetPublishPipelineRunner
             _logger.Info($"Using staging publish dir -> {publishDir}");
         }
 
-        var publishArgs = BuildPublishArguments(plan, target, tfm, rid, style, publishDir);
+        var publishArgs = BuildPublishArguments(plan, target, tfm, rid, style, publishDir, _msiReservationOwner);
 
         _logger.Info($"Publishing {target.Name} ({rid}) -> {publishDir}");
         RunDotnet(plan.ProjectRoot, publishArgs, plan.EnvironmentVariables);
@@ -429,7 +429,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string framework,
         string runtime,
         DotNetPublishStyle style,
-        string outputDir)
+        string outputDir,
+        string? reservationOwner = null)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (target is null) throw new ArgumentNullException(nameof(target));
@@ -450,7 +451,13 @@ public sealed partial class DotNetPublishPipelineRunner
             publishArgs.Add("--no-build");
 
         AppendPublishStyleArgs(publishArgs, target.Publish, style);
-        publishArgs.AddRange(BuildMsBuildPropertyArgs(BuildPublishMsBuildPropertiesForRun(plan, target, framework, runtime, style)));
+        publishArgs.AddRange(BuildMsBuildPropertyArgs(BuildPublishMsBuildPropertiesForRun(
+            plan,
+            target,
+            framework,
+            runtime,
+            style,
+            reservationOwner)));
         return publishArgs;
     }
 
@@ -495,13 +502,22 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishTargetPlan target,
         string framework,
         string runtime,
-        DotNetPublishStyle style)
+        DotNetPublishStyle style,
+        string? reservationOwner)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (target is null) throw new ArgumentNullException(nameof(target));
 
         var merged = BuildPublishMsBuildProperties(plan, target, framework, runtime, style);
-        ApplyPublishMsiVersionProperties(merged, plan, target.Name, framework, runtime, style, reserveMonotonicVersions: true);
+        ApplyPublishMsiVersionProperties(
+            merged,
+            plan,
+            target.Name,
+            framework,
+            runtime,
+            style,
+            reserveMonotonicVersions: true,
+            reservationOwner: reservationOwner);
         return merged;
     }
 
@@ -512,7 +528,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string framework,
         string runtime,
         DotNetPublishStyle style,
-        bool reserveMonotonicVersions = false)
+        bool reserveMonotonicVersions = false,
+        string? reservationOwner = null)
     {
         foreach (var installer in plan.Installers.Where(i =>
                      string.Equals(i.PrepareFromTarget, targetName, StringComparison.OrdinalIgnoreCase)))
@@ -526,10 +543,14 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
 
             if (reserveMonotonicVersions)
+            {
                 ReserveMsiVersionState(
                     resolved,
                     $"publish for installer '{installer.Id}'",
-                    resolved.ReservationOwner);
+                    reservationOwner ?? resolved.ReservationOwner,
+                    resolved.AllowOutputOverwrite);
+                resolved.ReservationOwner = reservationOwner ?? resolved.ReservationOwner;
+            }
 
             foreach (var propertyName in ResolvePublishVersionProperties(versioning))
             {

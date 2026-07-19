@@ -185,6 +185,18 @@ public sealed partial class DotNetPublishPipelineRunner
             failedResult.RunReportMarkdownPath = runReportMarkdownPath;
             return failedResult;
         }
+        finally
+        {
+            foreach (var version in plan.MsiVersions.Values)
+            {
+                if (!ReleaseMsiVersionStateReservation(version, _msiReservationOwner))
+                {
+                    _logger.Warn(
+                        $"MSI version reservation for '{version.Version}' in '{version.StatePath}' " +
+                        "could not be released. A later overwrite rebuild may require retrying after the state file is available.");
+                }
+            }
+        }
     }
 
 }

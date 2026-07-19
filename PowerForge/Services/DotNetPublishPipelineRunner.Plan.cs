@@ -2023,6 +2023,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         AssemblyVersion = BuildFourPartVersion(resolved.Version!),
                         Patch = resolved.Patch,
                         StatePath = resolved.StatePath,
+                        AllowOutputOverwrite = installer.Versioning.AllowOutputOverwrite,
                         ReservationOwner = _msiReservationOwner
                     };
 
