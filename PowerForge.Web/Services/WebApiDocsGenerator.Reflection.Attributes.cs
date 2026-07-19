@@ -871,12 +871,14 @@ public static partial class WebApiDocsGenerator
         var name = ExtractMemberName(fullName);
         if (string.IsNullOrWhiteSpace(name)) return;
 
+        var parameterTypes = ParseParameterTypes(fullName);
         var model = new ApiMemberModel
         {
             Name = name,
             Summary = GetSummary(member, memberKey, memberLookup),
             Kind = "Property",
-            ValueSummary = GetElement(member, "value", memberKey, memberLookup)
+            ValueSummary = GetElement(member, "value", memberKey, memberLookup),
+            Parameters = ParseParameters(member, parameterTypes, null, memberKey, memberLookup)
         };
         model.Examples.AddRange(GetExamples(member, memberKey, memberLookup));
         model.Exceptions.AddRange(GetExceptions(member, memberKey, memberLookup));

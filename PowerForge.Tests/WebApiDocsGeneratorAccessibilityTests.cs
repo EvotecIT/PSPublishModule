@@ -20,11 +20,17 @@ public sealed class WebApiDocsGeneratorAccessibilityTests
                   <assembly><name>PowerForge.Tests</name></assembly>
                   <members>
                     <member name="T:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture"><summary>Public fixture.</summary></member>
+                    <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.#ctor"><summary>Public constructor.</summary></member>
+                    <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.#ctor(System.Int32)"><summary>Internal constructor.</summary></member>
                     <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.PublicMethod"><summary>Public method.</summary></member>
                     <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.InternalMethod"><summary>Internal method.</summary></member>
+                    <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.Overloaded(System.String)"><summary>Public overload.</summary></member>
+                    <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.Overloaded(System.Int32)"><summary>Internal overload.</summary></member>
                     <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.op_Addition(PowerForge.Tests.WebApiDocsPublicAccessibilityFixture,PowerForge.Tests.WebApiDocsPublicAccessibilityFixture)"><summary>Public operator.</summary></member>
                     <member name="P:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.PublicProperty"><summary>Public property.</summary></member>
                     <member name="P:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.InternalProperty"><summary>Internal property.</summary></member>
+                    <member name="P:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.Item(System.String)"><summary>Public indexer.</summary></member>
+                    <member name="P:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.Item(System.Int32)"><summary>Internal indexer.</summary></member>
                     <member name="T:PowerForge.Tests.WebApiDocsInternalAccessibilityFixture"><summary>Internal fixture.</summary></member>
                     <member name="M:PowerForge.Tests.WebApiDocsInternalAccessibilityFixture.LooksPublic"><summary>Public method on an internal type.</summary></member>
                   </members>
@@ -32,12 +38,32 @@ public sealed class WebApiDocsGeneratorAccessibilityTests
                 """);
 
             var outputPath = Path.Combine(root, "api");
+            const string internalTypeSlug = "powerforge-tests-webapidocsinternalaccessibilityfixture";
+            var internalJsonPath = Path.Combine(outputPath, "types", internalTypeSlug + ".json");
+            var internalRoutePath = Path.Combine(outputPath, internalTypeSlug, "index.html");
+            var internalAliasPath = Path.Combine(outputPath, internalTypeSlug + ".html");
+
+            var xmlOnlyResult = WebApiDocsGenerator.Generate(new WebApiDocsOptions
+            {
+                XmlPath = xmlPath,
+                OutputPath = outputPath,
+                Format = "both",
+                Template = "docs",
+                BaseUrl = "/api",
+                IncludeUndocumentedTypes = false
+            });
+            Assert.Equal(2, xmlOnlyResult.TypeCount);
+            Assert.True(File.Exists(internalJsonPath));
+            Assert.True(File.Exists(internalRoutePath));
+            Assert.True(File.Exists(internalAliasPath));
+
             var result = WebApiDocsGenerator.Generate(new WebApiDocsOptions
             {
                 XmlPath = xmlPath,
                 AssemblyPath = typeof(WebApiDocsGeneratorAccessibilityTests).Assembly.Location,
                 OutputPath = outputPath,
-                Format = "json",
+                Format = "both",
+                Template = "docs",
                 BaseUrl = "/api",
                 IncludeUndocumentedTypes = false
             });
@@ -53,17 +79,64 @@ public sealed class WebApiDocsGeneratorAccessibilityTests
             Assert.Contains("PublicMethod", publicTypeJson, StringComparison.Ordinal);
             Assert.Contains("op_Addition", publicTypeJson, StringComparison.Ordinal);
             Assert.Contains("PublicProperty", publicTypeJson, StringComparison.Ordinal);
+            Assert.Contains("Public constructor.", publicTypeJson, StringComparison.Ordinal);
+            Assert.Contains("Public overload.", publicTypeJson, StringComparison.Ordinal);
+            Assert.Contains("Public operator.", publicTypeJson, StringComparison.Ordinal);
+            Assert.Contains("Public indexer.", publicTypeJson, StringComparison.Ordinal);
             Assert.DoesNotContain("InternalMethod", publicTypeJson, StringComparison.Ordinal);
             Assert.DoesNotContain("InternalProperty", publicTypeJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("Internal constructor.", publicTypeJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("Internal overload.", publicTypeJson, StringComparison.Ordinal);
+            Assert.DoesNotContain("Internal indexer.", publicTypeJson, StringComparison.Ordinal);
 
-            Assert.False(File.Exists(Path.Combine(
-                outputPath,
-                "types",
-                "powerforge-tests-webapidocsinternalaccessibilityfixture.json")));
+            Assert.False(File.Exists(internalJsonPath));
+            Assert.False(File.Exists(internalRoutePath));
+            Assert.False(File.Exists(internalAliasPath));
 
             var xref = File.ReadAllText(Path.Combine(outputPath, "xrefmap.json"));
             Assert.DoesNotContain("InternalMethod", xref, StringComparison.Ordinal);
             Assert.DoesNotContain("InternalAccessibilityFixture", xref, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Generate_WithUninspectableRequestedAssembly_FailsClosed()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-fail-closed-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var xmlPath = Path.Combine(root, "test.xml");
+            File.WriteAllText(xmlPath,
+                """
+                <doc>
+                  <assembly><name>Broken</name></assembly>
+                  <members>
+                    <member name="T:Broken.InternalType"><summary>Must not be emitted.</summary></member>
+                  </members>
+                </doc>
+                """);
+            var assemblyPath = Path.Combine(root, "broken.dll");
+            File.WriteAllText(assemblyPath, "not an assembly");
+            var outputPath = Path.Combine(root, "api");
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                WebApiDocsGenerator.Generate(new WebApiDocsOptions
+                {
+                    XmlPath = xmlPath,
+                    AssemblyPath = assemblyPath,
+                    OutputPath = outputPath,
+                    Format = "json"
+                }));
+
+            Assert.Contains("could not be inspected", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(Path.Combine(outputPath, "index.json")));
         }
         finally
         {
@@ -119,6 +192,17 @@ public sealed class WebApiDocsGeneratorAccessibilityTests
 
 public sealed class WebApiDocsPublicAccessibilityFixture
 {
+    /// <summary>Visible constructor used by API documentation visibility tests.</summary>
+    public WebApiDocsPublicAccessibilityFixture()
+    {
+    }
+
+    /// <summary>Hidden constructor used by API documentation visibility tests.</summary>
+    internal WebApiDocsPublicAccessibilityFixture(int value)
+    {
+        _ = value;
+    }
+
     /// <summary>Visible member used by API documentation visibility tests.</summary>
     public void PublicMethod()
     {
@@ -128,6 +212,18 @@ public sealed class WebApiDocsPublicAccessibilityFixture
     public static WebApiDocsPublicAccessibilityFixture operator +(
         WebApiDocsPublicAccessibilityFixture left,
         WebApiDocsPublicAccessibilityFixture right) => left;
+
+    /// <summary>Visible overload used by API documentation visibility tests.</summary>
+    public void Overloaded(string value)
+    {
+        _ = value;
+    }
+
+    /// <summary>Hidden overload used by API documentation visibility tests.</summary>
+    internal void Overloaded(int value)
+    {
+        _ = value;
+    }
 
     /// <summary>Hidden member used by API documentation visibility tests.</summary>
     internal void InternalMethod()
@@ -139,6 +235,12 @@ public sealed class WebApiDocsPublicAccessibilityFixture
 
     /// <summary>Hidden property used by API documentation visibility tests.</summary>
     internal string InternalProperty { get; } = string.Empty;
+
+    /// <summary>Visible indexer used by API documentation visibility tests.</summary>
+    public string this[string key] => key;
+
+    /// <summary>Hidden indexer used by API documentation visibility tests.</summary>
+    internal string this[int index] => index.ToString();
 }
 
 internal sealed class WebApiDocsInternalAccessibilityFixture

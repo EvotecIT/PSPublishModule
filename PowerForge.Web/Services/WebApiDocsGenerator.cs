@@ -397,6 +397,7 @@ public static partial class WebApiDocsGenerator
             : string.Empty;
         var outputPath = Path.GetFullPath(options.OutputPath);
         Directory.CreateDirectory(outputPath);
+        var previousTypeSlugs = ReadExistingApiTypeSlugs(outputPath);
 
         var warnings = new List<string>();
         if (options.Type == ApiDocsType.CSharp && !File.Exists(xmlPath))
@@ -405,13 +406,18 @@ public static partial class WebApiDocsGenerator
             warnings.Add($"PowerShell help not found: {helpPath}");
 
         Assembly? assembly = null;
-        if (options.Type == ApiDocsType.CSharp && !string.IsNullOrWhiteSpace(options.AssemblyPath) && File.Exists(options.AssemblyPath))
+        if (options.Type == ApiDocsType.CSharp && !string.IsNullOrWhiteSpace(options.AssemblyPath))
         {
-            assembly = TryLoadAssembly(Path.GetFullPath(options.AssemblyPath), warnings);
-        }
-        else if (options.Type == ApiDocsType.CSharp && !string.IsNullOrWhiteSpace(options.AssemblyPath))
-        {
-            warnings.Add($"Assembly not found: {options.AssemblyPath}");
+            var requestedAssemblyPath = Path.GetFullPath(options.AssemblyPath);
+            if (!File.Exists(requestedAssemblyPath))
+                throw new FileNotFoundException(
+                    $"Configured API documentation assembly was not found: {requestedAssemblyPath}",
+                    requestedAssemblyPath);
+
+            assembly = TryLoadAssembly(requestedAssemblyPath, warnings);
+            if (assembly is null)
+                throw new InvalidOperationException(
+                    $"Configured API documentation assembly could not be inspected: {requestedAssemblyPath}");
         }
 
         var apiDoc = options.Type == ApiDocsType.PowerShell
@@ -460,6 +466,7 @@ public static partial class WebApiDocsGenerator
             .Where(t => ShouldIncludeType(t, options))
             .OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        RemoveStaleApiTypeArtifacts(outputPath, previousTypeSlugs, types);
         var typeDisplayNames = BuildTypeDisplayNameMap(types, options, warnings);
         var typeAliasMap = BuildTypeAliasMap(types, typeDisplayNames);
         var typeUsageMap = BuildTypeUsageMap(types);

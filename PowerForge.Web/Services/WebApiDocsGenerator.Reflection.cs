@@ -199,7 +199,7 @@ public static partial class WebApiDocsGenerator
 
             foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
             {
-                var member = FindNamedMember(model.Properties, property.Name);
+                var member = FindPropertyModel(model.Properties, property);
                 if (member is null)
                 {
                     member = new ApiMemberModel
@@ -314,7 +314,7 @@ public static partial class WebApiDocsGenerator
             if (ParamsMatch(candidate.Parameters, parameters)) return candidate;
         }
 
-        return candidates.FirstOrDefault(c => c.Parameters.Count == parameters.Length) ?? candidates.First();
+        return null;
     }
 
     private static ApiMemberModel? FindConstructorModel(List<ApiMemberModel> members, ConstructorInfo ctor)
@@ -331,7 +331,25 @@ public static partial class WebApiDocsGenerator
             if (ParamsMatch(candidate.Parameters, parameters)) return candidate;
         }
 
-        return candidates.FirstOrDefault(c => c.Parameters.Count == parameters.Length) ?? candidates.First();
+        return null;
+    }
+
+    private static ApiMemberModel? FindPropertyModel(List<ApiMemberModel> members, PropertyInfo property)
+    {
+        var candidates = members
+            .Where(member => string.Equals(member.Name, property.Name, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (candidates.Count == 0)
+            return null;
+
+        var parameters = property.GetIndexParameters();
+        foreach (var candidate in candidates)
+        {
+            if (candidate.Parameters.Count != parameters.Length) continue;
+            if (ParamsMatch(candidate.Parameters, parameters)) return candidate;
+        }
+
+        return null;
     }
 
     private static bool ParamsMatch(List<ApiParameterModel> parameters, ParameterInfo[] infos)
@@ -340,11 +358,43 @@ public static partial class WebApiDocsGenerator
         for (var i = 0; i < parameters.Count; i++)
         {
             var left = NormalizeTypeName(parameters[i].Type);
-            var right = NormalizeTypeName(GetReadableTypeName(infos[i].ParameterType));
+            var right = NormalizeTypeName(GetDocumentationTypeName(infos[i].ParameterType));
             if (!string.Equals(left, right, StringComparison.OrdinalIgnoreCase))
                 return false;
         }
         return true;
+    }
+
+    private static string GetDocumentationTypeName(Type type)
+    {
+        if (type.IsByRef)
+            return GetDocumentationTypeName(type.GetElementType() ?? type) + "@";
+        if (type.IsPointer)
+            return GetDocumentationTypeName(type.GetElementType() ?? type) + "*";
+        if (type.IsArray)
+        {
+            var elementType = GetDocumentationTypeName(type.GetElementType() ?? typeof(object));
+            if (type.GetArrayRank() == 1)
+                return elementType + "[]";
+
+            return elementType + "[" + string.Join(",", Enumerable.Repeat("0:", type.GetArrayRank())) + "]";
+        }
+        if (type.IsGenericParameter)
+        {
+            var prefix = type.DeclaringMethod is null ? "`" : "``";
+            return prefix + type.GenericParameterPosition;
+        }
+        if (type.IsGenericType)
+        {
+            var definition = type.GetGenericTypeDefinition();
+            var definitionName = GenericArityRegex
+                .Replace(definition.FullName ?? definition.Name, string.Empty)
+                .Replace('+', '.');
+            var arguments = type.GetGenericArguments().Select(GetDocumentationTypeName);
+            return definitionName + "{" + string.Join(",", arguments) + "}";
+        }
+
+        return (type.FullName ?? type.Name).Replace('+', '.');
     }
 
     private static string NormalizeTypeName(string? value)
