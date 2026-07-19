@@ -48,6 +48,7 @@ public static partial class WebApiDocsGenerator
                 {
                     Name = method.Name,
                     DisplayName = method.Name,
+                    DocumentationSignature = BuildDocumentationMethodSignature(method),
                     Parameters = method.GetParameters().Select(p => new ApiParameterModel
                     {
                         Name = p.Name ?? string.Empty,
@@ -302,19 +303,9 @@ public static partial class WebApiDocsGenerator
 
     private static ApiMemberModel? FindMethodModel(List<ApiMemberModel> members, MethodInfo method)
     {
-        var candidates = members
-            .Where(m => string.Equals(m.Name, method.Name, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        if (candidates.Count == 0) return null;
-
-        var parameters = method.GetParameters();
-        foreach (var candidate in candidates)
-        {
-            if (candidate.Parameters.Count != parameters.Length) continue;
-            if (ParamsMatch(candidate.Parameters, parameters)) return candidate;
-        }
-
-        return null;
+        var signature = BuildDocumentationMethodSignature(method);
+        return members.FirstOrDefault(candidate =>
+            string.Equals(candidate.DocumentationSignature, signature, StringComparison.Ordinal));
     }
 
     private static ApiMemberModel? FindConstructorModel(List<ApiMemberModel> members, ConstructorInfo ctor)
@@ -395,6 +386,49 @@ public static partial class WebApiDocsGenerator
         }
 
         return (type.FullName ?? type.Name).Replace('+', '.');
+    }
+
+    private static string BuildDocumentationMethodSignature(MethodInfo method)
+    {
+        var name = method.Name;
+        if (method.IsGenericMethod)
+            name += "``" + method.GetGenericArguments().Length;
+
+        var conversionReturnType =
+            method.Name is "op_Implicit" or "op_Explicit"
+                ? GetDocumentationTypeName(method.ReturnType)
+                : null;
+        return BuildDocumentationMethodSignature(
+            name,
+            method.GetParameters().Select(parameter => GetDocumentationTypeName(parameter.ParameterType)).ToArray(),
+            conversionReturnType);
+    }
+
+    private static string BuildDocumentationMethodSignature(
+        string name,
+        IReadOnlyList<string> parameterTypes,
+        string? conversionReturnType)
+    {
+        var signature = parameterTypes.Count == 0
+            ? name
+            : name + "(" + string.Join(",", parameterTypes) + ")";
+        return string.IsNullOrWhiteSpace(conversionReturnType)
+            ? signature
+            : signature + "~" + conversionReturnType;
+    }
+
+    private static string? ParseDocumentationConversionReturnType(string fullName)
+    {
+        var parametersEnd = fullName.LastIndexOf(')');
+        if (parametersEnd < 0 ||
+            parametersEnd + 1 >= fullName.Length ||
+            fullName[parametersEnd + 1] != '~')
+        {
+            return null;
+        }
+
+        var returnType = fullName.Substring(parametersEnd + 2).Trim();
+        return returnType.Length == 0 ? null : returnType;
     }
 
     private static string NormalizeTypeName(string? value)
@@ -508,6 +542,7 @@ public static partial class WebApiDocsGenerator
     private static void FillMethodMember(ApiMemberModel member, MethodInfo method, Type declaring)
     {
         member.Kind = "Method";
+        member.DocumentationSignature = BuildDocumentationMethodSignature(method);
         member.ReturnType = GetReadableTypeName(method.ReturnType);
         member.Signature = BuildMethodSignature(method);
         member.IsStatic = method.IsStatic;

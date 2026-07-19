@@ -101,6 +101,7 @@ public static partial class WebApiDocsGenerator
             Returns = source.Returns,
             Value = source.Value,
             ValueSummary = source.ValueSummary,
+            DocumentationSignature = source.DocumentationSignature,
             Source = source.Source is null
                 ? null
                 : new ApiSourceLink { Path = source.Source.Path, Line = source.Source.Line, Url = source.Source.Url }
@@ -835,6 +836,7 @@ public static partial class WebApiDocsGenerator
         var parameterTypes = ParseParameterTypes(fullName);
         var parameterNames = TryResolveParameterNames(assembly, typeName, name, parameterTypes);
         var parameters = ParseParameters(member, parameterTypes, parameterNames, memberKey, memberLookup);
+        var conversionReturnType = ParseDocumentationConversionReturnType(fullName);
 
         var isCtor = IsConstructorName(name);
         var displayName = isCtor ? GetShortTypeName(typeName) : name;
@@ -846,7 +848,10 @@ public static partial class WebApiDocsGenerator
             Kind = isCtor ? "Constructor" : "Method",
             Parameters = parameters,
             Returns = GetElement(member, "returns", memberKey, memberLookup),
-            IsConstructor = isCtor
+            IsConstructor = isCtor,
+            DocumentationSignature = isCtor
+                ? null
+                : BuildDocumentationMethodSignature(name, parameterTypes, conversionReturnType)
         };
         model.TypeParameters.AddRange(GetTypeParameters(member, memberKey, memberLookup));
         model.Examples.AddRange(GetExamples(member, memberKey, memberLookup));

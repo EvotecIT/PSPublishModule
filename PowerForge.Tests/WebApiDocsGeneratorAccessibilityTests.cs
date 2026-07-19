@@ -27,6 +27,10 @@ public sealed class WebApiDocsGeneratorAccessibilityTests
                     <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.Overloaded(System.String)"><summary>Public overload.</summary></member>
                     <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.Overloaded(System.Int32)"><summary>Internal overload.</summary></member>
                     <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.op_Addition(PowerForge.Tests.WebApiDocsPublicAccessibilityFixture,PowerForge.Tests.WebApiDocsPublicAccessibilityFixture)"><summary>Public operator.</summary></member>
+                    <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.op_Implicit(PowerForge.Tests.WebApiDocsPublicAccessibilityFixture)~System.String"><summary>String conversion.</summary></member>
+                    <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.op_Implicit(PowerForge.Tests.WebApiDocsPublicAccessibilityFixture)~System.Int32"><summary>Integer conversion.</summary></member>
+                    <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.Generic``1(System.String)"><summary>Single generic parameter.</summary></member>
+                    <member name="M:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.Generic``2(System.String)"><summary>Two generic parameters.</summary></member>
                     <member name="P:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.PublicProperty"><summary>Public property.</summary></member>
                     <member name="P:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.InternalProperty"><summary>Internal property.</summary></member>
                     <member name="P:PowerForge.Tests.WebApiDocsPublicAccessibilityFixture.Item(System.String)"><summary>Public indexer.</summary></member>
@@ -82,6 +86,10 @@ public sealed class WebApiDocsGeneratorAccessibilityTests
             Assert.Contains("Public constructor.", publicTypeJson, StringComparison.Ordinal);
             Assert.Contains("Public overload.", publicTypeJson, StringComparison.Ordinal);
             Assert.Contains("Public operator.", publicTypeJson, StringComparison.Ordinal);
+            Assert.Contains("String conversion.", publicTypeJson, StringComparison.Ordinal);
+            Assert.Contains("Integer conversion.", publicTypeJson, StringComparison.Ordinal);
+            Assert.Contains("Single generic parameter.", publicTypeJson, StringComparison.Ordinal);
+            Assert.Contains("Two generic parameters.", publicTypeJson, StringComparison.Ordinal);
             Assert.Contains("Public indexer.", publicTypeJson, StringComparison.Ordinal);
             Assert.DoesNotContain("InternalMethod", publicTypeJson, StringComparison.Ordinal);
             Assert.DoesNotContain("InternalProperty", publicTypeJson, StringComparison.Ordinal);
@@ -212,6 +220,19 @@ public sealed class WebApiDocsPublicAccessibilityFixture
     public static WebApiDocsPublicAccessibilityFixture operator +(
         WebApiDocsPublicAccessibilityFixture left,
         WebApiDocsPublicAccessibilityFixture right) => left;
+
+    /// <summary>Visible conversion used by API documentation visibility tests.</summary>
+    public static implicit operator string(WebApiDocsPublicAccessibilityFixture value) =>
+        value.ToString() ?? string.Empty;
+
+    /// <summary>Visible conversion used by API documentation visibility tests.</summary>
+    public static implicit operator int(WebApiDocsPublicAccessibilityFixture value) => 0;
+
+    /// <summary>Visible generic overload used by API documentation visibility tests.</summary>
+    public string Generic<T>(string value) => value;
+
+    /// <summary>Visible generic overload used by API documentation visibility tests.</summary>
+    public string Generic<TFirst, TSecond>(string value) => value;
 
     /// <summary>Visible overload used by API documentation visibility tests.</summary>
     public void Overloaded(string value)
