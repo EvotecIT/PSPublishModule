@@ -106,14 +106,21 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
-    [Fact]
-    public void Execute_ApplePrepare_PreflightsEveryMetadataTargetBeforeFirstRemoteMutation()
+    [Theory]
+    [InlineData("mapping")]
+    [InlineData("locale")]
+    [InlineData("metadata")]
+    public void Execute_ApplePrepare_PreflightsEveryMetadataTargetBeforeFirstRemoteMutation(
+        string failureKind)
     {
         var root = CreateSandbox();
         try
         {
             CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
             CreateXcodeProject(root, "CasaRayMac.xcodeproj", "1.2.0", "9");
+            File.WriteAllText(Path.Combine(root, "project.yml"), "name: CasaRay");
+            var thirdRoot = Directory.CreateDirectory(Path.Combine(root, "Third"));
+            File.WriteAllText(Path.Combine(thirdRoot.FullName, "project.yml"), "name: Third");
             var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
             File.WriteAllText(keyPath, "private-key");
             File.WriteAllText(
@@ -127,15 +134,18 @@ public sealed partial class PowerForgeReleaseServiceTests
                   "metadata": {}
                 }
                 """);
+            var macVersion = failureKind == "mapping" ? "9.9.9" : "1.2.0";
+            var macLocale = failureKind == "locale" ? string.Empty : "en-US";
+            var macMetadata = failureKind == "metadata" ? "null" : "{}";
             File.WriteAllText(
                 Path.Combine(root, "metadata-mac.json"),
-                """
+                $$"""
                 {
                   "appId": "6778025328",
-                  "versionString": "9.9.9",
+                  "versionString": "{{macVersion}}",
                   "platform": "macOS",
-                  "locale": "en-US",
-                  "metadata": {}
+                  "locale": "{{macLocale}}",
+                  "metadata": {{macMetadata}}
                 }
                 """);
             var spec = CreateAppleAutomationSpec(root, keyPath);
@@ -144,9 +154,11 @@ public sealed partial class PowerForgeReleaseServiceTests
                 "metadata-ios.json",
                 "metadata-mac.json"
             };
+            var iosApp = Assert.Single(spec.AppleApps.Apps);
+            iosApp.RegenerateProject = true;
             spec.AppleApps.Apps = new[]
             {
-                Assert.Single(spec.AppleApps.Apps),
+                iosApp,
                 new AppleAppConfiguration
                 {
                     Name = "CasaRay Mac",
@@ -155,6 +167,16 @@ public sealed partial class PowerForgeReleaseServiceTests
                     ProjectPath = "CasaRayMac.xcodeproj",
                     Scheme = "CasaRayMac",
                     AppStoreConnectAppId = "6778025328"
+                },
+                new AppleAppConfiguration
+                {
+                    Name = "CasaRay Third",
+                    BundleId = "com.evotecit.casaray.third",
+                    Platform = ApplePlatform.iOS,
+                    ProjectPath = "Third/Third.xcodeproj",
+                    Scheme = "Third",
+                    AppStoreConnectAppId = "6778025328",
+                    GenerateProjectIfMissing = true
                 }
             };
             var prepareCalls = 0;
@@ -165,7 +187,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         prepareCalls++;
                         throw new InvalidOperationException("No remote mutation may start before all metadata preflights pass.");
-                    })
+                    },
+                    generateAppleProject: plan => plan.RegenerateProject)
                 .Execute(
                     spec,
                     new PowerForgeReleaseRequest
@@ -176,9 +199,24 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             Assert.False(result.Success);
             Assert.Equal(0, prepareCalls);
+            var targets = result.AppleReceipt!.Targets;
+            Assert.Equal(3, targets.Length);
+            Assert.True(targets[0].ProjectGenerated);
+            Assert.Contains("remoteActions", targets[0].SkippedSteps);
+            Assert.Contains("remoteActions", targets[1].SkippedSteps);
+            Assert.Contains("preflight", targets[2].SkippedSteps);
+            Assert.Contains("remoteActions", targets[2].SkippedSteps);
+            Assert.False(targets[2].ProjectGenerated);
+            Assert.Null(targets[2].Version);
+            Assert.Null(targets[2].Build);
             Assert.Contains(
-                "No App Store metadata config matches",
-                Assert.IsType<string>(result.AppleReceipt!.ErrorMessage),
+                failureKind switch
+                {
+                    "mapping" => "No App Store metadata config matches",
+                    "locale" => "must declare Locale",
+                    _ => "must declare a Metadata object"
+                },
+                Assert.IsType<string>(result.AppleReceipt.ErrorMessage),
                 StringComparison.OrdinalIgnoreCase);
         }
         finally
@@ -402,6 +440,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             var app = Assert.Single(spec.AppleApps!.Apps);
             app.ProjectPath = "Missing.xcodeproj";
             app.RegenerateProject = true;
+            app.MarketingVersion = "2.0.0";
+            app.BuildNumberPolicy = AppleBuildNumberPolicy.IncrementExisting;
 
             var result = CreateAppleAutomationService(
                     _ => throw new InvalidOperationException("Cleanup must not query App Store Connect."),
@@ -415,8 +455,48 @@ public sealed partial class PowerForgeReleaseServiceTests
                     });
 
             Assert.True(result.Success);
-            var target = Assert.Single(result.AppleReceipt!.Targets);
+            Assert.True(result.AppleReceipt!.Success);
+            var target = Assert.Single(result.AppleReceipt.Targets);
             Assert.False(target.ProjectGenerated);
+            Assert.Null(target.Version);
+            Assert.Null(target.Build);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleCleanup_IgnoresVersionPolicyForExistingWorkspace()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "Existing.xcworkspace"));
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var app = Assert.Single(spec.AppleApps!.Apps);
+            app.ProjectPath = "Existing.xcworkspace";
+            app.MarketingVersion = "2.0.0";
+            app.BuildNumber = "10";
+            app.BuildNumberPolicy = AppleBuildNumberPolicy.IncrementExisting;
+
+            var result = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("Cleanup must not query App Store Connect."),
+                    generateAppleProject: _ => throw new InvalidOperationException("Cleanup must not invoke XcodeGen."))
+                .Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Cleanup
+                    });
+
+            Assert.True(result.Success);
+            Assert.True(result.AppleReceipt!.Success);
+            var target = Assert.Single(result.AppleReceipt.Targets);
             Assert.Null(target.Version);
             Assert.Null(target.Build);
         }
@@ -463,6 +543,7 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             Assert.True(result.Success);
             var receipt = Assert.IsType<PowerForgeAppleReleaseReceipt>(result.AppleReceipt);
+            Assert.True(receipt.Success);
             var removed = Assert.Single(receipt.Cleanup.RemovedPaths);
             Assert.False(Path.IsPathRooted(removed));
             Assert.DoesNotContain(root, removed, StringComparison.Ordinal);

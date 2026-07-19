@@ -323,8 +323,22 @@ internal sealed partial class PowerForgeReleaseService
             (string? MarketingVersion, string? BuildNumber) values = (null, null);
             if (plan.Action != PowerForgeAppleReleaseAction.Cleanup)
             {
-                var resolved = ResolveAppleDistributionValues(app, result?.VersionUpdate);
-                values = (resolved.MarketingVersion, resolved.BuildNumber);
+                try
+                {
+                    var resolved = ResolveAppleDistributionValues(app, result?.VersionUpdate);
+                    values = (resolved.MarketingVersion, resolved.BuildNumber);
+                }
+                catch (Exception exception)
+                {
+                    if (result is not null &&
+                        string.IsNullOrWhiteSpace(result.ErrorMessage) &&
+                        !result.SkippedSteps.Contains("preflight", StringComparer.OrdinalIgnoreCase))
+                    {
+                        result.Success = false;
+                        result.ErrorMessage =
+                            $"Unable to resolve release identity for receipt: {exception.Message}";
+                    }
+                }
             }
             var readiness = result?.Distribution?.Readiness;
             var betaGroupsConfigured = plan.TestFlightBetaGroupIds.Length > 0 ||

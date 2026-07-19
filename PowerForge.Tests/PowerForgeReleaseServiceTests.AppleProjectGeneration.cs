@@ -48,6 +48,50 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void Execute_ApplePlan_RejectsDuplicateStableTargetNames()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var first = Assert.Single(spec.AppleApps!.Apps);
+            first.Name = "CasaRay";
+            spec.AppleApps.Apps = new[]
+            {
+                first,
+                new AppleAppConfiguration
+                {
+                    Name = "casaray",
+                    BundleId = "com.evotecit.casaray",
+                    Platform = ApplePlatform.macOS,
+                    ProjectPath = "CasaRay.xcodeproj",
+                    Scheme = "CasaRay",
+                    AppStoreConnectAppId = "6778025328"
+                }
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new PowerForgeReleaseService(new NullLogger()).Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Archive,
+                        PlanOnly = true
+                    }));
+
+            Assert.Contains("target names must be unique", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Theory]
     [InlineData(PowerForgeAppleReleaseAction.Status)]
     [InlineData(PowerForgeAppleReleaseAction.Upload)]

@@ -43,6 +43,34 @@ public sealed class PowerForgeCliAppleReleaseTests
                 Assert.Equal("status", Assert.Single(result.GetProperty("enabledSteps").EnumerateArray()).GetString());
             }
 
+            var configuredDedicated = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-release Configured --config \"{configPath}\" --plan --summary --output json");
+            Assert.Equal(2, configuredDedicated.ExitCode);
+            using (var rejectedDocument = JsonDocument.Parse(configuredDedicated.StdOut))
+            {
+                var rejected = rejectedDocument.RootElement;
+                Assert.False(rejected.GetProperty("success").GetBoolean());
+                Assert.Contains(
+                    "requires an explicit named action",
+                    rejected.GetProperty("error").GetString(),
+                    StringComparison.OrdinalIgnoreCase);
+            }
+
+            var undefinedNumericAction = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-release 999 --config \"{configPath}\" --plan --summary --output json");
+            Assert.Equal(2, undefinedNumericAction.ExitCode);
+            using (var rejectedDocument = JsonDocument.Parse(undefinedNumericAction.StdOut))
+            {
+                var rejected = rejectedDocument.RootElement;
+                Assert.False(rejected.GetProperty("success").GetBoolean());
+                Assert.Contains(
+                    "Unknown Apple release action",
+                    rejected.GetProperty("error").GetString(),
+                    StringComparison.OrdinalIgnoreCase);
+            }
+
             WriteReleaseConfig(configPath, submitForReview: true, includeInvalidModule: false);
             var configured = await RunCliAsync(
                 repoRoot,
@@ -145,11 +173,15 @@ public sealed class PowerForgeCliAppleReleaseTests
 
     private static string GetCliPath(string repoRoot)
     {
+        var testOutputDirectory = new DirectoryInfo(AppContext.BaseDirectory);
+        var configuration = testOutputDirectory.Parent?.Name
+            ?? throw new DirectoryNotFoundException(
+                $"Unable to derive the current build configuration from '{AppContext.BaseDirectory}'.");
         var path = Path.Combine(
             repoRoot,
             "PowerForge.Cli",
             "bin",
-            "Debug",
+            configuration,
             "net10.0",
             "PowerForge.Cli.dll");
         Assert.True(File.Exists(path), $"PowerForge CLI test dependency was not built: {path}");

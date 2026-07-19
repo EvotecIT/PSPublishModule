@@ -45,7 +45,15 @@ internal static partial class Program
         try
         {
             ValidateAppleReleaseArguments(argv.Skip(1).ToArray());
-            var releaseArgs = new[] { "release", "--apple-action", action }
+            var parsedAction = ParseAppleReleaseAction(action);
+            if (parsedAction == PowerForgeAppleReleaseAction.Configured)
+            {
+                throw new ArgumentException(
+                    "The dedicated apple-release command requires an explicit named action. " +
+                    "Use the general release command only when intentionally running the legacy Configured workflow.");
+            }
+
+            var releaseArgs = new[] { "release", "--apple-action", parsedAction.ToString() }
                 .Concat(argv.Skip(1))
                 .ToArray();
             return CommandRelease(releaseArgs, cli, logger, commandName: "apple-release");

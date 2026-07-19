@@ -435,7 +435,8 @@ internal static partial class Program
     {
         if (string.IsNullOrWhiteSpace(value))
             return PowerForgeAppleReleaseAction.Configured;
-        if (Enum.TryParse<PowerForgeAppleReleaseAction>(value, ignoreCase: true, out var action))
+        if (Enum.TryParse<PowerForgeAppleReleaseAction>(value, ignoreCase: true, out var action)
+            && Enum.IsDefined(typeof(PowerForgeAppleReleaseAction), action))
             return action;
         throw new ArgumentException($"Unknown Apple release action '{value}'.");
     }

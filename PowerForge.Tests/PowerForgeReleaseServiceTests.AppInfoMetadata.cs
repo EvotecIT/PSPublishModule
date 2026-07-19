@@ -220,6 +220,72 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Execute_AppleApps_PreflightsEveryAppInfoPayloadBeforeRemoteMutation(
+        bool nullMetadata)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Tactra.xcodeproj");
+            CreateXcodeProject(root, "Second.xcodeproj");
+            var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
+            File.WriteAllText(keyPath, "private-key");
+            WriteAppInfoConfig(root, "app-info-first.json", "app-1", "en-US");
+            File.WriteAllText(
+                Path.Combine(root, "app-info-second.json"),
+                $$"""
+                {
+                  "appId": "app-2",
+                  "locale": "{{(nullMetadata ? "en-US" : string.Empty)}}",
+                  "metadata": {{(nullMetadata ? "null" : "{}")}}
+                }
+                """);
+            var requests = new List<AppStoreConnectReleasePreparationRequest>();
+            var spec = CreateAppInfoReleaseSpec(keyPath);
+            spec.AppleApps!.AppInfoConfigPath = null;
+            spec.AppleApps.AppInfoConfigPaths = new[]
+            {
+                "app-info-first.json",
+                "app-info-second.json"
+            };
+            var first = Assert.Single(spec.AppleApps.Apps);
+            first.Name = "Tactra First";
+            spec.AppleApps.Apps = new[]
+            {
+                first,
+                new AppleAppConfiguration
+                {
+                    Name = "Tactra Second",
+                    ProjectPath = "Second.xcodeproj",
+                    Scheme = "Second",
+                    Platform = ApplePlatform.iOS,
+                    AppStoreConnectAppId = "app-2"
+                }
+            };
+
+            var result = CreateAppInfoReleaseService(requests).Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json")
+                });
+
+            Assert.False(result.Success);
+            Assert.Empty(requests);
+            Assert.Contains(
+                nullMetadata ? "must declare a Metadata object" : "must declare Locale",
+                Assert.IsType<string>(result.AppleReceipt!.ErrorMessage),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private static PowerForgeReleaseService CreateAppInfoReleaseService(
         List<AppStoreConnectReleasePreparationRequest> requests)
         => new(
