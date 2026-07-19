@@ -479,7 +479,7 @@ internal static partial class Program
             ProcessingTimeoutSeconds = plan.Automation.ProcessingTimeoutSeconds,
             PollIntervalSeconds = plan.Automation.PollIntervalSeconds,
             EnabledSteps = enabledSteps.ToArray(),
-            RequiresConfirmation = RequiresAppleActionConfirmation(plan.Action, plan.ReplaceScreenshots),
+            RequiresConfirmation = RequiresAppleActionConfirmation(plan),
             Targets = plan.Apps.Select(static app => new AppleReleaseCliTargetSummary
             {
                 Name = app.Name,
@@ -499,13 +499,16 @@ internal static partial class Program
             steps.Add(name);
     }
 
-    private static bool RequiresAppleActionConfirmation(
-        PowerForgeAppleReleaseAction action,
-        bool replaceScreenshots)
-        => action == PowerForgeAppleReleaseAction.SubmitTestFlightReview ||
-           action == PowerForgeAppleReleaseAction.SubmitAppReview ||
-           action == PowerForgeAppleReleaseAction.Release ||
-           (action == PowerForgeAppleReleaseAction.Screenshots && replaceScreenshots);
+    private static bool RequiresAppleActionConfirmation(PowerForgeAppleReleasePlan plan)
+        => (plan.Action == PowerForgeAppleReleaseAction.Configured &&
+            (plan.SubmitTestFlightBetaReview ||
+             plan.SubmitForReview ||
+             plan.ReleaseApprovedVersion ||
+             (plan.SyncScreenshots && plan.ReplaceScreenshots))) ||
+           plan.Action == PowerForgeAppleReleaseAction.SubmitTestFlightReview ||
+           plan.Action == PowerForgeAppleReleaseAction.SubmitAppReview ||
+           plan.Action == PowerForgeAppleReleaseAction.Release ||
+           (plan.Action == PowerForgeAppleReleaseAction.Screenshots && plan.ReplaceScreenshots);
 
     private static bool? ResolveBooleanOverride(
         string[] argv,

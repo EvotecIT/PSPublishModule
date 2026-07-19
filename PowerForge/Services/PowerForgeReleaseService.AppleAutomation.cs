@@ -133,6 +133,36 @@ internal sealed partial class PowerForgeReleaseService
         {
             throw new InvalidOperationException($"{settingName} must remain inside AppleApps.ProjectRoot.");
         }
+
+        EnsureNoReparsePointsInExistingPath(root, candidate, settingName);
+    }
+
+    private static void EnsureNoReparsePointsInExistingPath(
+        string projectRoot,
+        string path,
+        string settingName)
+    {
+        var root = Path.GetFullPath(projectRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var current = Path.GetFullPath(path)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = Path.DirectorySeparatorChar == '\\'
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        while (true)
+        {
+            if ((File.Exists(current) || Directory.Exists(current)) &&
+                (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidOperationException(
+                    $"{settingName} must not traverse a symbolic link or reparse point: {current}");
+            }
+
+            if (current.Equals(root, comparison))
+                break;
+            current = Path.GetDirectoryName(current)
+                ?? throw new InvalidOperationException($"{settingName} could not be validated inside AppleApps.ProjectRoot.");
+        }
     }
 
     private bool TryResumeAppleUpload(
@@ -264,9 +294,22 @@ internal sealed partial class PowerForgeReleaseService
 
         if (IsUploadAction(plan.Action) &&
             plan.Automation.CleanupAfterProcessing &&
+            results.Length == plan.Apps.Length &&
             results.All(result => IsAppleBuildValid(result.RemoteState, result.Plan)))
         {
-            cleanup = MergeCleanup(cleanup, _appleArtifactService.RemoveCurrentArtifacts(plan));
+            try
+            {
+                cleanup = MergeCleanup(cleanup, _appleArtifactService.RemoveCurrentArtifacts(plan));
+            }
+            catch (Exception exception)
+            {
+                foreach (var result in results.Where(static result => result.Success))
+                {
+                    result.Success = false;
+                    result.ErrorMessage =
+                        $"Apple build is valid, but local artifact cleanup failed: {exception.Message}";
+                }
+            }
         }
 
         var targets = plan.Apps.Select(app =>
@@ -277,7 +320,12 @@ internal sealed partial class PowerForgeReleaseService
             var build = platform?.MatchedBuild ?? platform?.SelectedBuild;
             var review = platform?.ReviewSubmissions.FirstOrDefault(static value => value.IsSubmitted == true) ??
                          platform?.ReviewSubmissions.FirstOrDefault();
-            var values = ResolveAppleDistributionValues(app, result?.VersionUpdate);
+            (string? MarketingVersion, string? BuildNumber) values = (null, null);
+            if (plan.Action != PowerForgeAppleReleaseAction.Cleanup)
+            {
+                var resolved = ResolveAppleDistributionValues(app, result?.VersionUpdate);
+                values = (resolved.MarketingVersion, resolved.BuildNumber);
+            }
             var readiness = result?.Distribution?.Readiness;
             var betaGroupsConfigured = plan.TestFlightBetaGroupIds.Length > 0 ||
                                        plan.TestFlightBetaGroupNames.Length > 0;
@@ -325,7 +373,8 @@ internal sealed partial class PowerForgeReleaseService
         {
             Action = plan.Action,
             CheckedAt = DateTimeOffset.UtcNow,
-            Success = results.All(static result => result.Success),
+            Success = results.Length == plan.Apps.Length &&
+                      results.All(static result => result.Success),
             ErrorMessage = errors.Length == 0 ? null : string.Join(" ", errors),
             ReceiptPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, plan.ReceiptPath).Replace('\\', '/'),
             Targets = targets,
@@ -337,7 +386,7 @@ internal sealed partial class PowerForgeReleaseService
         };
 
         if (plan.Automation.WriteReceipt)
-            WriteAppleReceipt(plan.ReceiptPath, receipt);
+            WriteAppleReceipt(plan.ProjectRoot, plan.ReceiptPath, receipt);
         return receipt;
     }
 
@@ -380,8 +429,12 @@ internal sealed partial class PowerForgeReleaseService
             FreeSpaceGB = second.FreeSpaceGB ?? first.FreeSpaceGB
         };
 
-    private static void WriteAppleReceipt(string path, PowerForgeAppleReleaseReceipt receipt)
+    private static void WriteAppleReceipt(
+        string projectRoot,
+        string path,
+        PowerForgeAppleReleaseReceipt receipt)
     {
+        EnsurePathWithinProjectRoot(projectRoot, path, "AppleApps.Automation.ReceiptPath");
         var directory = Path.GetDirectoryName(path);
         if (!string.IsNullOrWhiteSpace(directory))
             Directory.CreateDirectory(directory);
@@ -389,7 +442,23 @@ internal sealed partial class PowerForgeReleaseService
         options.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
         options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
         options.WriteIndented = true;
-        File.WriteAllText(path, JsonSerializer.Serialize(receipt, options));
+        var payload = JsonSerializer.Serialize(receipt, options);
+        var temporaryPath = Path.Combine(
+            directory ?? projectRoot,
+            $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            File.WriteAllText(temporaryPath, payload);
+            if (File.Exists(path))
+                File.Replace(temporaryPath, path, destinationBackupFileName: null, ignoreMetadataErrors: true);
+            else
+                File.Move(temporaryPath, path);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+                File.Delete(temporaryPath);
+        }
     }
 
     private static AppStoreConnectReleaseStateResult GetAppleReleaseState(AppStoreConnectReleaseStateRequest request)

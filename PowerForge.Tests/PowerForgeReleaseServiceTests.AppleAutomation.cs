@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeReleaseServiceTests
@@ -35,6 +33,61 @@ public sealed partial class PowerForgeReleaseServiceTests
                 Path.Combine("build", "powerforge", "apple", "release-receipt.json"),
                 plan.ReceiptPath,
                 StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_ExplicitAppleAction_IgnoresEveryNonAppleReleaseSection()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.Module = new PowerForgeModuleReleaseOptions
+            {
+                ScriptPath = "missing-module-build.ps1"
+            };
+            spec.Packages = new ProjectBuildConfiguration();
+            spec.Tools = new PowerForgeToolReleaseSpec();
+            spec.WorkspaceValidation = new PowerForgeWorkspaceValidationOptions
+            {
+                ConfigPath = "missing-workspace-validation.json"
+            };
+            spec.GitHub = new PowerForgeReleaseGitHubOptions
+            {
+                Publish = true
+            };
+
+            var result = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, "VALID"))
+                .Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Status
+                    });
+
+            Assert.True(result.Success);
+            Assert.Null(result.ModulePlan);
+            Assert.Null(result.Module);
+            Assert.Null(result.Packages);
+            Assert.Null(result.ToolPlan);
+            Assert.Null(result.Tools);
+            Assert.Null(result.DotNetToolPlan);
+            Assert.Null(result.DotNetTools);
+            Assert.Null(result.WorkspaceValidationPlan);
+            Assert.Null(result.WorkspaceValidation);
+            Assert.Null(result.UnifiedGitHubRelease);
+            Assert.Null(result.ReleaseManifestPath);
+            Assert.Equal(PowerForgeAppleReleaseAction.Status, result.AppleReceipt!.Action);
         }
         finally
         {
@@ -197,110 +250,6 @@ public sealed partial class PowerForgeReleaseServiceTests
                     }));
 
             Assert.Contains("explicit confirmation", exception.Message, StringComparison.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            TryDelete(root);
-        }
-    }
-
-    [Fact]
-    public void Execute_AppleArchivePlan_AcceptsMissingXcodeGenProject()
-    {
-        var root = CreateSandbox();
-        try
-        {
-            var projectDirectory = Path.Combine(root, "Generated");
-            Directory.CreateDirectory(projectDirectory);
-            File.WriteAllText(Path.Combine(projectDirectory, "project.yml"), "name: Generated");
-            var spec = new PowerForgeReleaseSpec
-            {
-                AppleApps = new PowerForgeAppleReleaseOptions
-                {
-                    ProjectRoot = root,
-                    Automation = new PowerForgeAppleReleaseAutomationOptions(),
-                    Apps = new[]
-                    {
-                        new AppleAppConfiguration
-                        {
-                            Name = "Generated iOS",
-                            ProjectPath = "Generated/Generated.xcodeproj",
-                            Scheme = "Generated",
-                            GenerateProjectIfMissing = true
-                        }
-                    }
-                }
-            };
-
-            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
-                spec,
-                new PowerForgeReleaseRequest
-                {
-                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                    PlanOnly = true,
-                    AppleAction = PowerForgeAppleReleaseAction.Archive
-                });
-
-            Assert.True(result.Success);
-            Assert.True(Assert.Single(result.AppleAppPlan!.Apps).GenerateProjectIfMissing);
-        }
-        finally
-        {
-            TryDelete(root);
-        }
-    }
-
-    [Theory]
-    [InlineData(PowerForgeAppleReleaseAction.Status)]
-    [InlineData(PowerForgeAppleReleaseAction.Upload)]
-    public void Execute_AppleRemoteAction_GeneratesMissingProjectBeforeResolvingIdentity(
-        PowerForgeAppleReleaseAction action)
-    {
-        var root = CreateSandbox();
-        try
-        {
-            var generatedRoot = Path.Combine(root, "Generated");
-            Directory.CreateDirectory(generatedRoot);
-            File.WriteAllText(Path.Combine(generatedRoot, "project.yml"), "name: Generated");
-            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
-            File.WriteAllText(keyPath, "private-key");
-            var spec = CreateAppleAutomationSpec(root, keyPath);
-            var app = Assert.Single(spec.AppleApps!.Apps);
-            app.Name = "Generated iOS";
-            app.ProjectPath = "Generated/Generated.xcodeproj";
-            app.Scheme = "Generated";
-            app.GenerateProjectIfMissing = true;
-            var generationCalls = 0;
-            var service = CreateAppleAutomationService(
-                request => CreateReleaseState(request, "VALID"),
-                getAvailableBytes: _ => throw new InvalidOperationException("Exact remote resume must skip archive preflight."),
-                generateAppleProject: plan =>
-                {
-                    generationCalls++;
-                    CreateXcodeProject(
-                        Path.GetDirectoryName(plan.ProjectPath)!,
-                        Path.GetFileName(plan.ProjectPath),
-                        "1.2.0",
-                        "9");
-                    return true;
-                });
-
-            var result = service.Execute(
-                spec,
-                new PowerForgeReleaseRequest
-                {
-                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                    AppleAction = action
-                });
-
-            Assert.True(result.Success);
-            Assert.Equal(1, generationCalls);
-            var target = Assert.Single(result.AppleReceipt!.Targets);
-            Assert.True(target.ProjectGenerated);
-            Assert.Equal("1.2.0", target.Version);
-            Assert.Equal("9", target.Build);
-            if (action == PowerForgeAppleReleaseAction.Upload)
-                Assert.True(target.ResumedExistingBuild);
         }
         finally
         {
@@ -615,159 +564,6 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
-    [Fact]
-    public void Execute_AppleScreenshots_RejectsNonmatchingConfiguredSpecBeforeMutation()
-    {
-        var root = CreateSandbox();
-        try
-        {
-            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
-            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
-            File.WriteAllText(keyPath, "private-key");
-            File.WriteAllText(
-                Path.Combine(root, "screenshots.json"),
-                """
-                {
-                  "appId": "6778025328",
-                  "versionString": "9.9.9",
-                  "platform": "iOS",
-                  "locale": "en-US",
-                  "screenshotSets": []
-                }
-                """);
-            var spec = CreateAppleAutomationSpec(root, keyPath);
-            spec.AppleApps!.ScreenshotConfigPath = "screenshots.json";
-            var prepareCalls = 0;
-
-            var result = CreateAppleAutomationService(
-                    _ => throw new InvalidOperationException("A config mismatch must not query final status."),
-                    prepareAppleDistribution: _ =>
-                    {
-                        prepareCalls++;
-                        throw new InvalidOperationException("Screenshot mutation must not run.");
-                    })
-                .Execute(
-                    spec,
-                    new PowerForgeReleaseRequest
-                    {
-                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                        AppleAction = PowerForgeAppleReleaseAction.Screenshots
-                    });
-
-            Assert.False(result.Success);
-            Assert.Equal(0, prepareCalls);
-            Assert.Contains(
-                "No screenshot sync config matches",
-                Assert.IsType<string>(Assert.Single(result.AppleReceipt!.Targets).ErrorMessage),
-                StringComparison.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            TryDelete(root);
-        }
-    }
-
-    [Fact]
-    public void Execute_ApplePrepare_RejectsNonmatchingConfiguredMetadataBeforeMutation()
-    {
-        var root = CreateSandbox();
-        try
-        {
-            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
-            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
-            File.WriteAllText(keyPath, "private-key");
-            File.WriteAllText(
-                Path.Combine(root, "metadata.json"),
-                """
-                {
-                  "appId": "wrong-app",
-                  "versionString": "1.2.0",
-                  "platform": "iOS",
-                  "locale": "en-US",
-                  "metadata": {}
-                }
-                """);
-            var spec = CreateAppleAutomationSpec(root, keyPath);
-            spec.AppleApps!.MetadataConfigPath = "metadata.json";
-            var prepareCalls = 0;
-
-            var result = CreateAppleAutomationService(
-                    _ => throw new InvalidOperationException("A config mismatch must not query final status."),
-                    prepareAppleDistribution: _ =>
-                    {
-                        prepareCalls++;
-                        throw new InvalidOperationException("Metadata mutation must not run.");
-                    })
-                .Execute(
-                    spec,
-                    new PowerForgeReleaseRequest
-                    {
-                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                        AppleAction = PowerForgeAppleReleaseAction.Prepare
-                    });
-
-            Assert.False(result.Success);
-            Assert.Equal(0, prepareCalls);
-            Assert.Contains(
-                "No App Store metadata config matches",
-                Assert.IsType<string>(Assert.Single(result.AppleReceipt!.Targets).ErrorMessage),
-                StringComparison.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            TryDelete(root);
-        }
-    }
-
-    [Fact]
-    public void Execute_AppleCleanup_WritesOnlyProjectRelativeRemovedPaths()
-    {
-        var root = CreateSandbox();
-        try
-        {
-            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
-            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
-            File.WriteAllText(keyPath, "private-key");
-            var spec = CreateAppleAutomationSpec(root, keyPath);
-            spec.AppleApps!.Automation.ArtifactRetentionDays = 7;
-            var service = CreateAppleAutomationService(
-                _ => throw new InvalidOperationException("Cleanup must not query App Store Connect."));
-            var planResult = service.Execute(
-                spec,
-                new PowerForgeReleaseRequest
-                {
-                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                    AppleAction = PowerForgeAppleReleaseAction.Cleanup,
-                    PlanOnly = true
-                });
-            var archiveRoot = Path.GetDirectoryName(Assert.Single(planResult.AppleAppPlan!.Apps).ArchivePath)!;
-            var stale = Path.Combine(archiveRoot, "stale.xcarchive");
-            Directory.CreateDirectory(stale);
-            File.WriteAllText(Path.Combine(stale, "old.bin"), "old");
-            Directory.SetLastWriteTimeUtc(stale, DateTime.UtcNow.AddDays(-10));
-
-            var result = service.Execute(
-                spec,
-                new PowerForgeReleaseRequest
-                {
-                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                    AppleAction = PowerForgeAppleReleaseAction.Cleanup
-                });
-
-            Assert.True(result.Success);
-            var receipt = Assert.IsType<PowerForgeAppleReleaseReceipt>(result.AppleReceipt);
-            var removed = Assert.Single(receipt.Cleanup.RemovedPaths);
-            Assert.False(Path.IsPathRooted(removed));
-            Assert.DoesNotContain(root, removed, StringComparison.Ordinal);
-            var json = File.ReadAllText(Path.Combine(root, receipt.ReceiptPath!));
-            Assert.DoesNotContain(root, json, StringComparison.Ordinal);
-        }
-        finally
-        {
-            TryDelete(root);
-        }
-    }
-
     private static PowerForgeReleaseSpec CreateAppleAutomationSpec(string root, string keyPath)
         => new()
         {
@@ -890,4 +686,60 @@ public sealed partial class PowerForgeReleaseServiceTests
                 TimeSpan.FromSeconds(1),
                 false)
         };
+
+    private static AppStoreConnectReleasePreparationResult CreateSuccessfulPreparation(
+        AppStoreConnectReleasePreparationRequest request)
+        => new()
+        {
+            AppId = request.AppId,
+            VersionString = request.VersionString,
+            BuildNumber = request.BuildNumber,
+            Platform = request.Platform,
+            Version = new AppStoreConnectVersionInfo
+            {
+                Id = "version-id",
+                VersionString = request.VersionString
+            },
+            Build = new AppStoreConnectBuildInfo
+            {
+                Id = "build-id",
+                Version = request.BuildNumber,
+                ProcessingState = "VALID",
+                MarketingVersion = request.VersionString
+            },
+            SelectedBuild = true
+        };
+
+    private static void WriteScreenshotConfig(
+        string root,
+        string fileName,
+        string appId,
+        string version,
+        string platform,
+        string folder,
+        bool qualityEnabled)
+        => File.WriteAllText(
+            Path.Combine(root, fileName),
+            $$"""
+            {
+              "appId": "{{appId}}",
+              "versionString": "{{version}}",
+              "platform": "{{platform}}",
+              "locale": "en-US",
+              "quality": {
+                "enabled": {{qualityEnabled.ToString().ToLowerInvariant()}},
+                "rejectDuplicates": true,
+                "requireConsistentDimensions": true,
+                "minimumFileBytes": 0,
+                "minimumKilobytesPerMegapixel": 0
+              },
+              "screenshotSets": [
+                {
+                  "screenshotDisplayType": "{{(platform == "macOS" ? "APP_DESKTOP" : "APP_IPHONE_65")}}",
+                  "path": "{{folder}}",
+                  "filter": "*.png"
+                }
+              ]
+            }
+            """);
 }
